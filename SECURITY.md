@@ -17,8 +17,9 @@ assessment, and any suggested fix. You will get an acknowledgement within
 
 ## Scope
 
-The Freeholder core (`apps/*`), the packages under `packages/`, and the
-deployment templates in this repository.
+The Freeholder core application (`app/` and `src/` at the repository root),
+the packages under `packages/`, and the deployment templates in this
+repository.
 
 ## Supported versions
 
