@@ -122,9 +122,9 @@ freeholder/
 │   ├── catalog              # Products (physical / digital / service), variants, pricing
 │   ├── cart-checkout        # Cart, checkout, tax + shipping rules
 │   ├── orders               # Order lifecycle, fulfillment, digital delivery
-│   ├── payments             # Invoice + Payment core, provider adapters (Stripe, PayPal)
+│   ├── payments             # Invoice + Payment core, tips & pay-what-you-want, provider adapters (Stripe, PayPal)
 │   ├── promotions           # Coupons, gift cards, abandoned-cart recovery
-│   └── subscriptions        # Memberships, recurring billing, gated content
+│   └── subscriptions        # Memberships, recurring billing, gated content & paywalls (recurring or one-time unlock)
 │
 ├── services/                # Sell time & expertise
 │   ├── booking              # Availability, calendars, bookings, reminders, 2-way cal sync
@@ -142,6 +142,7 @@ freeholder/
 │   ├── email-marketing      # Broadcasts, simple automations, list segments (spine-native)
 │   ├── reviews              # Post-job review requests, moderation, display widgets
 │   ├── social               # Media prep (crop/trim presets, captions) + scheduled publishing [v2: auto-clip]
+│   ├── affiliates           # Referral & commission engine: dual-sided codes, admin-defined commission rules on any conversion, payout ledger
 │   └── analytics            # First-party pageviews + funnel events, joined to contacts
 │
 └── platform/                # Operate & extend
@@ -194,7 +195,14 @@ freeholder/
 | `Invoice` | **The single money object.** | contact_id, source_type + source_id (order/quote/booking/subscription/manual), status, line_items (jsonb snapshot), totals, due_at, deposit_of_invoice_id (for split deposit/balance), schedule (jsonb for plans) |
 | `Payment` | One attempt/settlement against an invoice. | invoice_id, provider (stripe/paypal/manual/gift_card), provider_ref, amount_cents, status, method, refunded_amount_cents |
 | `Subscription` | Recurring billing. | contact_id, product_variant_id, provider_ref, status, current_period_end, grants (jsonb: gated content, member pricing) |
+| `ContentUnlock` | One-time paywall purchase. | contact_id, subject_type + subject_id (page/post/gallery/asset), invoice_id, granted_at, expires_at (nullable — lifetime by default) |
+| `Tip` | Voluntary payment, standalone or attached to another flow. | contact_id (nullable — anonymous allowed), invoice_id, amount_cents, currency, context (block/checkout/invoice/gallery), message |
 | `Coupon` / `GiftCard` | Promotions. | code, rules (jsonb), balance_cents (gift card), redemptions |
+| `AffiliateProgram` | Admin-defined commission scheme. | name, conversion_types[] (signup/subscription/order/booking/custom event), customer_discount (jsonb), commission (jsonb: percent or fixed, basis, cap, recurring or first-cycle-only), cookie_window_days, status |
+| `AffiliateCode` | A referrer's code within a program (IROCK). | program_id, contact_id (the referrer — a Contact like everyone else), code, landing_path, clicks, status |
+| `CommissionEvent` | One earned commission on the ledger. | affiliate_code_id, referred_contact_id, conversion_type, subject_type + subject_id, invoice_id (nullable — signups have no invoice), amount_cents, status (pending → approved → paid, or reversed on refund) |
+
+Paywalls, tips, and commissions all obey the convergence rule: an unlock or tip is realized as an `Invoice` + `Payment` like any other money-in, and commission payouts settle through the invoicing module (manual/batch in v1; payout-provider adapter such as Stripe Connect as a v2 adapter) — no parallel money paths. Attribution is first-party: a visit with `?ref=IROCK` sets the code on the session, conversion within `cookie_window_days` writes the `CommissionEvent`, refunds reverse it automatically.
 
 **Money state machines (enforce in service layer, not UI):**
 
@@ -797,12 +805,12 @@ Migration is not a docs page; it's part of a recipe's definition of done (§18 m
 import { definePlugin } from "@freeholder/plugin-kit";
 
 export default definePlugin({
-  name: "tip-jar",
+  name: "gift-registry",
   version: "0.1.0",
   freeholder: ">=1.0.0",
   permissions: ["invoicing:create", "contacts:read"],   // §26
   services: { /* ... */ },
-  routes: { public: { "/tip": TipPage } },
+  routes: { public: { "/registry": RegistryPage } },
   mcpTools: { /* auto-derived from services + Zod */ },
 });
 ```
@@ -825,18 +833,18 @@ export default definePlugin({
 ## 25. Ridiculously Easy (the DX bar)
 
 ```bash
-npx create-freeholder-plugin tip-jar     # scaffolds manifest, example service+route+test
-cd tip-jar && npm run dev                 # boots a seeded demo Freeholder with your plugin
+npx create-freeholder-plugin gift-registry     # scaffolds manifest, example service+route+test
+cd gift-registry && npm run dev                 # boots a seeded demo Freeholder with your plugin
                                           # hot-reloading inside it — full site, fake business
 npm test                                  # runs against the same seeded instance
-npm run share                             # validates → publishes to npm as freeholder-plugin-tip-jar
+npm run share                             # validates → publishes to npm as freeholder-plugin-gift-registry
 ```
 
 The bar: **zero-config from idea to installable in under an hour.** The dev harness (part of MIT `plugin-kit`) is the make-or-break piece — nobody should need to set up a whole Freeholder to write a widget. `npm run dev` gives them Aurora Coast Photography with their plugin live inside it.
 
 **Installing (owner side):**
 - Admin → Plugins → browse/search → one-click install (npm fetch, integrity-pinned) → permission consent screen → enable
-- Or: `npm i freeholder-plugin-tip-jar` in the deploy, auto-discovered by the `freeholder-plugin-*` naming convention
+- Or: `npm i freeholder-plugin-gift-registry` in the deploy, auto-discovered by the `freeholder-plugin-*` naming convention
 - Or: drop a folder into `/plugins` (the hackable path — a vibe-coded personal plugin never needs publishing)
 - Config-as-code stays true: installed plugins + versions are recorded in `freeholder.config.ts`, so a redeploy reproduces the instance exactly
 
@@ -865,11 +873,11 @@ A plugin registry is **just a signed JSON index** — deliberately boring so tha
 // https://plugins.freeholder.ai/index.json  (canonical, auto-built from npm + GitHub topic)
 { "registry": "Freeholder Official", "updated": "2026-07-22",
   "plugins": [{
-    "name": "freeholder-plugin-tip-jar", "version": "0.4.2",
+    "name": "freeholder-plugin-gift-registry", "version": "0.4.2",
     "tier": "verified", "license": "AGPL-3.0",
     "permissions": ["invoicing:create","contacts:read"],
     "freeholder": ">=1.0.0", "integrity": "sha512-…",
-    "repo": "github:someone/tip-jar", "description": "…", "screenshots": […]
+    "repo": "github:someone/gift-registry", "description": "…", "screenshots": […]
   }]
 }
 ```
@@ -899,7 +907,7 @@ A plugin registry is **just a signed JSON index** — deliberately boring so tha
 
 1. **OpenAPI** — generated from the same Zod schemas that validate every request at runtime. It is definitionally impossible for the spec to describe a shape the API doesn't enforce.
 2. **SDK (`@freeholder/sdk`, MIT)** — generated from the OpenAPI spec; typed, tree-shakable, with hand-written ergonomic wrappers only for flows (pagination, auth) — wrappers are tested against the generated layer so they break loudly if the contract moves. Published automatically on every release by CI (changesets); SDK version === platform version, always.
-3. **MCP** — already runtime-generated (§11): tools are derived from the enabled services of *that instance*, so an instance with the tip-jar plugin automatically exposes tip-jar tools to agents, with descriptions from the plugin's own schema annotations. New feature merged → new MCP tool exists. No release lag at all.
+3. **MCP** — already runtime-generated (§11): tools are derived from the enabled services of *that instance*, so an instance with the gift-registry plugin automatically exposes gift-registry tools to agents, with descriptions from the plugin's own schema annotations. New feature merged → new MCP tool exists. No release lag at all.
 4. **Per-instance introspection** — every Freeholder serves its own live contract: `/api/openapi.json` (reflecting its version + enabled modules + plugins), `/api/mcp` manifest, and `/llms.txt`. An agent or developer never reasons from generic docs about what *this* instance can do — they ask it.
 5. **Docs site** (`docs.freeholder.ai`) — reference sections are built from the generated artifacts in CI on every release; prose guides live beside code and are **executable**: doc snippets are extracted and run against the seeded demo instance in CI, so a guide with stale code fails the build. Docs ship `llms-full.txt` so AI assistants helping developers always have current ground truth.
 6. **The drift gate** — CI fails any PR where committed generated artifacts differ from freshly regenerated ones. Contract updates are not a chore anyone can forget; they are a build step no one can skip.
@@ -957,13 +965,13 @@ One block editor for **everything with a public face** — pages, posts, email t
 
 **Structure is data; code is vocabulary.** The governing rule of the whole editing surface: rearranging the site — any page, the chrome around it, the look of it — is a database write, live on next request, never a build. Only extending the *vocabulary* (a new block type, a new behavior) is code, which arrives via plugin and its rebuild-on-install. There is no build step between an owner and their site.
 
-- **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), custom HTML (admin-only permission).
+- **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), tip/support (pay-what-you-want with preset amounts), paywall gate (wraps any blocks behind a one-time unlock or subscription — server-rendered teaser, gated content never present in the HTML), custom HTML (admin-only permission).
 - **Editing model:** drag to reorder, slash-command insertion, inline editing, autosave with visible version history and one-click restore (`ContentRevision` rows — normalized, in the database, per the mandate). Live responsive preview (desktop/mobile) and — for emails — inbox preview with the test-send button adjacent.
 - **Templates & sections:** any block arrangement can be saved as a reusable Section (synced or detached copies), and full-page templates ship per business preset. Plugins register new block types through the manifest (§24) and they appear in the palette with zero editor changes.
 - **Site chrome is Sections:** the header, footer, nav, and announcement bar are synced Sections — block trees in the database, edited in the same editor, server-rendered on every page. Menus are rows, not JSX. `app/(public)/layout.tsx` is a thin shell that renders the chrome Sections; it contains no hardcoded site structure.
 - **Design tokens, not themes:** colors, typography, logo, spacing, and radii are settings rows emitted as CSS custom properties at request time; Tailwind's palette references the variables rather than hardcoding values. Rebranding the site is a settings save, effective on next page load.
 - **Templates are defaults, never cages:** the layout of a product, service, or post page starts from a stored template whose dynamic blocks bind to the entity being viewed (this product's gallery here, price block there, reviews above the fold if the owner drags them there) — but any individual entity can detach into a fully bespoke block tree of its own. Every entity with a public face carries an optional per-entity `blocks` override; a store where every product page is completely different is a supported first-class state, not a workaround. Default templates ship per business preset as seed data, so day one still looks designed.
-- **Variants are native (A/B everywhere):** any block, Section, page, or per-entity layout can hold named variants with a traffic split — variants live inside the same `blocks` schema, not in a bolt-on experiment tool. Assignment is server-side and sticky per visitor, rendered in the initial HTML (no client-side swap flicker), and every conversion-bearing block (CTA, form, checkout, booking, quote request, newsletter signup) reports impressions and conversions to first-party analytics on the spine. "Which headline books more calls" is a native report joined to actual revenue, and adding a variant is one action in the editor, everywhere.
+- **Variants are native (A/B everywhere):** any block, Section, page, or per-entity layout can hold named variants with a traffic split — variants live inside the same `blocks` schema, not in a bolt-on experiment tool. Assignment is server-side and sticky per visitor, rendered in the initial HTML (no client-side swap flicker), and every conversion-bearing block (CTA, form, checkout, booking, quote request, newsletter signup, tip, paywall gate) reports impressions and conversions to first-party analytics on the spine. "Which headline books more calls" is a native report joined to actual revenue, and adding a variant is one action in the editor, everywhere. Caching is designed for this from day one: the visitor's variant assignment is part of the page-cache key (and the cache layer's Vary surface), so full-page and edge caching coexist with live experiments by construction — never a retrofit.
 - **Typed blocks, never markup blobs:** every block is a Zod-schema'd JSON node rendered by a server component. Stored HTML soup forfeits the SEO gate, sane migrations, and re-theming forever — the custom HTML block stays admin-only, scoped, and deliberately inconvenient.
 - **The SEO contract holds:** blocks render server-side to semantic HTML; the editor enforces one H1 and warns on heading-order violations — the drag-and-drop layer can't produce pages that fail the SEO gate.
 
@@ -987,7 +995,7 @@ Sharing isn't a buttons plugin; it's a property of every entity with a public fa
 - **Everything shareable has a `ShareTarget`:** canonical URL + auto-generated OG image + per-channel share intents (native Web Share API on mobile, channel links on desktop, copy-with-attribution). Pages, posts, products, galleries (and individual gallery images where the owner allows), newsletter issues, events, reviews, the changelog — one system, present by default, removable per entity.
 - **Tracked, first-party:** share links carry a short `ref` token → `SharedLink` rows (entity, sharer contact if known, channel) → clicks land as analytics events attributed to the share. The owner sees "this gallery was shared 12 times and drove 3 bookings" — sharing becomes a measured channel, not a hopeful button.
 - **Client-side sharing where it counts:** a client can share their proofing gallery with a partner (scoped guest access, owner-permitted), share a quote internally before accepting ("send to my business partner" issues a view-only link), and gift-card/registry-style sharing on products.
-- **Referral & advocacy rails (ties into §36 roadmap):** every Contact can hold a personal referral code; referred signups/purchases attribute automatically on the spine. The loyalty/referral module (roadmap) builds on these rails rather than inventing its own tracking.
+- **Referral & advocacy rails (spec'd — `growth/affiliates`, §3, §4.3):** every Contact can hold referral codes; referred conversions attribute automatically on the spine. Admins define commission rules for **any** conversion type — signups, subscriptions, orders, bookings, custom events — and codes are dual-sided: the visitor gets the discount, the referrer earns the commission (a creator sends visitors with code IROCK → the subscriber gets 10% off, the creator earns 10% commission). Attribution is first-party (`?ref` token → `AffiliateCode` → `CommissionEvent`), the ledger runs pending → approved → paid with automatic reversal on refund, and referrers see their own earnings in the customer portal — an affiliate is just a Contact with a code, not a separate system. The loyalty module (roadmap, §36) extends these same rails with points and tiers rather than inventing its own tracking.
 - **Embeds:** galleries, review walls, booking widgets, and newsletter signup blocks all emit copy-paste embed codes — Freeholder content propagates onto other sites with backlinks. Sharing outward is also an SEO strategy.
 
 ---
@@ -1020,7 +1028,7 @@ Method: the most-installed plugins/apps on both ecosystems are a revealed-prefer
 - **Support inbox + live chat** (Gorgias/Click-to-Chat): unified inbox (site chat, assistant escalations, contact forms, social inbox) threaded per Contact; WhatsApp/Messenger deep-links for the click-to-chat pattern.
 
 **Ship as first-party plugins (wanted often, not by all):**
-- **Loyalty & referral programs** (Smile/ReferralCandy) on the §34 rails: points, tiers, rewards, affiliate payouts.
+- **Loyalty programs** (Smile's category) extending the core affiliates module (§3, §34): points, tiers, rewards on the same first-party attribution rails — referrals and commissions themselves are already core.
 - **SMS marketing** (Klaviyo/Omnisend's second channel) via the sms adapter, consent-gated.
 - **Gift options & registries**; **local delivery/pickup scheduling** (huge for food/retail); **print-on-demand adapter** (Printify-style) as a fulfillment plugin; **memberships/gated communities** beyond simple subscriptions.
 
