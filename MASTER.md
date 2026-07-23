@@ -951,11 +951,17 @@ Embeddings for retrieval use pgvector — inside the one sacred database (princi
 
 ## 32. Universal Drag-and-Drop Editor
 
-One block editor for **all** content types — pages, posts, email templates, newsletter issues, landing pages, even the assistant's rich answers. Not a per-feature editor zoo; the same `blocks (jsonb)` schema everywhere, with per-context block palettes (email context excludes interactive blocks and renders to table-based HTML for mail clients; page context gets the full set).
+One block editor for **everything with a public face** — pages, posts, email templates, newsletter issues, landing pages, the assistant's rich answers, and the site chrome itself. Not a per-feature editor zoo; the same `blocks (jsonb)` schema everywhere, with per-context block palettes (email context excludes interactive blocks and renders to table-based HTML for mail clients; page context gets the full set).
+
+**Structure is data; code is vocabulary.** The governing rule of the whole editing surface: rearranging the site — any page, the chrome around it, the look of it — is a database write, live on next request, never a build. Only extending the *vocabulary* (a new block type, a new behavior) is code, which arrives via plugin and its rebuild-on-install. There is no build step between an owner and their site.
 
 - **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), custom HTML (admin-only permission).
 - **Editing model:** drag to reorder, slash-command insertion, inline editing, autosave with visible version history and one-click restore (`ContentRevision` rows — normalized, in the database, per the mandate). Live responsive preview (desktop/mobile) and — for emails — inbox preview with the test-send button adjacent.
 - **Templates & sections:** any block arrangement can be saved as a reusable Section (synced or detached copies), and full-page templates ship per business preset. Plugins register new block types through the manifest (§24) and they appear in the palette with zero editor changes.
+- **Site chrome is Sections:** the header, footer, nav, and announcement bar are synced Sections — block trees in the database, edited in the same editor, server-rendered on every page. Menus are rows, not JSX. `app/(public)/layout.tsx` is a thin shell that renders the chrome Sections; it contains no hardcoded site structure.
+- **Design tokens, not themes:** colors, typography, logo, spacing, and radii are settings rows emitted as CSS custom properties at request time; Tailwind's palette references the variables rather than hardcoding values. Rebranding the site is a settings save, effective on next page load.
+- **Entity-page templates with dynamic slots:** the layout of a product, service, or post page is a stored template whose dynamic blocks bind to the entity being viewed (this product's gallery here, price block there, reviews above the fold if the owner drags them there). Default templates ship per business preset as seed data, so day one still looks designed.
+- **Typed blocks, never markup blobs:** every block is a Zod-schema'd JSON node rendered by a server component. Stored HTML soup forfeits the SEO gate, sane migrations, and re-theming forever — the custom HTML block stays admin-only, scoped, and deliberately inconvenient.
 - **The SEO contract holds:** blocks render server-side to semantic HTML; the editor enforces one H1 and warns on heading-order violations — the drag-and-drop layer can't produce pages that fail the SEO gate.
 
 ---
