@@ -61,7 +61,12 @@ long-term. Contributions are welcome under the DCO — see
 ## Repository layout
 
 ```
-apps/web        Freeholder core application (AGPL-3.0-only)
-packages/sdk    @freeholder/sdk — client SDK (MIT)
+app/            Next.js App Router — public site, portal, admin, API (AGPL-3.0-only)
+src/            core spine, feature modules, adapters, MCP server (AGPL-3.0-only)
+packages/       separately published MIT packages (@freeholder/sdk, …)
 MASTER.md       canonical product & architecture specification
 ```
+
+The core application lives at the repository root — one monolith, not a
+monorepo. `packages/` exists only for artifacts people install outside this
+repo. The full layout is specified in `MASTER.md` §10.

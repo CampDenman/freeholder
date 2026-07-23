@@ -1,14 +1,14 @@
 # FREEHOLDER — Master Project Document
 
 **The open-source operating system for a one-person business.**
-Draft v2 (unified) · July 2026 · Tony Aly · AGPL-3.0 core / MIT SDK & templates
+Launch edition · July 2026 · Tony Aly · AGPL-3.0 core / MIT SDK & templates
 
-This single document is the canonical source of truth for the project. On repo day, §1 gets excerpted as `README.md`; everything else ships as-is.
+This document is the canonical source of truth for the project. §1 is excerpted as `README.md`. When code and this document disagree, one of them is wrong — fix whichever it is, in the same PR (see `CLAUDE.md`).
 
 ## Contents
 
 **The pitch** — 1. Why Freeholder
-**Architecture** — 2. Principles · 3. Module Map · 4. Data-Model Spine · 5. The SEO Layer · 6. Cross-Module Flows · 7. Build Order (v1 slice) · 8. Open Decisions
+**Architecture** — 2. Principles · 3. Module Map · 4. Data-Model Spine · 5. The SEO Layer · 6. Cross-Module Flows · 7. Build Order (v1 slice) · 8. Design Decisions
 **Build contract** — 9. Stack Decisions · 10. Repository Layout · 11. Module Contract · 12. Adapter Contract · 13. Setup Wizard · 14. Replit-First Deploy Story · 15. Quality Gates (CI) · 16. Agent Conventions
 **Deployment** — 17. Configuration Model · 18. Recipe Anatomy & Mandates · 19. Support Tiers · 20. Recipe: Replit · 21. Recipe: DigitalOcean · 22. create-freeholder · 23. Migration Matrix
 **Extensibility** — 24. Plugins: The Design Bet · 25. Plugin DX · 26. Trust Model · 27. Federated Registries · 28. The Living Platform Contract · 29. What This Buys the Ecosystem
@@ -352,7 +352,7 @@ This section encodes the standards from BigDataSEO.com and the Vibe Coding 101 S
 
 ---
 
-## 7. Build Order (proposed v1 slice)
+## 7. Build Order (the v1 slice)
 
 The v1 that is genuinely shippable on Replit and already better than the tool-mash:
 
@@ -371,11 +371,9 @@ Deferred to v2: subscriptions/memberships, gift cards, social auto-clipping (man
 
 ---
 
-## 8. Open Decisions
+## 8. Design Decisions (the fine print)
 
-- **Framework:** Next.js (largest vibe-coding familiarity, Replit-native) vs SvelteKit (lighter). Leaning Next.js for adoption.
-- **ORM:** Drizzle (SQL-transparent, light) vs Prisma (familiar). Leaning Drizzle.
-- **Custom fields:** jsonb on Contact (fast, v1) vs EAV tables (queryable, heavier). Leaning jsonb + generated columns for hot fields.
+- **Custom fields:** jsonb on Contact with generated columns + indexes for hot fields — not EAV tables. Fast, honest about Postgres, and reversible if a field graduates to a real column.
 - **Multi-currency:** store currency per money row from day one; v1 UI = base currency + optional PriceListEntry overrides per enabled currency. Auto-FX display of prices is off by default (honest pricing beats approximate pricing).
 - **Tax:** v1 = simple rate tables per tax zone (keyed to business location + customer country); Stripe Tax as optional adapter later. Canada (GST/PST/HST) and EU VAT (incl. B2B reverse-charge flag) are the two zone templates that ship in v1.
 - **v1 shipped locales:** propose en + fr + es (covers Canada bilingual compliance and the largest creator markets); community PRs add catalogs. Machine-translation assist for content from day one, always flagged for review.
@@ -384,7 +382,7 @@ Deferred to v2: subscriptions/memberships, gift cards, social auto-clipping (man
 
 ---
 
-## 9. Stack Decisions (settling the open items)
+## 9. Stack Decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
@@ -406,10 +404,10 @@ Deferred to v2: subscriptions/memberships, gift cards, social auto-clipping (man
 ```
 freeholder/                          # AGPL-3.0
 ├── LICENSE                          # AGPL-3.0
-├── README.md
-├── ARCHITECTURE.md
-├── SCAFFOLD.md                      # this file
-├── CLAUDE.md / AGENTS.md            # agent ground rules (Acquirer Audit Set compatible)
+├── README.md                        # excerpt of §1
+├── MASTER.md                        # this document — ground truth
+├── CLAUDE.md                        # agent ground rules
+├── LICENSING.md · DCO.md · SECURITY.md · CONTRIBUTING.md · CODE_OF_CONDUCT.md
 ├── PROJECT_BACKLOG.json             # append-only backlog
 │
 ├── app/                             # Next.js App Router
@@ -479,7 +477,8 @@ freeholder/                          # AGPL-3.0
 └── packages/                        # MIT-licensed, separately published
     ├── sdk/                         # @freeholder/sdk — typed API client
     ├── create-freeholder/           # npx create-freeholder — deploy bootstrapper
-    └── templates/                   # @freeholder/templates — theme starters
+    ├── templates/                   # @freeholder/templates — theme starters
+    └── mobile-app/                  # white-label Expo/React Native app (§35)
 ```
 
 **License boundary:** everything under root = AGPL-3.0. Everything under `packages/` = MIT with its own LICENSE. The SDK and templates being MIT means agencies and tool-makers can build on Freeholder freely; the AGPL core means nobody closes the platform itself.
@@ -628,7 +627,7 @@ A running Freeholder instance is fully described by three orthogonal layers. Kee
 └─────────────────────────────────────────────────────────┘
 ```
 
-All three resolve into one artifact: **`freeholder.config.ts`** (checked in, no secrets) + **env vars** (secrets, per SCAFFOLD's single Zod `env.ts`). A "recipe" is a documented, validated combination of layer 1 with sane defaults for layers 2–3.
+All three resolve into one artifact: **`freeholder.config.ts`** (checked in, no secrets) + **env vars** (secrets, validated by the single Zod `env.ts`, §14). A "recipe" is a documented, validated combination of layer 1 with sane defaults for layers 2–3.
 
 ```ts
 // freeholder.config.ts — the whole instance, declaratively
@@ -727,7 +726,7 @@ Tiers are printed in the recipe index and in `create-freeholder`'s target picker
 
 **Honest limits (in the recipe README):** dev workspace sleeps (Deployments don't — deploy for production); single-region. Media is already in Replit Object Storage per the mandate, so graduating to DigitalOcean later is the standard migration path (§23) — a bucket sync, not a rescue. Replit is the best *first* home and a fine *forever* home for low-traffic businesses; the recipe says both plainly.
 
-**Strategic note:** this template is also the funnel from vibe-coding-101.com — "Module 8: deploy a real business" links straight to the fork button, with your Replit referral on the path. Curriculum → template → deployed Freeholder instances is a compounding loop across your properties.
+**Strategic note:** this template is also the funnel from vibe-coding-101.com — "Module 8: deploy a real business" links straight to the fork button. Curriculum → template → deployed Freeholder instances is a compounding loop.
 
 ---
 
@@ -928,7 +927,7 @@ A plugin registry is **just a signed JSON index** — deliberately boring so tha
 
 ## 30. CRM Depth: Newsletters, Templates, Lifecycles
 
-**Newsletters as a first-class object** (not just "campaigns"): a `Newsletter` is a recurring publication with an identity — name, description, cadence, public archive page (server-rendered, in the sitemap: every past issue is an SEO asset), and its own subscribe endpoint/embeddable form. Contacts hold per-newsletter subscriptions with double-opt-in records and one-click unsubscribe (RFC 8058), consent timestamps retained for compliance (CASL — you're Canadian — GDPR, CAN-SPAM).
+**Newsletters as a first-class object** (not just "campaigns"): a `Newsletter` is a recurring publication with an identity — name, description, cadence, public archive page (server-rendered, in the sitemap: every past issue is an SEO asset), and its own subscribe endpoint/embeddable form. Contacts hold per-newsletter subscriptions with double-opt-in records and one-click unsubscribe (RFC 8058), consent timestamps retained for compliance (CASL, GDPR, CAN-SPAM).
 
 | Entity | Key fields |
 |---|---|

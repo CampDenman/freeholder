@@ -2,7 +2,7 @@
   "name": "freeholder",
   "private": true,
   "version": "0.0.0",
-  "description": "The open-source operating system for a one-person business",
+  "description": "The open-source operating system for a one-person business — the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
   "license": "AGPL-3.0-only",
   "author": "Camp Denman Society",
   "repository": {
@@ -14,8 +14,9 @@
   },
   "packageManager": "pnpm@9.0.0",
   "scripts": {
-    "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
-    "test": "pnpm -r test"
+    "build": "echo 'scaffold — the app build lands with the v1 slice (MASTER.md §7)'",
+    "lint": "echo 'scaffold — lint lands with the v1 slice'",
+    "test": "echo 'scaffold — tests land with the v1 slice'",
+    "packages:build": "pnpm -r --filter './packages/*' build"
   }
 }
