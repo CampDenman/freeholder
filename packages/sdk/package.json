@@ -1,0 +1,18 @@
+{
+  "name": "@freeholder/sdk",
+  "version": "0.0.0",
+  "description": "Client SDK for Freeholder sites — typed access to the API and MCP surface",
+  "license": "MIT",
+  "author": "Camp Denman Society",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/campdenman/freeholder.git",
+    "directory": "packages/sdk"
+  },
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "echo 'sdk scaffold — build lands with the v1 slice'",
+    "lint": "echo 'sdk scaffold — lint lands with the v1 slice'",
+    "test": "echo 'sdk scaffold — tests land with the v1 slice'"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "freeholder",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The open-source operating system for a one-person business",
+  "license": "AGPL-3.0-only",
+  "author": "Camp Denman Society",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/campdenman/freeholder.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  }
+}
