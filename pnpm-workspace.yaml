@@ -1,2 +1,9 @@
 packages:
   - "packages/*"
+
+# esbuild ships prebuilt binaries as optional deps; its postinstall script
+# races with itself on Windows when multiple versions install concurrently.
+# sharp needs its build script to wire up libvips for next/image.
+allowBuilds:
+  esbuild: false
+  sharp: true

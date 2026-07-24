@@ -23,3 +23,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# typescript / next
+*.tsbuildinfo
+next-env.d.ts
