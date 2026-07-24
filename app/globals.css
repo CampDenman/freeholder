@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens (MASTER.md §32): these custom properties are the single
+ * styling contract. At runtime the settings service overrides them per
+ * instance — rebranding is a settings save, never a build. Tailwind theme
+ * values reference the variables; components never hardcode brand values.
+ */
+:root {
+  --fh-color-brand: oklch(0.55 0.15 250);
+  --fh-color-brand-contrast: oklch(0.98 0.01 250);
+  --fh-color-bg: oklch(0.99 0 0);
+  --fh-color-fg: oklch(0.22 0.01 250);
+  --fh-color-muted: oklch(0.55 0.02 250);
+  --fh-font-sans: ui-sans-serif, system-ui, sans-serif;
+  --fh-radius: 0.5rem;
+}
+
+@theme inline {
+  --color-brand: var(--fh-color-brand);
+  --color-brand-contrast: var(--fh-color-brand-contrast);
+  --color-bg: var(--fh-color-bg);
+  --color-fg: var(--fh-color-fg);
+  --color-muted: var(--fh-color-muted);
+  --font-sans: var(--fh-font-sans);
+  --radius-fh: var(--fh-radius);
+}
