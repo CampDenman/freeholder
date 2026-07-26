@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// The licensing gate (LICENSING.md, CLAUDE.md non-negotiables). Every source
+// file carries a copyright line and an SPDX identifier, and the identifier
+// must match which side of the AGPL/MIT boundary the file is on. Getting this
+// wrong is not a style slip: it is the licensing boundary the whole project
+// rests on, so it is checked rather than remembered.
+//
+// Usage: node scripts/license-headers.mjs [--fix]
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+
+const COPYRIGHT = "Copyright (C) 2026 Camp Denman Society";
+const fix = process.argv.includes("--fix");
+
+// Generated files: drizzle rewrites migrations wholesale, so a header added
+// here would vanish on the next `db:generate`. JSON has no comment syntax.
+const EXEMPT = [/^db\/migrations\//, /\.json$/, /^next-env\.d\.ts$/];
+
+const COMMENT = { ts: "//", tsx: "//", mts: "//", mjs: "//", js: "//", css: null, yml: "#", yaml: "#" };
+
+const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8" });
+const untracked = execFileSync(
+  "git",
+  ["ls-files", "--others", "--exclude-standard"],
+  { encoding: "utf8" },
+);
+
+const files = [...tracked.split("\n"), ...untracked.split("\n")]
+  .filter(Boolean)
+  .filter((f) => !EXEMPT.some((rx) => rx.test(f)))
+  .filter((f) => COMMENT[f.split(".").pop() ?? ""]);
+
+const problems = [];
+
+for (const file of files) {
+  const prefix = COMMENT[file.split(".").pop()];
+  // packages/* is MIT, everything else in the repo is AGPL (LICENSING.md).
+  const license = file.startsWith("packages/") ? "MIT" : "AGPL-3.0-only";
+  const spdx = `SPDX-License-Identifier: ${license}`;
+
+  const original = readFileSync(file, "utf8");
+  const body = original.replace(/^﻿/, "");
+  const hasCopyright = body.includes(COPYRIGHT);
+  const hasSpdx = body.includes(spdx);
+  const hasWrongSpdx = /SPDX-License-Identifier: \S+/.test(body) && !hasSpdx;
+
+  if (hasCopyright && hasSpdx) continue;
+
+  if (hasWrongSpdx) {
+    // Never auto-rewrite a license: a mismatch here means code may have moved
+    // across the AGPL/MIT boundary, which is a decision, not a typo.
+    problems.push(`${file}: declares a different license; expected ${license}`);
+    continue;
+  }
+
+  if (!fix) {
+    problems.push(
+      `${file}: missing ${!hasCopyright ? "copyright line" : ""}${!hasCopyright && !hasSpdx ? " and " : ""}${!hasSpdx ? "SPDX identifier" : ""}`,
+    );
+    continue;
+  }
+
+  const lines = [];
+  if (!hasCopyright) lines.push(`${prefix} ${COPYRIGHT}`);
+  if (!hasSpdx) lines.push(`${prefix} ${spdx}`);
+  // Insert above an existing SPDX line so the two stay adjacent, else at top.
+  const spdxLine = body.split("\n").findIndex((l) => l.includes("SPDX-License-Identifier"));
+  const out = body.split("\n");
+  out.splice(spdxLine >= 0 ? spdxLine : 0, 0, ...lines);
+  writeFileSync(file, out.join("\n"));
+  console.log(`fixed ${file}`);
+}
+
+if (problems.length > 0) {
+  console.error(
+    `License headers (LICENSING.md): ${problems.length} file(s) need attention.\n` +
+      problems.map((p) => `  ${p}`).join("\n") +
+      "\n\nRun `pnpm license:fix` to add the missing headers.",
+  );
+  process.exit(1);
+}
+console.log(`License headers: ${files.length} files OK.`);

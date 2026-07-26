@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "id": "2026-07-26-core-spine",
+    "date": "2026-07-26",
+    "title": "Core spine: service registry, contact identity, session auth, i18n",
+    "masterRef": "§7 step 1",
+    "status": "done",
+    "delivered": [
+      "defineService wrapper: permission → validation → transaction → audit-in-tx → post-commit bus",
+      "Service composition via ctx.call / ctx.callAsSystem, sharing one transaction",
+      "Contact spine with a unique-email identity rule, contacts.resolve and contacts.merge",
+      "Owner registration guaranteed once by a partial unique index; token-scoped logout",
+      "i18n string layer with BCP-47 fallback chain and per-currency minor units",
+      "Boot sequence: core manifest, topo-sorted wiring, service registration and listener subscription, entered from instrumentation.ts",
+      "Production environment asserted at boot rather than at first login",
+      "Service-layer gate (§15.5) extended to the Drizzle client and driver",
+      "Type-aware lint, with the money gate (§15.4) expressed as lint rules",
+      "License-header gate enforcing the AGPL/MIT boundary in CI",
+      "Test harness: TEST_DATABASE_URL isolation, migrations in globalSetup, 92 tests"
+    ],
+    "openFollowUps": [
+      "Post-commit event bus is in-process, so events are lost if the process dies mid-publish",
+      "updatedAt is hand-maintained in contacts.update only; other write paths will drift",
+      "TimelineEventInput.subjectId is typed string against a uuid column",
+      "Boot does not mount routes, jobs or MCP tools — no such surfaces exist yet",
+      "The FX-inside-charge-paths half of the money gate (§15.4) awaits an fx adapter"
+    ]
+  }
+]

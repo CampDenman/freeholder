@@ -1,3 +1,4 @@
+// Copyright (C) 2026 Camp Denman Society
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import { defineConfig } from "@/core/config";

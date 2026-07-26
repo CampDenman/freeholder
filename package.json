@@ -23,10 +23,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "changelog:gate": "node scripts/changelog-gate.mjs",
+    "license:check": "node scripts/license-headers.mjs",
+    "license:fix": "node scripts/license-headers.mjs --fix",
     "packages:build": "pnpm -r --filter './packages/*' build"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
+    "intl-messageformat": "^11.2.12",
     "next": "^16.2.11",
     "pg-boss": "^12.26.2",
     "postgres": "^3.4.9",

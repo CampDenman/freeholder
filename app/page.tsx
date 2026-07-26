@@ -1,3 +1,4 @@
+// Copyright (C) 2026 Camp Denman Society
 // SPDX-License-Identifier: AGPL-3.0-only
 // Placeholder home. Replaced by the cms module's block renderer (§7 step 6);
 // until then it proves the SSR pipeline: complete HTML, no client JS needed.

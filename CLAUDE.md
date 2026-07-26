@@ -9,6 +9,21 @@ either the change is wrong, or the doc must be updated in the same PR.
 - **Unified contact spine.** Every module (commerce, booking, quotes,
   galleries, email, analytics) reads and writes the same contact record.
   Never create a module-private notion of "customer".
+  One contact per email address, enforced by a unique index. Automated paths
+  (forms, checkout, imports, referrals) call `contacts.resolve` — never
+  `contacts.create`, which is for deliberate entry by a human. Anonymous
+  surfaces reach it through `ctx.callAsSystem`.
+  **A module that adds a `contact_id` column must repoint it in
+  `contacts.merge`.** Merge is a hand-maintained list, not a reflection over
+  the schema: a table missing from it orphans rows the first time an owner
+  merges two duplicates, which is the exact silent fork the spine exists to
+  prevent.
+- **One transaction per mutation.** Services compose with `ctx.call` and
+  `ctx.callAsSystem`, which reuse the caller's transaction and its event
+  queue. Never call `someService.call(...)` from inside another handler: that
+  opens a second transaction on a second connection, so half the mutation can
+  commit while the other half rolls back. Elevation is `ctx.callAsSystem` and
+  nothing else — it is deliberately greppable.
 - **Single-tenant.** One deploy = one business. No tenant-isolation
   abstractions.
 - **Monolith + toggleable modules.** No microservices. Adapters for the
