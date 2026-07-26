@@ -1,3 +1,4 @@
+# Copyright (C) 2026 Camp Denman Society
 # SPDX-License-Identifier: AGPL-3.0-only
 # Quality gates (MASTER.md §15). The SEO, i18n, money, and a11y gates join
 # this file as the surfaces they check come into existence — each lands in
@@ -34,7 +35,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Lint (architecture boundaries included)
+      - name: License headers (LICENSING.md boundary)
+        run: pnpm license:check
+      - name: Lint (architecture boundaries, service-layer and money gates)
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck

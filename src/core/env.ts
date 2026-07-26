@@ -1,3 +1,4 @@
+// Copyright (C) 2026 Camp Denman Society
 // SPDX-License-Identifier: AGPL-3.0-only
 // The single Zod env schema (MASTER.md §14, §17). Every environment variable
 // the platform reads is declared here — nothing reads process.env directly.
@@ -11,6 +12,12 @@ const envSchema = z.object({
     .default("development"),
   /** Postgres connection string. Required at runtime, not at build time. */
   DATABASE_URL: z.string().url().optional(),
+  /**
+   * Throwaway database for the test suite. Declared here because this file is
+   * the single register of what the platform reads — vitest.config.ts maps it
+   * onto DATABASE_URL so tests can never reach the development database.
+   */
+  TEST_DATABASE_URL: z.string().url().optional(),
   /** Absolute base URL of this instance, e.g. https://example.com */
   APP_URL: z.string().url().default("http://localhost:3000"),
   /** 32+ char secret for session-token hashing. Required in production. */
@@ -33,6 +40,42 @@ export function env(): Env {
     cached = parsed.data;
   }
   return cached;
+}
+
+/** Tests only: forget the cached parse so a suite can vary the environment. */
+export function resetEnvForTests(): void {
+  cached = undefined;
+}
+
+/**
+ * Everything a production instance must have before it serves a request.
+ *
+ * Deliberately *not* a `.refine()` on the schema: `next build` runs with
+ * NODE_ENV=production and no secrets attached, so making the schema itself
+ * strict would break the build. This runs at boot instead, which is the first
+ * moment the distinction between building and running actually exists — and
+ * it reports everything missing at once rather than one failure per attempt.
+ */
+export function requireProductionEnv(): void {
+  const current = env();
+  if (current.NODE_ENV !== "production") return;
+
+  const missing: string[] = [];
+  if (!current.DATABASE_URL) {
+    missing.push("DATABASE_URL — the Postgres 15+ connection string");
+  }
+  if (!current.SESSION_SECRET) {
+    missing.push(
+      'SESSION_SECRET — 32+ random characters; generate one with:\n      node -e "console.log(crypto.randomBytes(32).toString(\'hex\'))"',
+    );
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `This instance cannot start in production. Missing:\n${missing
+        .map((m) => `  - ${m}`)
+        .join("\n")}\nSee .env.example.`,
+    );
+  }
 }
 
 /** Fails loudly, in plain English, when the database is needed but absent. */

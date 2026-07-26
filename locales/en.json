@@ -1,0 +1,20 @@
+{
+  "common.appName": "Freeholder",
+  "common.save": "Save",
+  "common.cancel": "Cancel",
+  "common.delete": "Delete",
+  "common.search": "Search",
+  "auth.login.title": "Log in",
+  "auth.login.email": "Email",
+  "auth.login.password": "Password",
+  "auth.login.submit": "Log in",
+  "auth.login.failed": "Wrong email or password.",
+  "auth.logout": "Log out",
+  "contacts.title": "Contacts",
+  "contacts.new": "New contact",
+  "contacts.count": "{count, plural, =0 {No contacts yet} one {# contact} other {# contacts}}",
+  "contacts.stage.lead": "Lead",
+  "contacts.stage.prospect": "Prospect",
+  "contacts.stage.customer": "Customer",
+  "contacts.stage.repeat": "Repeat customer"
+}

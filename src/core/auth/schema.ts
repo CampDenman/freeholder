@@ -1,0 +1,65 @@
+// Copyright (C) 2026 Camp Denman Society
+// SPDX-License-Identifier: AGPL-3.0-only
+// Identity & access tables (MASTER.md §4.1). A User is a login — owner,
+// staff, or customer; customers may be magic-link-only (null password_hash).
+// Sessions are server-side per §9: hand-rolled Lucia-style, token hashed at
+// rest so a database leak never yields a usable session.
+import { sql } from "drizzle-orm";
+import {
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash"),
+    role: text("role", { enum: ["owner", "staff", "customer"] }).notNull(),
+    otpSecret: text("otp_secret"),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("users_email_idx").on(t.email),
+    // One owner, enforced by the database. The setup wizard's registerOwner is
+    // a public unauthenticated endpoint (§13), so "check then insert" in the
+    // service layer is not enough: two concurrent first-boot requests both
+    // read an empty table and both insert. This index is what actually makes
+    // first boot happen exactly once.
+    uniqueIndex("users_single_owner_idx")
+      .on(t.role)
+      .where(sql`${t.role} = 'owner'`),
+  ],
+);
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("sessions_user_id_idx").on(t.userId),
+    uniqueIndex("sessions_token_hash_idx").on(t.tokenHash),
+  ],
+);
