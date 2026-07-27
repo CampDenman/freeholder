@@ -19,11 +19,37 @@
       "Test harness: TEST_DATABASE_URL isolation, migrations in globalSetup, 92 tests"
     ],
     "openFollowUps": [
+      "contacts.resolve never updates an existing contact: a returning form submission's new phone/locale/source is silently discarded (§4.6 names contact_create/update)",
+      "contacts.merge orphans the duplicate's users row when both contacts have a login",
+      "No expired-session sweep: rows are deleted only when revisited, revoked, or cascaded (needs core/jobs)",
       "Post-commit event bus is in-process, so events are lost if the process dies mid-publish",
       "updatedAt is hand-maintained in contacts.update only; other write paths will drift",
       "TimelineEventInput.subjectId is typed string against a uuid column",
-      "Boot does not mount routes, jobs or MCP tools — no such surfaces exist yet",
+      "tests/helpers/spine.ts hand-lists spine tables while src/core/tables.ts is the barrel — they will drift",
+      "License-header gate does not cover CSS (needs block-comment handling)",
+      "Boot mounts no routes, jobs or MCP tools — no such surfaces exist yet",
       "The FX-inside-charge-paths half of the money gate (§15.4) awaits an fx adapter"
+    ]
+  },
+  {
+    "id": "2026-07-26-http-edge",
+    "date": "2026-07-26",
+    "title": "The HTTP edge: actor resolution, service routes, auth endpoints",
+    "masterRef": "§10, §11, §15.5",
+    "status": "done",
+    "delivered": [
+      "src/core/http: cookies, actor resolution, ServiceError-to-status mapping, serviceRoute wrapper",
+      "Framework-agnostic (web Request/Response) so src/ stays free of Next imports",
+      "Routes: POST /api/setup/owner, /api/auth/login, /api/auth/logout, GET /api/auth/session",
+      "Session token lives only in an HttpOnly SameSite=Lax cookie, never in a response body",
+      "Sliding session renewal re-issues the cookie so the browser copy cannot expire first",
+      "Verified end to end over real HTTP against the dev database, not only as function calls"
+    ],
+    "openFollowUps": [
+      "No CSRF defence beyond SameSite=Lax; state-changing routes need a token before browser forms post with cookie auth",
+      "No rate limiting on login or setup — brute force is currently unbounded",
+      "No middleware yet for locale routing or noindex headers on /admin and /portal",
+      "Cookie is re-issued only by GET /api/auth/session; other routes let it drift toward expiry"
     ]
   }
 ]
