@@ -1,27 +1,105 @@
+/* Copyright (C) 2026 Camp Denman Society */
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/*
+ * Deliberately thin. The values live in src/core/design/tokens.ts and are
+ * emitted as --fh-* custom properties by the layout at request time (§32), so
+ * an owner's brand can override them without a rebuild. This file only maps
+ * those variables into Tailwind's theme and sets the floor everything else
+ * inherits.
+ */
 @import "tailwindcss";
 
-/*
- * Design tokens (MASTER.md §32): these custom properties are the single
- * styling contract. At runtime the settings service overrides them per
- * instance — rebranding is a settings save, never a build. Tailwind theme
- * values reference the variables; components never hardcode brand values.
- */
-:root {
-  --fh-color-brand: oklch(0.55 0.15 250);
-  --fh-color-brand-contrast: oklch(0.98 0.01 250);
-  --fh-color-bg: oklch(0.99 0 0);
-  --fh-color-fg: oklch(0.22 0.01 250);
-  --fh-color-muted: oklch(0.55 0.02 250);
-  --fh-font-sans: ui-sans-serif, system-ui, sans-serif;
-  --fh-radius: 0.5rem;
+/* Self-hosted, never a font CDN: §2 principle 6 keeps third parties off the
+ * public surface, and a webfont request is a third party like any other.
+ * latin-ext is not optional — v1 ships English, French and Spanish. */
+@font-face {
+  font-family: "Schibsted Grotesk";
+  src: url("/fonts/schibsted-grotesk-latin.woff2") format("woff2");
+  font-weight: 400 900;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Schibsted Grotesk";
+  src: url("/fonts/schibsted-grotesk-latin-ext.woff2") format("woff2");
+  font-weight: 400 900;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
+    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
 }
 
+/* Tailwind's palette *is* the token set — `bg-surface` resolves to the
+ * variable, so a theme override reaches every utility at once. */
 @theme inline {
-  --color-brand: var(--fh-color-brand);
-  --color-brand-contrast: var(--fh-color-brand-contrast);
-  --color-bg: var(--fh-color-bg);
-  --color-fg: var(--fh-color-fg);
-  --color-muted: var(--fh-color-muted);
-  --font-sans: var(--fh-font-sans);
-  --radius-fh: var(--fh-radius);
+  --color-paper: var(--fh-paper);
+  --color-surface: var(--fh-surface);
+  --color-surface-muted: var(--fh-surface-muted);
+  --color-field: var(--fh-field);
+  --color-ink: var(--fh-ink);
+  --color-ink-muted: var(--fh-ink-muted);
+  --color-rule: var(--fh-rule);
+  --color-accent: var(--fh-accent);
+  --color-on-accent: var(--fh-on-accent);
+  --color-accent-soft: var(--fh-accent-soft);
+  --color-success: var(--fh-success);
+  --color-success-soft: var(--fh-success-soft);
+  --color-warning: var(--fh-warning);
+  --color-warning-soft: var(--fh-warning-soft);
+  --color-danger: var(--fh-danger);
+  --color-danger-soft: var(--fh-danger-soft);
+  --color-focus: var(--fh-focus);
+
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+  body {
+    background-color: var(--fh-paper);
+    color: var(--fh-ink);
+    font-family: var(--font-sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Visible keyboard focus is a floor, not a feature (§15.7). */
+  :focus-visible {
+    outline: 2px solid var(--fh-focus);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
