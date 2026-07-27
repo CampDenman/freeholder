@@ -1,0 +1,244 @@
+// Copyright (C) 2026 Camp Denman Society
+// SPDX-License-Identifier: AGPL-3.0-only
+// Business identity and module toggles (MASTER.md §4.8, §13).
+//
+// The profile is readable by anyone because every public page needs it — the
+// site's name, locale and currency are on the page already. Writing it is
+// owner-only, and once setup completes the wizard's own step refuses to run
+// again, so /setup cannot be replayed against a live business.
+import { z } from "zod";
+import { eq, sql } from "drizzle-orm";
+import { users } from "@/core/auth/schema";
+import { businessProfile, moduleSettings } from "@/core/settings/schema";
+import { defineService, ServiceError } from "@/core/service";
+
+const PROFILE_ID = 1;
+
+/** BCP-47-ish: a language, optional script/region. Not a full parser. */
+const locale = z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, {
+  message: "use a BCP-47 locale such as en, fr-CA or zh-Hant-TW",
+});
+
+const profileShape = {
+  name: z.string().min(1),
+  tagline: z.string().optional(),
+  schemaType: z.string().min(1),
+  country: z.string().length(2).toUpperCase(),
+  defaultLocale: locale,
+  enabledLocales: z.array(locale).min(1),
+  baseCurrency: z.string().length(3).toUpperCase(),
+  timezone: z.string().min(1),
+  units: z.enum(["metric", "imperial"]),
+  firstDayOfWeek: z.number().int().min(0).max(6),
+};
+
+/** Creation fills in the fields the wizard does not ask about. */
+const createProfile = z.object({
+  ...profileShape,
+  schemaType: profileShape.schemaType.default("LocalBusiness"),
+  defaultLocale: profileShape.defaultLocale.default("en"),
+  enabledLocales: profileShape.enabledLocales.default(["en"]),
+  units: profileShape.units.default("metric"),
+  firstDayOfWeek: profileShape.firstDayOfWeek.default(1),
+});
+
+/**
+ * Patching uses the shape *without* defaults. `.partial()` does not remove a
+ * `.default()`, so patching from the creation schema would quietly resupply
+ * every default: changing a tagline would reset the business's locale, units
+ * and first day of week. The two schemas are separate for that reason alone.
+ */
+const patchProfile = z.object(profileShape).partial();
+
+export const getBusiness = defineService({
+  name: "settings.getBusiness",
+  summary: "The business profile every public page renders from.",
+  kind: "query",
+  permission: "public",
+  input: z.object({}),
+  handler: async (_input, ctx) => {
+    const [profile] = await ctx.tx
+      .select()
+      .from(businessProfile)
+      .where(eq(businessProfile.id, PROFILE_ID))
+      .limit(1);
+    return profile ?? null;
+  },
+});
+
+/**
+ * What first boot still needs. Public, because /setup has to ask before anyone
+ * can possibly be signed in — and it deliberately answers only yes/no
+ * questions, never who the owner is.
+ */
+export const setupState = defineService({
+  name: "settings.setupState",
+  summary: "What first-boot setup still requires.",
+  kind: "query",
+  permission: "public",
+  input: z.object({}),
+  handler: async (_input, ctx) => {
+    const [owner] = await ctx.tx
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.role, "owner"))
+      .limit(1);
+    const [profile] = await ctx.tx
+      .select({ completedAt: businessProfile.setupCompletedAt })
+      .from(businessProfile)
+      .where(eq(businessProfile.id, PROFILE_ID))
+      .limit(1);
+    return {
+      hasOwner: Boolean(owner),
+      hasBusiness: Boolean(profile),
+      completed: Boolean(profile?.completedAt),
+    };
+  },
+});
+
+export const updateBusiness = defineService({
+  name: "settings.updateBusiness",
+  summary: "Create or change the business profile.",
+  kind: "mutation",
+  permission: "owner",
+  input: createProfile,
+  handler: async (input, ctx) => {
+    // Upsert on the fixed id: setup writes the first version and the admin
+    // screen edits it later, through one path rather than two.
+    const [profile] = await ctx.tx
+      .insert(businessProfile)
+      .values({ ...input, id: PROFILE_ID })
+      .onConflictDoUpdate({
+        target: businessProfile.id,
+        set: { ...input, updatedAt: sql`now()` },
+      })
+      .returning();
+    ctx.setSubject("business_profile", String(PROFILE_ID));
+    ctx.queueEvent("settings.businessUpdated", { name: profile!.name });
+    return profile!;
+  },
+});
+
+/**
+ * Patch a subset of the profile. Separate from updateBusiness because that one
+ * requires the fields a business cannot exist without; this one is for the
+ * admin screen changing a tagline without restating its own country.
+ */
+export const patchBusiness = defineService({
+  name: "settings.patchBusiness",
+  summary: "Change part of the business profile.",
+  kind: "mutation",
+  permission: "owner",
+  input: patchProfile,
+  handler: async (input, ctx) => {
+    if (Object.keys(input).length === 0) {
+      throw new ServiceError(
+        "validation",
+        "settings.patchBusiness: nothing to change",
+      );
+    }
+    const [profile] = await ctx.tx
+      .update(businessProfile)
+      .set({ ...input, updatedAt: sql`now()` })
+      .where(eq(businessProfile.id, PROFILE_ID))
+      .returning();
+    if (!profile) {
+      throw new ServiceError(
+        "not_found",
+        "No business profile yet — complete setup first.",
+      );
+    }
+    ctx.setSubject("business_profile", String(PROFILE_ID));
+    ctx.queueEvent("settings.businessUpdated", { name: profile.name });
+    return profile;
+  },
+});
+
+export const completeSetup = defineService({
+  name: "settings.completeSetup",
+  summary: "Finish first-boot setup and lock the wizard.",
+  kind: "mutation",
+  permission: "owner",
+  input: z.object({}),
+  handler: async (_input, ctx) => {
+    const [profile] = await ctx.tx
+      .select()
+      .from(businessProfile)
+      .where(eq(businessProfile.id, PROFILE_ID))
+      .limit(1);
+    if (!profile) {
+      throw new ServiceError(
+        "not_found",
+        "There is no business profile to finish. Save the business details first.",
+      );
+    }
+    if (profile.setupCompletedAt) {
+      // §13: locked after completion. Replaying the wizard against a live
+      // business is how a demo instance gets reset by a passer-by.
+      throw new ServiceError("conflict", "Setup is already complete.");
+    }
+    const [updated] = await ctx.tx
+      .update(businessProfile)
+      .set({ setupCompletedAt: sql`now()`, updatedAt: sql`now()` })
+      .where(eq(businessProfile.id, PROFILE_ID))
+      .returning();
+    ctx.setSubject("business_profile", String(PROFILE_ID));
+    ctx.queueEvent("settings.setupCompleted", {});
+    return updated!;
+  },
+});
+
+export const listModules = defineService({
+  name: "settings.listModules",
+  summary: "Module toggles that have been set.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({}),
+  // Only modules with a stored row. The set of *installed* modules comes from
+  // the boot report; the admin screen merges the two so a module that has
+  // never been toggled still appears, at its manifest default.
+  handler: async (_input, ctx) =>
+    ctx.tx.select().from(moduleSettings).orderBy(moduleSettings.module),
+});
+
+export const setModuleEnabled = defineService({
+  name: "settings.setModuleEnabled",
+  summary: "Turn a module on or off.",
+  kind: "mutation",
+  permission: "owner",
+  input: z.object({ module: z.string().min(1), enabled: z.boolean() }),
+  handler: async (input, ctx) => {
+    if (input.module === "core") {
+      // §3: core is always on. Allowing this would let an owner switch off
+      // auth and lock themselves out of their own instance permanently.
+      throw new ServiceError(
+        "validation",
+        "Core is always on and cannot be turned off.",
+      );
+    }
+    const [row] = await ctx.tx
+      .insert(moduleSettings)
+      .values({ module: input.module, enabled: input.enabled })
+      .onConflictDoUpdate({
+        target: moduleSettings.module,
+        set: { enabled: input.enabled, updatedAt: sql`now()` },
+      })
+      .returning();
+    ctx.setSubject("module_settings", input.module);
+    ctx.queueEvent(
+      input.enabled ? "module.enabled" : "module.disabled",
+      { module: input.module },
+    );
+    return row!;
+  },
+});
+
+export default [
+  getBusiness,
+  setupState,
+  updateBusiness,
+  patchBusiness,
+  completeSetup,
+  listModules,
+  setModuleEnabled,
+];

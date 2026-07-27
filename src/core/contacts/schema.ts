@@ -90,7 +90,8 @@ export const timelineEvents = pgTable(
     /** Dotted past-tense verb: "contact.created", "quote.sent", "invoice.paid"… */
     eventType: text("event_type").notNull(),
     subjectType: text("subject_type").notNull(),
-    subjectId: uuid("subject_id"),
+    /** Polymorphic like audit_log.subject_id — see that column. */
+    subjectId: text("subject_id"),
     payload: jsonb("payload").notNull().default({}),
     occurredAt: timestamp("occurred_at", { withTimezone: true })
       .notNull()

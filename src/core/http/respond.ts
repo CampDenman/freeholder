@@ -12,15 +12,28 @@ const STATUS: Record<ServiceError["code"], number> = {
   conflict: 409,
 };
 
+export interface ResponseParts {
+  headers?: Record<string, string>;
+  /**
+   * Set-Cookie is the one header that legitimately repeats, and a plain record
+   * cannot express that — signing in sets both the session and CSRF cookies.
+   */
+  cookies?: string[];
+}
+
 export function json(
   body: unknown,
   status = 200,
-  headers: Record<string, string> = {},
+  parts: ResponseParts = {},
 ): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", ...headers },
+  const headers = new Headers({
+    "content-type": "application/json; charset=utf-8",
+    ...parts.headers,
   });
+  for (const cookie of parts.cookies ?? []) {
+    headers.append("set-cookie", cookie);
+  }
+  return new Response(JSON.stringify(body), { status, headers });
 }
 
 /**

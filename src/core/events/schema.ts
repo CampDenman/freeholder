@@ -16,7 +16,12 @@ export const auditLog = pgTable(
     /** The service method name: "contacts.create", "auth.login"… */
     action: text("action").notNull(),
     subjectType: text("subject_type"),
-    subjectId: uuid("subject_id"),
+    /**
+     * Polymorphic, so text rather than uuid: a subject may be a contact id, a
+     * module name, or the singleton business profile. Typing it uuid asserted
+     * something untrue and made auditing a settings change impossible.
+     */
+    subjectId: text("subject_id"),
     /** Input snapshot / changed fields. Secrets are redacted before write. */
     diff: jsonb("diff").notNull().default({}),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),

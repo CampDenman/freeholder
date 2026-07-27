@@ -10,13 +10,13 @@
 // app/ stays a routing skin over an application that does not know about it.
 import type { z } from "zod";
 import { actorFromRequest } from "@/core/http/actor";
-import { errorResponse, json } from "@/core/http/respond";
+import { requireCsrf } from "@/core/http/csrf";
+import { errorResponse, json, type ResponseParts } from "@/core/http/respond";
 import type { Service } from "@/core/service";
 
-export interface Presented {
+export interface Presented extends ResponseParts {
   status?: number;
   body?: unknown;
-  headers?: Record<string, string>;
 }
 
 export interface ServiceRouteOptions<Out> {
@@ -59,6 +59,10 @@ export function serviceRoute<In extends z.ZodType, Out>(
     // will allow and whether a refusal reads as 401 or 403.
     const actor = await actorFromRequest(request);
     try {
+      // Before the service, and before the body is even parsed: a forged
+      // request must not reach business logic at all.
+      requireCsrf(request);
+
       const input = options.readInput
         ? await options.readInput(request)
         : request.method === "GET"
@@ -67,11 +71,10 @@ export function serviceRoute<In extends z.ZodType, Out>(
 
       const result = await service.call(input, actor);
       const presented = options.present?.(result) ?? { body: result };
-      return json(
-        presented.body ?? { ok: true },
-        presented.status ?? 200,
-        presented.headers ?? {},
-      );
+      return json(presented.body ?? { ok: true }, presented.status ?? 200, {
+        headers: presented.headers,
+        cookies: presented.cookies,
+      });
     } catch (error) {
       return errorResponse(error, actor);
     }

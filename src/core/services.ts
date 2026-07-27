@@ -6,8 +6,13 @@
 // separate mistake anyone can make.
 import authServices from "@/core/auth/service";
 import contactServices from "@/core/contacts/service";
+import settingsServices from "@/core/settings/service";
 import type { Service } from "@/core/service";
 
-const services: Service[] = [...authServices, ...contactServices];
+const services: Service[] = [
+  ...authServices,
+  ...contactServices,
+  ...settingsServices,
+];
 
 export default services;

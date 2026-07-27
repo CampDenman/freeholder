@@ -8,6 +8,13 @@
       "when": 1785054443543,
       "tag": "0000_core-spine",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785119642360,
+      "tag": "0001_business-profile",
+      "breakpoints": true
     }
   ]
 }
