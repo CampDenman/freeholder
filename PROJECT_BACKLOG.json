@@ -51,5 +51,28 @@
       "No middleware yet for locale routing or noindex headers on /admin and /portal",
       "Cookie is re-issued only by GET /api/auth/session; other routes let it drift toward expiry"
     ]
+  },
+  {
+    "id": "2026-07-26-settings-and-csrf",
+    "date": "2026-07-26",
+    "title": "Business settings, module toggles, and CSRF defence",
+    "masterRef": "§4.8, §13, §2 principle 1",
+    "status": "done",
+    "delivered": [
+      "business_profile singleton, enforced by a check constraint rather than convention",
+      "Column-level checks on country, currency and first day of week",
+      "settings services: getBusiness, setupState, updateBusiness, patchBusiness, completeSetup",
+      "Module toggles, with core refused so an owner cannot lock themselves out",
+      "Setup locks after completion so the wizard cannot be replayed on a live site",
+      "CSRF double-submit token, enforced in serviceRoute for cookie-authenticated writes",
+      "audit_log.subject_id and timeline_events.subject_id are now text: subjects are polymorphic"
+    ],
+    "openFollowUps": [
+      "No rate limiting on login or setup — brute force is still unbounded",
+      "settings.listModules returns only stored rows; the admin screen must merge with the boot report",
+      "No /setup or admin UI yet — these services have no screens",
+      "Logo and branding await core/media",
+      "Regenerating an applied migration requires resetting the target database; worth a documented reset script"
+    ]
   }
 ]

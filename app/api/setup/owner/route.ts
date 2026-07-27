@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Camp Denman Society
 // SPDX-License-Identifier: AGPL-3.0-only
+import { csrfCookie, issueCsrfToken } from "@/core/http/csrf";
 import { registerOwner } from "@/core/auth/service";
 import { sessionCookie } from "@/core/http/cookies";
 import { serviceRoute } from "@/core/http/route";
@@ -10,6 +11,9 @@ export const POST = serviceRoute(registerOwner, {
   present: ({ userId, token, expiresAt }) => ({
     status: 201,
     body: { userId },
-    headers: { "set-cookie": sessionCookie(token, expiresAt) },
+    cookies: [
+      sessionCookie(token, expiresAt),
+      csrfCookie(issueCsrfToken(), expiresAt),
+    ],
   }),
 });

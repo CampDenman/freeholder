@@ -7,4 +7,4 @@
 export { users, sessions } from "@/core/auth/schema";
 export { organizations, contacts, timelineEvents } from "@/core/contacts/schema";
 export { auditLog } from "@/core/events/schema";
-export { moduleSettings } from "@/core/settings/schema";
+export { businessProfile, moduleSettings } from "@/core/settings/schema";

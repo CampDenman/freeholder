@@ -12,6 +12,13 @@ export default defineModule({
   tables: () => import("@/core/tables"),
   services: () => import("@/core/services"),
   events: {
-    emits: ["contact.created", "contact.merged"],
+    emits: [
+      "contact.created",
+      "contact.merged",
+      "settings.businessUpdated",
+      "settings.setupCompleted",
+      "module.enabled",
+      "module.disabled",
+    ],
   },
 });

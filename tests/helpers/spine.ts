@@ -49,7 +49,7 @@ export async function truncateSpine(): Promise<void> {
   await db().execute(sql`
     truncate table
       "audit_log", "timeline_events", "contacts", "organizations",
-      "sessions", "users", "module_settings"
+      "sessions", "users", "module_settings", "business_profile"
     restart identity cascade
   `);
 }

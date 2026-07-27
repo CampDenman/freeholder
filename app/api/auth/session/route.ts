@@ -6,6 +6,12 @@ import {
   readSessionToken,
   sessionCookie,
 } from "@/core/http/cookies";
+import {
+  clearedCsrfCookie,
+  csrfCookie,
+  issueCsrfToken,
+  readCsrfCookie,
+} from "@/core/http/csrf";
 import { json } from "@/core/http/respond";
 
 /**
@@ -19,16 +25,24 @@ export async function GET(request: Request): Promise<Response> {
 
   if (!token) return json({ user: null });
   if (!session) {
-    // The cookie names a session that has expired or been revoked. Clearing it
-    // stops the browser presenting a dead token on every subsequent request.
+    // The cookie names a session that has expired or been revoked. Clearing
+    // both stops the browser presenting a dead token on every request.
     return json({ user: null }, 200, {
-      "set-cookie": clearedSessionCookie(),
+      cookies: [clearedSessionCookie(), clearedCsrfCookie()],
     });
   }
 
   // Sessions slide: validating past the half-life extends the row in the
   // database. Re-issuing the cookie keeps the browser's copy from expiring
   // first, which would log a working session out.
+  const cookies = [sessionCookie(token, session.expiresAt)];
+
+  // Replace a missing CSRF token, but never a present one — rotating it here
+  // would invalidate whatever the page already has in flight.
+  if (!readCsrfCookie(request)) {
+    cookies.push(csrfCookie(issueCsrfToken(), session.expiresAt));
+  }
+
   return json(
     {
       user: {
@@ -38,6 +52,6 @@ export async function GET(request: Request): Promise<Response> {
       },
     },
     200,
-    { "set-cookie": sessionCookie(token, session.expiresAt) },
+    { cookies },
   );
 }

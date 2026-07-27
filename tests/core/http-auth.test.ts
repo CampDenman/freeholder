@@ -9,16 +9,22 @@ import { POST as logoutRoute } from "../../app/api/auth/logout/route";
 import { GET as sessionRoute } from "../../app/api/auth/session/route";
 import { POST as registerOwnerRoute } from "../../app/api/setup/owner/route";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { CSRF_COOKIE, CSRF_HEADER } from "@/core/http/csrf";
 import { closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
 
 const PASSWORD = "a-sufficiently-long-owner-password";
 
-const post = (url: string, body: unknown, cookie?: string) =>
+const post = (
+  url: string,
+  body: unknown,
+  auth?: { cookie: string; csrf?: string },
+) =>
   new Request(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(cookie ? { cookie } : {}),
+      ...(auth ? { cookie: auth.cookie } : {}),
+      ...(auth?.csrf ? { [CSRF_HEADER]: auth.csrf } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -26,11 +32,29 @@ const post = (url: string, body: unknown, cookie?: string) =>
 const get = (url: string, cookie?: string) =>
   new Request(url, { headers: cookie ? { cookie } : {} });
 
-/** The cookie a browser would send back, built from a Set-Cookie header. */
-function cookieFrom(response: Response): string {
-  const header = response.headers.get("set-cookie");
-  if (!header) throw new Error("expected a Set-Cookie header");
-  return header.split(";")[0]!;
+/**
+ * What a browser would hold after this response, and what it would echo back.
+ * Sign-in sets two cookies, so this reads them all rather than the first.
+ */
+function clientState(response: Response): { cookie: string; csrf: string } {
+  const setCookies = response.headers.getSetCookie();
+  if (setCookies.length === 0) throw new Error("expected a Set-Cookie header");
+  const pairs = setCookies.map((c) => c.split(";")[0]!);
+  const csrfPair = pairs.find((p) => p.startsWith(`${CSRF_COOKIE}=`));
+  return {
+    cookie: pairs.join("; "),
+    csrf: csrfPair ? decodeURIComponent(csrfPair.slice(CSRF_COOKIE.length + 1)) : "",
+  };
+}
+
+/** Just the session token value, for assertions about where it must not be. */
+function sessionTokenFrom(response: Response): string {
+  const pair = response.headers
+    .getSetCookie()
+    .map((c) => c.split(";")[0]!)
+    .find((p) => p.startsWith(`${SESSION_COOKIE}=`));
+  if (!pair) throw new Error("expected a session cookie");
+  return decodeURIComponent(pair.slice(SESSION_COOKIE.length + 1));
 }
 
 describe.runIf(hasDatabase)("the auth routes", () => {
@@ -52,8 +76,9 @@ describe.runIf(hasDatabase)("the auth routes", () => {
     const body = (await response.json()) as { userId: string };
     expect(body.userId).toBeTruthy();
 
-    const cookie = cookieFrom(response);
-    expect(cookie.startsWith(`${SESSION_COOKIE}=`)).toBe(true);
+    const { cookie } = clientState(response);
+    expect(cookie).toContain(`${SESSION_COOKIE}=`);
+    expect(cookie).toContain(`${CSRF_COOKIE}=`);
 
     const session = await sessionRoute(
       get("https://example.test/api/auth/session", cookie),
@@ -68,7 +93,7 @@ describe.runIf(hasDatabase)("the auth routes", () => {
   it("never puts the session token in a response body", async () => {
     // The token belongs in an HttpOnly cookie and nowhere a script can read.
     const created = await registerOwner();
-    const token = cookieFrom(created).split("=")[1]!;
+    const token = sessionTokenFrom(created);
     expect(token.length).toBeGreaterThan(20);
 
     const createdBody = JSON.stringify(await created.json());
@@ -82,7 +107,7 @@ describe.runIf(hasDatabase)("the auth routes", () => {
       }),
     );
     const loginBody = JSON.stringify(await loggedIn.json());
-    expect(loginBody).not.toContain(cookieFrom(loggedIn).split("=")[1]!);
+    expect(loginBody).not.toContain(sessionTokenFrom(loggedIn));
     expect(loginBody).not.toContain("expiresAt");
   });
 
@@ -134,8 +159,11 @@ describe.runIf(hasDatabase)("the auth routes", () => {
 
   it("clears a cookie that names a session which no longer exists", async () => {
     const created = await registerOwner();
-    const cookie = cookieFrom(created);
-    await logoutRoute(post("https://example.test/api/auth/logout", {}, cookie));
+    const client = clientState(created);
+    await logoutRoute(
+      post("https://example.test/api/auth/logout", {}, client),
+    );
+    const cookie = client.cookie;
 
     const response = await sessionRoute(
       get("https://example.test/api/auth/session", cookie),
@@ -146,7 +174,8 @@ describe.runIf(hasDatabase)("the auth routes", () => {
 
   it("signs out the caller's own session and nobody else's", async () => {
     const owner = await registerOwner();
-    const ownerCookie = cookieFrom(owner);
+    const ownerClient = clientState(owner);
+    const ownerCookie = ownerClient.cookie;
 
     // A second session for the same user, as a second browser would have.
     const second = await loginRoute(
@@ -155,11 +184,12 @@ describe.runIf(hasDatabase)("the auth routes", () => {
         password: PASSWORD,
       }),
     );
-    const secondCookie = cookieFrom(second);
+    const secondClient = clientState(second);
+    const secondCookie = secondClient.cookie;
     expect(secondCookie).not.toBe(ownerCookie);
 
     const loggedOut = await logoutRoute(
-      post("https://example.test/api/auth/logout", {}, secondCookie),
+      post("https://example.test/api/auth/logout", {}, secondClient),
     );
     expect(loggedOut.status).toBe(200);
     expect(loggedOut.headers.get("set-cookie")).toContain("Max-Age=0");
@@ -177,11 +207,55 @@ describe.runIf(hasDatabase)("the auth routes", () => {
     expect(who.user?.role).toBe("owner");
   });
 
+  it("refuses a cookie-authenticated write carrying no CSRF token", async () => {
+    // The forged request: another site causes the browser to POST here, and
+    // the session cookie rides along automatically. The attacker cannot read
+    // the CSRF cookie to copy it into a header, so this must not go through.
+    const owner = await registerOwner();
+    const { cookie } = clientState(owner);
+
+    const forged = await logoutRoute(
+      post("https://example.test/api/auth/logout", {}, { cookie }),
+    );
+    expect(forged.status).toBe(403);
+
+    // And the session it tried to end is still alive.
+    const alive = await sessionRoute(
+      get("https://example.test/api/auth/session", cookie),
+    );
+    const who = (await alive.json()) as { user: { role: string } | null };
+    expect(who.user?.role).toBe("owner");
+  });
+
+  it("refuses a CSRF token that does not match the cookie", async () => {
+    const owner = await registerOwner();
+    const { cookie } = clientState(owner);
+    const forged = await logoutRoute(
+      post(
+        "https://example.test/api/auth/logout",
+        {},
+        { cookie, csrf: "a-token-the-attacker-guessed" },
+      ),
+    );
+    expect(forged.status).toBe(403);
+  });
+
+  it("needs no CSRF token before sign-in, or login could never happen", async () => {
+    await registerOwner();
+    const response = await loginRoute(
+      post("https://example.test/api/auth/login", {
+        email: "owner@example.test",
+        password: PASSWORD,
+      }),
+    );
+    expect(response.status).toBe(200);
+  });
+
   it("ignores a session token supplied in the body instead of the cookie", async () => {
     // The forged path: naming a session you do not hold must do nothing.
     const owner = await registerOwner();
-    const ownerCookie = cookieFrom(owner);
-    const stolenToken = ownerCookie.split("=")[1]!;
+    const ownerCookie = clientState(owner).cookie;
+    const stolenToken = sessionTokenFrom(owner);
 
     await logoutRoute(
       post("https://example.test/api/auth/logout", { token: stolenToken }),
