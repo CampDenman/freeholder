@@ -5,7 +5,7 @@
 // them) and lands in the audit log via the service wrapper. No module gets
 // its own notion of "customer" — this is the only door.
 import { z } from "zod";
-import { and, arrayContains, eq, ilike, or, sql } from "drizzle-orm";
+import { and, arrayContains, count, eq, ilike, or, sql } from "drizzle-orm";
 import { contacts, timelineEvents } from "@/core/contacts/schema";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError } from "@/core/service";
@@ -339,6 +339,35 @@ export const listContacts = defineService({
   },
 });
 
+/**
+ * The shape of the spine at a glance. Counted in the database rather than by
+ * loading rows and measuring the array — a contact list that outgrows one page
+ * must not turn the dashboard into a full table scan in application memory.
+ */
+export const contactStats = defineService({
+  name: "contacts.stats",
+  summary: "How many contacts there are, and where they are in the lifecycle.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({}),
+  handler: async (_input, ctx) => {
+    const rows = await ctx.tx
+      .select({ stage: contacts.lifecycleStage, n: count() })
+      .from(contacts)
+      .groupBy(contacts.lifecycleStage);
+
+    const byStage = Object.fromEntries(
+      STAGES.map((stage) => [stage, 0]),
+    ) as Record<(typeof STAGES)[number], number>;
+    let total = 0;
+    for (const row of rows) {
+      byStage[row.stage] = row.n;
+      total += row.n;
+    }
+    return { total, byStage };
+  },
+});
+
 export default [
   createContact,
   resolveContact,
@@ -346,4 +375,5 @@ export default [
   updateContact,
   getContact,
   listContacts,
+  contactStats,
 ];

@@ -12,6 +12,8 @@ import {
   Select,
 } from "@/ui/primitives";
 import {
+  ALL_CURRENCIES,
+  ALL_TIMEZONES,
   BUSINESS_TYPES,
   COUNTRY_DEFAULTS,
   DEFAULT_COUNTRY,
@@ -21,8 +23,10 @@ import {
 } from "@/core/settings/defaults";
 import { saveBusinessAction, type ActionState } from "../actions";
 
-const CURRENCIES = [...new Set(COUNTRY_DEFAULTS.map((c) => c.currency))].sort();
-const TIMEZONES = [...new Set(COUNTRY_DEFAULTS.map((c) => c.timezone))].sort();
+// The full lists, not the country table's samples: that table suggests a
+// default, it does not limit what a business may choose.
+const CURRENCIES = ALL_CURRENCIES;
+const TIMEZONES = ALL_TIMEZONES;
 
 export function BusinessForm() {
   const [country, setCountry] = useState(DEFAULT_COUNTRY);

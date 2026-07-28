@@ -107,5 +107,29 @@
       "packages/templates is still a scaffold; the Bench tokens should become its first theme",
       "Theme toggle is only in the setup header; it belongs in the admin shell and, as an owner opt-in, on the public site"
     ]
+  },
+  {
+    "id": "2026-07-28-admin-shell",
+    "date": "2026-07-28",
+    "title": "Admin shell: sign-in, overview, and editable settings",
+    "masterRef": "§5, §9, §10, §4.8",
+    "status": "done",
+    "delivered": [
+      "(admin) route group: /login outside the guard, /admin behind it",
+      "requireStaffActor() called by the layout AND every page, because Next renders them in parallel",
+      "Sign-in and sign-out through the auth services; sign-out revokes the session row",
+      "Overview with real contact counts and the real audit trail, rendered in plain English",
+      "Settings screen editing the business profile after setup",
+      "events.recentActivity and contacts.stats services",
+      "noindex on admin and login (§5)",
+      "Full IANA timezone and ISO currency lists, with withCurrent() so a stored value is always selectable"
+    ],
+    "openFollowUps": [
+      "No contacts screen yet — the spine is counted but not browsable",
+      "Audit entries show the service name prettified; a real human-readable summary per action would read better",
+      "No staff invitations, so the only account is the owner created at setup",
+      "Sign-in has no rate limiting (tracked since the HTTP edge landed)",
+      "No password reset or OTP yet"
+    ]
   }
 ]

@@ -45,6 +45,35 @@ export const COUNTRY_DEFAULTS: readonly CountryDefaults[] = [
 
 export const DEFAULT_COUNTRY = "CA";
 
+/**
+ * Every zone and currency the platform knows, not the handful above.
+ *
+ * The list above exists to *suggest* a default from a country; it must never
+ * be the list a business can choose from. A Canadian photographer is as likely
+ * to be in Vancouver as Toronto, and a select whose options omit the value it
+ * was given silently falls back to its first option — which is how a business
+ * in Vancouver quietly became one in Johannesburg the first time this screen
+ * was opened with real data.
+ */
+export const ALL_TIMEZONES: readonly string[] =
+  Intl.supportedValuesOf("timeZone");
+
+export const ALL_CURRENCIES: readonly string[] =
+  Intl.supportedValuesOf("currency");
+
+/**
+ * The options for a select, guaranteed to contain the value it is showing.
+ * Belt and braces for lists that are curated rather than exhaustive — a
+ * stored value must always be selectable, even if it predates the list.
+ */
+export function withCurrent(
+  options: readonly string[],
+  current: string | undefined,
+): string[] {
+  if (!current || options.includes(current)) return [...options];
+  return [current, ...options];
+}
+
 export function defaultsFor(code: string): CountryDefaults {
   return (
     COUNTRY_DEFAULTS.find((c) => c.code === code) ??
