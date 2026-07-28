@@ -11,6 +11,8 @@ export function SignInForm() {
     signInAction,
     {},
   );
+  const generation = state.attempt ?? 0;
+
   return (
     <form action={action} className="grid gap-5">
       {state.error ? (
@@ -20,10 +22,12 @@ export function SignInForm() {
       ) : null}
       <Field label="Email" htmlFor="email">
         <Input
+          key={`email-${generation}`}
           id="email"
           name="email"
           type="email"
           autoComplete="username"
+          defaultValue={state.values?.email ?? ""}
           required
           autoFocus
         />

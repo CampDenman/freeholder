@@ -5,7 +5,16 @@
 // them) and lands in the audit log via the service wrapper. No module gets
 // its own notion of "customer" — this is the only door.
 import { z } from "zod";
-import { and, arrayContains, count, eq, ilike, or, sql } from "drizzle-orm";
+import {
+  and,
+  arrayContains,
+  count,
+  desc,
+  eq,
+  ilike,
+  or,
+  sql,
+} from "drizzle-orm";
 import { contacts, timelineEvents } from "@/core/contacts/schema";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError } from "@/core/service";
@@ -43,9 +52,11 @@ async function guardDuplicateEmail<T>(
     return await run();
   } catch (error) {
     if (email && isUniqueViolation(error, "contacts_email_idx")) {
+      // Plain English: this message reaches a business owner's screen, and
+      // "use contacts.resolve" is a sentence only its author can act on.
       throw new ServiceError(
         "conflict",
-        `A contact with the email ${email} already exists — resolve it (contacts.resolve) or merge the records (contacts.merge).`,
+        `${email} is already on another contact. Open that contact instead, or merge the two records.`,
       );
     }
     throw error;
@@ -329,14 +340,51 @@ export const listContacts = defineService({
         : undefined,
       input.tag ? arrayContains(contacts.tags, [input.tag]) : undefined,
     ].filter((f) => f !== undefined);
-    return ctx.tx
+    const where = filters.length ? and(...filters) : undefined;
+
+    const rows = await ctx.tx
       .select()
       .from(contacts)
-      .where(filters.length ? and(...filters) : undefined)
-      .orderBy(contacts.createdAt)
+      .where(where)
+      // Newest first: the contact somebody is looking for is far more often
+      // the one that just arrived than the one from three years ago.
+      .orderBy(desc(contacts.createdAt))
       .limit(input.limit)
       .offset(input.offset);
+
+    // Counted separately rather than by measuring `rows`, which only ever
+    // holds one page — a caller cannot page through what it cannot size.
+    const [totals] = await ctx.tx
+      .select({ n: count() })
+      .from(contacts)
+      .where(where);
+
+    return { rows, total: totals?.n ?? 0 };
   },
+});
+
+/**
+ * The CRM timeline for one contact (§4.1). A *view* over the spine rather than
+ * a separate store: modules write TimelineEvents as things happen, and this
+ * reads them back. Nothing here knows what a quote or a booking is — that is
+ * the point of the integration contract.
+ */
+export const contactTimeline = defineService({
+  name: "contacts.timeline",
+  summary: "Everything that has happened to one contact, newest first.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({
+    contactId: z.string().uuid(),
+    limit: z.number().int().min(1).max(200).default(50),
+  }),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select()
+      .from(timelineEvents)
+      .where(eq(timelineEvents.contactId, input.contactId))
+      .orderBy(desc(timelineEvents.occurredAt))
+      .limit(input.limit),
 });
 
 /**
@@ -375,5 +423,6 @@ export default [
   updateContact,
   getContact,
   listContacts,
+  contactTimeline,
   contactStats,
 ];

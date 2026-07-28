@@ -2,13 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 "use client";
 import { usePathname } from "next/navigation";
-import { Gauge, SlidersHorizontal } from "@phosphor-icons/react/dist/ssr";
+import {
+  Gauge,
+  SlidersHorizontal,
+  UsersThree,
+} from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
 // Only what exists. A nav advertising screens that are not built is a promise
 // the interface cannot keep; entries arrive with their modules.
 const LINKS = [
   { href: "/admin", label: "Overview", Icon: Gauge },
+  { href: "/admin/contacts", label: "Contacts", Icon: UsersThree },
   { href: "/admin/settings", label: "Settings", Icon: SlidersHorizontal },
 ] as const;
 
