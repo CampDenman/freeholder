@@ -219,7 +219,11 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
       const error = await failure(createContact
         .call({ name: "Ada Again", email: "Ada@Example.test" }, STAFF));
       expect(error.code).toBe("conflict");
-      expect(error.message).toMatch(/contacts\.(resolve|merge)/);
+      expect(error.message).toContain("ada@example.test");
+      // This string lands on a business owner's screen, so it must not name
+      // internal services — "use contacts.resolve" is a sentence only its
+      // author can act on.
+      expect(error.message).not.toMatch(/contacts\./);
       expect(await contactRows()).toHaveLength(1);
     });
 

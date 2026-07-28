@@ -15,12 +15,23 @@ import { login, logout } from "@/core/auth/service";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
+import { createContact, updateContact } from "@/core/contacts/service";
 import { patchBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 
 export interface ActionState {
   error?: string;
   saved?: boolean;
+  /**
+   * What the caller typed, handed back on failure.
+   *
+   * React resets a form after its action runs — every time, success or not —
+   * so without this an owner who mistypes one field loses the whole record
+   * they just filled in. `attempt` changes on each failure so the inputs
+   * remount and pick the returned values up.
+   */
+  values?: Record<string, string>;
+  attempt?: number;
 }
 
 function present(error: unknown): ActionState {
@@ -32,6 +43,20 @@ function present(error: unknown): ActionState {
 function field(form: FormData, key: string, fallback = ""): string {
   const value = form.get(key);
   return typeof value === "string" ? value : fallback;
+}
+
+/** Hand a form's own text back, so a rejected save does not discard it. */
+function echo(
+  previous: ActionState,
+  form: FormData,
+): Pick<ActionState, "values" | "attempt"> {
+  const values: Record<string, string> = {};
+  for (const key of form.keys()) {
+    // Never a password: echoing one would put it in the rendered HTML.
+    if (key === "password") continue;
+    values[key] = field(form, key);
+  }
+  return { values, attempt: (previous.attempt ?? 0) + 1 };
 }
 
 async function currentActor() {
@@ -52,7 +77,10 @@ export async function signInAction(
     token = result.token;
     expiresAt = result.expiresAt;
   } catch (error) {
-    return present(error);
+    // Same reason as the contact form: React resets the form, and retyping an
+    // address after a mistyped password is a needless indignity. `echo` never
+    // returns the password.
+    return { ...present(error), ...echo(_previous, form) };
   }
 
   const jar = await cookies();
@@ -113,7 +141,72 @@ export async function saveBusinessSettingsAction(
       await currentActor(),
     );
   } catch (error) {
-    return present(error);
+    return { ...present(error), ...echo(_previous, form) };
+  }
+  return { saved: true };
+}
+
+const STAGES = ["lead", "prospect", "customer", "repeat"] as const;
+type Stage = (typeof STAGES)[number];
+
+function stageOf(form: FormData): Stage {
+  const value = field(form, "lifecycleStage", "lead");
+  return (STAGES as readonly string[]).includes(value)
+    ? (value as Stage)
+    : "lead";
+}
+
+function tagsOf(form: FormData): string[] {
+  return field(form, "tags")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+export async function createContactAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  let id: string;
+  try {
+    const contact = await createContact.call(
+      {
+        name: field(form, "name"),
+        email: field(form, "email") || undefined,
+        phone: field(form, "phone") || undefined,
+        lifecycleStage: stageOf(form),
+        tags: tagsOf(form),
+        ownerNotes: field(form, "ownerNotes") || undefined,
+        source: "admin",
+      },
+      await currentActor(),
+    );
+    id = contact.id;
+  } catch (error) {
+    return { ...present(error), ...echo(_previous, form) };
+  }
+  redirect(`/admin/contacts/${id}`);
+}
+
+export async function updateContactAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await updateContact.call(
+      {
+        id: field(form, "id"),
+        name: field(form, "name"),
+        email: field(form, "email") || undefined,
+        phone: field(form, "phone") || undefined,
+        lifecycleStage: stageOf(form),
+        tags: tagsOf(form),
+        ownerNotes: field(form, "ownerNotes") || undefined,
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(_previous, form) };
   }
   return { saved: true };
 }

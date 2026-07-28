@@ -131,5 +131,28 @@
       "Sign-in has no rate limiting (tracked since the HTTP edge landed)",
       "No password reset or OTP yet"
     ]
+  },
+  {
+    "id": "2026-07-28-contacts-admin",
+    "date": "2026-07-28",
+    "title": "Contacts in the admin: list, detail, timeline, create and edit",
+    "masterRef": "§2 principle 3, §4.1",
+    "status": "done",
+    "delivered": [
+      "Contacts list with search, stage filter and paging, all as GET params so a view is a URL",
+      "contacts.list now returns { rows, total } — paging needs a total the page length cannot give",
+      "contacts.timeline service: the CRM timeline as a view over the spine (§4.1)",
+      "Contact detail with inline edit and its timeline",
+      "Create by hand, with the unique-email conflict surfaced in plain English",
+      "Fixed: React resets a form after every action, so a rejected save discarded everything typed",
+      "Fixed: the duplicate-email message named internal services to a business owner"
+    ],
+    "openFollowUps": [
+      "The setup owner form still loses its email on a rejected submit — same React form-reset cause",
+      "No merge UI: contacts.merge exists as a service but the admin cannot call it",
+      "No contact delete or archive",
+      "Timeline shows core events only; module events arrive with their modules",
+      "Search has no index behind it — fine at this size, needs one before it is not"
+    ]
   }
 ]

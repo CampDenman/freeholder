@@ -1,0 +1,235 @@
+// Copyright (C) 2026 Camp Denman Society
+// SPDX-License-Identifier: AGPL-3.0-only
+// The spine, made browsable (MASTER.md §2 principle 3, §4.1).
+//
+// Search and filtering are a GET form reading searchParams, not client state:
+// it works before JavaScript loads, the back button behaves, and a filtered
+// view is a URL somebody can bookmark or send to their bookkeeper.
+import { MagnifyingGlass, Plus, UserPlus } from "@phosphor-icons/react/dist/ssr";
+import { listContacts } from "@/core/contacts/service";
+import { formatDateTime } from "@/core/i18n";
+import { getBusiness } from "@/core/settings/service";
+import { Button, Card, Input, Pill, Select, cx } from "@/ui/primitives";
+import { requireStaffActor } from "../guard";
+
+export const dynamic = "force-dynamic";
+
+const ANONYMOUS = { kind: "anonymous" } as const;
+const PAGE_SIZE = 25;
+
+const STAGES = [
+  { value: "", label: "Every stage" },
+  { value: "lead", label: "Leads" },
+  { value: "prospect", label: "Prospects" },
+  { value: "customer", label: "Customers" },
+  { value: "repeat", label: "Repeat customers" },
+] as const;
+
+const STAGE_TONE = {
+  lead: "neutral",
+  prospect: "accent",
+  customer: "success",
+  repeat: "success",
+} as const;
+
+function pageHref(params: Record<string, string>, offset: number): string {
+  const query = new URLSearchParams(params);
+  if (offset > 0) query.set("offset", String(offset));
+  else query.delete("offset");
+  const qs = query.toString();
+  return qs ? `/admin/contacts?${qs}` : "/admin/contacts";
+}
+
+export default async function ContactsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const actor = await requireStaffActor();
+  const params = await searchParams;
+
+  const one = (key: string): string => {
+    const value = params[key];
+    return (Array.isArray(value) ? value[0] : value) ?? "";
+  };
+  const search = one("search");
+  const stage = one("stage");
+  const offset = Math.max(0, Number(one("offset")) || 0);
+
+  const [business, result] = await Promise.all([
+    getBusiness.call({}, ANONYMOUS),
+    listContacts.call(
+      {
+        search: search || undefined,
+        lifecycleStage: stage || undefined,
+        limit: PAGE_SIZE,
+        offset,
+      },
+      actor,
+    ),
+  ]);
+
+  const timezone = business?.timezone ?? "UTC";
+  const locale = business?.defaultLocale ?? "en";
+  const filters: Record<string, string> = {};
+  if (search) filters.search = search;
+  if (stage) filters.stage = stage;
+  const filtered = Boolean(search || stage);
+
+  return (
+    <div className="grid gap-6">
+      <div className="flex flex-wrap items-end gap-4">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Contacts</h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            Everyone this business has touched. One record per person, shared by
+            every part of the platform.
+          </p>
+        </div>
+        <a
+          href="/admin/contacts/new"
+          className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
+        >
+          <Plus size={15} weight="bold" />
+          New contact
+        </a>
+      </div>
+
+      <form
+        method="get"
+        className="flex flex-wrap items-end gap-3 rounded-lg border border-rule bg-surface p-3"
+      >
+        <div className="grid min-w-52 flex-1 gap-1.5">
+          <label
+            htmlFor="search"
+            className="font-mono text-xs font-medium text-ink-muted"
+          >
+            Search by name or email
+          </label>
+          <Input
+            id="search"
+            name="search"
+            type="search"
+            defaultValue={search}
+            placeholder="grace@…"
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <label
+            htmlFor="stage"
+            className="font-mono text-xs font-medium text-ink-muted"
+          >
+            Stage
+          </label>
+          <Select id="stage" name="stage" defaultValue={stage}>
+            {STAGES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Button type="submit" variant="quiet">
+          <MagnifyingGlass size={15} weight="bold" />
+          Search
+        </Button>
+        {filtered ? (
+          <a href="/admin/contacts" className="py-2 text-sm text-ink-muted">
+            Clear
+          </a>
+        ) : null}
+      </form>
+
+      <Card>
+        {result.total === 0 ? (
+          <div className="grid justify-items-start gap-3 px-4 py-10">
+            <UserPlus size={26} weight="light" className="text-ink-muted" />
+            <p className="text-sm text-ink-muted">
+              {filtered
+                ? "No contacts match that search."
+                : "No contacts yet. Add one by hand, or let forms and checkout bring them in."}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-2xl border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-rule bg-surface-muted text-start">
+                  <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
+                    Name
+                  </th>
+                  <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
+                    Email
+                  </th>
+                  <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
+                    Stage
+                  </th>
+                  <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
+                    Added
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.rows.map((contact) => (
+                  <tr key={contact.id} className="border-b border-rule last:border-b-0">
+                    <td className="px-4 py-2.5">
+                      <a
+                        href={`/admin/contacts/${contact.id}`}
+                        className="font-medium underline decoration-rule underline-offset-2"
+                      >
+                        {contact.name}
+                      </a>
+                    </td>
+                    <td className="px-4 py-2.5 text-ink-muted">
+                      {contact.email ?? "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Pill tone={STAGE_TONE[contact.lifecycleStage]}>
+                        {contact.lifecycleStage}
+                      </Pill>
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-ink-muted tabular-nums">
+                      {formatDateTime(contact.createdAt, timezone, locale)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {result.total > PAGE_SIZE ? (
+        <div className="flex items-center gap-4 text-sm">
+          <span className="text-ink-muted tabular-nums">
+            {offset + 1}–{Math.min(offset + PAGE_SIZE, result.total)} of{" "}
+            {result.total}
+          </span>
+          <div className="ms-auto flex gap-2">
+            <a
+              href={pageHref(filters, Math.max(0, offset - PAGE_SIZE))}
+              aria-disabled={offset === 0}
+              className={cx(
+                "rounded-md border border-rule px-3 py-1.5",
+                offset === 0 && "pointer-events-none opacity-45",
+              )}
+            >
+              Previous
+            </a>
+            <a
+              href={pageHref(filters, offset + PAGE_SIZE)}
+              aria-disabled={offset + PAGE_SIZE >= result.total}
+              className={cx(
+                "rounded-md border border-rule px-3 py-1.5",
+                offset + PAGE_SIZE >= result.total &&
+                  "pointer-events-none opacity-45",
+              )}
+            >
+              Next
+            </a>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
