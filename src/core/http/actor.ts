@@ -18,9 +18,30 @@ const ANONYMOUS: Actor = { kind: "anonymous" };
 export async function resolveSession(
   request: Request,
 ): Promise<SessionUser | undefined> {
-  const token = readSessionToken(request);
+  return sessionFromToken(readSessionToken(request));
+}
+
+/**
+ * The same resolution, from a bare token.
+ *
+ * Server Actions and server components never see a `Request` — the framework
+ * hands them cookies through its own API. Rather than let `next/headers` leak
+ * into src/ (§10), the routing layer reads the cookie and passes the token
+ * here, so identity still resolves through exactly one function.
+ */
+export async function sessionFromToken(
+  token: string | undefined,
+): Promise<SessionUser | undefined> {
   if (!token) return undefined;
   return whoami.call({ token }, ANONYMOUS);
+}
+
+export async function actorFromToken(
+  token: string | undefined,
+): Promise<Actor> {
+  const session = await sessionFromToken(token);
+  if (!session) return ANONYMOUS;
+  return { kind: "user", userId: session.userId, role: session.role };
 }
 
 /**

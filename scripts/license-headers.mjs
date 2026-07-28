@@ -12,9 +12,18 @@ import { readFileSync, writeFileSync } from "node:fs";
 const COPYRIGHT = "Copyright (C) 2026 Camp Denman Society";
 const fix = process.argv.includes("--fix");
 
-// Generated files: drizzle rewrites migrations wholesale, so a header added
-// here would vanish on the next `db:generate`. JSON has no comment syntax.
-const EXEMPT = [/^db\/migrations\//, /\.json$/, /^next-env\.d\.ts$/];
+// Generated files carry no header, because whatever generates them will
+// silently drop it and fail this check on the next unrelated change — drizzle
+// rewrites migrations wholesale, and any dependency change rewrites the
+// lockfile. JSON has no comment syntax at all.
+const EXEMPT = [
+  /^db\/migrations\//,
+  /\.json$/,
+  /^next-env\.d\.ts$/,
+  /(^|\/)pnpm-lock\.yaml$/,
+  /(^|\/)package-lock\.json$/,
+  /(^|\/)yarn\.lock$/,
+];
 
 const COMMENT = { ts: "//", tsx: "//", mts: "//", mjs: "//", js: "//", css: null, yml: "#", yaml: "#" };
 

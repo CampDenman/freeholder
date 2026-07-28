@@ -74,5 +74,38 @@
       "Logo and branding await core/media",
       "Regenerating an applied migration requires resetting the target database; worth a documented reset script"
     ]
+  },
+  {
+    "id": "2026-07-27-design-system",
+    "date": "2026-07-27",
+    "title": "Design system (Bench) and the first-run setup wizard",
+    "masterRef": "§9, §13, §32",
+    "status": "done",
+    "delivered": [
+      "src/core/design/tokens.ts: semantic colour roles, type scale, spacing, radii, motion — plain data, no framework",
+      "Tokens emitted as CSS custom properties by the layout at request time, per §32",
+      "Tailwind theme references the variables, so a brand override reaches every utility",
+      "Self-hosted Schibsted Grotesk + JetBrains Mono, latin and latin-ext, with OFL licences",
+      "Phosphor icons (React and React Native packages exist, so web and app stay consistent)",
+      "src/ui primitives: Card, Field, Input, Select, Segmented, Button, Callout, Pill",
+      "Three-step /setup wizard on Server Actions, working before any JavaScript loads",
+      "Country-driven smart defaults for currency, timezone, units and week start (§13 step 3)",
+      "Contrast tests asserting WCAG AA across every pairing in both schemes",
+      "Verified end to end in a browser: owner created, business saved, wizard locked",
+      "Light/dark/system as a platform standard: cookie-backed, resolved server-side, stamped on <html>",
+      "No flash of the wrong theme — the preference is in the first byte, not applied after hydration",
+      "Theme switch works with JavaScript disabled (three submit buttons, one server action)",
+      "color-scheme narrowed per theme so native controls follow the choice, not the OS",
+      "Fixed instrumentation.ts being evaluated in the Edge runtime, where core cannot load node:crypto"
+    ],
+    "openFollowUps": [
+      "No admin shell yet — settings have a wizard but no screen to edit them afterwards",
+      "Radix is the agreed primitive but nothing needs it yet; it lands with the first menu or dialog",
+      "Locale list is derived from the country default, not chosen by the owner",
+      "Setup covers §13 steps 1-3; payments, modules and demo data steps wait on those modules",
+      "No logo upload — waits on core/media",
+      "packages/templates is still a scaffold; the Bench tokens should become its first theme",
+      "Theme toggle is only in the setup header; it belongs in the admin shell and, as an owner opt-in, on the public site"
+    ]
   }
 ]
