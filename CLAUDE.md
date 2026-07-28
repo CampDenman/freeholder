@@ -30,6 +30,13 @@ either the change is wrong, or the doc must be updated in the same PR.
   swappable edges: payments (Stripe default, PayPal), mail
   (Google/Outlook OAuth for transactional, provider adapter for bulk),
   storage (S3-compatible), SMS.
+- **Light and dark are both first-class.** Every surface ships in both, and
+  every colour comes from a semantic token in `src/core/design/tokens.ts` —
+  never a literal, and never a value that only works on one ground. The theme
+  is resolved server-side from a cookie and stamped on `<html>`, so no screen
+  implements its own toggle or reads `prefers-color-scheme` directly. New
+  colour pairings must clear WCAG AA in *both* schemes; `tests/core/tokens.test.ts`
+  enforces it, so a token that fails is a failing build.
 - **Licensing boundary.** Core is `AGPL-3.0-only`; everything under
   `packages/` is `MIT`. New files carry the SPDX headers shown in
   `LICENSING.md`. Never move code across the boundary without flagging it.

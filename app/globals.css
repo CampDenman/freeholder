@@ -78,8 +78,18 @@
 }
 
 @layer base {
+  /* Native controls — scrollbars, date pickers, form widgets — follow the
+   * chosen theme rather than the operating system's. Without narrowing this,
+   * a visitor who picks light on a dark machine gets dark scrollbars on a
+   * light page. */
   html {
     color-scheme: light dark;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
   }
   body {
     background-color: var(--fh-paper);

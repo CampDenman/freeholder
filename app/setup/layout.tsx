@@ -4,8 +4,15 @@
 // there is no business yet, so there is nothing to navigate.
 import type { ReactNode } from "react";
 import { Storefront } from "@phosphor-icons/react/dist/ssr";
+import { ThemeToggle } from "@/ui/ThemeToggle";
+import { readThemePreference, setThemeAction } from "../theme";
 
-export default function SetupLayout({ children }: { children: ReactNode }) {
+export default async function SetupLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const theme = await readThemePreference();
   return (
     <div className="min-h-svh bg-paper">
       <header className="border-b border-rule bg-surface">
@@ -15,6 +22,11 @@ export default function SetupLayout({ children }: { children: ReactNode }) {
           <span className="ms-auto font-mono text-xs text-ink-muted">
             First-run setup
           </span>
+          <ThemeToggle
+            current={theme}
+            action={setThemeAction}
+            returnTo="/setup"
+          />
         </div>
       </header>
       <main className="mx-auto max-w-2xl px-6 py-10">{children}</main>
