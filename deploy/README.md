@@ -38,8 +38,30 @@ A recipe may pin an adapter **only** where the platform forces it — a target
 with no persistent disk must use S3 storage, for instance. Everything else
 stays the owner's choice.
 
+## The published image
+
+Every recipe pulls the same image from
+`ghcr.io/campdenman/freeholder`, built and pushed by CI on each change to
+`main`:
+
+| Tag | What it is |
+|---|---|
+| `edge` | current `main` |
+| `sha-<short>` | one exact commit |
+| `X.Y.Z`, `X.Y`, `latest` | a release tag |
+
+Publishing is the *only* thing CI does for your deploy. Running Freeholder
+needs no GitHub account, no runner and no fork — `docker compose pull` is the
+whole story, which is the point.
+
+> **Maintainers:** a GHCR package is private on first push even when the
+> repository is public. Set it to public once, under the repository's Packages
+> tab, or nobody else can pull it.
+
 ## Known gaps
 
+- arm64 images. `linux/amd64` covers DigitalOcean and Replit; ARM wants native
+  runners rather than QEMU emulation.
 - `migrate.md` per target (§18 requires one for Tier 1–2) waits on a second
   Tier-1 recipe: a migration path needs somewhere to migrate to.
 - The recipe validation matrix (§18) is not in CI yet, so a rotting recipe is

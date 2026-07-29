@@ -214,5 +214,25 @@
       "The recipe validation matrix (§18) only builds the image; it does not boot it against PG + MinIO and run doctor",
       "scripts/doctor.ts still does not exist, so verify.md carries checks it should eventually automate"
     ]
+  },
+  {
+    "id": "2026-07-29-publish-image",
+    "date": "2026-07-29",
+    "title": "Publish the container image to GHCR",
+    "masterRef": "§14, §18",
+    "status": "done",
+    "delivered": [
+      "Publish workflow on main and on v* tags, never on pull_request",
+      "main publishes edge and sha-<short>; release tags earn latest and semver",
+      "GITHUB_TOKEN with packages:write only — no long-lived personal credential",
+      "Recipe now defaults to :edge, since :latest does not exist until a release",
+      "deploy/README documents that a GHCR package is private until made public once"
+    ],
+    "openFollowUps": [
+      "linux/amd64 only; arm64 wants native runners rather than QEMU",
+      "No release tags yet, so latest and semver tags are untested paths",
+      "Package visibility must be flipped to public by hand after the first push",
+      "No image signing or SBOM"
+    ]
   }
 ]
