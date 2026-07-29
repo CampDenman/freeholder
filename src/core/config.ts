@@ -28,6 +28,19 @@ export const configSchema = z.object({
       calendar: z.enum(["google", "microsoft", "none"]).default("none"),
       sms: z.enum(["twilio", "none"]).default("none"),
       ai: z.enum(["anthropic", "openai", "none"]).default("none"),
+      /**
+       * The builder that changes this site on the owner's instruction (§37).
+       * Deliberately separate from `ai`: that one grounds answers and drafts
+       * translations, this one writes changes, and they carry different risk.
+       *
+       * pm_brain is *our* default and nothing more — whoever deploys their own
+       * copy sets this to whatever intelligence they run, or to "none", which
+       * removes the builder entirely. A platform that hardcodes its owner's
+       * choice of model has not understood §1.
+       */
+      agent: z
+        .enum(["pm_brain", "anthropic", "openai", "local", "none"])
+        .default("none"),
       fx: z.enum(["manual", "ecb"]).default("manual"),
     })
     .prefault({}),

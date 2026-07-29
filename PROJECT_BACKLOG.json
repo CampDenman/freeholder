@@ -234,5 +234,30 @@
       "Package visibility must be flipped to public by hand after the first push",
       "No image signing or SBOM"
     ]
+  },
+  {
+    "id": "2026-07-29-self-building-scope",
+    "date": "2026-07-29",
+    "title": "Scope: §37 The Self-Building Instance",
+    "masterRef": "§37, §2 principle 7, §12, §17, §24, §32",
+    "status": "scoped",
+    "delivered": [
+      "MASTER.md §37: owner-facing builder, invoked from admin or any page while signed in",
+      "The two lanes made explicit: structure is a database write, vocabulary is code via plugin PR",
+      "Proposals not edits — preview diffs, plugin PRs against the owner's fork, or a traffic-split variant",
+      "adapters/agent as a family distinct from adapters/ai; pm_brain (Kimi K3) is our default, not everyone's",
+      "Envelope: owner-authenticated, budgeted, reversible in one action, audited as agent:<name>",
+      "Prompt-injection boundary stated: the §31 front-site assistant never shares a context with build authority",
+      "Builder reachable over MCP so the owner's own assistants can administer and develop the instance",
+      "builder.* is a separate ApiKey scope, not implied by a broad grant",
+      "AGPL: a self-modifying instance can emit its own source from /source",
+      "config.ts: adapters.agent, defaulting to none, with tests"
+    ],
+    "openFollowUps": [
+      "Nothing is implemented — this is scope. It depends on cms/blocks (§32), plugins (§24) and mcp (§7 step 9)",
+      "The plugin-PR lane assumes the owner has a fork and CI; a no-forge fallback is unspecified",
+      "Budget accounting has no home yet — likely a settings row plus a usage table",
+      "/source emission for AGPL compliance is specced but not designed"
+    ]
   }
 ]
