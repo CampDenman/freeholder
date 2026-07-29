@@ -18,7 +18,40 @@ export interface LocalConfig {
   publicPath: string;
 }
 
+/**
+ * §18's storage mandate, enforced rather than documented: media is the least
+ * recoverable asset a business has, and a droplet's disk is not backed up, does
+ * not survive a rebuild, and cannot be shared by two processes. A dead box must
+ * never be able to take the photo archive with it.
+ *
+ * The override exists because a self-hoster who genuinely means it should not
+ * be locked out of their own software — and it is named to be embarrassing in
+ * a config review, which is the point.
+ */
+function refuseInProduction(): void {
+  if (process.env.NODE_ENV !== "production") return;
+  if (process.env.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
+    console.warn(
+      "[storage] Using local disk in production because " +
+        "FREEHOLDER_UNSAFE_LOCAL_STORAGE=1. Uploaded media will be lost if " +
+        "this machine is rebuilt, and cannot be served by a second instance.",
+    );
+    return;
+  }
+  throw new Error(
+    "Storage is set to \"local\", which is for development only: media on a " +
+      "server's own disk is not backed up and does not survive a rebuild " +
+      "(MASTER.md §18).\n" +
+      "Set adapters.storage to \"s3\" in freeholder.config.ts and configure " +
+      "S3_* in the environment — DigitalOcean Spaces, Cloudflare R2, MinIO and " +
+      "AWS all work.\n" +
+      "If you truly intend to keep media on this machine's disk, set " +
+      "FREEHOLDER_UNSAFE_LOCAL_STORAGE=1.",
+  );
+}
+
 export function createLocalStorage(config: LocalConfig): StorageAdapter {
+  refuseInProduction();
   const root = resolve(config.root);
 
   /**

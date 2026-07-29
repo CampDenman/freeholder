@@ -1,0 +1,17 @@
+# Copyright (C) 2026 Camp Denman Society
+# SPDX-License-Identifier: AGPL-3.0-only
+name: digitalocean-droplet
+tier: 1
+maintainers: ["@tonyaly"]
+freeholder_min_version: "0.1.0"
+provides:
+  database: on-droplet-postgres
+  storage: spaces-s3
+  jobs: web-process
+  cron: host-cron
+estimated_monthly_cost_usd: { min: 17, typical: 29 }
+limits:
+  - "Media MUST live in Spaces (§18 storage mandate) — the droplet holds compute and the database, never the archive"
+  - "One box: Postgres shares the droplet, so a rebuild restores from pg_dump rather than failing over"
+  - "Jobs run in the web process until core/jobs lands; long work will need a second container"
+tested_on: "2026-07-28"

@@ -164,3 +164,64 @@ describe("the S3 adapter", () => {
     );
   });
 });
+
+describe("the local adapter refuses production (§18 storage mandate)", () => {
+  const withEnv = (vars: Record<string, string | undefined>, body: () => void) => {
+    const previous = { ...process.env };
+    Object.assign(process.env, vars);
+    for (const [k, v] of Object.entries(vars)) if (v === undefined) delete process.env[k];
+    try {
+      body();
+    } finally {
+      process.env = previous;
+    }
+  };
+
+  it("throws in production rather than losing an owner's media quietly", () => {
+    // A droplet's disk is not backed up and does not survive a rebuild. Media
+    // is the least recoverable thing a business owns, so this fails loudly at
+    // boot instead of at restore time.
+    withEnv(
+      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined },
+      () => {
+        expect(() =>
+          createLocalStorage({ root: ".data/media", publicPath: "/media" }),
+        ).toThrow(/development only/);
+      },
+    );
+  });
+
+  it("names the way out, so the error is actionable", () => {
+    withEnv(
+      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: undefined },
+      () => {
+        try {
+          createLocalStorage({ root: ".data/media", publicPath: "/media" });
+        } catch (error) {
+          const message = (error as Error).message;
+          expect(message).toContain("freeholder.config.ts");
+          expect(message).toContain("FREEHOLDER_UNSAFE_LOCAL_STORAGE=1");
+        }
+      },
+    );
+  });
+
+  it("obeys a deliberate override", () => {
+    withEnv(
+      { NODE_ENV: "production", FREEHOLDER_UNSAFE_LOCAL_STORAGE: "1" },
+      () => {
+        expect(() =>
+          createLocalStorage({ root: ".data/media", publicPath: "/media" }),
+        ).not.toThrow();
+      },
+    );
+  });
+
+  it("says nothing outside production", () => {
+    withEnv({ NODE_ENV: "development" }, () => {
+      expect(() =>
+        createLocalStorage({ root: ".data/media", publicPath: "/media" }),
+      ).not.toThrow();
+    });
+  });
+});

@@ -45,6 +45,24 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      # A recipe whose image does not build is a recipe nobody can use, and
+      # this repo has no Docker on the development machine — so CI is where
+      # that claim gets checked. First half of §18's recipe validation matrix.
+      - name: Deploy recipe — the image builds
+        run: docker build --tag freeholder:ci .
+      - name: Deploy recipe — the image starts and serves
+        run: |
+          docker run -d --name freeholder-ci -p 3000:3000             -e SESSION_SECRET=ci-only-secret-that-is-32-chars-long             -e APP_URL=http://localhost:3000             freeholder:ci
+          # No DATABASE_URL on purpose: the container must boot and answer
+          # before it can reach a database, or a cold start is a crash loop.
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)
+            if [ -n "$code" ] && [ "$code" != "000" ]; then
+              echo "container answered with HTTP $code after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "container never answered"; docker logs freeholder-ci; exit 1
       - name: Changelog gate (§15.6)
         if: github.event_name == 'pull_request'
         run: node scripts/changelog-gate.mjs origin/${{ github.base_ref }}
