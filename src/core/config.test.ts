@@ -23,3 +23,36 @@ describe("defineConfig", () => {
     expect(instanceConfig.baseCurrency).toHaveLength(3);
   });
 });
+
+describe("the builder adapter (§37)", () => {
+  it("is off unless somebody chooses it", () => {
+    // A platform that ships an agent able to change the site, enabled by
+    // default, has made that decision for its owner.
+    expect(defineConfig({}).adapters.agent).toBe("none");
+  });
+
+  it("accepts our default without making it everyone's", () => {
+    expect(defineConfig({ adapters: { agent: "pm_brain" } }).adapters.agent).toBe(
+      "pm_brain",
+    );
+    expect(defineConfig({ adapters: { agent: "local" } }).adapters.agent).toBe(
+      "local",
+    );
+  });
+
+  it("is a separate choice from the content-assist model", () => {
+    // Grounding answers and writing changes are different jobs carrying
+    // different risk, so they are not one setting.
+    const config = defineConfig({
+      adapters: { ai: "anthropic", agent: "none" },
+    });
+    expect(config.adapters.ai).toBe("anthropic");
+    expect(config.adapters.agent).toBe("none");
+  });
+
+  it("rejects an unknown builder rather than silently ignoring it", () => {
+    expect(() =>
+      defineConfig({ adapters: { agent: "some-model" as "none" } }),
+    ).toThrow();
+  });
+});
