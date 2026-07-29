@@ -232,8 +232,12 @@ describe("the environment can override the configured adapter", () => {
     // which cannot be true of a single artifact shared by all of them.
     const previous = { ...process.env };
     try {
-      process.env.FREEHOLDER_STORAGE = "local";
-      process.env.NODE_ENV = "development";
+      // Object.assign rather than direct assignment: Next types NODE_ENV as
+      // read-only, and the test needs to vary it.
+      Object.assign(process.env, {
+        FREEHOLDER_STORAGE: "local",
+        NODE_ENV: "development",
+      });
       const { storage, resetStorageForTests } = await import(
         "@/adapters/storage"
       );
