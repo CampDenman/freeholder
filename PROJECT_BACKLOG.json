@@ -191,5 +191,28 @@
       "No presigned upload straight from the browser, so uploads pass through the app for now",
       "@replit/object-storage is not in optionalDependencies yet; a Replit deploy must add it"
     ]
+  },
+  {
+    "id": "2026-07-28-do-droplet-recipe",
+    "date": "2026-07-28",
+    "title": "DigitalOcean droplet recipe, Docker image, and the §18 storage mandate",
+    "masterRef": "§14, §17, §18, §21b",
+    "status": "done",
+    "delivered": [
+      "Enforced §18: the local storage adapter refuses NODE_ENV=production unless FREEHOLDER_UNSAFE_LOCAL_STORAGE=1",
+      "Multi-stage Dockerfile on Next standalone output, running as a non-root user",
+      "deploy/digitalocean-droplet: recipe.yaml, README walkthrough, .env.example, verify.md",
+      "compose.yml with Caddy for automatic TLS, app, and Postgres never published to the host",
+      "cloud-init.yml: Docker, ufw limited to 22/80/443, unattended security updates",
+      "backup.sh: nightly pg_dump to a versioned Spaces bucket, refusing to upload a suspiciously small dump",
+      "verify.md rehearses a restore, because a backup never restored is a hope",
+      "CI now builds the image and proves it answers HTTP without a database attached"
+    ],
+    "openFollowUps": [
+      "No Replit recipe yet — §18 wants migrate.md per Tier-1 target, which needs a second target to migrate to",
+      "No published image: FREEHOLDER_IMAGE points at ghcr.io but nothing pushes there yet",
+      "The recipe validation matrix (§18) only builds the image; it does not boot it against PG + MinIO and run doctor",
+      "scripts/doctor.ts still does not exist, so verify.md carries checks it should eventually automate"
+    ]
   }
 ]

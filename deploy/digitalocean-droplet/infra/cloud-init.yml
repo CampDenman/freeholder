@@ -1,0 +1,38 @@
+#cloud-config
+# Copyright (C) 2026 Camp Denman Society
+# SPDX-License-Identifier: AGPL-3.0-only
+# One-command droplet bootstrap (§21b). Everything a fresh Ubuntu box needs to
+# run the compose stack — nothing Freeholder-specific beyond the directory,
+# because the release itself arrives afterwards.
+package_update: true
+package_upgrade: true
+
+packages:
+  - docker.io
+  - docker-compose-v2
+  - ufw
+  - unattended-upgrades
+
+write_files:
+  - path: /etc/freeholder/README
+    content: |
+      Freeholder lives in /opt/freeholder.
+        compose.yml   the stack        .env  secrets (chmod 600)
+      Deploy:  cd /opt/freeholder && docker compose pull && docker compose up -d
+      Logs:    docker compose logs -f app
+      Backup:  /opt/freeholder/backup.sh   (nightly via cron)
+
+runcmd:
+  # Only 22, 80 and 443. Postgres is reachable from the app container and
+  # nowhere else — it is never published to the host.
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow OpenSSH
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+  - systemctl enable --now docker
+  - mkdir -p /opt/freeholder
+  - chmod 750 /opt/freeholder
+  # Security updates apply themselves; an unattended box is worse than none.
+  - systemctl enable --now unattended-upgrades

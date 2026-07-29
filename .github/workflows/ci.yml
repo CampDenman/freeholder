@@ -45,6 +45,32 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      # A recipe whose image does not build is a recipe nobody can use, and
+      # this repo has no Docker on the development machine — so CI is where
+      # that claim gets checked. First half of §18's recipe validation matrix.
+      - name: Deploy recipe — the image builds
+        run: docker build --tag freeholder:ci .
+      - name: Deploy recipe — the image serves a real request
+        run: |
+          # --network host so the container reaches the Postgres service the
+          # rest of this job already migrated. Asserting 200 rather than "some
+          # response": the first version of this step accepted any status and
+          # passed on a 500, which is a green tick for a broken image.
+          docker run -d --name freeholder-ci --network host -e SESSION_SECRET=ci-only-secret-that-is-32-chars-long -e APP_URL=http://localhost:3000 -e DATABASE_URL="$DATABASE_URL" freeholder:ci
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          if [ "$code" != "200" ]; then
+            echo "home page answered $code, expected 200"; docker logs freeholder-ci; exit 1
+          fi
+          setup=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/setup || true)
+          if [ "$setup" != "200" ]; then
+            echo "/setup answered $setup, expected 200"; docker logs freeholder-ci; exit 1
+          fi
+          echo "image serves / and /setup with 200"
+          docker rm -f freeholder-ci >/dev/null
       - name: Changelog gate (§15.6)
         if: github.event_name == 'pull_request'
         run: node scripts/changelog-gate.mjs origin/${{ github.base_ref }}

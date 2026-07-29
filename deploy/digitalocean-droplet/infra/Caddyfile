@@ -1,0 +1,8 @@
+# Copyright (C) 2026 Camp Denman Society
+# SPDX-License-Identifier: AGPL-3.0-only
+# Automatic TLS from Let's Encrypt. Caddy needs the domain to already resolve
+# to this droplet before it can be issued a certificate.
+{$FREEHOLDER_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
