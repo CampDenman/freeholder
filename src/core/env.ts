@@ -22,6 +22,28 @@ const envSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   /** 32+ char secret for session-token hashing. Required in production. */
   SESSION_SECRET: z.string().min(32).optional(),
+
+  /**
+   * S3-compatible object storage (§12). One set of names for DigitalOcean
+   * Spaces, Cloudflare R2, MinIO, Backblaze and AWS alike — they speak the
+   * same protocol, so naming them after a vendor would be a lie the next
+   * migration has to unpick. Required only when storage is set to "s3".
+   */
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().optional(),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Serve from a CDN or custom domain instead of the bucket host. */
+  S3_PUBLIC_BASE_URL: z.string().url().optional(),
+  /** "true" only if the bucket really is world-readable. Default: private. */
+  S3_PUBLIC: z.enum(["true", "false"]).optional(),
+
+  /** Replit Object Storage (§20). Discovered from the environment on Replit. */
+  REPLIT_BUCKET_ID: z.string().optional(),
+
+  /** Development only — production mandates managed object storage (§18). */
+  LOCAL_STORAGE_ROOT: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

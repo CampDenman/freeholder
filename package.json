@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.45.2",
     "intl-messageformat": "^11.2.12",
     "next": "^16.2.11",

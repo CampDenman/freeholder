@@ -170,5 +170,26 @@
       "Merge has no confirmation step and cannot be undone",
       "No way to merge from the list by selecting two rows"
     ]
+  },
+  {
+    "id": "2026-07-28-storage-adapters",
+    "date": "2026-07-28",
+    "title": "Storage adapters: S3-compatible, Replit, and local",
+    "masterRef": "§12, §18, §20",
+    "status": "done",
+    "delivered": [
+      "StorageAdapter contract with put/get/delete/url and an explicit isPublic",
+      "S3-compatible implementation covering Spaces, R2, MinIO, B2 and AWS via aws4fetch",
+      "Replit Object Storage via dynamic import, so its package never burdens other deploys",
+      "Local filesystem for development, with a path guard against key traversal",
+      "Selection from freeholder.config.ts; missing S3 credentials fail loudly rather than falling back to disk",
+      "storageKey() sanitises attacker-influenced filenames; 15 tests including traversal and signing"
+    ],
+    "openFollowUps": [
+      "No consumer yet — the Asset table, media services and admin library are the next PR",
+      "No image variants; sharp is already allowed to build in pnpm-workspace.yaml for that",
+      "No presigned upload straight from the browser, so uploads pass through the app for now",
+      "@replit/object-storage is not in optionalDependencies yet; a Replit deploy must add it"
+    ]
   }
 ]
