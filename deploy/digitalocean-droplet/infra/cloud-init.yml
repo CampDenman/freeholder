@@ -1,9 +1,17 @@
 #cloud-config
 # Copyright (C) 2026 Camp Denman Society
 # SPDX-License-Identifier: AGPL-3.0-only
-# One-command droplet bootstrap (§21b). Everything a fresh Ubuntu box needs to
-# run the compose stack — nothing Freeholder-specific beyond the directory,
-# because the release itself arrives afterwards.
+# One-command droplet bootstrap (MASTER.md 21b). Everything a fresh Ubuntu box
+# needs to run the compose stack -- nothing Freeholder-specific beyond the
+# directory, because the release itself arrives afterwards.
+#
+# ASCII ONLY, deliberately. An earlier version of this file contained an em
+# dash and cloud-init rejected the whole document with "unacceptable character
+# #x0080": user-data reaches the parser without a UTF-8 decode, so any byte
+# above 0x7F discards every directive here. It fails *silently* -- cloud-init
+# still reports "status: done", and you find out by discovering no Docker on a
+# machine that claims to have finished. tests/core/deploy-recipe.test.ts keeps
+# this file ASCII so that cannot happen again.
 package_update: true
 package_upgrade: true
 
@@ -24,7 +32,7 @@ write_files:
 
 runcmd:
   # Only 22, 80 and 443. Postgres is reachable from the app container and
-  # nowhere else — it is never published to the host.
+  # nowhere else; it is never published to the host.
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow OpenSSH
