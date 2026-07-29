@@ -5,12 +5,17 @@
 // happen, and this reads them back without knowing what any of them mean.
 import { notFound } from "next/navigation";
 import { ClockCounterClockwise } from "@phosphor-icons/react/dist/ssr";
-import { contactTimeline, getContact } from "@/core/contacts/service";
+import {
+  contactTimeline,
+  getContact,
+  listContacts,
+} from "@/core/contacts/service";
 import { formatDateTime } from "@/core/i18n";
 import { getBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 import { Card, CardBody, CardHeader } from "@/ui/primitives";
 import { ContactForm } from "../ContactForm";
+import { MergePanel } from "./MergePanel";
 import { requireStaffActor } from "../../guard";
 
 export const dynamic = "force-dynamic";
@@ -34,11 +39,17 @@ function actorLabel(actor: string): string {
 
 export default async function ContactDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const actor = await requireStaffActor();
   const { id } = await params;
+  const query = await searchParams;
+  const mergeQuery = (
+    Array.isArray(query.merge) ? query.merge[0] : query.merge
+  )?.trim();
 
   const contact = await getContact.call({ id }, actor).catch((error: unknown) => {
     // A bad id in the address bar is a 404, not a 500 — and a malformed one
@@ -54,6 +65,16 @@ export default async function ContactDetailPage({
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
+
+  // Merging destroys a record, so it is owner-only at the service; not
+  // rendering the panel for staff saves them discovering that by being refused.
+  const canMerge = actor.kind === "user" && actor.role === "owner";
+  const candidates =
+    canMerge && mergeQuery
+      ? (await listContacts.call({ search: mergeQuery, limit: 10 }, actor)).rows
+          .filter((row) => row.id !== contact.id)
+          .map((row) => ({ id: row.id, name: row.name, email: row.email }))
+      : [];
 
   return (
     <div className="grid gap-6">
@@ -80,6 +101,14 @@ export default async function ContactDetailPage({
           ownerNotes: contact.ownerNotes ?? "",
         }}
       />
+
+      {canMerge ? (
+        <MergePanel
+          survivingId={contact.id}
+          query={mergeQuery ?? ""}
+          candidates={candidates}
+        />
+      ) : null}
 
       <Card>
         <CardHeader

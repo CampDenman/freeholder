@@ -154,5 +154,21 @@
       "Timeline shows core events only; module events arrive with their modules",
       "Search has no index behind it — fine at this size, needs one before it is not"
     ]
+  },
+  {
+    "id": "2026-07-28-contact-merge-ui",
+    "date": "2026-07-28",
+    "title": "Merge duplicates from the contact detail screen",
+    "masterRef": "§2 principle 3, §4.1",
+    "status": "done",
+    "delivered": [
+      "Merge panel on contact detail: search for the duplicate rather than a dropdown of everyone",
+      "Owner-only, and hidden from staff rather than shown and refused",
+      "Closes the gap where the duplicate-email message suggested merging but nothing could"
+    ],
+    "openFollowUps": [
+      "Merge has no confirmation step and cannot be undone",
+      "No way to merge from the list by selecting two rows"
+    ]
   }
 ]
