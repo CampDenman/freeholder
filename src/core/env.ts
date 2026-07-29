@@ -44,6 +44,18 @@ const envSchema = z.object({
 
   /** Development only — production mandates managed object storage (§18). */
   LOCAL_STORAGE_ROOT: z.string().optional(),
+
+  /**
+   * Overrides `adapters.storage` from freeholder.config.ts.
+   *
+   * §17 describes that file as the instance, checked in — which holds when an
+   * owner forks and builds their own image. It cannot hold for the *published*
+   * image, because one artifact serves every instance and cannot carry any of
+   * their choices. So the declarative config remains the default and the
+   * environment overrides it, which is the only arrangement where a shared
+   * image and a per-instance configuration can both be true.
+   */
+  FREEHOLDER_STORAGE: z.enum(["s3", "replit", "local"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

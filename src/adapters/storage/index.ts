@@ -15,8 +15,11 @@ export const MEDIA_PATH = "/media";
 
 function build(): StorageAdapter {
   const e = env();
+  // Environment wins over the checked-in default, so one published image can
+  // serve instances that store their media in different places (§17).
+  const choice = e.FREEHOLDER_STORAGE ?? config.adapters.storage;
 
-  switch (config.adapters.storage) {
+  switch (choice) {
     case "s3": {
       // Named rather than defaulted: a half-configured bucket that silently
       // falls back to the local disk would lose an owner's files at the exact

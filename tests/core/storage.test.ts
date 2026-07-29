@@ -225,3 +225,23 @@ describe("the local adapter refuses production (§18 storage mandate)", () => {
     });
   });
 });
+
+describe("the environment can override the configured adapter", () => {
+  it("is how one published image serves differently-configured instances", async () => {
+    // freeholder.config.ts is checked in and describes *an* instance (§17),
+    // which cannot be true of a single artifact shared by all of them.
+    const previous = { ...process.env };
+    try {
+      process.env.FREEHOLDER_STORAGE = "local";
+      process.env.NODE_ENV = "development";
+      const { storage, resetStorageForTests } = await import(
+        "@/adapters/storage"
+      );
+      resetStorageForTests();
+      expect(storage().id).toBe("local");
+      resetStorageForTests();
+    } finally {
+      process.env = previous;
+    }
+  });
+});

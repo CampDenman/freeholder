@@ -19,7 +19,9 @@ services:
   app:
     image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}
     restart: unless-stopped
-    env_file: [../.env]
+    # Beside compose.yml, per the README's layout. `../.env` would resolve
+    # to /opt/.env and silently start the app with no configuration.
+    env_file: [.env]
     environment:
       DATABASE_URL: postgres://freeholder:${POSTGRES_PASSWORD}@db:5432/freeholder
     depends_on:

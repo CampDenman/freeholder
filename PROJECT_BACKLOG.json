@@ -259,5 +259,24 @@
       "Budget accounting has no home yet — likely a settings row plus a usage table",
       "/source emission for AGPL compliance is specced but not designed"
     ]
+  },
+  {
+    "id": "2026-07-29-recipe-bootstrap-fixes",
+    "date": "2026-07-29",
+    "title": "Three recipe bugs found by actually deploying it",
+    "masterRef": "§14, §17, §18, §21b",
+    "status": "done",
+    "delivered": [
+      "cloud-init.yml is ASCII only: an em dash made cloud-init discard every directive while still reporting success",
+      "Migrations run at boot from instrumentation.ts, so `docker compose up` does not leave an empty schema",
+      "FREEHOLDER_STORAGE overrides the checked-in adapter, because one published image cannot bake per-instance config",
+      "compose.yml env_file corrected from ../.env to .env, which resolved outside the project directory",
+      "tests/core/deploy-recipe.test.ts guards ASCII, required recipe files, no media volume, and an unpublished database port"
+    ],
+    "openFollowUps": [
+      "Migrating at boot is right for single-box targets but wrong for many replicas; FREEHOLDER_SKIP_MIGRATE=1 opts out",
+      "No recipe smoke in CI actually provisions a machine, so cloud-init is still only checked for ASCII",
+      "The adapter override exists only for storage; ai, agent and the rest are still build-time"
+    ]
   }
 ]
