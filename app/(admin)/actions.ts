@@ -15,7 +15,11 @@ import { login, logout } from "@/core/auth/service";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
-import { createContact, updateContact } from "@/core/contacts/service";
+import {
+  createContact,
+  mergeContacts,
+  updateContact,
+} from "@/core/contacts/service";
 import { patchBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 
@@ -209,4 +213,24 @@ export async function updateContactAction(
     return { ...present(error), ...echo(_previous, form) };
   }
   return { saved: true };
+}
+
+/**
+ * Fold a duplicate into the contact being viewed. Owner-only at the service,
+ * so a staff member who reaches this form still gets a clean refusal.
+ */
+export async function mergeContactAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const survivingId = field(form, "survivingId");
+  try {
+    await mergeContacts.call(
+      { survivingId, duplicateId: field(form, "duplicateId") },
+      await currentActor(),
+    );
+  } catch (error) {
+    return present(error);
+  }
+  redirect(`/admin/contacts/${survivingId}`);
 }
