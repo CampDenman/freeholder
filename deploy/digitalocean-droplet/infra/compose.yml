@@ -17,7 +17,7 @@ services:
     depends_on: [app]
 
   app:
-    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:latest}
+    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}
     restart: unless-stopped
     env_file: [../.env]
     environment:
