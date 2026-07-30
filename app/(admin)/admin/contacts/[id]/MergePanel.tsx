@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { ArrowsMerge, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button, Callout, Card, CardBody, CardHeader } from "@/ui/primitives";
 import { mergeContactAction, type ActionState } from "../../../actions";
+import type { MergePanelLabels } from "../contactLabels";
 
 export interface MergeCandidate {
   id: string;
@@ -21,10 +22,15 @@ export function MergePanel({
   survivingId,
   query,
   candidates,
+  labels,
+  noResults,
 }: {
   survivingId: string;
   query: string;
   candidates: MergeCandidate[];
+  labels: MergePanelLabels;
+  /** Already interpolated with the query, so the sentence reads naturally. */
+  noResults: string;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     mergeContactAction,
@@ -35,7 +41,7 @@ export function MergePanel({
     <Card>
       <CardHeader
         icon={<ArrowsMerge size={17} weight="bold" />}
-        title="Merge a duplicate"
+        title={labels.title}
       />
       <CardBody>
         {state.error ? (
@@ -43,11 +49,7 @@ export function MergePanel({
             {state.error}
           </Callout>
         ) : null}
-        <p className="text-sm text-ink-muted">
-          Find the other record for this person. Its history moves here, and
-          anything this contact is missing is filled in from it. The duplicate
-          is then removed — this cannot be undone.
-        </p>
+        <p className="text-sm text-ink-muted">{labels.intro}</p>
 
         <form method="get" className="flex flex-wrap items-end gap-2">
           <div className="grid min-w-52 flex-1 gap-1.5">
@@ -55,27 +57,25 @@ export function MergePanel({
               htmlFor="merge"
               className="font-mono text-xs font-medium text-ink-muted"
             >
-              Search for the duplicate
+              {labels.searchLabel}
             </label>
             <input
               id="merge"
               name="merge"
               type="search"
               defaultValue={query}
-              placeholder="name or email"
+              placeholder={labels.searchPlaceholder}
               className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent"
             />
           </div>
           <Button type="submit" variant="quiet">
-            Search
+            {labels.search}
           </Button>
         </form>
 
         {query ? (
           candidates.length === 0 ? (
-            <p className="text-sm text-ink-muted">
-              Nobody else matches “{query}”.
-            </p>
+            <p className="text-sm text-ink-muted">{noResults}</p>
           ) : (
             <ul className="grid list-none gap-0 p-0">
               {candidates.map((candidate) => (
@@ -85,7 +85,7 @@ export function MergePanel({
                 >
                   <span className="text-sm font-medium">{candidate.name}</span>
                   <span className="text-xs text-ink-muted">
-                    {candidate.email ?? "no email"}
+                    {candidate.email ?? labels.noEmail}
                   </span>
                   <form action={action} className="ms-auto">
                     <input
@@ -99,7 +99,7 @@ export function MergePanel({
                       value={candidate.id}
                     />
                     <Button type="submit" variant="quiet" disabled={pending}>
-                      Merge into this contact
+                      {labels.submit}
                     </Button>
                   </form>
                 </li>

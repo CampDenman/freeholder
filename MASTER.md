@@ -369,6 +369,15 @@ The v1 that is genuinely shippable on Replit and already better than the tool-ma
 
 Deferred to v2: subscriptions/memberships, gift cards, social auto-clipping (manual crop/trim presets ship in v1.5), PayPal adapter, SMS.
 
+**Deviation in force (decided 2026-07-26): the project's own site before the money path.** The order above is the right order for a business deploying Freeholder. It is not the right order for *building* Freeholder, and the difference is worth stating rather than rediscovering. The first thing this codebase ships is `freeholder.ai` itself, which needs steps 1 and 6 — settings, media, jobs, cms, forms, seo, analytics and an admin shell — and none of commerce, booking, quotes, galleries or the portal.
+
+Two reasons, the second being the one that decides it:
+
+1. It is roughly a fifth of v1, and it is the fifth that has to exist before anyone can be told the project exists.
+2. §32 makes the public surface a block tree in the database, and §37 — the moat — is built entirely on that line already existing. So cms/blocks is not step 6 of a list; it is the floor under the public surface, under the question of how a module contributes a route to a file-system router, and under the self-building instance. Building our own site builds that floor and dogfoods it on something real before any paying business depends on it.
+
+The money path (steps 2–3) follows immediately after, ahead of booking, quotes and galleries. Step 9 (mcp + api) is also pulled forward, ahead of the money path: it is generated from the service registry rather than authored, so it is cheap once the registry is stable, and principle 7 in §2 is only true once it exists. `ROADMAP.md` carries the phase-by-phase plan and is the file to correct when this changes.
+
 ---
 
 ## 8. Design Decisions (the fine print)

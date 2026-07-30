@@ -37,6 +37,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: License headers (LICENSING.md boundary)
         run: pnpm license:check
+      # §36 lists dependency audit among the v1.0 security gates. Scoped to
+      # high and critical: a gate that fires on every low-severity transitive
+      # advisory gets muted within a month, and a muted gate protects nothing.
+      - name: Dependency audit (§36)
+        run: pnpm audit --audit-level high
       - name: Lint (architecture boundaries, service-layer and money gates)
         run: pnpm lint
       - name: Typecheck

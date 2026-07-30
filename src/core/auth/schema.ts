@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const users = pgTable(
   "users",
@@ -23,12 +24,8 @@ export const users = pgTable(
     role: text("role", { enum: ["owner", "staff", "customer"] }).notNull(),
     otpSecret: text("otp_secret"),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("users_email_idx").on(t.email),
@@ -54,9 +51,7 @@ export const sessions = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     ip: text("ip"),
     userAgent: text("user_agent"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: createdAtColumn(),
   },
   (t) => [
     index("sessions_user_id_idx").on(t.userId),

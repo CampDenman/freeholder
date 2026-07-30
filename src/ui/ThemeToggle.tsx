@@ -8,11 +8,7 @@
 // framework imports (§10), and the routing layer supplies whatever "handle a
 // form post" means for it.
 import { Desktop, Moon, Sun } from "@phosphor-icons/react/dist/ssr";
-import {
-  THEME_LABELS,
-  THEME_PREFERENCES,
-  type ThemePreference,
-} from "@/core/design/theme";
+import { THEME_PREFERENCES, type ThemePreference } from "@/core/design/theme";
 import { cx } from "@/ui/primitives";
 
 // Derived from a real icon rather than the package's `Icon` type, which its
@@ -25,21 +21,33 @@ const ICONS: Record<ThemePreference, IconComponent> = {
   dark: Moon,
 };
 
+export interface ThemeToggleLabels {
+  legend: string;
+  names: Record<ThemePreference, string>;
+}
+
 export function ThemeToggle({
   current,
   action,
   returnTo,
+  labels,
 }: {
   current: ThemePreference;
   action: (formData: FormData) => void | Promise<void>;
   /** Where to come back to, so choosing a theme never moves you. */
   returnTo: string;
+  /**
+   * Translated by the caller. This file has no locale to translate against —
+   * src/ knows nothing about requests (§10) — so the routing layer, which does,
+   * hands the words down. See app/themeLabels.ts.
+   */
+  labels: ThemeToggleLabels;
 }) {
   return (
     <form action={action}>
       <input type="hidden" name="returnTo" value={returnTo} />
       <fieldset className="m-0 border-0 p-0">
-        <legend className="sr-only">Colour theme</legend>
+        <legend className="sr-only">{labels.legend}</legend>
         <div className="inline-flex overflow-hidden rounded-md border border-rule">
           {THEME_PREFERENCES.map((preference) => {
             const Icon = ICONS[preference];
@@ -51,7 +59,7 @@ export function ThemeToggle({
                 name="theme"
                 value={preference}
                 aria-pressed={active}
-                title={THEME_LABELS[preference]}
+                title={labels.names[preference]}
                 className={cx(
                   "border-e border-rule px-2.5 py-1.5 last:border-e-0",
                   active
@@ -60,7 +68,7 @@ export function ThemeToggle({
                 )}
               >
                 <Icon size={15} weight={active ? "fill" : "regular"} />
-                <span className="sr-only">{THEME_LABELS[preference]}</span>
+                <span className="sr-only">{labels.names[preference]}</span>
               </button>
             );
           })}

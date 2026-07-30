@@ -8,6 +8,8 @@ import type { ReactNode } from "react";
 import { getBusiness } from "@/core/settings/service";
 import { ThemeToggle } from "@/ui/ThemeToggle";
 import { readThemePreference, setThemeAction } from "../../theme";
+import { getT } from "../../i18n";
+import { themeLabels } from "../../themeLabels";
 import { requireStaffActor } from "./guard";
 import { AdminNav } from "./AdminNav";
 import { SignOutButton } from "./SignOutButton";
@@ -28,9 +30,10 @@ export default async function AdminLayout({
   children: ReactNode;
 }) {
   const actor = await requireStaffActor();
-  const [business, theme] = await Promise.all([
+  const [business, theme, t] = await Promise.all([
     getBusiness.call({}, ANONYMOUS),
     readThemePreference(),
+    getT(),
   ]);
 
   return (
@@ -38,7 +41,7 @@ export default async function AdminLayout({
       <header className="border-b border-rule bg-surface">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
           <a href="/admin" className="text-sm font-semibold">
-            {business?.name ?? "Freeholder"}
+            {business?.name ?? t("common.appName")}
           </a>
           <span className="rounded-full bg-surface-muted px-2 py-0.5 font-mono text-xs text-ink-muted">
             {actor.kind === "user" ? actor.role : ""}
@@ -48,12 +51,20 @@ export default async function AdminLayout({
               current={theme}
               action={setThemeAction}
               returnTo="/admin"
+              labels={themeLabels(t)}
             />
-            <SignOutButton />
+            <SignOutButton label={t("auth.logout")} />
           </div>
         </div>
         <div className="mx-auto max-w-5xl px-6">
-          <AdminNav />
+          <AdminNav
+            labels={{
+              region: t("admin.nav.label"),
+              overview: t("admin.nav.overview"),
+              contacts: t("admin.nav.contacts"),
+              settings: t("admin.nav.settings"),
+            }}
+          />
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>

@@ -2,11 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { Check } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
+import { getT } from "../i18n";
 
-const STEPS = ["Owner account", "Business details", "Done"] as const;
+const STEP_KEYS = [
+  "setup.steps.owner",
+  "setup.steps.business",
+  "setup.steps.done",
+] as const;
 
 /** Where you are in a three-step flow — position carries real information. */
-export function Steps({ current }: { current: 0 | 1 | 2 }) {
+export async function Steps({ current }: { current: 0 | 1 | 2 }) {
+  const t = await getT();
+  const STEPS = STEP_KEYS.map((key) => t(key));
+
   return (
     <ol className="mb-8 flex flex-wrap items-center gap-x-3 gap-y-2 p-0">
       {STEPS.map((label, i) => {

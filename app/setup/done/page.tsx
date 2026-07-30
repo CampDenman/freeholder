@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { CheckCircle } from "@phosphor-icons/react/dist/ssr";
 import { getBusiness, setupState } from "@/core/settings/service";
 import { Callout } from "@/ui/primitives";
+import { getT } from "../../i18n";
 import { Steps } from "../Steps";
 import { DoneForm } from "./DoneForm";
 
@@ -19,25 +20,35 @@ export default async function SetupDonePage() {
   if (!state.hasOwner) redirect("/setup");
   if (!state.hasBusiness) redirect("/setup/business");
 
-  const business = await getBusiness.call({}, ANONYMOUS);
+  const [business, t] = await Promise.all([
+    getBusiness.call({}, ANONYMOUS),
+    getT(),
+  ]);
 
   return (
     <>
       <Steps current={2} />
       <h1 className="text-2xl font-bold tracking-tight">
-        {business?.name} is ready
+        {t("setup.done.title", { name: business?.name ?? "" })}
       </h1>
       <p className="mt-2 mb-6 max-w-prose text-ink-muted">
-        Finishing locks this wizard, so nobody can walk through it again on a
-        live site. Your settings stay editable from the admin.
+        {t("setup.done.intro")}
       </p>
       <div className="mb-8">
         <Callout tone="success" icon={<CheckCircle size={17} weight="fill" />}>
-          Publishing in {business?.enabledLocales.join(", ")}, charging in{" "}
-          {business?.baseCurrency}, showing times in {business?.timezone}.
+          {t("setup.done.summary", {
+            locales: business?.enabledLocales.join(", ") ?? "",
+            currency: business?.baseCurrency ?? "",
+            timezone: business?.timezone ?? "",
+          })}
         </Callout>
       </div>
-      <DoneForm />
+      <DoneForm
+        labels={{
+          submit: t("setup.done.submit"),
+          pending: t("setup.done.pending"),
+        }}
+      />
     </>
   );
 }

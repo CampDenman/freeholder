@@ -109,16 +109,21 @@ export function currencyName(code: string, locale = "en"): string {
  * schema.org business types the owner picks from (§13 step 2). This choice
  * drives the JSON-LD on every public page, so it is identity rather than
  * decoration — a Photographer and a HairSalon emit different structured data.
+ *
+ * Values only. What each one is *called* is copy, so it lives in the message
+ * catalogs under `business.type.<value>` and is translated where a locale
+ * exists — the schema.org identifier is the same in every language, and the
+ * word for it is not.
  */
 export const BUSINESS_TYPES = [
-  { value: "LocalBusiness", label: "General business" },
-  { value: "Photographer", label: "Photography" },
-  { value: "ProfessionalService", label: "Professional services" },
-  { value: "HomeAndConstructionBusiness", label: "Trades and construction" },
-  { value: "HealthAndBeautyBusiness", label: "Health and beauty" },
-  { value: "HairSalon", label: "Hair salon" },
-  { value: "FoodEstablishment", label: "Food and drink" },
-  { value: "Store", label: "Shop" },
-  { value: "EntertainmentBusiness", label: "Entertainment" },
-  { value: "EducationalOrganization", label: "Teaching and courses" },
+  "LocalBusiness",
+  "Photographer",
+  "ProfessionalService",
+  "HomeAndConstructionBusiness",
+  "HealthAndBeautyBusiness",
+  "HairSalon",
+  "FoodEstablishment",
+  "Store",
+  "EntertainmentBusiness",
+  "EducationalOrganization",
 ] as const;

@@ -3,6 +3,8 @@
 // §13 steps 2–3: who the business is, and where it operates.
 import { redirect } from "next/navigation";
 import { setupState } from "@/core/settings/service";
+import { getLocale, getT } from "../../i18n";
+import { businessFormLabels, businessOptions } from "../businessLabels";
 import { Steps } from "../Steps";
 import { BusinessForm } from "./BusinessForm";
 
@@ -13,17 +15,25 @@ export default async function SetupBusinessPage() {
   if (state.completed) redirect("/");
   if (!state.hasOwner) redirect("/setup");
 
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+
   return (
     <>
       <Steps current={1} />
       <h1 className="text-2xl font-bold tracking-tight">
-        Tell us about the business
+        {t("setup.business.title")}
       </h1>
       <p className="mt-2 mb-8 max-w-prose text-ink-muted">
-        Your country fills in the rest. Everything here appears on your public
-        site, and you can change any of it later.
+        {t("setup.business.intro")}
       </p>
-      <BusinessForm />
+      <BusinessForm
+        labels={{
+          ...businessFormLabels(t),
+          submit: t("setup.business.submit"),
+          pending: t("common.saving"),
+        }}
+        options={businessOptions(locale, t)}
+      />
     </>
   );
 }

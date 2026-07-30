@@ -18,6 +18,7 @@ import { db, type Database } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
 import { publish, writeTimelineEvent } from "@/core/events";
 import type { TimelineEventInput } from "@/core/events";
+import { consume, rateLimitKey, type RateLimitPolicy } from "@/core/security/rate-limit";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -36,8 +37,15 @@ const roleRank: Record<Role, number> = { customer: 1, staff: 2, owner: 3 };
 
 export class ServiceError extends Error {
   constructor(
-    readonly code: "validation" | "permission" | "not_found" | "conflict",
+    readonly code:
+      | "validation"
+      | "permission"
+      | "not_found"
+      | "conflict"
+      | "rate_limited",
     message: string,
+    /** Seconds until a rate-limited caller may retry; surfaced as Retry-After. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "ServiceError";
@@ -142,6 +150,24 @@ export interface ServiceContext {
   ) => Promise<O>;
 }
 
+/**
+ * Throttling declared on the service rather than bolted onto a route.
+ *
+ * §2 principle 7 is the reason: the admin UI, a server action, the REST API and
+ * an MCP tool all reach the same service, so a limit enforced at any one of
+ * those doors is a limit the other three walk around. Declared here it applies
+ * wherever the call comes from, exactly as the permission check does.
+ */
+export interface ServiceRateLimit extends RateLimitPolicy {
+  /**
+   * What to count separately — the email being attempted, the caller's IP.
+   * Return undefined to skip counting this particular call.
+   */
+  subject: (input: never) => string | undefined;
+  /** Message shown when the limit is hit. Written for a person, not a log. */
+  message: string;
+}
+
 export interface ServiceDef<In extends z.ZodType, Out> {
   /** Dotted "<module>.<verb>": "contacts.create", "auth.login"… */
   name: string;
@@ -149,6 +175,8 @@ export interface ServiceDef<In extends z.ZodType, Out> {
   kind: "query" | "mutation";
   permission: Permission;
   input: In;
+  /** Optional throttle, consumed before the transaction opens. */
+  rateLimit?: ServiceRateLimit & { subject: (input: z.output<In>) => string | undefined };
   handler: (input: z.output<In>, ctx: ServiceContext) => Promise<Out>;
 }
 
@@ -188,6 +216,28 @@ export function defineService<In extends z.ZodType, Out>(
       // A composed call inherits its parent's transaction and event queue; a
       // top-level call owns both. Exactly one transaction per outermost call.
       const inheritedTx = options?.tx;
+
+      // Throttled *before* the transaction opens, and skipped for composed and
+      // system calls. A composed call is one step of a mutation the outermost
+      // caller was already allowed to make — charging it again would let an
+      // internal refactor that adds a step start failing under a limit nobody
+      // changed. See rate-limit.ts for why the counter commits separately.
+      if (def.rateLimit && !inheritedTx && actor.kind !== "system") {
+        const subject = def.rateLimit.subject(parsed.data);
+        if (subject !== undefined) {
+          const verdict = await consume(
+            rateLimitKey(def.name, subject),
+            def.rateLimit,
+          );
+          if (!verdict.allowed) {
+            throw new ServiceError(
+              "rate_limited",
+              def.rateLimit.message,
+              verdict.retryAfterSeconds,
+            );
+          }
+        }
+      }
       const queued: QueuedEvent[] = options?.queued ?? [];
       let subject: { subjectType: string; subjectId: string } | undefined;
 

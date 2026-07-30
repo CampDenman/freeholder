@@ -67,6 +67,27 @@ export function t(
 }
 
 /**
+ * A `t` with the locale already bound.
+ *
+ * Every call site would otherwise repeat the locale it just resolved, and the
+ * one that forgets does not fail — it renders English at a French visitor. So
+ * the locale is decided once, per request, and passed as a function.
+ */
+export type Translate = (
+  key: string,
+  params?: Record<string, string | number | Date>,
+) => string;
+
+export function translator(locale: string): Translate {
+  return (key, params) => t(locale, key, params);
+}
+
+/** Every key in a catalog. Used by the i18n gate to compare catalogs. */
+export function catalogKeys(locale: string): string[] {
+  return Object.keys(catalogs[locale] ?? {});
+}
+
+/**
  * All money is (amount_minor_units, currency); never floats, never auto-FX.
  *
  * "Cents" is a two-decimal assumption, and most of the world isn't. ¥1000 is

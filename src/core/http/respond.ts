@@ -10,6 +10,7 @@ const STATUS: Record<ServiceError["code"], number> = {
   permission: 403,
   not_found: 404,
   conflict: 409,
+  rate_limited: 429,
 };
 
 export interface ResponseParts {
@@ -52,7 +53,17 @@ export function errorResponse(error: unknown, actor: Actor): Response {
       error.code === "permission" && actor.kind === "anonymous"
         ? 401
         : STATUS[error.code];
-    return json({ error: { code: error.code, message: error.message } }, status);
+    // Retry-After turns "try later" into a number the caller can act on —
+    // clients and well-behaved crawlers both honour it, and a person staring
+    // at a login form deserves to be told how long rather than guessing.
+    const headers = error.retryAfterSeconds
+      ? { "retry-after": String(error.retryAfterSeconds) }
+      : undefined;
+    return json(
+      { error: { code: error.code, message: error.message } },
+      status,
+      { headers },
+    );
   }
   console.error("unhandled error in a route handler", error);
   return json(

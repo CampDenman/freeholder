@@ -3,8 +3,10 @@
 // Shared scaffolding for database-backed tests. Suites gate on `hasDatabase`
 // via describe.runIf so the unit suite still runs on a machine with no
 // Postgres, and truncate between tests so ordering never carries state.
-import { sql } from "drizzle-orm";
+import { is, sql } from "drizzle-orm";
+import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { db } from "@/core/db";
+import * as coreTables from "@/core/tables";
 import type { Actor, ServiceError } from "@/core/service";
 
 export const hasDatabase = Boolean(process.env.DATABASE_URL);
@@ -44,14 +46,23 @@ export function failure<T>(promise: Promise<T>): Promise<ServiceError> {
   );
 }
 
-/** Every spine table, in dependency order. Extend when core adds tables. */
+/**
+ * Empty every spine table between tests.
+ *
+ * Derived from the `@/core/tables` barrel rather than hand-listed: the old
+ * hand-list and the barrel were two records of the same fact, and the failure
+ * mode was quiet — a table core added but nobody added here leaks state from
+ * one test into the next, which surfaces as a flake in an unrelated suite.
+ * `cascade` means dependency order does not need stating either.
+ */
 export async function truncateSpine(): Promise<void> {
-  await db().execute(sql`
-    truncate table
-      "audit_log", "timeline_events", "contacts", "organizations",
-      "sessions", "users", "module_settings", "business_profile"
-    restart identity cascade
-  `);
+  const exports: Record<string, unknown> = coreTables;
+  const names = Object.values(exports)
+    .filter((value): value is PgTable => is(value, PgTable))
+    .map((table) => `"${getTableConfig(table).name}"`);
+  await db().execute(
+    sql.raw(`truncate table ${names.join(", ")} restart identity cascade`),
+  );
 }
 
 export { closeDb } from "@/core/db";

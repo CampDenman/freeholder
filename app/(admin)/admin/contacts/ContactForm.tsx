@@ -19,6 +19,7 @@ import {
   updateContactAction,
   type ActionState,
 } from "../../actions";
+import type { ContactFormLabels } from "./contactLabels";
 
 export interface ContactValues {
   id?: string;
@@ -30,14 +31,13 @@ export interface ContactValues {
   ownerNotes: string;
 }
 
-const STAGES = [
-  { value: "lead", label: "Lead" },
-  { value: "prospect", label: "Prospect" },
-  { value: "customer", label: "Customer" },
-  { value: "repeat", label: "Repeat customer" },
-] as const;
-
-export function ContactForm({ values }: { values: ContactValues }) {
+export function ContactForm({
+  values,
+  labels,
+}: {
+  values: ContactValues;
+  labels: ContactFormLabels;
+}) {
   const editing = Boolean(values.id);
   const [state, action, pending] = useActionState<ActionState, FormData>(
     editing ? updateContactAction : createContactAction,
@@ -63,7 +63,7 @@ export function ContactForm({ values }: { values: ContactValues }) {
     <form action={action}>
       {values.id ? <input type="hidden" name="id" value={values.id} /> : null}
       <Card>
-        <CardHeader title={editing ? "Details" : "New contact"} />
+        <CardHeader title={editing ? labels.details : labels.newContact} />
         <CardBody>
           {state.error ? (
             <Callout
@@ -78,11 +78,11 @@ export function ContactForm({ values }: { values: ContactValues }) {
               tone="success"
               icon={<CheckCircle size={17} weight="fill" />}
             >
-              Saved.
+              {labels.saved}
             </Callout>
           ) : null}
 
-          <Field label="Name" htmlFor="name">
+          <Field label={labels.name} htmlFor="name">
             <Input
               key={`name-${generation}`}
               id="name"
@@ -95,9 +95,9 @@ export function ContactForm({ values }: { values: ContactValues }) {
 
           <div className="grid gap-5 sm:grid-cols-2">
             <Field
-              label="Email"
+              label={labels.email}
               htmlFor="email"
-              hint="One contact per address — the platform will not create a second."
+              hint={labels.emailHint}
             >
               <Input
                 key={`email-${generation}`}
@@ -107,7 +107,7 @@ export function ContactForm({ values }: { values: ContactValues }) {
                 defaultValue={seed.email}
               />
             </Field>
-            <Field label="Phone" htmlFor="phone">
+            <Field label={labels.phone} htmlFor="phone">
               <Input
                 key={`phone-${generation}`}
                 id="phone"
@@ -119,21 +119,21 @@ export function ContactForm({ values }: { values: ContactValues }) {
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Stage" htmlFor="lifecycleStage">
+            <Field label={labels.stage} htmlFor="lifecycleStage">
               <Select
                 key={`stage-${generation}`}
                 id="lifecycleStage"
                 name="lifecycleStage"
                 defaultValue={seed.lifecycleStage}
               >
-                {STAGES.map((stage) => (
+                {labels.stages.map((stage) => (
                   <option key={stage.value} value={stage.value}>
                     {stage.label}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="Tags" htmlFor="tags" hint="Comma separated.">
+            <Field label={labels.tags} htmlFor="tags" hint={labels.tagsHint}>
               <Input
                 key={`tags-${generation}`}
                 id="tags"
@@ -145,9 +145,9 @@ export function ContactForm({ values }: { values: ContactValues }) {
           </div>
 
           <Field
-            label="Private notes"
+            label={labels.notes}
             htmlFor="ownerNotes"
-            hint="Only you and your staff see these."
+            hint={labels.notesHint}
           >
             <textarea
               key={`notes-${generation}`}
@@ -161,10 +161,14 @@ export function ContactForm({ values }: { values: ContactValues }) {
         </CardBody>
         <CardFooter>
           <Button type="submit" disabled={pending}>
-            {pending ? "Saving…" : editing ? "Save changes" : "Add contact"}
+            {pending
+              ? labels.saving
+              : editing
+                ? labels.saveChanges
+                : labels.add}
           </Button>
           <a href="/admin/contacts" className="text-sm text-ink-muted">
-            Cancel
+            {labels.cancel}
           </a>
         </CardFooter>
       </Card>

@@ -13,11 +13,10 @@ import {
   eq,
   ilike,
   or,
-  sql,
 } from "drizzle-orm";
 import { contacts, timelineEvents } from "@/core/contacts/schema";
 import { isUniqueViolation } from "@/core/db";
-import { defineService, ServiceError } from "@/core/service";
+import { defineService, ServiceError, type Tx } from "@/core/service";
 
 const STAGES = ["lead", "prospect", "customer", "repeat"] as const;
 const lifecycleStage = z.enum(STAGES);
@@ -87,6 +86,73 @@ export const createContact = defineService({
   },
 });
 
+type ContactRow = typeof contacts.$inferSelect;
+type ResolveInput = Partial<z.output<typeof contactFields>>;
+
+/**
+ * What an automated path is allowed to change about a contact it already knows
+ * (§4.6: a form's destination is contact_create *or update*).
+ *
+ * The governing rule is that automated data fills blanks and never overwrites.
+ * A returning visitor typing a phone number into a form should not be able to
+ * replace the number the owner corrected by hand last week, and a second form
+ * submission must not relabel where the contact originally came from. So:
+ *
+ * - blank fields are filled;
+ * - `source` is first-touch and therefore never rewritten — overwriting it
+ *   would destroy the attribution the analytics funnel is built on;
+ * - `name` is replaced only while it is still the placeholder `resolve` itself
+ *   wrote (the email address), so "someone@example.com" becomes "Sam Okonjo"
+ *   the first time a real name arrives, and never changes again;
+ * - `lifecycleStage` only moves forward, as it does in a merge — a newsletter
+ *   signup from an existing customer must not demote them back to a lead;
+ * - `tags` union, `customFields` merge with the stored value winning;
+ * - `ownerNotes` is never touched by an automated path at all.
+ *
+ * Returns the columns that actually changed, so an unchanged contact costs no
+ * UPDATE — `updated_at` is a change cursor now, and bumping it on every form
+ * view would make it useless for exactly the sync and export paths that read it.
+ */
+function incomingChanges(
+  existing: ContactRow,
+  input: ResolveInput,
+): Partial<ContactRow> {
+  const changes: Partial<ContactRow> = {};
+
+  if (input.name && existing.name === existing.email) {
+    changes.name = input.name;
+  }
+  for (const field of ["phone", "preferredLocale", "timezone", "country"] as const) {
+    const value = input[field];
+    if (value && !existing[field]) changes[field] = value;
+  }
+  if (input.source && !existing.source) changes.source = input.source;
+
+  if (input.tags?.length) {
+    const merged = [...new Set([...existing.tags, ...input.tags])];
+    if (merged.length !== existing.tags.length) changes.tags = merged;
+  }
+
+  if (input.customFields && Object.keys(input.customFields).length > 0) {
+    const stored = existing.customFields as Record<string, unknown>;
+    const incoming = Object.entries(input.customFields).filter(
+      ([key]) => !(key in stored),
+    );
+    if (incoming.length > 0) {
+      changes.customFields = { ...Object.fromEntries(incoming), ...stored };
+    }
+  }
+
+  if (
+    input.lifecycleStage &&
+    STAGES.indexOf(input.lifecycleStage) > STAGES.indexOf(existing.lifecycleStage)
+  ) {
+    changes.lifecycleStage = input.lifecycleStage;
+  }
+
+  return changes;
+}
+
 /**
  * The door every automated path uses. A form submission, an import, a checkout
  * by a returning visitor, an affiliate signup — all of them mean "this email
@@ -112,11 +178,30 @@ export const resolveContact = defineService({
           .limit(1)
       )[0];
 
-    const existing = await found();
-    if (existing) {
+    /** Fill blanks on a contact the business already knows (see above). */
+    const enrich = async (existing: ContactRow) => {
       ctx.setSubject("contact", existing.id);
-      return { contact: existing, created: false };
-    }
+      const changes = incomingChanges(existing, input);
+      if (Object.keys(changes).length === 0) {
+        return { contact: existing, created: false, updated: false };
+      }
+      const [updated] = await ctx.tx
+        .update(contacts)
+        .set(changes)
+        .where(eq(contacts.id, existing.id))
+        .returning();
+      await ctx.emitTimeline({
+        contactId: existing.id,
+        eventType: "contact.updated",
+        subjectType: "contact",
+        subjectId: existing.id,
+        payload: { fields: Object.keys(changes), via: input.source ?? "resolve" },
+      });
+      return { contact: updated!, created: false, updated: true };
+    };
+
+    const existing = await found();
+    if (existing) return enrich(existing);
 
     const [inserted] = await ctx.tx
       .insert(contacts)
@@ -142,8 +227,7 @@ export const resolveContact = defineService({
           `contacts.resolve: could not resolve ${input.email}`,
         );
       }
-      ctx.setSubject("contact", raced.id);
-      return { contact: raced, created: false };
+      return enrich(raced);
     }
 
     ctx.setSubject("contact", inserted.id);
@@ -155,18 +239,52 @@ export const resolveContact = defineService({
       payload: { source: input.source ?? "resolve" },
     });
     ctx.queueEvent("contact.created", { contactId: inserted.id });
-    return { contact: inserted, created: true };
+    return { contact: inserted, created: true, updated: false };
   },
 });
 
+/** One table that references `contacts.id`, and how a merge repoints it. */
+export interface ContactReference {
+  /** Physical table name — what the completeness gate matches against. */
+  table: string;
+  repoint: (
+    tx: Tx,
+    duplicateId: string,
+    survivingId: string,
+  ) => Promise<unknown>;
+}
+
 /**
- * Fold a duplicate into the record that survives.
+ * Every table that references `contacts.id`.
  *
- * ⚠ CONVENTION: every table that references `contacts.id` must be repointed
- * here. A module that adds a `contact_id` column and does not extend this
- * handler leaves rows orphaned on merge — the spine silently forks, which is
- * the exact failure §2 principle 3 exists to prevent. See CLAUDE.md.
+ * ⚠ CONVENTION (CLAUDE.md): a module that adds a `contact_id` column adds its
+ * entry here in the same PR. Rows left pointing at a deleted duplicate are the
+ * silent fork of the spine that §2 principle 3 exists to prevent.
+ *
+ * The list is hand-maintained rather than reflected off the schema on purpose.
+ * A generic `UPDATE ... SET contact_id` would corrupt any table whose
+ * contact_id sits in a unique constraint — a per-contact subscription row, say,
+ * where the survivor may already hold the very row being repointed onto it.
+ * Those tables need a decision (merge? drop? keep the survivor's?), and a
+ * reflection cannot make one.
+ *
+ * What is *not* left to memory is noticing an omission:
+ * `tests/core/merge-completeness.test.ts` reflects over the schema and fails
+ * when a `contact_id` column has no entry here. The list is hand-written; the
+ * obligation to write it is enforced.
  */
+export const CONTACT_REFERENCES: readonly ContactReference[] = [
+  {
+    table: "timeline_events",
+    repoint: (tx, duplicateId, survivingId) =>
+      tx
+        .update(timelineEvents)
+        .set({ contactId: survivingId })
+        .where(eq(timelineEvents.contactId, duplicateId)),
+  },
+];
+
+/** Fold a duplicate into the record that survives. */
 export const mergeContacts = defineService({
   name: "contacts.merge",
   summary: "Merge a duplicate contact into the one that survives.",
@@ -195,11 +313,10 @@ export const mergeContacts = defineService({
     const surviving = await load(input.survivingId);
     const duplicate = await load(input.duplicateId);
 
-    // Every contact_id FK in the schema, repointed. Keep this list exhaustive.
-    await ctx.tx
-      .update(timelineEvents)
-      .set({ contactId: surviving.id })
-      .where(eq(timelineEvents.contactId, duplicate.id));
+    // Every contact_id FK in the schema, repointed — see CONTACT_REFERENCES.
+    for (const reference of CONTACT_REFERENCES) {
+      await reference.repoint(ctx.tx, duplicate.id, surviving.id);
+    }
 
     // The survivor keeps what it has and inherits what it lacks; no field the
     // owner entered is thrown away by a merge.
@@ -231,7 +348,6 @@ export const mergeContacts = defineService({
         STAGES.indexOf(surviving.lifecycleStage)
           ? duplicate.lifecycleStage
           : surviving.lifecycleStage,
-      updatedAt: sql`now()`,
     };
 
     // Delete before update: email and user_id are unique, so the survivor can
@@ -277,7 +393,7 @@ export const updateContact = defineService({
     const [contact] = await guardDuplicateEmail(changes.email, () =>
       ctx.tx
         .update(contacts)
-        .set({ ...changes, updatedAt: sql`now()` })
+        .set({ ...changes })
         .where(eq(contacts.id, id))
         .returning(),
     );

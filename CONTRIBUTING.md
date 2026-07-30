@@ -22,6 +22,35 @@ disagree silently.
 4. **Open a PR** against `main`. `main` is protected: PRs only, status checks
    required, no force pushes.
 
+## Running it locally
+
+You need Node 20+, pnpm, and a PostgreSQL 15+ you don't mind writing to.
+
+```bash
+pnpm install
+cp .env.example .env          # set DATABASE_URL and SESSION_SECRET
+pnpm db:migrate
+pnpm dev                      # first visit lands on /setup
+```
+
+**Tests want a second, throwaway database.** Set `TEST_DATABASE_URL` in `.env`
+and the suite maps it onto `DATABASE_URL` for the run; migrations are applied
+by vitest's `globalSetup`, so there is no separate migrate step. Without that
+variable the database-backed suites **skip** rather than run — deliberately, so
+a test run can never truncate the database you were developing against. The
+unit suites always run.
+
+```bash
+pnpm test          # vitest
+pnpm typecheck     # tsc --noEmit
+pnpm lint          # architecture, money (§15.4), service-layer (§15.5), i18n (§15.3)
+pnpm license:check # the AGPL/MIT boundary and SPDX headers
+```
+
+CI runs all of the above plus the build, a dependency audit, and a Docker image
+that has to answer a real HTTP request. Run them before opening a PR and the
+review is about the code rather than the checks.
+
 ## Licensing of contributions
 
 Inbound = outbound: your contribution is accepted under the license of the

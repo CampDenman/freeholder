@@ -11,24 +11,27 @@ import {
   Segmented,
   Select,
 } from "@/ui/primitives";
-import {
-  ALL_CURRENCIES,
-  ALL_TIMEZONES,
-  BUSINESS_TYPES,
-  COUNTRY_DEFAULTS,
-  DEFAULT_COUNTRY,
-  countryName,
-  currencyName,
-  defaultsFor,
-} from "@/core/settings/defaults";
+import { DEFAULT_COUNTRY, defaultsFor } from "@/core/settings/defaults";
 import { saveBusinessAction, type ActionState } from "../actions";
+import type { BusinessFieldLabels, BusinessOptions } from "../businessLabels";
 
-// The full lists, not the country table's samples: that table suggests a
-// default, it does not limit what a business may choose.
-const CURRENCIES = ALL_CURRENCIES;
-const TIMEZONES = ALL_TIMEZONES;
+export interface BusinessFormLabels extends BusinessFieldLabels {
+  submit: string;
+  pending: string;
+}
 
-export function BusinessForm() {
+/**
+ * Option lists arrive already named in the instance's locale — see
+ * businessOptions(). This component decides *which* option is suggested; it
+ * never decides what an option is called.
+ */
+export function BusinessForm({
+  labels,
+  options,
+}: {
+  labels: BusinessFormLabels;
+  options: BusinessOptions;
+}) {
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
   const [state, action, pending] = useActionState<ActionState, FormData>(
     saveBusinessAction,
@@ -47,34 +50,34 @@ export function BusinessForm() {
         </Callout>
       ) : null}
 
-      <Field label="Business name" htmlFor="name">
+      <Field label={labels.name} htmlFor="name">
         <Input
           id="name"
           name="name"
           required
-          placeholder="Aurora Coast Photography"
+          placeholder={labels.namePlaceholder}
         />
       </Field>
 
       <Field
-        label="Tagline"
+        label={labels.tagline}
         htmlFor="tagline"
-        hint="Optional. Shown under your name."
+        hint={labels.taglineHint}
       >
         <Input
           id="tagline"
           name="tagline"
-          placeholder="Coastal light, honestly made"
+          placeholder={labels.taglinePlaceholder}
         />
       </Field>
 
       <Field
-        label="What kind of business"
+        label={labels.schemaType}
         htmlFor="schemaType"
-        hint="Search engines use this to describe you. It can change later."
+        hint={labels.schemaTypeHint}
       >
         <Select id="schemaType" name="schemaType" defaultValue="LocalBusiness">
-          {BUSINESS_TYPES.map((type) => (
+          {options.businessTypes.map((type) => (
             <option key={type.value} value={type.value}>
               {type.label}
             </option>
@@ -82,46 +85,46 @@ export function BusinessForm() {
         </Select>
       </Field>
 
-      <Field label="Country" htmlFor="country" hint="Sets the defaults below.">
+      <Field label={labels.country} htmlFor="country" hint={labels.countryHint}>
         <Select
           id="country"
           name="country"
           value={country}
           onChange={(event) => setCountry(event.target.value)}
         >
-          {COUNTRY_DEFAULTS.map((entry) => (
-            <option key={entry.code} value={entry.code}>
-              {countryName(entry.code)}
+          {options.countries.map((entry) => (
+            <option key={entry.value} value={entry.value}>
+              {entry.label}
             </option>
           ))}
         </Select>
       </Field>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Currency you charge in" htmlFor="baseCurrency">
+        <Field label={labels.baseCurrency} htmlFor="baseCurrency">
           <Select
             id="baseCurrency"
             name="baseCurrency"
             key={`currency-${country}`}
             defaultValue={suggested.currency}
           >
-            {CURRENCIES.map((code) => (
-              <option key={code} value={code}>
-                {code} — {currencyName(code)}
+            {options.currencies.map((currency) => (
+              <option key={currency.value} value={currency.value}>
+                {currency.label}
               </option>
             ))}
           </Select>
         </Field>
-        <Field label="Time zone" htmlFor="timezone">
+        <Field label={labels.timezone} htmlFor="timezone">
           <Select
             id="timezone"
             name="timezone"
             key={`timezone-${country}`}
             defaultValue={suggested.timezone}
           >
-            {TIMEZONES.map((zone) => (
-              <option key={zone} value={zone}>
-                {zone.replaceAll("_", " ")}
+            {options.timezones.map((zone) => (
+              <option key={zone.value} value={zone.value}>
+                {zone.label}
               </option>
             ))}
           </Select>
@@ -129,28 +132,28 @@ export function BusinessForm() {
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Units" htmlFor="units">
+        <Field label={labels.units} htmlFor="units">
           <div>
             <Segmented
               key={`units-${country}`}
               name="units"
               defaultValue={suggested.units}
               options={[
-                { value: "metric", label: "Metric" },
-                { value: "imperial", label: "Imperial" },
+                { value: "metric", label: labels.unitsMetric },
+                { value: "imperial", label: labels.unitsImperial },
               ]}
             />
           </div>
         </Field>
-        <Field label="Week starts on" htmlFor="firstDayOfWeek">
+        <Field label={labels.firstDayOfWeek} htmlFor="firstDayOfWeek">
           <Select
             id="firstDayOfWeek"
             name="firstDayOfWeek"
             key={`weekstart-${country}`}
             defaultValue={String(suggested.firstDayOfWeek)}
           >
-            <option value="0">Sunday</option>
-            <option value="1">Monday</option>
+            <option value="0">{labels.sunday}</option>
+            <option value="1">{labels.monday}</option>
           </Select>
         </Field>
       </div>
@@ -159,7 +162,7 @@ export function BusinessForm() {
 
       <div>
         <Button type="submit" disabled={pending}>
-          {pending ? "Saving…" : "Save and continue"}
+          {pending ? labels.pending : labels.submit}
         </Button>
       </div>
     </form>

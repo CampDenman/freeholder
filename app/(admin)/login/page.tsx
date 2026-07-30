@@ -14,6 +14,8 @@ import { actorFromToken } from "@/core/http/actor";
 import { getBusiness, setupState } from "@/core/settings/service";
 import { ThemeToggle } from "@/ui/ThemeToggle";
 import { readThemePreference, setThemeAction } from "../../theme";
+import { getT } from "../../i18n";
+import { themeLabels } from "../../themeLabels";
 import { SignInForm } from "./SignInForm";
 
 export const dynamic = "force-dynamic";
@@ -34,9 +36,10 @@ export default async function LoginPage() {
   );
   if (actor.kind === "user" && actor.role !== "customer") redirect("/admin");
 
-  const [business, theme] = await Promise.all([
+  const [business, theme, t] = await Promise.all([
     getBusiness.call({}, ANONYMOUS),
     readThemePreference(),
+    getT(),
   ]);
 
   return (
@@ -45,23 +48,31 @@ export default async function LoginPage() {
         <div className="mx-auto flex max-w-md items-center gap-2.5 px-6 py-4">
           <Storefront size={20} weight="bold" className="text-accent" />
           <span className="text-sm font-semibold">
-            {business?.name ?? "Freeholder"}
+            {business?.name ?? t("common.appName")}
           </span>
           <div className="ms-auto">
             <ThemeToggle
               current={theme}
               action={setThemeAction}
               returnTo="/login"
+              labels={themeLabels(t)}
             />
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-md px-6 py-16">
-        <h1 className="text-2xl font-bold tracking-tight">Sign in</h1>
-        <p className="mt-2 mb-8 text-ink-muted">
-          Owners and staff only. Customers get a link by email instead.
-        </p>
-        <SignInForm />
+        <h1 className="text-2xl font-bold tracking-tight">
+          {t("auth.login.title")}
+        </h1>
+        <p className="mt-2 mb-8 text-ink-muted">{t("auth.login.intro")}</p>
+        <SignInForm
+          labels={{
+            email: t("auth.login.email"),
+            password: t("auth.login.password"),
+            submit: t("auth.login.submit"),
+            pending: t("auth.login.pending"),
+          }}
+        />
       </main>
     </div>
   );

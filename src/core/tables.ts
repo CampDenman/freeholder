@@ -7,4 +7,5 @@
 export { users, sessions } from "@/core/auth/schema";
 export { organizations, contacts, timelineEvents } from "@/core/contacts/schema";
 export { auditLog } from "@/core/events/schema";
+export { rateLimitCounters } from "@/core/security/schema";
 export { businessProfile, moduleSettings } from "@/core/settings/schema";

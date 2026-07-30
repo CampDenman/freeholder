@@ -4,6 +4,8 @@
 // these once; this is where they live for the rest of the site's life.
 import { redirect } from "next/navigation";
 import { getBusiness } from "@/core/settings/service";
+import { getLocale, getT } from "../../../i18n";
+import { businessFormLabels, businessOptions } from "../../../setup/businessLabels";
 import { requireStaffActor } from "../guard";
 import { SettingsForm } from "./SettingsForm";
 
@@ -17,15 +19,30 @@ export default async function AdminSettingsPage() {
   // Reachable only if setup was skipped somehow; the wizard is the way in.
   if (!business) redirect("/setup");
 
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">Settings</h1>
+        <h1 className="text-xl font-bold tracking-tight">
+          {t("admin.settings.title")}
+        </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Who this business is, and the conventions the whole site follows.
+          {t("admin.settings.intro")}
         </p>
       </div>
       <SettingsForm
+        labels={{
+          ...businessFormLabels(t),
+          cardTitle: t("business.cardTitle"),
+          submit: t("common.saveChanges"),
+          pending: t("common.saving"),
+          saved: t("admin.settings.saved"),
+        }}
+        options={businessOptions(locale, t, {
+          currency: business.baseCurrency,
+          timezone: business.timezone,
+        })}
         values={{
           name: business.name,
           tagline: business.tagline ?? "",

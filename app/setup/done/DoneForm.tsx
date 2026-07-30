@@ -6,7 +6,12 @@ import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button, Callout } from "@/ui/primitives";
 import { completeSetupAction, type ActionState } from "../actions";
 
-export function DoneForm() {
+export interface DoneFormLabels {
+  submit: string;
+  pending: string;
+}
+
+export function DoneForm({ labels }: { labels: DoneFormLabels }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     completeSetupAction,
     {},
@@ -20,7 +25,7 @@ export function DoneForm() {
       ) : null}
       <div>
         <Button type="submit" disabled={pending}>
-          {pending ? "Finishing…" : "Finish setup"}
+          {pending ? labels.pending : labels.submit}
         </Button>
       </div>
     </form>
