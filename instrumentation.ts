@@ -31,6 +31,6 @@ export async function register(): Promise<void> {
   );
 
   const { bootOnce } = await import("@/core/boot");
-  const { default: coreManifest } = await import("@/core/manifest");
-  await bootOnce([coreManifest]);
+  const { default: manifests } = await import("@/modules");
+  await bootOnce(manifests);
 }

@@ -6,7 +6,7 @@
 import { is, sql } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { db } from "@/core/db";
-import * as coreTables from "@/core/tables";
+import manifests from "@/modules";
 import type { Actor, ServiceError } from "@/core/service";
 
 export const hasDatabase = Boolean(process.env.DATABASE_URL);
@@ -47,19 +47,27 @@ export function failure<T>(promise: Promise<T>): Promise<ServiceError> {
 }
 
 /**
- * Empty every spine table between tests.
+ * Empty every table any installed module owns, between tests.
  *
- * Derived from the `@/core/tables` barrel rather than hand-listed: the old
- * hand-list and the barrel were two records of the same fact, and the failure
- * mode was quiet — a table core added but nobody added here leaks state from
- * one test into the next, which surfaces as a flake in an unrelated suite.
+ * Derived from the manifests rather than hand-listed, and from *all* of them
+ * rather than core's barrel alone. Both of those are the same lesson learned
+ * twice: a hand-list and the real set are two records of one fact, and the
+ * failure is quiet — a table nobody added here leaks state into the next test
+ * and surfaces as a flake in an unrelated suite. `tables` is already the
+ * manifest field that answers "what does this module own" (§11), so asking it
+ * means a new module is cleaned up by existing.
+ *
  * `cascade` means dependency order does not need stating either.
  */
 export async function truncateSpine(): Promise<void> {
-  const exports: Record<string, unknown> = coreTables;
-  const names = Object.values(exports)
-    .filter((value): value is PgTable => is(value, PgTable))
-    .map((table) => `"${getTableConfig(table).name}"`);
+  const names: string[] = [];
+  for (const manifest of manifests) {
+    if (!manifest.tables) continue;
+    const owned: Record<string, unknown> = await manifest.tables();
+    for (const value of Object.values(owned)) {
+      if (is(value, PgTable)) names.push(`"${getTableConfig(value).name}"`);
+    }
+  }
   await db().execute(
     sql.raw(`truncate table ${names.join(", ")} restart identity cascade`),
   );

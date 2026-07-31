@@ -93,18 +93,35 @@ point:
 ## Phase 2 — the floor: cms and blocks (§32)
 
 The largest single piece of work in the project, and the one to over-invest in.
+Split in two, because the block *system* and the block *editor* are different
+problems and only the first blocks everything else.
+
+### Phase 2a — the block system ✅
+
+Landed 2026-07-31.
 
 - Typed, Zod-schema'd block nodes rendered by server components; `blocks`
-  jsonb, `ContentRevision`, per-entity overrides.
-- **Site chrome as synced Sections** — header, footer, nav and announcement bar
-  are rows, and `app/(public)/layout.tsx` is a thin shell with no hardcoded
-  site structure.
-- **The module route-mounting decision**, resolved as §32 implies: one
-  catch-all public route rendering block trees. Written into MASTER.md §11 when
-  it lands, because every module after it inherits the answer.
-- The editor: drag to reorder, slash insertion, autosave, visible version
-  history, responsive preview.
-- Deferred to a later pass: variants with a traffic split, and the paywall gate.
+  jsonb validated against the registry on every write, `ContentRevision` on
+  every save.
+- **Site chrome as Sections** — `app/(public)/layout.tsx` fetches two rows and
+  renders them; it contains no site structure at all.
+- **The module route-mounting decision**, resolved as §32 implies and written
+  into MASTER.md §11: one catch-all public route, and a module reaches the
+  public surface through block types, sitemap sources and seed content — never
+  page routes.
+- `cms` is also the first feature module, so this is where the §11 contract
+  stopped being core describing itself: `requires` and the topo-sort, and a
+  listener on core's `settings.setupCompleted` with neither module importing
+  the other.
+
+### Phase 2b — the editor
+
+- Drag to reorder, slash-command insertion, inline editing.
+- Autosave against `cms.updatePage`, with the version history and one-click
+  restore that `ContentRevision` and `cms.restoreRevision` already support.
+- Live responsive preview; the admin screens for pages and sections.
+- Deferred past 2b: per-entity layout overrides, variants with a traffic split,
+  and the paywall gate — all of which the schema already leaves room for.
 
 ## Phase 3 — be found (§7 step 6, §5)
 

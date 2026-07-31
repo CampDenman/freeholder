@@ -12,18 +12,15 @@
   "common.next": "Next",
   "common.somethingWentWrong": "Something went wrong. Try again.",
   "common.emptyValue": "—",
-
   "theme.legend": "Colour theme",
   "theme.system": "System",
   "theme.light": "Light",
   "theme.dark": "Dark",
-
   "home.brand": "Freeholder",
   "home.ready.title": "This instance is ready to set up",
   "home.ready.intro": "Create the owner account and tell Freeholder about the business. It takes about a minute, and nothing is permanent except who owns the site.",
   "home.ready.cta": "Start setup",
   "home.live.note": "The public site arrives with the cms module. Until then, this page confirms the platform is serving your business.",
-
   "auth.login.title": "Sign in",
   "auth.login.intro": "Owners and staff only. Customers get a link by email instead.",
   "auth.login.email": "Email",
@@ -31,12 +28,10 @@
   "auth.login.submit": "Sign in",
   "auth.login.pending": "Signing in…",
   "auth.logout": "Sign out",
-
   "setup.badge": "First-run setup",
   "setup.steps.owner": "Owner account",
   "setup.steps.business": "Business details",
   "setup.steps.done": "Done",
-
   "setup.owner.title": "Create your owner account",
   "setup.owner.intro": "This is the account that owns the site. It can only be created once, so keep the details somewhere safe.",
   "setup.owner.email": "Email",
@@ -46,17 +41,14 @@
   "setup.owner.passwordHint": "At least 12 characters. A passphrase beats a short complicated one.",
   "setup.owner.submit": "Create owner account",
   "setup.owner.pending": "Creating account…",
-
   "setup.business.title": "Tell us about the business",
   "setup.business.intro": "Your country fills in the rest. Everything here appears on your public site, and you can change any of it later.",
   "setup.business.submit": "Save and continue",
-
   "setup.done.title": "{name} is ready",
   "setup.done.intro": "Finishing locks this wizard, so nobody can walk through it again on a live site. Your settings stay editable from the admin.",
   "setup.done.summary": "Publishing in {locales}, charging in {currency}, showing times in {timezone}.",
   "setup.done.submit": "Finish setup",
   "setup.done.pending": "Finishing…",
-
   "business.name": "Business name",
   "business.namePlaceholder": "Aurora Coast Photography",
   "business.tagline": "Tagline",
@@ -77,7 +69,6 @@
   "business.locales": "Languages",
   "business.localesHint": "Comma separated. The first one is your default and stays unprefixed in your web addresses.",
   "business.cardTitle": "Business details",
-
   "business.type.LocalBusiness": "General business",
   "business.type.Photographer": "Photography",
   "business.type.ProfessionalService": "Professional services",
@@ -88,12 +79,10 @@
   "business.type.Store": "Shop",
   "business.type.EntertainmentBusiness": "Entertainment",
   "business.type.EducationalOrganization": "Teaching and courses",
-
   "admin.nav.label": "Admin sections",
   "admin.nav.overview": "Overview",
   "admin.nav.contacts": "Contacts",
   "admin.nav.settings": "Settings",
-
   "admin.overview.title": "Overview",
   "admin.overview.intro": "Everything below is live from your own data.",
   "admin.overview.contacts": "Contacts",
@@ -101,16 +90,13 @@
   "admin.overview.contactsEmpty": "No contacts yet. They arrive on their own once forms and checkout are live, and you can add one by hand at any time.",
   "admin.overview.activity": "What changed",
   "admin.overview.activityEmpty": "Nothing has changed yet. Every action anyone takes — you, your staff, or an AI agent — is recorded here.",
-
   "actor.agent": "Agent {name}",
   "actor.staff": "You or your staff",
   "actor.system": "The platform",
   "actor.visitor": "A visitor",
-
   "admin.settings.title": "Settings",
   "admin.settings.intro": "Who this business is, and the conventions the whole site follows.",
   "admin.settings.saved": "Saved. Your public site uses these straight away.",
-
   "contacts.title": "Contacts",
   "contacts.intro": "Everyone this business has touched. One record per person, shared by every part of the platform.",
   "contacts.new": "New contact",
@@ -127,7 +113,6 @@
   "contacts.column.stage": "Stage",
   "contacts.column.added": "Added",
   "contacts.paging": "{from}–{to} of {total}",
-
   "contacts.stage.lead": "Lead",
   "contacts.stage.prospect": "Prospect",
   "contacts.stage.customer": "Customer",
@@ -136,13 +121,11 @@
   "contacts.stagePlural.prospect": "Prospects",
   "contacts.stagePlural.customer": "Customers",
   "contacts.stagePlural.repeat": "Repeat customers",
-
   "contacts.detail.back": "← All contacts",
   "contacts.detail.added": "Added {when}",
   "contacts.detail.details": "Details",
   "contacts.detail.timeline": "Timeline",
   "contacts.detail.timelineEmpty": "Nothing yet. Quotes, bookings, invoices and emails will all appear here as they happen.",
-
   "contacts.field.name": "Name",
   "contacts.field.email": "Email",
   "contacts.field.emailHint": "One contact per address — the platform will not create a second.",
@@ -153,12 +136,21 @@
   "contacts.field.notes": "Private notes",
   "contacts.field.notesHint": "Only you and your staff see these.",
   "contacts.add": "Add contact",
-
   "contacts.merge.title": "Merge a duplicate",
   "contacts.merge.intro": "Find the other record for this person. Its history moves here, and anything this contact is missing is filled in from it. The duplicate is then removed — this cannot be undone.",
   "contacts.merge.searchLabel": "Search for the duplicate",
   "contacts.merge.searchPlaceholder": "name or email",
   "contacts.merge.noResults": "Nobody else matches “{query}”.",
   "contacts.merge.noEmail": "no email",
-  "contacts.merge.submit": "Merge into this contact"
+  "contacts.merge.submit": "Merge into this contact",
+  "cms.nav.primary": "Main navigation",
+  "cms.block.heading": "Heading",
+  "cms.block.text": "Text",
+  "cms.block.button": "Button",
+  "cms.block.columns": "Columns",
+  "cms.block.divider": "Divider",
+  "cms.block.spacer": "Spacer",
+  "cms.block.faq": "FAQ",
+  "cms.block.brand": "Business name",
+  "cms.block.nav": "Navigation"
 }

@@ -316,5 +316,39 @@
       "Error messages thrown by services are still English literals in src/ — they reach a screen through ActionState, and they need catalog keys before a second locale ships",
       "The fixed rate-limit window allows a brief 2x burst across a boundary; a sliding window needs a history table and is not worth it at these limits"
     ]
+  },
+  {
+    "id": "2026-07-31-cms-blocks",
+    "date": "2026-07-31",
+    "title": "Phase 2a: the block system and the public surface",
+    "masterRef": "§32, §11, §5, §4.6",
+    "status": "done",
+    "delivered": [
+      "src/modules/cms — the first feature module, so the first real test of the §11 contract rather than core describing itself",
+      "Module contract proven: requires + topo-sort puts core first however the list is written, and events.listens subscribes cms to core's settings.setupCompleted without either module importing the other",
+      "Typed block registry: every node Zod-validated against its own block before it is written, so jsonb stays a typed tree rather than a bag (§2 principle 12 names block content as its permitted case)",
+      "Unknown block types are refused, not dropped — dropping means the next save permanently deletes the sections a disabled plugin drew",
+      "Zod defaults applied on parse, so adding an optional prop to a block is not a data migration",
+      "v1 vocabulary: heading, text, button, columns, divider, spacer, faq, brand, nav — the blocks that need no module that does not exist yet",
+      "Blocks contribute their own JSON-LD: an FAQ block on a page is what puts FAQPage in the markup (§5)",
+      "One catch-all public route rendering block trees; a new page is an INSERT, live on the next request, with no build step (§32)",
+      "Site chrome as Sections: app/(public)/layout.tsx fetches two rows and renders them, containing no hardcoded site structure — menus are rows, not JSX",
+      "proxy.ts forwards the request path so the chrome's nav can mark the current entry while staying a server component",
+      "ContentRevision on every save, written inside the same transaction before the update; restoring is itself revisioned, so a restore is undoable (§37)",
+      "cms.ensureDefaults seeds header, footer and home idempotently on setup completion, so day one looks designed (§32)",
+      "Drafts are unreachable by URL — 'unlisted' is not a permission model — and excluded from the sitemap source",
+      "MASTER.md §11 records how a module reaches the public surface: block types, sitemap sources and seed content, never page routes",
+      "truncateSpine now derives from every installed module's manifest rather than core's barrel, so a new module is cleaned up between tests by existing"
+    ],
+    "openFollowUps": [
+      "No editor yet — this is Phase 2a. Drag-to-reorder, slash insertion, autosave and version-restore UI are Phase 2b; today a page is edited through the services",
+      "No admin screens for pages or sections, so the only way to author content is a service call",
+      "Image, gallery, product, booking, tip and paywall blocks wait on the modules that back them",
+      "Per-entity layout overrides and A/B variants with traffic splits (§32) are deliberately deferred",
+      "The catch-all does not yet serve locale-prefixed paths; §4.9's URL strategy lands in proxy.ts with EntityTranslation",
+      "generateMetadata and the page render each resolve the page, so a request costs two lookups until a request-scoped cache lands",
+      "No sitemap.xml, robots.txt or llms.txt route yet — cms.publishedPaths exists as the source, but the SEO engine that consumes it is Phase 3",
+      "ContentRevision has no pruning; an actively edited page grows a row per save"
+    ]
   }
 ]
