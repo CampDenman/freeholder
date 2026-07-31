@@ -33,6 +33,19 @@ const slug = z
     "use lowercase words separated by hyphens or slashes",
   );
 
+/**
+ * The read side takes any string.
+ *
+ * `slug` above is the *write* rule, and it is right to be strict there. Using
+ * it for lookups was wrong: a visitor's URL is untrusted input, so a request
+ * for `/favicon.ico` or `/wp-admin.php` failed validation and answered 500
+ * where the honest answer is "no such page". Any string is a legitimate
+ * question; the answer is simply null.
+ */
+const lookupSlug = z
+  .string()
+  .transform((value) => value.replace(/^\/+|\/+$/g, ""));
+
 const seo = z
   .object({
     title: z.string().max(60).optional(),
@@ -54,7 +67,7 @@ export const resolvePage = defineService({
   summary: "The published page at a path, or null.",
   kind: "query",
   permission: "public",
-  input: z.object({ slug, locale: z.string().default("en") }),
+  input: z.object({ slug: lookupSlug, locale: z.string().default("en") }),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
       .select()

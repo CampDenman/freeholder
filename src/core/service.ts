@@ -19,6 +19,7 @@ import { auditLog } from "@/core/events/schema";
 import { publish, writeTimelineEvent } from "@/core/events";
 import type { TimelineEventInput } from "@/core/events";
 import { consume, rateLimitKey, type RateLimitPolicy } from "@/core/security/rate-limit";
+import { ready } from "@/core/runtime";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -200,9 +201,17 @@ export function defineService<In extends z.ZodType, Out>(
       options?: ServiceCallOptions,
     ): Promise<Out> {
       if (!permits(actor, def.permission, def.name)) {
+        // Written for whoever reads it, which is a business owner looking at a
+        // form that just refused them — not the author of this file. The old
+        // message ("anonymous may not call settings.updateBusiness.") reached
+        // the setup wizard verbatim and named an internal service to someone
+        // who has no idea what one is. The actor and service still reach the
+        // audit trail and the server log, where they are useful.
         throw new ServiceError(
           "permission",
-          `${actorString(actor)} may not call ${def.name}.`,
+          actor.kind === "anonymous"
+            ? "You are not signed in, or your session has expired. Sign in and try again."
+            : "Your account does not have permission to do that.",
         );
       }
       const parsed = def.input.safeParse(rawInput);
@@ -216,6 +225,14 @@ export function defineService<In extends z.ZodType, Out>(
       // A composed call inherits its parent's transaction and event queue; a
       // top-level call owns both. Exactly one transaction per outermost call.
       const inheritedTx = options?.tx;
+
+      // The platform must be wired before a mutation can fan out to the
+      // modules listening for it. Awaited here rather than at each entry point
+      // because every surface reaches the platform through a service, so this
+      // is the one place that cannot be forgotten — and only on the outermost
+      // call, since a composed one is already inside a booted graph. See
+      // core/runtime.ts for why boot cannot be left to instrumentation alone.
+      if (!inheritedTx) await ready();
 
       // Throttled *before* the transaction opens, and skipped for composed and
       // system calls. A composed call is one step of a mutation the outermost
@@ -289,7 +306,15 @@ export function defineService<In extends z.ZodType, Out>(
 const registry = new Map<string, Service>();
 
 export function registerService(service: Service): void {
-  if (registry.has(service.def.name)) {
+  const existing = registry.get(service.def.name);
+  // Registering the *same* service again is a no-op, not an error. Boot is a
+  // precondition now (core/runtime.ts) rather than a one-shot startup step, so
+  // a graph can legitimately be asked to boot more than once. What must still
+  // fail is two *different* services claiming one name — that is a collision
+  // between modules, and silently letting the second win would route calls to
+  // whichever happened to load last.
+  if (existing === service) return;
+  if (existing) {
     throw new Error(`service "${service.def.name}" registered twice`);
   }
   registry.set(service.def.name, service);

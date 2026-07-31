@@ -75,6 +75,21 @@ jobs:
             echo "/setup answered $setup, expected 200"; docker logs freeholder-ci; exit 1
           fi
           echo "image serves / and /setup with 200"
+          # The modules must be booted *in the graph serving requests*, not
+          # merely in instrumentation's. They were not, for three phases, and
+          # nothing failed — services are called as objects rather than looked
+          # up, so an empty registry is invisible until a module listens for an
+          # event. This asserts the wiring rather than trusting it.
+          health=$(curl -s http://localhost:3000/api/health)
+          echo "health: $health"
+          echo "$health" | grep -q '"ok":true' || { echo "platform did not boot"; docker logs freeholder-ci; exit 1; }
+          node -e '
+            const h = JSON.parse(process.argv[1]);
+            if (!h.modules || !h.services) {
+              console.error("booted with nothing wired:", h); process.exit(1);
+            }
+            console.log(`booted ${h.modules} modules, ${h.services} services, ${h.listeners} listeners`);
+          ' "$health"
           docker rm -f freeholder-ci >/dev/null
       - name: Changelog gate (§15.6)
         if: github.event_name == 'pull_request'

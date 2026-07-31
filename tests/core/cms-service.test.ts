@@ -8,7 +8,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { boot, resetBootForTests } from "@/core/boot";
 import { resetRegistryForTests } from "@/core/service";
-import { updateBusiness } from "@/core/settings/service";
+import { completeSetup, updateBusiness } from "@/core/settings/service";
 import coreManifest from "@/core/manifest";
 import cmsManifest from "@/modules/cms/manifest";
 import {
@@ -87,6 +87,28 @@ describe.runIf(hasDatabase)("the cms module", () => {
 
       const header = await getSection.call({ key: "header" }, ANONYMOUS);
       expect(header?.kind).toBe("chrome");
+    });
+
+    /**
+     * The production bug, reproduced.
+     *
+     * Setup completed on the live instance and nothing was seeded — no error,
+     * no listener, nothing in the audit trail after `settings.completeSetup`.
+     * The cause was that boot ran in `instrumentation.ts`'s module graph while
+     * requests were served from a different one, so the listener map that boot
+     * populated was invisible to the code publishing the event.
+     *
+     * This asserts the whole chain end to end — service → post-commit event →
+     * subscribed listener → seeded rows — and it only passes because a service
+     * call now guarantees the platform is booted first (core/runtime.ts).
+     */
+    it("seeds the site when setup completes, via the event bus", async () => {
+      await updateBusiness.call(BUSINESS, OWNER);
+      await completeSetup.call({}, OWNER);
+
+      expect(await resolvePage.call({ slug: "" }, ANONYMOUS)).not.toBeNull();
+      expect(await getSection.call({ key: "header" }, ANONYMOUS)).not.toBeNull();
+      expect(await getSection.call({ key: "footer" }, ANONYMOUS)).not.toBeNull();
     });
 
     it("is idempotent, so re-running repairs without duplicating", async () => {
