@@ -113,9 +113,24 @@ describe("rejection happens before the handler", () => {
       .call({ n: 1 }, user("customer")));
     expect(error).toBeInstanceOf(ServiceError);
     expect(error.code).toBe("permission");
-    expect(error.message).toContain("user:u1");
-    expect(error.message).toContain("probe.run");
     expect(runs).toBe(0);
+
+    // The message reaches a business owner's screen, so it must not name the
+    // internal service or the actor id. The setup wizard showed them
+    // "anonymous may not call settings.updateBusiness." before this changed.
+    // Attribution belongs in the audit trail, not the interface.
+    expect(error.message).not.toContain("user:u1");
+    expect(error.message).not.toContain("probe.run");
+    expect(error.message).toMatch(/permission/i);
+  });
+
+  it("tells an anonymous caller to sign in, rather than that they lack a role", () => {
+    // Two different problems with two different remedies: "sign in" is
+    // actionable, "you lack permission" is not when the fix is a login.
+    return failure(probe.call({ n: 1 }, ANON)).then((error) => {
+      expect(error.code).toBe("permission");
+      expect(error.message).toMatch(/sign in/i);
+    });
   });
 
   it("rejects invalid input without running the handler", async () => {
@@ -194,9 +209,31 @@ describe("the registry", () => {
     expect(listServices().size).toBe(1);
   });
 
-  it("refuses a duplicate name", () => {
+  it("accepts the same service twice, because boot is a precondition", () => {
+    // Boot is no longer a one-shot startup step — every module graph boots its
+    // own copy on demand (core/runtime.ts), so a graph can legitimately be
+    // asked to boot more than once. Re-registering the identical service must
+    // therefore be a no-op rather than a crash.
     registerService(one);
-    expect(() => registerService(one)).toThrow(/registered twice/);
+    expect(() => registerService(one)).not.toThrow();
+    expect(listServices().size).toBe(1);
+    expect(getService("registry.one")).toBe(one);
+  });
+
+  it("still refuses two different services claiming one name", () => {
+    // The collision that matters: two modules both calling themselves
+    // "registry.one". Letting the second win would silently route every call
+    // to whichever module happened to load last.
+    const impostor = defineService({
+      name: "registry.one",
+      summary: "a different service wearing the same name",
+      kind: "query",
+      permission: "public",
+      input: z.object({}),
+      handler: async () => null,
+    });
+    registerService(one);
+    expect(() => registerService(impostor)).toThrow(/registered twice/);
   });
 
   it("fails loudly for an unknown name", () => {
