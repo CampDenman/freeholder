@@ -1,0 +1,73 @@
+// Copyright (C) 2026 Camp Denman Society
+// SPDX-License-Identifier: AGPL-3.0-only
+// Rendering a block tree to semantic HTML on the server (MASTER.md §32, §5).
+//
+// Server-only by construction: the public surface is server-rendered HTML with
+// the content present in the initial response (§5 "Rendering"), so there is no
+// client component anywhere in this path and no hydration step between an
+// owner publishing and a crawler reading. That is also what makes the SEO gate
+// checkable — what the crawler sees is what this function returned.
+import type { ReactNode } from "react";
+import { getBlock } from "./blocks/registry";
+import type { BlockNode, BlockRenderContext } from "./blocks/types";
+
+/**
+ * Render one tree.
+ *
+ * Nodes are resolved in parallel rather than in sequence: a page with a nav
+ * and three live blocks should cost one round of queries, not four in a row.
+ * Blocks are independent by contract — a block cannot see its siblings — so
+ * there is nothing to serialize.
+ */
+export async function renderBlocks(
+  nodes: BlockNode[],
+  ctx: BlockRenderContext,
+): Promise<ReactNode[]> {
+  return Promise.all(nodes.map((node) => renderBlock(node, ctx)));
+}
+
+async function renderBlock(
+  node: BlockNode,
+  ctx: BlockRenderContext,
+): Promise<ReactNode> {
+  const definition = getBlock(node.type);
+  if (!definition) {
+    // Unreachable through the services, which validate against the same
+    // registry before writing. Reached only if a block type is removed from
+    // the code while trees still reference it — a plugin uninstalled, say. A
+    // missing block leaves a gap in a page; it must never take the page down.
+    console.warn(`[cms] no renderer for block type "${node.type}" — skipped`);
+    return null;
+  }
+
+  const resolved = definition.resolve
+    ? await definition.resolve(node.props, ctx)
+    : (undefined as never);
+
+  const children = node.children
+    ? await renderBlocks(node.children, ctx)
+    : undefined;
+
+  return (
+    <BlockFrame key={node.id}>
+      {definition.render({
+        props: node.props,
+        ctx,
+        resolved,
+        children,
+      })}
+    </BlockFrame>
+  );
+}
+
+/**
+ * A keyed wrapper, and nothing else.
+ *
+ * Deliberately not a styled container: §32 makes the *arrangement* the owner's,
+ * so the renderer contributes no spacing, no borders and no opinions of its
+ * own. Everything visual comes from the blocks themselves or from the flow
+ * container the page puts them in.
+ */
+function BlockFrame({ children }: { children: ReactNode }) {
+  return <>{children}</>;
+}

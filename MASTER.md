@@ -530,6 +530,16 @@ export default defineModule({
 
 **Boot sequence:** load manifests → topo-sort by `requires` → run pending migrations per module → register services in the service registry → mount routes → subscribe event listeners → register jobs → build MCP tool list from enabled modules only.
 
+**How a module reaches the public surface (decided 2026-07-31).** The manifest above lists `routes.public`, which reads as though a module contributes page files to the router. It does not, and it must not — §32 already settled this: *structure is data; code is vocabulary.* There is **one** public route, a catch-all that resolves a path to a row and renders that row's block tree. A new page is an INSERT, live on the next request. A module therefore reaches the public surface by contributing:
+
+- **block types** — new vocabulary in the page editor, the only code half of §32;
+- **sitemap sources** — a service name the SEO engine calls for the URLs the module's content occupies;
+- **seed content** — pages and Sections it wants to exist on a fresh install.
+
+`routes` remains in the manifest for the surfaces where a *path* is genuinely code rather than content: `api` (webhooks, REST endpoints) and the token-addressed functional pages a module owns (`/quote/[token]`, a magic-link landing, an unsubscribe confirmation). Those are behaviour at a URL, not a document, and no amount of block editing produces them. The test is simple — **if an owner could reasonably want to rearrange it, it is data; if rearranging it is meaningless, it may be a route.**
+
+This is what keeps §37 honest, too. A builder that can add a page is doing a database write inside the service layer, with validation, audit and one-click revert; a builder that could add a *route* would be writing code on the box that serves traffic, which §37 explicitly forbids.
+
 **The service registry is the single choke point.** Admin UI, REST API, and MCP all call `services.quotes.send(...)`. Every service method: validates with Zod, checks permissions from session/API-key scopes, executes in a transaction, emits TimelineEvents, writes AuditLog. A service method that skips any of these fails code review — this is the invariant that makes the platform agent-safe.
 
 ---

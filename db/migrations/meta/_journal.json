@@ -22,6 +22,13 @@
       "when": 1785404740598,
       "tag": "0002_rate-limit-counters",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785487343897,
+      "tag": "0003_cms-pages-and-sections",
+      "breakpoints": true
     }
   ]
 }
