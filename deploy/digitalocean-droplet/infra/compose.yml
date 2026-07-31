@@ -14,6 +14,18 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data      # certificates; losing this re-issues them
       - caddy-config:/config
+    # `{$FREEHOLDER_DOMAIN}` in the Caddyfile is *Caddy's* substitution, not
+    # compose's, so it reads this container's environment — and without this
+    # block it read an empty string. An empty site address leaves a bare `{`,
+    # which Caddy parses as a global options block, so the first directive
+    # inside fails with "unrecognized global option: encode" and the container
+    # never starts. The stack looked healthy because app and db were up.
+    #
+    # `:?` rather than a default: a reverse proxy whose hostname is a guess
+    # would request a certificate for the wrong name, and being told at
+    # `compose up` beats discovering it in Let's Encrypt's rate limits.
+    environment:
+      FREEHOLDER_DOMAIN: ${FREEHOLDER_DOMAIN:?set FREEHOLDER_DOMAIN in .env — Caddy needs the hostname it should request a certificate for}
     depends_on: [app]
 
   app:

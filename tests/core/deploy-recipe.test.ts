@@ -73,6 +73,43 @@ describe("the compose stack does not contradict the storage mandate", () => {
       expect(compose!).not.toMatch(/uploads:/i);
     });
 
+    it.runIf(compose !== undefined)(
+      `${recipe}: the proxy is given every variable its config interpolates`,
+      () => {
+        // The bug this exists for: the Caddyfile reads {$FREEHOLDER_DOMAIN},
+        // which is Caddy's own substitution against the *container's*
+        // environment — not compose's substitution against .env. The service
+        // had neither `environment:` nor `env_file:`, so the variable was
+        // empty, the site address vanished, and Caddy read the leftover `{` as
+        // a global options block and refused to start. Nothing looked wrong:
+        // app and db were up, and only the public surface was missing.
+        const proxyPath = join(DEPLOY, recipe, "infra", "Caddyfile");
+        let proxyConfig: string | undefined;
+        try {
+          proxyConfig = readFileSync(proxyPath, "utf8");
+        } catch {
+          return; // recipe does not use Caddy
+        }
+
+        const interpolated = [
+          ...proxyConfig.matchAll(/\{\$([A-Z0-9_]+)\}/g),
+        ].map((m) => m[1]!);
+        expect(interpolated.length).toBeGreaterThan(0);
+
+        const caddySection = compose!.slice(
+          compose!.indexOf("  caddy:"),
+          compose!.indexOf("  app:"),
+        );
+        for (const variable of interpolated) {
+          expect(
+            caddySection,
+            `Caddyfile interpolates ${variable}, but the caddy service never receives it — ` +
+              `it will read as empty and the config will not parse.`,
+          ).toMatch(new RegExp(`${variable}\\s*:`));
+        }
+      },
+    );
+
     it.runIf(compose !== undefined)(`${recipe}: database is not published`, () => {
       // `ports:` on the database would expose Postgres to the internet; the
       // app reaches it over the compose network with `expose:` instead.
