@@ -9,3 +9,22 @@ packages:
 allowBuilds:
   esbuild: false
   sharp: true
+
+# Transitive dependencies pinned forward past a published advisory (§36:
+# "dependency audit in CI"). These exist because `pnpm audit --audit-level
+# high` is a CI gate, and the honest way past a red gate is to take the patch,
+# not to lower the bar until the gate goes quiet.
+#
+# Each entry is a floor, not a pin — a direct dependency asking for something
+# newer still wins. Remove an entry once every dependency has caught up on its
+# own; the audit gate is what will tell you it is safe to.
+overrides:
+  # CVE-2026-33327/33328/35590 — inherited libvips vulnerabilities. Reached
+  # through next/image, which is why sharp builds at all (see allowBuilds).
+  sharp: ">=0.35.0"
+  # GHSA-r28c-9q8g-f849 and the sourceMappingURL path traversal: arbitrary file
+  # read via an attacker-controlled source map comment.
+  postcss: ">=8.5.18"
+  # DoS via unbounded brace expansion. Only reachable through dev tooling
+  # today, overridden anyway because the fix is a patch version.
+  brace-expansion: ">=5.0.8"

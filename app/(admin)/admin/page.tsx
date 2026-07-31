@@ -5,21 +5,15 @@
 import { Users } from "@phosphor-icons/react/dist/ssr";
 import { contactStats } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
-import { formatDateTime } from "@/core/i18n";
+import { formatDateTime, type Translate } from "@/core/i18n";
 import { getBusiness } from "@/core/settings/service";
 import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { getT } from "../../i18n";
 import { requireStaffActor } from "./guard";
 
 export const dynamic = "force-dynamic";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
-
-const STAGE_LABELS: Record<string, string> = {
-  lead: "Leads",
-  prospect: "Prospects",
-  customer: "Customers",
-  repeat: "Repeat customers",
-};
 
 /** "contacts.create" → "Contact created", for someone who did not build this. */
 function describe(action: string): string {
@@ -33,21 +27,22 @@ function describe(action: string): string {
   return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} — ${readable}`;
 }
 
-function actorLabel(actor: string): string {
-  if (actor.startsWith("agent:")) return `Agent ${actor.slice(6)}`;
-  if (actor.startsWith("user:")) return "You or your staff";
-  if (actor === "system") return "The platform";
-  return "A visitor";
+function actorLabel(actor: string, t: Translate): string {
+  if (actor.startsWith("agent:")) return t("actor.agent", { name: actor.slice(6) });
+  if (actor.startsWith("user:")) return t("actor.staff");
+  if (actor === "system") return t("actor.system");
+  return t("actor.visitor");
 }
 
 export default async function AdminOverviewPage() {
   // Its own guard, not the layout's: layouts and pages render in parallel, so
   // this must not assume anybody has vetted the caller yet.
   const actor = await requireStaffActor();
-  const [business, stats, activity] = await Promise.all([
+  const [business, stats, activity, t] = await Promise.all([
     getBusiness.call({}, ANONYMOUS),
     contactStats.call({}, actor),
     recentActivity.call({ limit: 12 }, actor),
+    getT(),
   ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -56,30 +51,35 @@ export default async function AdminOverviewPage() {
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">Overview</h1>
+        <h1 className="text-xl font-bold tracking-tight">
+          {t("admin.overview.title")}
+        </h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Everything below is live from your own data.
+          {t("admin.overview.intro")}
         </p>
       </div>
 
       <Card>
         <CardHeader
           icon={<Users size={17} weight="bold" />}
-          title="Contacts"
-          status={<Pill tone="neutral">{stats.total} total</Pill>}
+          title={t("admin.overview.contacts")}
+          status={
+            <Pill tone="neutral">
+              {t("admin.overview.contactsTotal", { count: stats.total })}
+            </Pill>
+          }
         />
         <CardBody>
           {stats.total === 0 ? (
             <p className="text-sm text-ink-muted">
-              No contacts yet. They arrive on their own once forms and checkout
-              are live, and you can add one by hand at any time.
+              {t("admin.overview.contactsEmpty")}
             </p>
           ) : (
             <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {Object.entries(stats.byStage).map(([stage, n]) => (
                 <div key={stage} className="grid gap-1">
                   <dt className="font-mono text-xs text-ink-muted">
-                    {STAGE_LABELS[stage] ?? stage}
+                    {t(`contacts.stagePlural.${stage}`)}
                   </dt>
                   <dd className="text-2xl font-bold tabular-nums">{n}</dd>
                 </div>
@@ -90,12 +90,11 @@ export default async function AdminOverviewPage() {
       </Card>
 
       <Card>
-        <CardHeader title="What changed" />
+        <CardHeader title={t("admin.overview.activity")} />
         <CardBody>
           {activity.length === 0 ? (
             <p className="text-sm text-ink-muted">
-              Nothing has changed yet. Every action anyone takes — you, your
-              staff, or an AI agent — is recorded here.
+              {t("admin.overview.activityEmpty")}
             </p>
           ) : (
             <ul className="grid list-none gap-0 p-0">
@@ -108,7 +107,7 @@ export default async function AdminOverviewPage() {
                     {describe(entry.action)}
                   </span>
                   <span className="text-xs text-ink-muted">
-                    {actorLabel(entry.actor)}
+                    {actorLabel(entry.actor, t)}
                   </span>
                   <time
                     dateTime={entry.at.toISOString()}

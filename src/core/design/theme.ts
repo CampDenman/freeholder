@@ -39,8 +39,7 @@ export function themeAttribute(
   return preference === "system" ? undefined : preference;
 }
 
-export const THEME_LABELS: Record<ThemePreference, string> = {
-  system: "Match system",
-  light: "Light",
-  dark: "Dark",
-};
+// The *names* of these preferences are copy, not structure, so they live in
+// the message catalogs under `theme.*` and are translated by the routing layer
+// (app/themeLabels.ts). A Record of English strings here would be a second
+// place user-facing text can hide from the i18n gate.

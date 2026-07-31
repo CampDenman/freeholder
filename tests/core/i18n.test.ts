@@ -20,6 +20,53 @@ describe("t()", () => {
     expect(t("en", "nope.not.a.key")).toBe("nope.not.a.key");
   });
 
+  describe("the shipped translations actually format", () => {
+    // A catalog can be complete (the i18n gate proves that) and still be
+    // broken at render time, because ICU treats an apostrophe as an escape
+    // character. French is full of them — "n'a", "l'instant", "d'e-mail" —
+    // and a mis-parsed one silently swallows the rest of the message.
+    it("renders French apostrophes literally rather than as ICU quoting", () => {
+      expect(t("fr", "common.somethingWentWrong")).toBe(
+        "Une erreur s'est produite. Réessayez.",
+      );
+      expect(t("fr", "contacts.merge.noEmail")).toBe("pas d'e-mail");
+      expect(t("fr", "admin.settings.intro")).toContain(
+        "L'identité de cette entreprise",
+      );
+    });
+
+    it("pluralizes in French and Spanish", () => {
+      expect(t("fr", "contacts.count", { count: 0 })).toBe("Aucun contact");
+      expect(t("fr", "contacts.count", { count: 1 })).toBe("1 contact");
+      expect(t("fr", "contacts.count", { count: 7 })).toBe("7 contacts");
+
+      expect(t("es", "contacts.count", { count: 0 })).toBe(
+        "Aún no hay contactos",
+      );
+      expect(t("es", "contacts.count", { count: 1 })).toBe("1 contacto");
+      expect(t("es", "contacts.count", { count: 7 })).toBe("7 contactos");
+    });
+
+    it("interpolates placeholders in every shipped locale", () => {
+      expect(t("es", "setup.done.title", { name: "Aurora" })).toBe(
+        "Aurora está listo",
+      );
+      expect(t("fr", "contacts.merge.noResults", { query: "Grace" })).toBe(
+        "Personne d'autre ne correspond à « Grace ».",
+      );
+      expect(t("es", "contacts.paging", { from: 1, to: 25, total: 60 })).toBe(
+        "1–25 de 60",
+      );
+    });
+
+    it("falls back along the language chain, not straight to English", () => {
+      // A Québécois owner reaches the French catalog before English is
+      // considered at all — a missing region must not undo the language.
+      expect(t("fr-CA", "auth.login.title")).toBe("Connexion");
+      expect(t("es-MX", "admin.nav.settings")).toBe("Ajustes");
+    });
+  });
+
   it("serves a regional locale from the base catalog", () => {
     expect(t("en-GB", "common.save")).toBe("Save");
   });

@@ -16,6 +16,7 @@ import {
   validateSession,
 } from "@/core/auth/sessions";
 import { defineService, ServiceError } from "@/core/service";
+import { rateLimitKey, reset as resetRateLimit } from "@/core/security/rate-limit";
 
 const sessionMeta = {
   ip: z.string().optional(),
@@ -49,6 +50,24 @@ export const registerOwner = defineService({
   kind: "mutation",
   permission: "public",
   input: registration,
+  // One global bucket, not one per caller — deliberately, and worth saying
+  // plainly. This endpoint succeeds exactly once in an instance's life, so
+  // there is no account to count against and nothing to take over; what it
+  // protects is the cost of hashing a password on an unauthenticated public
+  // URL. Per-IP counting would be better, but nothing populates `ip` on this
+  // path yet (threading a trusted client address through Server Actions needs
+  // a proxy-trust decision this PR does not make), and a per-IP limit keyed on
+  // a value that is always undefined is a global limit wearing a costume.
+  //
+  // The cost of a shared bucket is that a stranger can delay an owner's first
+  // boot by up to fifteen minutes. The window expires on its own, so it is a
+  // delay and never a lockout.
+  rateLimit: {
+    limit: 20,
+    windowSeconds: 15 * 60,
+    subject: () => "first-boot",
+    message: "Too many setup attempts. Wait a few minutes and try again.",
+  },
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select({ n: count() }).from(users);
     if ((row?.n ?? 0) > 0) {
@@ -96,6 +115,19 @@ export const login = defineService({
   kind: "mutation",
   permission: "public",
   input: loginCredentials,
+  // Counted per email address rather than per IP: the attack this stops is
+  // guessing one account's password, and an attacker with a proxy pool changes
+  // IP freely while the target address stays the same. Ten tries in fifteen
+  // minutes is far past honest mistyping and far short of a useful guess rate.
+  //
+  // It is not a lockout — the window expires on its own, so nobody can lock an
+  // owner out of their own instance by failing to log in as them on purpose.
+  rateLimit: {
+    limit: 10,
+    windowSeconds: 15 * 60,
+    subject: (input) => input.email,
+    message: "Too many sign-in attempts. Wait a few minutes and try again.",
+  },
   handler: async (input, ctx) => {
     const [user] = await ctx.tx
       .select()
@@ -109,6 +141,10 @@ export const login = defineService({
       throw invalid;
     }
     ctx.setSubject("user", user.id);
+    // Clear the budget on success, so four fumbled attempts followed by the
+    // right password do not leave someone one mistake from being throttled for
+    // the rest of the window. Only a run of *failures* is suspicious.
+    await resetRateLimit(rateLimitKey("auth.login", input.email));
     await ctx.tx
       .update(users)
       .set({ lastLoginAt: sql`now()` })

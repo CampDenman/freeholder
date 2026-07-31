@@ -10,10 +10,12 @@ import {
   getContact,
   listContacts,
 } from "@/core/contacts/service";
-import { formatDateTime } from "@/core/i18n";
+import { formatDateTime, type Translate } from "@/core/i18n";
 import { getBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 import { Card, CardBody, CardHeader } from "@/ui/primitives";
+import { getT } from "../../../../i18n";
+import { contactFormLabels, mergePanelLabels } from "../contactLabels";
 import { ContactForm } from "../ContactForm";
 import { MergePanel } from "./MergePanel";
 import { requireStaffActor } from "../../guard";
@@ -30,11 +32,13 @@ function describe(eventType: string): string {
   return `${subject.charAt(0).toUpperCase()}${subject.slice(1)} ${verb}`;
 }
 
-function actorLabel(actor: string): string {
-  if (actor.startsWith("agent:")) return `Agent ${actor.slice(6)}`;
-  if (actor.startsWith("user:")) return "You or your staff";
-  if (actor === "system") return "The platform";
-  return "A visitor";
+function actorLabel(actor: string, t: Translate): string {
+  if (actor.startsWith("agent:")) {
+    return t("actor.agent", { name: actor.slice(6) });
+  }
+  if (actor.startsWith("user:")) return t("actor.staff");
+  if (actor === "system") return t("actor.system");
+  return t("actor.visitor");
 }
 
 export default async function ContactDetailPage({
@@ -58,9 +62,10 @@ export default async function ContactDetailPage({
     throw error;
   });
 
-  const [business, timeline] = await Promise.all([
+  const [business, timeline, t] = await Promise.all([
     getBusiness.call({}, ANONYMOUS),
     contactTimeline.call({ contactId: contact.id }, actor),
+    getT(),
   ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -80,17 +85,20 @@ export default async function ContactDetailPage({
     <div className="grid gap-6">
       <div>
         <a href="/admin/contacts" className="text-sm text-ink-muted">
-          ← All contacts
+          {t("contacts.detail.back")}
         </a>
         <h1 className="mt-2 text-xl font-bold tracking-tight">
           {contact.name}
         </h1>
         <p className="mt-1 font-mono text-xs text-ink-muted">
-          Added {formatDateTime(contact.createdAt, timezone, locale)}
+          {t("contacts.detail.added", {
+            when: formatDateTime(contact.createdAt, timezone, locale),
+          })}
         </p>
       </div>
 
       <ContactForm
+        labels={contactFormLabels(t)}
         values={{
           id: contact.id,
           name: contact.name,
@@ -107,19 +115,22 @@ export default async function ContactDetailPage({
           survivingId={contact.id}
           query={mergeQuery ?? ""}
           candidates={candidates}
+          labels={mergePanelLabels(t)}
+          noResults={t("contacts.merge.noResults", {
+            query: mergeQuery ?? "",
+          })}
         />
       ) : null}
 
       <Card>
         <CardHeader
           icon={<ClockCounterClockwise size={17} weight="bold" />}
-          title="Timeline"
+          title={t("contacts.detail.timeline")}
         />
         <CardBody>
           {timeline.length === 0 ? (
             <p className="text-sm text-ink-muted">
-              Nothing yet. Quotes, bookings, invoices and emails will all appear
-              here as they happen.
+              {t("contacts.detail.timelineEmpty")}
             </p>
           ) : (
             <ol className="grid list-none gap-0 p-0">
@@ -132,7 +143,7 @@ export default async function ContactDetailPage({
                     {describe(event.eventType)}
                   </span>
                   <span className="text-xs text-ink-muted">
-                    {actorLabel(event.actor)}
+                    {actorLabel(event.actor, t)}
                   </span>
                   <time
                     dateTime={event.occurredAt.toISOString()}

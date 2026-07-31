@@ -17,6 +17,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const businessProfile = pgTable(
   "business_profile",
@@ -50,12 +51,8 @@ export const businessProfile = pgTable(
     firstDayOfWeek: integer("first_day_of_week").notNull().default(1),
     /** Set once the wizard finishes; /setup locks itself after this (§13). */
     setupCompletedAt: timestamp("setup_completed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [
     check("business_profile_singleton", sql`${t.id} = 1`),
@@ -80,7 +77,5 @@ export const moduleSettings = pgTable("module_settings", {
   enabled: boolean("enabled").notNull().default(true),
   /** Validated against the module's settingsSchema (§11) before write. */
   config: jsonb("config").notNull().default({}),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  updatedAt: updatedAtColumn(),
 });

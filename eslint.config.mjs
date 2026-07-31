@@ -5,6 +5,69 @@
 // lives here, not in tribal knowledge.
 import tseslint from "typescript-eslint";
 
+// The gates are named arrays rather than written inline because ESLint's flat
+// config *replaces* a rule's options when a later block sets the same rule for
+// overlapping files — it does not merge them. Writing the i18n gate inline for
+// `src/ui/**` silently switched the money gate off there, which is the kind of
+// hole a gate is supposed to close rather than open. Composing the arrays
+// makes the overlap explicit and impossible to get wrong by accident.
+
+// Money gate (MASTER.md §15.4). Money is integer minor units; the only way it
+// becomes a float is division, rounding helpers, or float parsing. Adding and
+// subtracting minor units is correct and stays legal — this bans the
+// operations that lose a cent, not arithmetic.
+const MONEY_GATE = [
+  {
+    selector:
+      'BinaryExpression[operator="/"] > Identifier[name=/([Cc]ents|[Mm]inorUnits|[Aa]mount)$/]',
+    message:
+      "Money is integer minor units (MASTER.md §15.4): dividing it produces a float. formatMoney() renders it without ever dividing.",
+  },
+  {
+    selector: 'CallExpression[callee.property.name="toFixed"]',
+    message:
+      "toFixed() rounds in floating point (MASTER.md §15.4). Format money with formatMoney().",
+  },
+  {
+    selector: 'CallExpression[callee.name="parseFloat"]',
+    message:
+      "parseFloat() introduces float error (MASTER.md §15.4). Money is parsed and stored as integer minor units.",
+  },
+  {
+    selector:
+      'CallExpression[callee.object.name="Number"][callee.property.name="parseFloat"]',
+    message:
+      "Number.parseFloat() introduces float error (MASTER.md §15.4). Money is parsed and stored as integer minor units.",
+  },
+];
+
+// The i18n gate (MASTER.md §15.3): user-facing text must pass through the
+// string layer. §2 principle 9 calls retrofitting i18n "the single most
+// expensive refactor a platform can face" — this is what keeps the retrofit
+// from being needed a second time.
+//
+// It catches the two shapes copy takes in JSX: a bare literal between tags,
+// and a literal handed to an attribute that is rendered or announced.
+//
+// Client components cannot call `t` — the catalogs are server-side and the
+// locale is resolved per request — so they take their strings as props. That
+// is what makes a rule this blunt workable.
+const I18N_GATE = [
+  {
+    // Two or more letters in a row: skips punctuation, arrows, dashes and the
+    // whitespace JSX is full of, catches every real sentence.
+    selector: "JSXText[value=/[A-Za-z]{2,}/]",
+    message:
+      'User-facing text must come from the string layer (MASTER.md §15.3). Use {t("some.key")} in a server component, or take the string as a prop in a client component.',
+  },
+  {
+    selector:
+      'JSXAttribute[name.name=/^(label|placeholder|title|alt|hint|summary|legend|aria-label|aria-description|aria-placeholder|aria-roledescription|aria-valuetext)$/] > Literal[value=/[A-Za-z]{2,}/]',
+    message:
+      "This attribute is read by a person or a screen reader, so it must come from the string layer (MASTER.md §15.3) rather than a literal.",
+  },
+];
+
 export default tseslint.config(
   {
     ignores: [".next/**", "node_modules/**", "packages/**", "db/**"],
@@ -43,35 +106,7 @@ export default tseslint.config(
           ],
         },
       ],
-      // Money gate (MASTER.md §15.4). Money is integer minor units; the only
-      // way it becomes a float is division, rounding helpers, or float
-      // parsing. Adding and subtracting minor units is correct and stays
-      // legal — this bans the operations that lose a cent, not arithmetic.
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            'BinaryExpression[operator="/"] > Identifier[name=/([Cc]ents|[Mm]inorUnits|[Aa]mount)$/]',
-          message:
-            "Money is integer minor units (MASTER.md §15.4): dividing it produces a float. formatMoney() renders it without ever dividing.",
-        },
-        {
-          selector: 'CallExpression[callee.property.name="toFixed"]',
-          message:
-            "toFixed() rounds in floating point (MASTER.md §15.4). Format money with formatMoney().",
-        },
-        {
-          selector: 'CallExpression[callee.name="parseFloat"]',
-          message:
-            "parseFloat() introduces float error (MASTER.md §15.4). Money is parsed and stored as integer minor units.",
-        },
-        {
-          selector:
-            'CallExpression[callee.object.name="Number"][callee.property.name="parseFloat"]',
-          message:
-            "Number.parseFloat() introduces float error (MASTER.md §15.4). Money is parsed and stored as integer minor units.",
-        },
-      ],
+      "no-restricted-syntax": ["error", ...MONEY_GATE],
     },
   },
   {
@@ -101,6 +136,14 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  {
+    // The rendered surfaces carry both gates. `src/ui/**` overlaps the src/
+    // block above, so the money gate is restated here rather than lost.
+    files: ["app/**/*.tsx", "src/ui/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", ...MONEY_GATE, ...I18N_GATE],
     },
   },
   {

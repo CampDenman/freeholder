@@ -15,18 +15,15 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
+import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   domain: text("domain"),
   customFields: jsonb("custom_fields").notNull().default({}),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: createdAtColumn(),
+  updatedAt: updatedAtColumn(),
 });
 
 export const contacts = pgTable(
@@ -58,12 +55,8 @@ export const contacts = pgTable(
     /** ISO-3166-1 alpha-2. Tax follows location, not locale (§4.9). */
     country: text("country"),
     ownerNotes: text("owner_notes"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("contacts_user_id_idx").on(t.userId),

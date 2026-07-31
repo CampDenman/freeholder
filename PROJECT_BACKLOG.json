@@ -278,5 +278,43 @@
       "No recipe smoke in CI actually provisions a machine, so cloud-init is still only checked for ASCII",
       "The adapter override exists only for storage; ai, agent and the rest are still build-time"
     ]
+  },
+  {
+    "id": "2026-07-30-phase-0-foundations",
+    "date": "2026-07-30",
+    "title": "Phase 0: the debts that get more expensive every PR",
+    "masterRef": "§2 principle 9, §4.6, §15.3, §36, CLAUDE.md",
+    "status": "done",
+    "delivered": [
+      "i18n retrofit: every string in app/ now resolves through the catalog — t() was previously imported by nothing while ~2,400 lines of UI hardcoded English",
+      "§15.3 lint gate: JSX text and person-readable attributes must come from the string layer, in app/**/*.tsx and src/ui/**/*.tsx",
+      "Catalog gate: keys used in code must exist in the default locale, and a translated catalog must neither miss keys nor carry orphans",
+      "Client components take strings as props — catalogs stay server-side, and the locale is resolved once per request by app/i18n.ts",
+      "THEME_LABELS and BUSINESS_TYPES labels moved out of src/ into the catalog: English in src/ is text the gate cannot see",
+      "Country, currency and timezone option lists now built server-side in the instance's locale, not client-side with a hardcoded 'en'",
+      "Merge completeness gate: schema reflection fails the build when a contact_id column has no entry in CONTACT_REFERENCES",
+      "contacts.merge repoints from a declared list the handler actually iterates, so the list cannot drift from the code",
+      "Rate limiting declared on the service definition, so it applies to the admin UI, REST API, server actions and MCP alike",
+      "The limiter commits outside the caller's transaction — a failed login rolls back, and a counter that rolls back with it counts nothing",
+      "auth.login throttled per email address; a successful sign-in clears the budget; 429 carries Retry-After",
+      "Security headers on every response: nosniff, DENY, Referrer-Policy, Permissions-Policy, HSTS",
+      "pnpm audit --audit-level high in CI, with four advisories cleared by pinning transitive deps forward rather than lowering the bar",
+      "updated_at maintained by the column ($onUpdate) instead of by every write path remembering",
+      "contacts.resolve now enriches a known contact (§4.6): blanks fill, owner-entered values never overwrite, first-touch source is kept, lifecycle only moves forward",
+      "truncateSpine derived from the tables barrel, closing a hand-list that was drifting",
+      "ROADMAP.md: the phased plan from here to the spec'd vision",
+      "MASTER.md §7 records the freeholder.ai-before-money-path deviation that had been governing the work from a session note",
+      "HANDOFF.md deleted per its own instructions; the local-development facts it carried moved into CONTRIBUTING.md",
+      "French and Spanish catalogs, complete and gate-verified, with provenance recorded in locales/README.md as AI-drafted and awaiting native review"
+    ],
+    "openFollowUps": [
+      "fr and es are AI-drafted and have had no native review — locales/README.md says so plainly, and correcting a phrase is a no-issue-needed first PR",
+      "auth.registerOwner is throttled by one global bucket, not per IP: nothing populates `ip` on that path, and threading a trusted client address through Server Actions needs a proxy-trust decision",
+      "rate_limit_counters has no sweep — rows are bounded by distinct subjects attempted, but it wants a job once core/jobs exists",
+      "The i18n gate covers JSX text and a named attribute list; a user-facing string built in a plain .ts helper and passed to JSX would still pass",
+      "Locale is the business default only; the URL prefix (§4.9) and Contact.preferred_locale arrive with the public surface, and both change app/i18n.ts alone",
+      "Error messages thrown by services are still English literals in src/ — they reach a screen through ActionState, and they need catalog keys before a second locale ships",
+      "The fixed rate-limit window allows a brief 2x burst across a boundary; a sliding window needs a history table and is not worth it at these limits"
+    ]
   }
 ]

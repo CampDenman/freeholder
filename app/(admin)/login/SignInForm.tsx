@@ -6,7 +6,14 @@ import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button, Callout, Field, Input } from "@/ui/primitives";
 import { signInAction, type ActionState } from "../actions";
 
-export function SignInForm() {
+export interface SignInFormLabels {
+  email: string;
+  password: string;
+  submit: string;
+  pending: string;
+}
+
+export function SignInForm({ labels }: { labels: SignInFormLabels }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     signInAction,
     {},
@@ -20,7 +27,7 @@ export function SignInForm() {
           {state.error}
         </Callout>
       ) : null}
-      <Field label="Email" htmlFor="email">
+      <Field label={labels.email} htmlFor="email">
         <Input
           key={`email-${generation}`}
           id="email"
@@ -32,7 +39,7 @@ export function SignInForm() {
           autoFocus
         />
       </Field>
-      <Field label="Password" htmlFor="password">
+      <Field label={labels.password} htmlFor="password">
         <Input
           id="password"
           name="password"
@@ -43,7 +50,7 @@ export function SignInForm() {
       </Field>
       <div>
         <Button type="submit" disabled={pending}>
-          {pending ? "Signing in…" : "Sign in"}
+          {pending ? labels.pending : labels.submit}
         </Button>
       </div>
     </form>

@@ -15,6 +15,13 @@
       "when": 1785119642360,
       "tag": "0001_business-profile",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785404740598,
+      "tag": "0002_rate-limit-counters",
+      "breakpoints": true
     }
   ]
 }

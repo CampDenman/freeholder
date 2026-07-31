@@ -4,6 +4,7 @@
 // on a fresh install — and once-only by database constraint, not by obscurity.
 import { redirect } from "next/navigation";
 import { setupState } from "@/core/settings/service";
+import { getT } from "../i18n";
 import { Steps } from "./Steps";
 import { OwnerForm } from "./OwnerForm";
 
@@ -14,17 +15,28 @@ export default async function SetupOwnerPage() {
   if (state.completed) redirect("/");
   if (state.hasOwner) redirect("/setup/business");
 
+  const t = await getT();
+
   return (
     <>
       <Steps current={0} />
       <h1 className="text-2xl font-bold tracking-tight">
-        Create your owner account
+        {t("setup.owner.title")}
       </h1>
       <p className="mt-2 mb-8 max-w-prose text-ink-muted">
-        This is the account that owns the site. It can only be created once, so
-        keep the details somewhere safe.
+        {t("setup.owner.intro")}
       </p>
-      <OwnerForm />
+      <OwnerForm
+        labels={{
+          email: t("setup.owner.email"),
+          emailHint: t("setup.owner.emailHint"),
+          emailPlaceholder: t("setup.owner.emailPlaceholder"),
+          password: t("setup.owner.password"),
+          passwordHint: t("setup.owner.passwordHint"),
+          submit: t("setup.owner.submit"),
+          pending: t("setup.owner.pending"),
+        }}
+      />
     </>
   );
 }

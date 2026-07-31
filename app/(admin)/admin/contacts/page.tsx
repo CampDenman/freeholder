@@ -10,20 +10,14 @@ import { listContacts } from "@/core/contacts/service";
 import { formatDateTime } from "@/core/i18n";
 import { getBusiness } from "@/core/settings/service";
 import { Button, Card, Input, Pill, Select, cx } from "@/ui/primitives";
+import { getT } from "../../../i18n";
+import { CONTACT_STAGES } from "./contactLabels";
 import { requireStaffActor } from "../guard";
 
 export const dynamic = "force-dynamic";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 const PAGE_SIZE = 25;
-
-const STAGES = [
-  { value: "", label: "Every stage" },
-  { value: "lead", label: "Leads" },
-  { value: "prospect", label: "Prospects" },
-  { value: "customer", label: "Customers" },
-  { value: "repeat", label: "Repeat customers" },
-] as const;
 
 const STAGE_TONE = {
   lead: "neutral",
@@ -56,8 +50,9 @@ export default async function ContactsPage({
   const stage = one("stage");
   const offset = Math.max(0, Number(one("offset")) || 0);
 
-  const [business, result] = await Promise.all([
+  const [business, t, result] = await Promise.all([
     getBusiness.call({}, ANONYMOUS),
+    getT(),
     listContacts.call(
       {
         search: search || undefined,
@@ -75,23 +70,29 @@ export default async function ContactsPage({
   if (search) filters.search = search;
   if (stage) filters.stage = stage;
   const filtered = Boolean(search || stage);
+  const stageOptions = [
+    { value: "", label: t("contacts.allStages") },
+    ...CONTACT_STAGES.map((value) => ({
+      value,
+      label: t(`contacts.stagePlural.${value}`),
+    })),
+  ];
 
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Contacts</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            Everyone this business has touched. One record per person, shared by
-            every part of the platform.
-          </p>
+          <h1 className="text-xl font-bold tracking-tight">
+            {t("contacts.title")}
+          </h1>
+          <p className="mt-1 text-sm text-ink-muted">{t("contacts.intro")}</p>
         </div>
         <a
           href="/admin/contacts/new"
           className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
         >
           <Plus size={15} weight="bold" />
-          New contact
+          {t("contacts.new")}
         </a>
       </div>
 
@@ -104,14 +105,14 @@ export default async function ContactsPage({
             htmlFor="search"
             className="font-mono text-xs font-medium text-ink-muted"
           >
-            Search by name or email
+            {t("contacts.searchLabel")}
           </label>
           <Input
             id="search"
             name="search"
             type="search"
             defaultValue={search}
-            placeholder="grace@…"
+            placeholder={t("contacts.searchPlaceholder")}
           />
         </div>
         <div className="grid gap-1.5">
@@ -119,10 +120,10 @@ export default async function ContactsPage({
             htmlFor="stage"
             className="font-mono text-xs font-medium text-ink-muted"
           >
-            Stage
+            {t("contacts.stageLabel")}
           </label>
           <Select id="stage" name="stage" defaultValue={stage}>
-            {STAGES.map((option) => (
+            {stageOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -131,11 +132,11 @@ export default async function ContactsPage({
         </div>
         <Button type="submit" variant="quiet">
           <MagnifyingGlass size={15} weight="bold" />
-          Search
+          {t("common.search")}
         </Button>
         {filtered ? (
           <a href="/admin/contacts" className="py-2 text-sm text-ink-muted">
-            Clear
+            {t("common.clear")}
           </a>
         ) : null}
       </form>
@@ -145,9 +146,7 @@ export default async function ContactsPage({
           <div className="grid justify-items-start gap-3 px-4 py-10">
             <UserPlus size={26} weight="light" className="text-ink-muted" />
             <p className="text-sm text-ink-muted">
-              {filtered
-                ? "No contacts match that search."
-                : "No contacts yet. Add one by hand, or let forms and checkout bring them in."}
+              {filtered ? t("contacts.emptyFiltered") : t("contacts.empty")}
             </p>
           </div>
         ) : (
@@ -156,16 +155,16 @@ export default async function ContactsPage({
               <thead>
                 <tr className="border-b border-rule bg-surface-muted text-start">
                   <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
-                    Name
+                    {t("contacts.column.name")}
                   </th>
                   <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
-                    Email
+                    {t("contacts.column.email")}
                   </th>
                   <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
-                    Stage
+                    {t("contacts.column.stage")}
                   </th>
                   <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
-                    Added
+                    {t("contacts.column.added")}
                   </th>
                 </tr>
               </thead>
@@ -181,11 +180,11 @@ export default async function ContactsPage({
                       </a>
                     </td>
                     <td className="px-4 py-2.5 text-ink-muted">
-                      {contact.email ?? "—"}
+                      {contact.email ?? t("common.emptyValue")}
                     </td>
                     <td className="px-4 py-2.5">
                       <Pill tone={STAGE_TONE[contact.lifecycleStage]}>
-                        {contact.lifecycleStage}
+                        {t(`contacts.stage.${contact.lifecycleStage}`)}
                       </Pill>
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-ink-muted tabular-nums">
@@ -202,8 +201,11 @@ export default async function ContactsPage({
       {result.total > PAGE_SIZE ? (
         <div className="flex items-center gap-4 text-sm">
           <span className="text-ink-muted tabular-nums">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, result.total)} of{" "}
-            {result.total}
+            {t("contacts.paging", {
+              from: offset + 1,
+              to: Math.min(offset + PAGE_SIZE, result.total),
+              total: result.total,
+            })}
           </span>
           <div className="ms-auto flex gap-2">
             <a
@@ -214,7 +216,7 @@ export default async function ContactsPage({
                 offset === 0 && "pointer-events-none opacity-45",
               )}
             >
-              Previous
+              {t("common.previous")}
             </a>
             <a
               href={pageHref(filters, offset + PAGE_SIZE)}
@@ -225,7 +227,7 @@ export default async function ContactsPage({
                   "pointer-events-none opacity-45",
               )}
             >
-              Next
+              {t("common.next")}
             </a>
           </div>
         </div>

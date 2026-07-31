@@ -20,6 +20,7 @@ import {
   createContact,
   mergeContacts,
   resolveContact,
+  updateContact,
 } from "@/core/contacts/service";
 import { defineService, ServiceError, type Actor } from "@/core/service";
 import {
@@ -270,6 +271,138 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
       );
       expect(contact.name).toBe("noname@example.test");
       expect(contact.lifecycleStage).toBe("lead");
+    });
+
+    // §4.6 names the destination contact_create *or update*: a returning
+    // visitor who finally gives their phone number must not have it discarded.
+    it("fills blanks on a contact it already knows", async () => {
+      const first = await resolveContact.call(
+        { email: "returning@example.test", name: "Ada", source: "newsletter" },
+        STAFF,
+      );
+
+      const second = await resolveContact.call(
+        {
+          email: "returning@example.test",
+          phone: "+1 250 555 0100",
+          preferredLocale: "fr-CA",
+          tags: ["quote-request"],
+        },
+        STAFF,
+      );
+
+      expect(second.created).toBe(false);
+      expect(second.updated).toBe(true);
+      expect(second.contact.id).toBe(first.contact.id);
+      expect(second.contact.phone).toBe("+1 250 555 0100");
+      expect(second.contact.preferredLocale).toBe("fr-CA");
+      expect(second.contact.tags).toEqual(["quote-request"]);
+      // Creation, then the enrichment — both are newsworthy on the timeline.
+      expect(await timelineRows()).toHaveLength(2);
+    });
+
+    it("never overwrites what the owner already recorded", async () => {
+      await resolveContact.call(
+        {
+          email: "known@example.test",
+          name: "Grace Hopper",
+          phone: "+1 250 555 0111",
+          source: "contact-form",
+        },
+        STAFF,
+      );
+
+      const second = await resolveContact.call(
+        {
+          email: "known@example.test",
+          name: "typo mcgee",
+          phone: "+1 000 000 0000",
+          // First touch is what the funnel attributes to; a second form
+          // submission must not relabel where this contact came from.
+          source: "footer-signup",
+        },
+        STAFF,
+      );
+
+      expect(second.updated).toBe(false);
+      expect(second.contact.name).toBe("Grace Hopper");
+      expect(second.contact.phone).toBe("+1 250 555 0111");
+      expect(second.contact.source).toBe("contact-form");
+      // Nothing changed, so nothing is written — updated_at is a change
+      // cursor, and a form view is not a change.
+      expect(await timelineRows()).toHaveLength(1);
+    });
+
+    it("upgrades the placeholder name exactly once", async () => {
+      const first = await resolveContact.call(
+        { email: "anon@example.test" },
+        STAFF,
+      );
+      expect(first.contact.name).toBe("anon@example.test");
+
+      const named = await resolveContact.call(
+        { email: "anon@example.test", name: "Sam Okonjo" },
+        STAFF,
+      );
+      expect(named.contact.name).toBe("Sam Okonjo");
+
+      const later = await resolveContact.call(
+        { email: "anon@example.test", name: "Someone Else" },
+        STAFF,
+      );
+      expect(later.updated).toBe(false);
+      expect(later.contact.name).toBe("Sam Okonjo");
+    });
+
+    it("moves lifecycle forward but never backward", async () => {
+      await resolveContact.call(
+        { email: "buyer@example.test", lifecycleStage: "customer" },
+        STAFF,
+      );
+
+      const demote = await resolveContact.call(
+        { email: "buyer@example.test", lifecycleStage: "lead" },
+        STAFF,
+      );
+      expect(demote.contact.lifecycleStage).toBe("customer");
+
+      const promote = await resolveContact.call(
+        { email: "buyer@example.test", lifecycleStage: "repeat" },
+        STAFF,
+      );
+      expect(promote.contact.lifecycleStage).toBe("repeat");
+    });
+
+    it("leaves updated_at alone when nothing changed", async () => {
+      const { contact } = await resolveContact.call(
+        { email: "quiet@example.test", name: "Quiet" },
+        STAFF,
+      );
+
+      await resolveContact.call({ email: "quiet@example.test" }, STAFF);
+
+      const [after] = await db()
+        .select()
+        .from(contacts)
+        .where(eq(contacts.id, contact.id));
+      expect(after!.updatedAt).toEqual(contact.updatedAt);
+    });
+
+    // The column maintains itself now ($onUpdate), so no service sets it and
+    // none can forget to. This proves the mechanism rather than the caller.
+    it("stamps updated_at without any service setting it", async () => {
+      const created = await createContact.call(
+        { name: "Stamp Test", email: "stamp@example.test" },
+        STAFF,
+      );
+      const changed = await updateContact.call(
+        { id: created.id, phone: "+1 250 555 0122" },
+        STAFF,
+      );
+      expect(changed.updatedAt.getTime()).toBeGreaterThan(
+        created.updatedAt.getTime(),
+      );
+      expect(changed.createdAt).toEqual(created.createdAt);
     });
   });
 

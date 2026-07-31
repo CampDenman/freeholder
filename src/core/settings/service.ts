@@ -110,7 +110,7 @@ export const updateBusiness = defineService({
       .values({ ...input, id: PROFILE_ID })
       .onConflictDoUpdate({
         target: businessProfile.id,
-        set: { ...input, updatedAt: sql`now()` },
+        set: { ...input },
       })
       .returning();
     ctx.setSubject("business_profile", String(PROFILE_ID));
@@ -139,7 +139,7 @@ export const patchBusiness = defineService({
     }
     const [profile] = await ctx.tx
       .update(businessProfile)
-      .set({ ...input, updatedAt: sql`now()` })
+      .set({ ...input })
       .where(eq(businessProfile.id, PROFILE_ID))
       .returning();
     if (!profile) {
@@ -179,7 +179,7 @@ export const completeSetup = defineService({
     }
     const [updated] = await ctx.tx
       .update(businessProfile)
-      .set({ setupCompletedAt: sql`now()`, updatedAt: sql`now()` })
+      .set({ setupCompletedAt: sql`now()` })
       .where(eq(businessProfile.id, PROFILE_ID))
       .returning();
     ctx.setSubject("business_profile", String(PROFILE_ID));
@@ -221,7 +221,7 @@ export const setModuleEnabled = defineService({
       .values({ module: input.module, enabled: input.enabled })
       .onConflictDoUpdate({
         target: moduleSettings.module,
-        set: { enabled: input.enabled, updatedAt: sql`now()` },
+        set: { enabled: input.enabled },
       })
       .returning();
     ctx.setSubject("module_settings", input.module);

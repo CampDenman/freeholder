@@ -9,20 +9,27 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
+export interface AdminNavLabels {
+  region: string;
+  overview: string;
+  contacts: string;
+  settings: string;
+}
+
 // Only what exists. A nav advertising screens that are not built is a promise
 // the interface cannot keep; entries arrive with their modules.
 const LINKS = [
-  { href: "/admin", label: "Overview", Icon: Gauge },
-  { href: "/admin/contacts", label: "Contacts", Icon: UsersThree },
-  { href: "/admin/settings", label: "Settings", Icon: SlidersHorizontal },
+  { href: "/admin", key: "overview", Icon: Gauge },
+  { href: "/admin/contacts", key: "contacts", Icon: UsersThree },
+  { href: "/admin/settings", key: "settings", Icon: SlidersHorizontal },
 ] as const;
 
-export function AdminNav() {
+export function AdminNav({ labels }: { labels: AdminNavLabels }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Admin sections">
+    <nav aria-label={labels.region}>
       <ul className="-mb-px flex list-none gap-1 p-0">
-        {LINKS.map(({ href, label, Icon }) => {
+        {LINKS.map(({ href, key, Icon }) => {
           const active =
             href === "/admin" ? pathname === href : pathname.startsWith(href);
           return (
@@ -38,7 +45,7 @@ export function AdminNav() {
                 )}
               >
                 <Icon size={16} weight={active ? "fill" : "regular"} />
-                {label}
+                {labels[key]}
               </a>
             </li>
           );

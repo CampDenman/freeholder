@@ -5,10 +5,10 @@
 import { describe, expect, it } from "vitest";
 import {
   parseThemePreference,
-  THEME_LABELS,
   THEME_PREFERENCES,
   themeAttribute,
 } from "@/core/design/theme";
+import { t } from "@/core/i18n";
 
 describe("parseThemePreference()", () => {
   it("accepts the three real preferences", () => {
@@ -51,9 +51,14 @@ describe("the preference set", () => {
     expect(THEME_PREFERENCES[0]).toBe("system");
   });
 
-  it("labels every preference", () => {
+  it("has a catalog entry naming every preference", () => {
+    // The names live in the message catalogs, not in a Record of English in
+    // src/ — `t` returns the key itself when a string is missing, so a
+    // preference nobody translated fails here rather than rendering
+    // "theme.light" at a visitor.
     for (const preference of THEME_PREFERENCES) {
-      expect(THEME_LABELS[preference]).toBeTruthy();
+      const key = `theme.${preference}`;
+      expect(t("en", key)).not.toBe(key);
     }
   });
 });

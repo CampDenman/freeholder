@@ -6,7 +6,25 @@ import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button, Callout, Field, Input } from "@/ui/primitives";
 import { createOwnerAction, type ActionState } from "./actions";
 
-export function OwnerForm() {
+/**
+ * Strings arrive as props rather than being looked up here.
+ *
+ * This is a client component, and the catalogs are server-side JSON: importing
+ * `t` would ship every locale's strings to the browser and re-implement locale
+ * resolution on both sides of the boundary. The server already knows the
+ * locale, so it translates and passes the result down (MASTER.md §4.9).
+ */
+export interface OwnerFormLabels {
+  email: string;
+  emailHint: string;
+  emailPlaceholder: string;
+  password: string;
+  passwordHint: string;
+  submit: string;
+  pending: string;
+}
+
+export function OwnerForm({ labels }: { labels: OwnerFormLabels }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     createOwnerAction,
     {},
@@ -18,20 +36,20 @@ export function OwnerForm() {
           {state.error}
         </Callout>
       ) : null}
-      <Field label="Email" htmlFor="email" hint="You will sign in with this.">
+      <Field label={labels.email} htmlFor="email" hint={labels.emailHint}>
         <Input
           id="email"
           name="email"
           type="email"
           autoComplete="email"
           required
-          placeholder="you@yourbusiness.com"
+          placeholder={labels.emailPlaceholder}
         />
       </Field>
       <Field
-        label="Password"
+        label={labels.password}
         htmlFor="password"
-        hint="At least 12 characters. A passphrase beats a short complicated one."
+        hint={labels.passwordHint}
       >
         <Input
           id="password"
@@ -44,7 +62,7 @@ export function OwnerForm() {
       </Field>
       <div>
         <Button type="submit" disabled={pending}>
-          {pending ? "Creating account…" : "Create owner account"}
+          {pending ? labels.pending : labels.submit}
         </Button>
       </div>
     </form>
