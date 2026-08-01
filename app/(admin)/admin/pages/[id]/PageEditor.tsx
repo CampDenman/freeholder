@@ -30,6 +30,7 @@ export function PageEditor({
       initialBlocks={initialBlocks}
       blockTypes={blockTypes}
       labels={labels}
+      previewSrc={`/preview/page/${id}`}
       save={(blocks) => savePageBlocksAction(id, blocks)}
     />
   );

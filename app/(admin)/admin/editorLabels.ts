@@ -26,35 +26,62 @@ function label(t: Translate, key: string, fallback: string): string {
   return translated === key ? fallback : translated;
 }
 
-function translateField(t: Translate, field: FieldDescriptor): EditorField {
+/** One entry the asset picker can offer. */
+export interface AssetChoice {
+  id: string;
+  filename: string;
+}
+
+function translateField(
+  t: Translate,
+  field: FieldDescriptor,
+  assets: AssetChoice[],
+): EditorField {
   return {
     name: field.name,
     kind: field.kind,
     required: field.required,
     label: label(t, `cms.field.${field.name}`, field.name),
-    choices: field.choices?.map((choice) => ({
-      value: choice.value,
-      label: label(t, choice.labelKey, choice.value),
-    })),
-    itemFields: field.itemFields?.map((sub) => translateField(t, sub)),
+    choices:
+      field.kind === "asset"
+        ? // The library, as options. Empty is legitimate — a fresh instance
+          // has no files, and the block simply renders nothing until it does.
+          [
+            { value: "", label: t("cms.field.noAsset") },
+            ...assets.map((asset) => ({
+              value: asset.id,
+              label: asset.filename,
+            })),
+          ]
+        : field.choices?.map((choice) => ({
+            value: choice.value,
+            label: label(t, choice.labelKey, choice.value),
+          })),
+    itemFields: field.itemFields?.map((sub) => translateField(t, sub, assets)),
   };
 }
 
 export function editorBlockTypes(
   t: Translate,
   context: "page" | "chrome",
+  assets: AssetChoice[] = [],
 ): EditorBlockType[] {
   return paletteFor(context).map((entry) => ({
     type: entry.type,
     label: label(t, entry.labelKey, entry.type),
     container: entry.container,
     starter: entry.starter,
-    fields: entry.fields.map((field) => translateField(t, field)),
+    fields: entry.fields.map((field) => translateField(t, field, assets)),
   }));
 }
 
 export function editorLabels(t: Translate): EditorLabels {
   return {
+    preview: {
+      region: t("cms.editor.preview"),
+      desktop: t("cms.editor.desktop"),
+      mobile: t("cms.editor.mobile"),
+    },
     addBlock: t("cms.editor.addBlock"),
     cancel: t("common.cancel"),
     remove: t("cms.editor.remove"),

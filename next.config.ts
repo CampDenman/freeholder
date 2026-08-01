@@ -19,7 +19,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        // The editor canvas frames this same origin (§32's live preview), and
+        // `DENY` blocks framing even by the site itself — so the preview group
+        // is carved out here and given `SAMEORIGIN` below rather than having
+        // the whole site weakened to allow one screen.
+        source: "/((?!preview).*)",
         headers: [
           // Stops a browser second-guessing a declared content type, which is
           // how an uploaded file gets treated as a script (§18 media lives in
@@ -42,6 +46,24 @@ const nextConfig: NextConfig = {
           // Two years, subdomains included. Recipes terminate TLS in front of
           // the app (Caddy on the droplet), so this is the app stating the
           // requirement rather than trusting each proxy to remember it.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+        ],
+      },
+      {
+        // Same protections, minus the one that would stop the editor showing
+        // the page being edited. `frame-ancestors 'self'` is the modern
+        // expression of the same rule and is what a current browser honours;
+        // SAMEORIGIN is there for anything that does not.
+        source: "/preview/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains",

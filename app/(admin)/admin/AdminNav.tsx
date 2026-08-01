@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   FileText,
   Gauge,
+  Image as ImageIcon,
   Layout,
   SlidersHorizontal,
   UsersThree,
@@ -16,6 +17,7 @@ export interface AdminNavLabels {
   overview: string;
   pages: string;
   sections: string;
+  media: string;
   contacts: string;
   settings: string;
 }
@@ -26,6 +28,7 @@ const LINKS = [
   { href: "/admin", key: "overview", Icon: Gauge },
   { href: "/admin/pages", key: "pages", Icon: FileText },
   { href: "/admin/sections", key: "sections", Icon: Layout },
+  { href: "/admin/media", key: "media", Icon: ImageIcon },
   { href: "/admin/contacts", key: "contacts", Icon: UsersThree },
   { href: "/admin/settings", key: "settings", Icon: SlidersHorizontal },
 ] as const;

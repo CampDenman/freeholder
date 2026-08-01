@@ -11,6 +11,7 @@ import { formatDateTime } from "@/core/i18n";
 import { getBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 import { getPage, listRevisions } from "@/modules/cms/service";
+import { listAssets } from "@/core/media/service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { Card, CardBody, CardHeader } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
@@ -37,9 +38,10 @@ export default async function EditPagePage({
     throw error;
   });
 
-  const [business, revisions, t] = await Promise.all([
+  const [business, revisions, library, t] = await Promise.all([
     getBusiness.call({}, ANONYMOUS),
     listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
+    listAssets.call({ kind: "image" }, actor),
     getT(),
   ]);
 
@@ -78,7 +80,11 @@ export default async function EditPagePage({
       <PageEditor
         id={page.id}
         initialBlocks={page.blocks as BlockNode[]}
-        blockTypes={editorBlockTypes(t, "page")}
+        blockTypes={editorBlockTypes(
+          t,
+          "page",
+          library.rows.map((a) => ({ id: a.id, filename: a.filename })),
+        )}
         labels={editorLabels(t)}
       />
 

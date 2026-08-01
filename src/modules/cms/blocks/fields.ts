@@ -14,7 +14,13 @@
 // still renders, because rendering never depended on this.
 import type { z } from "zod";
 
-export type FieldKind = "text" | "multiline" | "boolean" | "choice" | "list";
+export type FieldKind =
+  | "text"
+  | "multiline"
+  | "boolean"
+  | "choice"
+  | "list"
+  | "asset";
 
 export interface FieldChoice {
   value: string;
@@ -41,7 +47,13 @@ export interface FieldDescriptor {
  * editor, so a plugin can carry its own without the editor knowing it exists.
  */
 export interface FieldHint {
-  control?: "multiline";
+  /**
+   * `asset` turns a string field into a picker over the media library. The
+   * *derivation* still knows nothing about images — it only knows this field
+   * names something the editor should offer a chooser for, which is why a
+   * plugin can ask for one without touching the editor (§24).
+   */
+  control?: "multiline" | "asset";
   hidden?: boolean;
 }
 
@@ -116,6 +128,7 @@ function describeField(
   const base = { name, required: !optional };
 
   if (def.type === "string") {
+    if (hint?.control === "asset") return { ...base, kind: "asset" };
     return { ...base, kind: hint?.control === "multiline" ? "multiline" : "text" };
   }
   if (def.type === "boolean") {

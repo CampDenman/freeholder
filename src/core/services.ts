@@ -7,6 +7,7 @@
 import authServices from "@/core/auth/service";
 import contactServices from "@/core/contacts/service";
 import eventServices from "@/core/events/service";
+import mediaServices from "@/core/media/service";
 import settingsServices from "@/core/settings/service";
 import type { Service } from "@/core/service";
 
@@ -14,6 +15,7 @@ const services: Service[] = [
   ...authServices,
   ...contactServices,
   ...eventServices,
+  ...mediaServices,
   ...settingsServices,
 ];
 

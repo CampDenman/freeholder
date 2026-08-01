@@ -27,10 +27,11 @@ import {
   Trash,
 } from "@phosphor-icons/react/dist/ssr";
 import { Button, cx } from "@/ui/primitives";
+import { PreviewCanvas, type PreviewLabels } from "./PreviewCanvas";
 
 export interface EditorField {
   name: string;
-  kind: "text" | "multiline" | "boolean" | "choice" | "list";
+  kind: "text" | "multiline" | "boolean" | "choice" | "list" | "asset";
   required: boolean;
   label: string;
   choices?: { value: string; label: string }[];
@@ -53,6 +54,7 @@ export interface EditorNode {
 }
 
 export interface EditorLabels {
+  preview: PreviewLabels;
   addBlock: string;
   cancel: string;
   remove: string;
@@ -78,15 +80,21 @@ export function BlockEditor({
   initialBlocks,
   blockTypes,
   labels,
+  previewSrc,
   save,
 }: {
   initialBlocks: EditorNode[];
   blockTypes: EditorBlockType[];
   labels: EditorLabels;
+  /** The preview page for this subject. */
+  previewSrc: string;
   /** Persists the whole tree. Throws with a readable message on refusal. */
   save: (blocks: EditorNode[]) => Promise<{ error?: string }>;
 }) {
   const [blocks, setBlocks] = useState<EditorNode[]>(initialBlocks);
+  const [selectedId, setSelectedId] = useState<string | undefined>();
+  /** Bumped on every successful save; reloads the canvas. */
+  const [savedVersion, setSavedVersion] = useState(0);
   const [status, setStatus] = useState<
     "clean" | "dirty" | "saving" | "saved" | "failed"
   >("clean");
@@ -115,6 +123,7 @@ export function BlockEditor({
     savedRef.current = snapshot;
     setError(undefined);
     setStatus("saved");
+    setSavedVersion((n) => n + 1);
   }, [save]);
 
   // Autosave, debounced. Deliberately not on every keystroke: each save writes
@@ -132,20 +141,36 @@ export function BlockEditor({
   };
 
   return (
-    <div className="grid gap-4">
-      <BlockList
-        nodes={blocks}
-        onChange={mutate}
-        byType={byType}
-        blockTypes={blockTypes}
-        labels={labels}
-      />
-      <SaveStatus
-        status={status}
-        error={error}
-        labels={labels}
-        onRetry={() => void persist()}
-      />
+    <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      <div className="grid gap-4">
+        <BlockList
+          nodes={blocks}
+          onChange={mutate}
+          byType={byType}
+          blockTypes={blockTypes}
+          labels={labels}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
+        <SaveStatus
+          status={status}
+          error={error}
+          labels={labels}
+          onRetry={() => void persist()}
+        />
+      </div>
+
+      {/* Sticky so the canvas stays in view while the controls scroll —
+          otherwise editing the fourth block means losing sight of the page. */}
+      <div className="lg:sticky lg:top-4">
+        <PreviewCanvas
+          src={previewSrc}
+          version={savedVersion}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          labels={labels.preview}
+        />
+      </div>
     </div>
   );
 }
@@ -202,12 +227,16 @@ function BlockList({
   byType,
   blockTypes,
   labels,
+  selectedId,
+  onSelect,
 }: {
   nodes: EditorNode[];
   onChange: (next: EditorNode[]) => void;
   byType: Map<string, EditorBlockType>;
   blockTypes: EditorBlockType[];
   labels: EditorLabels;
+  selectedId?: string;
+  onSelect: (id: string | undefined) => void;
 }) {
   const [dragging, setDragging] = useState<number | undefined>();
 
@@ -253,13 +282,17 @@ function BlockList({
                 if (dragging !== undefined) move(dragging, index);
                 setDragging(undefined);
               }}
+              onFocusCapture={() => onSelect(node.id)}
               className={cx(
-                "rounded-lg border border-rule bg-surface",
+                "rounded-lg border bg-surface transition-colors",
+                selectedId === node.id ? "border-accent" : "border-rule",
                 dragging === index && "opacity-50",
               )}
             >
               <BlockCard
                 node={node}
+                selectedId={selectedId}
+                onSelect={onSelect}
                 definition={byType.get(node.type)}
                 labels={labels}
                 blockTypes={blockTypes}
@@ -291,6 +324,8 @@ function BlockCard({
   labels,
   blockTypes,
   byType,
+  selectedId,
+  onSelect,
   isFirst,
   isLast,
   onMoveUp,
@@ -303,6 +338,8 @@ function BlockCard({
   labels: EditorLabels;
   blockTypes: EditorBlockType[];
   byType: Map<string, EditorBlockType>;
+  selectedId?: string;
+  onSelect: (id: string | undefined) => void;
   isFirst: boolean;
   isLast: boolean;
   onMoveUp: () => void;
@@ -315,7 +352,10 @@ function BlockCard({
 
   return (
     <div>
-      <div className="flex items-center gap-2 border-b border-rule bg-surface-muted px-3 py-2">
+      <div
+        className="flex items-center gap-2 border-b border-rule bg-surface-muted px-3 py-2"
+        onClick={() => onSelect(node.id)}
+      >
         <span
           aria-hidden="true"
           title={labels.reorder}
@@ -359,6 +399,8 @@ function BlockCard({
               byType={byType}
               blockTypes={blockTypes}
               labels={labels}
+              selectedId={selectedId}
+              onSelect={onSelect}
             />
           </div>
         ) : null}
@@ -423,6 +465,30 @@ function Field({
         />
         {field.label}
       </label>
+    );
+  }
+
+  if (field.kind === "asset") {
+    // Values stay strings: an asset id is a uuid, and the numeric coercion the
+    // literal-union control needs would mangle it.
+    return (
+      <div className="grid gap-1.5">
+        <label htmlFor={id} className="font-mono text-xs font-medium text-ink-muted">
+          {field.label}
+        </label>
+        <select
+          id={id}
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => onChange(event.target.value || undefined)}
+          className={control}
+        >
+          {(field.choices ?? []).map((choice) => (
+            <option key={choice.value} value={choice.value}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+      </div>
     );
   }
 

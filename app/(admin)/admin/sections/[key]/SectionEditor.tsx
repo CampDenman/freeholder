@@ -25,6 +25,7 @@ export function SectionEditor({
       initialBlocks={initialBlocks}
       blockTypes={blockTypes}
       labels={labels}
+      previewSrc={`/preview/section/${sectionKey}`}
       save={(blocks) => saveSectionBlocksAction(sectionKey, blocks)}
     />
   );

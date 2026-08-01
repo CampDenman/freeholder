@@ -30,6 +30,7 @@ async function renderBlock(
   node: BlockNode,
   ctx: BlockRenderContext,
 ): Promise<ReactNode> {
+  const identify = ctx.identifyBlocks === true;
   const definition = getBlock(node.type);
   if (!definition) {
     // Unreachable through the services, which validate against the same
@@ -48,15 +49,23 @@ async function renderBlock(
     ? await renderBlocks(node.children, ctx)
     : undefined;
 
-  return (
-    <BlockFrame key={node.id}>
-      {definition.render({
-        props: node.props,
-        ctx,
-        resolved,
-        children,
-      })}
-    </BlockFrame>
+  const rendered = definition.render({
+    props: node.props,
+    ctx,
+    resolved,
+    children,
+  });
+
+  // In the editor's preview the same output is wrapped so a click can be
+  // traced back to a node. On the public surface it is not wrapped at all —
+  // the markup a visitor and a crawler receive stays exactly what the blocks
+  // produced, which is what keeps the SEO gate checking the real thing.
+  return identify ? (
+    <div key={node.id} data-block-id={node.id} data-block-type={node.type}>
+      {rendered}
+    </div>
+  ) : (
+    <BlockFrame key={node.id}>{rendered}</BlockFrame>
   );
 }
 

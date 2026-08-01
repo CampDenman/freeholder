@@ -4,6 +4,7 @@
 // which is the whole point of deriving the palette per context.
 import { notFound } from "next/navigation";
 import { getSection } from "@/modules/cms/service";
+import { listAssets } from "@/core/media/service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
@@ -19,10 +20,11 @@ export default async function EditSectionPage({
 }: {
   params: Promise<{ key: string }>;
 }) {
-  await requireStaffActor();
+  const actor = await requireStaffActor();
   const { key } = await params;
-  const [section, t] = await Promise.all([
+  const [section, library, t] = await Promise.all([
     getSection.call({ key }, ANONYMOUS),
+    listAssets.call({ kind: "image" }, actor),
     getT(),
   ]);
   if (!section) notFound();
@@ -39,7 +41,11 @@ export default async function EditSectionPage({
       <SectionEditor
         sectionKey={section.key}
         initialBlocks={section.blocks as BlockNode[]}
-        blockTypes={editorBlockTypes(t, "chrome")}
+        blockTypes={editorBlockTypes(
+          t,
+          "chrome",
+          library.rows.map((a) => ({ id: a.id, filename: a.filename })),
+        )}
         labels={editorLabels(t)}
       />
     </div>
