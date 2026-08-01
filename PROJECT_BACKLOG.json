@@ -350,5 +350,35 @@
       "No sitemap.xml, robots.txt or llms.txt route yet — cms.publishedPaths exists as the source, but the SEO engine that consumes it is Phase 3",
       "ContentRevision has no pruning; an actively edited page grows a row per save"
     ]
+  },
+  {
+    "id": "2026-08-01-cms-editor",
+    "date": "2026-08-01",
+    "title": "Phase 2b: the block editor",
+    "masterRef": "§32, §24, §15.7",
+    "status": "done",
+    "delivered": [
+      "Edit forms derived from each block's own Zod schema, so the editor knows about fields and never about headings or FAQs — which is what makes §24's 'a plugin's block appears in the palette with zero editor changes' true rather than aspirational",
+      "Field kinds derived: text, multiline, boolean, choice (enum and literal union), and list-of-objects with sub-fields",
+      "A shape the derivation cannot draw yields no control rather than a broken one, so an exotic plugin schema loses one input instead of taking the editor down",
+      "Per-field hints live on the block definition, not in the editor: a paragraph renders as a textarea, and machinery like a nav's aria-label key is hidden from the owner",
+      "Every block declares a starter, parsed against its own schema at palette time — so adding a block cannot produce a tree that fails to save",
+      "Reorder by buttons as well as drag: drag alone is unusable with a keyboard or screen reader, and §15.7 puts a11y in the gates",
+      "Debounced autosave through cms.updatePage, with an aria-live save status and a retry on refusal",
+      "Version history with one-click restore; the restore is itself revisioned, so it is never a one-way door (§37)",
+      "Pages admin: list, create, publish/unpublish, and an owner-only repair that re-creates the starting site",
+      "Chrome admin editing the header and footer with the chrome palette — the same editor, a different context, which is the point of deriving the palette per context",
+      "Whole-tree saves rather than patches, so the server validates exactly what will be stored and ContentRevision is a faithful record",
+      "Verified in a browser end to end: autosave wrote through, the public page changed with no build, and restore reverted it"
+    ],
+    "openFollowUps": [
+      "No slash-command insertion. §32 names it, but it implies a rich-text surface and the text block is a textarea — what shipped is a block picker, which is the honest equivalent for now",
+      "No live responsive preview (§32); the editor shows controls, not a rendering",
+      "No drag between nesting levels — a block can be reordered within its list but not dragged into or out of a columns block",
+      "Adding a list item seeds empty strings, so a required sub-field is briefly invalid and the save is refused until it is filled; the message says so but the timing is awkward",
+      "cms.ensureDefaults renders in the audit trail as 'Cm — ensure defaults' because the prettifier strips a trailing s from the module name",
+      "Autosave has no conflict detection: two people editing one page will overwrite each other, last write wins",
+      "Testing the editor locally needs NODE_ENV=development even against a production build, because the session cookie is Secure and localhost is http"
+    ]
   }
 ]

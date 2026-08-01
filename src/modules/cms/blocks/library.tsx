@@ -31,6 +31,7 @@ export const heading = defineBlock({
     level: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).default(2),
     align: z.enum(["start", "center"]).default("start"),
   }),
+  starter: () => ({ text: "A new heading", level: 2 as const }),
   render: ({ props }) => {
     const Tag = `h${props.level}` as const;
     const size = {
@@ -59,6 +60,8 @@ export const text = defineBlock({
     align: z.enum(["start", "center"]).default("start"),
     measure: z.boolean().default(true),
   }),
+  starter: () => ({ body: "Write something here." }),
+  fieldHints: { body: { control: "multiline" } },
   render: ({ props }) => (
     <div
       className={cx(
@@ -89,6 +92,7 @@ export const button = defineBlock({
     href: z.string().min(1),
     variant: z.enum(["solid", "quiet"]).default("solid"),
   }),
+  starter: () => ({ label: "Get in touch", href: "/contact" }),
   render: ({ props }) => (
     <a
       href={props.href}
@@ -115,6 +119,7 @@ export const columns = defineBlock({
     count: z.union([z.literal(2), z.literal(3)]).default(2),
     gap: z.enum(["tight", "normal", "loose"]).default("normal"),
   }),
+  starter: () => ({ count: 2 as const }),
   render: ({ props, children }) => (
     <div
       className={cx(
@@ -133,6 +138,7 @@ export const divider = defineBlock({
   labelKey: "cms.block.divider",
   contexts: ["page", "chrome"],
   schema: z.object({}),
+  starter: () => ({}),
   render: () => <hr className="border-0 border-t border-rule" />,
 });
 
@@ -141,6 +147,7 @@ export const spacer = defineBlock({
   labelKey: "cms.block.spacer",
   contexts: ["page"],
   schema: z.object({ size: z.enum(["s", "m", "l"]).default("m") }),
+  starter: () => ({ size: "m" as const }),
   render: ({ props }) => (
     <div
       aria-hidden="true"
@@ -166,6 +173,9 @@ export const faq = defineBlock({
     items: z
       .array(z.object({ question: z.string().min(1), answer: z.string().min(1) }))
       .min(1),
+  }),
+  starter: () => ({
+    items: [{ question: "A question people ask", answer: "The answer." }],
   }),
   render: ({ props }) => (
     <dl className="grid gap-0 border-t border-rule">
@@ -203,6 +213,7 @@ export const brand = defineBlock({
     href: z.string().default("/"),
     showTagline: z.boolean().default(false),
   }),
+  starter: () => ({}),
   render: ({ props, ctx }) => (
     <a href={props.href} className="grid gap-0.5">
       <span className="text-sm font-semibold text-ink">
@@ -230,6 +241,11 @@ export const nav = defineBlock({
       .default([]),
     ariaLabelKey: z.string().default("cms.nav.primary"),
   }),
+  starter: () => ({ links: [{ label: "About", href: "/about" }] }),
+  // The screen-reader name for the menu is platform machinery, not copy the
+  // owner writes — it is a catalog key, and showing it would invite someone to
+  // type a sentence into a field that expects an identifier.
+  fieldHints: { ariaLabelKey: { hidden: true } },
   render: ({ props, ctx }) => {
     if (props.links.length === 0) return null;
     return (

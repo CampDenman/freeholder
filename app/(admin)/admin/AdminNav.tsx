@@ -3,7 +3,9 @@
 "use client";
 import { usePathname } from "next/navigation";
 import {
+  FileText,
   Gauge,
+  Layout,
   SlidersHorizontal,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
@@ -12,6 +14,8 @@ import { cx } from "@/ui/primitives";
 export interface AdminNavLabels {
   region: string;
   overview: string;
+  pages: string;
+  sections: string;
   contacts: string;
   settings: string;
 }
@@ -20,6 +24,8 @@ export interface AdminNavLabels {
 // the interface cannot keep; entries arrive with their modules.
 const LINKS = [
   { href: "/admin", key: "overview", Icon: Gauge },
+  { href: "/admin/pages", key: "pages", Icon: FileText },
+  { href: "/admin/sections", key: "sections", Icon: Layout },
   { href: "/admin/contacts", key: "contacts", Icon: UsersThree },
   { href: "/admin/settings", key: "settings", Icon: SlidersHorizontal },
 ] as const;
