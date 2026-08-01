@@ -12,6 +12,19 @@ const nextConfig: NextConfig = {
   // (§14: one-command deploy, and a droplet with 4GB has better uses for it).
   output: "standalone",
 
+  // sharp loads its native library by resolving a path at runtime, which
+  // dependency tracing cannot see — so the standalone output shipped the
+  // JavaScript and left `libvips-cpp.so` behind, and the image died on boot
+  // with ERR_DLOPEN_FAILED. Naming the packages explicitly is what gets the
+  // platform binaries into the artifact.
+  //
+  // Found by CI booting the image rather than by anything at build time: the
+  // build succeeds either way, which is exactly why §18's recipe check runs
+  // the container instead of trusting that it compiled.
+  outputFileTracingIncludes: {
+    "/**": ["./node_modules/sharp/**", "./node_modules/@img/**"],
+  },
+
   // Security headers (MASTER.md §36: "security headers … shipped, not sold").
   // Set here rather than in a recipe's reverse proxy on purpose — every target
   // must get them, and a header that depends on the deploy being configured
