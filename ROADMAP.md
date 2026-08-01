@@ -114,13 +114,20 @@ Landed 2026-07-31.
   listener on core's `settings.setupCompleted` with neither module importing
   the other.
 
-### Phase 2b — the editor
+### Phase 2b — the editor ✅
 
-- Drag to reorder, slash-command insertion, inline editing.
-- Autosave against `cms.updatePage`, with the version history and one-click
-  restore that `ContentRevision` and `cms.restoreRevision` already support.
-- Live responsive preview; the admin screens for pages and sections.
-- Deferred past 2b: per-entity layout overrides, variants with a traffic split,
+Landed 2026-08-01.
+
+- Edit forms **derived from each block's Zod schema**, so the editor knows
+  about fields and never about individual blocks — which is what makes §24's
+  zero-editor-changes promise for plugins real.
+- Reorder by buttons *and* drag, autosave, version history with one-click
+  restore, pages and chrome admin screens.
+- **Not done, and named rather than implied:** slash-command insertion (§32
+  names it, but it implies a rich-text surface the text block does not have —
+  what shipped is a block picker), live responsive preview, and dragging
+  between nesting levels.
+- Still deferred: per-entity layout overrides, variants with a traffic split,
   and the paywall gate — all of which the schema already leaves room for.
 
 ## Phase 3 — be found (§7 step 6, §5)

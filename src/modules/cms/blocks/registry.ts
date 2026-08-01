@@ -7,6 +7,7 @@
 // where a plugin's block types join without the editor changing. One source,
 // several projections — the same shape as the service registry in §28.
 import { z } from "zod";
+import { deriveFields, type FieldDescriptor } from "./fields";
 import type { BlockDefinition, BlockNode } from "./types";
 import {
   brand,
@@ -42,11 +43,34 @@ export function getBlock(type: string): BlockDefinition<z.ZodType, never> | unde
   return byType.get(type);
 }
 
-/** The palette for a context, for the editor to render. */
-export function paletteFor(context: "page" | "chrome") {
+export interface PaletteEntry {
+  type: string;
+  labelKey: string;
+  container: boolean;
+  /** Derived from the block's own schema — see blocks/fields.ts. */
+  fields: FieldDescriptor[];
+  /** Props a freshly added block starts with. */
+  starter: Record<string, unknown>;
+}
+
+/**
+ * Everything the editor needs to offer a context's blocks, derived rather than
+ * listed (§24: a plugin's block "appears in the palette with zero editor
+ * changes"). The editor knows about *fields*, never about headings or FAQs.
+ */
+export function paletteFor(context: "page" | "chrome"): PaletteEntry[] {
   return definitions
     .filter((d) => d.contexts.includes(context))
-    .map((d) => ({ type: d.type, labelKey: d.labelKey, container: Boolean(d.container) }));
+    .map((d) => ({
+      type: d.type,
+      labelKey: d.labelKey,
+      container: Boolean(d.container),
+      fields: deriveFields(d.type, d.schema, d.fieldHints),
+      // Parsed on the way out so a starter carries the schema's defaults too,
+      // and so a block whose starter is wrong fails here rather than at the
+      // owner's first save.
+      starter: d.schema.parse(d.starter()) as Record<string, unknown>,
+    }));
 }
 
 export class BlockValidationError extends Error {}

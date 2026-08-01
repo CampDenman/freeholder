@@ -16,6 +16,7 @@
 import type { ReactNode } from "react";
 import type { z } from "zod";
 import type { Translate } from "@/core/i18n";
+import type { FieldHint } from "./fields";
 
 /**
  * What a block can see while rendering.
@@ -57,6 +58,22 @@ export interface BlockDefinition<
   /** Where this block may be used. Email excludes interactive blocks (§32). */
   contexts: ReadonlyArray<"page" | "chrome">;
   schema: Props;
+  /**
+   * The props a freshly added block starts with.
+   *
+   * Required rather than derived, because a schema cannot invent copy: a
+   * heading's `text` has no default and `""` fails its own `min(1)`, so
+   * deriving would produce a block that cannot be saved the moment it is
+   * added. Starter values are placeholder content the owner immediately
+   * replaces, which is a different thing from a default.
+   */
+  starter: () => z.input<Props>;
+  /**
+   * Per-field editing hints — that a string is a paragraph, that a field is
+   * machinery. On the block rather than in the editor, so a plugin carries its
+   * own (§24).
+   */
+  fieldHints?: Record<string, FieldHint>;
   /** True when this block holds other blocks, so the tree walker recurses. */
   container?: boolean;
   resolve?: (

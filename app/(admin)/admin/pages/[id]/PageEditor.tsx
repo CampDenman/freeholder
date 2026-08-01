@@ -1,0 +1,36 @@
+// Copyright (C) 2026 Camp Denman Society
+// SPDX-License-Identifier: AGPL-3.0-only
+"use client";
+// Binds the generic block editor to one page.
+//
+// A thin wrapper so `BlockEditor` never learns what it is editing — the same
+// component drives a page and a chrome Section, and will drive an email
+// template when §30 lands.
+import {
+  BlockEditor,
+  type EditorBlockType,
+  type EditorLabels,
+  type EditorNode,
+} from "../../BlockEditor";
+import { savePageBlocksAction } from "../../../cms-actions";
+
+export function PageEditor({
+  id,
+  initialBlocks,
+  blockTypes,
+  labels,
+}: {
+  id: string;
+  initialBlocks: EditorNode[];
+  blockTypes: EditorBlockType[];
+  labels: EditorLabels;
+}) {
+  return (
+    <BlockEditor
+      initialBlocks={initialBlocks}
+      blockTypes={blockTypes}
+      labels={labels}
+      save={(blocks) => savePageBlocksAction(id, blocks)}
+    />
+  );
+}
