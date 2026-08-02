@@ -30,6 +30,7 @@ export function PreviewCanvas({
   selectedId,
   onSelect,
   onEdit,
+  onMove,
   labels,
 }: {
   /** The preview page for this subject. */
@@ -50,6 +51,12 @@ export function PreviewCanvas({
    * a view of it.
    */
   onEdit: (blockId: string, prop: string, value: string) => void;
+  /**
+   * A block dragged somewhere else. The canvas has already moved the DOM for
+   * feedback, but that is a preview of the request — the editor decides
+   * whether the move is legal and what the tree becomes.
+   */
+  onMove: (blockId: string, targetId: string, position: string) => void;
   labels: PreviewLabels;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -63,17 +70,22 @@ export function PreviewCanvas({
         source?: string;
         blockId?: string | null;
         edit?: { blockId?: string; prop?: string; value?: string };
+        move?: { blockId?: string; targetId?: string; position?: string };
       };
       if (data?.source !== "freeholder-preview") return;
       if (data.edit?.blockId && data.edit.prop !== undefined) {
         onEdit(data.edit.blockId, data.edit.prop, data.edit.value ?? "");
         return;
       }
+      if (data.move?.blockId && data.move.targetId && data.move.position) {
+        onMove(data.move.blockId, data.move.targetId, data.move.position);
+        return;
+      }
       onSelect(data.blockId ?? undefined);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [onSelect, onEdit]);
+  }, [onSelect, onEdit, onMove]);
 
   // …and selecting in the editor outlines it in the frame.
   useEffect(() => {

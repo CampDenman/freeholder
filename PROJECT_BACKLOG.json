@@ -437,5 +437,28 @@
       "Deleting an asset still leaves any block pointing at it in place, holding a dead id; the block renders nothing, and nothing prunes the reference",
       "media.usage runs one query per asset on the library screen — fine at this size, wants a single grouped query before a library gets large"
     ]
+  },
+  {
+    "id": "2026-08-02-visual-drag",
+    "date": "2026-08-02",
+    "title": "Visual drag on the canvas — the last step to a visual editor",
+    "masterRef": "§32, §24",
+    "status": "done",
+    "delivered": [
+      "moveBlock: a pure, tested tree operation deciding whether a move is legal and what the tree becomes — kept out of the component because tree surgery is obviously correct until somebody drops a container into its own child",
+      "Refusals that matter: a container into its own subtree would detach that branch and lose it; a no-op; an unknown id; an 'inside' onto a block that holds nothing. Nine tests, including one asserting no move ever loses or duplicates a node",
+      "A drag grip rather than a draggable block: a draggable element swallows text selection, and these blocks are typed into",
+      "The grip is injected by the canvas script, not emitted by the renderer, so block components stay free of editor furniture",
+      "Drop indicators computed from rendered geometry — a line above or below by pointer midpoint, an outline for an empty container",
+      "Dragging beside a container's children moves a block in or out of it, so cross-container movement falls out of before/after rather than needing its own case",
+      "The DOM moves on drop for feedback, but that is a preview of the reported intent: the editor applies the move to the tree, and an illegal move leaves the tree untouched and snaps back on the next render",
+      "Verified end to end in a browser with real DragEvents: indicator computed 'before', canvas reordered, tree reordered, autosave kept a revision"
+    ],
+    "openFollowUps": [
+      "CDP mouse events cannot initiate HTML5 drag, so the browser check dispatches real DragEvents rather than moving a physical pointer — the listeners are exercised exactly as a user's drag would, but native drag *initiation* is not",
+      "No keyboard equivalent for moving a block between containers; the up/down buttons only reorder within a level, so nesting is mouse-only and that is an a11y gap §15.7 will want closed",
+      "No auto-scroll while dragging near the edge of the canvas",
+      "Rich text remains a spec decision: §32 forbids markup blobs, so inline formatting needs a constrained inline-node schema rather than stored HTML"
+    ]
   }
 ]

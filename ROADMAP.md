@@ -135,9 +135,12 @@ the four that separate a form editor from a WYSIWYG one. What remains:
 - ~~**Inline editing**~~ ✅ *(2026-08-02)* — heading text, body copy and button
   labels are typed straight onto the canvas. The canvas reports the keystroke;
   the editor applies it to the tree.
-- **Visual drag** — drop indicators from rendered geometry, dragging across
-  container boundaries, cross-frame drag. The largest remaining piece, and the
-  last of the four.
+- ~~**Visual drag**~~ ✅ *(2026-08-02)* — a grip per block, drop indicators
+  computed from rendered geometry, and movement in and out of containers. The
+  legality of a move lives in a pure, tested function, not in the component.
+
+**All four steps are done.** The editor is visual: you see the page, click it
+to select, type into it, and drag its parts around.
 - **Rich text** is a **spec decision before it is work**: §32 forbids markup
   blobs, so inline formatting needs a constrained inline-node schema rather
   than stored HTML. MASTER.md has to settle that first.

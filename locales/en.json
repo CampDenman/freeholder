@@ -256,5 +256,6 @@
   "cms.field.noAsset": "None",
   "media.delete": "Delete",
   "media.deleteConfirm": "Delete permanently",
-  "media.stillUsed": "{places, plural, one {Still used in # place} other {Still used in # places}}"
+  "media.stillUsed": "{places, plural, one {Still used in # place} other {Still used in # places}}",
+  "cms.editor.dragBlock": "Drag to move"
 }
