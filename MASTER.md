@@ -20,7 +20,7 @@ This document is the canonical source of truth for the project. §1 is excerpted
 
 **The open-source operating system for a one-person business.**
 
-Stop leasing your business. Website, store, bookings, quotes, invoices, client galleries, CRM, email, analytics — one deploy, one database, one login. Yours.
+Stop leasing your business. Website, store, bookings, quotes, invoices, client galleries, CRM, email, texts, loyalty, analytics — one deploy, one database, one login. Yours.
 
 ---
 
@@ -93,7 +93,7 @@ Start with the architecture (§2–§8) and the build contract (§9–§16). Tra
 2. **Monolith with modules.** One app, one Postgres database, one ORM schema. Modules are feature folders that can be toggled on/off in admin, not services. A module may own tables, but it may never duplicate a spine entity.
 3. **The Contact Spine.** `Contact` is the center of gravity. Bookings, orders, quotes, invoices, gallery access, form submissions, email events, reviews, messages — everything references `contact_id`. The CRM timeline is a *view* over the spine, not a separate store.
 4. **Money converges on Invoice → Payment.** Whether value arrives via cart checkout, an accepted quote, a booking deposit, or a subscription cycle, it is realized as an `Invoice` paid by one or more `Payment` records through a payment-provider adapter. One reconciliation path, one refund path, one reporting path.
-5. **Adapters for anything external.** Payments (Stripe default, PayPal), transactional mail (Gmail/Outlook OAuth), bulk mail (Resend/Postmark/SES), storage (S3-compatible), SMS (Twilio, optional), calendar sync (Google/Microsoft). Core never imports a vendor SDK directly; it imports the adapter interface.
+5. **Adapters for anything external.** Payments (Stripe default, PayPal), transactional mail (Gmail/Outlook OAuth), bulk mail (Resend/Postmark/SES), storage (S3-compatible), SMS (Twilio et al), calendar sync (Google/Microsoft). Core never imports a vendor SDK directly; it imports the adapter interface. Note the split this makes possible: *messaging* is core (§4.14) because consent and opt-out are obligations, while the carrier behind it is swappable — and voice and video, whose vendors bring their own compliance posture, stay behind the plugin boundary entirely.
 6. **First-party analytics.** Privacy-first pageview + event capture, stored locally, joined to the spine. No third-party pixels in core. Experimentation is native to the same store: variant impressions and conversions (§32) are first-class events, so A/B results live next to revenue, not in a separate tool.
 7. **Agent-operable by design.** Every admin capability is exposed through the internal service layer, which is what the REST API, the admin UI, *and* the bundled MCP server all call. If the UI can do it, an agent can do it, with the same permission checks.
 8. **Boring technology.** Postgres, one web framework, server-rendered public pages (SEO), background jobs via a Postgres-backed queue (no Redis requirement for v1).
@@ -117,6 +117,7 @@ freeholder/
 │   ├── locations            # Business locations, NAP, hours, service areas → LocalBusiness schema
 │   ├── scheduling           # Calendars (person / business / resource), availability engine, ICS, external sync
 │   ├── tax                  # Zones, categories, rates, registrations, exemptions; adapter seam for Stripe Tax et al
+│   ├── messaging            # Numbers, two-way SMS/MMS, consent & keywords, quiet hours, delivery receipts
 │   ├── notifications        # In-app + email notification fanout
 │   └── jobs                 # Background queue, scheduled tasks
 │
@@ -149,13 +150,14 @@ freeholder/
 │   ├── email-marketing      # Broadcasts, simple automations, list segments (spine-native)
 │   ├── reviews              # Post-job review requests, moderation, display widgets
 │   ├── social               # Media prep (crop/trim presets, captions) + scheduled publishing [v2: auto-clip]
-│   ├── affiliates           # Referral & commission engine: dual-sided codes, admin-defined commission rules on any conversion, payout ledger
+│   ├── affiliates           # Referral & commission engine: dual-sided codes, attribution touches, holdbacks, payout batches
+│   ├── loyalty              # Points ledger, earn rules over spine events, tiers, rewards, redemption & liability
 │   └── analytics            # First-party pageviews + funnel events, joined to contacts
 │
 └── platform/                # Operate & extend
     ├── admin                # The admin app shell: dashboards, CRUD for everything
     ├── crm                  # Pipelines & deals, tasks, notes, segments, consent, imports, duplicate queue
-    ├── inbox                # One threaded conversation per contact across email, forms, chat, SMS, social
+    ├── inbox                # The human surface over core/messaging: one thread per contact, every channel, assignable
     ├── automations          # Visual trigger → condition → action over spine events; modules contribute verbs
     ├── portal               # Customer portal: their quotes, invoices, bookings, galleries, files, messages
     ├── reporting            # Saved views, cohort & funnel reports, accounting export (CSV, QuickBooks/Xero shapes)
@@ -668,6 +670,161 @@ that outgrow it.
   where applicable, the legally required wording per regime, and a stable PDF
   archive. §4.3's `Invoice` is where those live.
 
+### 4.13 Loyalty, referral and advocacy
+
+Retention and referral are the same mechanism seen from two sides: a business
+rewarding behaviour it wants more of. They share attribution rails, a ledger
+discipline, and a payout path — so they are one system with two faces rather
+than two systems that will disagree about who earned what.
+
+#### Loyalty
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `LoyaltyProgram` | The programme itself. One per instance in practice; the table allows more. | name, points_label (Stars, Credits, Miles), status, earn_currency (which currency 1 point maps to for reporting), redemption_value_cents, expiry_policy (jsonb: never/inactivity/fixed_window + notice_days), enrolment (automatic/opt_in), terms_page_id |
+| `EarnRule` | What earns points, and how many. | program_id, event_match (jsonb over spine events), formula (fixed / per_currency_unit / multiplier), points, cap_per_period, eligible_segment_id, eligible_products (jsonb), starts_at, ends_at, priority, active |
+| `LoyaltyTier` | Status levels. | program_id, name, threshold_basis (points_earned/lifetime_spend), threshold, window_days, benefits (jsonb: price_list_id, points_multiplier, free_shipping, early_access, perks[]), position |
+| `LoyaltyAccount` | A contact's standing. Balances are derived from the ledger, cached for display only. | contact_id, program_id, tier_id, tier_since, tier_expires_at, points_balance_cached, lifetime_points, enrolled_at, status |
+| `PointsLedger` | Append-only. Every movement is a row. | account_id, delta, reason (earn/redeem/expire/adjust/reverse/transfer), source_type + source_id, invoice_id, actor, note, expires_at, at |
+| `Reward` | What points buy. | program_id, kind (discount/free_product/free_shipping/gift_card/pass_credits/donation), cost_points, value (jsonb), stock, per_contact_limit, eligible_tier_ids[], eligible_segment_id, status |
+| `Redemption` | A reward actually taken. | account_id, reward_id, points_spent, issued_coupon_id / issued_pass_balance_id / invoice_id, status (issued/used/expired/reversed), at |
+
+**Rules:**
+
+- **Points are a ledger, not a number** — the same discipline as stock (§4.2)
+  and for the same reason: "I had 400 points last week" must be answerable, and
+  a balance you cannot explain is a balance customers stop believing.
+- **Earning is a listener on spine events**, never a call from inside another
+  module. An order paid, a booking completed, a review approved, a referral
+  converted, a birthday, a first sign-up — `EarnRule.event_match` selects from
+  what the platform already emits (§4.1). Commerce does not know loyalty
+  exists.
+- **A refund reverses the earn.** Reversal writes a negative row citing the
+  original; it never deletes history. Same for a cancelled booking or a
+  retracted review.
+- **Expiry is a scheduled job that writes rows**, never a silent recomputation,
+  and it gives notice first. Several jurisdictions restrict or forbid expiry on
+  inactivity alone, so `expiry_policy` carries a notice period and the platform
+  refuses to configure an expiry with no notice.
+- **Redemption obeys the convergence rule.** Points become a coupon, a pass
+  balance, or a zero-value invoice line — never a parallel discount path.
+  A £0 invoice with the reward named on it is still the record of the
+  transaction.
+- **Outstanding points are a liability**, and the owner is shown the number:
+  balance × `redemption_value_cents`, per period, in reporting and in the
+  accounting export. A loyalty programme whose cost is invisible is how a
+  business gives away a margin it never measured.
+- **Tier evaluation is a pure function of the ledger and a window**, run on
+  write and on a schedule, emitting `TimelineEvent`s on promotion and demotion
+  so automations can act and the customer can be told.
+- **Fraud is bounded by rules, not vigilance**: caps per rule per period,
+  self-referral detection, and a minimum account age before redemption.
+
+#### Referral and affiliate dynamics
+
+§4.3 already carries `AffiliateProgram`, `AffiliateCode` and `CommissionEvent`.
+What follows is the machinery that makes attribution defensible.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `AttributionTouch` | Every recorded contact with a referral code, first-party. | anon_id, contact_id (once identified), code_id, kind (click/scan/manual), landing_path, referrer_url, utm (jsonb), device_hash, at |
+| `ReferralInvitation` | A named invite, so "invite a friend" is trackable rather than a hope. | referrer_contact_id, program_id, channel (email/sms/link/qr), invitee_email, invitee_phone, sent_at, accepted_at, converted_at, reward_state |
+| `PayoutBatch` / `PayoutLine` | Settling commissions. | batch: period, currency, method (manual/transfer/provider), status (draft/approved/paid), total_cents, paid_at · line: batch_id, affiliate_contact_id, commission_event_ids[], amount_cents, tax_form_state |
+
+**Rules:**
+
+- **The attribution model is a choice the owner makes and can see**: last
+  touch (default), first touch, or position-based, with a stated cookie window
+  and a server-side record. `AttributionTouch` keeps the whole chain regardless,
+  so changing the model does not require re-running history — it re-reads it.
+- **Attribution is first-party and survives the cookie.** A code on a session,
+  a scanned QR at a market stall, a code typed at checkout, and an invitation
+  accepted by link all land in the same table.
+- **Commission has a holdback.** A `CommissionEvent` becomes payable only after
+  the refund window closes; a refund or chargeback inside it reverses
+  automatically, and reversing after payout produces a negative line on the
+  next batch rather than an argument.
+- **Dual-sided rewards can pay in points.** A referrer may earn commission,
+  loyalty points, a pass, or a credit — the reward is a configuration, which is
+  precisely why loyalty and affiliates share these rails.
+- **Payouts settle through invoicing** (§4.3). v1 is manual and batched with a
+  CSV the owner can hand to their bank or accountant; a payout-provider adapter
+  is a later implementation of the same interface.
+- **Tax paperwork is acknowledged, not automated**: `tax_form_state` tracks
+  whether the information a jurisdiction requires above a threshold (1099-NEC,
+  T4A, equivalents) has been collected. The platform prompts and records; it
+  does not file.
+- **One hop only.** Commission accrues to the referrer of the converting
+  customer and to nobody above them. Multi-level structures are refused by the
+  data model, not by policy — there is no parent link on `AffiliateCode` — and
+  that is deliberate.
+
+### 4.14 Messaging and conversations
+
+Email is a broadcast medium that people tolerate. Text messages are a personal
+medium that people *read*, which is why they are the first person-to-person
+channel Freeholder owns rather than delegates — and why the rules around them
+are strict enough to belong in the spine instead of a plugin.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `MessagingNumber` | A number the business sends and receives on. | provider, e164, country, kind (long_code/toll_free/short_code/10dlc), capabilities (sms/mms), registration (jsonb: brand, campaign, status, submitted_at), assigned_to_calendar_id (nullable), default_for (transactional/marketing/support), status |
+| `Conversation` | One thread with one person on one channel. Threads into the §30 inbox. | contact_id, channel (sms/mms/email/chat/social), number_id, subject, status (open/snoozed/closed), assignee_user_id, last_inbound_at, last_outbound_at, unread |
+| `Message` | One message either way. | conversation_id, direction (inbound/outbound), body, media_asset_ids[], template_id, sent_by (user/system/automation/agent), provider_ref, segments, cost_cents, at |
+| `MessageDelivery` | What the carrier said happened. | message_id, status (queued/sent/delivered/failed/undelivered/read), error_code, error_text, at |
+| `KeywordRule` | Inbound words that mean something. | keyword, match (exact/prefix), action (opt_out/opt_in/help/auto_reply/tag/route/booking_confirm), reply_body, active |
+| `MessagingWindow` | When a person may be messaged, in their own timezone. | scope (global/segment/contact), quiet_from, quiet_to, timezone_source (contact/business), max_per_day, applies_to (marketing/transactional/all) |
+
+**Rules:**
+
+- **An inbound message resolves to a Contact, always.** The phone number is
+  normalised to E.164 and passed to `contacts.resolve` (never `create`) through
+  `ctx.callAsSystem`, so a text from an unknown number produces a real contact
+  with a real timeline rather than an orphan thread. This is the spine rule
+  applied to a new door.
+- **Consent is per purpose and per channel**, recorded in `ConsentRecord`
+  (§30) with method, timestamp and source. Marketing texts require express
+  opt-in with the terms shown at the moment of collection; transactional
+  messages — a booking confirmation, a delivery notification, an OTP — ride the
+  existing relationship. The service layer enforces the distinction; there is
+  no code path that can send a marketing segment without it.
+- **STOP, START and HELP are handled before anything else sees the message**,
+  in every supported language, and an opt-out propagates across every channel
+  for that contact rather than only the number it arrived on. Honouring an
+  opt-out is not a feature to be configured.
+- **Quiet hours are the contact's, not the business's.** TCPA's 8am–9pm is
+  local to the recipient, and `MessagingWindow` resolves against
+  `Contact.timezone` with the business's as fallback. Transactional messages
+  may be exempted explicitly; marketing may not.
+- **Two-way by default.** A reminder that says "reply C to confirm" is worth
+  more than three that do not, so `KeywordRule` can confirm a booking, join a
+  waitlist, or route to a human. Anything it cannot answer lands in the inbox
+  as an open thread with a person's name on it.
+- **Delivery is observed, not assumed.** `MessageDelivery` records carrier
+  status and error codes, and a hard failure marks the number invalid on the
+  contact so the next send does not repeat it.
+- **Cost is visible per message and per campaign.** Segments and price are
+  recorded, because SMS is the one channel where an owner can spend real money
+  by accident.
+- **Registration is part of setup, not a surprise.** US 10DLC brand and
+  campaign registration, toll-free verification, and alphanumeric sender IDs
+  where they apply are tracked on `MessagingNumber` with their status surfaced
+  in the admin — an unregistered number silently filtered by carriers is the
+  most common way an SMS launch fails.
+- **Templates are the same objects as email templates** (§30's
+  `EmailTemplate`, `kind = sms`), rendered per contact locale and timezone,
+  with the same test-send-to-self.
+- **MMS media comes from `core/media`** — one library, one pipeline.
+
+**Voice and video are plugin territory** (§24), and deliberately so. Calls,
+video rooms and their recordings mean a vendor's SDK, a vendor's compliance
+posture and a vendor's pricing, none of which belong in a monolith that has to
+boot on a $6 droplet. What core owns is the seam: a plugin registering a voice
+or video adapter attaches its artifacts — a recording asset, a transcript, a
+duration, a missed-call event — to the same `Conversation` and the same
+timeline, so a call is part of a person's history without core learning what a
+SIP trunk is.
+
 ---
 
 ## 5. The SEO Layer (doctrine, enforced structurally)
@@ -718,7 +875,9 @@ The v1 that is genuinely shippable on Replit and already better than the tool-ma
 9. mcp + api + webhooks (the owner's own agents administer and develop the instance from here — §37)
 10. email marketing (broadcasts first, automations v1.1)
 
-Deferred to v2: subscriptions/memberships, gift cards, social auto-clipping (manual crop/trim presets ship in v1.5), PayPal adapter, SMS.
+11. messaging + inbox (two-way SMS with consent, keywords and quiet hours — §4.14 — threaded per contact), then loyalty on the referral rails already built (§4.13)
+
+Deferred to v2: subscriptions/memberships, gift cards, social auto-clipping (manual crop/trim presets ship in v1.5), PayPal adapter, voice and video (plugins, §4.14).
 
 **Deviation in force (decided 2026-07-26): the project's own site before the money path.** The order above is the right order for a business deploying Freeholder. It is not the right order for *building* Freeholder, and the difference is worth stating rather than rediscovering. The first thing this codebase ships is `freeholder.ai` itself, which needs steps 1 and 6 — settings, media, jobs, cms, forms, seo, analytics and an admin shell — and none of commerce, booking, quotes, galleries or the portal.
 
@@ -1419,7 +1578,7 @@ Sharing isn't a buttons plugin; it's a property of every entity with a public fa
 - **Everything shareable has a `ShareTarget`:** canonical URL + auto-generated OG image + per-channel share intents (native Web Share API on mobile, channel links on desktop, copy-with-attribution). Pages, posts, products, galleries (and individual gallery images where the owner allows), newsletter issues, events, reviews, the changelog — one system, present by default, removable per entity.
 - **Tracked, first-party:** share links carry a short `ref` token → `SharedLink` rows (entity, sharer contact if known, channel) → clicks land as analytics events attributed to the share. The owner sees "this gallery was shared 12 times and drove 3 bookings" — sharing becomes a measured channel, not a hopeful button.
 - **Client-side sharing where it counts:** a client can share their proofing gallery with a partner (scoped guest access, owner-permitted), share a quote internally before accepting ("send to my business partner" issues a view-only link), and gift-card/registry-style sharing on products.
-- **Referral & advocacy rails (spec'd — `growth/affiliates`, §3, §4.3):** every Contact can hold referral codes; referred conversions attribute automatically on the spine. Admins define commission rules for **any** conversion type — signups, subscriptions, orders, bookings, custom events — and codes are dual-sided: the visitor gets the discount, the referrer earns the commission (a creator sends visitors with code IROCK → the subscriber gets 10% off, the creator earns 10% commission). Attribution is first-party (`?ref` token → `AffiliateCode` → `CommissionEvent`), the ledger runs pending → approved → paid with automatic reversal on refund, and referrers see their own earnings in the customer portal — an affiliate is just a Contact with a code, not a separate system. The loyalty module (roadmap, §36) extends these same rails with points and tiers rather than inventing its own tracking.
+- **Referral & advocacy rails (spec'd — `growth/affiliates`, §3, §4.3):** every Contact can hold referral codes; referred conversions attribute automatically on the spine. Admins define commission rules for **any** conversion type — signups, subscriptions, orders, bookings, custom events — and codes are dual-sided: the visitor gets the discount, the referrer earns the commission (a creator sends visitors with code IROCK → the subscriber gets 10% off, the creator earns 10% commission). Attribution is first-party (`?ref` token → `AffiliateCode` → `CommissionEvent`), the ledger runs pending → approved → paid with automatic reversal on refund, and referrers see their own earnings in the customer portal — an affiliate is just a Contact with a code, not a separate system. The loyalty engine (§4.13) extends these same rails with points, tiers and rewards rather than inventing its own tracking — a referral may pay the referrer in commission, in points, or in both, because the reward is configuration on one ledger rather than two systems reconciling.
 - **Embeds:** galleries, review walls, booking widgets, and newsletter signup blocks all emit copy-paste embed codes — Freeholder content propagates onto other sites with backlinks. Sharing outward is also an SEO strategy.
 
 ---
@@ -1452,9 +1611,15 @@ Method: the most-installed plugins/apps on both ecosystems are a revealed-prefer
 - **Support inbox + live chat** (Gorgias/Click-to-Chat): unified inbox (site chat, assistant escalations, contact forms, social inbox) threaded per Contact; WhatsApp/Messenger deep-links for the click-to-chat pattern.
 
 **Ship as first-party plugins (wanted often, not by all):**
-- **Loyalty programs** (Smile's category) extending the core affiliates module (§3, §34): points, tiers, rewards on the same first-party attribution rails — referrals and commissions themselves are already core.
-- **SMS marketing** (Klaviyo/Omnisend's second channel) via the sms adapter, consent-gated.
-- **Gift options & registries**; **local delivery/pickup scheduling** (huge for food/retail); **print-on-demand adapter** (Printify-style) as a fulfillment plugin; **memberships/gated communities** beyond simple subscriptions.
+- ~~Loyalty programs~~ and ~~SMS~~ — **both moved into core** (§4.13, §4.14).
+  Loyalty because it is the same attribution ledger as referrals seen from the
+  other side, and splitting them guarantees two systems that disagree about who
+  earned what. SMS because consent, opt-out propagation and quiet hours are
+  obligations rather than features: a plugin that gets them wrong is the
+  owner's legal exposure, and the only honest place for a rule nobody may skip
+  is the service layer.
+- **Gift options & registries**; **print-on-demand adapter** (Printify-style) as a fulfillment plugin; **memberships/gated communities** beyond simple subscriptions. (Local delivery and pickup scheduling also moved into core — §4.11.)
+- **Voice and video** (calls, video rooms, recordings, transcripts) through provider adapters. Core owns the conversation and the timeline; the vendor SDK, its compliance posture and its pricing stay behind a plugin boundary (§4.14).
 
 **Explicitly out (the anti-roadmap):** dropshipping marketplaces, ad-network integrations, third-party analytics pixels as core, page-builder lock-in formats, anything that makes the owner's data someone else's product. The WordPress lesson cuts both ways — install-count proves demand, but half those plugins exist to patch an incoherent core. Freeholder absorbs the coherence and leaves the patchwork behind.
 
@@ -1552,6 +1717,12 @@ rather than in a backlog.
 - **Passes, memberships and retainers**, because a ten-class card and a monthly
   retainer are the same idea — prepaid entitlement spent later — and neither
   should require a second money path.
+- **Loyalty and referral on one ledger** (§4.13): points earned from spine
+  events, tiers that change what someone pays, rewards that redeem into the
+  normal money path, and referral commission that may itself pay in points.
+- **Two-way text messaging** (§4.14): a real conversation per contact, with
+  consent, opt-out propagation and the recipient's quiet hours enforced in the
+  service layer rather than remembered by a human.
 - **Time tracking against a project or booking**, billable and unbillable, that
   becomes invoice lines in one step. A `TimeEntry` (contact_id, project_id,
   booking_id, minutes, rate_cents, billable, invoiced_invoice_id) is a small
@@ -1616,7 +1787,10 @@ oversight and invites somebody to build it badly.
   inventory ledger is built so these *can* land later; a one-person business
   does not need them and their weight would be felt by everyone.
 - **Multi-tenancy in any form** (§2). One deploy, one business, forever.
-- **A points-based loyalty engine** in core — it extends affiliates (§36) as a
-  first-party plugin, on the same first-party attribution rails.
+- **Voice and video calling.** Person-to-person *text* is core (§4.14) because
+  its obligations are; calls mean a vendor SDK and a vendor's compliance
+  posture, so they arrive as plugins attaching to the same conversation.
+- **Multi-level referral structures.** One hop, enforced by the absence of a
+  parent link on `AffiliateCode` (§4.13) rather than by policy.
 - **Anything that makes the owner's data someone else's product** (§36's
   anti-roadmap). Unchanged, and load-bearing.
