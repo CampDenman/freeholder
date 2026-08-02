@@ -27,6 +27,7 @@ import {
   Trash,
 } from "@phosphor-icons/react/dist/ssr";
 import { Button, cx } from "@/ui/primitives";
+import { moveBlock, type DropPosition } from "@/modules/cms/blocks/move";
 import { PreviewCanvas, type PreviewLabels } from "./PreviewCanvas";
 
 export interface EditorField {
@@ -141,6 +142,29 @@ export function BlockEditor({
   };
 
   /**
+   * Apply a block dragged somewhere else on the canvas.
+   *
+   * The decision about whether the move is legal lives in `moveBlock`, which
+   * is pure and tested — a container dropped into its own child would detach
+   * that branch, and a component is the wrong place to be sure about that. An
+   * illegal move leaves the tree untouched, and the canvas snaps back on its
+   * next render because the tree is what it renders from.
+   */
+  const applyMove = useCallback(
+    (blockId: string, targetId: string, position: string) => {
+      setBlocks((current) => {
+        // No cast needed: EditorNode and BlockNode are the same shape, which
+        // is the point — the editor is holding the block tree, not a parallel
+        // model of it that has to be translated back and forth.
+        const moved = moveBlock(current, blockId, targetId, position as DropPosition);
+        return moved ?? current;
+      });
+      setStatus("dirty");
+    },
+    [],
+  );
+
+  /**
    * Apply text typed on the canvas.
    *
    * `useCallback` because the canvas subscribes to it: a new identity on every
@@ -198,6 +222,7 @@ export function BlockEditor({
           selectedId={selectedId}
           onSelect={setSelectedId}
           onEdit={applyInlineEdit}
+          onMove={applyMove}
           labels={labels.preview}
         />
       </div>
