@@ -13,14 +13,13 @@ import { notFound } from "next/navigation";
 import { getPage } from "@/modules/cms/service";
 import { renderBlocks } from "@/modules/cms/render";
 import type { BlockNode } from "@/modules/cms/blocks/types";
-import { getBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 import { getLocale, getT } from "../../../../i18n";
 import { requireStaffActor } from "../../../../(admin)/admin/guard";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function PagePreview({
   params,
@@ -38,7 +37,7 @@ export default async function PagePreview({
   const [locale, t, business] = await Promise.all([
     getLocale(),
     getT(),
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
   ]);
 
   return (

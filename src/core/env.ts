@@ -56,6 +56,16 @@ const envSchema = z.object({
    * image and a per-instance configuration can both be true.
    */
   FREEHOLDER_STORAGE: z.enum(["s3", "replit", "local"]).optional(),
+
+  /**
+   * Permits local-disk storage in production, against §18's mandate.
+   *
+   * Declared here rather than read where it is used, because a guard that
+   * decides what "production" means from a different source than the rest of
+   * the platform can disagree with it — and this particular disagreement ends
+   * with an owner's uploads on a disk that a rebuild throws away.
+   */
+  FREEHOLDER_UNSAFE_LOCAL_STORAGE: z.enum(["1"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

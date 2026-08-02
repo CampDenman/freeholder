@@ -10,6 +10,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { StorageAdapter, StoredObject } from "@/adapters/storage/types";
+import { env } from "@/core/env";
 
 export interface LocalConfig {
   /** Directory to write under. Created on demand. */
@@ -29,8 +30,12 @@ export interface LocalConfig {
  * a config review, which is the point.
  */
 function refuseInProduction(): void {
-  if (process.env.NODE_ENV !== "production") return;
-  if (process.env.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
+  // Through env() like everything else: a guard that decides for itself what
+  // production means can disagree with the platform that configured it, and
+  // the disagreement is only discovered by losing an owner's media.
+  const { NODE_ENV, FREEHOLDER_UNSAFE_LOCAL_STORAGE } = env();
+  if (NODE_ENV !== "production") return;
+  if (FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
     console.warn(
       "[storage] Using local disk in production because " +
         "FREEHOLDER_UNSAFE_LOCAL_STORAGE=1. Uploaded media will be lost if " +

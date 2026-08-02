@@ -3,22 +3,21 @@
 // Every page on the site (MASTER.md §32).
 import { FileText, Plus } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
-import { getBusiness } from "@/core/settings/service";
 import { listPages } from "@/modules/cms/service";
 import { Card, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { SeedSiteButton } from "./SeedSiteButton";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function PagesPage() {
   const actor = await requireStaffActor();
   const [pages, business, t] = await Promise.all([
     listPages.call({}, actor),
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     getT(),
   ]);
 

@@ -8,15 +8,14 @@
 import { MagnifyingGlass, Plus, UserPlus } from "@phosphor-icons/react/dist/ssr";
 import { listContacts } from "@/core/contacts/service";
 import { formatDateTime } from "@/core/i18n";
-import { getBusiness } from "@/core/settings/service";
 import { Button, Card, Input, Pill, Select, cx } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { CONTACT_STAGES } from "./contactLabels";
 import { requireStaffActor } from "../guard";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 const PAGE_SIZE = 25;
 
 const STAGE_TONE = {
@@ -51,7 +50,7 @@ export default async function ContactsPage({
   const offset = Math.max(0, Number(one("offset")) || 0);
 
   const [business, t, result] = await Promise.all([
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     getT(),
     listContacts.call(
       {

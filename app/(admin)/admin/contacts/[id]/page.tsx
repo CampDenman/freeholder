@@ -11,7 +11,6 @@ import {
   listContacts,
 } from "@/core/contacts/service";
 import { formatDateTime, type Translate } from "@/core/i18n";
-import { getBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 import { Card, CardBody, CardHeader } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
@@ -19,10 +18,10 @@ import { contactFormLabels, mergePanelLabels } from "../contactLabels";
 import { ContactForm } from "../ContactForm";
 import { MergePanel } from "./MergePanel";
 import { requireStaffActor } from "../../guard";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 /** "contact.created" → "Contact created", for someone who did not build this. */
 function describe(eventType: string): string {
@@ -63,7 +62,7 @@ export default async function ContactDetailPage({
   });
 
   const [business, timeline, t] = await Promise.all([
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     contactTimeline.call({ contactId: contact.id }, actor),
     getT(),
   ]);

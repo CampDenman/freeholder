@@ -485,5 +485,24 @@
       "No generated OG images and no IndexNow ping on publish; both are named in §5 and neither blocks being indexed",
       "The §15.2 SEO gate still needs the seeded demo site to crawl"
     ]
+  },
+  {
+    "id": "2026-08-02-standing-debts-1",
+    "date": "2026-08-02",
+    "title": "Standing debts, first batch",
+    "masterRef": "§4.1, §4.8, §12",
+    "status": "done",
+    "delivered": [
+      "contacts.merge refuses when both contacts have their own login. contacts.user_id is unique and 1:1, so a merge can keep only one: choosing silently either leaves a credential that still signs in and resolves to nobody, or destroys a real person’s password and sessions on one click. Verified by disabling the guard and watching the merge orphan a users row",
+      "The activity feed reads each service’s own summary instead of deriving prose from its name. The derivation stripped a trailing s from the module, so cms.ensureDefaults read as “Cm — ensure defaults”; the fallback stays for audit rows that outlive the service that wrote them, and no longer singularizes anything",
+      "The local storage adapter reads NODE_ENV and FREEHOLDER_UNSAFE_LOCAL_STORAGE through env() like everything else, and both are declared in the schema — a guard that decides for itself what production means can disagree with the platform that configured it",
+      "Request-scoped readers (core/settings/read.ts, modules/cms/read.ts) wrap the services in React cache(), so one render pass fetches the business profile and the page once rather than once per component that needs them"
+    ],
+    "openFollowUps": [
+      "Measured: a public page request made 4 getBusiness queries before and 2 after. It is not 1 because Next resolves generateMetadata in a separate cache scope from the render — halving it is what this seam can do",
+      "The remaining admin screens each call getBusiness once, so they gain nothing from the cache beyond consistency; the layout and page pair is where the duplicate was",
+      "PROJECT_BACKLOG claimed TimelineEventInput.subjectId was typed string against a uuid column. It is not: both timeline_events.subject_id and audit_log.subject_id are text, deliberately, because the column is polymorphic across entity types. No change, entry retired",
+      "Merging still has no confirmation step and cannot be undone (tracked separately)"
+    ]
   }
 ]

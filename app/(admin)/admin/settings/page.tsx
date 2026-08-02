@@ -3,19 +3,18 @@
 // Editing the business after setup — the other half of §13. The wizard writes
 // these once; this is where they live for the rest of the site's life.
 import { redirect } from "next/navigation";
-import { getBusiness } from "@/core/settings/service";
 import { getLocale, getT } from "../../../i18n";
 import { businessFormLabels, businessOptions } from "../../../setup/businessLabels";
 import { requireStaffActor } from "../guard";
 import { SettingsForm } from "./SettingsForm";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function AdminSettingsPage() {
   await requireStaffActor();
-  const business = await getBusiness.call({}, ANONYMOUS);
+  const business = await currentBusiness();
   // Reachable only if setup was skipped somehow; the wizard is the way in.
   if (!business) redirect("/setup");
 

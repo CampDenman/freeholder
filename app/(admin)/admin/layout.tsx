@@ -5,7 +5,6 @@
 // check who is asking.
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { getBusiness } from "@/core/settings/service";
 import { ThemeToggle } from "@/ui/ThemeToggle";
 import { readThemePreference, setThemeAction } from "../../theme";
 import { getT } from "../../i18n";
@@ -13,6 +12,7 @@ import { themeLabels } from "../../themeLabels";
 import { requireStaffActor } from "./guard";
 import { AdminNav } from "./AdminNav";
 import { SignOutButton } from "./SignOutButton";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,6 @@ export const dynamic = "force-dynamic";
  */
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function AdminLayout({
   children,
@@ -31,7 +30,7 @@ export default async function AdminLayout({
 }) {
   const actor = await requireStaffActor();
   const [business, theme, t] = await Promise.all([
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     readThemePreference(),
     getT(),
   ]);
