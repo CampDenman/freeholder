@@ -37,6 +37,15 @@ export interface BlockRenderContext {
   } | null;
   /** Path currently being rendered, so nav can mark itself current. */
   path: string;
+  /**
+   * Wrap each block so the editor can trace a click back to a node.
+   *
+   * Only ever true inside the admin preview. The public surface renders
+   * unwrapped, so what a visitor and a crawler receive is exactly what the
+   * blocks produced — the SEO gate has to be checking the real markup, not a
+   * version with editor scaffolding in it.
+   */
+  identifyBlocks?: boolean;
 }
 
 /**

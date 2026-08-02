@@ -125,8 +125,25 @@ Landed 2026-08-01.
   restore, pages and chrome admin screens.
 - **Not done, and named rather than implied:** slash-command insertion (§32
   names it, but it implies a rich-text surface the text block does not have —
-  what shipped is a block picker), live responsive preview, and dragging
-  between nesting levels.
+  what shipped is a block picker) and dragging between nesting levels.
+
+### Phase 2c — the visual canvas
+
+The preview pane and click-to-select landed 2026-08-01, which is steps 1–2 of
+the four that separate a form editor from a WYSIWYG one. What remains:
+
+- **Inline editing** — `contenteditable` on plain-string props, synced back
+  over the same postMessage bridge. Tractable because heading and text props
+  are plain strings rather than markup.
+- **Visual drag** — drop indicators from rendered geometry, dragging across
+  container boundaries, cross-frame drag. The largest remaining piece.
+- **Rich text** is a **spec decision before it is work**: §32 forbids markup
+  blobs, so inline formatting needs a constrained inline-node schema rather
+  than stored HTML. MASTER.md has to settle that first.
+
+The canvas must stay a *view* of the tree — edits flow tree → render, never
+render → tree. If the DOM ever becomes the source of truth, typed blocks,
+migrations and re-theming all stop being true.
 - Still deferred: per-entity layout overrides, variants with a traffic split,
   and the paywall gate — all of which the schema already leaves room for.
 

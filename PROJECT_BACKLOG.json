@@ -380,5 +380,36 @@
       "Autosave has no conflict detection: two people editing one page will overwrite each other, last write wins",
       "Testing the editor locally needs NODE_ENV=development even against a production build, because the session cookie is Secure and localhost is http"
     ]
+  },
+  {
+    "id": "2026-08-01-media-and-canvas",
+    "date": "2026-08-01",
+    "title": "core/media, and the editor canvas with click-to-select",
+    "masterRef": "§3, §4.5, §5, §18, §32, §36",
+    "status": "done",
+    "delivered": [
+      "core/media: Asset table, upload, list, alt text, delete — the first consumer of the storage adapters, which had been sitting unused since they landed",
+      "Automatic responsive renditions (§36): AVIF and WebP at 400/800/1600/2400, never upscaled, with a format the local libvips cannot encode skipped rather than fatal",
+      "media.resolveImage returns srcset sources and intrinsic dimensions, so a page reserves space and never reflows when an image lands",
+      "Alt text lives on the asset rather than the block, so one description serves every use; the library flags images missing one, because §5 fails a page that renders without",
+      "SVG is stored but never resized and never served inline — it is a document that can carry script",
+      "Media served with immutable caching, since storage keys end in a random segment and a replacement produces a new key",
+      "The image block, and the first use of the resolve hook built in 2a: props name an asset, the URLs come from core/media at render time, so replacing a file updates every page showing it",
+      "An asset picker in the editor, derived like every other control — a new FieldHint control, not a special case in the editor",
+      "The editor canvas: a live preview beside the controls, rendered by the same renderBlocks the public page uses, with desktop and mobile widths (§32)",
+      "Click-to-select in both directions — clicking in the canvas selects the block card, selecting a card outlines it in the canvas",
+      "X-Frame-Options carved out for /preview only: DENY everywhere else, SAMEORIGIN plus frame-ancestors 'self' for the canvas"
+    ],
+    "openFollowUps": [
+      "The canvas shows the *saved* tree, so it follows autosave rather than keystrokes — a deliberate trade for the guarantee that the preview cannot disagree with the page",
+      "No inline editing and no visual drag yet: the canvas is a view, not an input surface",
+      "Editing a published page writes to the live site on autosave; there is no draft-then-publish workflow for changes to an already-published page",
+      "Uploads pass through the app rather than going straight to the bucket with a presigned URL, so a large file occupies the web process for its duration",
+      "blurhash is a column and nothing generates it (§4.5); a low-quality placeholder would also need a decision on which",
+      "Video and audio are stored but get no poster frame, duration or transcode",
+      "A page with several images costs one resolveImage query each — a request-scoped cache would collapse them",
+      "src/adapters/storage/local.ts reads process.env.NODE_ENV directly while the rest of the codebase reads through env(), so its production guard can disagree with the cookie logic about what production means",
+      "Deleting an asset does not check whether a block still points at it; the block renders nothing rather than breaking, but the owner gets no warning"
+    ]
   }
 ]

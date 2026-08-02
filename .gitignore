@@ -14,6 +14,11 @@ coverage/
 .env.*
 !.env.example
 
+# local media, written by the dev-only storage adapter (§18: production media
+# lives in object storage, never on instance disk — this directory only ever
+# exists on a developer's machine and in test runs)
+.data/
+
 # logs & OS noise
 *.log
 .DS_Store

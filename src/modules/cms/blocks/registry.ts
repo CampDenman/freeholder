@@ -16,6 +16,7 @@ import {
   divider,
   faq,
   heading,
+  image,
   nav,
   spacer,
   text,
@@ -24,6 +25,7 @@ import {
 const definitions: BlockDefinition<z.ZodType, never>[] = [
   heading,
   text,
+  image,
   button,
   columns,
   divider,

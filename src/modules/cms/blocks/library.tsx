@@ -275,3 +275,71 @@ export const nav = defineBlock({
     );
   },
 });
+
+/* ------------------------------------------------------------------ media */
+
+/**
+ * An image from the asset library (MASTER.md §32 block list, §36, §5).
+ *
+ * The first block with a `resolve` step, and the reason that hook exists: what
+ * this renders is not in the block's props. The props name an asset; the URLs,
+ * the renditions and the intrinsic size come from core/media at render time,
+ * so replacing a file updates every page that shows it without touching a
+ * single block tree.
+ *
+ * The markup is the §36 checklist made concrete: `<picture>` with AVIF then
+ * WebP then the original, `srcset` so the browser picks a width, `loading` and
+ * `decoding` set for lazy rendering, and intrinsic `width`/`height` so the
+ * page reserves space and does not reflow when the image lands.
+ *
+ * Alt text lives on the *asset*, not the block: it describes the image, and
+ * copying it onto every block that uses the picture is how it drifts. §5
+ * requires it on public images, so a missing one is a visible gap in the media
+ * library rather than something a page can quietly omit.
+ */
+export const image = defineBlock({
+  type: "image",
+  labelKey: "cms.block.image",
+  contexts: ["page", "chrome"],
+  schema: z.object({
+    assetId: z.string().uuid().optional(),
+    /** Overrides the asset's own description where the context needs it to. */
+    alt: z.string().optional(),
+    width: z.enum(["column", "wide", "full"]).default("column"),
+    rounded: z.boolean().default(true),
+  }),
+  starter: () => ({}),
+  fieldHints: { assetId: { control: "asset" } },
+  // Imported lazily so the block library does not drag core/media into every
+  // bundle that only needs a heading.
+  resolve: async (props) => {
+    if (!props.assetId) return null;
+    const { resolveImage } = await import("@/core/media/service");
+    return resolveImage.call({ id: props.assetId }, { kind: "anonymous" });
+  },
+  render: ({ props, resolved }) => {
+    if (!resolved) return null;
+    const alt = props.alt ?? resolved.altText ?? "";
+    return (
+      <picture>
+        {resolved.sources.map((source) => (
+          <source key={source.format} srcSet={source.srcset} type={source.type} />
+        ))}
+        <img
+          src={resolved.src}
+          alt={alt}
+          width={resolved.width ?? undefined}
+          height={resolved.height ?? undefined}
+          loading="lazy"
+          decoding="async"
+          className={cx(
+            "h-auto max-w-full",
+            props.rounded && "rounded-lg",
+            props.width === "wide" && "w-full",
+            props.width === "full" && "w-full",
+          )}
+        />
+      </picture>
+    );
+  },
+});
