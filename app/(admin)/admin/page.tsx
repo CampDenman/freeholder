@@ -6,26 +6,15 @@ import { Users } from "@phosphor-icons/react/dist/ssr";
 import { contactStats } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
 import { formatDateTime, type Translate } from "@/core/i18n";
-import { getBusiness } from "@/core/settings/service";
+import { describeAction } from "./describeAction";
 import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../i18n";
 import { requireStaffActor } from "./guard";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 
-/** "contacts.create" → "Contact created", for someone who did not build this. */
-function describe(action: string): string {
-  const [subject, verb] = action.split(".");
-  if (!subject || !verb) return action;
-  const readable = verb
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .toLowerCase()
-    .trim();
-  const noun = subject.replace(/s$/, "");
-  return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} — ${readable}`;
-}
 
 function actorLabel(actor: string, t: Translate): string {
   if (actor.startsWith("agent:")) return t("actor.agent", { name: actor.slice(6) });
@@ -39,7 +28,7 @@ export default async function AdminOverviewPage() {
   // this must not assume anybody has vetted the caller yet.
   const actor = await requireStaffActor();
   const [business, stats, activity, t] = await Promise.all([
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     contactStats.call({}, actor),
     recentActivity.call({ limit: 12 }, actor),
     getT(),
@@ -104,7 +93,7 @@ export default async function AdminOverviewPage() {
                   className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-rule py-2.5 last:border-b-0"
                 >
                   <span className="text-sm font-medium">
-                    {describe(entry.action)}
+                    {describeAction(entry.action)}
                   </span>
                   <span className="text-xs text-ink-muted">
                     {actorLabel(entry.actor, t)}

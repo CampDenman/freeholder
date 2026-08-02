@@ -8,7 +8,6 @@
 import { notFound } from "next/navigation";
 import { ArrowSquareOut, ClockCounterClockwise } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
-import { getBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 import { getPage, listRevisions } from "@/modules/cms/service";
 import { listAssets } from "@/core/media/service";
@@ -20,10 +19,10 @@ import { editorBlockTypes, editorLabels } from "../../editorLabels";
 import { PageEditor } from "./PageEditor";
 import { RevisionList } from "./RevisionList";
 import { PublishToggle } from "./PublishToggle";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function EditPagePage({
   params,
@@ -39,7 +38,7 @@ export default async function EditPagePage({
   });
 
   const [business, revisions, library, t] = await Promise.all([
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
     listAssets.call({ kind: "image" }, actor),
     getT(),

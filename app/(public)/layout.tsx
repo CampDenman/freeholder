@@ -14,16 +14,15 @@
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { PATH_HEADER } from "@/core/http/headers";
-import { getSection } from "@/modules/cms/service";
 import { renderBlocks } from "@/modules/cms/render";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
-import { getBusiness } from "@/core/settings/service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { getLocale, getT } from "../i18n";
+import { currentBusiness } from "@/core/settings/read";
+import { publishedSection } from "@/modules/cms/read";
 
 export const dynamic = "force-dynamic";
 
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function PublicLayout({
   children,
@@ -33,13 +32,13 @@ export default async function PublicLayout({
   const [locale, t, business, requestHeaders] = await Promise.all([
     getLocale(),
     getT(),
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     headers(),
   ]);
 
   const [header, footer] = await Promise.all([
-    getSection.call({ key: HEADER_KEY, locale }, ANONYMOUS),
-    getSection.call({ key: FOOTER_KEY, locale }, ANONYMOUS),
+    publishedSection(HEADER_KEY, locale),
+    publishedSection(FOOTER_KEY, locale),
   ]);
 
   // `path` lets a nav block mark the current entry. A layout cannot know which

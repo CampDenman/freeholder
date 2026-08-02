@@ -11,12 +11,13 @@ import { redirect } from "next/navigation";
 import { Storefront } from "@phosphor-icons/react/dist/ssr";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
-import { getBusiness, setupState } from "@/core/settings/service";
+import { setupState } from "@/core/settings/service";
 import { ThemeToggle } from "@/ui/ThemeToggle";
 import { readThemePreference, setThemeAction } from "../../theme";
 import { getT } from "../../i18n";
 import { themeLabels } from "../../themeLabels";
 import { SignInForm } from "./SignInForm";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function LoginPage() {
   if (actor.kind === "user" && actor.role !== "customer") redirect("/admin");
 
   const [business, theme, t] = await Promise.all([
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     readThemePreference(),
     getT(),
   ]);

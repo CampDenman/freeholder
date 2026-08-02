@@ -8,6 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLocalStorage } from "@/adapters/storage/local";
+import { resetEnvForTests } from "@/core/env";
 import { createS3Storage } from "@/adapters/storage/s3";
 import { storageKey } from "@/adapters/storage/types";
 import type { StorageAdapter } from "@/adapters/storage/types";
@@ -166,14 +167,18 @@ describe("the S3 adapter", () => {
 });
 
 describe("the local adapter refuses production (§18 storage mandate)", () => {
+  // The guard reads through env(), which parses once and caches — so varying
+  // the environment means dropping that cache on both sides of the body.
   const withEnv = (vars: Record<string, string | undefined>, body: () => void) => {
     const previous = { ...process.env };
     Object.assign(process.env, vars);
     for (const [k, v] of Object.entries(vars)) if (v === undefined) delete process.env[k];
+    resetEnvForTests();
     try {
       body();
     } finally {
       process.env = previous;
+      resetEnvForTests();
     }
   };
 

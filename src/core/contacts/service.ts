@@ -313,6 +313,30 @@ export const mergeContacts = defineService({
     const surviving = await load(input.survivingId);
     const duplicate = await load(input.duplicateId);
 
+    // Two contacts, two logins, one survivor: `contacts.user_id` is unique and
+    // 1:1, so the merge can keep only one of them. Every way of choosing
+    // silently is wrong — the loser's `users` row would outlive the contact it
+    // described, leaving a credential that still signs in and resolves to
+    // nobody, and deleting it instead would destroy a password and every
+    // session belonging to a real person on the strength of one click.
+    //
+    // So it refuses, and says which two addresses are in the way. Today this
+    // can only happen between staff logins; when the portal gives customers
+    // accounts it will be common, and the answer there is an explicit "which
+    // login survives" step, not a default hidden in this handler.
+    if (
+      surviving.userId &&
+      duplicate.userId &&
+      surviving.userId !== duplicate.userId
+    ) {
+      throw new ServiceError(
+        "conflict",
+        `Both contacts can sign in — ${surviving.email ?? "the survivor"} and ` +
+          `${duplicate.email ?? "the duplicate"} each have their own login. ` +
+          `Remove one of the two logins first, then merge.`,
+      );
+    }
+
     // Every contact_id FK in the schema, repointed — see CONTACT_REFERENCES.
     for (const reference of CONTACT_REFERENCES) {
       await reference.repoint(ctx.tx, duplicate.id, surviving.id);

@@ -6,9 +6,9 @@ import { notFound } from "next/navigation";
 import { getSection } from "@/modules/cms/service";
 import { renderBlocks } from "@/modules/cms/render";
 import type { BlockNode } from "@/modules/cms/blocks/types";
-import { getBusiness } from "@/core/settings/service";
 import { getLocale, getT } from "../../../../i18n";
 import { requireStaffActor } from "../../../../(admin)/admin/guard";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,7 @@ export default async function SectionPreview({
     getSection.call({ key }, ANONYMOUS),
     getLocale(),
     getT(),
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
   ]);
   if (!section) notFound();
 

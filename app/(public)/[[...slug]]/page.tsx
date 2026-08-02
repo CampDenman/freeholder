@@ -18,8 +18,7 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
-import { getBusiness, setupState } from "@/core/settings/service";
-import { resolvePage } from "@/modules/cms/service";
+import { setupState } from "@/core/settings/service";
 import { collectJsonLd } from "@/modules/cms/blocks/registry";
 import { renderBlocks } from "@/modules/cms/render";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -32,6 +31,8 @@ import {
 } from "@/core/seo/jsonld";
 import { siteOrigin } from "@/core/seo/origin";
 import { getLocale, getT } from "../../i18n";
+import { currentBusiness } from "@/core/settings/read";
+import { publishedPage } from "@/modules/cms/read";
 
 export const dynamic = "force-dynamic";
 
@@ -52,8 +53,8 @@ export async function generateMetadata({
   const { slug } = await params;
   const locale = await getLocale();
   const [page, business] = await Promise.all([
-    resolvePage.call({ slug: pathOf(slug), locale }, ANONYMOUS),
-    getBusiness.call({}, ANONYMOUS),
+    publishedPage(pathOf(slug), locale),
+    currentBusiness(),
   ]);
   if (!page) return {};
 
@@ -95,8 +96,8 @@ export default async function PublicPage({
 
   const [locale, t] = await Promise.all([getLocale(), getT()]);
   const [page, business] = await Promise.all([
-    resolvePage.call({ slug: path, locale }, ANONYMOUS),
-    getBusiness.call({}, ANONYMOUS),
+    publishedPage(path, locale),
+    currentBusiness(),
   ]);
 
   // An instance nobody has set up yet has no pages, and answering 404 at the

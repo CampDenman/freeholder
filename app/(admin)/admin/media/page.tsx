@@ -4,13 +4,13 @@
 import { Image as ImageIcon } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
 import { assetUsage, listAssets, resolveImage } from "@/core/media/service";
-import { getBusiness } from "@/core/settings/service";
 import { Card, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { UploadForm } from "./UploadForm";
 import { AltTextForm } from "./AltTextForm";
 import { DeleteAssetButton } from "./DeleteAssetButton";
+import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export default async function MediaPage() {
   const actor = await requireStaffActor();
   const [library, business, t] = await Promise.all([
     listAssets.call({}, actor),
-    getBusiness.call({}, ANONYMOUS),
+    currentBusiness(),
     getT(),
   ]);
 

@@ -463,6 +463,61 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
       expect(merged.email).toBe("has@example.test");
     });
 
+    it("refuses when both contacts can sign in", async () => {
+      // contacts.user_id is unique and 1:1, so a merge can keep only one
+      // login. Choosing silently either orphans a credential that still signs
+      // in and resolves to nobody, or destroys a real person's password.
+      const [one, two] = await db()
+        .insert(users)
+        .values([
+          { email: "one@example.test", role: "staff" },
+          { email: "two@example.test", role: "staff" },
+        ])
+        .returning();
+      const survivor = await createContact.call({ name: "One" }, STAFF);
+      const duplicate = await createContact.call({ name: "Two" }, STAFF);
+      await db()
+        .update(contacts)
+        .set({ userId: one!.id })
+        .where(eq(contacts.id, survivor.id));
+      await db()
+        .update(contacts)
+        .set({ userId: two!.id })
+        .where(eq(contacts.id, duplicate.id));
+
+      const error = await failure(
+        mergeContacts.call(
+          { survivingId: survivor.id, duplicateId: duplicate.id },
+          OWNER,
+        ),
+      );
+      expect(error.code).toBe("conflict");
+      expect(error.message).toContain("login");
+
+      // Nothing moved: both contacts and both logins survive the refusal.
+      expect(await contactRows()).toHaveLength(2);
+      expect(await db().select().from(users)).toHaveLength(2);
+    });
+
+    it("lets the survivor inherit the duplicate's login", async () => {
+      const [account] = await db()
+        .insert(users)
+        .values({ email: "solo@example.test", role: "customer" })
+        .returning();
+      const survivor = await createContact.call({ name: "No Login" }, STAFF);
+      const duplicate = await createContact.call({ name: "Login" }, STAFF);
+      await db()
+        .update(contacts)
+        .set({ userId: account!.id })
+        .where(eq(contacts.id, duplicate.id));
+
+      const merged = await mergeContacts.call(
+        { survivingId: survivor.id, duplicateId: duplicate.id },
+        OWNER,
+      );
+      expect(merged.userId).toBe(account!.id);
+    });
+
     it("refuses to merge a contact into itself", async () => {
       const contact = await createContact.call({ name: "Solo" }, STAFF);
       const error = await failure(mergeContacts
