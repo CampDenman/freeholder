@@ -36,6 +36,13 @@
       "when": 1785607778792,
       "tag": "0004_media-assets",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785693269064,
+      "tag": "0005_seo-redirects",
+      "breakpoints": true
     }
   ]
 }

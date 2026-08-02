@@ -460,5 +460,30 @@
       "No auto-scroll while dragging near the edge of the canvas",
       "Rich text remains a spec decision: §32 forbids markup blobs, so inline formatting needs a constrained inline-node schema rather than stored HTML"
     ]
+  },
+  {
+    "id": "2026-08-02-core-seo",
+    "date": "2026-08-02",
+    "title": "core/seo — the layer that makes the site findable",
+    "masterRef": "§5, §11",
+    "status": "done",
+    "delivered": [
+      "Absolute canonical, Open Graph and Twitter card on every public page, built from the same row as the content — the SEO contract holds by construction rather than by an owner remembering a field",
+      "JSON-LD decided by what a page is, not by a setting: WebSite + Organization on the home page, BreadcrumbList everywhere else, and the owner schema.org type from setup used verbatim so a Photographer and a HairSalon emit genuinely different data",
+      "A sitemap index over per-locale sitemaps, assembled by calling the services modules named in seo.sitemapSources — the engine never learns what a page, product or gallery is, and a module ships its sitemap entry by existing",
+      "A sitemap source that throws is skipped with a warning: a broken module costs its own pages, not every other module’s",
+      "robots.txt blocking /admin, /login, /portal, /api and /preview — preview renders unpublished drafts, so a crawler following a leaked link must not index a page nobody published",
+      "llms.txt generated from the business profile and the same sitemap sources, listing only what is actually published",
+      "Redirects on slug change, written by cms.updatePage through ctx.callAsSystem in the same transaction as the rename — the page and the record of where it went commit together or not at all",
+      "Redirect resolution follows a chain of renames, gives up rather than looping, and retargets a row when a slug is taken back so a live page always beats a redirect",
+      "APP_URL is the only source of the canonical origin; a request that disagrees with it produces a warning, never the answer — a canonical built from the Host header is how a site tells a crawler its home is on somebody else’s domain"
+    ],
+    "openFollowUps": [
+      "Next matches a dynamic segment but never a dynamic part of one: app/sitemap-[locale].xml built cleanly and 404’d at runtime. The published URL is now a proxy rewrite onto /sitemaps/[locale], and a test asserts the address rather than the route — the build could not have caught this",
+      "Permanent redirects go out as 308, not the 301 §5 names: a server component cannot choose its status code. Permanent-versus-temporary is intact and search engines treat 308 as 301’s equal; the redirect row still records 301/302, so serving a literal 301 is a change in one place",
+      "hreflang is not emitted — §4.9 locale routing has not landed, so there is no second URL to point at",
+      "No generated OG images and no IndexNow ping on publish; both are named in §5 and neither blocks being indexed",
+      "The §15.2 SEO gate still needs the seeded demo site to crawl"
+    ]
   }
 ]

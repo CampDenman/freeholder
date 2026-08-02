@@ -153,9 +153,12 @@ migrations and re-theming all stop being true.
 
 ## Phase 3 — be found (§7 step 6, §5)
 
-- **`core/seo`** — meta builder, JSON-LD per page type, sitemap index and
-  per-locale sitemaps, hreflang, canonicals, redirects on slug change,
-  robots.txt, llms.txt, generated OG images.
+- ~~**`core/seo`**~~ ✅ *(2026-08-02)* — canonicals, Open Graph and Twitter
+  cards, WebSite + Organization JSON-LD on the home page and BreadcrumbList
+  elsewhere, a sitemap index over per-locale sitemaps assembled from module
+  manifests, robots.txt, llms.txt, and automatic redirects on slug change.
+  **Still owed here:** hreflang (waiting on the locale routing below — there is
+  no second URL to point at yet), generated OG images, and the IndexNow ping.
 - **`seed/`** — "Aurora Coast Photography". A prerequisite rather than a nicety:
   §15.2's SEO gate crawls the seeded demo site, and §25's plugin dev harness
   boots it.
