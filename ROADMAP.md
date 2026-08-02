@@ -11,25 +11,31 @@ actually delivered; this records what is still owed.
 
 ---
 
-## Where the project stands (2026-07-30)
+## Where the project stands (2026-08-02)
 
-The spine is real and the product is not started. `main` is green on every
+`freeholder.ai` is a live Freeholder instance serving its own site from blocks
+in its own database, over TLS, and it is now findable. `main` is green on every
 gate — license headers, dependency audit, type-aware lint, typecheck, tests,
 build, and a Docker image proved to answer a real request.
 
 **Built:** the service registry and its invariants (§11), the contact spine
-(§4.1), session auth, business settings and module toggles (§4.8), the HTTP
-edge with CSRF, the Bench design system with light and dark as equals (§32
-tokens), a three-step setup wizard (§13 steps 1–3), the admin shell with
-contacts and settings, storage adapters (§12), and a DigitalOcean droplet
-recipe publishing to GHCR (§21b).
+(§4.1), session auth, rate limiting and security headers, business settings and
+module toggles (§4.8), the HTTP edge with CSRF, the Bench design system with
+light and dark as equals (§32 tokens), a three-step setup wizard (§13 steps
+1–3), the admin shell with contacts and settings, storage adapters (§12), a
+DigitalOcean droplet recipe publishing to GHCR (§21b), `core/media` with sharp
+renditions, the `cms` module with a **visual** block editor (canvas, inline
+editing, drag), and `core/seo` (canonicals, JSON-LD, sitemaps, robots, llms.txt,
+redirects on rename).
 
-**Not started:** every one of the 23 feature modules in §3. `src/modules/` is
-an empty directory. So are `src/mcp/` and `seed/`. Of the eight adapter
-families in §12, only storage exists.
+**Not started:** the money path, the scheduling engine, and everything that
+depends on them. Of the module map in §3, `cms` is the only feature module.
+`src/mcp/` and `seed/` are empty. Of the adapter families in §12, only storage
+exists.
 
-Against the §7 build order: step 1 is roughly half done, steps 2–10 are not
-begun beyond the admin shell.
+Against the §7 build order: step 1 is nearly done, step 6 is half done, and the
+rest is ahead. §38 in MASTER.md is the checklist for what v1 "complete" means;
+Phases 5 and 6 below are how it gets built.
 
 ---
 
@@ -188,15 +194,54 @@ once it does exist.
 Adapter interfaces and `none/` implementations for every remaining family land
 at the head of this phase, so modules stop null-checking absent vendors.
 
-Then `invoicing` + `payments` (Stripe adapter, webhook verification) →
-`catalog` → `cart-checkout` → `orders`, with the §4.3 state machines enforced
-in the service layer, and the Canadian and EU tax-zone templates of §8.
+Then, in dependency order:
 
-## Phase 6 — the rest of v1
+- **`core/tax`** (§4.12) before anything charges anybody. Zones, categories,
+  compound and sequential rates, registrations with threshold watching,
+  exemptions and reverse charge, per-zone inclusive/exclusive display, and
+  `TaxLine` snapshots. Templates for CA, EU, UK, US, AU and NZ. It comes first
+  because an invoice built before tax exists gets tax bolted onto it, and that
+  bolt is visible in the schema forever.
+- **`invoicing` + `payments`** — Stripe adapter, webhook verification, the §4.3
+  state machines enforced in the service layer.
+- **`catalog`** (§4.2) — this is the big one. Option types and values, the
+  generated variant matrix, attributes, `ProductMedia` with roles and per-
+  variant swaps, price lists, and `PriceBreak` in both tiered and volume modes
+  with a single deterministic resolver that can say *why* a price won.
+- **`inventory`** — the `StockMovement` ledger, reservations with expiry,
+  multi-location from the first migration, backorder policy per variant,
+  back-in-stock subscriptions. Suppliers and purchase orders follow.
+- **`shipping`** (§4.11) — zones, the rate engine, packaging and dimensional
+  weight, split shipments, pickup and local delivery windows, returns.
+- **`cart-checkout` → `orders`** — the two modules that turn all of the above
+  into a purchase, plus bundles, upsells and abandoned-cart recovery.
 
-`booking` with Google Calendar sync → `quotes` and `contracts` → `galleries` →
-`portal` → `email-marketing` (needs the mail adapters and §30's `Newsletter`
-and `EmailTemplate`) → `reviews`.
+**Why this order:** every later module prices something, and the price resolver
+plus the tax engine are what "prices something" means. Building checkout first
+would mean building it twice.
+
+## Phase 6 — time, work, and the rest of v1
+
+- **`core/scheduling`** (§4.4) — calendars for the business, each person and
+  each resource; the availability resolver (buffers, lead time, horizon,
+  capacity, compound requirements, assignment, travel time, caps); ICS feeds;
+  the calendar adapter for two-way sync; and the exclusion constraint that
+  makes double-booking impossible rather than unlikely.
+- **`booking`** on top of it — waitlists, group capacity, deposits through the
+  money path, cancellation policies, reschedule tokens, multi-channel
+  reminders, intake forms and waivers as preconditions.
+- **`rentals`** and **`events`**, which are the same engine pointed at a
+  resource and at a seat count.
+- **`quotes`** and **`contracts`** → **`portfolio`** (§4.5: projects, outcomes,
+  before/after, testimonials) → **`galleries`** → **`portal`**.
+- **`crm`** (§30) — deals, tasks, notes, segments, consent records, imports,
+  the duplicate queue — and **`inbox`**, which is the spine made visible.
+- **`automations`**, then **`email-marketing`** (needs the mail adapters and
+  §30's `Newsletter` and `EmailTemplate`) → **`reviews`**.
+- **`reporting`** and the accounting export.
+
+§38 is the checklist for what "done" means here: it names the connective work
+that makes a list of modules feel like a product rather than a suite.
 
 ## Phase 7 — the moat (§37)
 
