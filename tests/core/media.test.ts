@@ -15,12 +15,18 @@ import {
   toVariantSet,
 } from "@/core/media/variants";
 import {
+  assetUsage,
   deleteAsset,
   listAssets,
   resolveImage,
   setAltText,
   uploadAsset,
 } from "@/core/media/service";
+import {
+  createPage,
+  publishPage,
+  resolvePage,
+} from "@/modules/cms/service";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import {
   ANONYMOUS,
@@ -252,5 +258,82 @@ describe.runIf(hasDatabase)("the asset library", () => {
     );
     const error = await failure(deleteAsset.call({ id: asset.id }, STAFF));
     expect(error.code).toBe("permission");
+  });
+});
+
+describe.runIf(hasDatabase)("knowing what a file is still used by", () => {
+  beforeEach(async () => {
+    await truncateSpine();
+    resetStorageForTests();
+  });
+
+  it("finds a reference nested anywhere in a block tree", async () => {
+    const asset = await uploadAsset.call(
+      { filename: "used.png", contentType: "image/png", bytes: await png(200, 200) },
+      STAFF,
+    );
+
+    // Deliberately nested: an image inside a columns block must be found as
+    // readily as one at the top level, which is what `$.**` buys.
+    await createPage.call(
+      {
+        slug: "nested",
+        title: "Nested",
+        blocks: [
+          {
+            id: "row",
+            type: "columns",
+            props: {},
+            children: [
+              { id: "img", type: "image", props: { assetId: asset.id } },
+            ],
+          },
+        ],
+      },
+      STAFF,
+    );
+
+    expect(await assetUsage.call({ id: asset.id }, STAFF)).toEqual({
+      pages: 1,
+      sections: 0,
+    });
+  });
+
+  it("reports nothing for a file no page mentions", async () => {
+    const asset = await uploadAsset.call(
+      { filename: "loose.png", contentType: "image/png", bytes: await png(120, 120) },
+      STAFF,
+    );
+    await createPage.call({ slug: "other", title: "Other" }, STAFF);
+
+    expect(await assetUsage.call({ id: asset.id }, STAFF)).toEqual({
+      pages: 0,
+      sections: 0,
+    });
+  });
+
+  it("leaves a gap rather than breaking the page when a used file is deleted", async () => {
+    // The whole reason usage is a warning and not a refusal: an owner may well
+    // want the file gone, and the site must survive the decision.
+    const asset = await uploadAsset.call(
+      { filename: "doomed.png", contentType: "image/png", bytes: await png(300, 200) },
+      STAFF,
+    );
+    const page = await createPage.call(
+      {
+        slug: "shows-it",
+        title: "Shows it",
+        blocks: [{ id: "img", type: "image", props: { assetId: asset.id } }],
+      },
+      STAFF,
+    );
+    await publishPage.call({ id: page.id, published: true }, STAFF);
+
+    await deleteAsset.call({ id: asset.id }, OWNER);
+
+    // The page is still there and still served; the image simply resolves to
+    // nothing.
+    expect(await resolvePage.call({ slug: "shows-it" }, ANONYMOUS)).not.toBeNull();
+    expect(await resolveImage.call({ id: asset.id }, ANONYMOUS)).toBeNull();
   });
 });

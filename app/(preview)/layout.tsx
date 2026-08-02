@@ -42,6 +42,37 @@ document.addEventListener("mouseover", function (event) {
   });
   if (el) el.setAttribute("data-hovered", "true");
 });
+// Typing on the canvas. The element carries which prop it shows and the block
+// it belongs to; the editor owns the tree and decides what to do with it.
+//
+// Listens on input rather than blur, so the controls stay in step while
+// typing. The canvas never writes to the tree itself; it only reports what was
+// typed, and the editor debounces before saving.
+document.addEventListener("input", function (event) {
+  var el = event.target instanceof Element ? event.target : null;
+  if (!el || !el.hasAttribute("data-editable-prop")) return;
+  var block = el.closest("[data-block-id]");
+  if (!block) return;
+  parent.postMessage({
+    source: "freeholder-preview",
+    edit: {
+      blockId: block.getAttribute("data-block-id"),
+      prop: el.getAttribute("data-editable-prop"),
+      value: el.innerText
+    }
+  }, window.location.origin);
+});
+
+// Enter would insert a line break inside a heading; blur commits instead.
+document.addEventListener("keydown", function (event) {
+  var el = event.target instanceof Element ? event.target : null;
+  if (!el || !el.hasAttribute("data-editable-prop")) return;
+  if (event.key === "Enter" && el.tagName !== "DIV") {
+    event.preventDefault();
+    el.blur();
+  }
+});
+
 window.addEventListener("message", function (event) {
   if (event.origin !== window.location.origin) return;
   if (!event.data || event.data.source !== "freeholder-editor") return;
@@ -61,6 +92,8 @@ window.addEventListener("message", function (event) {
 const CANVAS_CSS = `
   .fh-canvas { display: grid; gap: 2rem; max-width: 48rem; margin: 0 auto; padding: 2.5rem 1.5rem; }
   [data-block-id] { outline-offset: 3px; cursor: pointer; }
+  [data-editable-prop] { cursor: text; }
+  [data-editable-prop]:focus { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
   [data-hovered] { outline: 1px dashed var(--fh-rule); }
   [data-selected] { outline: 2px solid var(--fh-accent); }
 `;

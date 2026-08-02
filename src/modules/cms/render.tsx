@@ -45,13 +45,31 @@ async function renderBlock(
     ? await definition.resolve(node.props, ctx)
     : (undefined as never);
 
+  /**
+   * Marks an element as directly typeable, in the preview only.
+   *
+   * A block spreads this onto whichever element shows the prop — only the
+   * block knows which that is. On the public surface it returns nothing, so
+   * the markup a visitor receives has no editor attributes in it at all.
+   */
+  const editable = identify
+    ? (prop: string) => ({
+        contentEditable: "plaintext-only",
+        suppressContentEditableWarning: "true",
+        "data-editable-prop": prop,
+        // Typing into a heading should not also trigger the click that
+        // selects it, and spellcheck squiggles on a design surface are noise.
+        spellCheck: "false",
+      })
+    : () => undefined;
+
   const children = node.children
     ? await renderBlocks(node.children, ctx)
     : undefined;
 
   const rendered = definition.render({
     props: node.props,
-    ctx,
+    ctx: { ...ctx, editable },
     resolved,
     children,
   });

@@ -32,7 +32,7 @@ export const heading = defineBlock({
     align: z.enum(["start", "center"]).default("start"),
   }),
   starter: () => ({ text: "A new heading", level: 2 as const }),
-  render: ({ props }) => {
+  render: ({ props, ctx }) => {
     const Tag = `h${props.level}` as const;
     const size = {
       1: "text-4xl sm:text-5xl font-bold tracking-tight text-balance",
@@ -41,7 +41,10 @@ export const heading = defineBlock({
       4: "text-base font-semibold",
     }[props.level];
     return (
-      <Tag className={cx(size, props.align === "center" && "text-center")}>
+      <Tag
+        {...ctx.editable?.("text")}
+        className={cx(size, props.align === "center" && "text-center")}
+      >
         {props.text}
       </Tag>
     );
@@ -62,23 +65,31 @@ export const text = defineBlock({
   }),
   starter: () => ({ body: "Write something here." }),
   fieldHints: { body: { control: "multiline" } },
-  render: ({ props }) => (
-    <div
-      className={cx(
-        "grid gap-4 text-ink-muted",
-        props.measure && "max-w-prose",
-        props.align === "center" && "text-center justify-items-center",
-      )}
-    >
-      {props.body
-        .split(/\n{2,}/)
-        .map((paragraph) => paragraph.trim())
-        .filter(Boolean)
-        .map((paragraph, i) => (
-          <p key={i}>{paragraph}</p>
-        ))}
-    </div>
-  ),
+  render: ({ props, ctx }) => {
+    const editing = ctx.editable?.("body");
+    return (
+      <div
+        {...editing}
+        className={cx(
+          "grid gap-4 text-ink-muted",
+          props.measure && "max-w-prose",
+          props.align === "center" && "text-center justify-items-center",
+        )}
+      >
+        {/* Paragraphs when rendering for real; one editable region while
+            typing, because a caret cannot cross sibling elements sensibly and
+            splitting on blank lines mid-sentence would fight the typist. The
+            stored value is the same string either way. */}
+        {editing
+          ? props.body
+          : props.body
+              .split(/\n{2,}/)
+              .map((paragraph) => paragraph.trim())
+              .filter(Boolean)
+              .map((paragraph, i) => <p key={i}>{paragraph}</p>)}
+      </div>
+    );
+  },
 });
 
 /* --------------------------------------------------------------- actions */
@@ -93,9 +104,10 @@ export const button = defineBlock({
     variant: z.enum(["solid", "quiet"]).default("solid"),
   }),
   starter: () => ({ label: "Get in touch", href: "/contact" }),
-  render: ({ props }) => (
+  render: ({ props, ctx }) => (
     <a
       href={props.href}
+      {...ctx.editable?.("label")}
       className={cx(
         "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold",
         props.variant === "solid"
