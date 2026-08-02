@@ -12,7 +12,7 @@ This document is the canonical source of truth for the project. §1 is excerpted
 **Build contract** — 9. Stack Decisions · 10. Repository Layout · 11. Module Contract · 12. Adapter Contract · 13. Setup Wizard · 14. Replit-First Deploy Story · 15. Quality Gates (CI) · 16. Agent Conventions
 **Deployment** — 17. Configuration Model · 18. Recipe Anatomy & Mandates · 19. Support Tiers · 20. Recipe: Replit · 21. Recipe: DigitalOcean · 22. create-freeholder · 23. Migration Matrix
 **Extensibility** — 24. Plugins: The Design Bet · 25. Plugin DX · 26. Trust Model · 27. Federated Registries · 28. The Living Platform Contract · 29. What This Buys the Ecosystem
-**Going big** — 30. CRM Depth · 31. Front-Site AI Assistant · 32. Universal Drag-and-Drop Editor · 33. Social Media Hub · 34. Sharing DNA · 35. React Native App · 36. Mined Roadmap (WordPress & Shopify) · 37. The Self-Building Instance
+**Going big** — 30. CRM Depth · 31. Front-Site AI Assistant · 32. Universal Drag-and-Drop Editor · 33. Social Media Hub · 34. Sharing DNA · 35. React Native App · 36. Mined Roadmap (WordPress & Shopify) · 37. The Self-Building Instance · 38. The Day-One Surface
 
 ---
 
@@ -115,28 +115,35 @@ freeholder/
 │   ├── settings             # Business profile, branding, module toggles, adapter config
 │   ├── i18n                 # Locales, translations, currency, formats — used by every module
 │   ├── locations            # Business locations, NAP, hours, service areas → LocalBusiness schema
+│   ├── scheduling           # Calendars (person / business / resource), availability engine, ICS, external sync
+│   ├── tax                  # Zones, categories, rates, registrations, exemptions; adapter seam for Stripe Tax et al
 │   ├── notifications        # In-app + email notification fanout
 │   └── jobs                 # Background queue, scheduled tasks
 │
 ├── commerce/                # Sell things
-│   ├── catalog              # Products (physical / digital / service), variants, pricing
-│   ├── cart-checkout        # Cart, checkout, tax + shipping rules
-│   ├── orders               # Order lifecycle, fulfillment, digital delivery
+│   ├── catalog              # Products, option matrices, variants, attributes, media, price lists & breaks
+│   ├── inventory            # Stock ledger, reservations, multi-location, suppliers & purchase orders
+│   ├── cart-checkout        # Cart, checkout, tax + shipping resolution, bundles & upsells
+│   ├── orders               # Order lifecycle, fulfillment, digital delivery, returns/RMA
+│   ├── shipping             # Zones, rate engine, packaging & dimensional weight, pickup/local delivery, carrier adapters
 │   ├── payments             # Invoice + Payment core, tips & pay-what-you-want, provider adapters (Stripe, PayPal)
 │   ├── promotions           # Coupons, gift cards, abandoned-cart recovery
-│   └── subscriptions        # Memberships, recurring billing, gated content & paywalls (recurring or one-time unlock)
+│   └── subscriptions        # Memberships, recurring billing, passes, gated content & paywalls
 │
 ├── services/                # Sell time & expertise
-│   ├── booking              # Availability, calendars, bookings, reminders, 2-way cal sync
+│   ├── booking              # Bookings on core/scheduling: capacity, waitlists, deposits, reminders, policies
+│   ├── rentals              # Equipment & space hire — catalog items whose availability is a resource calendar
+│   ├── events               # Classes, workshops, ticketed events; schema.org Event, ICS, seat inventory
 │   ├── quotes               # Quote pipeline: draft → sent → negotiation → accepted
-│   ├── contracts            # E-sign: templates, click-to-sign, audit trail
+│   ├── contracts            # E-sign: templates, click-to-sign, waivers, audit trail
 │   └── invoicing            # Manual invoices, deposits, payment plans, late fees, receipts
 │
 ├── content/                 # Be found & show work
 │   ├── cms                  # Pages, blog, blocks, nav, redirects
+│   ├── portfolio            # Projects & case studies, collections, before/after, testimonials
 │   ├── galleries            # Public portfolio + private client galleries (proofing, delivery, sales)
 │   ├── forms                # Lead capture, intake questionnaires → contacts + submissions
-│   └── seo                  # RIBA browse hierarchy, sitemaps, schema.org, hreflang, OG images, llms.txt, programmatic location/service pages
+│   └── seo                  # RIBA browse hierarchy, sitemaps, schema.org, hreflang, OG images, llms.txt, product & location feeds
 │
 ├── growth/                  # Keep & grow the audience
 │   ├── email-marketing      # Broadcasts, simple automations, list segments (spine-native)
@@ -147,7 +154,11 @@ freeholder/
 │
 └── platform/                # Operate & extend
     ├── admin                # The admin app shell: dashboards, CRUD for everything
+    ├── crm                  # Pipelines & deals, tasks, notes, segments, consent, imports, duplicate queue
+    ├── inbox                # One threaded conversation per contact across email, forms, chat, SMS, social
+    ├── automations          # Visual trigger → condition → action over spine events; modules contribute verbs
     ├── portal               # Customer portal: their quotes, invoices, bookings, galleries, files, messages
+    ├── reporting            # Saved views, cohort & funnel reports, accounting export (CSV, QuickBooks/Xero shapes)
     ├── api                  # REST API + API keys + webhooks (outbound)
     └── mcp                  # Bundled MCP server exposing the service layer to AI agents
 ```
@@ -175,12 +186,128 @@ freeholder/
 
 ### 4.2 Catalog (what's for sale)
 
+One catalog for everything the business sells — a print, a wedding package, a
+downloadable preset pack, a rented lens, a ten-class pass. `kind` decides which
+extra tables apply; nothing else forks. A gallery selling prints, a booking
+taking a deposit and a checkout selling a hoodie all resolve to the same
+`ProductVariant`, which is what makes one order able to contain all three.
+
 | Entity | Purpose | Key fields |
 |---|---|---|
-| `Product` | Anything sellable. `kind: physical \| digital \| service` | name, slug, kind, description, media[], status, seo fields |
-| `ProductVariant` | Price point / option combo. | product_id, sku, price_cents, currency, inventory_qty (physical), file_asset_id (digital), options (jsonb) |
-| `ServiceOffering` | Service-specific config layered on a `service` product. | product_id, duration_min, buffer_before/after_min, location_type (in_person/virtual/client_site), deposit_type (none/fixed/percent), deposit_value, cancellation_policy, max_per_day |
-| `PriceRule` | Payment options per offering. | product_id, mode (full/deposit_balance/payment_plan/hourly), plan_schedule (jsonb) |
+| `Product` | Anything sellable. `kind: physical \| digital \| service \| rental \| bundle \| pass` | name, slug, kind, subtitle, description (blocks), brand, status (draft/active/archived), visibility (public/unlisted/member_only), tax_category_id, seo (jsonb), schema_type, published_at |
+| `ProductVariant` | One buyable configuration. | product_id, sku, gtin, position, option_values[], price_cents, compare_at_cents, cost_cents, currency, weight_g, dimensions (l/w/h mm), requires_shipping, is_default, status, file_asset_id (digital), duration_min (service) |
+| `OptionType` | A dimension a product varies along. Reusable across products. | name, slug, kind (select/swatch/text/number/file), display (dropdown/swatch/button), position |
+| `OptionValue` | One choice within a dimension. | option_type_id, value, label, swatch (hex or asset_id), position, price_delta_cents (nullable), sku_fragment |
+| `ProductOption` | Which dimensions this product uses, in order. | product_id, option_type_id, position, required |
+| `Attribute` / `AttributeValue` | Facts about a product that are *not* buyable choices — material, focal length, care instructions, certifications. Powers filtering, comparison tables and structured data. | key, label, kind (text/number/bool/enum/measure), unit, group, is_filterable, is_comparable |
+| `ProductMedia` | Ordered, unlimited media per product, and optionally per variant. | product_id, variant_id (nullable), asset_id, role (hero/gallery/swatch/size_chart/lifestyle/360/model), position, alt_text, focal_point |
+| `ProductRelation` | Merchandising links. | product_id, related_product_id, kind (upsell/cross_sell/accessory/replacement/variant_of/bundle_component), position |
+| `BundleComponent` | What a `bundle` contains. | bundle_product_id, component_variant_id, qty, price_mode (sum/fixed/percent_off) |
+| `ServiceOffering` | Service-specific config layered on a `service` product. | product_id, duration_min, buffer_before/after_min, location_type (in_person/virtual/client_site), deposit_type (none/fixed/percent), deposit_value, cancellation_policy_id, intake_form_id, waiver_template_id, capacity, assignment (specific/pool/round_robin), calendar_ids[], travel_time_min |
+| `PriceRule` | How an offering may be paid for. | product_id, mode (full/deposit_balance/payment_plan/hourly/retainer), plan_schedule (jsonb) |
+
+**Options are a matrix, not a list.** An owner defines the dimensions (Size,
+Colour, Finish) and the values in each, and the variant grid is *generated* —
+every combination proposed, individually enable-able, individually priced and
+stocked. Adding a fourth colour later adds a row per existing size rather than
+asking the owner to re-enter a table. `OptionValue.price_delta_cents` exists so
+"+$15 for the large" does not require touching every variant, and a variant's
+own `price_cents` always wins over a delta when both are set.
+
+**Media is unlimited, ordered, and typed by role.** A product carries as many
+assets as the owner wants: photographs, a video, a 360 spin, a glTF/USDZ model
+for AR view-in-room, a size chart, a PDF spec sheet. `role` is what lets the
+storefront show the right thing in the right place without the owner arranging
+a gallery by hand, and `variant_id` is what makes choosing "Sage" swap the
+photograph. The media pipeline (§4.5) is the same one the CMS uses — one
+upload, responsive renditions everywhere.
+
+#### Pricing
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `PriceList` | A named set of prices: a currency, a customer group, a season, a wholesale sheet. | name, currency, kind (retail/wholesale/member/sale/contract), audience (jsonb: segment query, member tier, affiliate program), starts_at, ends_at, priority |
+| `PriceListEntry` | The price of one variant in one list. | price_list_id, variant_id, amount_cents |
+| `PriceBreak` | Unit-price discounting by quantity. | price_list_id, variant_id (nullable — may apply to a product or a whole list), min_qty, max_qty (nullable), unit_amount_cents *or* percent_off, mode (tiered/volume) |
+| `CustomerGroup` | Who a price list is for. Membership is a saved segment, not a hand-list. | name, segment (jsonb), default_price_list_id, tax_exempt, exemption_ref |
+
+**Unit-price discounting is first-class, and the two modes are different
+arithmetic.** *Volume* pricing charges every unit at the rate the total
+quantity earns — 12 units at the 10+ rate. *Tiered* pricing charges each band
+at its own rate — the first 9 at one price, the tenth onward at another. Every
+serious catalog needs whichever one the owner's trade actually uses, and
+guessing produces invoices that are wrong by a few dollars in a way nobody
+catches for a year. Both ship; the product says which it uses.
+
+**Price resolution is one function, and it is deterministic.** Given a variant,
+a contact, a currency, a quantity and a moment, exactly one price wins, and the
+order of precedence is fixed: a contract price for that contact, then the
+highest-priority active list the contact qualifies for, then a sale list, then
+the variant's own price. The resolved price and the reason it won are both
+returned, because "why is this $40?" is a question owners ask constantly and a
+platform that cannot answer it teaches them not to trust it. Prices are never
+auto-converted between currencies (§4.9): a variant is either priced in a
+currency or unavailable in it.
+
+#### Inventory
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `InventoryItem` | Stock of one variant at one location. | variant_id, location_id, on_hand, reserved, incoming, safety_stock, reorder_point, bin |
+| `StockMovement` | Append-only ledger. Every change to on_hand is a row, never an UPDATE. | inventory_item_id, delta, reason (sale/return/adjustment/transfer/receipt/damage/count), reference (order/shipment/purchase order), actor, note, at |
+| `StockReservation` | Held stock during checkout or against an unfulfilled order. | inventory_item_id, qty, holder (cart/order/booking), expires_at |
+| `BackInStockSubscription` | Who to tell when it returns. | variant_id, contact_id, location_id (nullable), notified_at |
+| `Supplier` / `PurchaseOrder` / `PurchaseOrderLine` | Where stock comes from and what it cost. | supplier: name, contact_id, lead_time_days, currency · PO: supplier_id, status (draft/ordered/partial/received), expected_at · line: variant_id, qty, unit_cost_cents, received_qty |
+
+**Stock is a ledger, not a number.** `on_hand` is derived from
+`StockMovement`, so "we are three units short and nobody knows why" is always
+answerable. Overselling is prevented by `StockReservation` taken at
+add-to-cart with an expiry, not by an optimistic decrement at checkout —
+a reservation that expires returns the stock without a human noticing.
+
+**Tracking is optional per product**, because a printmaker with 400 SKUs and a
+consultant selling one service should not meet the same screen. Untracked
+products simply have no `InventoryItem`, and every code path treats absence as
+"always available" rather than as zero.
+
+**Multi-location from the first migration** (`location_id` references §4.10),
+because retrofitting a location column onto a stock system that assumed one
+warehouse is a rewrite of every query. A single-location business never sees
+the concept: one location is created at setup and the UI hides the column.
+
+**Backorder policy is per variant** — refuse, allow with a stated ship date, or
+allow silently — and the storefront says which, because "in stock" that turns
+out to mean "in six weeks" is the fastest way to earn a chargeback.
+
+#### Digital goods, rentals and passes
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `DigitalFulfillment` | What a digital purchase grants. | variant_id, asset_ids[], download_limit, expires_after_days, license_template_id, watermark_policy |
+| `LicenseKey` | Issued per purchase where the goods need one. | variant_id, order_item_id, contact_id, key, status (issued/active/revoked), seats, activations (jsonb) |
+| `RentalTerms` | For `rental` products — equipment, venues, gear. | variant_id, unit (hour/day/week), min_units, max_units, buffer_before/after_hours, deposit_cents, damage_policy, replacement_value_cents |
+| `Pass` | Prepaid entitlement: ten classes, five sessions, an annual membership. | product_id, kind (count/period/unlimited), credits, valid_days, applies_to (jsonb: services, categories), transferable |
+| `PassBalance` | What a contact has left. | contact_id, pass_id, invoice_id, credits_remaining, starts_at, expires_at |
+
+A rental is a bookable *thing* rather than a bookable *person*, so it reuses
+the scheduling engine's resource calendars (§4.4) rather than inventing a
+second availability model. A pass is bought like any other product, and spent
+at booking time or at checkout — which is why `PassBalance` is checked by the
+same price resolver as everything else, and why redeeming one still produces an
+`Invoice` for zero with the pass named on it. Money in and value out stay
+visible even when no card is charged.
+
+#### Merchandising and feeds
+
+Wishlists, saved carts, "notify me", recently viewed, and comparison tables all
+hang off the spine — a wishlist is a `Contact` and a list of variants, not a
+cookie. **Product feeds** (Google Merchant Center, Meta catalog) are generated
+from the same rows that render the page, on the same schedule as the sitemap:
+an owner who has entered a GTIN, a price and a photograph has already done the
+work a feed needs, and asking them to do it again in a spreadsheet is how
+catalogs go stale. Product pages emit `Product` + `Offer` + `AggregateRating`
+JSON-LD by construction (§5), including `availability`, `priceValidUntil`,
+shipping and return policy — the fields Google actually reads.
 
 ### 4.3 Money (the convergence path)
 
@@ -217,19 +344,112 @@ Invoice:  draft → sent → viewed → partially_paid → paid | overdue | void
 Payment:  created → processing → succeeded | failed → (refund: partial | full)
 ```
 
-### 4.4 Time (booking)
+### 4.4 Time (the scheduling engine)
+
+Scheduling is the half of this platform that a spreadsheet cannot fake, and the
+half where being slightly wrong costs an owner a client rather than a rounding
+error. The model separates three things that every simplistic booking tool
+conflates: **who or what is being booked** (a calendar), **what may be booked
+on it** (availability), and **what was booked** (a booking).
+
+#### Calendars and resources
 
 | Entity | Purpose | Key fields |
 |---|---|---|
-| `Calendar` | An owner/staff bookable resource. | user_id, external_sync (google/microsoft), sync_token |
-| `AvailabilityRule` | Recurring open hours + exceptions. | calendar_id, weekday, start/end, timezone, effective range |
-| `Booking` | A scheduled appointment. | contact_id, service_offering_id, calendar_id, starts_at, ends_at, status, location, invoice_id (deposit), reschedule_token, notes, intake_submission_id |
-| `BookingReminder` | Scheduled notifications. | booking_id, channel (email/sms), send_at, sent_at |
+| `Calendar` | Anything whose time can be spent. A person, the business itself, a room, a chair, a kiln, a van, a rentable lens. | kind (person/business/resource), name, slug, user_id (nullable — a resource has no login), location_id, timezone, capacity_default, color, external_sync (google/microsoft/caldav), sync_token, booking_horizon_days, min_notice_min, status |
+| `CalendarMembership` | Which calendars a service may draw on, and how. | calendar_id, service_offering_id, role (primary/assistant/resource), priority, skill_level |
+| `AvailabilityRule` | Recurring open hours. | calendar_id, weekday, starts, ends, effective_from, effective_to, kind (bookable/on_call/admin) |
+| `AvailabilityException` | A specific date that overrides the pattern — holidays, a late start, an extra Saturday. | calendar_id, date_range, kind (closed/open/reduced), starts, ends, reason |
+| `ExternalBusyBlock` | Time imported from a synced calendar. Never shown to customers, always respected. | calendar_id, source_ref, starts_at, ends_at, transparency |
+
+**A person's calendar and the business's calendar are different objects, and
+both exist from day one.** A solo owner has one of each and never notices; the
+moment they hire someone, or buy a second chair, or start renting the studio
+out, nothing has to be restructured. This is the single most expensive
+assumption to retrofit in a booking system and it costs almost nothing to get
+right at the start: `kind` on `Calendar`, and a booking that names a calendar
+rather than a user.
+
+**Resources are calendars too.** A massage room, a photo studio, a rental lens
+and a bookable van all behave identically — they have hours, they can be
+double-booked by mistake, and they need to be free at the same moment the
+person is. Making them the same entity means "this service needs a therapist
+*and* a room" is a query, not a feature.
+
+#### Availability
+
+Availability is **computed, never stored**. The answer to "what can I book?" is
+derived at request time from the rules, the exceptions, existing bookings, the
+external busy blocks, the buffers, the lead time, the horizon, and the capacity
+— because every cached answer is a double-booking waiting for a cache miss.
+
+The resolver takes a service, a date range, a timezone and optionally a
+preferred person, and returns slots. It accounts for:
+
+- **Buffers** before and after, per service, so a photographer is not booked
+  back-to-back across town.
+- **Lead time** (`min_notice_min`) and **horizon** (`booking_horizon_days`) —
+  no bookings in the next two hours, none more than six months out.
+- **Granularity and alignment** — 15-minute increments, or on the hour only.
+- **Capacity**: 1:1, a class of twelve, or unlimited (a webinar). Capacity is
+  per slot, and a booking holds seats rather than the whole slot.
+- **Compound requirements**: a service needing a person *and* a room only
+  offers a slot when both are free, chosen together rather than in sequence.
+- **Assignment**: a named person, any qualified person, or round-robin by load
+  — with the chosen calendar recorded so the customer is told who they got.
+- **Travel time and service areas** (§4.10): a mobile service checks whether
+  the previous booking's location leaves time to arrive, and refuses slots that
+  a map says are impossible.
+- **Daily and weekly caps**: `max_per_day`, and a weekly ceiling, because
+  burnout is a scheduling bug.
+
+#### Bookings
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `Booking` | A scheduled commitment. | contact_id, service_offering_id, calendar_id, secondary_calendar_ids[], starts_at, ends_at, timezone_at_booking, status, location_id, location_detail (address/meeting URL), capacity_used, invoice_id, pass_balance_id, reschedule_token, intake_submission_id, waiver_id, source (site/admin/agent/import), notes, cancellation_reason |
+| `BookingSeries` | Recurring appointments and multi-session courses. | rule (RRULE), count, service_offering_id, contact_id, status |
+| `BookingParticipant` | Group bookings, classes, and a client bringing two people. | booking_id, contact_id (nullable for a named guest), name, status (registered/attended/no_show), seat_count |
+| `Waitlist` | Who wants a full slot, in order. | service_offering_id, calendar_id (nullable), window (range), contact_id, position, notify_state |
+| `CancellationPolicy` | Named, reusable, attached per service. | name, free_until_hours, fee_type (none/fixed/percent/forfeit_deposit), fee_value, reschedule_limit, no_show_fee_cents |
+| `BookingReminder` | Scheduled notifications, multi-channel. | booking_id, channel (email/sms/push), offset_min, send_at, sent_at, status |
 
 ```
-Booking:  requested → confirmed → completed | no_show
-          any → rescheduled (new row, links to prior) | cancelled (policy applied → refund/credit per rules)
+Booking:  requested → confirmed → in_progress → completed | no_show
+          any → rescheduled (new row, links to prior) | cancelled (policy applied → refund/credit/fee)
+Series:   active → paused → completed | cancelled   (per-occurrence overrides allowed)
 ```
+
+**Rules:**
+
+- **Store UTC; render in two timezones.** Every customer-facing surface shows
+  the time in the customer's zone *and* the business's, labelled. Timezone
+  confusion is the single largest cause of no-shows, and `timezone_at_booking`
+  is retained so a DST change between booking and appointment is a known
+  quantity rather than a surprise.
+- **A booking is not a payment.** Deposits, balances and no-show fees all
+  resolve to `Invoice` + `Payment` like everything else (§4.3). A free
+  consultation produces no invoice at all.
+- **Rescheduling creates a new row** linked to the prior one, so the history of
+  a moved appointment survives. Customers reschedule through a signed
+  `reschedule_token` link, with no login and no support email.
+- **Cancellation is policy-driven, not ad hoc.** The policy attached to the
+  service decides whether a refund, a credit, or a fee applies, and the
+  customer saw the terms before booking.
+- **Intake and waivers are part of the booking, not an afterthought**: a
+  service may require a form submission (§4.6) and an e-signed waiver (§4.3's
+  `Contract`) before the slot is confirmed, and the booking holds a reference
+  to both.
+- **Everything emits `TimelineEvent`s** — requested, confirmed, reminded,
+  rescheduled, attended, no-showed — so the CRM shows a client's whole history
+  without booking knowing the CRM exists.
+- **ICS everywhere**: a subscribable feed per calendar for the owner, and an
+  attachment on every confirmation for the customer. Two-way sync is the
+  calendar adapter family (§12); the ICS path works with no adapter at all.
+- **Double-booking is prevented in the database**, not in the UI: an exclusion
+  constraint over `(calendar_id, tstzrange)` for capacity-1 calendars. Two
+  concurrent requests for the last slot must not both succeed, and no amount of
+  careful service-layer checking survives two processes.
 
 ### 4.5 Media & Galleries
 
@@ -242,6 +462,38 @@ Booking:  requested → confirmed → completed | no_show
 | `GalleryAccessLog` | Views/downloads → also emits TimelineEvents. | gallery_id, contact_id, action, asset_id, at |
 
 Print/digital sales from a gallery: `GalleryItem` links to `ProductVariant` price sheets → standard `Order` flow. No parallel commerce path.
+
+#### Portfolio and proof of work
+
+A portfolio is not a folder of images. It is the argument the business makes
+for itself, and the part of the site that converts — which means it needs
+structure a search engine and a skim-reading human can both follow.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `Project` | One piece of work, shown publicly. A wedding, a rebrand, a kitchen, a case study. | title, slug, summary, blocks (jsonb), client_contact_id (nullable), client_display_name, services[] (product ids), location_id, occurred_on, cover_asset_id, gallery_id, status, featured, seo (jsonb) |
+| `ProjectOutcome` | The measurable claim, if there is one. Rendered as a stat strip, and as structured data. | project_id, label, value, unit, method (how it was measured) |
+| `ProjectMedia` | Ordered media, with before/after pairing. | project_id, asset_id, role (hero/gallery/before/after/process/detail), pair_key, position, caption |
+| `Collection` | A curated grouping — "Weddings", "Editorial", "2026". One project may sit in several. | name, slug, kind (portfolio/service/industry/season), description, cover_asset_id, position |
+| `Testimonial` | A quote, attributable and linkable to the work it describes. | contact_id (nullable), display_name, role, body, rating, project_id, asset_id, consent (jsonb: given_at, method), status, display_locations[] |
+
+**Rules:**
+
+- **A project links to the services it used**, so a service page can list the
+  work that proves it and a project can link back to what it costs to hire.
+  That reciprocal link is the whole SEO argument for portfolios, and it cannot
+  be made by a gallery of loose images.
+- **Before/after is a pairing, not two uploads.** `pair_key` is what lets the
+  renderer show a slider rather than two pictures side by side.
+- **Client work has a consent state.** A `Project` naming a real client carries
+  the permission that made it publishable, and `client_display_name` exists so
+  "a Fortune 500 retailer" is a first-class option rather than a fib.
+- **Testimonials are contacts**, not free text, wherever the person is known —
+  so a review, a project and an invoice all hang off the same human, and
+  `AggregateRating` on a service page is computed rather than typed.
+- **Every project emits `CreativeWork` (or a subtype) JSON-LD** with its images,
+  date, and the services it relates to, and appears in the sitemap. The
+  portfolio *is* the content strategy for most of these businesses.
 
 ### 4.6 Content, Forms, SEO
 
@@ -317,6 +569,105 @@ NAP (Name, Address, Phone) consistency is the backbone of local SEO. It's captur
 - Multi-location businesses get `/locations/` as a root-linked index page with each location one hop below — RIBA-compliant by construction.
 - Bookings can be tied to a location (`Booking.location_id`); tax zones and service availability can vary per location.
 
+### 4.11 Shipping & fulfilment
+
+Shipping is where an otherwise good store loses money quietly: a flat rate that
+undercharges on heavy items, a free-shipping threshold that forgot about
+international, a package that was never marked as sent. The model is a rate
+*engine* rather than a rate *field*.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `ShippingZone` | Where a set of methods applies. Matched most-specific-first. | name, countries[], regions[], postal_patterns[], priority |
+| `ShippingMethod` | A way to get goods to a zone. | zone_id, name, carrier (manual/adapter id), service_level, kind (flat/weight/price/item/dimensional/calculated/free/pickup/local_delivery), config (jsonb), handling_fee_cents, delivery_estimate (min/max days), taxable, visible_when (jsonb: cart rules) |
+| `RateBand` | The brackets a non-flat method charges by. | method_id, min, max, amount_cents, per_unit_cents |
+| `PackagingBox` | What the owner actually ships in — drives dimensional weight and box selection. | name, inner l/w/h, max_weight_g, tare_weight_g |
+| `Fulfillment` | Part or all of an order leaving. | order_id, location_id, status (pending/picking/packed/shipped/delivered/failed/returned), items[], box_id, weight_g, carrier, service, tracking_number, tracking_url, shipped_at, delivered_at |
+| `DeliveryWindow` | For local delivery and pickup. | location_id, date, starts, ends, capacity, cutoff_at |
+| `ReturnRequest` / `ReturnItem` | RMA. | order_id, contact_id, reason, status (requested/approved/received/refunded/rejected), restock (bool), label_url, refund_invoice_id |
+
+**Rules:**
+
+- **Dimensional weight is computed, not ignored.** Carriers bill on the greater
+  of actual and volumetric weight; a store that quotes on grams alone loses on
+  every pillow it sells. Box selection picks the smallest `PackagingBox` the
+  items fit, and the quote uses the resulting billable weight.
+- **Split shipments are normal**, not an error state. Stock across two
+  locations, or a pre-order beside an in-stock item, produces two
+  `Fulfillment` rows against one order, each with its own tracking.
+- **Free shipping is a rule, not a price of zero** — thresholds evaluate on the
+  post-discount subtotal by default, per zone, with the choice stated, because
+  "free over $100" quietly meaning pre-discount is a support ticket generator.
+- **Pickup and local delivery are first-class methods**, keyed to a
+  `BusinessLocation` and a `DeliveryWindow`. For a bakery or a farm stand this
+  is the *only* shipping that matters, and bolting it on later never fits.
+- **Carrier rates are an adapter family** (§12): `none` (manual rates only) is
+  the default, and a carrier adapter adds live quotes, label purchase and
+  tracking webhooks without any other module learning a carrier's name.
+- **Every fulfilment writes `StockMovement` and `TimelineEvent`s**, so
+  inventory and the customer's history are consequences of shipping rather than
+  separate bookkeeping.
+- **Digital and service line items never enter this system**:
+  `requires_shipping` on the variant is what decides, so a cart of downloads
+  never asks for an address.
+
+### 4.12 Tax
+
+Tax is the area where "we'll add it later" turns into a rebuild, because it
+touches the price shown on the shelf, the arithmetic on every line, the fields
+on the invoice, and what the owner owes. It ships as a real engine with
+templates for the regimes v1 targets, and an adapter seam for the businesses
+that outgrow it.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `TaxCategory` | What kind of thing is being taxed: standard, food, books, children's clothing, digital services, exempt. Assigned per product. | name, code, description, default_rate_hint |
+| `TaxZone` | Where a set of rates applies. | name, country, regions[], postal_patterns[], priority, kind (origin/destination) |
+| `TaxRate` | One rate within a zone. | zone_id, category_id, name (GST/HST/QST/VAT/State/County), rate_bps, compound, priority, applies_to_shipping, effective_from, effective_to |
+| `TaxRegistration` | Where the business is registered to collect, and under what number. | zone_id, number, scheme (standard/oss/ioss/simplified), collects_from, threshold_cents, status |
+| `TaxExemption` | A customer who does not pay. | contact_id, zone_id, kind (reseller/nonprofit/reverse_charge/diplomatic), certificate_ref, validated_at, expires_at |
+| `TaxLine` | What was actually charged, snapshotted per invoice line, forever. | invoice_line_id, rate_name, rate_bps, taxable_cents, amount_cents, jurisdiction, registration_number |
+
+**Rules:**
+
+- **Tax follows location, never locale** (§4.9). A French-speaking customer in
+  Ontario pays HST; a French customer in Paris pays VAT. Place of supply is
+  determined by the rules of the regime, not by the language of the page.
+- **Compound and sequential rates both exist and are not the same.** Quebec's
+  QST is calculated on the pre-GST amount today and was compound historically;
+  getting the order wrong is a real error in a real jurisdiction. `compound`
+  and `priority` on `TaxRate` express it, and the templates ship correct.
+- **Tax-inclusive and tax-exclusive display is per zone, not per instance.**
+  The same catalog shows £120 to a British visitor and $100 + tax at a US
+  checkout, from one price and one flag, because a shop that displays
+  ex-VAT prices in the EU is breaking the law and one that displays inc-tax in
+  the US is losing sales.
+- **B2B reverse charge**, VAT-number capture and validation, and the resulting
+  zero-rated line with the required legend on the invoice.
+- **Thresholds are watched, not assumed.** `TaxRegistration.threshold_cents`
+  plus running totals per zone means the platform can tell an owner they are
+  approaching a registration obligation — US economic nexus, EU OSS, UK
+  distance selling — instead of letting them discover it in an audit. It gives
+  an alert and a number, never advice.
+- **Rounding is stated**: per-line or per-invoice, half-up or bankers', set per
+  zone template, because a penny's difference multiplied by a tax authority's
+  expectations is a reconciliation problem.
+- **What was charged is snapshotted.** `TaxLine` records the rate, its name and
+  the registration number at the moment of sale. Rates change; issued invoices
+  do not.
+- **v1 ships correct templates** for Canada (GST/HST/PST/QST by province), the
+  EU (VAT with OSS and reverse charge), the UK, the US (state + local, with
+  taxability by category), Australia and New Zealand (GST). Every other country
+  is a `TaxZone` an owner can define by hand in five minutes.
+- **The tax adapter family** (Stripe Tax, Avalara, TaxJar) replaces the
+  calculation when a business needs 12,000 US jurisdictions rather than the
+  handful they sell into. The interface is `quote(order) → TaxLine[]`, and the
+  built-in engine is simply the default implementation of it.
+- **Invoices carry what the jurisdiction requires**: sequential numbering that
+  cannot gap, the business's registration numbers, the customer's VAT number
+  where applicable, the legally required wording per regime, and a stable PDF
+  archive. §4.3's `Invoice` is where those live.
+
 ---
 
 ## 5. The SEO Layer (doctrine, enforced structurally)
@@ -384,7 +735,7 @@ The money path (steps 2–3) follows immediately after, ahead of booking, quotes
 
 - **Custom fields:** jsonb on Contact with generated columns + indexes for hot fields — not EAV tables. Fast, honest about Postgres, and reversible if a field graduates to a real column.
 - **Multi-currency:** store currency per money row from day one; v1 UI = base currency + optional PriceListEntry overrides per enabled currency. Auto-FX display of prices is off by default (honest pricing beats approximate pricing).
-- **Tax:** v1 = simple rate tables per tax zone (keyed to business location + customer country); Stripe Tax as optional adapter later. Canada (GST/PST/HST) and EU VAT (incl. B2B reverse-charge flag) are the two zone templates that ship in v1.
+- **Tax:** a real engine, specified in §4.12 — categories per product, zones matched most-specific-first, compound and sequential rates, registrations with threshold watching, exemptions and reverse charge, per-zone inclusive/exclusive display, and `TaxLine` snapshots that outlive rate changes. v1 ships correct templates for Canada, the EU, the UK, the US, Australia and New Zealand; every other country is a zone an owner defines by hand. The tax adapter family (Stripe Tax, Avalara, TaxJar) is the same interface with somebody else's arithmetic behind it, for businesses that outgrow the templates.
 - **v1 shipped locales:** propose en + fr + es (covers Canada bilingual compliance and the largest creator markets); community PRs add catalogs. Machine-translation assist for content from day one, always flagged for review.
 - **RTL:** the CSS layer uses logical properties from the start so Arabic/Hebrew are a catalog away, not a rewrite.
 - **hreflang + sitemap generation:** build in core routing, not as a plugin — every module's public pages inherit it for free.
@@ -572,7 +923,7 @@ export interface MailAdapter {
 
 **Routing rule:** transactional mail (receipts, OTPs, booking confirmations, quote notifications) goes through the owner's connected Gmail/Outlook. Bulk (campaigns) requires a bulk adapter (Resend/SES/Postmark) — the email-marketing module refuses to broadcast through a personal mailbox, protecting the owner's domain reputation from themselves.
 
-Same pattern for storage, calendar (2-way sync w/ webhook or polling fallback), sms, fx, and ai. The `none/` implementations let every optional family be absent without null-checks scattered through modules.
+Same pattern for storage, calendar (2-way sync w/ webhook or polling fallback), sms, fx, ai, **tax** (§4.12 — `quote(order) → TaxLine[]`, whose default implementation is the built-in engine), **carrier** (live rates, label purchase, tracking webhooks), **accounting** (export shapes for QuickBooks, Xero and plain CSV), and **agent** (§37). The `none/` implementations let every optional family be absent without null-checks scattered through modules.
 
 ---
 
@@ -959,6 +1310,59 @@ A plugin registry is **just a signed JSON index** — deliberately boring so tha
 
 **Template system:** one template model serves everything — newsletter layouts, campaign designs, and transactional emails (receipt, booking confirmation, quote sent) are all `EmailTemplate` rows editable in the same drag-and-drop editor, with locked variable slots ({{invoice.total}}, {{booking.starts_at_local}}) that render per contact locale/timezone/currency. Transactional templates ship as defaults, owner-customizable, with a "reset to default" escape hatch and test-send-to-self on every editor screen.
 
+**The working surface, not just the record.** A CRM that only stores contacts
+is an address book with extra steps. What makes one worth opening every morning
+is that it holds the *work*: what is owed, to whom, by when, and what happened
+last. These are core entities, not a plugin.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `Deal` | A live opportunity worth tracking through stages. Created by hand, by a form, or by a quote being sent. | contact_id, pipeline_id, stage_id, title, value_cents, currency, probability, expected_close_on, source, owner_user_id, quote_id, status (open/won/lost), lost_reason, closed_at |
+| `Task` | Something a human has to do, attached to anything. | subject_type + subject_id, contact_id, title, due_at, remind_at, assignee_user_id, priority, status, completed_at, completed_by |
+| `Note` | Free text against a contact, deal, project or booking, with mentions. | subject_type + subject_id, author, body, pinned, mentions[] |
+| `Segment` | A saved query over the spine. The unit of "who" for campaigns, price lists, automations and reports. | name, definition (jsonb), kind (dynamic/static), member_count_cached, last_evaluated_at |
+| `ScoringRule` | Transparent, inspectable lead scoring. | name, event_match (jsonb), points, decay_days, active |
+| `ConsentRecord` | What this contact agreed to, when, and how. | contact_id, purpose (marketing_email/sms/analytics/data_processing), state, method, source_url, ip, at, expires_at, withdrawn_at |
+| `DataRequest` | GDPR/CCPA/CASL access, export, correction and erasure requests. | contact_id, kind, status, requested_at, fulfilled_at, artifact_asset_id, actor |
+| `Relationship` | How two contacts relate: household, employer, referred_by, partner, guardian. | from_contact_id, to_contact_id, kind, since, notes |
+| `InboxThread` / `InboxMessage` | One conversation with a person, whatever channel it arrived on. | thread: contact_id, channel (email/form/chat/sms/social), subject, status (open/snoozed/closed), assignee, last_message_at · message: thread_id, direction, body, attachments[], provider_ref, at |
+| `SavedView` | A filter someone actually uses, kept. Per user, shareable. | name, entity, filters (jsonb), columns[], sort, owner_user_id, shared |
+| `MergeCandidate` | Suspected duplicates, surfaced rather than merged. | contact_a, contact_b, score, reasons (jsonb), status (open/merged/dismissed) |
+
+**Rules:**
+
+- **A deal is optional.** A retail store never opens one; a wedding
+  photographer opens one per enquiry. Pipelines are configuration (below), so
+  the module is inert until an owner defines a stage.
+- **Tasks are attachable to anything** — a contact, a deal, an invoice, a
+  booking, a project — because "chase the deposit" is about the invoice and
+  "confirm the venue" is about the booking, and a task list that only knows
+  contacts forces both into the wrong shape.
+- **Segments are the one definition of "who".** The same saved query drives a
+  campaign's audience, a price list's eligibility, an automation's entry
+  condition and a report's cohort. A platform with four incompatible ways to
+  say "customers in Ontario who bought twice" is four places to be wrong.
+- **Lead scoring is transparent by construction**: rules over spine events with
+  visible points and stated decay, never a model. An owner must be able to read
+  why someone is a 40.
+- **Consent is a record, not a boolean.** Purpose, method, timestamp, source
+  and IP — CASL, GDPR and CAN-SPAM all demand evidence rather than a flag, and
+  a preference centre reads from these rows. Marketing sends check consent in
+  the service layer; there is no code path that can skip it.
+- **Data requests are a workflow with an artifact.** Export produces a real
+  file the owner can hand over; erasure anonymises the contact and its timeline
+  while preserving the financial records the law separately requires them to
+  keep, and says so.
+- **Duplicates are surfaced, never merged automatically.** `MergeCandidate`
+  scores likely pairs and puts them in a queue; a human decides, because merge
+  is destructive (§4.1) and confidence is not consent.
+- **The inbox threads by contact, not by channel.** A form submission, a reply
+  to it by email, and a text message about the same job belong in one
+  conversation — that is the entire promise of a spine, made visible.
+- **Import is a first-class workflow**, not a one-shot script: upload, map
+  columns, dry-run with a diff, then commit — with every created and updated
+  row attributed to the import in the audit trail, and a way back out.
+
 **Lead lifecycles, configurable:** the hardcoded lifecycle_stage becomes a definable pipeline. `LifecyclePipeline` (name, stages[] with order, color, and stage-entry automations) — default ships as Subscriber → Lead → Prospect → Customer → Repeat → Advocate, fully editable. Stage transitions are service-layer events: they emit TimelineEvents, can trigger automations ("entered Prospect → send case-study sequence"), and power a kanban pipeline view in admin. Multiple pipelines allowed (e.g., a wholesale pipeline beside retail). Lead scoring v1: simple, transparent point rules on spine events (opened 3 emails +5, viewed pricing +10, quote accepted → auto-advance) — no black-box scoring.
 
 ---
@@ -1118,3 +1522,101 @@ An instance that modifies itself has modified the AGPL work it is serving over a
 ### Why this is the moat
 
 Generated websites are not new. What is new is where this one runs: on infrastructure the owner holds the keys to, against a service layer that constrains the agent to what a human is allowed to do, with an audit trail the owner can read and a rollback they own. The differentiator is not that a site can build itself — several products do that — it is that this one can build itself **without the owner surrendering the building**.
+
+---
+
+## 38. The Day-One Surface (what "complete" means for v1)
+
+§3 names the modules and §7 orders them. This section exists because there is a
+third question neither answers: *what does an owner expect to already be there
+the first time they look?* A platform can ship every module on the list and
+still feel unfinished if the connective work is missing — and it is always the
+same connective work, in every business, which is why it belongs in the spec
+rather than in a backlog.
+
+### Sell time, things, and expertise from one system
+
+- **Services** with real durations, buffers, deposits, intake forms and
+  cancellation policies (§4.2, §4.4).
+- **Calendars for the business, for each person, and for each resource** —
+  rooms, chairs, kilns, vans, lenses — with availability computed rather than
+  stored, capacity for classes, waitlists, round-robin assignment and travel
+  time (§4.4). A solo owner sees one calendar; the model never has to be
+  rebuilt when they hire.
+- **A catalog with option matrices, unit-price breaks, per-variant inventory
+  across locations, and unlimited ordered media including video and 3D/AR**
+  (§4.2).
+- **Shipping that computes** rather than guesses, including pickup and local
+  delivery windows (§4.11), and **tax that is correct in the jurisdictions v1
+  targets** and definable everywhere else (§4.12).
+- **Passes, memberships and retainers**, because a ten-class card and a monthly
+  retainer are the same idea — prepaid entitlement spent later — and neither
+  should require a second money path.
+- **Time tracking against a project or booking**, billable and unbillable, that
+  becomes invoice lines in one step. A `TimeEntry` (contact_id, project_id,
+  booking_id, minutes, rate_cents, billable, invoiced_invoice_id) is a small
+  table and the difference between an owner billing what they worked and
+  billing what they remember.
+- **In-person payment** through the payments adapter where the provider offers
+  it (Stripe Terminal, tap-to-pay on phone), because a market stall and a
+  studio walk-in are the same sale as the website's.
+
+### Show the work and be found
+
+- **Projects and case studies** linked reciprocally to the services they used,
+  with before/after pairing, outcomes, and testimonials attached to real
+  contacts (§4.5).
+- **Client galleries** with proofing, selection, watermarking, download policy
+  and print sales through the standard order flow (§4.5).
+- **The SEO layer as architecture** (§5), extended to products and locations:
+  `Product`/`Offer` structured data, product and local feeds generated on the
+  same schedule as the sitemap.
+
+### Know who everyone is, and what is owed
+
+- **Deals, tasks, notes, segments, consent records, duplicate detection and a
+  threaded inbox** (§30) — the CRM as a working surface rather than an address
+  book.
+- **Automations** over spine events (§36): trigger → condition → action, with
+  modules contributing verbs. This is the connective tissue that makes every
+  other capability compound, and it is core rather than a plugin because a
+  business whose tools cannot talk to each other has bought a filing cabinet.
+- **Reporting an owner will actually read**: saved views, a funnel from visit
+  to paid (§4.7), revenue by service, by product, by location and by month, and
+  an **accounting export** in the shapes QuickBooks and Xero accept. The
+  platform does not do bookkeeping; it refuses to make bookkeeping harder.
+
+### Operate it without fear
+
+- **Roles and permissions** beyond owner/staff/customer: named roles with
+  per-module grants, because a bookkeeper needs invoices and not the client
+  list, and a contractor needs one calendar and nothing else.
+- **Staff invitations, session management, 2FA for anyone with admin access.**
+- **Backups and export that the owner controls** — a full data export on
+  demand, and a documented restore. §23's migration round-trip test is the
+  proof that the export is real.
+- **A help centre / knowledge base** as CMS content, which doubles as the
+  grounding corpus for the front-site assistant (§31) and as SEO surface.
+- **Waivers and documents**: e-signable templates attached to bookings and
+  projects, with the same audit trail as contracts (§4.3).
+- **Release notes on the owner's own instance** (§4.8), so nothing about their
+  site ever changes silently.
+
+### Deliberately not v1 (and why)
+
+Naming these is part of the spec, because an unstated omission reads as an
+oversight and invites somebody to build it badly.
+
+- **Payroll, full double-entry bookkeeping, and tax filing.** Adjacent,
+  regulated, and a different product. Freeholder exports; an accountant files.
+- **Marketplace channel sync** (Etsy, eBay, Amazon). Real demand, but each is a
+  vendor integration with its own lifecycle — the plugin registry is where they
+  belong, not core.
+- **Serial-number and lot tracking, warehouse bin logic, wave picking.** The
+  inventory ledger is built so these *can* land later; a one-person business
+  does not need them and their weight would be felt by everyone.
+- **Multi-tenancy in any form** (§2). One deploy, one business, forever.
+- **A points-based loyalty engine** in core — it extends affiliates (§36) as a
+  first-party plugin, on the same first-party attribution rails.
+- **Anything that makes the owner's data someone else's product** (§36's
+  anti-roadmap). Unchanged, and load-bearing.
