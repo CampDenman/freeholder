@@ -11,6 +11,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import { businessProfile } from "@/core/settings/schema";
+import { recordRedirect } from "@/core/seo/service";
 import { contentRevisions, pages, sections } from "./schema";
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
@@ -223,6 +224,23 @@ export const updatePage = defineService({
         }
         throw error;
       });
+
+    // §5: "automatic redirect creation on slug change — slugs never silently
+    // break". Renaming a page is a normal editorial act; every link anyone
+    // ever shared to the old address breaking is not, and the platform is the
+    // only party that can see the rename happen.
+    //
+    // Elevated because an owner renaming a page has not asked for a redirect
+    // and should not have to; it rides the same transaction, so a page that
+    // moved and a redirect that records it commit together or not at all.
+    if (changes.slug !== undefined && changes.slug !== before.slug) {
+      await ctx.callAsSystem(recordRedirect, {
+        fromPath: before.slug,
+        toPath: page!.slug,
+        locale: before.locale,
+        source: "slug-change",
+      });
+    }
 
     ctx.setSubject("page", page!.id);
     ctx.queueEvent("cms.pageUpdated", { pageId: page!.id, slug: page!.slug });

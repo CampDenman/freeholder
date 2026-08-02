@@ -16,13 +16,21 @@
 //   - A path with no published page is a real 404, not a soft one — §5 wants
 //     "clean structural 404s", and a 200 saying "not found" is neither.
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { getBusiness, setupState } from "@/core/settings/service";
 import { resolvePage } from "@/modules/cms/service";
 import { collectJsonLd } from "@/modules/cms/blocks/registry";
 import { renderBlocks } from "@/modules/cms/render";
 import type { BlockNode } from "@/modules/cms/blocks/types";
+import { resolveRedirect } from "@/core/seo/service";
+import {
+  breadcrumbJsonLd,
+  humanizeSegment,
+  organizationJsonLd,
+  websiteJsonLd,
+} from "@/core/seo/jsonld";
+import { siteOrigin } from "@/core/seo/origin";
 import { getLocale, getT } from "../../i18n";
 
 export const dynamic = "force-dynamic";
@@ -55,17 +63,25 @@ export async function generateMetadata({
   const seo = (page.seo ?? {}) as { title?: string; description?: string };
   const siteName = business?.name;
   const title = seo.title ?? page.title;
+  const description = seo.description ?? business?.tagline ?? undefined;
+
+  // §5 wants the canonical *absolute*, and absolute means configured rather
+  // than taken from the request — see core/seo/origin.ts.
+  const origin = siteOrigin();
+  const url = page.slug === "" ? `${origin}/` : `${origin}/${page.slug}`;
 
   return {
     title: siteName && page.slug !== "" ? `${title} · ${siteName}` : title,
-    description: seo.description ?? business?.tagline ?? undefined,
-    alternates: { canonical: page.slug === "" ? "/" : `/${page.slug}` },
+    description,
+    alternates: { canonical: url },
     openGraph: {
       title,
-      description: seo.description ?? business?.tagline ?? undefined,
+      description,
       type: "website",
+      url,
       siteName: siteName ?? undefined,
     },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 
@@ -91,6 +107,26 @@ export default async function PublicPage({
     const state = await setupState.call({}, ANONYMOUS);
     if (!state.completed) return <NotSetUpYet t={t} />;
   }
+
+  // §5: "slugs never silently break". Before answering 404, ask whether this
+  // address used to be a page — a link somebody shared two years ago should
+  // still land somewhere, and a permanent redirect tells a crawler to carry
+  // the standing of the old address over to the new one.
+  //
+  // The wire status is 308, not the 301 §5 names: a server component cannot
+  // choose its status code, and Next's permanent redirect is 308. What §5
+  // actually asks for — permanent versus temporary, told to the crawler — is
+  // intact, and search engines treat 308 as 301's equal. The redirect *row*
+  // still records 301/302, so serving a literal 301 later is a change here and
+  // nowhere else.
+  if (!page) {
+    const moved = await resolveRedirect.call({ path, locale }, ANONYMOUS);
+    if (moved) {
+      const destination = moved.toPath === "" ? "/" : `/${moved.toPath}`;
+      if (moved.status === "301") permanentRedirect(destination);
+      redirect(destination);
+    }
+  }
   if (!page) notFound();
 
   const blocks = page.blocks as BlockNode[];
@@ -101,10 +137,37 @@ export default async function PublicPage({
     path: path === "" ? "/" : `/${path}`,
   });
 
-  // Structured data from the blocks themselves (§5): an FAQ block on the page
-  // is what puts FAQPage in the markup, so the SEO layer never has to guess
-  // what the content means.
-  const jsonLd = collectJsonLd(blocks);
+  // Structured data comes from two places, and neither is a setting an owner
+  // has to find: the page's own identity (§5 — WebSite and the business on the
+  // home page, a breadcrumb trail everywhere else), and the blocks themselves,
+  // where an FAQ block is what puts FAQPage in the markup.
+  const origin = siteOrigin();
+  const facts = business
+    ? {
+        name: business.name,
+        tagline: business.tagline,
+        schemaType: business.schemaType,
+        baseCurrency: business.baseCurrency,
+      }
+    : null;
+
+  const jsonLd = [
+    ...(facts && path === ""
+      ? [websiteJsonLd(origin, facts), organizationJsonLd(origin, facts)]
+      : []),
+    ...(path !== ""
+      ? [
+          breadcrumbJsonLd(origin, path, (segmentPath) =>
+            segmentPath === ""
+              ? (facts?.name ?? t("home.brand"))
+              : segmentPath === path
+                ? page.title
+                : humanizeSegment(segmentPath.split("/").pop() ?? segmentPath),
+          ),
+        ].filter((entry) => entry !== undefined)
+      : []),
+    ...collectJsonLd(blocks),
+  ];
 
   return (
     <>
