@@ -253,5 +253,8 @@
   "cms.editor.preview": "Vista previa",
   "cms.editor.desktop": "Escritorio",
   "cms.editor.mobile": "Móvil",
-  "cms.field.noAsset": "Ninguno"
+  "cms.field.noAsset": "Ninguno",
+  "media.delete": "Eliminar",
+  "media.deleteConfirm": "Eliminar definitivamente",
+  "media.stillUsed": "{places, plural, one {Todavía se usa en # sitio} other {Todavía se usa en # sitios}}"
 }

@@ -253,5 +253,8 @@
   "cms.editor.preview": "Aperçu",
   "cms.editor.desktop": "Ordinateur",
   "cms.editor.mobile": "Mobile",
-  "cms.field.noAsset": "Aucun"
+  "cms.field.noAsset": "Aucun",
+  "media.delete": "Supprimer",
+  "media.deleteConfirm": "Supprimer définitivement",
+  "media.stillUsed": "{places, plural, one {Encore utilisé à # endroit} other {Encore utilisé à # endroits}}"
 }

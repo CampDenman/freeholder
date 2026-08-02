@@ -3,13 +3,14 @@
 // The asset library (MASTER.md §3 core/media, §4.5).
 import { Image as ImageIcon } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
-import { listAssets, resolveImage } from "@/core/media/service";
+import { assetUsage, listAssets, resolveImage } from "@/core/media/service";
 import { getBusiness } from "@/core/settings/service";
 import { Card, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { UploadForm } from "./UploadForm";
 import { AltTextForm } from "./AltTextForm";
+import { DeleteAssetButton } from "./DeleteAssetButton";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,22 @@ export default async function MediaPage() {
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
+  // Deleting is irreversible, so it is owner-only at the service and hidden
+  // from staff here rather than offered and refused.
+  const owner = actor.kind === "user" && actor.role === "owner";
+
+  // Where each file is still referenced, so the confirmation can say what will
+  // be left with a gap.
+  const usage = new Map(
+    owner
+      ? await Promise.all(
+          library.rows.map(
+            async (asset) =>
+              [asset.id, await assetUsage.call({ id: asset.id }, actor)] as const,
+          ),
+        )
+      : [],
+  );
 
   // Previews come from the same resolver a public page uses, so the library
   // shows what a visitor would actually be served.
@@ -113,6 +130,29 @@ export default async function MediaPage() {
                         {formatDateTime(asset.createdAt, timezone, locale)}
                       </time>
                     </div>
+
+                    {owner ? (
+                      <div className="flex justify-end">
+                        <DeleteAssetButton
+                          id={asset.id}
+                          labels={{
+                            delete: t("media.delete"),
+                            confirm: t("media.deleteConfirm"),
+                            cancel: t("common.cancel"),
+                            usedOn:
+                              (usage.get(asset.id)?.pages ?? 0) +
+                                (usage.get(asset.id)?.sections ?? 0) >
+                              0
+                                ? t("media.stillUsed", {
+                                    places:
+                                      (usage.get(asset.id)?.pages ?? 0) +
+                                      (usage.get(asset.id)?.sections ?? 0),
+                                  })
+                                : "",
+                          }}
+                        />
+                      </div>
+                    ) : null}
 
                     {asset.kind === "image" ? (
                       <AltTextForm

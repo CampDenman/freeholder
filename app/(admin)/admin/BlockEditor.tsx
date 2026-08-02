@@ -140,6 +140,35 @@ export function BlockEditor({
     setStatus("dirty");
   };
 
+  /**
+   * Apply text typed on the canvas.
+   *
+   * `useCallback` because the canvas subscribes to it: a new identity on every
+   * render would tear down and re-add the message listener each keystroke.
+   *
+   * The canvas is *not* reloaded afterwards. It already shows what was typed —
+   * it is where the typing happened — and refreshing the frame mid-sentence
+   * would throw the caret away. The tree and the canvas agree; the save
+   * catches up on its own rhythm.
+   */
+  const applyInlineEdit = useCallback(
+    (blockId: string, prop: string, value: string) => {
+      setBlocks((current) => {
+        const walk = (nodes: EditorNode[]): EditorNode[] =>
+          nodes.map((node) =>
+            node.id === blockId
+              ? { ...node, props: { ...node.props, [prop]: value } }
+              : node.children
+                ? { ...node, children: walk(node.children) }
+                : node,
+          );
+        return walk(current);
+      });
+      setStatus("dirty");
+    },
+    [],
+  );
+
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       <div className="grid gap-4">
@@ -168,6 +197,7 @@ export function BlockEditor({
           version={savedVersion}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          onEdit={applyInlineEdit}
           labels={labels.preview}
         />
       </div>

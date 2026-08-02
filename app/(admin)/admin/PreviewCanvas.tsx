@@ -29,6 +29,7 @@ export function PreviewCanvas({
   version,
   selectedId,
   onSelect,
+  onEdit,
   labels,
 }: {
   /** The preview page for this subject. */
@@ -41,6 +42,14 @@ export function PreviewCanvas({
   version: number;
   selectedId?: string;
   onSelect: (blockId: string | undefined) => void;
+  /**
+   * Text typed directly on the canvas.
+   *
+   * The canvas reports; the editor decides. It never writes to the tree
+   * itself, which is what keeps the tree the source of truth and the rendering
+   * a view of it.
+   */
+  onEdit: (blockId: string, prop: string, value: string) => void;
   labels: PreviewLabels;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -50,13 +59,21 @@ export function PreviewCanvas({
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
-      const data = event.data as { source?: string; blockId?: string | null };
+      const data = event.data as {
+        source?: string;
+        blockId?: string | null;
+        edit?: { blockId?: string; prop?: string; value?: string };
+      };
       if (data?.source !== "freeholder-preview") return;
+      if (data.edit?.blockId && data.edit.prop !== undefined) {
+        onEdit(data.edit.blockId, data.edit.prop, data.edit.value ?? "");
+        return;
+      }
       onSelect(data.blockId ?? undefined);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [onSelect]);
+  }, [onSelect, onEdit]);
 
   // …and selecting in the editor outlines it in the frame.
   useEffect(() => {

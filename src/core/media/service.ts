@@ -7,7 +7,7 @@
 // with no row is litter a sweep can find, whereas a row with no object is a
 // broken image on a customer's screen.
 import { z } from "zod";
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { assets } from "@/core/media/schema";
 import { defineService, ServiceError } from "@/core/service";
@@ -226,6 +226,49 @@ export const setAltText = defineService({
 });
 
 /**
+ * Where an asset is still being used.
+ *
+ * Deleting a file that a page still points at leaves a gap on that page. The
+ * block handles it — `resolveImage` answers null and the block renders
+ * nothing, so a live site never breaks — but an owner deserves to know before
+ * rather than discover after.
+ *
+ * The jsonpath `$.**` walks the whole block tree, so an image nested inside a
+ * columns block is found as readily as one at the top level.
+ *
+ * cms owns those tables, which is why this reaches them through a raw query
+ * rather than importing their schema: core must not depend on a module (§11).
+ * The cost is that this string knows two table names — a narrow, deliberate
+ * exception, and the alternative is core importing downward.
+ */
+export const assetUsage = defineService({
+  name: "media.usage",
+  summary: "How many pages and sections still reference a file.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({ id: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    // The id travels as a jsonpath *variable* rather than being concatenated
+    // into the expression: the path stays a constant, and a value that is not
+    // a uuid can only ever fail to match rather than change the query.
+    const vars = sql`jsonb_build_object('id', ${input.id}::text)`;
+    const path = sql`'$.** ? (@.assetId == $id)'::jsonpath`;
+    const counts = await ctx.tx.execute<{ pages: number; sections: number }>(sql`
+      select
+        (select count(*) from pages
+          where jsonb_path_exists(blocks, ${path}, ${vars})) as pages,
+        (select count(*) from sections
+          where jsonb_path_exists(blocks, ${path}, ${vars})) as sections
+    `);
+    const row = counts[0];
+    return {
+      pages: Number(row?.pages ?? 0),
+      sections: Number(row?.sections ?? 0),
+    };
+  },
+});
+
+/**
  * Remove a file and every rendition of it.
  *
  * Storage is emptied before the row goes, for the same reason uploads write
@@ -268,6 +311,7 @@ export default [
   listAssets,
   getAsset,
   resolveImage,
+  assetUsage,
   setAltText,
   deleteAsset,
 ];

@@ -46,6 +46,15 @@ export interface BlockRenderContext {
    * version with editor scaffolding in it.
    */
   identifyBlocks?: boolean;
+  /**
+   * Which of this block's props may be typed into directly on the canvas.
+   *
+   * A block marks a *text* element with `editable(prop)` and the renderer
+   * turns that into `contenteditable` — but only in the preview. The mechanism
+   * is the block's, because only the block knows which element shows which
+   * prop; the decision to allow it at all is the editor's.
+   */
+  editable?: (prop: string) => Record<string, string> | undefined;
 }
 
 /**

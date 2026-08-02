@@ -411,5 +411,31 @@
       "src/adapters/storage/local.ts reads process.env.NODE_ENV directly while the rest of the codebase reads through env(), so its production guard can disagree with the cookie logic about what production means",
       "Deleting an asset does not check whether a block still points at it; the block renders nothing rather than breaking, but the owner gets no warning"
     ]
+  },
+  {
+    "id": "2026-08-02-media-delete-and-inline-editing",
+    "date": "2026-08-02",
+    "title": "Deleting media, and typing directly on the canvas",
+    "masterRef": "§4.5, §32, §37",
+    "status": "done",
+    "delivered": [
+      "media.delete finally reachable: owner-only, hidden from staff rather than offered and refused, closing a service the admin could not call",
+      "Two-step confirmation, because deleting media is one of the few things here that genuinely cannot be undone — §37's reversible-in-one-action is unachievable once bytes leave the bucket",
+      "media.usage walks block trees with a jsonpath $.** so an image nested inside a columns block is found as readily as a top-level one; the id travels as a jsonpath variable rather than being concatenated in",
+      "Usage is a warning, not a refusal: an owner may well want the file gone, and a page pointing at a deleted asset renders a gap rather than an error — asserted by a test",
+      "Inline editing on the canvas: heading text, body copy and button labels are contenteditable in the preview and typed straight into",
+      "The mechanism belongs to the block — only a block knows which element shows which prop — while the decision to allow it belongs to the editor, which passes ctx.editable only when rendering a preview",
+      "Editor attributes appear in the preview and nowhere else, so the markup a visitor and a crawler receive is untouched",
+      "The canvas reports; the editor decides. Typed text becomes a postMessage the editor applies to the tree — the canvas never writes to the tree, which keeps the tree the source of truth and the rendering a view of it",
+      "The frame is deliberately not reloaded after an inline edit: it already shows what was typed, and refreshing mid-sentence would throw the caret away",
+      "Enter blurs rather than inserting a line break in a heading, and the text block renders as one editable region while typing because a caret cannot cross sibling paragraphs sensibly"
+    ],
+    "openFollowUps": [
+      "Only plain-string props are editable. Rich text (bold, inline links) is a spec decision before it is work: §32 forbids markup blobs, so it needs a constrained inline-node schema rather than stored HTML",
+      "No visual drag yet — the last of the four steps toward WYSIWYG, and the largest",
+      "An inline edit marks the tree dirty but does not reload the canvas, so a change that alters *layout* rather than text (not currently possible inline) would not be reflected until the next save",
+      "Deleting an asset still leaves any block pointing at it in place, holding a dead id; the block renders nothing, and nothing prunes the reference",
+      "media.usage runs one query per asset on the library screen — fine at this size, wants a single grouped query before a library gets large"
+    ]
   }
 ]
