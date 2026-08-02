@@ -236,8 +236,20 @@ would mean building it twice.
   before/after, testimonials) → **`galleries`** → **`portal`**.
 - **`crm`** (§30) — deals, tasks, notes, segments, consent records, imports,
   the duplicate queue — and **`inbox`**, which is the spine made visible.
+- **`core/messaging` + `inbox`** (§4.14) — numbers and their registration
+  state, two-way SMS/MMS, consent per purpose, STOP/START/HELP handled before
+  anything else sees a message, quiet hours in the recipient's timezone,
+  delivery receipts and per-message cost. Inbound resolves to a `Contact`
+  through `contacts.resolve`, so a text from an unknown number is a real person
+  with a real timeline. Voice and video stay plugins.
 - **`automations`**, then **`email-marketing`** (needs the mail adapters and
   §30's `Newsletter` and `EmailTemplate`) → **`reviews`**.
+- **`affiliates` then `loyalty`** (§4.13), in that order and not the reverse:
+  loyalty is the referral ledger seen from the other side, and building points
+  first means building attribution twice. Ledger discipline, earn rules as
+  listeners on spine events, tiers, rewards that redeem into the normal money
+  path, holdbacks and reversal on refund, and the outstanding-points liability
+  shown to the owner.
 - **`reporting`** and the accounting export.
 
 §38 is the checklist for what "done" means here: it names the connective work
