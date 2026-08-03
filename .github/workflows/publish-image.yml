@@ -29,6 +29,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing (§39.3): the OIDC token *is* the identity, so there is
+      # no long-lived signing key to leak, rotate, or lose. What a verifier
+      # checks is that this workflow, in this repository, produced this digest.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
@@ -56,7 +61,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
@@ -72,9 +78,60 @@ jobs:
           # platform entry that some registry tooling reports as a broken image.
           provenance: false
 
+      # §39.3: an auto-updater that runs unverified code is a supply-chain
+      # backdoor with a friendly button. Nothing in §39 can be switched on
+      # until an instance can prove an image came from here — so the proof is
+      # published alongside the image from the first release, rather than
+      # retrofitted once there are instances trusting it.
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the image (keyless, §39.3)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          # Signed by digest, never by tag: a tag is a moving pointer, and a
+          # signature over a pointer proves nothing about what it points at
+          # tomorrow.
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          echo "signed ${IMAGE}@${DIGEST}"
+
+      - name: Build provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          artifact-name: freeholder-sbom.spdx.json
+          output-file: freeholder-sbom.spdx.json
+
+      - name: Attest the SBOM
+        uses: actions/attest-sbom@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: freeholder-sbom.spdx.json
+          push-to-registry: true
+
       - name: What was published
         run: |
-          echo "### Published" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Published"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo "digest: ${{ steps.build.outputs.digest }}"
+            echo '```'
+            echo "Signed keyless by \`${{ github.workflow_ref }}\`, with build provenance and an SPDX SBOM attached."
+            echo ""
+            echo "Verify before trusting it:"
+            echo '```sh'
+            echo "cosign verify ${IMAGE}@${{ steps.build.outputs.digest }} \\"
+            echo "  --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo "gh attestation verify oci://${IMAGE}@${{ steps.build.outputs.digest }} --repo ${{ github.repository }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

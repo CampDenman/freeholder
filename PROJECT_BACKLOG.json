@@ -504,5 +504,27 @@
       "PROJECT_BACKLOG claimed TimelineEventInput.subjectId was typed string against a uuid column. It is not: both timeline_events.subject_id and audit_log.subject_id are text, deliberately, because the column is polymorphic across entity types. No change, entry retired",
       "Merging still has no confirmation step and cannot be undone (tracked separately)"
     ]
+  },
+  {
+    "id": "2026-08-02-upgrade-gates",
+    "date": "2026-08-02",
+    "title": "The two gates that make unattended updates safe, plus signed images",
+    "masterRef": "§15.8, §15.9, §39.3, §39.5, §39.9",
+    "status": "done",
+    "delivered": [
+      "Upgrade gate: CI pulls the previously published image, boots it against an empty database so it migrates to the released schema, writes a contact through it, applies this build, asserts the data survived and the site serves, then boots the old image again with FREEHOLDER_SKIP_MIGRATE=1 and asserts it still reads the new schema. That last step is the one that would otherwise be discovered by an owner at 3am",
+      "Data is seeded with SQL rather than through the UI on purpose: the claim under test is that migrations preserve data, and driving forms would make a failure ambiguous between the two",
+      "Schema-compatibility gate: refuses DROP TABLE/COLUMN, RENAME, retype, and a NOT NULL a previous release cannot satisfy, unless the migration carries the marker comment freeholder:schema-breaking with a reason. Matched per statement, so a later ADD COLUMN ... DEFAULT cannot vouch for an earlier one that has none",
+      "The gate is quiet about everything expand-then-contract asks for — new tables, nullable columns, defaults, indexes, DROP NOT NULL — because a gate that fires on the recommended shape gets bypassed within a month",
+      "Images are signed keyless by digest (cosign, GitHub OIDC — no long-lived key to leak), with build provenance and an SPDX SBOM pushed to the registry. Verification commands are in the droplet verify checklist",
+      "Proved both directions: unit tests for the detector including the additive cases it must ignore, and the CLI run against a committed DROP COLUMN, which exited 1 with the expand-then-contract explanation"
+    ],
+    "openFollowUps": [
+      "The upgrade gate skips with a warning when no previously published image can be pulled — true on a fresh repository, and true for a pull request from a fork, whose token cannot read packages. A skipped gate is announced rather than silent, but it is still a skip",
+      "A migration acknowledged as schema-breaking is not yet reflected anywhere machine-readable: §39.3 wants schema_breaking on the release entry, and releases.json does not exist yet",
+      "The gate proves N-1 in one direction only — the old image reading the new schema. It does not prove the old *code* behaves correctly against it, which needs the old release’s own test suite and is not obviously worth the machinery",
+      "Migrations 0000-0005 predate the discipline and 0001 retypes a column. They cannot be edited — their hashes are in the journal of every database that has run them — so the baseline is recorded in the test rather than pretended away",
+      "arm64 images are still not built; signing does not change that"
+    ]
   }
 ]

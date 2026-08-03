@@ -48,3 +48,25 @@ restored is a hope.
 
 - [ ] `reboot` the droplet; the site returns without anyone logging in.
 - [ ] Sessions still work — you are not signed out.
+
+## The image is the one we published
+
+Every published image is signed keyless by the release workflow, with build
+provenance and an SPDX SBOM attached (MASTER.md §39.3). Nothing about §39's
+unattended updates is safe until an instance can prove what it is running, so
+this is worth doing once by hand — and worth wiring into monitoring later.
+
+- [ ] Verify the signature:
+
+      cosign verify ghcr.io/campdenman/freeholder:edge \
+        --certificate-identity-regexp '^https://github.com/CampDenman/freeholder/' \
+        --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+- [ ] Verify the provenance — that this digest was built by that workflow, from
+      this repository, rather than pushed by someone with a registry token:
+
+      gh attestation verify oci://ghcr.io/campdenman/freeholder:edge \
+        --repo CampDenman/freeholder
+
+- [ ] A failure here is not a warning to note and move past. An image that
+      cannot be verified should not be run.
