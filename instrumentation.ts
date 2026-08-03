@@ -33,4 +33,9 @@ export async function register(): Promise<void> {
   const { bootOnce } = await import("@/core/boot");
   const { default: manifests } = await import("@/modules");
   await bootOnce(manifests);
+
+  // After boot, because installing the demo calls services that boot has to
+  // have registered, and because a manifest's own services load lazily.
+  const { seedDemoIfRequested } = await import("@/modules/seed/boot");
+  await seedDemoIfRequested();
 }

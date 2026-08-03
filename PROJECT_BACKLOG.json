@@ -526,5 +526,29 @@
       "Migrations 0000-0005 predate the discipline and 0001 retypes a column. They cannot be edited — their hashes are in the journal of every database that has run them — so the baseline is recorded in the test rather than pretended away",
       "arm64 images are still not built; signing does not change that"
     ]
+  },
+  {
+    "id": "2026-08-03-seed-demo",
+    "date": "2026-08-03",
+    "title": "seed/ — Aurora Coast Photography",
+    "masterRef": "§3, §11, §15.2, §25",
+    "status": "done",
+    "delivered": [
+      "A six-page demo site — home, services, two service children, about, contact — with chrome, FAQ blocks, buttons and three generated photographs. Two levels deep on purpose, so breadcrumbs and the RIBA rule have something real to be right about",
+      "Installed by a service (demo.install) rather than a script, so it goes through the same permission check, transaction and audit row as an owner doing it by hand. Everything it writes goes through ordinary services, which means the demo can only contain content an owner could have produced themselves",
+      "A module that owns no tables and mounts no routes, whose requires: [cms] makes the topo-sort do real work — the block registry must be populated before a block tree can be validated against it",
+      "FREEHOLDER_SEED_DEMO=1 installs at boot if the site is empty. An env var rather than a route, because a route that installs a demo business is a route somebody eventually hits on a real instance",
+      "Refuses on an instance that already has pages, before writing anything, and there is deliberately no force flag: a flag that does not exist cannot be set by accident from a deploy recipe",
+      "Images are generated from SVG at install time and pushed through media.upload, so renditions, AVIF/WebP sources and intrinsic dimensions are all exercised without committing anyone's photographs, or megabytes, to the repository",
+      "The content is asserted against the checkable half of §5 in unit tests — one H1 per page, unique titles and descriptions within the lengths search results truncate at, alt text that describes rather than names a file, every page within three hops, no button pointing at a page that does not exist. A failure names the page rather than a URL",
+      "Verified end to end against a scratch database: booted with the flag, six pages published, sitemap listing all six, FAQPage and BreadcrumbList JSON-LD on a service child, and img tags carrying the real alt text with AVIF and WebP sources"
+    ],
+    "openFollowUps": [
+      "The seed installs cms content only. §11 wants each module to contribute its own seed data through its manifest; that becomes a registry when commerce and booking exist, and this is one file until then",
+      "No one-click purge from admin, which seed/README has promised since July",
+      "The §15.2 crawl gate is the next PR — this is the site it needed, and the unit assertions here are the subset that does not require a crawler",
+      "installDemo calls ensureDefaults and then updates the home page it creates, because updateSection updates and does not upsert. It mirrors what an owner does, but a create-or-update section service would be more honest",
+      "Copy is en only; EntityTranslation and locale routing have not landed, so a second locale has nothing to seed into"
+    ]
   }
 ]
