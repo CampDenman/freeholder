@@ -12,7 +12,7 @@ This document is the canonical source of truth for the project. §1 is excerpted
 **Build contract** — 9. Stack Decisions · 10. Repository Layout · 11. Module Contract · 12. Adapter Contract · 13. Setup Wizard · 14. Replit-First Deploy Story · 15. Quality Gates (CI) · 16. Agent Conventions
 **Deployment** — 17. Configuration Model · 18. Recipe Anatomy & Mandates · 19. Support Tiers · 20. Recipe: Replit · 21. Recipe: DigitalOcean · 22. create-freeholder · 23. Migration Matrix
 **Extensibility** — 24. Plugins: The Design Bet · 25. Plugin DX · 26. Trust Model · 27. Federated Registries · 28. The Living Platform Contract · 29. What This Buys the Ecosystem
-**Going big** — 30. CRM Depth · 31. Front-Site AI Assistant · 32. Universal Drag-and-Drop Editor · 33. Social Media Hub · 34. Sharing DNA · 35. React Native App · 36. Mined Roadmap (WordPress & Shopify) · 37. The Self-Building Instance · 38. The Day-One Surface
+**Going big** — 30. CRM Depth · 31. Front-Site AI Assistant · 32. Universal Drag-and-Drop Editor · 33. Social Media Hub · 34. Sharing DNA · 35. React Native App · 36. Mined Roadmap (WordPress & Shopify) · 37. The Self-Building Instance · 38. The Day-One Surface · 39. Staying Current
 
 ---
 
@@ -1281,6 +1281,8 @@ Every step writes real settings; nothing is a dead-end. `scripts/doctor.ts` re-v
 5. **Service-layer gate:** no route handler or MCP tool may import Drizzle tables directly — services only.
 6. **Changelog gate (the release-notes religion):** any PR that creates, updates, or removes user-facing functionality — a service method, route, MCP tool, setting, module capability — must include a changeset entry (`feat/fix/breaking` + one plain-English sentence a business owner can understand). CI detects functional diffs (service registry, route table, or MCP tool list changed) with no accompanying changeset and fails. Release notes are then auto-assembled per release from changesets — never written from memory the night before, never skipped. Undocumented functionality changes are treated as bugs.
 7. **A11y smoke** on key public templates.
+8. **Upgrade gate (§39.9):** boot the previous released image against a seeded database, apply the current build, assert health, data integrity and the smoke suite — then roll back and assert the old release still runs against the new schema. Auto-update is only as safe as the last time somebody proved an upgrade works, so it is proved on every PR.
+9. **Schema-compatibility gate (§39.5):** a migration that breaks readability by the previous release must declare it in its changeset. CI diffs the migration set against the last release and fails on an unlabelled breaking change — the expand-then-contract discipline is what makes rollback an image swap instead of a restore.
 
 These gates ARE the moat. Any contributor (human or agent) inherits the standards automatically.
 
@@ -1373,6 +1375,10 @@ provides:
 estimated_monthly_cost_usd: { min: 17, typical: 29 }
 limits:
   - "App Platform has no persistent disk — storage adapter MUST be s3 (Spaces)"
+update:                    # §39.8 — how this target stays current
+  strategy: deploy-hook    # image-swap | deploy-hook | source-pull
+  rollback: previous-deployment
+  automatable: true        # can the unattended updater drive it end to end?
 tested_on: "2026-07-01"
 ```
 
@@ -1380,6 +1386,7 @@ tested_on: "2026-07-01"
 - A recipe may pin *required* adapter choices only when the platform forces them (e.g., no-persistent-disk targets must use S3 storage). Everything else stays owner-choice.
 - **Storage mandate (all tiers):** production media lives in managed object storage, never on instance disk. On Tier-1 targets this is pinned: **Replit → Replit Object Storage; DigitalOcean (both flavors) → Spaces.** Other recipes must mandate their platform's equivalent (R2, S3, GCS…). The `local/` storage adapter is dev-only and refuses to start with `NODE_ENV=production` unless explicitly overridden with `FREEHOLDER_UNSAFE_LOCAL_STORAGE=1` — a flag named to be embarrassing in a config review. Rationale: media is the least-recoverable asset a business has; a dead droplet or wiped container must never be able to take the photo archive with it. Object storage also makes cross-platform migration a bucket sync instead of a rescue operation.
 - **Migration mandate (Tier 1–2):** a recipe is not approved without a specced migration path. Every Tier 1–2 recipe ships `migrate.md` covering, at minimum, migration **to and from each Tier-1 target** (export archive → provision → import → storage sync → DNS repoint), with expected downtime and a verification checklist. Tier-1 pairs are round-trip tested in CI (see §23); Tier-2 paths are verified by the recipe maintainer per release. No approved platform is ever a dead end — that's the ownership promise expressed as a requirement.
+- **Update mandate (Tier 1–2):** a recipe declares an `update` strategy and a rollback for its target, and CI exercises it in the upgrade gate (§39.9). A platform an instance cannot be kept patched on is not an approved platform — the same argument as the migration mandate, applied to time rather than to place.
 - Every recipe must run the same app code. No target-specific forks of application logic — if a target needs a code change, that change goes behind a capability flag in core (e.g., `jobs: in-process | worker`), available to all targets.
 - CI runs a **recipe validation matrix**: for each Tier 1–2 recipe, boot the app with that recipe's config against ephemeral PG + MinIO, run doctor, run the smoke suite. Recipes that rot get flagged automatically, not discovered by frustrated users.
 
@@ -1509,6 +1516,7 @@ export default definePlugin({
 **Beyond the module contract, plugins can also register:**
 - **CMS block types** — new blocks appear in the page editor (e.g., a "before/after slider" block)
 - **Dashboard widgets** — cards on the admin home
+- **A declared compatibility range** — every plugin names the core versions it supports (`freeholder: "^1.4"`), and §39.4's preflight refuses an update that would leave an installed plugin outside its range, naming the plugin rather than discovering the breakage afterwards.
 - **Adapter implementations** — a plugin can ship a whole new payments/mail/storage/sms adapter (`registerAdapter("payments", squareAdapter)`); this is how Square, Wise, Paddle etc. arrive without core PRs
 - **Theme hooks** — declared slots in public templates (header, footer, product page sections); no monkey-patching
 - **Automation actions/triggers** — new verbs for the email-marketing automations and future workflow builder
@@ -1547,7 +1555,8 @@ Plugins run **in-process** — same trust level as core once installed. Sandboxi
 
 1. **Declared permissions, enforced at the service registry.** A plugin's manifest lists scopes (`contacts:read`, `invoicing:create`, `settings:write`, `network:external`, …). The service registry rejects calls outside the granted set; the install screen shows scopes in human language ("can create invoices; cannot read your email settings"). Network egress from plugin code goes through a fetch wrapper that enforces the `network:external` scope.
 2. **Registry review tiers** (mirrors deploy recipes): **Verified** (maintainer-reviewed source, in the CI matrix, badge) / **Community** (automated checks: no eval, scope-lint, license check, integrity pinned, **CHANGELOG.md present with an entry for the published version — versions without release notes are rejected by the registry**) / **Unlisted** (install by name at your own risk — always possible; it's your instance). Plugin changelog entries are what feed the instance's own release notes when a plugin is installed or updated, so a missing changelog breaks the chain for every downstream site — hence it's a hard registry requirement, not a courtesy.
-3. **Kill switches:** per-plugin disable without uninstall; plugin errors are boundary-caught and degrade to a disabled widget, never a downed site; `AuditLog` records every plugin's service calls under `actor: plugin:<name>`.
+3. **Signed releases (§39.3).** Platform images and the update feed carry signatures and build provenance, and the updater verifies both before applying anything. An auto-updater is the most privileged component in a self-hosted system; unverified auto-update would hand every instance to whoever compromises the distribution path.
+4. **Kill switches:** per-plugin disable without uninstall; plugin errors are boundary-caught and degrade to a disabled widget, never a downed site; `AuditLog` records every plugin's service calls under `actor: plugin:<name>`.
 
 **Licensing lanes (stated up front to avoid the WordPress wars):**
 - **In-process plugins** import AGPL core APIs → must carry AGPL-compatible licenses. The registry checks the license field.
@@ -1940,6 +1949,12 @@ rather than in a backlog.
   projects, with the same audit trail as contracts (§4.3).
 - **Release notes on the owner's own instance** (§4.8), so nothing about their
   site ever changes silently.
+- **An instance that keeps itself patched** (§39): security releases applied
+  automatically in a night window, in the business's timezone, after a signature
+  check, a snapshot and a migration dry run — with automatic rollback and no
+  loss of the owner's content, plugins or configuration. This is not a
+  convenience feature. It is the difference between owning software and owning
+  a liability.
 
 ### Deliberately not v1 (and why)
 
@@ -1962,3 +1977,225 @@ oversight and invites somebody to build it badly.
   parent link on `AffiliateCode` (§4.13) rather than by policy.
 - **Anything that makes the owner's data someone else's product** (§36's
   anti-roadmap). Unchanged, and load-bearing.
+
+---
+
+## 39. Staying Current (self-update, because unpatched is how you get owned)
+
+Self-hosted software does not usually fail because it was badly written. It
+fails because it was installed once, worked, and was never touched again — and
+two years later it is running a version with a published CVE and an exploit kit
+pointed at it. Every ownership promise in this document is worthless if owning
+your instance means personally tracking security advisories for Next.js, a
+Postgres driver, and every dependency underneath.
+
+So updating is not a feature of Freeholder. It is a **property of the
+architecture**, designed for from the schema up, with a specific goal: *a solo
+owner who never reads a changelog should still be running a patched, current
+instance a year from now, with their site exactly as they left it.*
+
+### 39.1 The customization contract (what makes updates safe at all)
+
+An update is only safe if the platform knows with certainty which parts of a
+running instance belong to the owner. So the seams are named, and everything
+outside them is replaceable:
+
+| Seam | Holds | Survives an update because |
+|---|---|---|
+| **The database** | Pages, block trees, sections, products, settings, theme tokens, media records, every business record | §32 — structure is data. The site's design and content are rows, not code, so swapping the image cannot touch them. |
+| **Plugins** | Owner and third-party code | Installed artifacts with declared compatibility ranges (§24), loaded at boot, never merged into core |
+| **Configuration** | `freeholder.config.ts`, environment | §17 — the instance's choices, checked in or injected, never baked into the image |
+| **Uploads** | Media in object storage | §18's storage mandate — never on instance disk, so the container is disposable by construction |
+
+**Core is never patched in place.** That is the contract, stated as a rule. If
+an owner needs behaviour core does not have, the answer is a plugin, a
+configuration change, or a fork — and each of those has a defined update path.
+What has no update path, and is therefore not a supported pattern, is editing
+core files on a live server.
+
+This is also the answer to "will I get the latest tech?" The owner does not
+manage `package.json`. Next.js, the driver, sharp, the base image and every
+transitive dependency are the *platform's* responsibility — upgraded upstream,
+proved by the gates in §15, delivered as one artifact. An owner who updates
+gets a modern stack without ever running `pnpm update`.
+
+### 39.2 Versions, channels, and separable security
+
+Semantic versioning, and three channels:
+
+- **`stable`** — the default. Patch and minor releases.
+- **`security`** — patch releases containing security fixes *only*, backported
+  to the current and previous minor. This channel exists because "I turned off
+  auto-updates once, when a feature release changed something" is the story
+  behind most unpatched instances. Separating the two means an owner can take
+  fixes forever without taking surprises.
+- **`edge`** — main. For contributors and for `freeholder.ai` itself.
+
+Every release carries machine-readable metadata: severity with a CVSS score
+where a CVE applies, whether its schema is compatible with the previous
+release, whether it needs manual steps, and the minimum version it can be
+applied from. The updater reads that metadata; it never infers from a version
+number.
+
+### 39.3 The update feed, signed
+
+A signed `releases.json` is published alongside the images. Each entry names
+the version, channel, image digest, migration risk, plugin-API version,
+security severity, and a link to the assembled release notes — which §15.6
+already guarantees exist and are honest.
+
+**The feed and the image are both signed, and the updater verifies before it
+applies.** An auto-updater that fetches and runs unverified code is a
+supply-chain backdoor with a friendly button; it is the single most dangerous
+component in this design and is treated that way. Images carry signatures and
+build provenance, the instance ships the release public key, and a signature
+that does not verify is a hard stop with a loud message — never a warning that
+scrolls past.
+
+Checking is a scheduled job (`core/jobs`), daily, jittered so a fleet does not
+stampede one endpoint. The check is a plain GET of a static file: **no
+telemetry, no instance identifier, nothing reported upstream.** An instance
+that never contacts anything is also an instance that never learns it is
+vulnerable, so the trade is made explicit at setup — checking is on, reporting
+does not exist, and the whole mechanism can be turned off by someone who would
+rather watch a mailing list.
+
+### 39.4 Preflight — the part that earns the trust
+
+Nothing applies without passing preflight, and preflight is honest about what
+it cannot know:
+
+1. **Verify** the signature, provenance and digest of the target image.
+2. **Compatibility.** Every installed plugin declares `freeholder: "^1.4"`. A
+   target outside any installed plugin's range stops here and *names the
+   plugin*, rather than upgrading and breaking the site.
+3. **Migration dry run against a shadow database.** Clone the schema into a
+   temporary database, run the target's migrations there, and report. This is
+   the highest-value check in the system: it turns "the migration might fail at
+   3am" into a question answered in advance, against the owner's real schema,
+   at zero risk to it.
+4. **Drift detection.** Hash the running file tree against the published
+   digest. Local modifications mean this instance is a fork in all but name, so
+   the updater says so and switches to the fork lane (§39.7) rather than
+   overwriting somebody's work.
+5. **Environment.** Disk for a snapshot, Postgres version, required extensions,
+   adapter credentials still valid.
+6. **Estimated downtime**, from the dry run's own timings.
+
+`freeholder doctor` (§17) is where this lives, so preflight is the same code
+path a recipe already runs at install time.
+
+### 39.5 Apply, verify, roll back
+
+The applier is deliberately boring:
+
+1. Snapshot the database and record the current image digest.
+2. Pull and verify the new image.
+3. Run migrations (forward-only, §16).
+4. Start the new container; wait for `/api/health` and a short smoke suite —
+   render the home page, resolve a service, read a contact.
+5. Cut over. Keep the previous container for a grace period.
+6. Auto-draft a `ReleaseNote` (§4.8) from the release's changesets, so the
+   owner's own changelog records what changed on *their* site.
+7. On any failure in steps 3–5: roll back and report, without being asked.
+
+**Rollback works because of one discipline, and it is a hard rule on
+contributors rather than a hope: a release's schema must remain readable by the
+previous release.** Expand then contract — add the column, ship code that
+tolerates both shapes, drop the old one a release later. While that holds,
+rolling back is an image swap with no database restore and no data loss. A
+change that cannot honour it is marked `schema_breaking` in the feed, and the
+unattended updater refuses it and waits for a human who has read the note.
+
+### 39.6 Automation an owner can actually leave on
+
+```yaml
+updates:
+  channel: security        # security | stable | edge | off
+  apply: security          # security | patch | minor | none
+  window: { days: [tue, wed, thu], start: "03:00", timezone: business }
+  drain: true              # never cut over mid-checkout or mid-upload
+  notify: [email, sms]     # §4.14 consent applies
+  keep_snapshots: 5
+```
+
+Defaults are chosen for the owner who will never open this file: **security
+updates apply automatically**, in a night window in the business's own
+timezone, with drain, a snapshot, verification and automatic rollback. Feature
+updates are offered rather than taken — one button in the admin, with the
+release notes beside it.
+
+The window respects the business rather than the clock. An instance with §4.4
+scheduling does not cut over five minutes before a booking; one with a cart in
+flight drains first. "Maintenance at 3am" is a lie if 3am is when your
+Australian customers shop, which is why the window is expressed in the
+business's timezone and skipped rather than forced.
+
+### 39.7 The fork lane
+
+Some owners will fork, and they are not doing anything wrong — this is an AGPL
+project and §37 explicitly contemplates an instance that modifies itself. For
+them `freeholder update` is a merge rather than a swap: fetch upstream into a
+worktree, merge, report conflicts by file, run the gates, and open a pull
+request **in their own fork** — the same lane §37's builder already uses for
+code changes. A fork that stays close to upstream keeps getting security fixes;
+one that drifts is told, in the admin, how far it has drifted and which
+security releases it is missing.
+
+### 39.8 Per-target, because "update" means different things
+
+Updating is a step in the recipe (§18), not one script. `recipe.yaml` gains an
+`update` block declaring the strategy — `image-swap` on the droplet recipes,
+the platform's own deploy hook on App Platform, a source pull and restart on
+Replit — and how to roll back on that target. A recipe without a tested update
+path is not Tier 1, for the same reason one without a migration path is not: an
+approved platform must never be a place an instance goes to rot.
+
+### 39.9 What makes it trustworthy: two more gates
+
+Additions to §15, and the reason any of this can be left switched on:
+
+- **The upgrade gate.** CI boots the *previous released* image against a seeded
+  database, applies the current build, and asserts health, data integrity and
+  the smoke suite — then rolls back and asserts the old release still runs
+  against the new schema. Auto-update is only as safe as the last time somebody
+  proved an upgrade works, so it is proved on every PR.
+- **The schema-compatibility gate.** A migration that breaks N-1 readability
+  must say so in its changeset. CI diffs the migration set against the previous
+  release and fails on an unlabelled breaking change.
+
+### 39.10 Entities and surfaces
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `UpdateSetting` | The policy above. One row. | channel, apply_level, window (jsonb), drain, notify_channels[], keep_snapshots, last_checked_at, paused_until |
+| `AvailableRelease` | What the feed offered, cached. | version, channel, digest, severity, cvss, schema_breaking, min_from_version, plugin_api, notes_url, published_at, verified |
+| `UpdateRun` | One attempt, kept forever. | from_version, to_version, trigger (schedule/admin/cli/agent), preflight (jsonb), status, started_at, finished_at, log_asset_id, snapshot_id, rolled_back_from_run_id |
+| `Snapshot` | A restore point. | kind (db/config), storage_key, bytes, version, created_at, expires_at |
+
+Four surfaces, one service layer (§2 principle 7):
+
+- **Admin** — a status line that is never ambiguous: *"Up to date"*, *"Update
+  available"*, or *"2 security releases behind — CVSS 8.1"* in the danger
+  colour, with the notes and one button.
+- **CLI** — `freeholder update --check | --preflight | --apply | --rollback`,
+  with exit codes fit for cron and for monitoring.
+- **MCP** — the same services as tools, so "am I up to date?" and "apply
+  security updates tonight" are things an owner can say to their own assistant
+  (§37). Applying an update is a separate scope from reading its status.
+- **Email/SMS** — a security release outstanding beyond a set period escalates
+  to a notification, because silence must not be indistinguishable from safety.
+
+### 39.11 Honest limits
+
+- **A snapshot is not a backup of everything.** It covers the database and
+  configuration. Media lives in object storage with its own lifecycle (§18);
+  the updater verifies the bucket is reachable and does not copy it.
+- **Plugins can still break.** A compatibility range is a declaration, not a
+  proof. A plugin that misbehaves after an update is caught by §26's boundary
+  and disabled rather than taking the site down, and the update log names it.
+- **Rollback has a horizon.** Once a later release *contracts* the schema, the
+  releases before it are no longer reachable by an image swap. The admin states
+  which version is the earliest one still reachable.
+- **An owner can turn all of it off**, and some will. The design's job is to
+  make the on-by-default path so uneventful that nobody acquires a reason to.

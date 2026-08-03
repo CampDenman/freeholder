@@ -278,6 +278,27 @@ budget accounting, `/source` for AGPL compliance, and `builder.*` as an
 
 ---
 
+## Staying current (§39) — earlier than its section number suggests
+
+The self-update path is security infrastructure, not a late-stage feature: the
+first non-Camp-Denman instance to go live starts accruing unpatched days
+immediately. It lands in pieces, each cheap once its prerequisite exists:
+
+1. **Signed images and provenance** (already a backlog item) — nothing else in
+   §39 is safe to build before the artifact can be verified.
+2. **The N-1 schema discipline and the two §15 gates** — the upgrade gate and
+   the schema-compatibility gate. These cost almost nothing now, when there are
+   five migrations, and cannot be retrofitted honestly later.
+3. **`releases.json` and `freeholder update --check`** — after `core/jobs`,
+   which the daily check needs, and alongside `scripts/doctor.ts`, which
+   preflight extends rather than duplicates.
+4. **Preflight with the shadow-database migration dry run**, then the applier
+   with snapshot, smoke suite and automatic rollback.
+5. **The admin surface, the MCP tools and the notification escalation** — last,
+   because by then there is something true to report.
+
+Steps 1 and 2 belong in the next few PRs regardless of what phase is running.
+
 ## Threaded through every phase
 
 - **Deploy recipes.** The Replit recipe is Tier 1 in §19 and does not exist
