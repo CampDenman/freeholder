@@ -22,6 +22,12 @@
 set -euo pipefail
 
 PREVIOUS_IMAGE="${PREVIOUS_IMAGE:?set PREVIOUS_IMAGE}"
+# Registry names are lowercase, and `github.repository` is not: this repository
+# is CampDenman/freeholder, so the obvious `ghcr.io/${{ github.repository }}`
+# produces a reference that cannot be pulled. The publish workflow never hit it
+# because docker/metadata-action lowercases for you. Caught on this gate's
+# first run, by the skip being loud rather than silent.
+PREVIOUS_IMAGE="$(printf '%s' "$PREVIOUS_IMAGE" | tr '[:upper:]' '[:lower:]')"
 CURRENT_IMAGE="${CURRENT_IMAGE:?set CURRENT_IMAGE}"
 DB="${UPGRADE_DB:-freeholder_upgrade}"
 PORT="${UPGRADE_PORT:-3100}"
