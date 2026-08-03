@@ -37,6 +37,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `github.repository` keeps its capitals and a registry reference cannot.
+      # docker/metadata-action lowercases the tags it generates, which is why
+      # the push has always worked and everything *else* referring to $IMAGE
+      # by hand — cosign, the attestations — did not. Normalised once, here,
+      # rather than at each use.
+      - name: Normalise the image name
+        run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
