@@ -96,6 +96,15 @@ jobs:
             console.log(`booted ${h.modules} modules, ${h.services} services, ${h.listeners} listeners`);
           ' "$health"
           docker rm -f freeholder-ci >/dev/null
+      # §15.2 and §15.7, against the seeded demo site inside the built image.
+      # The doctrine in §5 is "enforced structurally" — this is the structure.
+      - name: SEO gate and a11y smoke (§15.2, §15.7)
+        run: bash scripts/public-gates.sh
+        env:
+          CI_IMAGE: freeholder:ci
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
       # §39.5: rollback is an image swap only while release N's schema is
       # still readable by N-1. This refuses the statements known to break that,
       # unless somebody wrote down that they are doing it deliberately.
