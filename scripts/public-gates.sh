@@ -35,6 +35,12 @@ psql -h "$PGHOST" -U "$PGUSER" -d postgres -c "create database ${DB}" >/dev/null
 # FREEHOLDER_UNSAFE_LOCAL_STORAGE because there is no bucket in CI and the
 # container is thrown away thirty seconds later. §18's mandate is about an
 # owner's media outliving their server, which is not what this is.
+#
+# LOCAL_STORAGE_ROOT under /tmp because the image runs as a non-root user and
+# cannot create `.data` beside the application. The first CI run of this gate
+# failed on exactly that — and failed *loudly*, because the demo-installed
+# check below caught an instance with no content instead of crawling it and
+# reporting a clean site.
 docker run -d --name fh-demo --network host \
   -e SESSION_SECRET=public-gates-secret-that-is-32-chars \
   -e APP_URL="$BASE" \
@@ -42,6 +48,7 @@ docker run -d --name fh-demo --network host \
   -e DATABASE_URL="postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:5432/${DB}" \
   -e FREEHOLDER_SEED_DEMO=1 \
   -e FREEHOLDER_UNSAFE_LOCAL_STORAGE=1 \
+  -e LOCAL_STORAGE_ROOT=/tmp/freeholder-media \
   "$IMAGE" >/dev/null
 
 code=""
