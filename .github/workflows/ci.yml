@@ -13,6 +13,11 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The upgrade gate (§39.9) pulls the previously released image to prove
+      # an owner's instance can actually get from that release to this one.
+      packages: read
     services:
       postgres:
         image: postgres:16
@@ -91,6 +96,35 @@ jobs:
             console.log(`booted ${h.modules} modules, ${h.services} services, ${h.listeners} listeners`);
           ' "$health"
           docker rm -f freeholder-ci >/dev/null
+      # §39.5: rollback is an image swap only while release N's schema is
+      # still readable by N-1. This refuses the statements known to break that,
+      # unless somebody wrote down that they are doing it deliberately.
+      - name: Schema-compatibility gate (§39.5)
+        if: github.event_name == 'pull_request'
+        run: node scripts/schema-compat-gate.mjs origin/${{ github.base_ref }}
+      # The gate that makes auto-update safe to leave on (§39.9). Everything
+      # else in §39 — signatures, preflight, snapshots — reduces the blast
+      # radius of a bad upgrade. This is the only part that checks an upgrade
+      # actually works, on real data, against the release people are running.
+      # Read-only, and only so the previously released image can be pulled.
+      # A pull request from a fork gets a token that cannot reach packages; the
+      # gate notices and skips with a warning rather than failing somebody
+      # else's contribution for a permission they were never going to have.
+      - name: Registry login (for the previous release)
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upgrade gate (§39.9)
+        run: bash scripts/upgrade-gate.sh
+        env:
+          PREVIOUS_IMAGE: ghcr.io/${{ github.repository }}:edge
+          CURRENT_IMAGE: freeholder:ci
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
       - name: Changelog gate (§15.6)
         if: github.event_name == 'pull_request'
         run: node scripts/changelog-gate.mjs origin/${{ github.base_ref }}
