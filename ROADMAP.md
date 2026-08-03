@@ -250,7 +250,22 @@ would mean building it twice.
   listeners on spine events, tiers, rewards that redeem into the normal money
   path, holdbacks and reversal on refund, and the outstanding-points liability
   shown to the owner.
+- **`subscriptions`** (§4.15) — plans, entitlements as the unit of access,
+  hard/soft/metered paywalls with the SEO markup that matches the gate, dunning
+  policies, proration, and portal self-service. It lands after `payments`
+  because provider-run billing is most of it, and before `ads` because a
+  publisher usually tries a membership before it tries a sponsor.
+- **`ads`** (§4.16) — seeded IAB sizes per breakpoint, the slot block, house
+  fill, sold campaigns invoiced through the money path, first-party impression,
+  viewability, unique and click counting into analytics with a daily rollup,
+  and consent-gated third-party creatives with generated `ads.txt`.
 - **`reporting`** and the accounting export.
+
+**Payment providers** (§12): Stripe, PayPal and manual/offline at 1.0; Square,
+Mollie, Razorpay and Paystack/Flutterwave as first-party adapters after it,
+chosen for the markets the first two serve worst. Methods — Apple Pay, Klarna,
+iDEAL, SEPA, ACH — are surfaced by whichever provider is configured rather than
+being adapters of their own.
 
 §38 is the checklist for what "done" means here: it names the connective work
 that makes a list of modules feel like a product rather than a suite.
