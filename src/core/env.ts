@@ -66,6 +66,16 @@ const envSchema = z.object({
    * with an owner's uploads on a disk that a rebuild throws away.
    */
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: z.enum(["1"]).optional(),
+
+  /**
+   * Install the Aurora Coast demo business at boot, if the site is empty.
+   *
+   * For demo deploys, the plugin dev harness (§25) and the SEO gate (§15.2),
+   * which needs a site to crawl inside a container it did not build. Read once
+   * at startup and never in response to a request — a route that installs a
+   * demo business is a route somebody eventually hits on a real instance.
+   */
+  FREEHOLDER_SEED_DEMO: z.enum(["1"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
