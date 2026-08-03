@@ -152,6 +152,7 @@ freeholder/
 │   ├── social               # Media prep (crop/trim presets, captions) + scheduled publishing [v2: auto-clip]
 │   ├── affiliates           # Referral & commission engine: dual-sided codes, attribution touches, holdbacks, payout batches
 │   ├── loyalty              # Points ledger, earn rules over spine events, tiers, rewards, redemption & liability
+│   ├── ads                  # Ad slots at IAB sizes per breakpoint, house & sold campaigns, third-party tags, first-party counts
 │   └── analytics            # First-party pageviews + funnel events, joined to contacts
 │
 └── platform/                # Operate & extend
@@ -323,8 +324,8 @@ shipping and return policy — the fields Google actually reads.
 | `Contract` | Agreement requiring signature. | contact_id, quote_id (nullable), template_id, body_snapshot, status, signed_at, signature (name, ip, user_agent, hash) — audit trail |
 | `Invoice` | **The single money object.** | contact_id, source_type + source_id (order/quote/booking/subscription/manual), status, line_items (jsonb snapshot), totals, due_at, deposit_of_invoice_id (for split deposit/balance), schedule (jsonb for plans) |
 | `Payment` | One attempt/settlement against an invoice. | invoice_id, provider (stripe/paypal/manual/gift_card), provider_ref, amount_cents, status, method, refunded_amount_cents |
-| `Subscription` | Recurring billing. | contact_id, product_variant_id, provider_ref, status, current_period_end, grants (jsonb: gated content, member pricing) |
-| `ContentUnlock` | One-time paywall purchase. | contact_id, subject_type + subject_id (page/post/gallery/asset), invoice_id, granted_at, expires_at (nullable — lifetime by default) |
+| `Subscription` | Recurring billing. Plans, entitlements, dunning and proration are §4.15. | contact_id, plan_id, product_variant_id, provider, provider_ref, billing_mode, status, current_period_end, cancel_at_period_end, grants (jsonb: gated content, member pricing) |
+| `ContentUnlock` | One-time paywall purchase. Access itself is decided by §4.15's entitlements; this is the money. | contact_id, subject_type + subject_id (page/post/gallery/asset), invoice_id, granted_at, expires_at (nullable — lifetime by default) |
 | `Tip` | Voluntary payment, standalone or attached to another flow. | contact_id (nullable — anonymous allowed), invoice_id, amount_cents, currency, context (block/checkout/invoice/gallery), message |
 | `Coupon` / `GiftCard` | Promotions. | code, rules (jsonb), balance_cents (gift card), redemptions |
 | `AffiliateProgram` | Admin-defined commission scheme. | name, conversion_types[] (signup/subscription/order/booking/custom event), customer_discount (jsonb), commission (jsonb: percent or fixed, basis, cap, recurring or first-cycle-only), cookie_window_days, status |
@@ -825,6 +826,123 @@ duration, a missed-call event — to the same `Conversation` and the same
 timeline, so a call is part of a person's history without core learning what a
 SIP trunk is.
 
+### 4.15 Subscriptions, entitlements and paywalls
+
+§4.3 owns the *money* of a subscription — `Subscription`, `Invoice`, `Payment`,
+`ContentUnlock`. This section owns the *access*, because "who may see this" is
+a different question from "who paid", and conflating them is how content ends
+up gated by a boolean somebody forgot to check.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `Plan` | A recurring offer. A `subscription` product's shape. | product_id, name, interval (day/week/month/year), interval_count, trial_days, trial_requires_card, setup_fee_cents, billing_mode (provider/platform/manual), cancel_behaviour (period_end/immediate), proration (create_prorations/none), status |
+| `Entitlement` | What a plan, pass or unlock *grants*. The unit of access. | grantor_type (plan/pass/unlock/tier/manual), grantor_id, resource (jsonb: kind + selector), quantity (nullable — metered), period (per_month/per_cycle/total), priority |
+| `EntitlementGrant` | A contact actually holding one, with its window. | contact_id, entitlement_id, source_subscription_id / pass_balance_id / unlock_id, starts_at, ends_at, used, status |
+| `Paywall` | The rule attached to content. | name, applies_to (jsonb: page/post/gallery/collection/tag/product selector), mode (hard/soft/metered/registration), meter_count, meter_window_days, preview_strategy (blocks/paragraphs/percent), preview_value, required_entitlements[], upsell_page_id, seo_policy |
+| `MeterCounter` | Metered paywall state, per visitor. | subject (anon_id or contact_id), paywall_id, window_starts_at, count |
+| `SubscriptionEvent` | The lifecycle, appended. | subscription_id, kind (created/trialing/activated/renewed/payment_failed/dunning/paused/resumed/plan_changed/cancelled/expired), from_plan_id, to_plan_id, invoice_id, at |
+| `DunningPolicy` | What happens when a renewal fails. | retries (jsonb: offsets), grace_days, notify_channels[], final_action (pause/cancel/downgrade_to_plan_id) |
+
+**Rules:**
+
+- **Access is computed from grants, never stored on the content.** A page does
+  not carry "members only"; a `Paywall` selects it and an `EntitlementGrant`
+  answers for a given person at a given moment. That is what lets one purchase
+  unlock a gallery, a download and member pricing without three flags.
+- **The gated content is never in the HTML.** A soft paywall renders the
+  teaser server-side and stops; there is no hidden div and no client-side
+  removal, because a paywall that ships the content and hides it is not a
+  paywall.
+- **Metered access is honest about crawlers.** Google requires
+  `isAccessibleForFree: false` plus a `cssSelector` naming the gated part
+  (`hasPart`), and serving crawlers something visitors cannot get is cloaking.
+  `seo_policy` chooses between *flexible sampling* (a stated number of free
+  views, applied to crawlers and humans alike) and *fully gated with structured
+  data* — and the platform emits the markup that matches the choice. Getting
+  this wrong is a manual action, so it is not left to an owner's judgement in a
+  help doc.
+- **Trials, upgrades and downgrades are proration decisions, and they are
+  stated per plan** rather than discovered at the first mid-cycle change.
+- **Dunning is a policy with a schedule**, not a single failed charge: retries
+  at stated offsets, a grace period during which access continues, notices on
+  the channels the contact consented to (§4.14), and a final action the owner
+  chose. Involuntary churn is the largest churn category in every subscription
+  business, and it is almost entirely a retry-schedule problem.
+- **Billing mode is explicit.** `provider` lets Stripe or PayPal run the
+  schedule; `platform` runs it from `core/jobs` against a stored payment
+  method; `manual` issues an invoice each period for a client who pays by
+  transfer. A retainer and a $5/month membership are the same object with
+  different modes.
+- **Self-service in the portal is mandatory**: change plan, update the card,
+  pause, cancel. Every cancellation an owner has to process by email is a
+  support cost and, in several jurisdictions, a legal exposure ("click to
+  cancel" rules).
+- **Cancelling ends the grant at the period end by default**, and expiry is a
+  job that writes `SubscriptionEvent` rows — access never quietly outlives the
+  money, and never disappears before the period the customer paid for.
+
+### 4.16 Advertising and sponsored inventory
+
+Some of these businesses are publishers: a local news site, a newsletter with a
+sponsor, a niche blog with a house ad for its own workshop. They need ad slots
+that behave properly at both breakpoints, a way to sell them, and honest
+numbers — not a Google tag and a hope.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `AdSlot` | A named, reusable position. Placed on the page as a block (§32), so where an ad appears is content structure like everything else. | name, code, description, formats[] (per breakpoint: sizes, ratio), lazy, refresh_seconds (0 = never), allow_house_fill, allow_third_party, status |
+| `AdSize` | An IAB-standard size, per breakpoint. Seeded, extensible. | label, width, height, breakpoint (desktop/tablet/mobile), iab_name |
+| `Advertiser` | Who is buying. **A `Contact`**, not a separate customer table. | contact_id, display_name, website, notes, billing_terms |
+| `AdCampaign` | A sale. Invoiced through the normal money path. | advertiser_contact_id, name, starts_at, ends_at, status (draft/scheduled/live/paused/completed), pricing (cpm/cpc/flat/house), rate_cents, budget_cents, pacing (even/asap), invoice_id, priority |
+| `AdLineItem` | What runs where. | campaign_id, slot_ids[], targeting (jsonb: locale, country, device, path patterns, referrer, segment_id), dayparting (jsonb), frequency_cap (n per period), goal_impressions, goal_clicks, weight, status |
+| `AdCreative` | The thing rendered. | line_item_id, kind (image/animated/video/native/html_tag/provider), asset_id, size, click_url, alt_text, headline, body, cta_label, tag_html, provider (jsonb: network, unit path, params), status, review_state |
+| `AdStat` | Daily rollup, written by a job from the event stream. | line_item_id, creative_id, slot_id, date, impressions, viewable_impressions, uniques, clicks, spend_cents |
+
+**Rules:**
+
+- **Standard sizes ship seeded, per breakpoint.** Desktop: 970×250 billboard,
+  970×90 and 728×90 leaderboards, 300×250 medium rectangle, 336×280 large
+  rectangle, 300×600 half page, 160×600 skyscraper. Mobile: 320×50 banner,
+  320×100 large banner, 300×250, 300×50. A slot declares a *set* per
+  breakpoint, so one placement serves a leaderboard on a laptop and a 320×50 on
+  a phone without the owner building two pages. Reserved space is rendered from
+  the declared size at every breakpoint, because an ad that arrives late and
+  pushes the article down is a Core Web Vitals failure and §36 already promises
+  those are core's problem.
+- **In-house first.** The default inventory is the owner's own: an uploaded
+  asset from `core/media`, a headline and a click URL. That is the case that
+  must be excellent, because it is how a small publisher runs a sponsor, and
+  how anyone runs a house promotion. `allow_house_fill` means unsold inventory
+  shows the owner's own campaign rather than a hole.
+- **Third-party inventory is supported and off by default.** A creative of kind
+  `html_tag` or `provider` carries somebody else's script, which means somebody
+  else's tracking. It is therefore gated behind the consent banner, refused
+  entirely when the visitor has not consented, disclosed in the admin at the
+  moment of pasting, and never present on a page where no third-party creative
+  is eligible. `/ads.txt` and `/app-ads.txt` are generated routes, because
+  programmatic demand requires them and a hand-edited file goes stale.
+- **Measurement is first-party and follows the MRC definition.** An impression
+  counts on render; a *viewable* impression counts at 50% of pixels for one
+  continuous second (two for video), observed with an `IntersectionObserver`
+  and reported to first-party analytics (§4.7) as `ad.impression`,
+  `ad.viewable`, `ad.click`. Uniques are distinct `anon_id` per day, from the
+  same first-party identifier the rest of analytics uses — no third-party
+  cookie, no fingerprinting, and the number is honest about what it is.
+- **`AdStat` is a rollup, not the source.** Events stream into analytics; a job
+  aggregates daily. Reporting reads the rollup, so a busy month does not turn
+  the advertiser report into a table scan, and the raw events remain for
+  auditing a disputed invoice.
+- **Click-outs are counted then redirected** through a signed first-party
+  endpoint, so the count and the destination cannot disagree, and a creative
+  cannot be swapped for a different target after approval.
+- **Selling an ad is selling a product.** `AdCampaign.invoice_id` ties a sale
+  to the same invoicing, tax and reporting path as everything else. The
+  advertiser is a `Contact`, so their history — the pitch, the quote, the
+  invoice, last year's campaign — is one timeline.
+- **Bounded by editorial honesty**: creatives carry a review state, sponsored
+  placements are labelled in the markup (`rel="sponsored"` on links,
+  a visible label), and there is no configuration that removes the label.
+
 ---
 
 ## 5. The SEO Layer (doctrine, enforced structurally)
@@ -846,6 +964,8 @@ This section encodes the standards from BigDataSEO.com and the Vibe Coding 101 S
 **Site-level:** locale-split sitemaps under a sitemap index, auto-updated on publish with IndexNow ping; robots.txt allowing crawlers and blocking `/admin`, `/portal`, checkout, and filter parameters; 301 management via the `Redirect` entity with automatic redirect creation on slug change (slugs never silently break); clean structural 404s.
 
 **AEO (answer-engine optimization):** auto-generated `/llms.txt` describing the business, offerings, locations, and key pages; content blocks encourage direct-answer patterns (FAQ blocks are first-class in the CMS); all schema above doubles as AI-crawler food. The analytics module tags referrers from AI surfaces (ChatGPT, Perplexity, AI Overviews) as a distinct acquisition channel.
+
+**Monetization surfaces:** `/ads.txt` and `/app-ads.txt` are generated from the ad module's configuration (§4.16) rather than hand-edited, and paywalled content emits `isAccessibleForFree: false` with a `cssSelector` naming the gated part — serving a crawler something a visitor cannot reach is cloaking, and §4.15's `seo_policy` is what keeps the markup and the gate telling the same story.
 
 **Programmatic pages:** the location × service matrix (e.g., `/locations/comox-valley/wedding-photography/`) is generated only where the owner enables it, with genuinely differentiated content blocks per page (location-specific galleries, testimonials, hours) — thin-template mass generation is explicitly out of scope; it's the failure mode RIBA audits exist to catch.
 
@@ -1061,14 +1181,55 @@ Adapters isolate vendors. Each adapter family has one interface in `src/adapters
 ```ts
 // src/adapters/payments/types.ts
 export interface PaymentAdapter {
-  readonly id: "stripe" | "paypal" | "manual";
+  readonly id: string;                    // "stripe" | "paypal" | "manual" | a plugin's
   createCheckout(invoice: InvoiceForCharge): Promise<{ url: string; providerRef: string }>;
   createSubscription?(sub: SubscriptionRequest): Promise<ProviderSubscription>;
   refund(payment: PaymentRecord, amountCents: number): Promise<RefundResult>;
   verifyWebhook(req: RawRequest): Promise<PaymentEvent>;   // normalize to internal event shape
   supportedCurrencies(): Promise<string[]>;
+  supportedMethods(ctx: { country: string; currency: string }): Promise<PaymentMethodOffer[]>;
+  capabilities(): AdapterCapabilities;     // subscriptions? refunds? in-person? payouts? SCA?
 }
 ```
+
+**Providers and methods are not the same thing, and conflating them is how
+integrations sprawl.** Apple Pay, Google Pay, Klarna, iDEAL, Bancontact, SEPA
+Direct Debit, ACH, BACS and Interac are payment *methods* — most are surfaced
+by a PSP an instance already has. Checkout therefore renders **methods**
+returned by `supportedMethods()` for the visitor's country and currency, not a
+list of vendor logos. Adding Klarna is a configuration change at the provider,
+not a new adapter.
+
+**More than one provider may be live at once.** A `PaymentProviderConfig` row
+per enabled provider carries its credentials, its priority, and eligibility
+rules (currency, country, method, amount range, one-off versus recurring), and
+the checkout offers whatever qualifies. What is *not* negotiable: a refund goes
+back through the provider that took the money, and `Payment.provider` records
+which one that was, forever.
+
+**At 1.0 the shipped set is deliberately small:**
+
+| Provider | Why it ships | Covers |
+|---|---|---|
+| **Stripe** | Default. Broadest method coverage from one integration — cards, Apple/Google Pay, SEPA, ACH, BACS, iDEAL, Bancontact, Klarna, Afterpay, plus Billing for provider-run subscriptions and Terminal for in-person. | 45+ countries |
+| **PayPal** | Not a technical choice — a trust one. A meaningful share of buyers will not enter a card on a site they have not heard of, and will pay instantly with PayPal. Includes PayPal Subscriptions and Venmo in the US. | 200+ markets |
+| **Manual / offline** | Bank transfer, e-transfer, cash, cheque, "pay me at the shoot". Not a fallback: for a large share of service businesses it is the *primary* method, and a platform that cannot record it forces a second ledger. | Everywhere |
+
+**The next four, as first-party adapters after 1.0**, chosen for the markets
+Stripe and PayPal serve worst rather than for logo count: **Square** (retail and
+in-person North America, and the incumbent for many salons and studios),
+**Mollie** (European SMBs — iDEAL, Bancontact, SEPA, with pricing and onboarding
+that suit a one-person business better than Adyen's), **Razorpay** (India: UPI,
+netbanking, RuPay — none of which Stripe covers well locally), and **Paystack
+or Flutterwave** (Africa). **Mercado Pago** follows for Latin America. Each is
+one adapter implementing the interface above; none requires a core change,
+which is the point of having the interface.
+
+**Deliberately not shipped:** crypto (volatility and refund semantics that do
+not fit the invoice model), and any provider requiring the platform to touch
+raw card data. Every shipped adapter is redirect- or element-based, so PCI
+scope stays SAQ-A and an owner self-hosting on a droplet never inherits an
+obligation they did not choose.
 
 ```ts
 // src/adapters/mail/types.ts
@@ -1548,7 +1709,7 @@ One block editor for **everything with a public face** — pages, posts, email t
 
 **Structure is data; code is vocabulary.** The governing rule of the whole editing surface: rearranging the site — any page, the chrome around it, the look of it — is a database write, live on next request, never a build. Only extending the *vocabulary* (a new block type, a new behavior) is code, which arrives via plugin and its rebuild-on-install. There is no build step between an owner and their site.
 
-- **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), tip/support (pay-what-you-want with preset amounts), paywall gate (wraps any blocks behind a one-time unlock or subscription — server-rendered teaser, gated content never present in the HTML), custom HTML (admin-only permission).
+- **Block library v1:** text, heading, image (auto alt-text suggestion), gallery embed, video, button/CTA, columns, divider, FAQ (emits FAQPage schema), testimonial (pulls from reviews), product/service card (live from catalog), booking widget, form embed, quote-request, map (from locations), social embed, share block (§34), tip/support (pay-what-you-want with preset amounts), paywall gate (wraps any blocks behind a one-time unlock or subscription — server-rendered teaser, gated content never present in the HTML), ad slot (names an `AdSlot`; reserves its declared size at every breakpoint so nothing shifts when a creative arrives), custom HTML (admin-only permission).
 - **Editing model:** drag to reorder, slash-command insertion, inline editing, autosave with visible version history and one-click restore (`ContentRevision` rows — normalized, in the database, per the mandate). Live responsive preview (desktop/mobile) and — for emails — inbox preview with the test-send button adjacent.
 - **Templates & sections:** any block arrangement can be saved as a reusable Section (synced or detached copies), and full-page templates ship per business preset. Plugins register new block types through the manifest (§24) and they appear in the palette with zero editor changes.
 - **Site chrome is Sections:** the header, footer, nav, and announcement bar are synced Sections — block trees in the database, edited in the same editor, server-rendered on every page. Menus are rows, not JSX. `app/(public)/layout.tsx` is a thin shell that renders the chrome Sections; it contains no hardcoded site structure.
@@ -1621,7 +1782,7 @@ Method: the most-installed plugins/apps on both ecosystems are a revealed-prefer
 - **Gift options & registries**; **print-on-demand adapter** (Printify-style) as a fulfillment plugin; **memberships/gated communities** beyond simple subscriptions. (Local delivery and pickup scheduling also moved into core — §4.11.)
 - **Voice and video** (calls, video rooms, recordings, transcripts) through provider adapters. Core owns the conversation and the timeline; the vendor SDK, its compliance posture and its pricing stay behind a plugin boundary (§4.14).
 
-**Explicitly out (the anti-roadmap):** dropshipping marketplaces, ad-network integrations, third-party analytics pixels as core, page-builder lock-in formats, anything that makes the owner's data someone else's product. The WordPress lesson cuts both ways — install-count proves demand, but half those plugins exist to patch an incoherent core. Freeholder absorbs the coherence and leaves the patchwork behind.
+**Explicitly out (the anti-roadmap):** dropshipping marketplaces, third-party analytics pixels as core, page-builder lock-in formats, anything that makes the owner's data someone else's product. *(Narrowed 2026-08-02: ad **networks** were listed here outright. §4.16 now ships owner-sold and house ad inventory with first-party counting, and permits a third-party network tag as a consent-gated creative kind. The line that mattered was never "no advertising" — it was that the owner's audience must not be silently rented to an ad network by default, which the consent gate and the off-by-default flag preserve.)* The WordPress lesson cuts both ways — install-count proves demand, but half those plugins exist to patch an incoherent core. Freeholder absorbs the coherence and leaves the patchwork behind.
 
 **Sequencing:** core absorptions land across v1.x in roughly the order listed (security/performance/anti-spam are v1.0 gates, not features); first-party plugins are the launch catalog for the plugin registry — seeding the ecosystem with high-demand examples that teach the plugin API by existing.
 
@@ -1723,6 +1884,13 @@ rather than in a backlog.
 - **Two-way text messaging** (§4.14): a real conversation per contact, with
   consent, opt-out propagation and the recipient's quiet hours enforced in the
   service layer rather than remembered by a human.
+- **Subscriptions with real access control** (§4.15): plans, entitlements,
+  hard/soft/metered paywalls that never ship the gated content to the browser,
+  dunning with a retry schedule, and self-service cancellation in the portal.
+- **Ad inventory the owner controls** (§4.16): IAB-standard slots per
+  breakpoint, house and sold campaigns invoiced through the normal money path,
+  first-party impressions, viewability, uniques and clicks — with third-party
+  tags possible, consent-gated, and off by default.
 - **Time tracking against a project or booking**, billable and unbillable, that
   becomes invoice lines in one step. A `TimeEntry` (contact_id, project_id,
   booking_id, minutes, rate_cents, billable, invoiced_invoice_id) is a small
