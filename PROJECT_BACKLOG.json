@@ -550,5 +550,28 @@
       "installDemo calls ensureDefaults and then updates the home page it creates, because updateSection updates and does not upsert. It mirrors what an owner does, but a create-or-update section service would be more honest",
       "Copy is en only; EntityTranslation and locale routing have not landed, so a second locale has nothing to seed into"
     ]
+  },
+  {
+    "id": "2026-08-03-seo-a11y-gates",
+    "date": "2026-08-03",
+    "title": "The SEO crawl gate and the a11y smoke test",
+    "masterRef": "§5, §15.2, §15.7",
+    "status": "done",
+    "delivered": [
+      "A crawler that walks the seeded demo site from the root, following only links a search engine would follow, recording the shortest depth to each page — run against a real server rendering real pages, because the interesting failures live in the gap between the source and what a browser is sent",
+      "Per page: title, meta description, an absolute canonical that points at itself, exactly one H1, alt on every image, and JSON-LD that parses with a schema.org context and the properties that make each type useful rather than merely valid",
+      "Across the set: duplicate titles, duplicate descriptions, anything more than three clicks from home, pages in the sitemap that nothing links to, and pages linked from the site that the sitemap never mentions",
+      "hreflang is checked only when the instance publishes more than one locale — demanding it of a single-locale site would train people to add tags describing a translation that does not exist",
+      "An accessibility smoke test running axe-core inside a jsdom window over the four public templates, restricted to rules that mean something without layout",
+      "Both gates run in CI against the built image with FREEHOLDER_SEED_DEMO=1, and the runner refuses to proceed unless the demo actually installed — a crawl gate over an empty instance is a green tick that checked one page",
+      "Proved failing on a real page rather than a fixture: added a second H1 and blanked an asset's alt text in a live database, and the gate exited 1 naming both pages and the image"
+    ],
+    "openFollowUps": [
+      "page-has-heading-one comes back *incomplete* under jsdom because axe needs layout, so it is out of the rule list — found while testing, and the reason the gate now reports undecided rules instead of counting them as passes. landmark-one-main lands in the same state on the real pages",
+      "No browser, so focus order, focus visibility, keyboard traps and reflow at 320px are all unchecked. Colour contrast is covered separately by tests/core/tokens.test.ts, which enforces WCAG AA on token pairings in both schemes",
+      "The crawl follows links only; a page reachable solely by a form submission or a redirect is invisible to it",
+      "JSON-LD validation is against a hand-listed set of the types we emit, not the schema.org vocabulary. It catches a BreadcrumbList without positions; it would not catch a misspelled property on a type nobody here uses",
+      "The a11y smoke strips the page's scripts before parsing, so anything rendered only after hydration is not audited. Nothing on the public surface currently is"
+    ]
   }
 ]

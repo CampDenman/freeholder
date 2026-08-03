@@ -168,7 +168,11 @@ migrations and re-theming all stop being true.
 - **`seed/`** — "Aurora Coast Photography". A prerequisite rather than a nicety:
   §15.2's SEO gate crawls the seeded demo site, and §25's plugin dev harness
   boots it.
-- **The §15.2 SEO gate and §15.7 a11y smoke in CI.**
+- ~~**The §15.2 SEO gate and §15.7 a11y smoke in CI**~~ ✅ *(2026-08-03)* — the
+  demo site is crawled from the root on every PR and the four public templates
+  are audited with axe. What is still owed is a browser: focus order, focus
+  visibility, keyboard traps and reflow are unchecked, and the gate now says so
+  out loud rather than implying coverage it does not have.
 - **`forms`** — submissions reaching the spine through `contacts.resolve` and
   `ctx.callAsSystem`, with the honeypot and time-trap anti-spam of §36.
 - **`analytics`** — first-party pageviews and funnel events joined to contacts.
