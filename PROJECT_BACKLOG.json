@@ -703,5 +703,28 @@
       "core.dispatchOutbox runs every minute, so a crash costs up to a minute of delay on events that would otherwise have been instant. Fine for reminders and analytics; worth revisiting if anything time-critical starts riding the bus",
       "The analytics listener that reads a cookie still degrades when replayed by the sweeper — it records the conversion without the visitor link. Documented when it was written and now genuinely reachable"
     ]
+  },
+  {
+    "id": "2026-08-04-change-password",
+    "date": "2026-08-04",
+    "title": "Changing your own password, and the way back in when you cannot",
+    "masterRef": "§9, §13",
+    "status": "done",
+    "delivered": [
+      "auth.changePassword: requires the current password even though the caller is signed in, because a session left open on a shared machine is the ordinary way an account is taken over, and knowing the old password is the cheapest proof the right person is typing",
+      "Every other session is revoked and the caller's own is kept. Changing a password is what somebody does when they think another person has it — leaving the intruder's session alive would make the act ceremonial — while signing somebody out of the screen they just used is a bug, not security",
+      "A twelve-character floor by length rather than character classes: a passphrase somebody can remember beats a short string with punctuation bolted on",
+      "scripts/owner-password.mjs, shipped inside the image: generates a password, hashes it with node:crypto, and prints the SQL that installs it. It cannot run the statement itself because a standalone build's node_modules holds four packages and none of them is a Postgres driver — so it computes the hash where the code lives and hands the operator something to run against the database container",
+      "The script restates the scrypt parameters instead of importing them, and a test runs the real script and hands what it produced to the real verifier — a deliberate duplication with nothing checking it is a copy waiting to rot, and the symptom would be a password the script swears it set and the application refuses, on the one day somebody is already locked out",
+      "Verified end to end on a live instance: registered an owner, signed in, ran the script, applied its statement, and watched the old password answer 401 while the new one answered 200",
+      "Neither password reaches the audit trail — the existing redaction covers them — but the fact of the change does, which is what an owner reading their own log needs to see"
+    ],
+    "openFollowUps": [
+      "Email-based reset still does not exist, and cannot until the mail adapter family does. That is the next PR by the owner's decision; until then a locked-out owner needs shell access",
+      "OTP is deferred entirely at the owner's request. §9 and §13 step 1 still owe it, and §36 lists 2FA for staff among the v1.0 security gates",
+      "The escape hatch is two commands rather than one, because the app container has no driver and the database container has no node. A single command would need either a driver in the image or psql in the app image",
+      "Found by rendering rather than by typecheck: the settings page passed a *function* into a client component to format the success message. Types allow it; React cannot serialise it. The wording moved into the server action, which is where the catalogs and plural rules live anyway — and is the better shape regardless",
+      "No password-strength feedback beyond the length floor, and no check against known-breached passwords"
+    ]
   }
 ]

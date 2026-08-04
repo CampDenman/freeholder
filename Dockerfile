@@ -39,6 +39,9 @@ COPY --from=build --chown=freeholder:freeholder /app/public ./public
 # Migrations travel with the image so a release can never be newer than the
 # schema it expects.
 COPY --from=build --chown=freeholder:freeholder /app/db ./db
+# The way back in when nobody can sign in. Needs only node:crypto, which is
+# why it can live in an image whose node_modules holds four packages.
+COPY --from=build --chown=freeholder:freeholder /app/scripts/owner-password.mjs ./scripts/owner-password.mjs
 USER freeholder
 EXPOSE 3000
 CMD ["node", "server.js"]

@@ -70,3 +70,18 @@ this is worth doing once by hand — and worth wiring into monitoring later.
 
 - [ ] A failure here is not a warning to note and move past. An image that
       cannot be verified should not be run.
+
+## You can get back in when you cannot sign in
+
+Worth doing once, before you need it — a password you cannot reset is a
+business you cannot reach.
+
+- [ ] Generate a new owner password and the statement that installs it:
+
+      docker compose exec app node scripts/owner-password.mjs
+
+- [ ] It prints the password once and does *not* apply it. Run the statement it
+      gives you against the database, then sign in with the new password.
+- [ ] Change it again from **Settings → Password**, so the password that ends
+      up in your shell history is not the one you keep. Every other signed-in
+      device is signed out when you do.

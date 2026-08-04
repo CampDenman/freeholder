@@ -6,12 +6,13 @@
 // is closed. Email+password now; OTP verification joins in the wizard PR
 // (the otp_secret column already exists).
 import { z } from "zod";
-import { count, eq, sql } from "drizzle-orm";
-import { users } from "@/core/auth/schema";
+import { and, count, eq, ne, sql } from "drizzle-orm";
+import { sessions, users } from "@/core/auth/schema";
 import { isUniqueViolation } from "@/core/db";
 import { hashPassword, verifyPassword } from "@/core/auth/passwords";
 import {
   createSession,
+  hashSessionToken,
   revokeSessionByToken,
   validateSession,
 } from "@/core/auth/sessions";
@@ -171,6 +172,90 @@ export const logout = defineService({
   },
 });
 
+/**
+ * Change your own password (MASTER.md §9, §13 step 1).
+ *
+ * The current password is required even though the caller is signed in, and
+ * that is not ceremony: a session left open on a shared machine is the ordinary
+ * way an account is taken over, and knowing the old password is the cheapest
+ * proof that the person typing is the person the account belongs to.
+ *
+ * Every *other* session is revoked. Changing a password is what somebody does
+ * when they think someone else has it — leaving the intruder's session alive
+ * would make the act pointless. The caller's own session survives, because
+ * signing somebody out of the screen they just used is a bug, not security.
+ */
+export const changePassword = defineService({
+  name: "auth.changePassword",
+  summary: "Change your own password.",
+  kind: "mutation",
+  permission: "customer",
+  input: z.object({
+    currentPassword: z.string().min(1),
+    // §9's floor. Length rather than character classes: a passphrase somebody
+    // can remember beats a short string with a punctuation mark bolted on.
+    newPassword: z.string().min(12).max(200),
+    /** The session doing the changing, so it is the one left standing. */
+    keepSessionToken: z.string().optional(),
+  }),
+  rateLimit: {
+    limit: 10,
+    windowSeconds: 15 * 60,
+    subject: (_input) => "change-password",
+    message: "Too many attempts. Wait a few minutes and try again.",
+  },
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind !== "user") {
+      throw new ServiceError("permission", "Sign in to change your password.");
+    }
+    const userId = ctx.actor.userId;
+
+    const [user] = await ctx.tx
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!user?.passwordHash) {
+      // A magic-link-only customer has no password to change (§9).
+      throw new ServiceError(
+        "validation",
+        "This account signs in without a password.",
+      );
+    }
+
+    if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
+      throw new ServiceError("permission", "That is not your current password.");
+    }
+    if (input.currentPassword === input.newPassword) {
+      throw new ServiceError(
+        "validation",
+        "The new password is the same as the old one.",
+      );
+    }
+
+    await ctx.tx
+      .update(users)
+      .set({ passwordHash: await hashPassword(input.newPassword) })
+      .where(eq(users.id, userId));
+
+    const keepHash = input.keepSessionToken
+      ? hashSessionToken(input.keepSessionToken)
+      : undefined;
+    const revoked = await ctx.tx
+      .delete(sessions)
+      .where(
+        keepHash
+          ? and(eq(sessions.userId, userId), ne(sessions.tokenHash, keepHash))
+          : eq(sessions.userId, userId),
+      )
+      .returning({ id: sessions.id });
+
+    ctx.setSubject("user", userId);
+    ctx.queueEvent("auth.passwordChanged", { userId });
+    return { ok: true, otherSessionsRevoked: revoked.length };
+  },
+});
+
 export const whoami = defineService({
   name: "auth.whoami",
   summary: "Resolve a session token to its user, renewing if due.",
@@ -180,4 +265,5 @@ export const whoami = defineService({
   handler: (input, ctx) => validateSession(ctx.tx, input.token),
 });
 
-export default [registerOwner, login, logout, whoami];
+export default [
+  changePassword,registerOwner, login, logout, whoami];

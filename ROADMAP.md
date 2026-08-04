@@ -95,7 +95,11 @@ point:
   transaction the way events already are.
 - **`core/locations`** — NAP as a single source of truth with `renderNAP()`
   (§4.10), and setup wizard step 4.
-- **OTP and password reset**, closing §9's auth spec and §13 step 1.
+- **Password change and the locked-out escape hatch** ✅ *(2026-08-04)* — an
+  owner can rotate their own password from Settings, and a command on their own
+  server gets them back in when they cannot sign in at all. **Still owed:**
+  email-based reset, which waits on the mail adapter family, and OTP, which
+  §9, §13 step 1 and §36's 2FA gate all still expect.
 - **`scripts/doctor.ts`** — §17 calls doctor the contract that makes community
   recipes trustworthy. Every later phase adds checks to it.
 

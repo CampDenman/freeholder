@@ -13,6 +13,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { login, logout } from "@/core/auth/service";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { changePassword } from "@/core/auth/service";
+import { getT } from "../i18n";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import {
@@ -36,6 +38,8 @@ export interface ActionState {
    */
   values?: Record<string, string>;
   attempt?: number;
+  /** A fully-worded success line, built server-side (see changePasswordAction). */
+  message?: string;
 }
 
 function present(error: unknown): ActionState {
@@ -104,6 +108,45 @@ export async function signInAction(
     expires: expiresAt,
   });
   redirect("/admin");
+}
+
+/**
+ * Change your own password.
+ *
+ * The session token travels from the cookie into the service so the screen the
+ * owner is looking at is the one session left standing — every other device is
+ * signed out, which is the point of changing a password at all.
+ */
+export async function changePasswordAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  try {
+    const result = await changePassword.call(
+      {
+        currentPassword: field(form, "currentPassword"),
+        newPassword: field(form, "newPassword"),
+        keepSessionToken: token,
+      },
+      await currentActor(),
+    );
+    // The wording is decided here rather than handed to the client as a
+    // function: a server component may not pass one across that boundary, and
+    // the server is where the catalogs and the plural rules live anyway.
+    const t = await getT();
+    return {
+      saved: true,
+      message: t("settings.passwordChanged", {
+        count: result.otherSessionsRevoked,
+      }),
+    };
+  } catch (error) {
+    // Neither password is echoed back: `resubmit` already refuses to return a
+    // field called "password", and these are not called that.
+    return { ...present(error), attempt: (previous.attempt ?? 0) + 1 };
+  }
 }
 
 export async function signOutAction(): Promise<void> {

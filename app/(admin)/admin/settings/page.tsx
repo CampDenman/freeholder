@@ -7,6 +7,7 @@ import { getLocale, getT } from "../../../i18n";
 import { businessFormLabels, businessOptions } from "../../../setup/businessLabels";
 import { requireStaffActor } from "../guard";
 import { SettingsForm } from "./SettingsForm";
+import { PasswordForm } from "./PasswordForm";
 import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,17 @@ export default async function AdminSettingsPage() {
           enabledLocales: business.enabledLocales,
           units: business.units,
           firstDayOfWeek: business.firstDayOfWeek,
+        }}
+      />
+
+      <PasswordForm
+        labels={{
+          cardTitle: t("settings.security"),
+          intro: t("settings.securityIntro"),
+          current: t("settings.currentPassword"),
+          next: t("settings.newPassword"),
+          nextHint: t("settings.newPasswordHelp"),
+          submit: t("settings.changePassword"),
         }}
       />
     </div>
