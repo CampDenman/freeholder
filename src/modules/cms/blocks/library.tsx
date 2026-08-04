@@ -213,6 +213,83 @@ export const faq = defineBlock({
 /* ----------------------------------------------------------------- chrome */
 
 /**
+ * A language switcher (§4.9).
+ *
+ * Added because the SEO gate caught its absence: the French home page was in
+ * the sitemap and no page linked to it, which is an orphan — a URL a crawler
+ * is told about and a person cannot reach. Every bilingual site needs this, so
+ * it belongs in the vocabulary rather than in one owner's footer markup.
+ *
+ * Renders nothing on a single-locale instance, which is most of them.
+ */
+export const locales = defineBlock({
+  type: "locales",
+  labelKey: "cms.block.locales",
+  contexts: ["chrome"],
+  schema: z.object({
+    separator: z.string().max(4).default("·"),
+  }),
+  starter: () => ({}),
+  render: ({ props, ctx }) => {
+    const enabled = ctx.business?.enabledLocales ?? [];
+    const fallback = ctx.business?.defaultLocale;
+    if (enabled.length < 2 || !fallback) return null;
+
+    // The same page in each language, not everybody's home page: a visitor
+    // switching language on an article wants that article.
+    const bare = ctx.path.replace(
+      new RegExp(`^/(?:${enabled.filter((l) => l !== fallback).join("|")})(?=/|$)`),
+      "",
+    );
+
+    return (
+      <nav aria-label={ctx.t("cms.nav.locales")} className="flex items-center gap-2">
+        {enabled.map((locale, index) => {
+          const href =
+            locale === fallback
+              ? bare || "/"
+              : `/${locale}${bare === "/" ? "" : bare}`;
+          const current = ctx.locale === locale;
+          return (
+            <span key={locale} className="flex items-center gap-2">
+              {index > 0 ? (
+                <span aria-hidden="true" className="text-ink-muted">
+                  {props.separator}
+                </span>
+              ) : null}
+              <a
+                href={href}
+                hrefLang={locale}
+                aria-current={current ? "true" : undefined}
+                className={cx(
+                  "text-xs",
+                  current ? "font-semibold text-ink" : "text-ink-muted",
+                )}
+              >
+                {/* The language's own name, not the reader's: somebody looking
+                    for French is looking for the word "Français". */}
+                {languageName(locale)}
+              </a>
+            </span>
+          );
+        })}
+      </nav>
+    );
+  },
+});
+
+/** A locale's name in its own language, with the tag as a last resort. */
+function languageName(locale: string): string {
+  try {
+    const display = new Intl.DisplayNames([locale], { type: "language" });
+    const name = display.of(locale);
+    return name ? name.charAt(0).toUpperCase() + name.slice(1) : locale;
+  } catch {
+    return locale;
+  }
+}
+
+/**
  * The business's name, live from settings. §4.10's discipline applied to
  * branding: rendered from one source so it cannot drift between the header,
  * the footer and the page that hardcoded it.

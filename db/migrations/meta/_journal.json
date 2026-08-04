@@ -64,6 +64,13 @@
       "when": 1785830970112,
       "tag": "0008_visitor-kind",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785834250410,
+      "tag": "0009_entity-translations",
+      "breakpoints": true
     }
   ]
 }

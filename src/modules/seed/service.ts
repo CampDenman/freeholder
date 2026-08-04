@@ -29,6 +29,7 @@ import {
 } from "@/modules/cms/service";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
 import { createForm } from "@/modules/forms/service";
+import { setTranslation } from "@/core/i18n/service";
 import {
   BUSINESS,
   footer,
@@ -36,6 +37,7 @@ import {
   header,
   IMAGES,
   PAGES,
+  TRANSLATIONS,
   type ImageSlot,
 } from "../../../seed/demo/content";
 
@@ -145,6 +147,26 @@ export const installDemo = defineService({
         await ctx.callAsSystem(publishPage, { id: row.id, published: true });
       }
       created.push(page.slug);
+    }
+
+    // Translations last: they name a page by id, so the pages have to exist.
+    const bySlug = new Map(
+      (await ctx.callAsSystem(listPages, {})).map((page) => [page.slug, page.id]),
+    );
+    for (const translation of TRANSLATIONS) {
+      const pageId = bySlug.get(translation.slug);
+      if (!pageId) continue;
+      await ctx.callAsSystem(setTranslation, {
+        entityType: "page",
+        entityId: pageId,
+        locale: translation.locale,
+        status: "reviewed",
+        fields: {
+          title: translation.title,
+          seo: translation.seo,
+          blocks: translation.blocks(assets),
+        },
+      });
     }
 
     await ctx.callAsSystem(completeSetup, {});

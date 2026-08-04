@@ -34,6 +34,9 @@ export interface BlockRenderContext {
   business: {
     name: string;
     tagline: string | null;
+    /** §4.9: what the language switcher offers, and what hreflang matches. */
+    defaultLocale?: string;
+    enabledLocales?: string[];
   } | null;
   /** Path currently being rendered, so nav can mark itself current. */
   path: string;

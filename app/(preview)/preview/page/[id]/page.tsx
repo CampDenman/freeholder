@@ -46,7 +46,12 @@ export default async function PagePreview({
         locale,
         t,
         business: business
-          ? { name: business.name, tagline: business.tagline }
+          ? {
+          name: business.name,
+          tagline: business.tagline,
+          defaultLocale: business.defaultLocale,
+          enabledLocales: business.enabledLocales,
+        }
           : null,
         path: page.slug === "" ? "/" : `/${page.slug}`,
         identifyBlocks: true,

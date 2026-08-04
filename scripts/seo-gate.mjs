@@ -56,7 +56,7 @@ export function auditPage({ url, html, status, locales = 1 }) {
 
   if (status !== 200) {
     at(`answered ${status}`);
-    return { problems, links: [], title: null, description: null };
+    return { problems, links: [], title: null, description: null, canonical: null };
   }
 
   const { document } = new JSDOM(html).window;
@@ -80,8 +80,19 @@ export function auditPage({ url, html, status, locales = 1 }) {
     at("has no canonical link");
   } else if (!/^https?:\/\//.test(canonical)) {
     at(`has a relative canonical (${canonical}); §5 requires an absolute URL`);
-  } else if (new URL(canonical).pathname !== new URL(url).pathname) {
-    at(`canonical points at ${new URL(canonical).pathname}, not itself`);
+  }
+
+  // The document's declared language against the one its URL claims. A French
+  // page saying lang="en" passes every validator and is read aloud in the
+  // wrong accent — the failure this caught on its first run.
+  const prefixed = /^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(?:\/|$)/.exec(
+    new URL(url).pathname,
+  );
+  const declared = document.documentElement.getAttribute("lang");
+  if (!declared) {
+    at("has no lang on <html>");
+  } else if (prefixed && declared.toLowerCase() !== prefixed[1].toLowerCase()) {
+    at(`is served under /${prefixed[1]}/ but declares lang="${declared}"`);
   }
 
   const h1s = document.querySelectorAll("h1");
@@ -139,7 +150,17 @@ export function auditPage({ url, html, status, locales = 1 }) {
     .map((a) => a.getAttribute("href"))
     .filter(Boolean);
 
-  return { problems, links, title, description };
+  // A page that names *another* URL as canonical is not claiming to be a page
+  // of its own — it is a second address for one. That is exactly what a
+  // locale-prefixed URL for an untranslated page is, and holding it to the
+  // uniqueness rules would demand it invent a different title for content that
+  // is deliberately the same.
+  const isCanonical =
+    !canonical ||
+    !/^https?:\/\//.test(canonical) ||
+    new URL(canonical).pathname === new URL(url).pathname;
+
+  return { problems, links, title, description, isCanonical };
 }
 
 /** Follow every internal link from the root, recording how deep each page is. */
@@ -150,6 +171,8 @@ async function crawl(base) {
   const problems = [];
   const titles = new Map();
   const descriptions = new Map();
+  /** Paths that name another URL as canonical — second addresses, not pages. */
+  const alternates = new Set();
 
   while (queue.length > 0) {
     const { path, depth } = queue.shift();
@@ -165,10 +188,11 @@ async function crawl(base) {
     const page = auditPage({ url, html, status: response.status });
     problems.push(...page.problems);
 
-    if (page.title) {
+    if (!page.isCanonical) alternates.add(path);
+    if (page.title && page.isCanonical) {
       titles.set(page.title, [...(titles.get(page.title) ?? []), path]);
     }
-    if (page.description) {
+    if (page.description && page.isCanonical) {
       descriptions.set(page.description, [
         ...(descriptions.get(page.description) ?? []),
         path,
@@ -206,7 +230,7 @@ async function crawl(base) {
     }
   }
 
-  return { seen, problems };
+  return { seen, problems, alternates };
 }
 
 /** Everything the sitemap claims, so orphans and lies both surface. */
@@ -226,7 +250,7 @@ async function sitemapPaths(base) {
 
 async function main() {
   const base = process.argv[2] ?? "http://localhost:3000";
-  const { seen, problems } = await crawl(base);
+  const { seen, problems, alternates } = await crawl(base);
   const sitemap = await sitemapPaths(base);
 
   // An orphan is in the sitemap and reachable by no link. It is the failure
@@ -239,6 +263,7 @@ async function main() {
   }
   // And the reverse: a page people can reach that the sitemap never mentions.
   for (const path of seen.keys()) {
+    if (alternates.has(path)) continue;
     if (!sitemap.has(path)) {
       problems.push({ url: path, message: "is linked from the site but missing from the sitemap" });
     }

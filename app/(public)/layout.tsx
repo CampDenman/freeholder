@@ -49,7 +49,12 @@ export default async function PublicLayout({
     locale,
     t,
     business: business
-      ? { name: business.name, tagline: business.tagline }
+      ? {
+          name: business.name,
+          tagline: business.tagline,
+          defaultLocale: business.defaultLocale,
+          enabledLocales: business.enabledLocales,
+        }
       : null,
     path: requestHeaders.get(PATH_HEADER) ?? "/",
   };

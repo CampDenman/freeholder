@@ -71,10 +71,14 @@ describe("what it refuses", () => {
       "has a relative canonical (/services); §5 requires an absolute URL",
     );
 
-    // The dangerous one: valid, absolute, and naming a different page — a site
-    // politely asking a search engine to drop it.
+    // A canonical naming a different URL is not an error: it is what a second
+    // address for one page looks like — a locale-prefixed URL for an
+    // untranslated page, say. The crawler stops holding it to the uniqueness
+    // rules instead of complaining about it.
     const elsewhere = page(`<h1>S</h1>`).replace("/services\">", "/about\">");
-    expect(messages(elsewhere)).toContain("canonical points at /about, not itself");
+    expect(messages(elsewhere)).toEqual([]);
+    expect(audit(elsewhere).isCanonical).toBe(false);
+    expect(audit(page(`<h1>S</h1>`)).isCanonical).toBe(true);
   });
 
   it("zero or several H1s", () => {

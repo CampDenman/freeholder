@@ -11,6 +11,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import { businessProfile } from "@/core/settings/schema";
+import { getTranslation, translatedIds } from "@/core/i18n/service";
 import { recordRedirect } from "@/core/seo/service";
 import { contentRevisions, pages, sections } from "./schema";
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
@@ -70,18 +71,51 @@ export const resolvePage = defineService({
   permission: "public",
   input: z.object({ slug: lookupSlug, locale: z.string().default("en") }),
   handler: async (input, ctx) => {
-    const [page] = await ctx.tx
-      .select()
+    // Pages are stored in the site's own language and *translated*, not
+    // duplicated (§4.9). So the lookup is by slug in the source language, and
+    // the requested locale decides which words come back — which is what makes
+    // /fr/services the same page as /services rather than a parallel one
+    // somebody has to remember to keep in step.
+    const [source] = await ctx.tx
+      .select({
+        page: pages,
+        defaultLocale: businessProfile.defaultLocale,
+      })
       .from(pages)
-      .where(
-        and(
-          eq(pages.slug, input.slug),
-          eq(pages.locale, input.locale),
-          eq(pages.status, "published"),
-        ),
-      )
+      .leftJoin(businessProfile, sql`true`)
+      .where(and(eq(pages.slug, input.slug), eq(pages.status, "published")))
       .limit(1);
-    return page ?? null;
+
+    const page = source?.page;
+    if (!page) return null;
+
+    const sourceLocale = source?.defaultLocale ?? page.locale;
+    if (input.locale === sourceLocale) return page;
+
+    const translation = await ctx.callAsSystem(getTranslation, {
+      entityType: "page",
+      entityId: page.id,
+      locale: input.locale,
+    });
+    if (!translation) {
+      // No reviewed translation: the page is served in the site's own
+      // language rather than not at all. A visitor who followed a French link
+      // to an untranslated page should read the English one, not a 404 — and
+      // hreflang only ever advertises the locales that do have one.
+      return page;
+    }
+
+    const fields = translation.fields as {
+      title?: string;
+      blocks?: unknown;
+      seo?: unknown;
+    };
+    return {
+      ...page,
+      title: fields.title ?? page.title,
+      blocks: fields.blocks ?? page.blocks,
+      seo: fields.seo ?? page.seo,
+    };
   },
 });
 
@@ -124,16 +158,52 @@ export const publishedPaths = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ locale: z.string().default("en") }),
-  handler: (input, ctx) =>
-    ctx.tx
+  handler: async (input, ctx) => {
+    const published = await ctx.tx
       .select({
+        id: pages.id,
         slug: pages.slug,
         title: pages.title,
         updatedAt: pages.updatedAt,
       })
       .from(pages)
-      .where(and(eq(pages.locale, input.locale), eq(pages.status, "published")))
-      .orderBy(pages.slug),
+      .where(eq(pages.status, "published"))
+      .orderBy(pages.slug);
+
+    const [business] = await ctx.tx
+      .select({ defaultLocale: businessProfile.defaultLocale })
+      .from(businessProfile)
+      .limit(1);
+
+    if (!business || input.locale === business.defaultLocale) {
+      return published.map(({ slug, title, updatedAt }) => ({
+        slug,
+        title,
+        updatedAt,
+      }));
+    }
+
+    // A locale's sitemap lists what that locale actually has (§5). A page with
+    // no reviewed translation is served in the site's own language, and
+    // listing it under /fr/ would advertise a French page that is in English.
+    const translated = new Set(
+      await ctx.callAsSystem(translatedIds, {
+        entityType: "page",
+        locale: input.locale,
+        ids: published.map((page) => page.id),
+      }),
+    );
+
+    return published
+      .filter((page) => translated.has(page.id))
+      .map(({ slug, title, updatedAt }) => ({
+        // The prefix belongs in the sitemap because it is the address a
+        // crawler should fetch.
+        slug: slug === "" ? input.locale : `${input.locale}/${slug}`,
+        title,
+        updatedAt,
+      }));
+  },
 });
 
 const duplicateSlug = (slugValue: string) =>

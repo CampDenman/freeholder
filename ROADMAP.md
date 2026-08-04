@@ -186,7 +186,13 @@ migrations and re-theming all stop being true.
   because the money tables do not exist yet; the rest is one join away. Still
   owed: a consent gate (§30 models it and nothing reads it), retention and
   pruning, and Core Web Vitals.
-- **Locale routing middleware** and `EntityTranslation`, completing §4.9.
+- ~~**Locale routing middleware** and `EntityTranslation`~~ ✅ *(2026-08-04)* —
+  §4.9's URL strategy, translations as rows against the same page rather than
+  duplicate pages, machine drafts excluded from the public surface, hreflang
+  and per-locale sitemaps that advertise only what exists, and a language
+  switcher block. **Still owed:** an admin surface for writing translations,
+  translated site chrome, and `Contact.preferred_locale` reaching the customer
+  surfaces that do not exist yet.
 
 **freeholder.ai ships at the end of this phase.**
 

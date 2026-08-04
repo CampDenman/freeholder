@@ -37,7 +37,10 @@ export const BUSINESS = {
   schemaType: "Photographer",
   country: "CA",
   defaultLocale: "en",
-  enabledLocales: ["en"],
+  // Two locales on purpose: hreflang, the per-locale sitemap and the URL
+  // prefix are only real if something is actually translated, and a demo that
+  // cannot exercise §4.9 cannot prove it works.
+  enabledLocales: ["en", "fr-CA"],
   baseCurrency: "CAD",
   timezone: "America/Vancouver",
   units: "metric" as const,
@@ -147,6 +150,11 @@ export function footer(): BlockNode[] {
             ariaLabelKey: "cms.nav.primary",
           },
         },
+        {
+          id: "seed-footer-locales",
+          type: "locales",
+          props: { separator: "·" },
+        },
       ],
     },
   ];
@@ -195,6 +203,60 @@ export const FORMS: Array<{
         kind: "multiline",
         required: true,
         help: "Where, how many people, and anything you already know you want.",
+      },
+    ],
+  },
+];
+
+/**
+ * One page, translated. Enough to make §4.9 demonstrable end to end: a
+ * prefixed URL that resolves, an hreflang set with something true in it, and a
+ * per-locale sitemap that lists exactly what that locale has.
+ *
+ * Written by a human for the demo rather than machine-drafted, so it ships as
+ * `reviewed` — §4.9 forbids publishing a machine draft silently, and the seed
+ * should model the rule rather than skirt it.
+ */
+export const TRANSLATIONS: Array<{
+  slug: string;
+  locale: string;
+  title: string;
+  seo: { title: string; description: string };
+  blocks: (assets: Record<ImageSlot, string>) => BlockNode[];
+}> = [
+  {
+    slug: "",
+    locale: "fr-CA",
+    title: "Aurora Coast Photographie",
+    seo: {
+      title: "Aurora Coast Photographie",
+      description:
+        "Photographie de mariage et de portrait sur la côte est de l'île de Vancouver, en lumière naturelle.",
+    },
+    blocks: (a) => [
+      {
+        id: "home-h1",
+        type: "heading",
+        props: { text: "La lumière de la côte, sans artifice", level: 1, align: "start" },
+      },
+      {
+        id: "home-intro",
+        type: "text",
+        props: {
+          body: "Mariages et portraits sur la côte est de l'île de Vancouver, photographiés dans la lumière qui est là.\n\nAucune pose imposée. On marche, on jase, et les photos sortent de la journée plutôt que d'être arrangées par-dessus.",
+          align: "start",
+          measure: true,
+        },
+      },
+      {
+        id: "home-hero",
+        type: "image",
+        props: { assetId: a.coastline, width: "wide", rounded: true },
+      },
+      {
+        id: "home-cta",
+        type: "button",
+        props: { label: "Voir les tarifs", href: "/fr-CA/services", variant: "solid" },
       },
     ],
   },

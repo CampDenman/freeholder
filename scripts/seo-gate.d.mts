@@ -15,6 +15,11 @@ export interface PageAudit {
   links: string[];
   title: string | null;
   description: string | null;
+  /**
+   * False when the page names a *different* URL as canonical — a second
+   * address for one page, which the uniqueness rules must not hold to account.
+   */
+  isCanonical?: boolean;
 }
 
 export function auditPage(input: {
