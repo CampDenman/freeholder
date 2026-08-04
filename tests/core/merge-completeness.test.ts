@@ -16,19 +16,42 @@
 //
 // This runs against the schema definitions, not a database, so it gates every
 // contributor's machine whether or not they have Postgres running.
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { is } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
-import * as coreTables from "@/core/tables";
+import manifests from "@/modules";
 import { contacts } from "@/core/contacts/schema";
-import { CONTACT_REFERENCES } from "@/core/contacts/service";
+import { contactReferences } from "@/core/contacts/service";
+import { ready } from "@/core/runtime";
 
-/** The barrel exports tables; anything else in it is not our business. */
+/**
+ * Every table any installed module owns — not core's barrel alone.
+ *
+ * The gate read only `@/core/tables` until forms became the first module to
+ * add a `contact_id` column, at which point it was checking a list that could
+ * no longer contain the answer. The same lesson `truncateSpine` learned:
+ * "what does this instance own" is a question for the manifests (§11), and any
+ * hand-list of them drifts.
+ */
+let tables: PgTable[] = [];
+
+beforeAll(async () => {
+  // Boot first: a module registers its repoint from its services module, and
+  // boot is what imports that.
+  await ready();
+  const found: PgTable[] = [];
+  for (const manifest of manifests) {
+    if (!manifest.tables) continue;
+    const owned: Record<string, unknown> = await manifest.tables();
+    for (const value of Object.values(owned)) {
+      if (is(value, PgTable)) found.push(value);
+    }
+  }
+  tables = found;
+});
+
 function allTables(): PgTable[] {
-  const exports: Record<string, unknown> = coreTables;
-  return Object.values(exports).filter((value): value is PgTable =>
-    is(value, PgTable),
-  );
+  return tables;
 }
 
 const contactsTableName = getTableConfig(contacts).name;
@@ -69,10 +92,15 @@ describe("contacts.merge covers the whole spine", () => {
       table: "timeline_events",
       column: "contact_id",
     });
+    // And a module's table, so the widening cannot silently regress.
+    expect(referencing).toContainEqual({
+      table: "form_submissions",
+      column: "contact_id",
+    });
   });
 
   it("repoints every table that references contacts.id", () => {
-    const covered = new Set(CONTACT_REFERENCES.map((r) => r.table));
+    const covered = new Set(contactReferences().map((r) => r.table));
     const missing = [
       ...new Set(
         tablesReferencingContacts()
@@ -89,7 +117,8 @@ describe("contacts.merge covers the whole spine", () => {
             `${missing.join(", ")}.\n\n` +
             `Merging two duplicates would orphan their rows — the spine forks silently, ` +
             `which is the failure MASTER.md §2 principle 3 exists to prevent.\n\n` +
-            `Add an entry to CONTACT_REFERENCES in src/core/contacts/service.ts, and decide ` +
+            `Core's tables are listed in src/core/contacts/service.ts; a module registers ` +
+            `its own with registerContactReference() from its services module. Decide ` +
             `deliberately what a merge means if contact_id participates in a unique constraint ` +
             `on that table.`,
     ).toEqual([]);
@@ -102,7 +131,7 @@ describe("contacts.merge covers the whole spine", () => {
     const referencing = new Set(
       tablesReferencingContacts().map((r) => r.table),
     );
-    const stale = CONTACT_REFERENCES.map((r) => r.table).filter(
+    const stale = contactReferences().map((r) => r.table).filter(
       (table) => !referencing.has(table),
     );
 

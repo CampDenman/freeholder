@@ -273,7 +273,7 @@ export interface ContactReference {
  * when a `contact_id` column has no entry here. The list is hand-written; the
  * obligation to write it is enforced.
  */
-export const CONTACT_REFERENCES: readonly ContactReference[] = [
+const references: ContactReference[] = [
   {
     table: "timeline_events",
     repoint: (tx, duplicateId, survivingId) =>
@@ -283,6 +283,33 @@ export const CONTACT_REFERENCES: readonly ContactReference[] = [
         .where(eq(timelineEvents.contactId, duplicateId)),
   },
 ];
+
+/**
+ * How a *module* declares what a merge means for its own table.
+ *
+ * Core cannot import a module's schema (§11), so a module that adds a
+ * contact_id column registers its repoint from its own services module, which
+ * boot imports exactly when the module is installed. The decision stays with
+ * the people who know what their table means — which is the whole argument for
+ * the list being hand-written — while the obligation to make one is still
+ * enforced by the completeness gate.
+ *
+ * Idempotent per table, because boot is a precondition rather than a one-shot
+ * event and a module graph may be asked to boot twice.
+ */
+export function registerContactReference(reference: ContactReference): void {
+  const existing = references.find((r) => r.table === reference.table);
+  if (existing) return;
+  references.push(reference);
+}
+
+/** Every table that references `contacts.id`, core's and every module's. */
+export function contactReferences(): readonly ContactReference[] {
+  return references;
+}
+
+/** @deprecated Read through `contactReferences()` so modules are included. */
+export const CONTACT_REFERENCES: readonly ContactReference[] = references;
 
 /** Fold a duplicate into the record that survives. */
 export const mergeContacts = defineService({
@@ -337,8 +364,9 @@ export const mergeContacts = defineService({
       );
     }
 
-    // Every contact_id FK in the schema, repointed — see CONTACT_REFERENCES.
-    for (const reference of CONTACT_REFERENCES) {
+    // Every contact_id FK in the schema, repointed — core's and every
+    // installed module's. See contactReferences().
+    for (const reference of contactReferences()) {
       await reference.repoint(ctx.tx, duplicate.id, surviving.id);
     }
 

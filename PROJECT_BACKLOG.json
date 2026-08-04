@@ -573,5 +573,33 @@
       "JSON-LD validation is against a hand-listed set of the types we emit, not the schema.org vocabulary. It catches a BreadcrumbList without positions; it would not catch a misspelled property on a type nobody here uses",
       "The a11y smoke strips the page's scripts before parsing, so anything rendered only after hydration is not audited. Nothing on the public surface currently is"
     ]
+  },
+  {
+    "id": "2026-08-03-forms",
+    "date": "2026-08-03",
+    "title": "The forms module — the first module whose public surface writes",
+    "masterRef": "§4.6, §11, §24, §32, §36",
+    "status": "done",
+    "delivered": [
+      "Forms as definitions: fields are rows in jsonb and the validator that accepts a visitor's answers is derived from them, so the two cannot disagree. Seven field kinds, each mapping to an input a browser renders natively with the right keyboard on a phone",
+      "An anonymous submission reaches the spine through contacts.resolve and ctx.callAsSystem — never contacts.create — so a stranger can cause a Contact to exist and nothing else. Verified in a browser: a real submission produced one contact, lowercased, sourced form:contact, with contact.created and form.submitted on the timeline",
+      "The first module to contribute a *block type*. A new `blocks` entry on the module manifest registers it at boot in dependency order, which is the seam §24 promises plugins: the block joins the palette, the editor derives its controls from the block's Zod schema, and the editor changes not at all",
+      "Two traps that cost a visitor nothing: a honeypot hidden from layout and from assistive technology, and a time trap whose timestamp is HMAC-signed — an unsigned one is worthless, since a bot that reads the field can post any value it likes",
+      "Neither trap rejects. §36 wants a quarantine queue rather than a bin: suspected spam is stored, flagged with the reason in words, kept out of the CRM, and rescuable in one click — and rescuing it resolves the contact then, exactly as an unflagged submission would have. Verified in a browser: a bot filling the honeypot got the same thank-you, was stored as spam, and created no contact",
+      "No client component on the public surface. The submission result travels back in the URL and is rendered server-side, because §5 and the SEO gate both rest on the public HTML having no hydration boundary. BlockRenderContext gained `query` for it",
+      "Only a code travels in that URL, never a message: a page that echoes arbitrary text from its own query string is a phishing page waiting for a crafted link",
+      "The merge-completeness gate was widened from core's barrel to every module's tables — forms is the first module with a contact_id column, and the gate could not have seen it. Modules declare their own repoint with registerContactReference(). Proved by disabling the registration and watching the gate name the table",
+      "Admin: a forms list with the quarantine count surfaced, and a per-form submissions view with received/flagged/all and a one-click rescue",
+      "The demo site now ships a real enquiry form on /contact, so the a11y smoke checks real labels against real controls and the SEO crawler walks a page that writes"
+    ],
+    "openFollowUps": [
+      "No form builder UI: forms are created through the service, and the admin lists them but cannot yet add or edit one. An owner without API access has the demo form and nothing else",
+      "The rate limit is per form rather than per visitor. An anonymous surface has no trustworthy identity, and Next does not hand a Server Action a client address honestly — so a determined single attacker can exhaust one form's window for everybody. Wants the same trusted-IP work as registerOwner",
+      "`notify` is stored and nothing sends it: there is no mail adapter yet, so an owner learns about a submission by opening the admin",
+      "Server-side validation messages are not shown to a no-JS visitor — only a generic failure. Browsers enforce required and type=email natively, so the specific message is a backstop, but a JS-less visitor who defeats native validation gets less help than they should",
+      "No spam signal beyond the two traps: no Turnstile, no reputation, no content heuristics. §36 names Turnstile as optional and it is not wired",
+      "Submissions are never pruned, and a busy form's quarantine grows without limit",
+      "React emits `autoComplete` in camelCase in the server-rendered HTML. Checked with a real HTML parser rather than assumed: attribute names are case-insensitive, so a browser reads autocomplete=email and autofill works. Cosmetic, noted so nobody re-investigates"
+    ]
   }
 ]

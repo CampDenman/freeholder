@@ -17,6 +17,7 @@
 // nav, a service page per thing sold, and copy that says something. The
 // business is fictional; the shape of it is not.
 import type { BlockNode } from "@/modules/cms/blocks/types";
+import type { FormFieldInput } from "@/modules/forms/fields";
 
 /** Which generated image a block wants. Resolved to asset ids at install. */
 export type ImageSlot = "coastline" | "portrait" | "studio";
@@ -150,6 +151,54 @@ export function footer(): BlockNode[] {
     },
   ];
 }
+
+/**
+ * The forms the demo ships with.
+ *
+ * One, and a real one: the contact page's enquiry form. It exists so the
+ * public surface has a form on it — which is what makes the a11y smoke test
+ * check real labels against real controls, and the SEO crawler walk a page
+ * that writes as well as reads.
+ */
+export const FORMS: Array<{
+  slug: string;
+  name: string;
+  submitLabel: string;
+  successMessage: string;
+  fields: FormFieldInput[];
+}> = [
+  {
+    slug: "contact",
+    name: "Enquiry",
+    submitLabel: "Send enquiry",
+    successMessage:
+      "Thank you — I read everything myself and will reply within a day.",
+    fields: [
+      { key: "name", label: "Your name", kind: "text", required: true },
+      { key: "email", label: "Email", kind: "email", required: true },
+      {
+        key: "occasion",
+        label: "What is it for?",
+        kind: "select",
+        required: true,
+        options: ["A wedding", "A portrait session", "Something else"],
+      },
+      {
+        key: "when",
+        label: "Roughly when?",
+        kind: "text",
+        placeholder: "September, or a date if you have one",
+      },
+      {
+        key: "message",
+        label: "Tell me about it",
+        kind: "multiline",
+        required: true,
+        help: "Where, how many people, and anything you already know you want.",
+      },
+    ],
+  },
+];
 
 export const PAGES: SeedPage[] = [
   {
@@ -406,6 +455,11 @@ export const PAGES: SeedPage[] = [
           align: "start",
           measure: true,
         },
+      },
+      {
+        id: "con-form",
+        type: "form",
+        props: { formSlug: "contact" },
       },
       {
         id: "con-faq",

@@ -30,6 +30,16 @@ export interface ModuleManifest {
     /** event name → handler exported from the module's services. */
     listens?: Record<string, string>;
   };
+  /**
+   * Block types this module adds to the CMS vocabulary (§24, §32).
+   *
+   * The default export is an array of `defineBlock` definitions, registered at
+   * boot in dependency order — which is why a module contributing blocks must
+   * `require` cms. This is the seam §24 promises plugins: a block arrives in
+   * the palette, the editor derives its form from its Zod schema, and the
+   * editor itself changes not at all.
+   */
+  blocks?: Lazy<Record<string, unknown>>;
   jobs?: Lazy<Record<string, unknown>>;
   mcpTools?: Lazy<Record<string, unknown>>;
   seo?: { sitemapSources: string[] };

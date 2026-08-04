@@ -37,6 +37,27 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
 
 const byType = new Map(definitions.map((d) => [d.type, d]));
 
+/**
+ * Add a block type from a module (§11's `blocks` manifest entry, §24).
+ *
+ * Idempotent for the same definition, because boot is a precondition rather
+ * than a one-shot event (core/runtime.ts) and a graph may legitimately be
+ * asked to boot twice. Two *different* definitions claiming one type must
+ * still fail: silently letting the second win would route an owner's existing
+ * content at whichever module happened to load last.
+ */
+export function registerBlock(definition: BlockDefinition<z.ZodType, never>): void {
+  const existing = byType.get(definition.type);
+  if (existing === definition) return;
+  if (existing) {
+    throw new Error(
+      `block type "${definition.type}" is registered twice, by two different definitions`,
+    );
+  }
+  definitions.push(definition);
+  byType.set(definition.type, definition);
+}
+
 export function blockTypes(): string[] {
   return [...byType.keys()];
 }

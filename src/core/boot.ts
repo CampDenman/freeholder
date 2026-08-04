@@ -18,6 +18,8 @@ export interface BootReport {
   modules: string[];
   /** Every service name now reachable through the registry. */
   services: string[];
+  /** Block types contributed by modules, beyond cms's own vocabulary. */
+  blocks: string[];
   listeners: Array<{ event: string; module: string; handler: string }>;
 }
 
@@ -35,10 +37,30 @@ export async function boot(
 ): Promise<BootReport> {
   requireProductionEnv();
 
-  const report: BootReport = { modules: [], services: [], listeners: [] };
+  const report: BootReport = { modules: [], services: [], listeners: [], blocks: [] };
 
   for (const manifest of sortModules(manifests)) {
     report.modules.push(manifest.name);
+
+    // Blocks before services, and both in dependency order: a module's own
+    // services may validate a block tree against the registry the moment they
+    // are called, and `requires: ["cms"]` is what guarantees the registry it
+    // is adding to already exists.
+    if (manifest.blocks) {
+      const loaded = await manifest.blocks();
+      const exported = loaded.default;
+      if (!Array.isArray(exported)) {
+        throw new Error(
+          `module "${manifest.name}" declares blocks, but its blocks module has no default export array. Export them as \`export default [ ... ]\`.`,
+        );
+      }
+      const { registerBlock } = await import("@/modules/cms/blocks/registry");
+      for (const block of exported) {
+        registerBlock(block as Parameters<typeof registerBlock>[0]);
+        report.blocks.push((block as { type: string }).type);
+      }
+    }
+
     if (!manifest.services) continue;
 
     const loaded = await manifest.services();
