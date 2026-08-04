@@ -11,6 +11,7 @@ export default defineModule({
   version: "0.1.0",
   tables: () => import("@/core/tables"),
   services: () => import("@/core/services"),
+  jobs: () => import("@/core/jobs/core-jobs"),
   events: {
     emits: [
       "contact.created",

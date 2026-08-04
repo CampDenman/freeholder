@@ -679,5 +679,29 @@
       "Contact.preferred_locale is still unused: customer-facing email and the portal should follow it, and neither exists yet",
       "The proxy treats any two-letter first segment as a possible locale, so a page slugged exactly like a language tag on an instance that later enables that language would be shadowed. Documented rather than solved"
     ]
+  },
+  {
+    "id": "2026-08-04-core-jobs",
+    "date": "2026-08-04",
+    "title": "core/jobs and the transactional outbox",
+    "masterRef": "§3, §9, §11",
+    "status": "done",
+    "delivered": [
+      "pg-boss behind a small registry: defineJob, a `jobs` entry on the module manifest, mounted at boot in dependency order alongside services and blocks. The database is already there, and §2's one-sacred-database argument applies to queues too — an owner deploying Freeholder should not also be operating Redis",
+      "The worker runs in the web process by default. §18's recipe manifest already distinguishes jobs: web-process from worker-process, and for a single box the first is right: one container, one thing to restart. pg-boss takes its own locks, so scaling to several replicas gives one scheduled run rather than one per replica",
+      "The event bus moved onto a transactional outbox. The event is written inside the caller's transaction, so it commits with the change that caused it or not at all; the same request dispatches it in-process after commit (the fast path, which keeps a listener inside the request that produced it); anything still unmarked a minute later is redelivered by a job",
+      "Delivery is at-least-once, and that is stated in the code rather than discovered: a crash between dispatching and marking runs a listener twice, so listeners must be idempotent",
+      "Four core jobs, each closing an open backlog entry: expired-session sweep, rate-limit counter sweep, outbox redelivery, outbox pruning. The outbox is a delivery mechanism, not a history — the audit log and timeline are where what-happened lives",
+      "Proved on a live instance rather than only in tests: worker started with 4 jobs and 4 schedules registered in pgboss.schedule, every seeded event dispatched by the fast path, and a deliberately stranded event — committed with no dispatch, as a dead process leaves — picked up and delivered by the sweeper inside 75 seconds",
+      "Also proved the property that makes an outbox an outbox: a mutation that throws after queueing an event writes no event at all"
+    ],
+    "openFollowUps": [
+      "Jobs have no admin surface: an owner cannot see what ran, what failed, or run one by hand. pg-boss keeps the history in its own schema and nothing reads it yet",
+      "No dead-letter handling for the outbox. A listener that throws every time leaves a row retried forever, with the error recorded but nobody told",
+      "The sweeper's grace period and batch size are constants rather than settings, which is right until an instance is large enough for it not to be",
+      "Nothing enqueues a job in the caller's transaction yet, though pg-boss supports it (fromDrizzle) and that is the correct shape for work caused by a change. The outbox covers events; jobs sent from a service would want the same treatment",
+      "core.dispatchOutbox runs every minute, so a crash costs up to a minute of delay on events that would otherwise have been instant. Fine for reminders and analytics; worth revisiting if anything time-critical starts riding the bus",
+      "The analytics listener that reads a cookie still degrades when replayed by the sweeper — it records the conversion without the visitor link. Documented when it was written and now genuinely reachable"
+    ]
   }
 ]

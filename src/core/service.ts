@@ -16,7 +16,8 @@
 import type { z } from "zod";
 import { db, type Database } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
-import { publish, writeTimelineEvent } from "@/core/events";
+import { writeTimelineEvent } from "@/core/events";
+import { dispatchNow, enqueue } from "@/core/events/outbox";
 import type { TimelineEventInput } from "@/core/events";
 import { consume, rateLimitKey, type RateLimitPolicy } from "@/core/security/rate-limit";
 import { ready } from "@/core/runtime";
@@ -106,6 +107,8 @@ export function redact(value: unknown): unknown {
 export interface QueuedEvent {
   eventName: string;
   payload: unknown;
+  /** The outbox row, once the outermost call has written it. */
+  id?: string;
 }
 
 /**
@@ -268,6 +271,11 @@ export function defineService<In extends z.ZodType, Out>(
             subject = { subjectType, subjectId };
           },
           queueEvent: (eventName, payload) => {
+            // Recorded *inside* this transaction, so the event commits with
+            // the change that caused it or not at all (§11's outbox). The
+            // write is deferred to the end of the handler rather than awaited
+            // here, because queueEvent's signature is synchronous and every
+            // caller in the codebase treats it as fire-and-forget.
             queued.push({ eventName, payload });
           },
           call: (service, input) => service.call(input, actor, { tx, queued }),
@@ -275,6 +283,16 @@ export function defineService<In extends z.ZodType, Out>(
             service.call(input, { kind: "system" }, { tx, queued }),
         };
         const out = await def.handler(parsed.data, ctx);
+
+        // The outermost call owns the outbox rows: a composed call shares the
+        // queue, and writing them per-nested-call would order them by who
+        // finished first rather than by what happened.
+        if (!inheritedTx) {
+          for (const event of queued) {
+            event.id = await enqueue(tx, event.eventName, event.payload);
+          }
+        }
+
         if (def.kind === "mutation") {
           await tx.insert(auditLog).values({
             actor: actorString(actor),
@@ -291,12 +309,16 @@ export function defineService<In extends z.ZodType, Out>(
         ? await run(inheritedTx)
         : await db().transaction(run);
 
-      // Only the outermost call publishes, and only after its commit — a
-      // listener must never observe state that later rolled back (§11).
+      // Only the outermost call dispatches, and only after its commit — a
+      // listener must never observe state that later rolled back (§11). The
+      // rows are already durable, so a crash here costs latency rather than
+      // the event.
       if (!inheritedTx) {
-        for (const { eventName, payload } of queued) {
-          await publish(eventName, payload);
-        }
+        await dispatchNow(
+          queued
+            .filter((event): event is Required<QueuedEvent> => Boolean(event.id))
+            .map(({ id, eventName, payload }) => ({ id, eventName, payload })),
+        );
       }
       return result;
     },

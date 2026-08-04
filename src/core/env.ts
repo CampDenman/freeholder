@@ -76,6 +76,17 @@ const envSchema = z.object({
    * demo business is a route somebody eventually hits on a real instance.
    */
   FREEHOLDER_SEED_DEMO: z.enum(["1"]).optional(),
+
+  /**
+   * Whether this process runs background jobs.
+   *
+   * On by default wherever a database is configured, because §18's Tier-1
+   * targets run one container and a second process to forget is a job that
+   * silently stops. `off` is for a deploy that runs a dedicated worker;
+   * `on` forces them in the test environment, where they are otherwise
+   * suppressed so a suite never races a scheduler.
+   */
+  FREEHOLDER_JOBS: z.enum(["on", "off"]).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
