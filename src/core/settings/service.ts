@@ -188,6 +188,87 @@ export const completeSetup = defineService({
   },
 });
 
+/**
+ * A module's own configuration (§11's `settingsSchema`, §4.8's ModuleSetting).
+ *
+ * Core cannot import a module, so it cannot know what a valid configuration
+ * looks like — the manifest does, and the schema it declares is what validates
+ * the write. That is the whole point of `settingsSchema` existing on the
+ * contract: a module gets typed, validated settings without core learning
+ * anything about it.
+ */
+export const setModuleConfig = defineService({
+  name: "settings.setModuleConfig",
+  summary: "Change a module's own settings.",
+  kind: "mutation",
+  permission: "owner",
+  input: z.object({
+    module: z.string().min(1),
+    config: z.record(z.string(), z.unknown()),
+  }),
+  handler: async (input, ctx) => {
+    const { default: manifests } = await import("@/modules");
+    const manifest = manifests.find((m) => m.name === input.module);
+    if (!manifest) {
+      throw new ServiceError("not_found", `There is no module called "${input.module}".`);
+    }
+
+    let config = input.config;
+    if (manifest.settingsSchema) {
+      const parsed = manifest.settingsSchema.safeParse(input.config);
+      if (!parsed.success) {
+        throw new ServiceError(
+          "validation",
+          parsed.error.issues[0]?.message ?? "Those settings are not valid.",
+        );
+      }
+      config = parsed.data as Record<string, unknown>;
+    }
+
+    const [row] = await ctx.tx
+      .insert(moduleSettings)
+      .values({ module: input.module, config })
+      .onConflictDoUpdate({ target: moduleSettings.module, set: { config } })
+      .returning();
+    ctx.setSubject("module_settings", input.module);
+    ctx.queueEvent("module.configured", { module: input.module });
+    return row!;
+  },
+});
+
+/**
+ * A module's configuration, with its schema's defaults applied.
+ *
+ * Public because a module's own services read it while serving anonymous
+ * visitors — analytics decides whether to count a request before anyone has
+ * signed in. It returns configuration, never credentials: anything secret
+ * belongs in the environment (§17), not in a jsonb column.
+ */
+export const getModuleConfig = defineService({
+  name: "settings.getModuleConfig",
+  summary: "Read a module's own settings.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ module: z.string().min(1) }),
+  handler: async (input, ctx) => {
+    const [row] = await ctx.tx
+      .select({ config: moduleSettings.config })
+      .from(moduleSettings)
+      .where(eq(moduleSettings.module, input.module))
+      .limit(1);
+
+    const stored = (row?.config ?? {}) as Record<string, unknown>;
+    const { default: manifests } = await import("@/modules");
+    const manifest = manifests.find((m) => m.name === input.module);
+    if (!manifest?.settingsSchema) return stored;
+
+    // Parsed on the way out as well as in, so a module that adds a setting
+    // gets its default on instances configured before it existed.
+    const parsed = manifest.settingsSchema.safeParse(stored);
+    return parsed.success ? (parsed.data as Record<string, unknown>) : stored;
+  },
+});
+
 export const listModules = defineService({
   name: "settings.listModules",
   summary: "Module toggles that have been set.",
@@ -234,6 +315,8 @@ export const setModuleEnabled = defineService({
 });
 
 export default [
+  setModuleConfig,
+  getModuleConfig,
   getBusiness,
   setupState,
   updateBusiness,

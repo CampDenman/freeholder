@@ -17,11 +17,8 @@
 // obvious candidate, and that is written down rather than assumed.
 import { headers } from "next/headers";
 import { track } from "@/modules/analytics/service";
-import {
-  ANON_HEADER,
-  looksAutomated,
-  SESSION_HEADER,
-} from "@/modules/analytics/visitor";
+import { classify, shapeOf } from "@/modules/analytics/classify";
+import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
 
 export async function recordPageView(
   path: string,
@@ -35,13 +32,16 @@ export async function recordPageView(
     // admin, an asset, a feed. Nothing to record.
     if (!anonId || !sessionId) return;
 
-    // A crawler reading every page would otherwise make an owner's chart a
-    // picture of Googlebot.
-    if (looksAutomated(requestHeaders.get("user-agent"))) return;
-
     // Next prefetches links on hover. Counting those would report visits to
-    // pages nobody opened.
+    // pages nobody opened — and unlike a crawler, a prefetch is not traffic
+    // anybody would ever want to see, so it is dropped rather than recorded.
     if (requestHeaders.get("next-router-prefetch") === "1") return;
+
+    // Crawlers are *recorded*, not dropped. An owner asking "how many people
+    // visited" gets people by default, and an owner asking "is something
+    // hammering my site" gets an answer at all — which is impossible if the
+    // platform threw the rows away when it made the call.
+    const verdict = classify(shapeOf(requestHeaders));
 
     await track.call(
       {
@@ -52,6 +52,8 @@ export async function recordPageView(
         referrer: requestHeaders.get("referer"),
         locale,
         props: {},
+        visitorKind: verdict.kind,
+        botReasons: verdict.reasons,
       },
       { kind: "anonymous" },
     );

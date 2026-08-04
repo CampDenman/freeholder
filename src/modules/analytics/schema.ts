@@ -48,6 +48,20 @@ export const analyticsEvents = pgTable(
     /** Where they came from. Host only — the full URL is somebody's history. */
     referrer: text("referrer"),
     locale: text("locale"),
+    /**
+     * What we think this was: human, bot, or suspected (see classify.ts).
+     *
+     * Recorded rather than dropped, so an owner can change their mind. The
+     * first version filtered bots at write time, which meant the decision was
+     * made once, invisibly, by the platform — and a wrong call could never be
+     * seen or undone. Keeping the row and filtering at read time is the same
+     * choice §36's spam quarantine makes, for the same reason.
+     */
+    visitorKind: text("visitor_kind", { enum: ["human", "bot", "suspected"] })
+      .notNull()
+      .default("human"),
+    /** Why it was classified that way, for an owner weighing the verdict. */
+    botReasons: text("bot_reasons").array().notNull().default([]),
     props: jsonb("props").notNull().default({}),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -56,5 +70,8 @@ export const analyticsEvents = pgTable(
     index("analytics_name_at_idx").on(t.name, t.at),
     index("analytics_anon_idx").on(t.anonId),
     index("analytics_contact_idx").on(t.contactId),
+    // Every reporting query filters on this, so it leads the index that
+    // serves them.
+    index("analytics_kind_at_idx").on(t.visitorKind, t.name, t.at),
   ],
 );

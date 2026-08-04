@@ -26,7 +26,7 @@ import {
   topReferrers,
   track,
 } from "@/modules/analytics/service";
-import { looksAutomated } from "@/modules/analytics/visitor";
+import { classify, type RequestShape } from "@/modules/analytics/classify";
 import { createContact, mergeContacts } from "@/core/contacts/service";
 import {
   ANONYMOUS,
@@ -61,30 +61,71 @@ describe("what a referrer is reduced to", () => {
   });
 });
 
-describe("who is not counted", () => {
-  it("recognises the obvious crawlers", () => {
+describe("telling a person from a program", () => {
+  const CHROME =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+  /** What a browser actually sends when somebody clicks a link. */
+  const browser = (over: Partial<RequestShape> = {}): RequestShape => ({
+    userAgent: CHROME,
+    accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    acceptLanguage: "en-CA,en;q=0.9",
+    secFetchMode: "navigate",
+    secFetchDest: "document",
+    secFetchSite: "none",
+    secChUa: '"Chromium";v="126"',
+    ...over,
+  });
+
+  it("counts a browser", () => {
+    expect(classify(browser())).toEqual({ kind: "human", reasons: [] });
+  });
+
+  it("recognises crawlers that say so", () => {
     for (const agent of [
       "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
       "Mozilla/5.0 (compatible; bingbot/2.0)",
       "curl/8.4.0",
       "python-requests/2.31.0",
-      "Mozilla/5.0 HeadlessChrome/120",
+      "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/120.0.0.0",
+      "GPTBot/1.0",
     ]) {
-      expect({ agent, bot: looksAutomated(agent) }).toEqual({ agent, bot: true });
+      expect({ agent, kind: classify(browser({ userAgent: agent })).kind })
+        .toEqual({ agent, kind: "bot" });
     }
   });
 
-  it("counts a browser", () => {
-    expect(
-      looksAutomated(
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
-      ),
-    ).toBe(false);
+  it("catches a scraper wearing a browser's user-agent", () => {
+    // The interesting case, and the one a pattern list can never catch: a
+    // copied Chrome string, and none of the headers a browser sends with it.
+    const verdict = classify({
+      userAgent: CHROME,
+      accept: "*/*",
+      acceptLanguage: null,
+      secFetchMode: null,
+      secFetchDest: null,
+      secFetchSite: null,
+      secChUa: null,
+    });
+    expect(verdict.kind).toBe("bot");
+    expect(verdict.reasons.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("treats a missing user-agent as automated", () => {
-    // Every real browser sends one. Something that does not is a script.
-    expect(looksAutomated(null)).toBe(true);
+  it("treats a missing user-agent as a program", () => {
+    expect(classify(browser({ userAgent: null })).kind).toBe("bot");
+  });
+
+  it("does not condemn an unusual browser on one signal alone", () => {
+    // Somebody on an old Safari sends no fetch metadata. That is a person, and
+    // calling them a bot is how a real visitor stops being counted — so one
+    // signal is "suspected", never "bot".
+    const verdict = classify(browser({ secFetchMode: null, secFetchDest: null, secFetchSite: null }));
+    expect(verdict.kind).toBe("suspected");
+    expect(verdict.reasons).toHaveLength(1);
+  });
+
+  it("knows a fetch() from somebody reading a page", () => {
+    expect(classify(browser({ secFetchDest: "empty" })).kind).toBe("suspected");
   });
 });
 
@@ -115,9 +156,13 @@ describe.runIf(hasDatabase)("recording and reading", () => {
 
     // The whole row, so a column added later without thought fails here: there
     // must be nowhere to put an IP address, a user-agent or a fingerprint.
+    // `visitorKind` and `botReasons` are the platform's *judgement* about a
+    // request, not a record of the device that made it — which is the line
+    // this assertion exists to hold.
     expect(Object.keys(event ?? {}).sort()).toEqual([
       "anonId",
       "at",
+      "botReasons",
       "contactId",
       "id",
       "locale",
@@ -126,6 +171,7 @@ describe.runIf(hasDatabase)("recording and reading", () => {
       "props",
       "referrer",
       "sessionId",
+      "visitorKind",
     ]);
   });
 
@@ -175,6 +221,83 @@ describe.runIf(hasDatabase)("recording and reading", () => {
 
     const referrers = await topReferrers.call({ days: 30, limit: 5 }, STAFF);
     expect(referrers).toEqual([{ referrer: "news.example", visitors: 1 }]);
+  });
+});
+
+describe.runIf(hasDatabase)("counting people, or counting everything", () => {
+  beforeEach(async () => {
+    await truncateSpine();
+  });
+
+  const traffic = async () => {
+    await track.call(
+      { ...visitor("person"), name: "page.viewed", path: "/services" },
+      ANONYMOUS,
+    );
+    await track.call(
+      {
+        ...visitor("crawler"),
+        name: "page.viewed",
+        path: "/services",
+        visitorKind: "bot",
+        botReasons: ["identified itself as a crawler or tool"],
+      },
+      ANONYMOUS,
+    );
+    await track.call(
+      {
+        ...visitor("maybe"),
+        name: "page.viewed",
+        path: "/services",
+        visitorKind: "suspected",
+        botReasons: ["sent none of the headers a browser sends when navigating"],
+      },
+      ANONYMOUS,
+    );
+  };
+
+  it("answers with people by default", async () => {
+    // The number an owner means when they ask how many visitors they had.
+    await traffic();
+    const totals = await overview.call({ days: 30 }, STAFF);
+    expect(totals.views).toBe(1);
+    expect(totals.visitors).toBe(1);
+  });
+
+  it("says how much it left out, whichever way it was asked", async () => {
+    // An owner deciding whether to trust the other numbers needs to know how
+    // much was excluded — so this one is never filtered.
+    await traffic();
+    expect((await overview.call({ days: 30 }, STAFF)).automated).toBe(2);
+    expect(
+      (await overview.call({ days: 30, includeBots: true }, STAFF)).automated,
+    ).toBe(2);
+  });
+
+  it("counts everything when the owner asks for it", async () => {
+    await traffic();
+    const totals = await overview.call({ days: 30, includeBots: true }, STAFF);
+    expect(totals.views).toBe(3);
+    expect(totals.visitors).toBe(3);
+  });
+
+  it("applies the same choice to every report, not just the headline", async () => {
+    // A dashboard whose summary excludes crawlers and whose page list does not
+    // is a dashboard that contradicts itself.
+    await traffic();
+    expect((await topPages.call({ days: 30, limit: 5 }, STAFF))[0]?.views).toBe(1);
+    expect(
+      (await topPages.call({ days: 30, limit: 5, includeBots: true }, STAFF))[0]
+        ?.views,
+    ).toBe(3);
+  });
+
+  it("keeps the reason it made the call", async () => {
+    await traffic();
+    const rows = await db().select().from(analyticsEvents);
+    const crawler = rows.find((row) => row.anonId === "crawler");
+    expect(crawler?.visitorKind).toBe("bot");
+    expect(crawler?.botReasons[0]).toContain("crawler");
   });
 });
 
