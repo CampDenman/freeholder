@@ -9,7 +9,19 @@
 // block, which is why a pageview is written during the server render and
 // there is no client bundle at all.
 import { z } from "zod";
-import { and, count, countDistinct, desc, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  gte,
+  isNotNull,
+  isNull,
+  ne,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { defineService } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { analyticsEvents } from "./schema";
@@ -68,6 +80,8 @@ export const track = defineService({
     locale: z.string().max(20).nullish(),
     props: z.record(z.string(), z.unknown()).default({}),
     contactId: z.string().uuid().nullish(),
+    visitorKind: z.enum(["human", "bot", "suspected"]).default("human"),
+    botReasons: z.array(z.string().max(200)).max(10).default([]),
   }),
   handler: async (input, ctx) => {
     await ctx.tx.insert(analyticsEvents).values({
@@ -79,6 +93,8 @@ export const track = defineService({
       referrer: referrerHost(input.referrer),
       locale: input.locale,
       props: input.props,
+      visitorKind: input.visitorKind,
+      botReasons: input.botReasons,
     });
     return { ok: true };
   },
@@ -120,14 +136,45 @@ export const identify = defineService({
 
 const since = z.number().int().min(1).max(365).default(30);
 
+/**
+ * Whether a query counts programs as well as people.
+ *
+ * Every reporting query takes it, and the *default is people* — because the
+ * number an owner means when they ask how many visitors they had is people.
+ * An owner who wants the other answer asks for it, and the rows were kept so
+ * they can.
+ */
+const includeBots = z.boolean().default(false);
+
+/** "Only people", unless the caller said otherwise. */
+function humansOnly(include: boolean): SQL | undefined {
+  return include ? undefined : eq(analyticsEvents.visitorKind, "human");
+}
+
+/**
+ * The module's stored preference, so a screen need not be told each time.
+ *
+ * Read through the service layer like everything else, so a module's settings
+ * are validated by the schema its own manifest declares (§11).
+ */
+export async function includeBotsSetting(): Promise<boolean> {
+  const { getModuleConfig } = await import("@/core/settings/service");
+  const config = await getModuleConfig.call(
+    { module: "analytics" },
+    { kind: "system" },
+  );
+  return (config as { includeBots?: boolean }).includeBots === true;
+}
+
 export const overview = defineService({
   name: "analytics.overview",
   summary: "Visits, visitors and conversions over a window.",
   kind: "query",
   permission: "staff",
-  input: z.object({ days: since }),
+  input: z.object({ days: since, includeBots }),
   handler: async (input, ctx) => {
     const from = new Date(Date.now() - input.days * 86_400_000);
+    const only = humansOnly(input.includeBots);
     const [totals] = await ctx.tx
       .select({
         views: count(),
@@ -136,14 +183,14 @@ export const overview = defineService({
       })
       .from(analyticsEvents)
       .where(
-        and(eq(analyticsEvents.name, "page.viewed"), gte(analyticsEvents.at, from)),
+        and(eq(analyticsEvents.name, "page.viewed"), gte(analyticsEvents.at, from), only),
       );
 
     const [conversions] = await ctx.tx
       .select({ n: count() })
       .from(analyticsEvents)
       .where(
-        and(eq(analyticsEvents.name, "form.submitted"), gte(analyticsEvents.at, from)),
+        and(eq(analyticsEvents.name, "form.submitted"), gte(analyticsEvents.at, from), only),
       );
 
     // The funnel §4.7 promises, as far as the platform can currently take it:
@@ -153,11 +200,26 @@ export const overview = defineService({
       .select({ n: countDistinct(analyticsEvents.anonId) })
       .from(analyticsEvents)
       .where(
-        and(gte(analyticsEvents.at, from), isNotNull(analyticsEvents.contactId)),
+        and(gte(analyticsEvents.at, from), isNotNull(analyticsEvents.contactId), only),
+      );
+
+    // Always counted, whatever the filter says: an owner deciding whether to
+    // trust the other five numbers needs to know how much was excluded.
+    const [automated] = await ctx.tx
+      .select({ n: count() })
+      .from(analyticsEvents)
+      .where(
+        and(
+          eq(analyticsEvents.name, "page.viewed"),
+          gte(analyticsEvents.at, from),
+          ne(analyticsEvents.visitorKind, "human"),
+        ),
       );
 
     return {
       days: input.days,
+      includeBots: input.includeBots,
+      automated: automated?.n ?? 0,
       views: totals?.views ?? 0,
       visitors: totals?.visitors ?? 0,
       sessions: totals?.sessions ?? 0,
@@ -172,7 +234,11 @@ export const topPages = defineService({
   summary: "Which pages were read, most first.",
   kind: "query",
   permission: "staff",
-  input: z.object({ days: since, limit: z.number().int().min(1).max(50).default(10) }),
+  input: z.object({
+    days: since,
+    includeBots,
+    limit: z.number().int().min(1).max(50).default(10),
+  }),
   handler: (input, ctx) =>
     ctx.tx
       .select({
@@ -185,6 +251,7 @@ export const topPages = defineService({
         and(
           eq(analyticsEvents.name, "page.viewed"),
           gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
+          humansOnly(input.includeBots),
         ),
       )
       .groupBy(analyticsEvents.path)
@@ -197,7 +264,11 @@ export const topReferrers = defineService({
   summary: "Where visitors came from.",
   kind: "query",
   permission: "staff",
-  input: z.object({ days: since, limit: z.number().int().min(1).max(50).default(10) }),
+  input: z.object({
+    days: since,
+    includeBots,
+    limit: z.number().int().min(1).max(50).default(10),
+  }),
   handler: (input, ctx) =>
     ctx.tx
       .select({
@@ -209,6 +280,7 @@ export const topReferrers = defineService({
         and(
           isNotNull(analyticsEvents.referrer),
           gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
+          humansOnly(input.includeBots),
         ),
       )
       .groupBy(analyticsEvents.referrer)
@@ -221,7 +293,7 @@ export const dailyViews = defineService({
   summary: "Views and visitors per day, for the chart.",
   kind: "query",
   permission: "staff",
-  input: z.object({ days: since, timezone: z.string().default("UTC") }),
+  input: z.object({ days: since, includeBots, timezone: z.string().default("UTC") }),
   handler: async (input, ctx) => {
     // Bucketed in the *business's* timezone, not UTC. An owner in Vancouver
     // looking at "yesterday" means their yesterday, and a chart that disagrees
@@ -237,6 +309,7 @@ export const dailyViews = defineService({
         and(
           eq(analyticsEvents.name, "page.viewed"),
           gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
+          humansOnly(input.includeBots),
         ),
       )
       .groupBy(sql`1`)

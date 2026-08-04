@@ -10,7 +10,9 @@ import { auditLog } from "@/core/events/schema";
 import {
   completeSetup,
   getBusiness,
+  getModuleConfig,
   listModules,
+  setModuleConfig,
   patchBusiness,
   setModuleEnabled,
   setupState,
@@ -262,5 +264,58 @@ describe.runIf(hasDatabase)("business settings", () => {
       expect(error.code).toBe("permission");
       await expect(listModules.call({}, STAFF)).resolves.toEqual([]);
     });
+  });
+});
+
+describe.runIf(hasDatabase)("a module's own settings (§11 settingsSchema)", () => {
+  beforeEach(async () => {
+    await truncateSpine();
+  });
+
+  it("applies the schema's defaults to an instance that never configured it", async () => {
+    // The interesting case is not reading a stored value; it is a module
+    // adding a setting later, and every existing instance getting its default
+    // without a migration.
+    const config = await getModuleConfig.call({ module: "analytics" }, ANONYMOUS);
+    expect(config).toEqual({ includeBots: false });
+  });
+
+  it("stores what the owner chose", async () => {
+    await setModuleConfig.call(
+      { module: "analytics", config: { includeBots: true } },
+      OWNER,
+    );
+    expect(await getModuleConfig.call({ module: "analytics" }, ANONYMOUS)).toEqual(
+      { includeBots: true },
+    );
+  });
+
+  it("validates against the schema the module itself declared", async () => {
+    // Core cannot know what a valid analytics setting looks like — the
+    // manifest does, and that is the whole point of settingsSchema.
+    const error = await failure(
+      setModuleConfig.call(
+        { module: "analytics", config: { includeBots: "yes please" } },
+        OWNER,
+      ),
+    );
+    expect(error.code).toBe("validation");
+  });
+
+  it("refuses a module that is not installed", async () => {
+    const error = await failure(
+      setModuleConfig.call({ module: "invented", config: {} }, OWNER),
+    );
+    expect(error.code).toBe("not_found");
+  });
+
+  it("is the owner's decision, not staff's", async () => {
+    const error = await failure(
+      setModuleConfig.call(
+        { module: "analytics", config: { includeBots: true } },
+        STAFF,
+      ),
+    );
+    expect(error.code).toBe("permission");
   });
 });

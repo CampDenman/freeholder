@@ -47,17 +47,8 @@ export function newVisitorId(): string {
   return crypto.randomUUID();
 }
 
-/**
- * Requests that are not a person looking at a page.
- *
- * Bots first, because a crawler that reads every page would otherwise make an
- * owner's traffic chart a picture of Googlebot. This is a heuristic and will
- * never be complete — the honest position is that it removes the obvious ones,
- * which is most of the volume.
- */
-const BOT = /bot|crawler|spider|crawling|slurp|bingpreview|headlesschrome|lighthouse|monitor|curl|wget|python-requests|axios|node-fetch/i;
-
-export function looksAutomated(userAgent: string | null): boolean {
-  if (!userAgent) return true;
-  return BOT.test(userAgent);
-}
+// Telling a person from a program used to live here as one hand-written
+// regex. It moved to classify.ts and became several signals over a maintained
+// list, because a hand-written list is wrong in both directions from the day
+// it is written — and because the interesting bots are the ones that do not
+// say so.

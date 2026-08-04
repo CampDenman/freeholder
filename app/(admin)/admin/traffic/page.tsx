@@ -8,10 +8,12 @@
 import { ChartLine } from "@phosphor-icons/react/dist/ssr";
 import {
   dailyViews,
+  includeBotsSetting,
   overview,
   topPages,
   topReferrers,
 } from "@/modules/analytics/service";
+import { setIncludeBotsAction } from "../../analytics-actions";
 import { currentBusiness } from "@/core/settings/read";
 import { Card, CardBody, CardHeader } from "@/ui/primitives";
 import { getT } from "../../../i18n";
@@ -23,14 +25,17 @@ const DAYS = 30;
 
 export default async function TrafficPage() {
   const actor = await requireStaffActor();
-  const business = await currentBusiness();
+  const [business, includeBots] = await Promise.all([
+    currentBusiness(),
+    includeBotsSetting(),
+  ]);
   const timezone = business?.timezone ?? "UTC";
 
   const [totals, pages, referrers, daily, t] = await Promise.all([
-    overview.call({ days: DAYS }, actor),
-    topPages.call({ days: DAYS, limit: 10 }, actor),
-    topReferrers.call({ days: DAYS, limit: 10 }, actor),
-    dailyViews.call({ days: DAYS, timezone }, actor),
+    overview.call({ days: DAYS, includeBots }, actor),
+    topPages.call({ days: DAYS, limit: 10, includeBots }, actor),
+    topReferrers.call({ days: DAYS, limit: 10, includeBots }, actor),
+    dailyViews.call({ days: DAYS, timezone, includeBots }, actor),
     getT(),
   ]);
 
@@ -42,6 +47,40 @@ export default async function TrafficPage() {
         <h1 className="text-xl font-bold tracking-tight">{t("analytics.title")}</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">
           {t("analytics.intro")}
+        </p>
+      </div>
+
+      {/*
+        Two buttons rather than a checkbox: each is a plain form posting one
+        value, so the choice works with no JavaScript and reads correctly to a
+        screen reader without any ARIA at all.
+      */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-1 rounded-md border border-rule p-1">
+          {[false, true].map((value) => (
+            <form key={String(value)} action={setIncludeBotsAction}>
+              <input type="hidden" name="includeBots" value={value ? "1" : "0"} />
+              <button
+                type="submit"
+                aria-pressed={includeBots === value}
+                className={
+                  includeBots === value
+                    ? "rounded bg-accent-soft px-3 py-1.5 text-sm font-semibold text-accent"
+                    : "rounded px-3 py-1.5 text-sm text-ink-muted"
+                }
+              >
+                {value ? t("analytics.everything") : t("analytics.people")}
+              </button>
+            </form>
+          ))}
+        </div>
+        <p className="text-xs text-ink-muted">
+          {t(
+            includeBots ? "analytics.automatedShown" : "analytics.automated",
+            { count: totals.automated },
+          )}
+          {" · "}
+          {t("analytics.countingIntro")}
         </p>
       </div>
 

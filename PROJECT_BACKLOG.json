@@ -628,5 +628,29 @@
       "The bus listener reads the visitor cookie from the request. When the transactional outbox lands (§39 roadmap) a replayed event will have no request, and the code already degrades to recording the conversion without the visitor link — but the link is the valuable half",
       "Sessions roll over after 30 minutes of quiet, which is convention rather than measurement"
     ]
+  },
+  {
+    "id": "2026-08-04-bot-detection",
+    "date": "2026-08-04",
+    "title": "Serious bot detection, and an owner toggle for it",
+    "masterRef": "§4.7, §11, §36",
+    "status": "done",
+    "delivered": [
+      "Replaced one hand-written regex with isbot (maintained, public domain) plus a signal-based classifier over request shape. A hand-written list is wrong in both directions from the day it is written, and the interesting bots are the ones that do not declare themselves",
+      "Signals beyond the user-agent: a missing or */* Accept, no Accept-Language, and none of the Sec-Fetch-* headers every browser since 2019 sends on a navigation. Two independent signals is a program; one is somebody's unusual browser, so one is 'suspected' rather than 'bot'",
+      "Three outcomes rather than two, because the honest answer to a plausible user-agent with no browser headers is 'probably not a person, but not worth deleting a visit over'",
+      "Reversed the earlier decision to drop bot requests at write time. Everything is recorded with a verdict and its reasons, and filtered at read time — the same choice the spam quarantine makes. A call made once, invisibly, that can never be seen or undone is the wrong shape for a judgement that is sometimes wrong",
+      "An owner toggle, stored as the analytics module's own configuration and validated against the settingsSchema its manifest declares — §11's settingsSchema used for the first time, with new core services settings.setModuleConfig and settings.getModuleConfig",
+      "Defaults parsed on read as well as write, so a module that adds a setting later gets its default on instances configured before it existed",
+      "The excluded count is reported whichever way the toggle is set: an owner deciding whether to trust the other five numbers needs to know how much was left out",
+      "Verified against a live instance with five differently-shaped requests: a real browser recorded human; Googlebot and GPTBot recorded bot; a scraper sending a copied Chrome user-agent and nothing else recorded bot with three reasons; an old Safari — a real person — recorded suspected with one"
+    ],
+    "openFollowUps": [
+      "No reverse-DNS verification of declared crawlers, which is the correct way to know a self-declared Googlebot is one. It is a DNS round trip per request and belongs behind a cache and a job",
+      "No IP reputation or datacentre ranges — the strongest signal available, and deliberately absent: §4.7 stores no IP, and adding one to catch bots would build the surveillance §36 rules out in order to measure traffic",
+      "No behavioural signals yet: a visitor reading forty pages in twenty seconds is obvious and currently invisible, because computing it at write time costs a query per view",
+      "Recording bots rather than dropping them means a heavily crawled site accumulates rows faster. Compounds the existing lack of retention and pruning",
+      "The toggle is instance-wide rather than per-report. That is the right default; a per-report override is a small addition if anyone wants it"
+    ]
   }
 ]
