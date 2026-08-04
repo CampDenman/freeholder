@@ -1,0 +1,327 @@
+// Copyright (C) 2026 Camp Denman Society
+// SPDX-License-Identifier: AGPL-3.0-only
+// Analytics services (MASTER.md §4.7, §36).
+//
+// The claim in §4.7 is that a funnel is not a separate product: it is this
+// table joined to the money tables through `contact_id`. That only works if
+// the join key gets filled in, which is what `identify` is for — and if the
+// events are recorded by the platform rather than by a script a visitor can
+// block, which is why a pageview is written during the server render and
+// there is no client bundle at all.
+import { z } from "zod";
+import { and, count, countDistinct, desc, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
+import { defineService } from "@/core/service";
+import { registerContactReference } from "@/core/contacts/service";
+import { analyticsEvents } from "./schema";
+
+// CLAUDE.md's non-negotiable: events point at contacts, so a merge has to
+// bring a visitor's history with them. Unconditional — one person may have
+// thousands of events, and after a merge all of them belong to the survivor.
+registerContactReference({
+  table: "analytics_events",
+  repoint: (tx, duplicateId, survivingId) =>
+    tx
+      .update(analyticsEvents)
+      .set({ contactId: survivingId })
+      .where(eq(analyticsEvents.contactId, duplicateId)),
+});
+
+/**
+ * The host somebody arrived from, not the page.
+ *
+ * "google.com" answers the question an owner has. The full referring URL is a
+ * fragment of a stranger's browsing history, and storing it would make this
+ * table something the platform would have to defend.
+ */
+export function referrerHost(referrer: string | null | undefined): string | null {
+  if (!referrer) return null;
+  try {
+    const host = new URL(referrer).hostname.replace(/^www\./, "");
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
+const visitor = {
+  anonId: z.string().min(1).max(64),
+  sessionId: z.string().min(1).max(64),
+};
+
+/**
+ * Record something that happened.
+ *
+ * `public` because the caller is a page render serving an anonymous visitor.
+ * It writes one row and nothing else — there is no path from here to any other
+ * table, which is what makes a public write safe to leave open.
+ */
+export const track = defineService({
+  name: "analytics.track",
+  summary: "Record one first-party event.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    ...visitor,
+    name: z.string().min(1).max(60),
+    path: z.string().max(2000).default("/"),
+    referrer: z.string().max(2000).nullish(),
+    locale: z.string().max(20).nullish(),
+    props: z.record(z.string(), z.unknown()).default({}),
+    contactId: z.string().uuid().nullish(),
+  }),
+  handler: async (input, ctx) => {
+    await ctx.tx.insert(analyticsEvents).values({
+      anonId: input.anonId,
+      sessionId: input.sessionId,
+      contactId: input.contactId ?? null,
+      name: input.name,
+      path: input.path,
+      referrer: referrerHost(input.referrer),
+      locale: input.locale,
+      props: input.props,
+    });
+    return { ok: true };
+  },
+});
+
+/**
+ * A visitor turned out to be somebody.
+ *
+ * Backfills the whole history, not just what happens next. Without that, a
+ * contact's first recorded moment is the form they submitted rather than the
+ * three pages they read first — and "which page brings me enquiries" is the
+ * question owners actually ask.
+ */
+export const identify = defineService({
+  name: "analytics.identify",
+  summary: "Attach a visitor's history to the contact they turned out to be.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    anonId: z.string().min(1).max(64),
+    contactId: z.string().uuid(),
+  }),
+  handler: async (input, ctx) => {
+    const updated = await ctx.tx
+      .update(analyticsEvents)
+      .set({ contactId: input.contactId })
+      .where(
+        and(
+          eq(analyticsEvents.anonId, input.anonId),
+          isNull(analyticsEvents.contactId),
+        ),
+      )
+      .returning({ id: analyticsEvents.id });
+    return { linked: updated.length };
+  },
+});
+
+/* ------------------------------------------------------------------ reading */
+
+const since = z.number().int().min(1).max(365).default(30);
+
+export const overview = defineService({
+  name: "analytics.overview",
+  summary: "Visits, visitors and conversions over a window.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({ days: since }),
+  handler: async (input, ctx) => {
+    const from = new Date(Date.now() - input.days * 86_400_000);
+    const [totals] = await ctx.tx
+      .select({
+        views: count(),
+        visitors: countDistinct(analyticsEvents.anonId),
+        sessions: countDistinct(analyticsEvents.sessionId),
+      })
+      .from(analyticsEvents)
+      .where(
+        and(eq(analyticsEvents.name, "page.viewed"), gte(analyticsEvents.at, from)),
+      );
+
+    const [conversions] = await ctx.tx
+      .select({ n: count() })
+      .from(analyticsEvents)
+      .where(
+        and(eq(analyticsEvents.name, "form.submitted"), gte(analyticsEvents.at, from)),
+      );
+
+    // The funnel §4.7 promises, as far as the platform can currently take it:
+    // visits → the ones that became somebody. Quotes and payments join this
+    // query by their own contact_id when those modules exist.
+    const [identified] = await ctx.tx
+      .select({ n: countDistinct(analyticsEvents.anonId) })
+      .from(analyticsEvents)
+      .where(
+        and(gte(analyticsEvents.at, from), isNotNull(analyticsEvents.contactId)),
+      );
+
+    return {
+      days: input.days,
+      views: totals?.views ?? 0,
+      visitors: totals?.visitors ?? 0,
+      sessions: totals?.sessions ?? 0,
+      conversions: conversions?.n ?? 0,
+      identified: identified?.n ?? 0,
+    };
+  },
+});
+
+export const topPages = defineService({
+  name: "analytics.topPages",
+  summary: "Which pages were read, most first.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({ days: since, limit: z.number().int().min(1).max(50).default(10) }),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select({
+        path: analyticsEvents.path,
+        views: count(),
+        visitors: countDistinct(analyticsEvents.anonId),
+      })
+      .from(analyticsEvents)
+      .where(
+        and(
+          eq(analyticsEvents.name, "page.viewed"),
+          gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
+        ),
+      )
+      .groupBy(analyticsEvents.path)
+      .orderBy(desc(count()))
+      .limit(input.limit),
+});
+
+export const topReferrers = defineService({
+  name: "analytics.topReferrers",
+  summary: "Where visitors came from.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({ days: since, limit: z.number().int().min(1).max(50).default(10) }),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select({
+        referrer: analyticsEvents.referrer,
+        visitors: countDistinct(analyticsEvents.anonId),
+      })
+      .from(analyticsEvents)
+      .where(
+        and(
+          isNotNull(analyticsEvents.referrer),
+          gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
+        ),
+      )
+      .groupBy(analyticsEvents.referrer)
+      .orderBy(desc(countDistinct(analyticsEvents.anonId)))
+      .limit(input.limit),
+});
+
+export const dailyViews = defineService({
+  name: "analytics.daily",
+  summary: "Views and visitors per day, for the chart.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({ days: since, timezone: z.string().default("UTC") }),
+  handler: async (input, ctx) => {
+    // Bucketed in the *business's* timezone, not UTC. An owner in Vancouver
+    // looking at "yesterday" means their yesterday, and a chart that disagrees
+    // with the calendar on the wall is a chart nobody trusts.
+    const rows = await ctx.tx
+      .select({
+        day: sql<string>`to_char(date_trunc('day', ${analyticsEvents.at} at time zone ${input.timezone}), 'YYYY-MM-DD')`,
+        views: count(),
+        visitors: countDistinct(analyticsEvents.anonId),
+      })
+      .from(analyticsEvents)
+      .where(
+        and(
+          eq(analyticsEvents.name, "page.viewed"),
+          gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
+        ),
+      )
+      .groupBy(sql`1`)
+      .orderBy(sql`1`);
+    return rows;
+  },
+});
+
+/**
+ * Recent events for one contact, for their timeline.
+ *
+ * The CRM already shows what a person *did* with the business. This is what
+ * they read before deciding to.
+ */
+export const contactActivity = defineService({
+  name: "analytics.contactActivity",
+  summary: "What one contact looked at.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({
+    contactId: z.string().uuid(),
+    limit: z.number().int().min(1).max(200).default(50),
+  }),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select()
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.contactId, input.contactId))
+      .orderBy(desc(analyticsEvents.at))
+      .limit(input.limit),
+});
+
+/**
+ * A form submission became a contact — so the visitor who read three pages
+ * first was that contact all along.
+ *
+ * On the bus rather than called by forms, which is §11 working as advertised:
+ * forms announces what happened and does not know analytics exists. The one
+ * thing the event cannot carry is *which browser* submitted it, so the cookie
+ * is read here — the listener runs post-commit inside the same request, where
+ * a cookie is still readable.
+ *
+ * If it ever does not (a job replaying events out of band, once the outbox in
+ * §39's roadmap lands), the conversion is recorded without the visitor link
+ * rather than lost: an anonymous count is worth more than an exception.
+ */
+export async function onFormSubmitted(payload: unknown): Promise<void> {
+  const { contactId } = (payload ?? {}) as { contactId?: string | null };
+
+  let anonId: string | undefined;
+  let sessionId: string | undefined;
+  try {
+    const { cookies } = await import("next/headers");
+    const jar = await cookies();
+    const { ANON_COOKIE, SESSION_COOKIE_NAME } = await import("./visitor");
+    anonId = jar.get(ANON_COOKIE)?.value;
+    sessionId = jar.get(SESSION_COOKIE_NAME)?.value;
+  } catch {
+    // Outside a request. Nothing to link, and nothing to complain about.
+  }
+
+  if (anonId && sessionId) {
+    await track.call(
+      {
+        anonId,
+        sessionId,
+        name: "form.submitted",
+        path: "/",
+        contactId: contactId ?? null,
+        props: {},
+      },
+      { kind: "system" },
+    );
+    if (contactId) {
+      await identify.call({ anonId, contactId }, { kind: "system" });
+    }
+  }
+}
+
+export default [
+  track,
+  identify,
+  overview,
+  topPages,
+  topReferrers,
+  dailyViews,
+  contactActivity,
+];

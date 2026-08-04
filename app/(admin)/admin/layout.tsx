@@ -64,6 +64,7 @@ export default async function AdminLayout({
               sections: t("admin.nav.sections"),
               media: t("admin.nav.media"),
               forms: t("forms.title"),
+              traffic: t("analytics.title"),
               contacts: t("admin.nav.contacts"),
               settings: t("admin.nav.settings"),
             }}
