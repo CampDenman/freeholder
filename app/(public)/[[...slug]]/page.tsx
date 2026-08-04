@@ -30,7 +30,8 @@ import {
   websiteJsonLd,
 } from "@/core/seo/jsonld";
 import { siteOrigin } from "@/core/seo/origin";
-import { getLocale, getT } from "../../i18n";
+import { getLocale, getT, requestedLocale } from "../../i18n";
+import { alternatesFor, localePath, translatedLocales } from "./alternates";
 import { recordPageView } from "./pageview";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
@@ -46,6 +47,35 @@ function pathOf(slug: string[] | undefined): string {
   return (slug ?? []).join("/");
 }
 
+/**
+ * The path to resolve, once a locale prefix has been accounted for.
+ *
+ * The proxy strips anything shaped like a language tag, because the edge
+ * cannot ask which locales this instance publishes. If it turns out not to be
+ * one, the segment was never a prefix — `/de/about` on a site with no German
+ * is a page called `de/about`, and it resolves as one.
+ */
+async function pathFor(slug: string[] | undefined): Promise<string> {
+  const path = pathOf(slug);
+  const [asked, business] = await Promise.all([
+    requestedLocale(),
+    currentBusiness(),
+  ]);
+  if (!asked) return path;
+  if (business?.enabledLocales.includes(asked)) return path;
+  return path === "" ? asked : `${asked}/${path}`;
+}
+
+/** A page's own address in a given locale (§4.9's URL strategy). */
+function canonicalFor(
+  origin: string,
+  slug: string,
+  locale: string,
+  business: { defaultLocale: string } | null,
+): string {
+  return `${origin}${localePath(slug, locale, business?.defaultLocale ?? locale)}`;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -54,7 +84,7 @@ export async function generateMetadata({
   const { slug } = await params;
   const locale = await getLocale();
   const [page, business] = await Promise.all([
-    publishedPage(pathOf(slug), locale),
+    publishedPage(await pathFor(slug), locale),
     currentBusiness(),
   ]);
   if (!page) return {};
@@ -72,10 +102,29 @@ export async function generateMetadata({
   const origin = siteOrigin();
   const url = page.slug === "" ? `${origin}/` : `${origin}/${page.slug}`;
 
+  // §5: "every localized page emits full hreflang alternates + x-default".
+  // Only the locales that actually have a reviewed translation are advertised
+  // — telling a search engine a French version exists when it does not is how
+  // a site ends up with duplicate-content problems in two languages.
+  const alternates = await alternatesFor(page.id, page.slug, origin, business);
+
+  // A prefixed URL for a page with no translation serves the site's own
+  // language — so it is not a separate page, and saying otherwise is how one
+  // article becomes two competing search results. The canonical names the
+  // version that is actually the article.
+  const translated = business ? await translatedLocales(page.id, business) : [];
+  const servedLocale =
+    locale === business?.defaultLocale || translated.includes(locale)
+      ? locale
+      : (business?.defaultLocale ?? locale);
+
   return {
     title: siteName && page.slug !== "" ? `${title} · ${siteName}` : title,
     description,
-    alternates: { canonical: url },
+    alternates: {
+      canonical: canonicalFor(origin, page.slug, servedLocale, business),
+      ...(alternates ? { languages: alternates } : {}),
+    },
     openGraph: {
       title,
       description,
@@ -95,7 +144,7 @@ export default async function PublicPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
-  const path = pathOf(slug);
+  const path = await pathFor(slug);
 
   const [locale, t] = await Promise.all([getLocale(), getT()]);
   const [page, business] = await Promise.all([
@@ -143,7 +192,12 @@ export default async function PublicPage({
   const rendered = await renderBlocks(blocks, {
     locale,
     t,
-    business: business ? { name: business.name, tagline: business.tagline } : null,
+    business: business ? {
+          name: business.name,
+          tagline: business.tagline,
+          defaultLocale: business.defaultLocale,
+          enabledLocales: business.enabledLocales,
+        } : null,
     path: path === "" ? "/" : `/${path}`,
     // Blocks whose state survives a page load read it from here — see the
     // form block, which confirms a submission by re-rendering rather than by

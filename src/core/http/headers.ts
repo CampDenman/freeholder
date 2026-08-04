@@ -17,3 +17,15 @@
  * to call usePathname().
  */
 export const PATH_HEADER = "x-freeholder-path";
+
+/**
+ * The locale a URL prefix asked for, stripped before the route sees it.
+ *
+ * §4.9's URL strategy: the default locale is unprefixed and every other one is
+ * path-prefixed (`/fr/services/...`). The prefix is a routing concern, so the
+ * catch-all should never see it — it resolves `services` in French rather than
+ * a page called `fr/services`. The proxy strips it and puts it here.
+ *
+ * Empty when the URL carried no prefix, which is the common case.
+ */
+export const LOCALE_HEADER = "x-freeholder-locale";

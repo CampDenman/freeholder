@@ -11,3 +11,4 @@ export { assets } from "@/core/media/schema";
 export { redirects } from "@/core/seo/schema";
 export { rateLimitCounters } from "@/core/security/schema";
 export { businessProfile, moduleSettings } from "@/core/settings/schema";
+export { entityTranslations } from "@/core/i18n/schema";

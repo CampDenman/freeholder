@@ -36,7 +36,12 @@ export default async function SectionPreview({
         locale,
         t,
         business: business
-          ? { name: business.name, tagline: business.tagline }
+          ? {
+          name: business.name,
+          tagline: business.tagline,
+          defaultLocale: business.defaultLocale,
+          enabledLocales: business.enabledLocales,
+        }
           : null,
         path: "/",
         identifyBlocks: true,

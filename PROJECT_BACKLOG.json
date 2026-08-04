@@ -652,5 +652,32 @@
       "Recording bots rather than dropping them means a heavily crawled site accumulates rows faster. Compounds the existing lack of retention and pruning",
       "The toggle is instance-wide rather than per-report. That is the right default; a per-report override is a small addition if anyone wants it"
     ]
+  },
+  {
+    "id": "2026-08-04-locale-routing",
+    "date": "2026-08-04",
+    "title": "Locale routing, EntityTranslation and hreflang",
+    "masterRef": "§4.9, §5, §15.2",
+    "status": "done",
+    "delivered": [
+      "A translated page is the same page with different words — same slug, same place in the hierarchy, same publication state — rather than a second page somebody has to keep in step. Nearly every other decision here follows from that one",
+      "§4.9's URL strategy: default locale unprefixed, others path-prefixed, stripped in proxy.ts before anything routes. The edge cannot ask which locales an instance publishes, so it strips anything shaped like a language tag and the page decides — /de/about on a site with no German resolves as a page called de/about",
+      "EntityTranslation in core, because every module's content is translatable and none should invent its own way of saying so. Core stores `fields` without looking inside: a page's translatable fields are cms's business",
+      "Machine drafts are excluded on the read path, not by convention. §4.9 permits machine translation to draft and forbids publishing it silently, and the read path is the only place that can enforce it",
+      "An untranslated page under a prefix serves the site's own language rather than 404ing, and canonicalises to the source URL — so one article never becomes two competing search results",
+      "hreflang advertises only locales that actually have a reviewed translation, with x-default pointing at the site's own language",
+      "A per-locale sitemap lists exactly what that locale has, prefixed",
+      "A `locales` block: a language switcher in the chrome vocabulary, rendering nothing on a single-locale instance, showing each language's name in its own language",
+      "The demo ships bilingual with one real translated page, so §4.9 is demonstrable end to end rather than merely implemented"
+    ],
+    "openFollowUps": [
+      "The SEO gate caught two real defects that unit tests could not. First: the French home was in the sitemap and no page linked to it — an orphan. That is why the language switcher exists, and it is a platform capability rather than a seed fix. Second, after the switcher: prefixed URLs for untranslated pages duplicated titles and descriptions, which is the classic i18n duplicate-content problem, fixed by canonicalising to the source URL",
+      "The document declared lang=en on French pages until this PR. A validator passes it, axe passes it, and a screen reader reads French aloud in an English accent. The gate now compares the declared language against the locale in the URL",
+      "No admin UI for translations: they are written through the service, like forms. The authoring surface is the obvious next piece",
+      "Nothing machine-drafts a translation yet — §4.9's AI-assisted drafting needs the ai adapter, which does not exist",
+      "Chrome (header and footer) is not translated: sections have no EntityTranslation rows, so a French page shows an English menu. The mechanism covers it; the seed and the admin do not yet use it",
+      "Contact.preferred_locale is still unused: customer-facing email and the portal should follow it, and neither exists yet",
+      "The proxy treats any two-letter first segment as a possible locale, so a page slugged exactly like a language tag on an instance that later enables that language would be shadowed. Documented rather than solved"
+    ]
   }
 ]

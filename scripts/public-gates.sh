@@ -75,4 +75,6 @@ docker logs fh-demo 2>&1 | grep "demo installed"
 
 node scripts/seo-gate.mjs "$BASE"
 echo
-node scripts/a11y-smoke.mjs "$BASE"
+# The French home too: a translated page is a different template as far as
+# `lang`, direction and the language switcher are concerned.
+node scripts/a11y-smoke.mjs "$BASE" / /services /services/weddings /contact /fr-CA
