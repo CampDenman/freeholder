@@ -12,4 +12,5 @@ export { redirects } from "@/core/seo/schema";
 export { rateLimitCounters } from "@/core/security/schema";
 export { businessProfile, moduleSettings } from "@/core/settings/schema";
 export { entityTranslations } from "@/core/i18n/schema";
+export { passwordResets } from "@/core/auth/schema";
 export { outboxEvents } from "@/core/events/schema";

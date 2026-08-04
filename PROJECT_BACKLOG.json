@@ -726,5 +726,31 @@
       "Found by rendering rather than by typecheck: the settings page passed a *function* into a client component to format the success message. Types allow it; React cannot serialise it. The wording moved into the server action, which is where the catalogs and plural rules live anyway — and is the better shape regardless",
       "No password-strength feedback beyond the length floor, and no check against known-breached passwords"
     ]
+  },
+  {
+    "id": "2026-08-04-mail-and-reset",
+    "date": "2026-08-04",
+    "title": "The mail adapter family, and password reset by email",
+    "masterRef": "§9, §12, §13",
+    "status": "done",
+    "delivered": [
+      "The §12 mail contract with `kind` on the adapter, because the transactional/bulk split is load-bearing: a personal mailbox that starts broadcasting loses its reputation and takes every receipt down with it",
+      "`delivers` on the adapter as well, so a caller can tell the difference between sending and pretending. A password reset that succeeds into a log file is worse than one that refuses, because the person waiting has no way to tell — and the forgot screen reads it and says so",
+      "console (the default: prints, never sends, warns loudly in production) and smtp (nodemailer). Gmail and Outlook refuse with a clear message rather than silently falling back to console — §12 wants them and they need an OAuth flow that does not exist, and an owner who configured Gmail and got the console would find out from a customer who never received a receipt",
+      "Reset tokens are 256 bits, stored hashed exactly as session tokens are, single-use, and good for an hour. Asking for a reset answers identically whether or not the address has an account, and every way a link can be bad gives one message — distinguishing them tells somebody probing which guess was closest",
+      "A reset revokes every session, unlike a voluntary change which keeps the caller's: the person resetting is about to sign in with the password they just chose, and whoever they are evicting must not survive it",
+      "Asking again invalidates the previous link, because somebody pressing 'send it again' expects the newest email to work",
+      "A daily job sweeps spent and expired links, so 'I forgot my password' does not accumulate a row forever",
+      "Forms' `notify` finally sends. On the bus rather than inline: a visitor must never wait for an SMTP handshake to see 'thank you', and a mail server having a bad afternoon must not roll back a submission that is already stored. Suspected spam is never notified — a quarantine that emails about every catch trains an owner to ignore it",
+      "Verified end to end in a real browser: requested a reset, read the link out of the console mailer's output, opened it, set a new password, and watched the old one answer 401 while the new one answered 200 and the token was marked spent"
+    ],
+    "openFollowUps": [
+      "Gmail and Outlook OAuth are still missing, and §12 prefers them for transactional mail so replies land in the inbox an owner already reads. SMTP with the same mailbox is the interim",
+      "No bulk adapter (Resend/SES/Postmark), so email-marketing has nothing to refuse to broadcast through yet",
+      "Mail is sent inline inside the request that triggers it for password resets — acceptable for one message, wrong for anything fanning out. Notifications already ride the outbox; resets could too, at the cost of a reset link arriving a moment later",
+      "No EmailTemplate (§30): the two messages are string literals in code rather than blocks an owner can edit, and they are English-only rather than following the recipient's locale",
+      "Nothing verifies that SMTP credentials work until the first real send fails. doctor should try a connection when it exists",
+      "Three of my own attempts to drive the reset form failed before I noticed the test was wrong, not the code: `document.querySelector('form')` was grabbing the theme toggle in the page header. Worth remembering — the first form on an admin page is the theme switcher"
+    ]
   }
 ]

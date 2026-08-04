@@ -5,6 +5,7 @@
 // it to the array it already lives in; forgetting to register it is not a
 // separate mistake anyone can make.
 import authServices from "@/core/auth/service";
+import resetServices from "@/core/auth/reset";
 import contactServices from "@/core/contacts/service";
 import eventServices from "@/core/events/service";
 import i18nServices from "@/core/i18n/service";
@@ -15,6 +16,7 @@ import type { Service } from "@/core/service";
 
 const services: Service[] = [
   ...authServices,
+  ...resetServices,
   ...contactServices,
   ...eventServices,
   ...i18nServices,

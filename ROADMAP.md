@@ -100,6 +100,10 @@ point:
   server gets them back in when they cannot sign in at all. **Still owed:**
   email-based reset, which waits on the mail adapter family, and OTP, which
   §9, §13 step 1 and §36's 2FA gate all still expect.
+- **Mail and email reset** ✅ *(2026-08-04)* — the §12 adapter contract with
+  console and SMTP behind it, reset tokens that are hashed at rest, single-use
+  and hourly, and forms' `notify` finally sending. **Still owed:** Gmail and
+  Outlook OAuth, which §12 prefers for transactional mail, and a bulk adapter.
 - **`scripts/doctor.ts`** — §17 calls doctor the contract that makes community
   recipes trustworthy. Every later phase adds checks to it.
 

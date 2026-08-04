@@ -74,6 +74,9 @@ export default async function LoginPage() {
             pending: t("auth.login.pending"),
           }}
         />
+        <a href="/forgot" className="mt-6 inline-block text-sm text-ink-muted">
+          {t("auth.forgot.link")}
+        </a>
       </main>
     </div>
   );
