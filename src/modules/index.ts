@@ -16,9 +16,10 @@
 // would want off. Core refuses to be disabled at all.
 import coreManifest from "@/core/manifest";
 import cmsManifest from "@/modules/cms/manifest";
+import formsManifest from "@/modules/forms/manifest";
 import seedManifest from "@/modules/seed/manifest";
 import type { ModuleManifest } from "@/core/module";
 
-const manifests: ModuleManifest[] = [coreManifest, cmsManifest, seedManifest];
+const manifests: ModuleManifest[] = [coreManifest, cmsManifest, formsManifest, seedManifest];
 
 export default manifests;

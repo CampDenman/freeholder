@@ -173,8 +173,12 @@ migrations and re-theming all stop being true.
   are audited with axe. What is still owed is a browser: focus order, focus
   visibility, keyboard traps and reflow are unchecked, and the gate now says so
   out loud rather than implying coverage it does not have.
-- **`forms`** — submissions reaching the spine through `contacts.resolve` and
-  `ctx.callAsSystem`, with the honeypot and time-trap anti-spam of §36.
+- ~~**`forms`**~~ ✅ *(2026-08-03)* — submissions reach the spine through
+  `contacts.resolve` and `ctx.callAsSystem`, with §36's honeypot and time trap
+  and a quarantine queue rather than a bin. Also the first module to contribute
+  a **block type**, which is the §24 seam plugins will use. Still owed: a form
+  builder in the admin (forms are created through the service today), and
+  notification email, which waits on a mail adapter.
 - **`analytics`** — first-party pageviews and funnel events joined to contacts.
 - **Locale routing middleware** and `EntityTranslation`, completing §4.9.
 

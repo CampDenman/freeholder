@@ -7,6 +7,7 @@ import {
   Gauge,
   Image as ImageIcon,
   Layout,
+  Envelope,
   SlidersHorizontal,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
@@ -18,6 +19,7 @@ export interface AdminNavLabels {
   pages: string;
   sections: string;
   media: string;
+  forms: string;
   contacts: string;
   settings: string;
 }
@@ -29,6 +31,7 @@ const LINKS = [
   { href: "/admin/pages", key: "pages", Icon: FileText },
   { href: "/admin/sections", key: "sections", Icon: Layout },
   { href: "/admin/media", key: "media", Icon: ImageIcon },
+  { href: "/admin/forms", key: "forms", Icon: Envelope },
   { href: "/admin/contacts", key: "contacts", Icon: UsersThree },
   { href: "/admin/settings", key: "settings", Icon: SlidersHorizontal },
 ] as const;

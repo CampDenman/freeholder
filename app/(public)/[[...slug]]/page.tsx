@@ -88,10 +88,12 @@ export async function generateMetadata({
 
 export default async function PublicPage({
   params,
+  searchParams,
 }: {
   params: Promise<Params>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { slug } = await params;
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
   const path = pathOf(slug);
 
   const [locale, t] = await Promise.all([getLocale(), getT()]);
@@ -136,6 +138,17 @@ export default async function PublicPage({
     t,
     business: business ? { name: business.name, tagline: business.tagline } : null,
     path: path === "" ? "/" : `/${path}`,
+    // Blocks whose state survives a page load read it from here — see the
+    // form block, which confirms a submission by re-rendering rather than by
+    // holding the result in client state. Repeated parameters collapse to the
+    // first: a block asking "was this form just sent?" wants an answer, not an
+    // array.
+    query: Object.fromEntries(
+      Object.entries(query).map(([key, value]) => [
+        key,
+        Array.isArray(value) ? value[0] : value,
+      ]),
+    ),
   });
 
   // Structured data comes from two places, and neither is a setting an owner

@@ -38,6 +38,17 @@ export interface BlockRenderContext {
   /** Path currently being rendered, so nav can mark itself current. */
   path: string;
   /**
+   * The URL's query, for blocks whose state survives a page load.
+   *
+   * Added for the form block, and kept deliberately narrow: a form that
+   * confirms a submission by re-rendering the page needs to know a submission
+   * just happened, and the alternative — a client component holding the result
+   * in state — would put the first hydration boundary on the public surface.
+   * §5 and the SEO gate both rest on that surface being plain server-rendered
+   * HTML, so a query parameter is the cheaper answer by a wide margin.
+   */
+  query?: Record<string, string | undefined>;
+  /**
    * Wrap each block so the editor can trace a click back to a node.
    *
    * Only ever true inside the admin preview. The public surface renders

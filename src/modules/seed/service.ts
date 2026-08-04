@@ -28,9 +28,11 @@ import {
   updateSection,
 } from "@/modules/cms/service";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
+import { createForm } from "@/modules/forms/service";
 import {
   BUSINESS,
   footer,
+  FORMS,
   header,
   IMAGES,
   PAGES,
@@ -84,6 +86,19 @@ export const installDemo = defineService({
         altText: image.alt,
       });
       assets[slot] = asset.id;
+    }
+
+    // Forms before pages, for the same reason images are: a form block names
+    // a form by slug, and a page referring to one that does not exist yet
+    // renders a hole rather than failing.
+    for (const form of FORMS) {
+      await ctx.callAsSystem(createForm, {
+        slug: form.slug,
+        name: form.name,
+        submitLabel: form.submitLabel,
+        successMessage: form.successMessage,
+        fields: form.fields,
+      });
     }
 
     // The same path an owner walks: finishing setup gives you a header, a
