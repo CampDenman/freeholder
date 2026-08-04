@@ -179,7 +179,13 @@ migrations and re-theming all stop being true.
   a **block type**, which is the §24 seam plugins will use. Still owed: a form
   builder in the admin (forms are created through the service today), and
   notification email, which waits on a mail adapter.
-- **`analytics`** — first-party pageviews and funnel events joined to contacts.
+- ~~**`analytics`**~~ ✅ *(2026-08-04)* — first-party page views recorded by the
+  server rather than by a script, conversions collected on the bus without
+  analytics and forms importing each other, and a visitor's history claimed
+  onto the contact they turn out to be. The funnel stops at "became a contact"
+  because the money tables do not exist yet; the rest is one join away. Still
+  owed: a consent gate (§30 models it and nothing reads it), retention and
+  pruning, and Core Web Vitals.
 - **Locale routing middleware** and `EntityTranslation`, completing §4.9.
 
 **freeholder.ai ships at the end of this phase.**

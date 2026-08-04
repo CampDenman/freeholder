@@ -7,6 +7,7 @@ import {
   Gauge,
   Image as ImageIcon,
   Layout,
+  ChartLine,
   Envelope,
   SlidersHorizontal,
   UsersThree,
@@ -21,6 +22,7 @@ export interface AdminNavLabels {
   media: string;
   forms: string;
   contacts: string;
+  traffic: string;
   settings: string;
 }
 
@@ -33,6 +35,7 @@ const LINKS = [
   { href: "/admin/media", key: "media", Icon: ImageIcon },
   { href: "/admin/forms", key: "forms", Icon: Envelope },
   { href: "/admin/contacts", key: "contacts", Icon: UsersThree },
+  { href: "/admin/traffic", key: "traffic", Icon: ChartLine },
   { href: "/admin/settings", key: "settings", Icon: SlidersHorizontal },
 ] as const;
 

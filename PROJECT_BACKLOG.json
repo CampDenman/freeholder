@@ -601,5 +601,32 @@
       "Submissions are never pruned, and a busy form's quarantine grows without limit",
       "React emits `autoComplete` in camelCase in the server-rendered HTML. Checked with a real HTML parser rather than assumed: attribute names are case-insensitive, so a browser reads autocomplete=email and autofill works. Cosmetic, noted so nobody re-investigates"
     ]
+  },
+  {
+    "id": "2026-08-04-analytics",
+    "date": "2026-08-04",
+    "title": "First-party analytics, and the first half of the funnel",
+    "masterRef": "§4.7, §36, §11",
+    "status": "done",
+    "delivered": [
+      "Page views recorded server-side during the render, from identifiers the proxy mints. Nothing to block, no client bundle, no third-party host, and it works with JavaScript off — so the traffic chart describes the traffic rather than the subset that ran a tag",
+      "identify() backfills a visitor's whole history onto the contact they turn out to be, not just what happens next. Without it a contact's first recorded moment is the form they submitted rather than the three pages they read first, and 'which page brings me enquiries' is unanswerable",
+      "Analytics listens for forms.submitted on the bus and never imports forms; forms does not know analytics exists. An instance with forms switched off records no conversions and breaks nothing. Verified in the request graph: boot reports 5 modules, 60 services, 2 listeners",
+      "What is not stored is asserted by a test over the whole row shape: no IP, no user-agent, no fingerprint, no third-party identifier. §36 puts third-party pixels on the anti-roadmap and a first-party rebuild of the same surveillance would be worse",
+      "Referrers are reduced to the host — google.com answers the owner's question, and the full referring URL is a fragment of a stranger's browsing history",
+      "The proxy refuses to mint an identifier at all for /admin, /login, /preview, /portal, /api and assets. The cheapest way to be sure a number is honest is never to record it",
+      "Crawlers and prefetches are filtered before recording. Verified against a live instance: four pages browsed as a person were recorded with referrer google.com; the same request as Googlebot, and a request to /admin, recorded nothing",
+      "Merging two contacts brings the visitor history with it — registered through the module seam added with forms",
+      "An admin traffic screen: five counts, a per-day bar list built from rows rather than a canvas (readable by a screen reader, prints, no client JS), top pages and top referrers"
+    ],
+    "openFollowUps": [
+      "One insert per page view, inside the request. Fine against a local Postgres at this scale; an obvious batching candidate once core/jobs exists, and written down rather than assumed",
+      "No consent gate. §30 models ConsentRecord with an analytics purpose and nothing reads it yet — an EU-facing instance needs that wired before the cookie is defensible there. The identifier is first-party and cross-site tracking is impossible by construction, which is the argument, not a ruling",
+      "No retention limit and no pruning: the table grows forever. Wants a setting and a job",
+      "The funnel stops at 'became a contact' because the money tables do not exist yet. §4.7's full visit → lead → quote → paid is one join away and cannot be written until quotes and invoices are real",
+      "Core Web Vitals are named in §36 as first-party-tracked and are not collected; that needs a client-side reporter, which is the first thing here that would",
+      "The bus listener reads the visitor cookie from the request. When the transactional outbox lands (§39 roadmap) a replayed event will have no request, and the code already degrades to recording the conversion without the visitor link — but the link is the valuable half",
+      "Sessions roll over after 30 minutes of quiet, which is convention rather than measurement"
+    ]
   }
 ]

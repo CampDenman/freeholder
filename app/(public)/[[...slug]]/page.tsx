@@ -31,6 +31,7 @@ import {
 } from "@/core/seo/jsonld";
 import { siteOrigin } from "@/core/seo/origin";
 import { getLocale, getT } from "../../i18n";
+import { recordPageView } from "./pageview";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
 
@@ -131,6 +132,12 @@ export default async function PublicPage({
     }
   }
   if (!page) notFound();
+
+  // §4.7's first-party analytics, recorded by the platform rather than by a
+  // script in the visitor's browser. Nothing to block, nothing to consent to
+  // loading, and it works with JavaScript switched off — the numbers describe
+  // the traffic that actually arrived rather than the subset that ran a tag.
+  await recordPageView(path === "" ? "/" : `/${path}`, locale);
 
   const blocks = page.blocks as BlockNode[];
   const rendered = await renderBlocks(blocks, {
