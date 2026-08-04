@@ -71,6 +71,13 @@
       "when": 1785834250410,
       "tag": "0009_entity-translations",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785863612880,
+      "tag": "0010_outbox",
+      "breakpoints": true
     }
   ]
 }

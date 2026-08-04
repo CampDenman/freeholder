@@ -86,10 +86,13 @@ point:
 - **`core/media`** — `Asset`, variants via sharp (AVIF/WebP, responsive), the
   admin library, alt text. Unblocks cms blocks, galleries, logos and OG images;
   the storage adapters have had no consumer for two PRs.
-- **`core/jobs`** — the pg-boss wrapper and job registry, mounted at boot, with
-  the expired-session sweep as its first job. Then move the event bus onto a
-  transactional outbox so a crash between commit and publish stops losing
-  events.
+- ~~**`core/jobs`**~~ ✅ *(2026-08-04)* — the pg-boss wrapper and job registry
+  mounted at boot, four scheduled jobs (session sweep, rate-limit sweep, outbox
+  redelivery and pruning), and the event bus moved onto a transactional outbox.
+  A crash between commit and dispatch now costs a minute of delay rather than
+  the event. **Still owed:** an admin surface for job history, dead-lettering
+  for an event no listener can handle, and enqueuing jobs inside the caller's
+  transaction the way events already are.
 - **`core/locations`** — NAP as a single source of truth with `renderNAP()`
   (§4.10), and setup wizard step 4.
 - **OTP and password reset**, closing §9's auth spec and §13 step 1.

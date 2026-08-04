@@ -5,7 +5,15 @@
 // wrapper, inside the same transaction as the mutation, so an unaudited
 // mutation is impossible rather than unlikely. The owner can read a
 // plain-English log of everything their AI did.
-import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 export const auditLog = pgTable(
   "audit_log",
@@ -29,5 +37,30 @@ export const auditLog = pgTable(
   (t) => [
     index("audit_log_subject_idx").on(t.subjectType, t.subjectId),
     index("audit_log_at_idx").on(t.at),
+  ],
+);
+
+/**
+ * The transactional outbox (§11). Logic lives in events/outbox.ts; the table
+ * lives here because drizzle-kit reads schema files, and a table it cannot see
+ * is a migration nobody generates.
+ */
+export const outboxEvents = pgTable(
+  "outbox_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventName: text("event_name").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    /** Null until a dispatch has run every listener without throwing. */
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // The sweeper's query: undispatched, oldest first.
+    index("outbox_pending_idx").on(t.dispatchedAt, t.createdAt),
   ],
 );

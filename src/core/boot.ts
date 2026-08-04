@@ -20,6 +20,8 @@ export interface BootReport {
   services: string[];
   /** Block types contributed by modules, beyond cms's own vocabulary. */
   blocks: string[];
+  /** Background jobs mounted from every module (§11). */
+  jobs: string[];
   listeners: Array<{ event: string; module: string; handler: string }>;
 }
 
@@ -37,7 +39,13 @@ export async function boot(
 ): Promise<BootReport> {
   requireProductionEnv();
 
-  const report: BootReport = { modules: [], services: [], listeners: [], blocks: [] };
+  const report: BootReport = {
+    modules: [],
+    services: [],
+    listeners: [],
+    blocks: [],
+    jobs: [],
+  };
 
   for (const manifest of sortModules(manifests)) {
     report.modules.push(manifest.name);
@@ -58,6 +66,21 @@ export async function boot(
       for (const block of exported) {
         registerBlock(block as Parameters<typeof registerBlock>[0]);
         report.blocks.push((block as { type: string }).type);
+      }
+    }
+
+    if (manifest.jobs) {
+      const loaded = await manifest.jobs();
+      const exported = loaded.default;
+      if (!Array.isArray(exported)) {
+        throw new Error(
+          `module "${manifest.name}" declares jobs, but its jobs module has no default export array.`,
+        );
+      }
+      const { registerJob } = await import("@/core/jobs");
+      for (const job of exported) {
+        registerJob(job as Parameters<typeof registerJob>[0]);
+        report.jobs.push((job as { name: string }).name);
       }
     }
 

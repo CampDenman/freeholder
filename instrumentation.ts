@@ -38,4 +38,15 @@ export async function register(): Promise<void> {
   // have registered, and because a manifest's own services load lazily.
   const { seedDemoIfRequested } = await import("@/modules/seed/boot");
   await seedDemoIfRequested();
+
+  // The worker last: every job is registered by boot, and starting before
+  // that would mount an empty queue. Failure is logged rather than fatal —
+  // an instance that cannot run background work should still serve pages,
+  // and the outbox is durable while it waits.
+  try {
+    const { startJobs } = await import("@/core/jobs");
+    await startJobs();
+  } catch (error) {
+    console.error("[jobs] worker did not start; the site is still serving", error);
+  }
 }
