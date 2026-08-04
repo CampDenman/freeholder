@@ -8,7 +8,7 @@
 // something which should have happened never did. So the tests are mostly
 // about the unhappy paths, because the happy one was already working.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
 import { outboxEvents } from "@/core/events/schema";
