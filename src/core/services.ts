@@ -10,6 +10,7 @@ import contactServices from "@/core/contacts/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
 import i18nServices from "@/core/i18n/service";
+import locationServices from "@/core/locations/service";
 import mediaServices from "@/core/media/service";
 import seoServices from "@/core/seo/service";
 import settingsServices from "@/core/settings/service";
@@ -22,6 +23,7 @@ const services: Service[] = [
   ...doctorServices,
   ...eventServices,
   ...i18nServices,
+  ...locationServices,
   ...mediaServices,
   ...seoServices,
   ...settingsServices,

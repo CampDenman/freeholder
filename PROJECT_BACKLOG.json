@@ -776,5 +776,29 @@
       "The recipe validation matrix still runs one recipe (the built image) rather than a matrix; §18 wants each Tier 1-2 recipe booted against ephemeral PG and MinIO",
       "core/locations was split out of this task rather than done. It is a module, not a script, and bundling them would have made both worse"
     ]
+  },
+  {
+    "id": "2026-08-04-doctor",
+    "date": "2026-08-04",
+    "title": "Doctor — the checks that try things rather than read settings back",
+    "masterRef": "§17, §18, §39.4",
+    "status": "done",
+    "delivered": [
+      "Every check does the cheapest real thing rather than the most thorough plausible thing: storage writes an object, reads it back and deletes it; mail is actually constructed; the database is asked which migrations it has run. Credentials that parse and a bucket that refuses writes look identical from the outside until an owner uploads a photograph",
+      "Every failure carries the sentence that fixes it, and a test enforces it — a check that reports 'storage misconfigured' has told an owner what they already knew",
+      "One implementation behind four doors (§2 principle 7): the platform.doctor service, an admin Health screen, /api/doctor, and a thin CLI. The alternative — a script that reimplements the checks so it can run standalone — is how a script and a product come to disagree about what healthy means",
+      "Owner-only, because the report names which adapters are configured and how each is failing, which is the reconnaissance somebody probing an instance would like. /api/health stays public and stays shallow",
+      "Wired into the recipe validation gate (§18): CI registers an owner on the throwaway container and runs doctor against it, failing the build on a FAIL and tolerating warnings, since CI has no mail adapter and no real bucket",
+      "Proved it can go red rather than only green: pointed storage at an unwritable path and set MAIL_ADAPTER=smtp with no host, and doctor reported both failures with their remedies and exited 2",
+      "Exit codes set on process.exitCode rather than passed to process.exit(). Calling exit while an HTTP connection is closing aborts Node mid-teardown — on Windows it tripped a libuv assertion and the process died with 127, which CI reads as 'command not found' rather than 'doctor warned'"
+    ],
+    "openFollowUps": [
+      "SMTP is checked by construction, not by connection. nodemailer can verify() a transport, and doing so would catch a wrong password rather than a wrong hostname — worth adding, at the cost of doctor opening a socket to somebody's mail server every time it runs",
+      "No check that APP_URL is where the site is actually reached. The SEO layer already warns when a request arrives at a different origin; doctor could read that, and cannot from inside a request-less service",
+      "Nothing checks the storage bucket's *public* flag against what the CMS assumes, so a bucket flipped to public after setup is invisible here",
+      "§39.4 wants preflight to extend doctor: verify a signature, dry-run migrations against a shadow database, compare plugin ranges. The shape is right — new checks in the same registry — and none of it exists yet",
+      "The recipe validation matrix still runs one recipe (the built image) rather than a matrix; §18 wants each Tier 1-2 recipe booted against ephemeral PG and MinIO",
+      "core/locations was split out of this task rather than done. It is a module, not a script, and bundling them would have made both worse"
+    ]
   }
 ]

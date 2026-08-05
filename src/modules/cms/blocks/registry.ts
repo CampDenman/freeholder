@@ -18,6 +18,8 @@ import {
   heading,
   image,
   locales,
+  locationsIndex,
+  nap,
   nav,
   spacer,
   text,
@@ -35,6 +37,8 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   brand,
   nav,
   locales,
+  nap,
+  locationsIndex,
 ] as unknown as BlockDefinition<z.ZodType, never>[];
 
 const byType = new Map(definitions.map((d) => [d.type, d]));

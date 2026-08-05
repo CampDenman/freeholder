@@ -47,6 +47,51 @@ export const BUSINESS = {
   firstDayOfWeek: 1,
 };
 
+/**
+ * Where Aurora Coast works (§4.10).
+ *
+ * A real, structured address rather than a line of text in the footer, because
+ * the point of §4.10 is that those are different things: a text line renders
+ * identically and is worth nothing to a search engine comparing this site
+ * against a directory listing. The demo has to demonstrate the difference, or
+ * it demonstrates the failure mode.
+ *
+ * The street is invented; the town is not. A demo address that resolved to a
+ * real business would be a worse kind of wrong.
+ */
+export const LOCATION = {
+  name: "Aurora Coast Photography",
+  slug: "courtenay",
+  street: "210 Fifth Street",
+  unit: "Studio 3",
+  city: "Courtenay",
+  region: "BC",
+  postalCode: "V9N 1A1",
+  country: "CA",
+  latitude: 49.687,
+  longitude: -124.993,
+  phone: "+1 250-555-0142",
+  email: "hello@auroracoast.example",
+  priceRange: "$$",
+};
+
+/**
+ * A week of hours, including a stated closure.
+ *
+ * Sunday is marked closed rather than left out, which is the distinction §4.10
+ * turns on: a search result can tell somebody a studio is shut on Sunday, and
+ * can tell them nothing at all about a day nobody mentioned.
+ */
+export const HOURS = [
+  { weekday: 1, opens: "09:00", closes: "17:00" },
+  { weekday: 2, opens: "09:00", closes: "17:00" },
+  { weekday: 3, opens: "09:00", closes: "17:00" },
+  { weekday: 4, opens: "09:00", closes: "17:00" },
+  { weekday: 5, opens: "09:00", closes: "16:00" },
+  { weekday: 6, opens: "10:00", closes: "14:00" },
+  { weekday: 0, closed: true },
+];
+
 export const IMAGES: Record<ImageSlot, { filename: string; alt: string; svg: string }> = {
   coastline: {
     filename: "aurora-coast-shoreline.jpg",
@@ -128,13 +173,15 @@ export function footer(): BlockNode[] {
       props: { count: 2, gap: "normal" },
       children: [
         {
-          id: "seed-footer-text",
-          type: "text",
-          props: {
-            body: `${BUSINESS.name}\nComox Valley, British Columbia\nhello@auroracoast.example`,
-            align: "start",
-            measure: true,
-          },
+          // Not a text block with the address typed into it, which is what
+          // this was. §4.10's rule is that the render helper is the only way
+          // to output NAP, and a footer keeping its own copy is exactly the
+          // drift the rule exists to stop — edit the location and this text
+          // would have gone on saying the old thing. The block reads the
+          // primary location instead.
+          id: "seed-footer-nap",
+          type: "nap",
+          props: { showAddress: true, showPhone: true, showEmail: true },
         },
         {
           id: "seed-footer-nav",

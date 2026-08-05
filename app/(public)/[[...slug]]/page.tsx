@@ -30,6 +30,9 @@ import {
   websiteJsonLd,
 } from "@/core/seo/jsonld";
 import { siteOrigin } from "@/core/seo/origin";
+import { localBusinessJsonLd } from "@/core/locations/jsonld";
+import { currentLocation } from "@/core/locations/read";
+import { getLocation } from "@/core/locations/service";
 import { getLocale, getT, requestedLocale } from "../../i18n";
 import { alternatesFor, localePath, translatedLocales } from "./alternates";
 import { recordPageView } from "./pageview";
@@ -226,9 +229,20 @@ export default async function PublicPage({
       }
     : null;
 
+  // §4.10: "Each location emits LocalBusiness JSON-LD with geo, hours,
+  // priceRange, sameAs." The home page carries the primary location's, because
+  // for a single-location business the home page *is* the business's page —
+  // and a business with no locations emits nothing extra rather than an
+  // Organization pretending to be somewhere.
+  const localBusiness =
+    facts && path === "" ? await homeLocalBusiness(origin, facts.schemaType) : null;
+
   const jsonLd = [
     ...(facts && path === ""
-      ? [websiteJsonLd(origin, facts), organizationJsonLd(origin, facts)]
+      ? [
+          websiteJsonLd(origin, facts),
+          localBusiness ?? organizationJsonLd(origin, facts),
+        ]
       : []),
     ...(path !== ""
       ? [
@@ -256,6 +270,31 @@ export default async function PublicPage({
       <article className="grid gap-8">{rendered}</article>
     </>
   );
+}
+
+/**
+ * The primary location as LocalBusiness, or null when there is none.
+ *
+ * It supersedes `organizationJsonLd` rather than joining it: two objects both
+ * claiming to be the business, one with an address and one without, is a
+ * crawler's ambiguity to resolve rather than a fact. The location's own
+ * `schemaType` wins when it has one — see core/locations/schema.ts.
+ */
+async function homeLocalBusiness(
+  origin: string,
+  businessSchemaType: string,
+): Promise<Record<string, unknown> | null> {
+  const primary = await currentLocation();
+  if (!primary) return null;
+  const full = await getLocation.call({ id: primary.id }, ANONYMOUS);
+  if (!full) return null;
+  return localBusinessJsonLd({
+    location: full,
+    hours: full.hours,
+    serviceArea: full.serviceArea,
+    businessSchemaType,
+    url: `${origin}/`,
+  });
 }
 
 /**

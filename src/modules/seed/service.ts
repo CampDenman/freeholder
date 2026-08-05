@@ -20,6 +20,10 @@ import { pages } from "@/modules/cms/schema";
 import { updateBusiness, completeSetup } from "@/core/settings/service";
 import { uploadAsset } from "@/core/media/service";
 import {
+  createLocationService,
+  setOpeningHours,
+} from "@/core/locations/service";
+import {
   createPage,
   ensureDefaults,
   listPages,
@@ -34,6 +38,8 @@ import {
   BUSINESS,
   footer,
   FORMS,
+  HOURS,
+  LOCATION,
   header,
   IMAGES,
   PAGES,
@@ -102,6 +108,18 @@ export const installDemo = defineService({
         fields: form.fields,
       });
     }
+
+    // The location before the chrome that renders it: the footer's NAP block
+    // resolves a location at render time, and seeding it afterwards would
+    // leave the demo's first render with an empty footer.
+    const location = await ctx.callAsSystem(createLocationService, {
+      ...LOCATION,
+      isPrimary: true,
+    });
+    await ctx.callAsSystem(setOpeningHours, {
+      locationId: location.id,
+      entries: HOURS,
+    });
 
     // The same path an owner walks: finishing setup gives you a header, a
     // footer and a home page, and then you edit them. `ensureDefaults` is what

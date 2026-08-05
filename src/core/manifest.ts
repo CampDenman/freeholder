@@ -20,6 +20,9 @@ export default defineModule({
       "settings.setupCompleted",
       "module.enabled",
       "module.disabled",
+      "location.created",
+      "location.updated",
+      "location.deleted",
     ],
   },
 });

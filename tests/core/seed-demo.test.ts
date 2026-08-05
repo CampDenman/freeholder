@@ -22,7 +22,7 @@ import { installDemo } from "@/modules/seed/service";
 import { resolvePage, getSection, publishedPaths } from "@/modules/cms/service";
 import { getBusiness } from "@/core/settings/service";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
-import { PAGES, IMAGES, BUSINESS } from "../../seed/demo/content";
+import { PAGES, IMAGES, BUSINESS, LOCATION } from "../../seed/demo/content";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import {
   ANONYMOUS,
@@ -147,9 +147,13 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     expect(await getSection.call({ key: FOOTER_KEY }, ANONYMOUS)).toBeTruthy();
 
     // Published, because a sitemap of drafts is not a demo of anything.
+    // The demo's own pages, plus the two the location earned: §4.10 gives a
+    // location a page and an index, and it gets them through the event bus
+    // rather than through the seed writing them — so this assertion is also
+    // the proof that path is wired up end to end.
     const paths = await publishedPaths.call({ locale: "en" }, STAFF);
     expect(paths.map((p: { slug: string }) => p.slug).sort()).toEqual(
-      PAGES.map((p) => p.slug).sort(),
+      [...PAGES.map((p) => p.slug), "locations", `locations/${LOCATION.slug}`].sort(),
     );
   });
 
@@ -192,7 +196,7 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     // And it refused *before* writing anything: no duplicate pages, no second
     // set of images.
     const rows = await db().select().from(pages);
-    expect(rows).toHaveLength(PAGES.length);
+    expect(rows).toHaveLength(PAGES.length + 2); // + the location and its index
     expect(await db().select().from(assets)).toHaveLength(
       Object.keys(IMAGES).length,
     );

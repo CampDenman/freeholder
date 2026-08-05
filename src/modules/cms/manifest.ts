@@ -33,7 +33,14 @@ export default defineModule({
       "cms.pageUnpublished",
       "cms.sectionUpdated",
     ],
-    listens: { "settings.setupCompleted": "onSetupCompleted" },
+    listens: {
+      "settings.setupCompleted": "onSetupCompleted",
+      // §4.10's LocationPage. core announces that a location exists; cms
+      // answers with a page, and neither module imports the other (§11).
+      "location.created": "onLocationCreated",
+      "location.updated": "onLocationUpdated",
+      "location.deleted": "onLocationDeleted",
+    },
   },
   // The public URLs this module puts in the sitemap (§5). The engine asks;
   // the module answers with a service name rather than a list, because the

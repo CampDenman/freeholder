@@ -16,6 +16,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { completeSetup, updateBusiness } from "@/core/settings/service";
+import { createLocationService } from "@/core/locations/service";
 import { ServiceError } from "@/core/service";
 
 export interface ActionState {
@@ -111,7 +112,71 @@ export async function saveBusinessAction(
   } catch (error) {
     return present(error);
   }
+  redirect("/setup/location");
+}
+
+/**
+ * §13 step 4, and the one step that is allowed to write nothing.
+ *
+ * Skipping and saving are the same submit, because the alternative — a link
+ * out of the form — leaves whatever was typed looking as though it had been
+ * kept. An empty form is also a skip: an owner who reads the screen, decides
+ * it does not apply and presses the main button should not get a location row
+ * with nothing in it, which would put an empty address block on their site
+ * (§4.10).
+ */
+export async function saveSetupLocationAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const skipped = text(form, "skip") === "1";
+  const street = text(form, "street").trim();
+  const city = text(form, "city").trim();
+  const phone = text(form, "phone").trim();
+  const country = text(form, "country").trim().toUpperCase();
+
+  if (!skipped && (street || city || phone)) {
+    const actor = await actorFromToken(
+      (await cookies()).get(SESSION_COOKIE)?.value,
+    );
+    try {
+      await createLocationService.call(
+        {
+          name: text(form, "name", ""),
+          // The site address is derived rather than asked for: nobody setting
+          // up a business has an opinion about it yet, and it is one field
+          // fewer between them and a working site. The admin screen can
+          // change it later, and moving it leaves a redirect.
+          slug: slugify(city || text(form, "name", "") || "main"),
+          street: street || null,
+          city: city || null,
+          region: text(form, "region").trim() || null,
+          postalCode: text(form, "postalCode").trim() || null,
+          country,
+          phone: phone || null,
+          isPrimary: true,
+        },
+        actor,
+      );
+    } catch (error) {
+      return present(error);
+    }
+  }
+
   redirect("/setup/done");
+}
+
+/** A name as a URL segment. Accents are folded, not dropped, so "Montréal" is montreal. */
+function slugify(value: string): string {
+  return (
+    value
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 120) || "main"
+  );
 }
 
 export async function completeSetupAction(
