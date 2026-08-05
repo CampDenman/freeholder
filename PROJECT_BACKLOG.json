@@ -800,5 +800,31 @@
       "The recipe validation matrix still runs one recipe (the built image) rather than a matrix; §18 wants each Tier 1-2 recipe booted against ephemeral PG and MinIO",
       "core/locations was split out of this task rather than done. It is a module, not a script, and bundling them would have made both worse"
     ]
+  },
+  {
+    "id": "2026-08-05-locations",
+    "date": "2026-08-05",
+    "title": "core/locations — one address, everywhere, that cannot drift",
+    "masterRef": "§4.10, §13 step 4, §5",
+    "status": "done",
+    "delivered": [
+      "renderNAP is the only formatter, which is §4.10's 'it can't drift' made structural rather than aspirational: the footer, the admin list, the location page and the PostalAddress in the JSON-LD are four projections of one call, and a test asserts they agree. Search engines corroborate a local business by comparing its site against directories, and 'Unit 3, 210 Fifth St' versus '210 5th Street #3' is two businesses to that comparison",
+      "Addresses are written the way each country writes them — postcode before the town in France, on its own line in the UK. Countries not listed get the North American order, which is wrong for some of them; the limitation is recorded in the file rather than hidden behind an approximation that looks total",
+      "Opening hours distinguish a stated closure from silence. 'Closed Sunday' is something a search result can tell a customer; 'nobody mentioned Sunday' is not, and conflating them is how a shop promises an open door",
+      "Location pages are cms pages (§32). core announces that a location exists, cms answers by writing one — so they are in the sitemap, translatable and owner-editable for free, the SEO layer needed no new source, and neither module imports the other",
+      "Deviated from §4.10 as written and updated MASTER.md in the same commit: special_dates was specified as jsonb and is rows here. A Christmas closure is a known field with a known shape, so jsonb would be the shadow store §2 principle 12 forbids, and rows are what OpeningHoursSpecification wants",
+      "Deleting a location unpublishes its page rather than destroying it — the words on it are the owner's, and §4.10 has a hidden status precisely so closing a location is not a deletion",
+      "An online-only business gets none of it: skipping the setup step writes nothing, reads answer null rather than a placeholder, and the null survives to the surfaces. Verified on production, where /locations 404s because freeholder.ai has no location",
+      "The demo's footer had the address typed into a text block — the exact drift this exists to stop. It reads the location now"
+    ],
+    "openFollowUps": [
+      "The SEO gate found two defects the 548 unit tests could not, both after they were green: the location pages were orphans (published, in the sitemap, linked from nowhere) and they shared a meta description with every other page via the tagline fallback. Second time §15.2 has earned itself by being a crawl rather than an assertion",
+      "Adding /locations to the site menu automatically is the platform editing the owner's navigation. It is what §5 demands — 'publishing anything automatically links it from its section index' — but it deserves a look when the nav becomes something owners curate properly",
+      "Location pages are generated in the default locale only. A bilingual instance gets one French page per location served from the English row via the locale fallback, which is correct but not translated; EntityTranslation could carry them",
+      "The location page holds a heading and the NAP block, nothing else. A map, a gallery and the services offered there all need modules that do not exist yet — §5 is explicit that thin-template mass generation is out of scope, so they arrive with their modules",
+      "§4.10's location x service matrix (/locations/comox-valley/wedding-photography/) needs the catalog and is deliberately not attempted",
+      "No admin UI for dated overrides — the holiday hours the schema models. The week is editable; a Boxing Day closure needs the API",
+      "The public-gates race between /api/health answering 200 and the seed finishing was always there and was always won by luck. Adding a location made the seed slow enough to lose it. Worth asking what else in CI is timing-dependent in the same way"
+    ]
   }
 ]
