@@ -9,6 +9,7 @@ import {
   Layout,
   ChartLine,
   Envelope,
+  Stethoscope,
   SlidersHorizontal,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
@@ -23,6 +24,7 @@ export interface AdminNavLabels {
   forms: string;
   contacts: string;
   traffic: string;
+  health: string;
   settings: string;
 }
 
@@ -37,6 +39,7 @@ const LINKS = [
   { href: "/admin/contacts", key: "contacts", Icon: UsersThree },
   { href: "/admin/traffic", key: "traffic", Icon: ChartLine },
   { href: "/admin/settings", key: "settings", Icon: SlidersHorizontal },
+  { href: "/admin/health", key: "health", Icon: Stethoscope },
 ] as const;
 
 export function AdminNav({ labels }: { labels: AdminNavLabels }) {
