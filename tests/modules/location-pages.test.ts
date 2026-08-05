@@ -11,7 +11,12 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { pages } from "@/modules/cms/schema";
-import { publishedPaths } from "@/modules/cms/service";
+import {
+  ensureDefaults,
+  getSection,
+  publishedPaths,
+} from "@/modules/cms/service";
+import { HEADER_KEY } from "@/modules/cms/defaults";
 import {
   onLocationCreated,
   onLocationDeleted,
@@ -92,6 +97,33 @@ describe.runIf(hasDatabase)("a location's page", () => {
     // what makes §5's "no orphan pages" hold without anyone maintaining it.
     const blocks = index?.blocks as Array<{ type: string }>;
     expect(blocks.some((block) => block.type === "locationsIndex")).toBe(true);
+  });
+
+  it("is linked from the site's menu, not just published", async () => {
+    // The SEO gate caught this hole after the tests passed: the pages were
+    // built, published and in the sitemap, and nothing on the site pointed at
+    // them. §5 calls that an orphan, and "in the sitemap" is not a link.
+    await ensureDefaults.call({}, OWNER);
+    const location = await createLocationService.call(CANADIAN, OWNER);
+    await onLocationCreated({ id: location.id, slug: location.slug });
+
+    const header = await getSection.call({ key: HEADER_KEY }, ANONYMOUS);
+    expect(JSON.stringify(header?.blocks)).toContain('"/locations"');
+  });
+
+  it("does not add the menu link twice", async () => {
+    await ensureDefaults.call({}, OWNER);
+    const first = await createLocationService.call(CANADIAN, OWNER);
+    await onLocationCreated({ id: first.id, slug: first.slug });
+    const second = await createLocationService.call(
+      { ...CANADIAN, slug: "cumberland" },
+      OWNER,
+    );
+    await onLocationCreated({ id: second.id, slug: second.slug });
+
+    const header = await getSection.call({ key: HEADER_KEY }, ANONYMOUS);
+    const found = JSON.stringify(header?.blocks).split('"/locations"').length - 1;
+    expect(found).toBe(1);
   });
 
   it("is in the sitemap, because it is a page", async () => {

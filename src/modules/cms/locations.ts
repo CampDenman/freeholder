@@ -22,8 +22,10 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { pages } from "./schema";
+import { HEADER_KEY } from "./defaults";
 import { createPage, updatePage } from "./service";
 import type { BlockNode } from "./blocks/types";
+import { renderNAP, type LocationRow } from "@/core/locations/nap";
 
 const SYSTEM = { kind: "system" } as const;
 
@@ -58,6 +60,25 @@ function locationBlocks(locationId: string, name: string): BlockNode[] {
       },
     },
   ];
+}
+
+/**
+ * A page's own description, so it does not fall back to the tagline.
+ *
+ * §5 wants "a unique title and description on every page", and a generated
+ * page with no description of its own inherits the business tagline — which
+ * every other page inherits too. The SEO gate reports that as duplicate
+ * descriptions, and it is right to: two pages describing themselves
+ * identically are two pages a search engine has to choose between.
+ *
+ * The address is the honest description of a location page. It is what the
+ * page is about, and it is unique by construction.
+ */
+function describeLocation(location: LocationRow): string {
+  const nap = renderNAP(location);
+  return nap.addressLine
+    ? `${location.name} — ${nap.addressLine}`
+    : `Contact details and opening hours for ${location.name}.`;
 }
 
 /** The index page's own content: a heading and the live list. */
@@ -98,7 +119,7 @@ async function pageAt(slug: string, locale: string) {
  * still needs the index, and an instance that never adds one must never get it
  * (§4.10 — no empty local scaffolding).
  */
-async function ensureIndex(locale: string): Promise<void> {
+async function ensureIndex(locale: string, businessName: string): Promise<void> {
   if (await pageAt(INDEX_SLUG, locale)) return;
   await createPage.call(
     {
@@ -106,6 +127,7 @@ async function ensureIndex(locale: string): Promise<void> {
       locale,
       title: "Locations",
       blocks: indexBlocks("Locations"),
+      seo: { description: `Where to find ${businessName}.` },
     },
     SYSTEM,
   );
@@ -113,6 +135,50 @@ async function ensureIndex(locale: string): Promise<void> {
   if (created) {
     const { publishPage } = await import("./service");
     await publishPage.call({ id: created.id, published: true }, SYSTEM);
+    await linkFromNav(locale);
+  }
+}
+
+/**
+ * Put `/locations` in the site's menu.
+ *
+ * §5 is unambiguous about why this is the platform's job rather than the
+ * owner's: "No orphan pages: publishing anything automatically links it from
+ * its section index" — and a section index is itself something published, so
+ * it needs a link from the root. The SEO gate caught this exact hole: the
+ * pages were built, published and in the sitemap, and nothing on the site
+ * pointed at them.
+ *
+ * It appends rather than reorders, it runs once (a link that is already there
+ * is left alone), and the owner can delete it. Adding a link an owner may not
+ * want is a smaller wrong than shipping a page nobody can reach — the second
+ * one is invisible until a crawler reports it.
+ */
+async function linkFromNav(locale: string): Promise<void> {
+  const { getSection, updateSection } = await import("./service");
+  const header = await getSection.call({ key: HEADER_KEY, locale }, SYSTEM);
+  if (!header) return;
+
+  const blocks = structuredClone(header.blocks) as BlockNode[];
+  let linked = false;
+
+  const walk = (nodes: BlockNode[]): void => {
+    for (const node of nodes) {
+      if (node.type === "nav") {
+        const links = (node.props.links ?? []) as Array<{ label: string; href: string }>;
+        if (!links.some((link) => link.href === `/${INDEX_SLUG}`)) {
+          node.props.links = [...links, { label: "Locations", href: `/${INDEX_SLUG}` }];
+          linked = true;
+        }
+        return;
+      }
+      if (node.children) walk(node.children);
+    }
+  };
+  walk(blocks);
+
+  if (linked) {
+    await updateSection.call({ key: HEADER_KEY, locale, blocks }, SYSTEM);
   }
 }
 
@@ -130,7 +196,7 @@ export async function onLocationCreated(payload: unknown): Promise<void> {
   if (!location || location.status !== "visible") return;
 
   const locale = await defaultLocale();
-  await ensureIndex(locale);
+  await ensureIndex(locale, await businessName());
 
   if (await pageAt(pathFor(slug), locale)) return;
   await createPage.call(
@@ -139,6 +205,7 @@ export async function onLocationCreated(payload: unknown): Promise<void> {
       locale,
       title: titleFor(location),
       blocks: locationBlocks(id, location.name),
+      seo: { description: describeLocation(location) },
     },
     SYSTEM,
   );
@@ -213,4 +280,10 @@ async function defaultLocale(): Promise<string> {
   const { getBusiness } = await import("@/core/settings/service");
   const business = await getBusiness.call({}, SYSTEM);
   return business?.defaultLocale ?? "en";
+}
+
+async function businessName(): Promise<string> {
+  const { getBusiness } = await import("@/core/settings/service");
+  const business = await getBusiness.call({}, SYSTEM);
+  return business?.name ?? "us";
 }
