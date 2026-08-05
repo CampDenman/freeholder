@@ -94,7 +94,7 @@ point:
   for an event no listener can handle, and enqueuing jobs inside the caller's
   transaction the way events already are.
 - **`core/locations`** — NAP as a single source of truth with `renderNAP()`
-  (§4.10), and setup wizard step 4.
+  (§4.10), and setup wizard step 4. The last of Phase 1.
 - **Password change and the locked-out escape hatch** ✅ *(2026-08-04)* — an
   owner can rotate their own password from Settings, and a command on their own
   server gets them back in when they cannot sign in at all. **Still owed:**
@@ -104,8 +104,11 @@ point:
   console and SMTP behind it, reset tokens that are hashed at rest, single-use
   and hourly, and forms' `notify` finally sending. **Still owed:** Gmail and
   Outlook OAuth, which §12 prefers for transactional mail, and a bulk adapter.
-- **`scripts/doctor.ts`** — §17 calls doctor the contract that makes community
-  recipes trustworthy. Every later phase adds checks to it.
+- ~~**`scripts/doctor.ts`**~~ ✅ *(2026-08-04)* — checks that *try* things
+  rather than read settings back: a file written to the bucket and read again,
+  the mail adapter constructed, the migration history compared with the build.
+  One implementation behind the service, an admin Health screen, `/api/doctor`
+  and a CLI, and it runs in the recipe gate. §39.4's preflight extends it.
 
 ## Phase 2 — the floor: cms and blocks (§32)
 

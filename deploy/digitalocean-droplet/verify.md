@@ -85,3 +85,22 @@ business you cannot reach.
 - [ ] Change it again from **Settings → Password**, so the password that ends
       up in your shell history is not the one you keep. Every other signed-in
       device is signed out when you do.
+
+## Doctor passes
+
+`doctor` is the one command that tries things rather than reading settings
+back: it writes a file to your bucket and reads it again, opens the mail
+configuration, and checks the database is on the schema this build expects.
+
+- [ ] Run it from your machine, signed in as the owner:
+
+      pnpm doctor --url https://your-domain --email you@example.com --password …
+
+      …or from the server: `docker compose exec app node scripts/doctor.mjs`
+      with `FREEHOLDER_URL`, `FREEHOLDER_EMAIL` and `FREEHOLDER_PASSWORD` set.
+
+- [ ] Every line reads `ok`. A `warn` is something to know about — no mail
+      configured, media on the machine's own disk. A `FAIL` will stop this
+      instance doing its job, and each one names what to change.
+- [ ] The same report is in the admin under **Health**, so you never need a
+      terminal to find out that uploads stopped working.

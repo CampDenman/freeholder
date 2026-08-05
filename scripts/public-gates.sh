@@ -73,6 +73,25 @@ if ! docker logs fh-demo 2>&1 | grep -q "demo installed"; then
 fi
 docker logs fh-demo 2>&1 | grep "demo installed"
 
+# §18's recipe validation matrix wants doctor run against a booted image, and
+# doctor is owner-only — so CI becomes the owner. `registerOwner` succeeds
+# exactly once per instance, and this container is thrown away.
+DOCTOR_EMAIL="ci@example.test"
+DOCTOR_PASSWORD="a-ci-owner-password-long-enough"
+curl -s -o /dev/null -X POST "${BASE}/api/setup/owner"   -H 'content-type: application/json'   -d "{\"email\":\"${DOCTOR_EMAIL}\",\"password\":\"${DOCTOR_PASSWORD}\"}"
+
+# Warnings are expected in CI — there is no mail adapter and no real bucket —
+# so a non-zero exit only matters when doctor *fails*.
+set +e
+FREEHOLDER_URL="$BASE" FREEHOLDER_EMAIL="$DOCTOR_EMAIL"   FREEHOLDER_PASSWORD="$DOCTOR_PASSWORD" node scripts/doctor.mjs
+doctor_status=$?
+set -e
+if [ "$doctor_status" -ge 2 ]; then
+  echo "::error title=Doctor::this instance reports a failing check (§17)"
+  exit 1
+fi
+echo
+
 node scripts/seo-gate.mjs "$BASE"
 echo
 # The French home too: a translated page is a different template as far as

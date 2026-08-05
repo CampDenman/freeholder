@@ -2,7 +2,7 @@
   "name": "freeholder",
   "private": true,
   "version": "0.0.0",
-  "description": "The open-source operating system for a one-person business — the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
+  "description": "The open-source operating system for a one-person business \u2014 the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
   "license": "AGPL-3.0-only",
   "author": "Camp Denman Society",
   "repository": {
@@ -25,7 +25,8 @@
     "changelog:gate": "node scripts/changelog-gate.mjs",
     "license:check": "node scripts/license-headers.mjs",
     "license:fix": "node scripts/license-headers.mjs --fix",
-    "packages:build": "pnpm -r --filter './packages/*' build"
+    "packages:build": "pnpm -r --filter './packages/*' build",
+    "doctor": "node scripts/doctor.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
