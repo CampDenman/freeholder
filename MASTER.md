@@ -562,7 +562,7 @@ NAP (Name, Address, Phone) consistency is the backbone of local SEO. It's captur
 | Entity | Purpose | Key fields |
 |---|---|---|
 | `BusinessLocation` | A physical or service-area presence. | name, slug, is_primary, address (structured: street, unit, city, region, postal, country), geo (lat, lng), phone, email, google_business_profile_url |
-| `OpeningHours` | Structured hours → OpeningHoursSpecification schema. | location_id, weekday, opens, closes, special_dates (jsonb: holidays, seasonal) |
+| `OpeningHours` | Structured hours → OpeningHoursSpecification schema. One row per interval: a weekly rule carries `weekday`, a holiday or seasonal override carries `on_date`, and exactly one of the two is set. | location_id, weekday, on_date, opens, closes, closed, label |
 | `ServiceArea` | For go-to-customer businesses (no storefront address shown). | location_id, kind (radius/regions), center_geo, radius_km, regions[] |
 | `LocationPage` | Auto-generated, RIBA-structured local landing pages. | location_id, service ids[], generated blocks (jsonb, owner-editable), status |
 
@@ -571,6 +571,13 @@ NAP (Name, Address, Phone) consistency is the backbone of local SEO. It's captur
 - Each location emits `LocalBusiness` (or subtype: Photographer, HairSalon, etc. — owner picks from schema.org business types in setup) JSON-LD with geo, hours, priceRange, sameAs links.
 - Multi-location businesses get `/locations/` as a root-linked index page with each location one hop below — RIBA-compliant by construction.
 - Bookings can be tied to a location (`Booking.location_id`); tax zones and service availability can vary per location.
+- A *stated* closure is not the same fact as no row at all. "Closed Sundays" is
+  something a search result can tell a visitor; silence about Sunday is not, and
+  conflating them is how a shop ends up promising an open door.
+- `LocationPage` is a cms page, not a second kind of thing (§32). core/locations
+  announces that a location exists and cms answers by writing the page, so
+  location pages are in the sitemap, translatable and owner-editable for free —
+  and an owner who rewrites one entirely has not fought the platform.
 
 ### 4.11 Shipping & fulfilment
 

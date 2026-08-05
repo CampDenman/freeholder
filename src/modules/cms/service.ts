@@ -597,6 +597,12 @@ export const ensureDefaults = defineService({
  * responds without either module importing the other (§11 — "modules
  * communicate only via the event bus and core services").
  */
+export {
+  onLocationCreated,
+  onLocationDeleted,
+  onLocationUpdated,
+} from "./locations";
+
 export async function onSetupCompleted(): Promise<void> {
   await ensureDefaults.call({}, { kind: "system" });
 }

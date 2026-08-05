@@ -13,7 +13,9 @@
 // there are no catalog lookups in the markup: the words on a public page come
 // from the database. The one exception is a fallback for an empty nav, and it
 // goes through `t` like everything else.
+import { Fragment } from "react";
 import { z } from "zod";
+import { renderNAP } from "@/core/locations/nap";
 import { cx } from "@/ui/primitives";
 import { defineBlock } from "./types";
 
@@ -429,6 +431,172 @@ export const image = defineBlock({
           )}
         />
       </picture>
+    );
+  },
+});
+
+/* -------------------------------------------------------------- locations */
+
+/**
+ * The business's address, phone and hours (MASTER.md §4.10).
+ *
+ * The block owns *what to show*; it owns nothing about *how the address
+ * reads*. Every string it renders comes from `renderNAP`, which is §4.10's
+ * exact-match rule made structural: this block, the contact page and the
+ * JSON-LD builder all call one formatter, so the address a visitor copies
+ * into a search box is character-for-character the one a crawler compares
+ * against a directory listing.
+ *
+ * Renders nothing at all when there is no location — §4.10: "a purely online
+ * creator skips this and no empty local scaffolding appears". Not a message
+ * saying an address has not been set: that is scaffolding, and it would be
+ * on the live site for every business that never intends to have one.
+ */
+export const nap = defineBlock({
+  type: "nap",
+  labelKey: "cms.block.nap",
+  // Available in chrome as well as pages, because the footer is where a NAP
+  // most often lives and the footer is chrome.
+  contexts: ["page", "chrome"],
+  schema: z.object({
+    /** Empty means the primary location — the usual case, and the default. */
+    locationId: z.string().nullish(),
+    showAddress: z.boolean().default(true),
+    showPhone: z.boolean().default(true),
+    showEmail: z.boolean().default(false),
+    showHours: z.boolean().default(false),
+    /**
+     * §4.10's go-to-customer case: the business has an address on file for
+     * tax and shipping, and does not want visitors arriving at it.
+     */
+    hideStreetAddress: z.boolean().default(false),
+  }),
+  starter: () => ({}),
+  fieldHints: { locationId: { hidden: true } },
+  resolve: async (props) => {
+    const { getLocation, primaryLocation } = await import(
+      "@/core/locations/service"
+    );
+    const anonymous = { kind: "anonymous" } as const;
+    if (props.locationId) {
+      return getLocation.call({ id: props.locationId }, anonymous);
+    }
+    const primary = await primaryLocation.call({}, anonymous);
+    if (!primary) return null;
+    return getLocation.call({ id: primary.id }, anonymous);
+  },
+  render: ({ props, ctx, resolved }) => {
+    if (!resolved) return null;
+
+    const nap = renderNAP(resolved, { hideAddress: props.hideStreetAddress });
+    const weekly = props.showHours
+      ? resolved.hours
+          .filter((row) => row.weekday !== null)
+          .sort((a, b) => (a.weekday ?? 0) - (b.weekday ?? 0))
+      : [];
+
+    // schema.org's own vocabulary is emitted elsewhere; what a visitor reads
+    // is a real address element, which is the semantic tag for exactly this.
+    return (
+      <address className="grid gap-1.5 not-italic text-sm text-ink-muted">
+        <span className="font-semibold text-ink">{nap.name}</span>
+        {props.showAddress && nap.addressLines.length > 0 ? (
+          <span className="grid">
+            {nap.addressLines.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </span>
+        ) : null}
+        {props.showPhone && nap.phone ? (
+          <a href={nap.phoneHref ?? undefined} className="text-ink-muted">
+            {nap.phone}
+          </a>
+        ) : null}
+        {props.showEmail && nap.email ? (
+          <a href={`mailto:${nap.email}`} className="text-ink-muted">
+            {nap.email}
+          </a>
+        ) : null}
+        {weekly.length > 0 ? (
+          <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            {weekly.map((row) => (
+              <Fragment key={row.id}>
+                <dt>{weekdayName(row.weekday!, ctx.locale)}</dt>
+                <dd>
+                  {row.closed
+                    ? ctx.t("cms.nap.closed")
+                    : `${row.opens?.slice(0, 5)}–${row.closes?.slice(0, 5)}`}
+                </dd>
+              </Fragment>
+            ))}
+          </dl>
+        ) : null}
+      </address>
+    );
+  },
+});
+
+/**
+ * The day's name in the visitor's language.
+ *
+ * `Intl` rather than seven catalog keys: the platform would be restating what
+ * every runtime already knows, and getting it wrong for the first locale
+ * somebody adds without translating. 2024-01-07 was a Sunday, which makes the
+ * arithmetic below index 0 = Sunday, matching the column.
+ */
+function weekdayName(weekday: number, locale: string): string {
+  const date = new Date(Date.UTC(2024, 0, 7 + weekday));
+  return new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+/**
+ * The index of every location (§4.10, §5's RIBA rule).
+ *
+ * "Multi-location businesses get /locations/ as a root-linked index page with
+ * each location one hop below — RIBA-compliant by construction." This block is
+ * the "root-linked" half: it lists what exists now, so a location added today
+ * is linked from the index without anyone editing the index. §5's "no orphan
+ * pages: publishing anything automatically links it from its section index" is
+ * a promise a hand-maintained list cannot keep.
+ */
+export const locationsIndex = defineBlock({
+  type: "locationsIndex",
+  labelKey: "cms.block.locationsIndex",
+  contexts: ["page"],
+  schema: z.object({
+    showAddress: z.boolean().default(true),
+  }),
+  starter: () => ({}),
+  resolve: async () => {
+    const { listLocations } = await import("@/core/locations/service");
+    return listLocations.call({}, { kind: "anonymous" });
+  },
+  render: ({ props, resolved }) => {
+    if (!resolved || resolved.length === 0) return null;
+    return (
+      <ul className="grid list-none gap-4 p-0">
+        {resolved.map((location) => {
+          const nap = renderNAP(location);
+          return (
+            <li key={location.id} className="border-b border-rule pb-4 last:border-0">
+              <a
+                href={`/locations/${location.slug}`}
+                className="font-semibold text-ink"
+              >
+                {location.name}
+              </a>
+              {props.showAddress && nap.addressLine ? (
+                <address className="mt-1 not-italic text-sm text-ink-muted">
+                  {nap.addressLine}
+                </address>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
     );
   },
 });

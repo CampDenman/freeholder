@@ -7,11 +7,12 @@ import { getT } from "../i18n";
 const STEP_KEYS = [
   "setup.steps.owner",
   "setup.steps.business",
+  "setup.steps.location",
   "setup.steps.done",
 ] as const;
 
-/** Where you are in a three-step flow — position carries real information. */
-export async function Steps({ current }: { current: 0 | 1 | 2 }) {
+/** Where you are in the flow — position carries real information. */
+export async function Steps({ current }: { current: 0 | 1 | 2 | 3 }) {
   const t = await getT();
   const STEPS = STEP_KEYS.map((key) => t(key));
 

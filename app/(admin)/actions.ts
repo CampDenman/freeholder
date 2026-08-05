@@ -22,6 +22,14 @@ import {
   mergeContacts,
   updateContact,
 } from "@/core/contacts/service";
+import {
+  createLocationService as createLocation,
+  deleteLocation,
+  setOpeningHours,
+  setPrimaryLocation,
+  setServiceArea,
+  updateLocation,
+} from "@/core/locations/service";
 import { patchBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 
@@ -276,4 +284,174 @@ export async function mergeContactAction(
     return present(error);
   }
   redirect(`/admin/contacts/${survivingId}`);
+}
+
+/* ------------------------------------------------------------- locations */
+
+/** A number field that may legitimately be blank — coordinates, a radius. */
+function optionalNumber(form: FormData, key: string): number | undefined {
+  const raw = field(form, key).trim();
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/** A text field where blank means "clear it", not "leave it alone". */
+function nullable(form: FormData, key: string): string | null {
+  return field(form, key).trim() || null;
+}
+
+/**
+ * Create or change a location (§4.10).
+ *
+ * One action for both, because the form is the same form: a location being
+ * added and a location being edited differ only in whether an id came with
+ * it, and two nearly identical actions is how the create path quietly loses a
+ * field the edit path gained.
+ */
+export async function saveLocationAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const id = field(form, "id");
+  const shared = {
+    name: field(form, "name"),
+    slug: field(form, "slug"),
+    street: nullable(form, "street"),
+    unit: nullable(form, "unit"),
+    city: nullable(form, "city"),
+    region: nullable(form, "region"),
+    postalCode: nullable(form, "postalCode"),
+    country: field(form, "country"),
+    latitude: optionalNumber(form, "latitude") ?? null,
+    longitude: optionalNumber(form, "longitude") ?? null,
+    phone: nullable(form, "phone"),
+    email: nullable(form, "email"),
+    googleBusinessProfileUrl: nullable(form, "googleBusinessProfileUrl"),
+    priceRange: nullable(form, "priceRange"),
+    schemaType: nullable(form, "schemaType"),
+    status: field(form, "status") === "hidden" ? ("hidden" as const) : ("visible" as const),
+    sameAs: field(form, "sameAs")
+      .split(/[\n,]/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  };
+
+  // The redirect is deliberately outside the try: `redirect` works by throwing
+  // a signal Next catches, so calling it inside would hand every successful
+  // create to the error branch and show an owner a failure for a location that
+  // saved perfectly. Same shape as mergeContactAction above.
+  let createdId: string | null = null;
+  try {
+    const actor = await currentActor();
+    if (id) {
+      await updateLocation.call({ id, ...shared }, actor);
+    } else {
+      createdId = (await createLocation.call(shared, actor)).id;
+    }
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  if (createdId) redirect(`/admin/locations/${createdId}`);
+  return { saved: true };
+}
+
+/** §4.10's primary: the location whose NAP is the business's own. */
+export async function setPrimaryLocationAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await setPrimaryLocation.call({ id: field(form, "id") }, await currentActor());
+  } catch (error) {
+    return present(error);
+  }
+  return { saved: true };
+}
+
+export async function deleteLocationAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await deleteLocation.call({ id: field(form, "id") }, await currentActor());
+  } catch (error) {
+    return present(error);
+  }
+  redirect("/admin/locations");
+}
+
+/**
+ * A whole week of hours in one save.
+ *
+ * The form posts seven rows whatever the owner filled in, and a row with no
+ * times and no closed box is a day nobody has said anything about — dropped
+ * here rather than sent as a half-filled entry the service would reject.
+ */
+export async function saveOpeningHoursAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const entries: Array<{
+    weekday: number;
+    opens?: string;
+    closes?: string;
+    closed: boolean;
+  }> = [];
+
+  for (let weekday = 0; weekday < 7; weekday++) {
+    const closed = form.get(`closed-${weekday}`) === "on";
+    const opens = field(form, `opens-${weekday}`).trim();
+    const closes = field(form, `closes-${weekday}`).trim();
+    if (closed) {
+      entries.push({ weekday, closed: true });
+    } else if (opens && closes) {
+      entries.push({ weekday, opens, closes, closed: false });
+    }
+  }
+
+  try {
+    await setOpeningHours.call(
+      { locationId: field(form, "locationId"), entries },
+      await currentActor(),
+    );
+  } catch (error) {
+    return present(error);
+  }
+  return { saved: true };
+}
+
+/** Where the business will travel to, or nowhere (§4.10's ServiceArea). */
+export async function saveServiceAreaAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const kind = field(form, "kind");
+  const regions = field(form, "regions")
+    .split(/[\n,]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const latitude = optionalNumber(form, "centerLatitude");
+  const longitude = optionalNumber(form, "centerLongitude");
+  const radiusKm = optionalNumber(form, "radiusKm");
+
+  let area:
+    | { kind: "radius"; centerLatitude: number; centerLongitude: number; radiusKm: number }
+    | { kind: "regions"; regions: string[] }
+    | null = null;
+  if (kind === "radius" && latitude !== undefined && longitude !== undefined && radiusKm) {
+    area = { kind: "radius", centerLatitude: latitude, centerLongitude: longitude, radiusKm };
+  } else if (kind === "regions" && regions.length > 0) {
+    area = { kind: "regions", regions };
+  }
+
+  try {
+    await setServiceArea.call(
+      { locationId: field(form, "locationId"), area },
+      await currentActor(),
+    );
+  } catch (error) {
+    return present(error);
+  }
+  return { saved: true };
 }

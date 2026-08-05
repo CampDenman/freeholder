@@ -27,7 +27,7 @@ export default async function SetupDonePage() {
 
   return (
     <>
-      <Steps current={2} />
+      <Steps current={3} />
       <h1 className="text-2xl font-bold tracking-tight">
         {t("setup.done.title", { name: business?.name ?? "" })}
       </h1>
