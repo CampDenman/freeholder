@@ -6,10 +6,10 @@
 // since the table it cleans up was written. That is the pattern to expect:
 // tables that grow are cheap to write and only become somebody's problem
 // months later, on an instance nobody is watching.
-import { lt, sql } from "drizzle-orm";
+import { isNotNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { defineJob } from "@/core/jobs";
-import { sessions } from "@/core/auth/schema";
+import { passwordResets, sessions } from "@/core/auth/schema";
 import { rateLimitCounters } from "@/core/security/schema";
 import { pruneDispatched, redeliverPending } from "@/core/events/outbox";
 
@@ -75,6 +75,32 @@ export const dispatchOutbox = defineJob({
   },
 });
 
+/**
+ * Spent and expired reset links.
+ *
+ * They are harmless — used or out of date, neither can be redeemed — and they
+ * accumulate one row per "I forgot my password" forever. The same shape of
+ * problem as the sessions above, written down before it becomes somebody's
+ * surprise.
+ */
+export const sweepPasswordResets = defineJob({
+  name: "core.sweepPasswordResets",
+  summary: "Delete reset links that are spent or expired.",
+  schedule: "31 3 * * *",
+  handler: async () => {
+    const deleted = await db()
+      .delete(passwordResets)
+      .where(
+        or(
+          isNotNull(passwordResets.usedAt),
+          lt(passwordResets.expiresAt, sql`now() - interval '1 day'`),
+        ),
+      )
+      .returning({ id: passwordResets.id });
+    return { deleted: deleted.length };
+  },
+});
+
 /** The outbox is a delivery mechanism, not a history. */
 export const pruneOutbox = defineJob({
   name: "core.pruneOutbox",
@@ -83,4 +109,10 @@ export const pruneOutbox = defineJob({
   handler: async () => ({ deleted: await pruneDispatched() }),
 });
 
-export default [sweepSessions, sweepRateLimits, dispatchOutbox, pruneOutbox];
+export default [
+  sweepSessions,
+  sweepRateLimits,
+  sweepPasswordResets,
+  dispatchOutbox,
+  pruneOutbox,
+];

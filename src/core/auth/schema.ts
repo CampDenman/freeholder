@@ -58,3 +58,30 @@ export const sessions = pgTable(
     uniqueIndex("sessions_token_hash_idx").on(t.tokenHash),
   ],
 );
+
+/**
+ * A password reset in flight (MASTER.md §9, §13).
+ *
+ * The token is stored **hashed**, exactly as a session token is: a database
+ * leak must not hand somebody a working reset link for every account. The row
+ * is the record that a reset was asked for; the token itself exists only in
+ * the email and in the URL the person clicks.
+ */
+export const passwordResets = pgTable(
+  "password_resets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Set when spent. A reset link is worth exactly one use. */
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("password_resets_token_idx").on(t.tokenHash),
+    index("password_resets_user_idx").on(t.userId),
+  ],
+);

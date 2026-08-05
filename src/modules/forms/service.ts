@@ -19,6 +19,7 @@ import {
   registerContactReference,
   resolveContact,
 } from "@/core/contacts/service";
+import { db } from "@/core/db";
 import { forms, formSubmissions } from "./schema";
 import {
   emailFrom,
@@ -389,6 +390,65 @@ export const submissionCounts = defineService({
     return row ?? { received: 0, spam: 0 };
   },
 });
+
+/**
+ * Tell the owner somebody wrote to them.
+ *
+ * On the bus rather than inline in `submitForm`, for two reasons. A visitor
+ * must never wait for an SMTP handshake to see "thank you". And a mail server
+ * having a bad afternoon must not roll back a submission that is already
+ * safely stored — the outbox will retry the *notification* without asking the
+ * person to fill the form in again.
+ *
+ * Suspected spam is never notified. A quarantine that emails the owner about
+ * every caught message is a quarantine that trains them to ignore it.
+ */
+export async function onFormSubmitted(payload: unknown): Promise<void> {
+  const { submissionId } = (payload ?? {}) as { submissionId?: string };
+  if (!submissionId) return;
+
+  const [row] = await db()
+    .select({ submission: formSubmissions, form: forms })
+    .from(formSubmissions)
+    .innerJoin(forms, eq(forms.id, formSubmissions.formId))
+    .where(eq(formSubmissions.id, submissionId))
+    .limit(1);
+  if (!row || row.submission.status !== "received") return;
+
+  const recipients = row.form.notify;
+  if (recipients.length === 0) return;
+
+  const fields = row.form.fields as FormField[];
+  const data = row.submission.data as Record<string, unknown>;
+  const answers = fields
+    .map((field) => {
+      const value = data[field.key];
+      if (value === undefined || value === "") return null;
+      return `${field.label}: ${typeof value === "string" ? value : JSON.stringify(value)}`;
+    })
+    .filter((line): line is string => line !== null);
+
+  const from = emailFrom(fields, data);
+  const { mail } = await import("@/adapters/mail");
+  for (const to of recipients) {
+    await mail().send({
+      to,
+      subject: `${row.form.name}: a new submission`,
+      // The reply goes to the person who wrote, not to the platform — an
+      // owner reading this on a phone should be able to press reply.
+      replyTo: from,
+      text: [
+        `Somebody filled in "${row.form.name}".`,
+        "",
+        ...answers,
+        "",
+        row.submission.sourceUrl ? `Sent from ${row.submission.sourceUrl}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    });
+  }
+}
 
 export { HONEYPOT_FIELD, STAMP_FIELD };
 

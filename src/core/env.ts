@@ -39,6 +39,21 @@ const envSchema = z.object({
   /** "true" only if the bucket really is world-readable. Default: private. */
   S3_PUBLIC: z.enum(["true", "false"]).optional(),
 
+  /**
+   * Transactional mail (§12). Overrides `adapters.mailTransactional`.
+   *
+   * The default is `console`, which prints and does not send — so a fresh
+   * instance can walk a password reset with no account anywhere, and says
+   * loudly in production that nothing is arriving.
+   */
+  MAIL_ADAPTER: z.enum(["smtp", "console"]).optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  /** The address mail comes from: "Aurora Coast <hello@auroracoast.ca>". */
+  MAIL_FROM: z.string().optional(),
+
   /** Replit Object Storage (§20). Discovered from the environment on Replit. */
   REPLIT_BUCKET_ID: z.string().optional(),
 
