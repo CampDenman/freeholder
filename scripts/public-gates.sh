@@ -80,16 +80,33 @@ DOCTOR_EMAIL="ci@example.test"
 DOCTOR_PASSWORD="a-ci-owner-password-long-enough"
 curl -s -o /dev/null -X POST "${BASE}/api/setup/owner"   -H 'content-type: application/json'   -d "{\"email\":\"${DOCTOR_EMAIL}\",\"password\":\"${DOCTOR_PASSWORD}\"}"
 
-# Warnings are expected in CI — there is no mail adapter and no real bucket —
-# so a non-zero exit only matters when doctor *fails*.
+# Warnings are expected here — no mail adapter, no real bucket, media on the
+# container's own disk — so the gate reasons about *which* checks failed rather
+# than whether any did.
+#
+# `env.appUrl` is the one failure this container earns honestly: it is a
+# production build serving on localhost, which is broken for a real deploy and
+# correct for a throwaway. Doctor is right to fail it; the exemption belongs
+# here, where it is visible, rather than in a check that would then be wrong
+# for everybody.
 set +e
 FREEHOLDER_URL="$BASE" FREEHOLDER_EMAIL="$DOCTOR_EMAIL"   FREEHOLDER_PASSWORD="$DOCTOR_PASSWORD" node scripts/doctor.mjs
-doctor_status=$?
+FREEHOLDER_URL="$BASE" FREEHOLDER_EMAIL="$DOCTOR_EMAIL"   FREEHOLDER_PASSWORD="$DOCTOR_PASSWORD" node scripts/doctor.mjs --json > /tmp/doctor.json
 set -e
-if [ "$doctor_status" -ge 2 ]; then
-  echo "::error title=Doctor::this instance reports a failing check (§17)"
-  exit 1
-fi
+
+node -e '
+  const report = JSON.parse(require("fs").readFileSync("/tmp/doctor.json", "utf8"));
+  const expected = new Set(["env.appUrl"]);
+  const unexpected = report.checks
+    .filter((check) => check.verdict === "fail" && !expected.has(check.id))
+    .map((check) => `${check.id}: ${check.detail}`);
+  if (unexpected.length > 0) {
+    console.error("::error title=Doctor::" + unexpected.join(" | "));
+    process.exitCode = 1;
+  } else {
+    console.log("Doctor: no unexpected failures.");
+  }
+'
 echo
 
 node scripts/seo-gate.mjs "$BASE"

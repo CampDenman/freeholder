@@ -13,6 +13,7 @@
 //
 // Usage:
 //   node scripts/doctor.mjs --url http://localhost:3000 --email you@example.com --password ...
+//   node scripts/doctor.mjs --json          (for monitoring, and for CI)
 //   FREEHOLDER_URL=... FREEHOLDER_EMAIL=... FREEHOLDER_PASSWORD=... node scripts/doctor.mjs
 //
 // Exit codes, for cron and for CI: 0 clean, 1 warnings, 2 failures.
@@ -62,6 +63,13 @@ const report = await response.json();
 if (!report.checks) {
   console.error(`Doctor did not answer: ${response.status}`);
   return 2;
+}
+
+// Machine-readable for monitoring, and for a caller that needs to reason
+// about *which* check failed rather than that something did.
+if (process.argv.includes("--json")) {
+  console.log(JSON.stringify(report, null, 2));
+  return report.verdict === "fail" ? 2 : report.verdict === "warn" ? 1 : 0;
 }
 
 const mark = { ok: "  ok  ", warn: " warn ", fail: " FAIL " };
