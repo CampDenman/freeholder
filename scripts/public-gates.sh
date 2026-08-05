@@ -66,7 +66,21 @@ fi
 # The demo has to have actually installed. Without this the gates would run
 # against a bare instance and pass by having nothing to look at — the exact
 # failure mode a crawl gate is prone to.
-if ! docker logs fh-demo 2>&1 | grep -q "demo installed"; then
+#
+# Waited for rather than checked once: /api/health answers 200 as soon as the
+# server is listening, and the seed is still running behind it. That race was
+# always there and was always won by luck — adding a location to the demo made
+# the seed slow enough to lose it, and the failure read as "the demo did not
+# install" directly above a log line saying it had.
+installed=""
+for _ in $(seq 1 60); do
+  if docker logs fh-demo 2>&1 | grep -q "demo installed"; then
+    installed="yes"
+    break
+  fi
+  sleep 1
+done
+if [ -z "$installed" ]; then
   echo "::error title=Public gates::the demo did not install; there is nothing to crawl"
   docker logs fh-demo
   exit 1
