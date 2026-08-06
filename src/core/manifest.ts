@@ -13,6 +13,11 @@ export default defineModule({
   services: () => import("@/core/services"),
   jobs: () => import("@/core/jobs/core-jobs"),
   events: {
+    // Core listens to *everything*, once, to fan committed events out to the
+    // owner's webhook subscriptions. It goes through the ordinary manifest
+    // mechanism rather than a special case in boot, so the listener shows up
+    // in the boot report like any other.
+    listens: { "*": "onAnyEvent" },
     emits: [
       "contact.created",
       "contact.merged",
@@ -25,6 +30,9 @@ export default defineModule({
       "location.deleted",
       "apikey.created",
       "apikey.revoked",
+      "webhook.created",
+      "webhook.updated",
+      "webhook.deleted",
     ],
   },
 });

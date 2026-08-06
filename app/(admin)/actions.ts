@@ -32,6 +32,13 @@ import {
   updateLocation,
 } from "@/core/locations/service";
 import { createApiKey, revokeApiKey } from "@/core/apikeys/service";
+import {
+  createWebhook,
+  deleteWebhook,
+  revealWebhookSecret,
+  testWebhook,
+  updateWebhook,
+} from "@/core/webhooks/service";
 import { patchBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 
@@ -516,6 +523,77 @@ export async function revokeApiKeyAction(
 ): Promise<ActionState> {
   try {
     await revokeApiKey.call({ id: field(form, "id") }, await currentActor());
+  } catch (error) {
+    return present(error);
+  }
+  revalidatePath("/admin/settings");
+  return { saved: true };
+}
+
+/* -------------------------------------------------------------- webhooks */
+
+/** Comma- or newline-separated event patterns, as the form collects them. */
+function patternsOf(form: FormData): string[] {
+  return field(form, "events")
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+export async function createWebhookAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await createWebhook.call(
+      {
+        name: field(form, "name"),
+        url: field(form, "url"),
+        events: patternsOf(form),
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  revalidatePath("/admin/settings");
+  return { saved: true };
+}
+
+/**
+ * Pause, resume, test, reveal or delete — one action, because they are one
+ * row's worth of controls and five near-identical actions is how one of them
+ * ends up forgetting to revalidate.
+ */
+export async function webhookAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const id = field(form, "id");
+  const intent = field(form, "intent");
+  try {
+    const actor = await currentActor();
+    switch (intent) {
+      case "pause":
+        await updateWebhook.call({ id, status: "paused" }, actor);
+        break;
+      case "resume":
+        await updateWebhook.call({ id, status: "active" }, actor);
+        break;
+      case "test":
+        await testWebhook.call({ id }, actor);
+        break;
+      case "remove":
+        await deleteWebhook.call({ id }, actor);
+        break;
+      case "reveal": {
+        const { secret } = await revealWebhookSecret.call({ id }, actor);
+        revalidatePath("/admin/settings");
+        return { saved: true, message: secret };
+      }
+      default:
+        return { error: "Unknown action." };
+    }
   } catch (error) {
     return present(error);
   }
