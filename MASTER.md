@@ -119,6 +119,7 @@ freeholder/
 │   ├── tax                  # Zones, categories, rates, registrations, exemptions; adapter seam for Stripe Tax et al
 │   ├── messaging            # Numbers, two-way SMS/MMS, consent & keywords, quiet hours, delivery receipts
 │   ├── notifications        # In-app + email notification fanout
+│   ├── agents               # Agent connections, workers, tasks, runs, approvals, spend (§40)
 │   └── jobs                 # Background queue, scheduled tasks
 │
 ├── commerce/                # Sell things
@@ -2229,3 +2230,143 @@ Four surfaces, one service layer (§2 principle 7):
   which version is the earliest one still reachable.
 - **An owner can turn all of it off**, and some will. The design's job is to
   make the on-by-default path so uneventful that nobody acquires a reason to.
+
+---
+
+## 40. The Agent Orchestration Layer (core/agents)
+
+§37 gave the owner *one* agent that builds their site. This section is about
+the other thing an owner needs: a way to put **many** agents to work on the
+business itself — triaging an inbox, drafting follow-ups, auditing SEO,
+reconciling stock, chasing an unpaid invoice — and to keep hold of the whole
+thing while it happens.
+
+The distinction matters because the failure modes differ. A builder that goes
+wrong changes a page. A workforce that goes wrong sends forty emails to real
+customers. So orchestration is core, it is modelled in the database rather than
+held in a process, and it is designed around the assumption that **work is
+long-running, partly autonomous, and occasionally wrong**.
+
+**Why core rather than a plugin.** Every module emits events, exposes services
+and owns data an agent will be asked to work on; the audit trail, the
+permission model and the contact spine are what make delegating safe. An
+orchestration layer bolted on from outside would reinvent all four and end up
+with its own notion of "who did this" — the exact silent fork §2 exists to
+prevent.
+
+### The shape in one paragraph
+
+An owner **connects** one or more agents. A connection is either *managed* (the
+platform runs the loop against a model through an adapter) or *inbound* (the
+agent runs wherever the owner already runs it and claims work through the API).
+On top of a connection the owner defines **agents**: named workers with a role,
+a tool scope, a budget and an autonomy level. Work arrives as **tasks**, created
+by a person, a schedule, an event, or by another agent decomposing its own. An
+agent executing a task produces a **run**, made of **steps**, each of which is a
+service call through the ordinary choke point. Anything the agent may not do by
+itself becomes an **approval** the owner acts on. Everything costs money, and
+the money is counted.
+
+### Entities
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `AgentConnection` | How to reach one agent runtime. | name, kind (managed/inbound), adapter (`adapters/agent` family), model, credential_ref, base_url, max_concurrency, status, last_seen_at, last_error, created_by |
+| `Agent` | A named worker the owner assigns work to. Several may share one connection. | connection_id, name, role, instructions (the durable brief), api_key_id (its own credential, §4.8), tool_scopes[], autonomy (suggest/approve/autonomous), max_concurrency, budget_cents, budget_period (day/week/month), status, avatar_asset_id |
+| `AgentTask` | One unit of work. A tree, because agents decompose. | parent_id, root_id, agent_id (nullable = unassigned), title, brief, input (jsonb), input_trust (owner/system/untrusted), status, priority, depends_on[], due_at, autonomy_ceiling, budget_cents, result (jsonb), failure_reason, attempts, created_by_actor, source (human/schedule/event/agent), source_ref |
+| `AgentRun` | One attempt at a task by an agent. | task_id, agent_id, attempt, status, started_at, ended_at, model, tokens_in, tokens_out, cost_cents, stop_reason (done/budget/timeout/refused/error/cancelled), error, lease_expires_at |
+| `AgentStep` | What happened inside a run, in order. | run_id, seq, kind (message/tool_call/tool_result/note), service_name, input (jsonb, redacted), output (jsonb, redacted), tokens, duration_ms, error |
+| `AgentApproval` | A side-effect waiting on a person. | run_id, task_id, kind, summary, preview (jsonb — a block-tree diff, a draft email, an order change), service_name, input (jsonb), status (pending/approved/rejected/expired), decided_by, decided_at, decision_note, expires_at |
+| `AgentPlaybook` | Reusable work: a brief with parameters, plus how it starts. | name, description, brief_template, default_agent_id, params_schema (jsonb), trigger (manual/schedule/event), schedule_cron, event_pattern, enabled |
+| `AgentSpend` | Ledger of money spent, per agent per period. | agent_id, run_id, period_start, cost_cents, tokens_in, tokens_out |
+
+**`AgentTask` is a tree and a graph.** `parent_id` carries decomposition — an
+agent handed "clear the inbox" creates a child task per message — and
+`depends_on[]` carries ordering between siblings. `root_id` is denormalised so
+that "everything that came out of this instruction" is one indexed query rather
+than a recursive walk, because that is the query an owner actually runs.
+
+**`input_trust` is not decoration.** §37 already says the builder must never
+take instruction from content it did not get from the owner. Here that rule
+needs a column, because the entire point of this layer is to point agents at
+customer email, form submissions and reviews. Anything marked `untrusted` is
+given to the model as quoted data inside an explicit frame, never as
+instructions — and a task whose input is untrusted **can never run
+`autonomous`**, whatever its agent's default is.
+
+### Autonomy is a ladder, and it is per task
+
+| Level | The agent may | The owner sees |
+|---|---|---|
+| `suggest` | read only; produce a proposal | a proposal to accept or discard |
+| `approve` | read freely; every write becomes an `AgentApproval` | a queue of specific, previewed changes |
+| `autonomous` | read and write within its `tool_scopes` and budget | the result, and the audit trail |
+
+The level on the `Agent` is a ceiling; the level on a task can only lower it.
+That direction is the safety property: an owner who set an agent to `approve`
+cannot be talked into `autonomous` by a task — including a task the agent
+wrote for itself.
+
+### Execution
+
+**Tasks are claimed, not pushed.** A worker (`core/jobs`) selects runnable
+tasks with `for update skip locked`, respecting per-agent and per-connection
+concurrency — the same mechanism webhook deliveries use, for the same reason.
+Inbound connections claim through the API instead: `agents.claimTask` hands an
+external runtime one task and a lease, and `agents.reportStep` /
+`agents.completeTask` write back. Both paths converge on the same rows, so an
+owner watching the screen cannot tell which kind of agent is working, and an
+agent can move between them without losing its history.
+
+**A run is bounded before it starts.** Wall-clock limit, step limit, and a
+budget in cents checked *before* each step rather than tallied afterwards. A run
+that hits any limit stops with `stop_reason` set and the task returns to
+`queued` or `needs_attention` — never silently half-done.
+
+**Every step is a service call.** No agent writes to a table. The step records
+the service name and the redacted input; the service's own audit row records
+`actor = agent:<name>`. The platform's existing "What Changed" timeline
+therefore contains agent work already, with no second history to reconcile.
+
+**Failure is a state, not an exception.** A failed task retries with backoff up
+to its limit, then parks as `needs_attention` with the reason. "Things the
+workforce could not finish" is a first-class screen, because the alternative is
+agent work that quietly stops.
+
+### What an owner sees
+
+- **A board of work** — queued, running, waiting on me, needs attention, done —
+  filterable by agent, with the root instruction visible for anything nested.
+- **A live run view**: steps as they happen, the service each one called, what
+  it cost, and a stop button that means it.
+- **An approvals queue** with a real preview: a block-tree diff, the actual
+  email that would go out, the refund that would be issued.
+- **Spend**, per agent and in total, against the cap.
+- **One kill switch** that pauses every agent at once, and a per-agent pause.
+
+### The envelope, extended from §37
+
+- **Owner-authenticated to configure, and closed to agents entirely.** Creating
+  a connection, creating an agent, granting scopes or raising a budget is
+  owner-only — the same rule that stops an API key minting API keys and a key
+  pointing a webhook wherever it likes. An agent that can create an agent has no
+  ceiling.
+- **Each agent holds its own `ApiKey`**, scoped to its role. That is what makes
+  `actor = agent:<name>` true at the service layer, what lets an owner revoke
+  one worker without touching the rest, and what makes a confused agent's blast
+  radius equal to its scopes.
+- **`builder.*` stays separate** (§37). An agent that drafts emails must not
+  also be able to change the site.
+- **Untrusted input never becomes instruction, and never raises autonomy.**
+- **Money is capped, visible, and enforced per step.**
+- **Everything is reversible or approved.** An irreversible action is behind an
+  approval or refused with a reason — §37's rule applied to a workforce.
+
+### Deliberately not v1
+
+- **Agents that write code.** That is §37's lane and stays there.
+- **Free-form agent-to-agent messaging.** Agents coordinate through tasks —
+  parent, child, dependency — because a task is inspectable and a conversation
+  between two models is not.
+- **A marketplace of pre-built agents.** Playbooks are shareable as data long
+  before that is worth building.
