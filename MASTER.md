@@ -1619,6 +1619,29 @@ A plugin registry is **just a signed JSON index** — deliberately boring so tha
 5. **Docs site** (`docs.freeholder.ai`) — reference sections are built from the generated artifacts in CI on every release; prose guides live beside code and are **executable**: doc snippets are extracted and run against the seeded demo instance in CI, so a guide with stale code fails the build. Docs ship `llms-full.txt` so AI assistants helping developers always have current ground truth.
 6. **The drift gate** — CI fails any PR where committed generated artifacts differ from freshly regenerated ones. Contract updates are not a chore anyone can forget; they are a build step no one can skip.
 
+**The API's shape, decided 2026-08-06.** §11 and this section both say "REST
+API", and what shipped is RPC over HTTP: `POST /api/v1/contacts.create`, one
+route, the path segment being a service name. The reason is this section's own
+requirement. A REST resource layer needs a hand-written mapping from services
+to paths, verbs and path parameters — which resource `contacts.merge` belongs
+to, whether `cms.publishPage` is a PATCH or a POST to a sub-resource — and that
+mapping is exactly the second source of truth "generated, never hand-maintained
+twice" exists to forbid. It would drift, and the drift gate could not catch it,
+because there would be nothing to compare against.
+
+Under RPC the projection is total: a service exists, therefore its endpoint
+exists, therefore its OpenAPI entry exists, and all three are the same object.
+The cost is real and accepted — no resource URLs, no HTTP caching semantics per
+resource, and `GET`/`POST` are the only verbs (a query gets both, a mutation
+gets `POST` only, so nothing that changes data is reachable by a prefetch).
+
+**Responses are not yet described.** `ServiceDef` carries an input schema and no
+output schema, so the generated spec says a response is an object and stops.
+Describing a shape the code does not enforce would be worse than describing
+none — and it is the one place the "impossible to drift" claim does not yet
+hold. Optional output schemas on services close it, and should land before the
+SDK is generated from this.
+
 **Change discipline:** semver on the platform; additive changes flow freely; breaking changes require a deprecation window (old shape served with `Deprecation` headers + changelog entry auto-assembled from conventional commits). The generated diff between two OpenAPI versions *is* the migration guide's skeleton.
 
 ---
