@@ -826,5 +826,50 @@
       "No admin UI for dated overrides — the holiday hours the schema models. The week is editable; a Boxing Day closure needs the API",
       "The public-gates race between /api/health answering 200 and the seed finishing was always there and was always won by luck. Adding a location made the seed slow enough to lose it. Worth asking what else in CI is timing-dependent in the same way"
     ]
+  },
+  {
+    "id": "2026-08-06-api-keys",
+    "date": "2026-08-06",
+    "title": "API keys — the credential that is not a person",
+    "masterRef": "§11, §26, §28",
+    "status": "done",
+    "delivered": [
+      "Most of this was designed several phases ago and then left unfinished: Actor has had an `agent` kind with scopes since the registry was written, and permits() already resolved both `contacts.create` and `contacts.*`. What was missing was the secret and the question of who may hold one",
+      "Keys cannot mint or revoke keys. §11's scope model ignores role rank — right for business services, wrong here, because a key scoped apikeys.* would satisfy an owner permission, mint a second key with every scope, and make the first key's limits decoration. Stated in the service rather than encoded in the permission system, with two tests",
+      "HMAC rather than scrypt: a key is 32 bytes of machine randomness, so there is no dictionary to slow down and per-request scrypt would tax every API call for nothing",
+      "The prefix is stored in the clear deliberately — secret scanners match fixed prefixes, so a leaked key is recognisable to a scanner that has never heard of this instance, and an owner deciding what to revoke needs to tell keys apart",
+      "Scopes are validated against the registry, because a misspelt scope grants nothing *silently* and reads as 'the API is broken' rather than 'the scope is wrong'",
+      "The picker asks per area (none/read/full) rather than per service: a checklist of sixty checkboxes is one people tick 'select all' on. It still resolves to explicit service names, and 'read only' is derived from each service's declared kind, so a module added tomorrow is grantable tomorrow"
+    ],
+    "openFollowUps": [
+      "A refused key was told 'your account does not have permission' — copy written for a business owner looking at a form, read by a developer holding a credential. Fixed here to name the missing scope, but it is the same class of problem as backlog item #19 (service errors have no catalog keys) and the two should be solved together",
+      "/api/doctor read the session cookie directly and so ignored keys entirely. Fixed. Worth asking which *other* routes predate a credential mechanism and quietly only know about cookies",
+      "Nothing rotates a key. An owner has to revoke and re-mint, which means an integration goes down between the two. A `rotate` that mints the replacement and keeps the old one alive for an hour would fix that",
+      "Keys are all-or-nothing per service; there is no read-your-own-writes or per-record scoping, and no IP allowlist",
+      "last_used_at is fire-and-forget outside the transaction, so a key used exactly once during a crash may look unused"
+    ]
+  },
+  {
+    "id": "2026-08-06-http-api",
+    "date": "2026-08-06",
+    "title": "The HTTP API and /api/openapi.json, as projections of the registry",
+    "masterRef": "§11, §28",
+    "status": "done",
+    "delivered": [
+      "RPC over HTTP rather than REST, and MASTER.md §28 updated in the same commit to say why: a REST resource layer needs a hand-written mapping from services to paths, verbs and path params, and that mapping is the second source of truth §28 exists to forbid. It would drift and the drift gate could not catch it, because there would be nothing to compare against. The costs — no resource URLs, no per-resource caching, two verbs — are written down rather than glossed",
+      "One route, the segment is a service name, and it hands off to the same serviceRoute the admin uses, so permissions, validation, transaction, rate limits, audit and CSRF are identical code rather than a second door with different locks",
+      "The spec is generated from service.def.input, the same object the request is validated against. Zod 4 emits JSON Schema natively so no converter sits in between. Two tests hold the claim: documented paths === registered services, and the document's schema is deep-equal to the registry's",
+      "Mutations refuse GET even for a key holding the scope — a mutation reachable by GET is one a prefetch, a crawler or an <img> tag can fire",
+      "Verified on production: 84 paths, public read 200, unauthenticated write 401, write-via-GET 400, and an audit row naming agent:<key name>"
+    ],
+    "openFollowUps": [
+      "**Responses are not described.** ServiceDef has an input schema and no output schema, so the document says 'an object'. This is the one place §28's 'impossible to drift' does not hold, and it should close with optional output schemas *before* the SDK is generated from this spec — otherwise the SDK's return types are invented",
+      "Every endpoint 404'd on a cold process because the route reaches the registry before anything calls a service, and an unbooted registry is empty. Fixed with ready() in dispatch. That is twice this trap has been hit (see the instrumentation bug in phase 0) and it suggests any new entry point that touches the registry directly needs the same guard — worth a lint rule",
+      "Query-string coercion is a heuristic: values that look like JSON literals are parsed as JSON. A string field whose value is the word 'true' would guess wrong, and the documented escape hatch is to POST a body. Output schemas would let the coercion consult the schema instead of guessing",
+      "No pagination convention. Services that return lists return all of them, which is fine at current scale and will not be",
+      "The spec title reads 'Freeholder — Freeholder API' on an instance whose business is called Freeholder. Cosmetic",
+      "/api/openapi.json is public. Defensible — every service refuses unauthorized callers on its own and §28 wants discovery — but it is a decision worth revisiting if an instance ever wants to be quiet about which modules it runs",
+      "No CORS headers, so a browser app on another origin cannot call this yet"
+    ]
   }
 ]
