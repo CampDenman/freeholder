@@ -5,6 +5,7 @@
 // files directly, so this barrel exists for the things that need the set:
 // boot-time introspection, relations, and test truncation.
 export { users, sessions } from "@/core/auth/schema";
+export { apiKeys } from "@/core/apikeys/schema";
 export { organizations, contacts, timelineEvents } from "@/core/contacts/schema";
 export { auditLog } from "@/core/events/schema";
 export { assets } from "@/core/media/schema";

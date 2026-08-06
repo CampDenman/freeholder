@@ -214,7 +214,14 @@ export function defineService<In extends z.ZodType, Out>(
           "permission",
           actor.kind === "anonymous"
             ? "You are not signed in, or your session has expired. Sign in and try again."
-            : "Your account does not have permission to do that.",
+            : actor.kind === "agent"
+              // An API key is read by a developer, not by a business owner, and
+              // naming the missing scope is the whole difference between a
+              // five-second fix and an afternoon. The service name is safe to
+              // give them: they already hold a credential for this instance,
+              // and §28 publishes the whole registry to them anyway.
+              ? `This API key is not allowed to call ${def.name}. Grant it "${def.name}" or "${def.name.split(".")[0]}.*" in Settings.`
+              : "Your account does not have permission to do that.",
         );
       }
       const parsed = def.input.safeParse(rawInput);

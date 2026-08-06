@@ -9,19 +9,18 @@
 // Owner-only, because the report names which adapters are configured and how
 // they are failing — precisely the reconnaissance somebody probing an instance
 // would like. `/api/health` stays public and stays shallow.
-import { cookies } from "next/headers";
-import { SESSION_COOKIE } from "@/core/auth/sessions";
-import { actorFromToken } from "@/core/http/actor";
+import { actorFromRequest } from "@/core/http/actor";
 import { doctor } from "@/core/doctor/service";
 import { ServiceError } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   try {
-    const actor = await actorFromToken(
-      (await cookies()).get(SESSION_COOKIE)?.value,
-    );
+    // actorFromRequest rather than the cookie alone: a monitor watching this
+    // endpoint should be able to hold a scoped key instead of a human session,
+    // which is the entire point of §17 calling doctor a contract.
+    const actor = await actorFromRequest(request);
     const report = await doctor.call({}, actor);
     // The HTTP status carries the verdict as well as the body, so a monitor
     // that only reads status codes still learns something true.

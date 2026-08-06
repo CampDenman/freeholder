@@ -70,6 +70,15 @@ function matches(a: string, b: string): boolean {
  */
 export function requireCsrf(request: Request): void {
   if (SAFE_METHODS.has(request.method.toUpperCase())) return;
+  // A bearer token is not an ambient credential: a browser never attaches one
+  // by itself, so a forged request cannot carry it. The check is skipped even
+  // when a session cookie is also present, because in that case the cookie is
+  // not what authorized the call — actorFromRequest gives the key precedence,
+  // and judging the request on a credential it is not using would refuse a
+  // legitimate script for running in a tab that happens to be signed in.
+  const authorization = request.headers.get("authorization");
+  if (authorization?.toLowerCase().startsWith("bearer ")) return;
+
   // No ambient credential means no cross-site request forgery to defend
   // against: an attacker forging this would simply be an anonymous caller.
   if (!readSessionToken(request)) return;
