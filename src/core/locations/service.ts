@@ -19,6 +19,7 @@ import {
   openingHours,
   serviceAreas,
 } from "@/core/locations/schema";
+import { violates } from "@/core/db/errors";
 import { defineService, ServiceError } from "@/core/service";
 
 /** A URL segment: lowercase, no punctuation to escape, no leading dash. */
@@ -496,38 +497,9 @@ export const deleteLocation = defineService({
  * Turn the unique-index violation into the sentence that fixes it.
  *
  * The constraint is what guarantees the fact; this only decides what an owner
- * reads when they hit it.
- *
- * The name has to be looked for down the `cause` chain rather than in the
- * message: drizzle wraps a driver error in DrizzleQueryError, whose message is
- * the failed SQL, and the constraint that actually rejected the write is a
- * property of the driver error underneath. Matching on the outer message alone
- * silently never matches — which is how an owner would have got a page of SQL
- * instead of a sentence.
- *
- * Both spellings of the property are checked because the two Postgres drivers
- * disagree: postgres.js calls it `constraint_name`, node-postgres calls it
- * `constraint`. The adapter is swappable (§12), so reading only the one this
- * instance happens to use would break on the other with no test to catch it.
+ * reads when they hit it. Recognising it is `violates` — see core/db/errors.ts
+ * for why that is not a one-line message match.
  */
-function violates(error: unknown, constraint: string): boolean {
-  for (let current: unknown = error, hops = 0; current && hops < 5; hops++) {
-    const candidate = current as {
-      constraint?: unknown;
-      constraint_name?: unknown;
-      cause?: unknown;
-    };
-    if (
-      candidate.constraint === constraint ||
-      candidate.constraint_name === constraint
-    ) {
-      return true;
-    }
-    current = candidate.cause;
-  }
-  return false;
-}
-
 function slugConflict(candidate: string | undefined) {
   return (error: unknown): never => {
     if (violates(error, "business_locations_slug")) {

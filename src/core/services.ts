@@ -6,6 +6,7 @@
 // separate mistake anyone can make.
 import authServices from "@/core/auth/service";
 import resetServices from "@/core/auth/reset";
+import apiKeyServices from "@/core/apikeys/service";
 import contactServices from "@/core/contacts/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
@@ -19,6 +20,7 @@ import type { Service } from "@/core/service";
 const services: Service[] = [
   ...authServices,
   ...resetServices,
+  ...apiKeyServices,
   ...contactServices,
   ...doctorServices,
   ...eventServices,

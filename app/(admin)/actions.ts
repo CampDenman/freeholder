@@ -11,6 +11,7 @@
 // carries its own CSRF defence.
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { login, logout } from "@/core/auth/service";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { changePassword } from "@/core/auth/service";
@@ -30,6 +31,7 @@ import {
   setServiceArea,
   updateLocation,
 } from "@/core/locations/service";
+import { createApiKey, revokeApiKey } from "@/core/apikeys/service";
 import { patchBusiness } from "@/core/settings/service";
 import { ServiceError } from "@/core/service";
 
@@ -453,5 +455,70 @@ export async function saveServiceAreaAction(
   } catch (error) {
     return present(error);
   }
+  return { saved: true };
+}
+
+/* -------------------------------------------------------------- api keys */
+
+/**
+ * Mint a key (§26).
+ *
+ * The token comes back in the action state because it is the only moment it
+ * exists outside the database — only its hash was stored, so a caller who
+ * loses it has to mint another. It is deliberately *not* redirected through,
+ * which would put a credential in a URL.
+ */
+export async function createApiKeyAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  // Each area contributes one value: "none", "read", or "full". The read case
+  // expands to the query services of that area, so least privilege is a
+  // one-click choice rather than a checklist somebody skips.
+  const scopes: string[] = [];
+  for (const [key, value] of form.entries()) {
+    if (!key.startsWith("access-") || typeof value !== "string") continue;
+    const area = key.slice("access-".length);
+    if (value === "full") {
+      scopes.push(`${area}.*`);
+    } else if (value === "read") {
+      const reads = field(form, `reads-${area}`)
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+      scopes.push(...reads);
+    }
+  }
+
+  try {
+    const days = Number(field(form, "expiresInDays", ""));
+    const key = await createApiKey.call(
+      {
+        name: field(form, "name"),
+        scopes,
+        expiresInDays: Number.isFinite(days) && days > 0 ? days : undefined,
+      },
+      await currentActor(),
+    );
+    // Without this the server component behind this card re-renders from its
+    // cached result, and an owner who has just minted a key reads "No keys
+    // yet" directly underneath the key they are holding.
+    revalidatePath("/admin/settings");
+    return { saved: true, message: key.token };
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+}
+
+export async function revokeApiKeyAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await revokeApiKey.call({ id: field(form, "id") }, await currentActor());
+  } catch (error) {
+    return present(error);
+  }
+  revalidatePath("/admin/settings");
   return { saved: true };
 }

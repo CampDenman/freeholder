@@ -45,11 +45,40 @@ export async function actorFromToken(
 }
 
 /**
- * An expired, forged or absent cookie all resolve to anonymous rather than an
- * error: a public page must render for a visitor whose session lapsed, and the
- * permission check downstream is what decides whether anonymous is enough.
+ * The API key behind this request, if it presents a live one.
+ *
+ * `Authorization: Bearer fh_live_…` only. Not a query parameter, and not a
+ * cookie: a credential in a URL ends up in access logs, in `Referer` headers
+ * and in browser history, and a credential the browser attaches automatically
+ * is a credential that can be used by a page the caller did not write. The
+ * header has neither problem, which is also why CSRF does not apply to it.
+ */
+export async function resolveApiKey(request: Request): Promise<Actor | undefined> {
+  const header = request.headers.get("authorization");
+  if (!header?.toLowerCase().startsWith("bearer ")) return undefined;
+
+  const { verifyApiKey, touchApiKey } = await import("@/core/apikeys/tokens");
+  const key = await verifyApiKey(header.slice("bearer ".length).trim());
+  if (!key) return undefined;
+
+  touchApiKey(key.id);
+  return { kind: "agent", keyName: key.name, scopes: key.scopes };
+}
+
+/**
+ * An expired, forged or absent credential all resolve to anonymous rather than
+ * an error: a public page must render for a visitor whose session lapsed, and
+ * the permission check downstream is what decides whether anonymous is enough.
+ *
+ * A key wins over a cookie when both are present. That combination means a
+ * script running in a browser that happens to be signed in, and taking the
+ * cookie would silently give it the *person's* authority instead of the key's
+ * — which is the opposite of what scoping a key is for.
  */
 export async function actorFromRequest(request: Request): Promise<Actor> {
+  const key = await resolveApiKey(request);
+  if (key) return key;
+
   const session = await resolveSession(request);
   if (!session) return ANONYMOUS;
   return { kind: "user", userId: session.userId, role: session.role };

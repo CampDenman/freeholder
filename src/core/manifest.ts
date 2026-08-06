@@ -23,6 +23,8 @@ export default defineModule({
       "location.created",
       "location.updated",
       "location.deleted",
+      "apikey.created",
+      "apikey.revoked",
     ],
   },
 });
