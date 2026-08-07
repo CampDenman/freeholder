@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Create the starting header, footer and home page if they are missing.
 //

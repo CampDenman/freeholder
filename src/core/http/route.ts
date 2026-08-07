@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Routes are thin wrappers over services (MASTER.md §10, §15.5) — and "thin"
 // is only true if the wrapping is written once. serviceRoute is that once: it

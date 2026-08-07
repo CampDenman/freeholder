@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The read side of the spine: browsing contacts, and the CRM timeline that
 // §4.1 calls "a view over the spine, not a separate store".

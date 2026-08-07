@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Where the platform actually starts. Next calls register() once per server
 // instance, which is the closest thing an App Router app has to a main().

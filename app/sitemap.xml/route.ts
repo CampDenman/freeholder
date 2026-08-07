@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The sitemap index (MASTER.md §5: "locale-split sitemaps under a sitemap
 // index"). One entry per enabled locale; a single-locale site gets an index of

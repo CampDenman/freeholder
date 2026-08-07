@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Fixed-window rate limiting (MASTER.md §36, "Security hardening … rate
 // limiting, login protection … shipped, not sold").

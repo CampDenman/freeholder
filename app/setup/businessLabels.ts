@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The business-profile field labels, shared by the setup wizard (§13 steps
 // 2–3) and the admin settings screen that edits the same fields afterwards.

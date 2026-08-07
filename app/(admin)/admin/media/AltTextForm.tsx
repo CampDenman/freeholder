@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Alt text lives on the asset, so it is written once and every page showing
 // the image inherits it. §5 requires it on public images, and describing the

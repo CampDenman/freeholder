@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // §13 step 1: the owner account. Public by necessity — nobody can be signed in
 // on a fresh install — and once-only by database constraint, not by obscurity.

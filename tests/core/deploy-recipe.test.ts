@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Guards on the deploy recipes (MASTER.md §18). These files are not imported by
 // anything, so nothing else would notice them breaking — and the way they break

@@ -9,7 +9,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const COPYRIGHT = "Copyright (C) 2026 Camp Denman Society";
+const COPYRIGHT = "Copyright (C) 2026 Tony Aly";
 const fix = process.argv.includes("--fix");
 
 // Generated files carry no header, because whatever generates them will

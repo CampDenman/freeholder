@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Types for the a11y smoke test (MASTER.md §15.7). See schema-compat-gate.d.mts
 // for why the gates stay .mjs and their types live beside them.

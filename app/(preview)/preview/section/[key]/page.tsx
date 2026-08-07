@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // One chrome Section, rendered for the editor canvas. Same renderer, same
 // bridge, different subject — which is the point of the context split.

@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The single Zod env schema (MASTER.md §14, §17). Every environment variable
 // the platform reads is declared here — nothing reads process.env directly.

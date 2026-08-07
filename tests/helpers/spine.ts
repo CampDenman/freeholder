@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Shared scaffolding for database-backed tests. Suites gate on `hasDatabase`
 // via describe.runIf so the unit suite still runs on a machine with no

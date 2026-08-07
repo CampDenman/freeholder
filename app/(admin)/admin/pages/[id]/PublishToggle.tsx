@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Publish or unpublish. A form, because it changes what the public can see.
 import { setPagePublishedAction } from "../../../cms-actions";

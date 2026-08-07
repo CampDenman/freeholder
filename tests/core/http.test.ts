@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The HTTP edge: the one place identity enters from outside, and the one place
 // a ServiceError becomes a status code. Before this existed the whole platform

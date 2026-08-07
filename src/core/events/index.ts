@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // TimelineEvent emitter + module event bus (MASTER.md §4.1, §10, §11).
 // Timeline rows are written inside the caller's transaction — an event about

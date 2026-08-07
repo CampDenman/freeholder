@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Contact services (MASTER.md §2 principle 3, §4.1). The spine's write path:
 // every mutation emits a TimelineEvent (modules write events; the CRM reads

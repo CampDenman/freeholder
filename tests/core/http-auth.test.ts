@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The auth routes end to end, through the real handlers against a real
 // database: first boot, sign in, carry the cookie, sign out. This is the first

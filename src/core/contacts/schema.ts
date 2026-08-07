@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Contact Spine (MASTER.md §2 principle 3, §4.1). Contact is the center
 // of gravity: every module references contact_id, and anything notable that

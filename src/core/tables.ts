@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Every table core owns, in one place (MASTER.md §11: a module declares its
 // tables in its manifest). Drizzle's migration generator reads the schema

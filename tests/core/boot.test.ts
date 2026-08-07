@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The boot sequence (MASTER.md §11). Until this existed the registry was built
 // but never populated: every service in core was unreachable through the

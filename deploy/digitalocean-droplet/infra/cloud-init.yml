@@ -1,5 +1,5 @@
 #cloud-config
-# Copyright (C) 2026 Camp Denman Society
+# Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: AGPL-3.0-only
 # One-command droplet bootstrap (MASTER.md 21b). Everything a fresh Ubuntu box
 # needs to run the compose stack -- nothing Freeholder-specific beyond the

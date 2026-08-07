@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Redirects (MASTER.md §5: "301 management via the `Redirect` entity with
 // automatic redirect creation on slug change — slugs never silently break").

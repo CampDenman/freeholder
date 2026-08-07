@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Password hashing (MASTER.md §9: hand-rolled thin, no auth SaaS). scrypt
 // from node:crypto — zero dependencies, memory-hard, boring. The stored

@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The asset library (MASTER.md §3 core/media, §4.5).
 import { Image as ImageIcon } from "@phosphor-icons/react/dist/ssr";
