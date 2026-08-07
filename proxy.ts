@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Request preprocessing, at the edge (Next's `proxy` convention — the current
 // name for what used to be `middleware`).

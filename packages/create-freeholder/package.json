@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "description": "npx create-freeholder — scaffold and deploy a Freeholder instance (MASTER.md §22)",
   "license": "MIT",
-  "author": "Camp Denman Society",
+  "author": "Tony Aly",
   "repository": {
     "type": "git",
-    "url": "https://github.com/campdenman/freeholder.git",
+    "url": "https://github.com/tonyaly/freeholder.git",
     "directory": "packages/create-freeholder"
   },
   "scripts": {

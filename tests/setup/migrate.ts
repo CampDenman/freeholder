@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Global setup: bring the test database to the current schema before anything
 // runs, so the suite can never fail on a migration somebody forgot to apply —

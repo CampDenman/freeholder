@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Types for the SEO gate (MASTER.md §5, §15.2). See schema-compat-gate.d.mts
 // for why the gate stays .mjs and its types live beside it.

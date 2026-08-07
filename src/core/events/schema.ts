@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The audit trail (MASTER.md §4.8, §11). Every admin/agent mutation through
 // the service layer lands here — it is written by the service registry

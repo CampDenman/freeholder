@@ -2,12 +2,12 @@
   "name": "freeholder",
   "private": true,
   "version": "0.0.0",
-  "description": "The open-source operating system for a one-person business \u2014 the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
+  "description": "The open-source operating system for a one-person business — the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
   "license": "AGPL-3.0-only",
-  "author": "Camp Denman Society",
+  "author": "Tony Aly",
   "repository": {
     "type": "git",
-    "url": "https://github.com/campdenman/freeholder.git"
+    "url": "https://github.com/tonyaly/freeholder.git"
   },
   "engines": {
     "node": ">=20"

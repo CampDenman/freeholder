@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Responsive image renditions (MASTER.md §36: "automatic responsive variants,
 // AVIF/WebP, lazy loading, CDN-friendly caching headers — the media pipeline

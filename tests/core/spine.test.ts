@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The database-backed half: everything MASTER.md §11 claims is impossible
 // rather than unlikely. Gated on a test database — see vitest.config.ts.

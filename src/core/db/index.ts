@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The one sacred database (MASTER.md §2, principle 12). Lazy singleton so
 // importing this module never connects — only use does.

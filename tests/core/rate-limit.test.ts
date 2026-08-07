@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Rate limiting (MASTER.md §36). The properties worth proving are the ones a
 // limiter usually gets wrong: that *failed* attempts are counted (the whole

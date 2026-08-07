@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The read side the admin overview is built on: how many contacts there are,
 // and what has changed lately (§4.8 — "the owner can read a plain-English log

@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Every form, and how much is waiting in each (MASTER.md §4.6, §36).
 import { Envelope, Warning } from "@phosphor-icons/react/dist/ssr";

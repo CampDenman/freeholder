@@ -58,15 +58,23 @@ this is worth doing once by hand — and worth wiring into monitoring later.
 
 - [ ] Verify the signature:
 
-      cosign verify ghcr.io/campdenman/freeholder:edge \
-        --certificate-identity-regexp '^https://github.com/CampDenman/freeholder/' \
+      > **Images published before 2026-08-07 are signed under the
+      > repository's former name.** Keyless signing binds the certificate to
+      > the repository identity at the time of signing, so anything built
+      > before the move verifies against
+      > `^https://github.com/CampDenman/freeholder/` instead. That is the
+      > mechanism working, not a problem: a signature that survived a rename
+      > without saying so would be the worrying outcome.
+
+      cosign verify ghcr.io/tonyaly/freeholder:edge \
+        --certificate-identity-regexp '^https://github.com/tonyaly/freeholder/' \
         --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
 - [ ] Verify the provenance — that this digest was built by that workflow, from
       this repository, rather than pushed by someone with a registry token:
 
-      gh attestation verify oci://ghcr.io/campdenman/freeholder:edge \
-        --repo CampDenman/freeholder
+      gh attestation verify oci://ghcr.io/tonyaly/freeholder:edge \
+        --repo tonyaly/freeholder
 
 - [ ] A failure here is not a warning to note and move past. An image that
       cannot be verified should not be run.

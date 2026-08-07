@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Editing the business after setup — the other half of §13. The wizard writes
 // these once; this is where they live for the rest of the site's life.

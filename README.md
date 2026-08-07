@@ -53,10 +53,15 @@ however you like.
 
 ## Governance
 
-Freeholder is stewarded by the **Camp Denman Society**, a not-for-profit,
-which holds the project's copyright and is positioned to support the project
-long-term. Contributions are welcome under the DCO — see
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+Freeholder is maintained by **Tony Aly**, who holds the project's copyright.
+That is a single person rather than a foundation, and the licence is what does
+the reassuring: every release is AGPL and public, so a fork taken today stays
+free on those terms no matter what happens to the project later.
+
+Contributions are welcome under the DCO — see
+[`CONTRIBUTING.md`](CONTRIBUTING.md). The DCO rather than a CLA is deliberate:
+contributors keep their own copyright, which means the project cannot be
+relicensed out from under the people who built it.
 
 ## Repository layout
 

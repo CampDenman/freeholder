@@ -1,4 +1,4 @@
-# Copyright (C) 2026 Camp Denman Society
+# Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: AGPL-3.0-only
 # One droplet: Caddy terminates TLS, the app serves, Postgres persists.
 # Media is NOT here — §18 mandates object storage, so the archive lives in
@@ -29,7 +29,7 @@ services:
     depends_on: [app]
 
   app:
-    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}
+    image: ${FREEHOLDER_IMAGE:-ghcr.io/tonyaly/freeholder:edge}
     restart: unless-stopped
     # Beside compose.yml, per the README's layout. `../.env` would resolve
     # to /opt/.env and silently start the app with no configuration.

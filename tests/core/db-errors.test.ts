@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Drizzle wraps driver errors, so a unique-violation check that only inspects
 // the caught error matches nothing — and a never-matching check looks exactly

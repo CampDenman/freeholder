@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The service registry — the single choke point (MASTER.md §11). Admin UI,
 // REST API, and MCP all call services; nothing else touches business logic.

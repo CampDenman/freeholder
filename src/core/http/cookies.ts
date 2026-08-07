@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Cookie plumbing, written against the web platform rather than a framework so
 // the §10 rule holds: src/ is the application, app/ is the routing skin.

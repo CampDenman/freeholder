@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Identity & access tables (MASTER.md §4.1). A User is a login — owner,
 // staff, or customer; customers may be magic-link-only (null password_hash).

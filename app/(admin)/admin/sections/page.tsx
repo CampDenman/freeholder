@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The site chrome, as data (MASTER.md §32: "menus are rows, not JSX").
 import { Layout } from "@phosphor-icons/react/dist/ssr";

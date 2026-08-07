@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The token layer (MASTER.md §32). These are the values the web app, the React
 // Native app and packages/templates all read, so the shape is a contract — a

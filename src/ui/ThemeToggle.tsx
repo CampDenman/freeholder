@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The light/dark control. Three plain submit buttons in a form — clicking one
 // posts its own name and value, so this works with JavaScript switched off and

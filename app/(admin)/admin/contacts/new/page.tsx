@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Deliberate entry by a human. Automated paths use contacts.resolve instead,
 // so a form submission never mints a second record for somebody already known.

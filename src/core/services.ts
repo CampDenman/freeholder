@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Core's service list — the default export a manifest's `services` loader is
 // expected to provide (MASTER.md §11). Adding a service to core means adding

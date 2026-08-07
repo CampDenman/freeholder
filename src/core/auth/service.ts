@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Auth services (MASTER.md §3 core/auth, §13 step 1). registerOwner is the
 // first-boot primitive behind the setup wizard: it succeeds exactly once, on

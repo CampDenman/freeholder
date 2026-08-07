@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The one translation from a ServiceError into an HTTP status. Doing this once,
 // here, is what stops each route inventing its own status codes and its own

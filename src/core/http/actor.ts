@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Turning an HTTP request into an Actor — the one place identity enters the
 // system from outside (MASTER.md §11). Nothing downstream reads cookies or

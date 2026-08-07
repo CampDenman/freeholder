@@ -10,15 +10,22 @@ the license texts themselves are authoritative.
 | Freeholder core (the platform: server, web app, admin, all modules) | everything in this repository **except** `packages/` | **AGPL-3.0-only** ([`LICENSE`](LICENSE)) |
 | SDKs, client libraries, templates, and integration packages | `packages/*` | **MIT** (a `LICENSE` file in each package) |
 
-Copyright (C) 2026 Camp Denman Society.
+Copyright (C) 2026 Tony Aly.
 
 ## Why this split
 
 The core is AGPL so that Freeholder stays open: anyone may self-host, modify,
 and redistribute it, but if you run a modified Freeholder as a network service
-you must offer your users the corresponding source (AGPL section 13). This is
-what lets a not-for-profit steward — Camp Denman Society — keep the project
-open for everyone, permanently.
+you must offer your users the corresponding source (AGPL section 13).
+
+The copyright is held by one person rather than a foundation, and that is worth
+being straight about. A single holder can relicense; a steward organisation is
+harder to capture and that is most of the reassurance such a structure offers.
+What stands in place of it here is the licence itself: every release is AGPL,
+every release is public, and a fork made today stays free under those terms
+regardless of what the holder does later. That is a floor a change of heart
+cannot lower — it can only affect what comes *after* it, and the code you
+already have keeps its licence forever.
 
 The SDKs and templates are MIT so that creators, businesses, and third-party
 developers can integrate with a Freeholder site — build themes, external
@@ -42,14 +49,14 @@ packages declare `AGPL-3.0-only`; each package under `packages/` declares
 `MIT`. New source files in the core should carry the header:
 
 ```
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 ```
 
 and new files under `packages/`:
 
 ```
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: MIT
 ```
 

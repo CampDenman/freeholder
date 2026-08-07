@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // §13 step 4: "Location / NAP — optional: address or service area, phone,
 // hours → primary BusinessLocation".

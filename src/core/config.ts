@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Camp Denman Society
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The declarative instance description (MASTER.md §17): deployment target ×
 // adapter profile × business preset. Checked in; secrets live in env only.
