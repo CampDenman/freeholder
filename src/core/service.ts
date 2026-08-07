@@ -59,7 +59,14 @@ export function actorString(actor: Actor): string {
     case "user":
       return `user:${actor.userId}`;
     case "agent":
-      return `agent:${actor.keyName}`;
+      // An agent hired through core/agents holds a key already named
+      // `agent:<worker>`, so prefixing unconditionally produced
+      // "agent:agent:Inbox triager" in the audit trail an owner reads. The
+      // prefix is what marks the actor kind; a key that already carries it
+      // does not need a second.
+      return actor.keyName.startsWith("agent:")
+        ? actor.keyName
+        : `agent:${actor.keyName}`;
     case "system":
       return "system";
     case "anonymous":

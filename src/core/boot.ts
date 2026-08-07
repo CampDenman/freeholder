@@ -25,7 +25,12 @@ export interface BootReport {
   listeners: Array<{ event: string; module: string; handler: string }>;
 }
 
-function isService(value: unknown): value is Service {
+/**
+ * Exported so a test can compare what `defineService` produced against what
+ * boot registered. That comparison exists because thirteen services once
+ * shipped unregistered — see tests/core/registry-completeness.test.ts.
+ */
+export function isService(value: unknown): value is Service {
   return (
     typeof value === "object" &&
     value !== null &&

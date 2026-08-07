@@ -2357,6 +2357,16 @@ agent work that quietly stops.
   radius equal to its scopes.
 - **`builder.*` stays separate** (§37). An agent that drafts emails must not
   also be able to change the site.
+- **For an inbound agent, scopes are the enforcement and autonomy is the
+  protocol.** Its effects are ordinary service calls it makes with its own key,
+  arriving as HTTP requests the platform cannot intercept — so what it *can* do
+  is exactly its scopes, checked on every call, and `autonomy` is what the
+  claim response tells it to do within them. A well-behaved agent proposes
+  instead of acting; one that ignores the instruction is still confined, and
+  every call is in the audit trail under its name. Managed execution enforces
+  autonomy strictly because there the platform makes the calls. The rule this
+  implies is worth saying to owners in as many words: **scope an inbound agent
+  to what you would let it do unsupervised.**
 - **Untrusted input never becomes instruction, and never raises autonomy.**
 - **Money is capped, visible, and enforced per step.**
 - **Everything is reversible or approved.** An irreversible action is behind an
