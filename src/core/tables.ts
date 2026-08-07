@@ -7,6 +7,16 @@
 export { users, sessions } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
 export {
+  agentConnections,
+  agents,
+  agentTasks,
+  agentRuns,
+  agentSteps,
+  agentApprovals,
+  agentSpend,
+  agentPlaybooks,
+} from "@/core/agents/schema";
+export {
   webhookSubscriptions,
   webhookDeliveries,
 } from "@/core/webhooks/schema";

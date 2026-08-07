@@ -513,6 +513,17 @@ describe.runIf(hasDatabase)("what an agent's key actually permits", () => {
     expect(error.code).toBe("permission");
   });
 
+  it("names the worker once in the audit trail, not twice", async () => {
+    // The key is already called `agent:<worker>`, so a second prefix made the
+    // owner's "What Changed" screen read "agent:agent:Inbox triager".
+    const { actorString } = await import("@/core/service");
+    expect(actorString(asAgent("Inbox triager"))).toBe("agent:Inbox triager");
+    // A key that is not an agent's still gets the prefix that marks the kind.
+    expect(
+      actorString({ kind: "agent", keyName: "Zapier", scopes: [] }),
+    ).toBe("agent:Zapier");
+  });
+
   it("keeps agent configuration closed to agents", async () => {
     const agent = await hire("Worker");
     const error = await failure(
