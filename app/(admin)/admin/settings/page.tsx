@@ -10,6 +10,8 @@ import { SettingsForm } from "./SettingsForm";
 import { PasswordForm } from "./PasswordForm";
 import { ApiKeysCard } from "./ApiKeysCard";
 import { listApiKeys, listScopes } from "@/core/apikeys/service";
+import { listDeliveries, listWebhooks } from "@/core/webhooks/service";
+import { WebhooksCard } from "./WebhooksCard";
 import { currentBusiness } from "@/core/settings/read";
 import type { Actor } from "@/core/service";
 
@@ -100,6 +102,41 @@ export default async function AdminSettingsPage() {
         />
       ) : null}
 
+      {keys ? (
+        <WebhooksCard
+          hooks={keys.hooks}
+          deliveries={keys.deliveries}
+          labels={{
+            cardTitle: t("webhooks.title"),
+            intro: t("webhooks.intro"),
+            name: t("webhooks.name"),
+            nameHint: t("webhooks.nameHint"),
+            url: t("webhooks.url"),
+            urlHint: t("webhooks.urlHint"),
+            events: t("webhooks.events"),
+            eventsHint: t("webhooks.eventsHint"),
+            create: t("webhooks.create"),
+            pending: t("common.saving"),
+            existing: t("webhooks.existing"),
+            empty: t("webhooks.empty"),
+            never: t("webhooks.never"),
+            lastDelivery: t("webhooks.lastDelivery"),
+            paused: t("webhooks.paused"),
+            active: t("webhooks.active"),
+            test: t("webhooks.test"),
+            pause: t("webhooks.pause"),
+            resume: t("webhooks.resume"),
+            reveal: t("webhooks.reveal"),
+            remove: t("webhooks.remove"),
+            removeConfirm: t("webhooks.removeConfirm"),
+            secretShown: t("webhooks.secretShown"),
+            secretHint: t("webhooks.secretHint"),
+            recent: t("webhooks.recent"),
+            noDeliveries: t("webhooks.noDeliveries"),
+          }}
+        />
+      ) : null}
+
       <PasswordForm
         labels={{
           cardTitle: t("settings.security"),
@@ -122,11 +159,17 @@ export default async function AdminSettingsPage() {
  * yesterday (§28). Nothing here is a second list to maintain.
  */
 async function loadKeys(actor: Actor, locale: string) {
-  const [areas, rows] = await Promise.all([
+  const [areas, rows, hooks, deliveries] = await Promise.all([
     listScopes.call({}, actor),
     listApiKeys.call({}, actor),
+    listWebhooks.call({}, actor),
+    listDeliveries.call({ limit: 10 }, actor),
   ]);
   const when = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
+  const exact = new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
   return {
     areas: areas.map((area) => ({
       area: area.area,
@@ -141,6 +184,27 @@ async function loadKeys(actor: Actor, locale: string) {
       scopes: row.scopes,
       lastUsed: row.lastUsedAt ? when.format(row.lastUsedAt) : null,
       expires: row.expiresAt ? when.format(row.expiresAt) : null,
+    })),
+    hooks: hooks.map((hook) => ({
+      id: hook.id,
+      name: hook.name,
+      url: hook.url,
+      events: hook.events,
+      status: hook.status,
+      pausedReason: hook.pausedReason,
+      lastDelivery: hook.lastDeliveryAt ? exact.format(hook.lastDeliveryAt) : null,
+    })),
+    deliveries: deliveries.map((delivery) => ({
+      id: delivery.id,
+      event: delivery.eventName,
+      status: delivery.status,
+      attempts: delivery.attempts,
+      // What an owner needs from a failed delivery is the reason, and from a
+      // successful one the status code that proves it landed.
+      detail:
+        delivery.error ??
+        (delivery.responseStatus ? String(delivery.responseStatus) : ""),
+      when: exact.format(delivery.createdAt),
     })),
   };
 }

@@ -109,10 +109,42 @@ export const pruneOutbox = defineJob({
   handler: async () => ({ deleted: await pruneDispatched() }),
 });
 
+/**
+ * Send whatever is due to somebody else's server.
+ *
+ * Every minute, and also nudged directly by the fan-out so a delivery does not
+ * wait for the tick. The schedule is what makes it *guaranteed*: an instance
+ * that was restarted between an event committing and its delivery going out
+ * picks the row up here, because the work list is a query rather than a
+ * message somebody has to still be holding.
+ */
+export const deliverWebhooks = defineJob({
+  name: "core.deliverWebhooks",
+  summary: "Send queued webhook deliveries that are due.",
+  schedule: "* * * * *",
+  handler: async () => {
+    const { deliverDue } = await import("@/core/webhooks/deliver");
+    return { attempted: await deliverDue() };
+  },
+});
+
+/** The delivery log is for debugging, not for keeping. */
+export const pruneWebhookDeliveries = defineJob({
+  name: "core.pruneWebhookDeliveries",
+  summary: "Forget webhook deliveries that finished a month ago.",
+  schedule: "51 4 * * *",
+  handler: async () => {
+    const { pruneDeliveries } = await import("@/core/webhooks/deliver");
+    return { deleted: await pruneDeliveries() };
+  },
+});
+
 export default [
   sweepSessions,
   sweepRateLimits,
   sweepPasswordResets,
   dispatchOutbox,
   pruneOutbox,
+  deliverWebhooks,
+  pruneWebhookDeliveries,
 ];

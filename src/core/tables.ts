@@ -6,6 +6,10 @@
 // boot-time introspection, relations, and test truncation.
 export { users, sessions } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
+export {
+  webhookSubscriptions,
+  webhookDeliveries,
+} from "@/core/webhooks/schema";
 export { organizations, contacts, timelineEvents } from "@/core/contacts/schema";
 export { auditLog } from "@/core/events/schema";
 export { assets } from "@/core/media/schema";

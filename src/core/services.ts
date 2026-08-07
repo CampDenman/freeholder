@@ -15,6 +15,7 @@ import locationServices from "@/core/locations/service";
 import mediaServices from "@/core/media/service";
 import seoServices from "@/core/seo/service";
 import settingsServices from "@/core/settings/service";
+import webhookServices from "@/core/webhooks/service";
 import type { Service } from "@/core/service";
 
 const services: Service[] = [
@@ -29,6 +30,22 @@ const services: Service[] = [
   ...mediaServices,
   ...seoServices,
   ...settingsServices,
+  ...webhookServices,
 ];
 
 export default services;
+
+/**
+ * Every committed event, offered to the owner's webhooks (§11's bus).
+ *
+ * Failures are swallowed by the bus itself, which is right here: an endpoint
+ * being unreachable must not fail the mutation that produced the event, and
+ * the delivery row already records what happened.
+ */
+export async function onAnyEvent(
+  payload: unknown,
+  eventName: string,
+): Promise<void> {
+  const { fanOut } = await import("@/core/webhooks/service");
+  await fanOut(eventName, payload);
+}
