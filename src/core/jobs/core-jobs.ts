@@ -139,6 +139,22 @@ export const pruneWebhookDeliveries = defineJob({
   },
 });
 
+/**
+ * Take work back from agents that went away.
+ *
+ * A lease is the only way to tell "still working" from "gone" across a
+ * network, and an agent that dies mid-task would otherwise hold it forever.
+ */
+export const reapAgentLeases = defineJob({
+  name: "core.reapAgentLeases",
+  summary: "Reclaim tasks from agents that stopped reporting.",
+  schedule: "* * * * *",
+  handler: async () => {
+    const { reapExpiredLeases } = await import("@/core/agents/execution");
+    return reapExpiredLeases();
+  },
+});
+
 export default [
   sweepSessions,
   sweepRateLimits,
@@ -147,4 +163,5 @@ export default [
   pruneOutbox,
   deliverWebhooks,
   pruneWebhookDeliveries,
+  reapAgentLeases,
 ];
