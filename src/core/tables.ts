@@ -10,6 +10,16 @@ export {
   webhookSubscriptions,
   webhookDeliveries,
 } from "@/core/webhooks/schema";
+export {
+  agentConnections,
+  agents,
+  agentTasks,
+  agentRuns,
+  agentSteps,
+  agentApprovals,
+  agentSpend,
+  agentPlaybooks,
+} from "@/core/agents/schema";
 export { organizations, contacts, timelineEvents } from "@/core/contacts/schema";
 export { auditLog } from "@/core/events/schema";
 export { assets } from "@/core/media/schema";
