@@ -252,6 +252,36 @@ In order, because each stage is useful on its own:
 The board, the live run view and the kill switch land with the stage that makes
 each of them true rather than as a screen ahead of the thing it shows.
 
+## Phase 4c — connected accounts, schedules and the briefing (§41, §42)
+
+Added 2026-08-07 at the owner's request, and placed here because it is the
+first thing that makes the agent workforce visibly worth having: work that
+recurs, and one screen that says what happened.
+
+Ordered so that each step is useful before the next exists:
+
+1. **Credential encryption and the connection model** — `CREDENTIAL_KEY`, the
+   `ConnectedAccount`/`ConnectionCapability` tables, and the doctor check.
+   Nothing connects yet; this is the safe place to put a token.
+2. **Google and Microsoft OAuth, calendar-read only** — several accounts per
+   provider, incremental consent, and free/busy sync at `busy_only`. The
+   payoff is immediate and needs no booking engine: the admin can show a real
+   unified calendar.
+3. **Playbook scheduling** — `core.runPlaybooks` every minute over
+   `next_run_at`, with catch-up and overlap policy. Prompt-based, and it works
+   with the inbound agents that already exist.
+4. **The briefing** — core contributors first (today's appointments, new
+   enquiries, needs-attention, an available update), then playbook sections,
+   then delivery by email.
+5. **Mail read and contact import** — everything untrusted, everything through
+   `contacts.resolve`. Last, because it is the largest source of hostile text
+   and it should land after the trust rules have been exercised by something
+   smaller.
+
+Booking audiences (§41's customers-versus-family split) need `core/scheduling`
+and therefore wait for Phase 6 — the connection model is built so that they
+drop in rather than requiring a rework.
+
 ## Phase 5 — the money path (§7 steps 2–3)
 
 Adapter interfaces and `none/` implementations for every remaining family land
