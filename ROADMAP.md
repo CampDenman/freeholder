@@ -223,6 +223,35 @@ authoring, so it is cheap once the registry is stable; it makes everything
 built afterwards agent-operable by existing; and §2 principle 7 is only true
 once it does exist.
 
+## Phase 4b — the agent workforce (§40)
+
+Added 2026-08-06 at the owner's request, and placed here rather than later for
+one reason: it is built *on* the API surface immediately above it. An agent is
+an `ApiKey` with scopes, its every action is a service call, and an external
+agent participates by claiming tasks over the same HTTP API and reporting
+steps back. Phase 4 is what makes §40 a schema and a worker loop rather than a
+second platform.
+
+In order, because each stage is useful on its own:
+
+1. **The model and the ledger** — connections, agents, tasks, runs, steps,
+   approvals, spend. Owner-only configuration, closed to agents. No execution
+   yet: tasks can be created, assigned, decomposed and read, which is already
+   enough to drive from an external agent by hand.
+2. **Inbound execution** — `agents.claimTask` with a lease, `agents.reportStep`,
+   `agents.completeTask`. This is the cheap half and the one that works with
+   *any* agent runtime the owner already has, including their own Claude.
+   Nothing about it needs a model provider.
+3. **Approvals** — the queue, the previews, and the rule that an irreversible
+   action is behind one or refused.
+4. **Managed execution** — `adapters/agent` runs the loop itself for owners who
+   would rather not host anything, with per-step budget enforcement.
+5. **Playbooks and triggers** — reusable briefs started by a schedule or by a
+   bus event, which is what turns "an agent I can ask" into "work that happens".
+
+The board, the live run view and the kill switch land with the stage that makes
+each of them true rather than as a screen ahead of the thing it shows.
+
 ## Phase 5 — the money path (§7 steps 2–3)
 
 Adapter interfaces and `none/` implementations for every remaining family land
