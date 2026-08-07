@@ -29,7 +29,7 @@ services:
     depends_on: [app]
 
   app:
-    image: ${FREEHOLDER_IMAGE:-ghcr.io/tonyaly/freeholder:edge}
+    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}
     restart: unless-stopped
     # Beside compose.yml, per the README's layout. `../.env` would resolve
     # to /opt/.env and silently start the app with no configuration.

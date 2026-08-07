@@ -54,6 +54,9 @@ however you like.
 ## Governance
 
 Freeholder is maintained by **Tony Aly**, who holds the project's copyright.
+The repository is hosted under the `CampDenman` organisation, which is an
+account, not a separate rights holder — the copyright is Tony Aly's.
+
 That is a single person rather than a foundation, and the licence is what does
 the reassuring: every release is AGPL and public, so a fork taken today stays
 free on those terms no matter what happens to the project later.
