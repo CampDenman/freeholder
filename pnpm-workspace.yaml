@@ -36,3 +36,16 @@ overrides:
   # that was enough in July is not enough now. Only reachable through dev
   # tooling, overridden anyway because the fix is a patch version.
   brace-expansion: ">=5.0.9"
+  # CVE-2026-59870 — quadratic CPU consumption resolving `!!omap`, which is a
+  # denial of service reachable by anything that parses untrusted YAML. Only
+  # in dev tooling here (changesets reads its own config and our changeset
+  # files), so the exposure is small; the floor is taken because the fix is a
+  # patch release in both majors and the gate is right to insist.
+  #
+  # Two entries rather than one, and both bounded at the next major: 3.x and
+  # 4.x are both installed, and an unbounded floor is not a patch — ">=3.15.1"
+  # resolved the 3.x slot to 5.2.3, which is a different library as far as its
+  # dependents are concerned. A security floor should move a package forward
+  # inside its own major and nowhere else.
+  js-yaml@3: ">=3.15.1 <4"
+  js-yaml@4: ">=4.3.1 <5"
