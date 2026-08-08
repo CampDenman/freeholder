@@ -43,6 +43,15 @@ const sessionSecret =
   process.env.SESSION_SECRET ?? "vitest-deterministic-session-secret-key-32+";
 process.env.SESSION_SECRET = sessionSecret;
 
+// The key that encrypts connected accounts (§41). Deterministic and obviously
+// fake, for the same reason the session secret above is: the suite has to be
+// able to encrypt something, and a developer's real key must never be what it
+// reaches for. 32 bytes as hex.
+const credentialKey =
+  process.env.CREDENTIAL_KEY ??
+  "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+process.env.CREDENTIAL_KEY = credentialKey;
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -59,6 +68,7 @@ export default defineConfig({
     env: {
       ...(testDatabaseUrl ? { DATABASE_URL: testDatabaseUrl } : {}),
       SESSION_SECRET: sessionSecret,
+      CREDENTIAL_KEY: credentialKey,
     },
   },
 });

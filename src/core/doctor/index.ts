@@ -298,6 +298,87 @@ async function checkJobs(): Promise<Check> {
   );
 }
 
+/** The command that makes a key, quoted once so two remedies cannot drift. */
+const GENERATE_KEY = [
+  "Generate one with:",
+  "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+].join(" ");
+
+/**
+ * The key that encrypts an owner's connected accounts (§41).
+ *
+ * Absent is fine until something is connected — an instance that has never
+ * linked a Google account has nothing to protect. Once one exists the key is
+ * load-bearing, and §41 is explicit that doctor should say so rather than
+ * letting the first sync be where an owner finds out.
+ */
+async function checkCredentialKey(): Promise<Check[]> {
+  const { credentialKeyConfigured, credentialKeyWorks } = await import(
+    "@/core/connections/crypto"
+  );
+  const configured = credentialKeyConfigured();
+
+  let connected = false;
+  try {
+    const { hasConnections } = await import("@/core/connections/service");
+    connected = await hasConnections();
+  } catch {
+    // No database is already a failing check of its own; this one has nothing
+    // to add to it.
+    return [];
+  }
+
+  if (!configured) {
+    return [
+      connected
+        ? fail(
+            "security.credentialKey",
+            "Connected accounts",
+            "Accounts are connected but CREDENTIAL_KEY is not set, so their stored credentials cannot be read.",
+            `Restore the key you used when connecting them. If it is gone, disconnect and reconnect each account. ${GENERATE_KEY}`,
+          )
+        : warn(
+            "security.credentialKey",
+            "Connected accounts",
+            "CREDENTIAL_KEY is not set. Nothing needs it yet, and connecting a Google or Microsoft account will.",
+            `Set it before connecting anything. ${GENERATE_KEY}`,
+          ),
+    ];
+  }
+
+  try {
+    if (!credentialKeyWorks()) {
+      return [
+        fail(
+          "security.credentialKey",
+          "Connected accounts",
+          "CREDENTIAL_KEY is set but a test encryption did not survive a round trip.",
+          "Check that the key is 32 bytes, as 64 hex characters or base64url.",
+        ),
+      ];
+    }
+  } catch (error) {
+    return [
+      fail(
+        "security.credentialKey",
+        "Connected accounts",
+        `CREDENTIAL_KEY is set but unusable: ${reason(error)}`,
+        "It must be 32 bytes, as 64 hex characters or base64url.",
+      ),
+    ];
+  }
+
+  return [
+    ok(
+      "security.credentialKey",
+      "Connected accounts",
+      connected
+        ? "The key that protects your connected accounts is working."
+        : "Ready to store connected accounts securely.",
+    ),
+  ];
+}
+
 async function checkSecurity(): Promise<Check[]> {
   const e = env();
   const checks: Check[] = [];
@@ -341,6 +422,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     await checkStorage(),
     await checkMail(),
     await checkJobs(),
+    ...(await checkCredentialKey()),
     ...(await checkSecurity()),
   ];
 

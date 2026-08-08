@@ -9,6 +9,7 @@ import resetServices from "@/core/auth/reset";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
 import apiKeyServices from "@/core/apikeys/service";
+import connectionServices from "@/core/connections/service";
 import contactServices from "@/core/contacts/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
@@ -26,6 +27,7 @@ const services: Service[] = [
   ...agentServices,
   ...agentExecution,
   ...apiKeyServices,
+  ...connectionServices,
   ...contactServices,
   ...doctorServices,
   ...eventServices,

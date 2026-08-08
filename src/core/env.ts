@@ -22,6 +22,21 @@ const envSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   /** 32+ char secret for session-token hashing. Required in production. */
   SESSION_SECRET: z.string().min(32).optional(),
+  /**
+   * Encrypts an owner's third-party credentials at rest (§41's addendum to
+   * §17). 32 bytes as hex or base64url. Absent is fine until something is
+   * connected; doctor fails once anything is.
+   *
+   * Deliberately unconstrained here beyond being a string. The real rule is
+   * "32 bytes, in one of two encodings", which a character count cannot
+   * express — 64 hex characters and 43 base64url ones are both correct — and
+   * `core/connections/crypto.ts` checks it properly and says so in a sentence
+   * that names both forms. A weaker check here would only get in front of the
+   * accurate one with a worse message.
+   */
+  CREDENTIAL_KEY: z.string().optional(),
+  /** The previous key, during a rotation. See core/connections/crypto.ts. */
+  CREDENTIAL_KEY_PREVIOUS: z.string().optional(),
 
   /**
    * S3-compatible object storage (§12). One set of names for DigitalOcean
