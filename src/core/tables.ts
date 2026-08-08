@@ -17,6 +17,12 @@ export {
   agentPlaybooks,
 } from "@/core/agents/schema";
 export {
+  connectedAccounts,
+  connectionCapabilities,
+  externalCalendars,
+  externalEvents,
+} from "@/core/connections/schema";
+export {
   webhookSubscriptions,
   webhookDeliveries,
 } from "@/core/webhooks/schema";

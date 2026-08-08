@@ -44,6 +44,11 @@ export default defineModule({
       "agentTask.claimed",
       "agentTask.completed",
       "agentTask.failed",
+      "connection.recorded",
+      "connection.updated",
+      "connection.removed",
+      "connection.needsAttention",
+      "connection.rotated",
     ],
   },
 });
