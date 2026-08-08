@@ -41,7 +41,7 @@ stays the owner's choice.
 ## The published image
 
 Every recipe pulls the same image from
-`ghcr.io/tonyaly/freeholder`, built and pushed by CI on each change to
+`ghcr.io/campdenman/freeholder`, built and pushed by CI on each change to
 `main`:
 
 | Tag | What it is |

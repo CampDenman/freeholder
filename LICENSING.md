@@ -10,7 +10,9 @@ the license texts themselves are authoritative.
 | Freeholder core (the platform: server, web app, admin, all modules) | everything in this repository **except** `packages/` | **AGPL-3.0-only** ([`LICENSE`](LICENSE)) |
 | SDKs, client libraries, templates, and integration packages | `packages/*` | **MIT** (a `LICENSE` file in each package) |
 
-Copyright (C) 2026 Tony Aly.
+Copyright (C) 2026 Tony Aly. The repository is hosted under the
+`CampDenman` organisation on GitHub; that is where the code lives, not a
+separate rights holder.
 
 ## Why this split
 
