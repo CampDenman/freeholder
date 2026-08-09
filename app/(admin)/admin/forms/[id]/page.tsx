@@ -73,7 +73,15 @@ export default async function FormSubmissionsPage({
           <ArrowLeft size={14} weight="bold" />
           {t("forms.back")}
         </a>
-        <h1 className="mt-1 text-xl font-bold tracking-tight">{form.name}</h1>
+        <div className="mt-1 flex flex-wrap items-baseline gap-3">
+          <h1 className="text-xl font-bold tracking-tight">{form.name}</h1>
+          <a
+            href={`/admin/forms/${id}/edit`}
+            className="text-sm font-semibold text-accent"
+          >
+            {t("forms.builder.edit")}
+          </a>
+        </div>
       </div>
 
       <nav aria-label={t("forms.title")} className="flex flex-wrap gap-2">

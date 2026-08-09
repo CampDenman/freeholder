@@ -99,6 +99,31 @@ export const getForm = defineService({
   },
 });
 
+/**
+ * One whole form, by id — what the builder loads.
+ *
+ * `forms.get` cannot do this job: it is keyed by slug, because that is what a
+ * rendered page has, and it is public, because that page is. An admin screen
+ * arrives with an id and needs the columns a visitor never sees — who gets
+ * notified, what the thank-you says — so this is staff-only and returns the
+ * row rather than a projection.
+ */
+export const getFormById = defineService({
+  name: "forms.byId",
+  summary: "One form, whole, for editing it.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({ id: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    const [form] = await ctx.tx
+      .select()
+      .from(forms)
+      .where(eq(forms.id, input.id))
+      .limit(1);
+    return form ?? null;
+  },
+});
+
 export const createForm = defineService({
   name: "forms.create",
   summary: "Add a form.",
@@ -455,6 +480,7 @@ export { HONEYPOT_FIELD, STAMP_FIELD };
 export default [
   listForms,
   getForm,
+  getFormById,
   createForm,
   updateForm,
   submitForm,

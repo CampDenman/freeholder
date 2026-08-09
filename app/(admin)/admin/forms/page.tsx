@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // Every form, and how much is waiting in each (MASTER.md §4.6, §36).
-import { Envelope, Warning } from "@phosphor-icons/react/dist/ssr";
+import { Envelope, Plus, Warning } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
 import { listForms, submissionCounts } from "@/modules/forms/service";
 import { currentBusiness } from "@/core/settings/read";
@@ -38,6 +38,13 @@ export default async function FormsPage() {
             {t("forms.quarantine", { count: counts.spam })}
           </Pill>
         ) : null}
+        <a
+          href="/admin/forms/new"
+          className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-on-accent"
+        >
+          <Plus size={15} weight="bold" />
+          {t("forms.builder.new")}
+        </a>
       </div>
 
       {forms.length === 0 ? (
