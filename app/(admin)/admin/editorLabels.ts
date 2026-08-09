@@ -20,8 +20,15 @@ import type {
   EditorLabels,
 } from "./BlockEditor";
 
-/** Translate, or fall back to the key's last segment as a readable name. */
-function label(t: Translate, key: string, fallback: string): string {
+/**
+ * Translate, or fall back to a readable name.
+ *
+ * Exported because a *block's* field names come from the block, so any screen
+ * that names one — the editor, the translation screen — meets the same
+ * problem: a plugin may declare a field core has no catalog key for, and
+ * showing "cms.field.tagline" is worse than showing "tagline".
+ */
+export function label(t: Translate, key: string, fallback: string): string {
   const translated = t(key);
   return translated === key ? fallback : translated;
 }
