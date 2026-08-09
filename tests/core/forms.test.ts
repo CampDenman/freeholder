@@ -13,6 +13,7 @@ import { contacts, timelineEvents } from "@/core/contacts/schema";
 import { formSubmissions } from "@/modules/forms/schema";
 import {
   createForm,
+  getFormById,
   listSubmissions,
   reviewSubmission,
   submitForm,
@@ -368,5 +369,49 @@ describe.runIf(hasDatabase)("merging a contact who submitted forms", () => {
     const submissions = await db().select().from(formSubmissions);
     expect(submissions).toHaveLength(2);
     expect(submissions.every((s) => s.contactId === survivor!.id)).toBe(true);
+  });
+});
+
+describe.runIf(hasDatabase)("loading a form for the builder", () => {
+  beforeEach(async () => {
+    await truncateSpine();
+  });
+
+  it("returns the columns the public lookup has no business returning", async () => {
+    // The bug this exists to stop coming back: the edit screen asked
+    // `forms.get` — which is keyed by slug — for a form by id, so it silently
+    // received nothing and the page 500'd.
+    const created = await createForm.call(
+      {
+        slug: "contact",
+        name: "Contact",
+        fields: [{ key: "name", label: "Name", kind: "text", required: true }],
+        successMessage: "Thanks — we will be in touch.",
+        notify: ["studio@example.test"],
+      },
+      STAFF,
+    );
+
+    const form = await getFormById.call({ id: created.id }, STAFF);
+    expect(form?.slug).toBe("contact");
+    expect(form?.successMessage).toBe("Thanks — we will be in touch.");
+    expect(form?.notify).toEqual(["studio@example.test"]);
+  });
+
+  it("is not a way for a visitor to read who gets notified", async () => {
+    const created = await createForm.call(
+      { slug: "contact", name: "Contact", notify: ["studio@example.test"] },
+      STAFF,
+    );
+    const denied = await failure(getFormById.call({ id: created.id }, ANONYMOUS));
+    expect(denied.code).toBe("permission");
+  });
+
+  it("says so when the id is nobody's", async () => {
+    const missing = await getFormById.call(
+      { id: "00000000-0000-4000-8000-000000000000" },
+      STAFF,
+    );
+    expect(missing).toBeNull();
   });
 });
