@@ -1,3 +1,4 @@
+// Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The licensing gate (LICENSING.md, CLAUDE.md non-negotiables). Every source
 // file carries a copyright line and an SPDX identifier, and the identifier
@@ -25,7 +26,28 @@ const EXEMPT = [
   /(^|\/)yarn\.lock$/,
 ];
 
-const COMMENT = { ts: "//", tsx: "//", mts: "//", mjs: "//", js: "//", css: null, yml: "#", yaml: "#" };
+const COMMENT = {
+  ts: ["//", ""],
+  tsx: ["//", ""],
+  mts: ["//", ""],
+  mjs: ["//", ""],
+  js: ["//", ""],
+  css: ["/*", " */"],
+  sh: ["#", ""],
+  yml: ["#", ""],
+  yaml: ["#", ""],
+};
+
+function commentStyle(file) {
+  const basename = file.split("/").pop();
+  if (
+    basename === "Dockerfile" ||
+    basename === "Caddyfile" ||
+    basename === ".dockerignore" ||
+    basename === ".env.example"
+  ) return ["#", ""];
+  return COMMENT[file.split(".").pop() ?? ""];
+}
 
 const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8" });
 const untracked = execFileSync(
@@ -37,21 +59,23 @@ const untracked = execFileSync(
 const files = [...tracked.split("\n"), ...untracked.split("\n")]
   .filter(Boolean)
   .filter((f) => !EXEMPT.some((rx) => rx.test(f)))
-  .filter((f) => COMMENT[f.split(".").pop() ?? ""]);
+  .filter((f) => commentStyle(f));
 
 const problems = [];
 
 for (const file of files) {
-  const prefix = COMMENT[file.split(".").pop()];
+  const [prefix, suffix] = commentStyle(file);
   // packages/* is MIT, everything else in the repo is AGPL (LICENSING.md).
   const license = file.startsWith("packages/") ? "MIT" : "AGPL-3.0-only";
   const spdx = `SPDX-License-Identifier: ${license}`;
 
   const original = readFileSync(file, "utf8");
   const body = original.replace(/^﻿/, "");
-  const hasCopyright = body.includes(COPYRIGHT);
-  const hasSpdx = body.includes(spdx);
-  const hasWrongSpdx = /SPDX-License-Identifier: \S+/.test(body) && !hasSpdx;
+
+  const header = body.split("\n").slice(0, 5).join("\n");
+  const hasCopyright = header.includes(COPYRIGHT);
+  const hasSpdx = header.includes(spdx);
+  const hasWrongSpdx = /SPDX-License-Identifier: \S+/.test(header) && !hasSpdx;
 
   if (hasCopyright && hasSpdx) continue;
 
@@ -70,8 +94,8 @@ for (const file of files) {
   }
 
   const lines = [];
-  if (!hasCopyright) lines.push(`${prefix} ${COPYRIGHT}`);
-  if (!hasSpdx) lines.push(`${prefix} ${spdx}`);
+  if (!hasCopyright) lines.push(`${prefix} ${COPYRIGHT}${suffix}`);
+  if (!hasSpdx) lines.push(`${prefix} ${spdx}${suffix}`);
   // Insert above an existing SPDX line so the two stay adjacent, else at top.
   const spdxLine = body.split("\n").findIndex((l) => l.includes("SPDX-License-Identifier"));
   const out = body.split("\n");

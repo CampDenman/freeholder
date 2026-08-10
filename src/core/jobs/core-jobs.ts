@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Core's own scheduled work.
 //
-// Three jobs, and every one of them closes a backlog entry that has been open
-// since the table it cleans up was written. That is the pattern to expect:
+// These jobs close operational debts that existed from the moment each growing
+// table was introduced. That is the pattern to expect:
 // tables that grow are cheap to write and only become somebody's problem
 // months later, on an instance nobody is watching.
 import { isNotNull, lt, or, sql } from "drizzle-orm";

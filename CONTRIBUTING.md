@@ -5,15 +5,18 @@ one-person business.
 
 ## Ground truth
 
-[`MASTER.md`](MASTER.md) is the canonical specification. Every product and
-architecture decision lives there. If a change contradicts the master doc,
-either the change is wrong or the doc needs a PR first — code and doc never
-disagree silently.
+[`MASTER.md`](MASTER.md) is the only product, architecture, status, and
+delivery source of truth. Every product change names an item in its §43
+completion checklist and meets the applicable feature-level definition of
+done. If a change contradicts the master doc, either the change is wrong or the
+doc changes in the same PR — code and doc never disagree silently. Do not
+create a parallel roadmap or backlog in another document.
 
 ## How to contribute
 
-1. **Discuss first** for anything non-trivial — open a GitHub Discussion or
-   an issue before writing code, so nobody builds a feature that can't merge.
+1. **Choose the work** from `MASTER.md` §43. Discuss anything non-trivial in a
+   GitHub Discussion or issue, but keep scope and acceptance criteria in the
+   master checklist so an issue never becomes a second product plan.
 2. **Fork and branch** from `main`. Branch names: `feat/...`, `fix/...`,
    `docs/...`.
 3. **Sign off every commit** (`git commit -s`). This certifies the
@@ -44,6 +47,7 @@ unit suites always run.
 pnpm test          # vitest
 pnpm typecheck     # tsc --noEmit
 pnpm lint          # architecture, money (§15.4), service-layer (§15.5), i18n (§15.3)
+pnpm plan:check    # MASTER.md is the one complete, internally consistent plan
 pnpm license:check # the AGPL/MIT boundary and SPDX headers
 ```
 

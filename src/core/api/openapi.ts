@@ -16,9 +16,8 @@
 // **What this does not describe: responses.** `ServiceDef` carries an input
 // schema and no output schema, so the honest thing is to say the response is
 // an object and stop, rather than invent a shape the code does not enforce.
-// Giving services optional output schemas would close that, and is worth doing
-// before the SDK is generated from this — it is recorded in the backlog rather
-// than bolted on here across eighty services.
+// Giving every service an output schema closes that gap before SDK generation;
+// `MASTER.md` §43 item C3.01 is the authoritative work item.
 import { z } from "zod";
 import { listServices, type Service } from "@/core/service";
 import { API_BASE } from "@/core/api/dispatch";

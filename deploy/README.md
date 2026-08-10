@@ -60,9 +60,9 @@ whole story, which is the point.
 
 ## Known gaps
 
-- arm64 images. `linux/amd64` covers DigitalOcean and Replit; ARM wants native
-  runners rather than QEMU emulation.
-- `migrate.md` per target (§18 requires one for Tier 1–2) waits on a second
-  Tier-1 recipe: a migration path needs somewhere to migrate to.
-- The recipe validation matrix (§18) is not in CI yet, so a rotting recipe is
-  still found by a frustrated user rather than automatically.
+- arm64 images. `linux/amd64` covers the current DigitalOcean recipe; ARM wants
+  native runners rather than QEMU emulation.
+- Replit and the other target recipes remain completion work (`MASTER.md`
+  C3.16).
+- Per-target migration and the validation matrix remain C3.17–C3.19.
+- Target-specific update/rollback remains C10.10.

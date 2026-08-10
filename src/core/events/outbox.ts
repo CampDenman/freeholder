@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
-// The transactional outbox (MASTER.md §11, and the backlog entry this closes).
+// The transactional outbox (MASTER.md §11).
 //
 // ── The hole this fills ───────────────────────────────────────────────────
 //

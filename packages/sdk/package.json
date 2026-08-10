@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "Client SDK for Freeholder sites — typed access to the API and MCP surface",
   "license": "MIT",
-  "author": "Tony Aly",
+  "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
     "type": "git",
     "url": "https://github.com/campdenman/freeholder.git",
