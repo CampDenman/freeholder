@@ -1,9 +1,18 @@
-# FREEHOLDER — Master Project Document
+# FREEHOLDER — Product Specification and Completion Plan
 
 **The open-source operating system for a one-person business.**
-Launch edition · July 2026 · Tony Aly · AGPL-3.0 core / MIT SDK & templates
+Living edition · reconciled 2026-08-10 · created, authored, and owned by Tony Aly · AGPL-3.0 core / MIT SDK & templates
 
-This document is the canonical source of truth for the project. §1 is excerpted as `README.md`. When code and this document disagree, one of them is wrong — fix whichever it is, in the same PR (see `CLAUDE.md`).
+This is the project's **only product and delivery source of truth**. It defines
+the product, architecture, complete scope, dependency order, current state, and
+the checklist that must reach zero before Freeholder is DONE. `README.md` is a
+short introduction, not a roadmap. Git and changesets preserve history; they do
+not compete with this document as a second backlog.
+
+When code and this document disagree, one of them is wrong. Fix whichever is
+wrong in the same change (see `CLAUDE.md`). A feature is not complete merely
+because its schema or service exists: §43 defines the evidence required before
+its checkbox may be checked.
 
 ## Contents
 
@@ -12,7 +21,8 @@ This document is the canonical source of truth for the project. §1 is excerpted
 **Build contract** — 9. Stack Decisions · 10. Repository Layout · 11. Module Contract · 12. Adapter Contract · 13. Setup Wizard · 14. Replit-First Deploy Story · 15. Quality Gates (CI) · 16. Agent Conventions
 **Deployment** — 17. Configuration Model · 18. Recipe Anatomy & Mandates · 19. Support Tiers · 20. Recipe: Replit · 21. Recipe: DigitalOcean · 22. create-freeholder · 23. Migration Matrix
 **Extensibility** — 24. Plugins: The Design Bet · 25. Plugin DX · 26. Trust Model · 27. Federated Registries · 28. The Living Platform Contract · 29. What This Buys the Ecosystem
-**Going big** — 30. CRM Depth · 31. Front-Site AI Assistant · 32. Universal Drag-and-Drop Editor · 33. Social Media Hub · 34. Sharing DNA · 35. React Native App · 36. Mined Roadmap (WordPress & Shopify) · 37. The Self-Building Instance · 38. The Day-One Surface · 39. Staying Current
+**Going big** — 30. CRM Depth · 31. Front-Site AI Assistant · 32. Universal Drag-and-Drop Editor · 33. Social Media Hub · 34. Sharing DNA · 35. React Native App · 36. Mined Roadmap (WordPress & Shopify) · 37. The Self-Building Instance · 38. The Day-One Surface · 39. Staying Current · 40. Agent Orchestration · 41. Connected Accounts · 42. Scheduled Work and Briefing
+**Execution** — 43. Product Completion Plan (live status, dependencies, actionable checklist, and final acceptance gate)
 
 ---
 
@@ -48,7 +58,11 @@ Freeholder is a single open-source application that replaces the rented stack. E
 - **Multilingual + international** — locales, currencies, timezones, tax zones, and NAP/local-SEO built into the core, not bolted on
 - **AI-native** — a bundled MCP server exposes the whole admin surface to your AI assistant, with scoped permissions and a full audit log. "Chase my overdue invoices" is a sentence, not an afternoon.
 
-### Quickstart
+### Quickstart contract
+
+The following is the required finished experience. Until checklist F10 in §43
+is complete, use the developer workflow in `CONTRIBUTING.md`; do not infer that
+an unfinished installer or recipe works from this target description.
 
 **Replit (fastest):** fork the template, hit Run, walk through the setup wizard. Live in minutes.
 
@@ -95,7 +109,7 @@ Start with the architecture (§2–§8) and the build contract (§9–§16). Tra
 4. **Money converges on Invoice → Payment.** Whether value arrives via cart checkout, an accepted quote, a booking deposit, or a subscription cycle, it is realized as an `Invoice` paid by one or more `Payment` records through a payment-provider adapter. One reconciliation path, one refund path, one reporting path.
 5. **Adapters for anything external.** Payments (Stripe default, PayPal), transactional mail (Gmail/Outlook OAuth), bulk mail (Resend/Postmark/SES), storage (S3-compatible), SMS (Twilio et al), calendar sync (Google/Microsoft). Core never imports a vendor SDK directly; it imports the adapter interface. Note the split this makes possible: *messaging* is core (§4.14) because consent and opt-out are obligations, while the carrier behind it is swappable — and voice and video, whose vendors bring their own compliance posture, stay behind the plugin boundary entirely.
 6. **First-party analytics.** Privacy-first pageview + event capture, stored locally, joined to the spine. No third-party pixels in core. Experimentation is native to the same store: variant impressions and conversions (§32) are first-class events, so A/B results live next to revenue, not in a separate tool.
-7. **Agent-operable by design.** Every admin capability is exposed through the internal service layer, which is what the REST API, the admin UI, *and* the bundled MCP server all call. If the UI can do it, an agent can do it, with the same permission checks.
+7. **Agent-operable by design.** Every admin capability is exposed through the internal service layer, which is what the HTTP API, the admin UI, *and* the bundled MCP server all call. If the UI can do it, an agent can do it, with the same permission checks.
 8. **Boring technology.** Postgres, one web framework, server-rendered public pages (SEO), background jobs via a Postgres-backed queue (no Redis requirement for v1).
 9. **International by default.** Locale, currency, timezone, and location are first-class core config, not bolt-ons. All money is `(amount_cents, currency)`, all timestamps are UTC with a business timezone for display, all user-facing strings run through the i18n layer from commit one — retrofitting i18n is the single most expensive refactor a platform can face.
 10. **SEO is architecture, not garnish.** Public pages are server-rendered HTML, URL structure follows a RIBA-compliant browse hierarchy (Root-Indexed Browse Architecture — every indexable page reachable within shallow hops from root-linked index pages), and every page ships complete meta, JSON-LD, and hreflang. The SEO module doesn't "add SEO"; the routing layer *is* the SEO.
@@ -165,7 +179,7 @@ freeholder/
     ├── automations          # Visual trigger → condition → action over spine events; modules contribute verbs
     ├── portal               # Customer portal: their quotes, invoices, bookings, galleries, files, messages
     ├── reporting            # Saved views, cohort & funnel reports, accounting export (CSV, QuickBooks/Xero shapes)
-    ├── api                  # REST API + API keys + webhooks (outbound)
+    ├── api                  # Registry-derived HTTP RPC API + API keys + webhooks (outbound)
     └── mcp                  # Bundled MCP server exposing the service layer to AI agents
 ```
 
@@ -990,7 +1004,11 @@ This section encodes the standards from BigDataSEO.com and the Vibe Coding 101 S
 
 ---
 
-## 7. Build Order (the v1 slice)
+## 7. Dependency Rationale (the original v1 slice)
+
+This section explains the architectural dependency decisions that shaped the
+system. It is not a second live roadmap: §43 is the authoritative execution
+order and completion checklist.
 
 The v1 that is genuinely shippable on Replit and already better than the tool-mash:
 
@@ -1016,7 +1034,7 @@ Two reasons, the second being the one that decides it:
 1. It is roughly a fifth of v1, and it is the fifth that has to exist before anyone can be told the project exists.
 2. §32 makes the public surface a block tree in the database, and §37 — the moat — is built entirely on that line already existing. So cms/blocks is not step 6 of a list; it is the floor under the public surface, under the question of how a module contributes a route to a file-system router, and under the self-building instance. Building our own site builds that floor and dogfoods it on something real before any paying business depends on it.
 
-The money path (steps 2–3) follows immediately after, ahead of booking, quotes and galleries. Step 9 (mcp + api) is also pulled forward, ahead of the money path: it is generated from the service registry rather than authored, so it is cheap once the registry is stable, and principle 7 in §2 is only true once it exists. `ROADMAP.md` carries the phase-by-phase plan and is the file to correct when this changes.
+The money path (steps 2–3) follows immediately after, ahead of booking, quotes and galleries. Step 9 (mcp + api) is also pulled forward, ahead of the money path: it is generated from the service registry rather than authored, so it is cheap once the registry is stable, and principle 7 in §2 is only true once it exists. §43 carries the dependency-ordered plan and is the section to correct when this changes.
 
 ---
 
@@ -1057,7 +1075,6 @@ freeholder/                          # AGPL-3.0
 ├── MASTER.md                        # this document — ground truth
 ├── CLAUDE.md                        # agent ground rules
 ├── LICENSING.md · DCO.md · SECURITY.md · CONTRIBUTING.md · CODE_OF_CONDUCT.md
-├── PROJECT_BACKLOG.json             # append-only backlog
 │
 ├── app/                             # Next.js App Router
 │   ├── (public)/                    # server-rendered public surface — THE SEO SURFACE
@@ -1071,7 +1088,7 @@ freeholder/                          # AGPL-3.0
 │   │   │   └── [...page]/           # CMS catch-all
 │   ├── (portal)/portal/             # customer portal (noindex)
 │   ├── (admin)/admin/               # admin app (noindex)
-│   ├── api/                         # REST API routes → thin wrappers over services
+│   ├── api/                         # HTTP API routes → thin wrappers over services
 │   ├── sitemap-index.xml/route.ts
 │   ├── robots.txt/route.ts
 │   └── llms.txt/route.ts
@@ -1180,7 +1197,7 @@ export default defineModule({
 
 This is what keeps §37 honest, too. A builder that can add a page is doing a database write inside the service layer, with validation, audit and one-click revert; a builder that could add a *route* would be writing code on the box that serves traffic, which §37 explicitly forbids.
 
-**The service registry is the single choke point.** Admin UI, REST API, and MCP all call `services.quotes.send(...)`. Every service method: validates with Zod, checks permissions from session/API-key scopes, executes in a transaction, emits TimelineEvents, writes AuditLog. A service method that skips any of these fails code review — this is the invariant that makes the platform agent-safe.
+**The service registry is the single choke point.** Admin UI, HTTP API, and MCP all call `services.quotes.send(...)`. Every service method: validates with Zod, checks permissions from session/API-key scopes, executes in a transaction, emits TimelineEvents, writes AuditLog. A service method that skips any of these fails code review — this is the invariant that makes the platform agent-safe.
 
 ---
 
@@ -1300,7 +1317,9 @@ These gates ARE the moat. Any contributor (human or agent) inherits the standard
 
 ## 16. Conventions for Coding Agents (CLAUDE.md summary)
 
-- One backlog item per build session; append-only `PROJECT_BACKLOG.json`; confidence tags verified/inferred/assumed on claims about existing code.
+- One §43 checklist item per focused build session. Mark it complete only with
+  the required evidence; use verified/inferred/assumed confidence tags when
+  making claims about existing code.
 - Never create a parallel path for something the spine owns (no module-local contacts, money, or media tables).
 - New public pages must register a sitemap source and pass the SEO gate locally before PR.
 - Migrations are forward-only; destructive changes require a data-migration plan in the PR body.
@@ -1579,7 +1598,7 @@ Plugins run **in-process** — same trust level as core once installed. Sandboxi
 
 **Licensing lanes (stated up front to avoid the WordPress wars):**
 - **In-process plugins** import AGPL core APIs → must carry AGPL-compatible licenses. The registry checks the license field.
-- **Out-of-process apps** — anything that talks to a Freeholder via REST API, SDK, webhooks, or MCP — are independent works: **any license, any commercial model.** Sell your SaaS companion freely.
+- **Out-of-process apps** — anything that talks to a Freeholder via HTTP API, SDK, webhooks, or MCP — are independent works: **any license, any commercial model.** Sell your SaaS companion freely.
 This gives commercial developers a clean lane (external apps) while keeping the in-process ecosystem open — the exact ecosystem structure that kept WordPress plugins flourishing for two decades, minus the license ambiguity.
 
 ---
@@ -1884,7 +1903,7 @@ A builder without limits is a liability, so the limits are architecture rather t
 
 ### Reachable by the owner's own agents (MCP)
 
-The builder is not only a chat box in the admin. It is a set of tools on the bundled MCP server (§3, §7 step 9), so an owner can point *their own* assistant — Claude, an IDE agent, whatever they run — at their instance and administer, modify and develop it from there. Principle 7 already requires this shape: the admin UI, the REST API and MCP all call the same service layer, so anything the owner can do in a browser, their agent can do with the same permission checks and the same audit row.
+The builder is not only a chat box in the admin. It is a set of tools on the bundled MCP server (§3, §7 step 9), so an owner can point *their own* assistant — Claude, an IDE agent, whatever they run — at their instance and administer, modify and develop it from there. Principle 7 already requires this shape: the admin UI, the HTTP API and MCP all call the same service layer, so anything the owner can do in a browser, their agent can do with the same permission checks and the same audit row.
 
 Nothing is bolted on to make this work. Tools are generated from the service registry with their Zod schemas (§11), so the tool list is never stale (§28) and a module that ships a service ships its MCP tool by existing.
 
@@ -2673,3 +2692,779 @@ open the admin until Thursday still needs to know about Monday.
   holiday" is a parser and a support burden; the field takes a cron expression
   with a plain-language description beside it, and a small set of presets
   covers what almost everyone wants.
+
+---
+
+## 43. Product Completion Plan — the live checklist
+
+This section replaces the former `ROADMAP.md` and `PROJECT_BACKLOG.json`. It is
+the execution view over §§1–42 and is the only list from which product work is
+selected. Git history and changesets explain what happened; this section says
+what is true now and what remains.
+
+### 43.1 Control block
+
+| Field | Value |
+|---|---|
+| Last reconciled | 2026-08-10 |
+| Evidence snapshot | `main` at `bb16555` (translation admin merged); C0 completion changeset `product-completion-plan.md` |
+| Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
+| Creator and original author | Tony Aly |
+| Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
+| Current focus | C1.01 roles and per-module grants; no public-launch work is required |
+| Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
+
+**Scope of DONE.** DONE includes every affirmative capability specified in
+§§1–42, including work previously labelled v1.1, v1.5, v2, a first-party
+plugin, or a later provider. Those labels express dependency order, not an
+excuse to leave the product incomplete. DONE excludes only the explicit
+anti-roadmap/refusal items: multi-tenancy, payroll, full bookkeeping and tax
+filing, multi-level referrals, warehouse/WMS depth, a general mail client,
+core voice/video implementations, third-party surveillance as core, and
+page-builder lock-in formats. Where the spec assigns something to a plugin,
+DONE requires the plugin and its integration seam, not that capability in
+core.
+
+**What is not a completion criterion.** A public launch, marketing site,
+stars, downloads, design partners, revenue, and a release announcement are not
+part of this plan. A versioned updater remains in scope because safe updating
+is a product capability (§39), not because the project must be marketed.
+
+**Status rules.** `[x]` means verified in code and tests at the evidence
+snapshot. `[ ]` means incomplete, including partially implemented work. An
+item may be checked only in the same change that supplies its evidence. Never
+use prose such as “mostly done” as a substitute for decomposing an item.
+
+### 43.2 Definition of done for every feature
+
+Every feature checkbox below inherits this checklist. If a line does not
+apply, the implementing change must say why.
+
+- [ ] **F01 — Model:** normalized schema, forward migration, constraints, and
+  indexes cover every documented query and invariant.
+- [ ] **F02 — Service:** typed input and output schemas, permission checks,
+  transaction boundaries, stable errors, and idempotency where retries occur.
+- [ ] **F03 — Spine:** contact resolution, merge repointing, audit entries,
+  timeline events, outbox events, and money convergence are wired wherever the
+  domain touches them.
+- [ ] **F04 — Human surface:** complete owner/staff/customer UI for the
+  capability, including empty, loading, error, disabled, destructive, and
+  recovery states.
+- [ ] **F05 — Agent surface:** HTTP API, OpenAPI, SDK, MCP, webhooks, and
+  agent approvals expose the same capability and permissions as the UI.
+- [ ] **F06 — International/accessibility:** all strings translated, locale,
+  timezone, currency and address rules respected, keyboard and screen-reader
+  paths complete, WCAG AA in light and dark, reduced motion supported.
+- [ ] **F07 — Safety:** threat model, rate limits, consent/privacy handling,
+  credential redaction, destructive confirmation, reversibility, concurrency,
+  and failure recovery are covered.
+- [ ] **F08 — Tests:** unit, service, database, permission, browser E2E,
+  accessibility, and relevant cross-module tests prove the happy path and
+  failure modes.
+- [ ] **F09 — Operations:** jobs are observable and retryable; data participates
+  in backup, restore, export, retention, erasure, and doctor checks.
+- [ ] **F10 — Experience:** setup, seed/demo data, contextual help, sensible
+  defaults, and reset-to-default make the capability understandable without
+  repository knowledge.
+- [ ] **F11 — Documentation:** this document, generated contract docs,
+  operator docs, migration notes, and a changeset agree with the code.
+- [ ] **F12 — Integration:** at least one end-to-end business journey proves
+  the feature composes with the rest of Freeholder rather than forming a silo.
+
+F01–F12 are templates, not twelve permanently open global tasks. The final
+completion gate in §43.16 reruns them across the entire product.
+
+### 43.3 Verified baseline
+
+These are the capabilities already proved by repository inspection and the
+green test/build suite. Later checklist items name the remaining depth.
+
+- [x] **B01 — Architectural spine:** single-tenant modular monolith, registry,
+  transactional service composition, permissions, audits, timeline, contact
+  resolution/merge, event bus, and transactional outbox.
+- [x] **B02 — Base operations:** configuration, environment validation,
+  migrations, pg-boss jobs, health, doctor, rate limiting, security headers,
+  changelog/schema/merge/license gates, and signed container provenance.
+- [x] **B03 — Identity baseline:** owner setup, password/session login,
+  password change/reset, CLI recovery, contacts CRUD, merge UI, API keys.
+- [x] **B04 — International baseline:** string catalogs, locale routing,
+  entity translations, hreflang, localized sitemaps, business locale/currency/
+  timezone, locations/NAP/hours/service areas.
+- [x] **B05 — Design and media baseline:** Bench semantic tokens in light and
+  dark, storage adapters, image upload, responsive AVIF/WebP variants, alt text,
+  media library, and deletion.
+- [x] **B06 — CMS baseline:** typed block trees, registry-derived field forms,
+  pages, sections/chrome, catch-all SSR public route, autosave revisions,
+  restore, responsive canvas, click selection, inline text editing, nested
+  visual drag, SEO metadata, redirects, robots, sitemaps and `llms.txt`.
+- [x] **B07 — Acquisition baseline:** form definitions, admin form builder,
+  public form block, spam traps/quarantine, contact resolution, notification
+  mail, first-party pageviews/conversions, contact attribution, traffic UI.
+- [x] **B08 — Platform contract baseline:** registry-derived HTTP RPC API,
+  API-key scopes, OpenAPI inputs, outbound signed webhooks, registry-derived
+  MCP tools, and enabled-module filtering.
+- [x] **B09 — Agent baseline:** agent connections/workers/tasks/runs/steps/
+  approvals/spend schema and services; inbound claim leases, step reporting,
+  completion, budgets, scopes, untrusted-input markers, and audit identity.
+- [x] **B10 — Connection baseline:** encrypted credential storage, rotation
+  primitive, connected-account and capability model, and doctor validation.
+- [x] **B11 — Deployment baseline:** production container, GHCR publishing,
+  DigitalOcean Droplet/Caddy/Postgres/S3-compatible recipe, backup script, and
+  live health verification.
+- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 762
+  tests pass at the evidence snapshot.
+
+### 43.4 Dependency order
+
+Work proceeds in this order unless this section is changed first:
+
+`C0 truth → C1 core safety → C2 editor → C3 living contract/ecosystem → C4
+agents/connections → C5 money → C6 scheduling/services → C7 CRM/comms → C8
+content/portal → C9 growth/revenue depth → C10 ownership/update/mobile → C11
+perfection proof`
+
+Finishing a later workstream is allowed when it does not create a second path
+or cement a missing upstream contract. The active workstream remains the first
+one with unchecked dependency items.
+
+### 43.5 C0 — Truth, stewardship, and planning integrity
+
+- [x] **C0.01** Consolidate product specification, current state, dependency
+  order, and remaining work into this document.
+- [x] **C0.02** Retire the root roadmap and JSON session backlog; remove every
+  instruction that treats either as live planning.
+- [x] **C0.03** Record Tony Aly as owner of the original Freeholder copyright
+  across core and MIT package notices.
+- [x] **C0.04** Credit Tony Aly (`tony@paradisemodern.com`, `tonyaly.com`) as
+  Freeholder's creator and original author in project and package metadata.
+- [x] **C0.05** Describe the `CampDenman` GitHub organization only as the
+  repository host, never as Freeholder's author, owner, or rights holder.
+- [x] **C0.06** Merge the translation-admin branch to `main` and reconcile its
+  checked status here. *(PR #57, `bb16555`, 2026-08-10.)*
+- [x] **C0.07** Require CI and DCO on protected `main`, including administrators,
+  and prevent force pushes/deletion. *(Verified through the GitHub protection
+  API on 2026-08-10: strict `checks` + `DCO`, admin enforcement on.)*
+- [x] **C0.08** Add a plan-consistency gate that rejects references to retired
+  planning files and validates unique checklist IDs. *(`scripts/plan-gate.mjs`,
+  six gate tests, and the `product-completion-plan.md` changeset.)*
+- [x] **C0.09** Reconcile `README.md`, setup text, package descriptions, and
+  deployment docs whenever a target capability becomes true; target language
+  must never masquerade as current availability.
+
+**C0 exit:** there is exactly one live plan, ownership is legally documented,
+and every contributor or agent can identify the next valid work item without
+reading chat logs.
+
+### 43.6 C1 — Core safety, collaboration, and operational completeness
+
+#### Identity, roles, contacts, and privacy
+
+- [ ] **C1.01** Replace coarse roles with named roles and per-module grants;
+  seed owner, administrator, editor, bookkeeper, service-provider, and customer
+  defaults without hard-coding their permissions.
+- [ ] **C1.02** Build staff invitations, acceptance, expiry/revocation,
+  resend, role assignment, and invitation audit history.
+- [ ] **C1.03** Add TOTP/WebAuthn-capable 2FA, recovery codes, mandatory 2FA
+  policy for privileged roles, and step-up authentication for critical work.
+- [ ] **C1.04** Add owner-visible session/device management, revoke-one,
+  revoke-all, suspicious-login notices, and secure session metadata retention.
+- [ ] **C1.05** Add customer magic links and portal account linking without
+  creating a second contact identity.
+- [ ] **C1.06** Complete organizations, contact tags, owner-defined custom
+  fields, relationships, preferred locale/timezone/country, and lifecycle data.
+- [ ] **C1.07** Build duplicate candidate detection/queue, explainable scores,
+  dismiss/merge workflow, and merge undo where no destructive conflict exists.
+- [ ] **C1.08** Build consent records, preference centre, data-access/export/
+  correction/erasure workflows, legal-retention exceptions, and audit artifacts.
+
+#### Jobs, events, files, mail, and notifications
+
+- [ ] **C1.09** Enqueue jobs inside the caller transaction; add idempotency
+  keys, retry/backoff policy, concurrency limits, cancellation, and leases.
+- [ ] **C1.10** Build owner job history, run detail, retry/cancel controls,
+  dead-letter queue, stuck-job detection, and briefing contribution.
+- [ ] **C1.11** Add dead-letter handling for unconsumed or permanently failing
+  outbox events and prove replay cannot duplicate side effects.
+- [ ] **C1.12** Complete media support for video, audio and documents,
+  resumable/presigned direct uploads, validation, malware scanning seam,
+  metadata/provenance, focal points, lifecycle and orphan cleanup.
+- [ ] **C1.13** Add generated image alt-text suggestions with explicit human
+  review and never silently overwrite authored alt text.
+- [ ] **C1.14** Complete Gmail and Microsoft transactional OAuth adapters,
+  bulk-mail adapters, sender verification, bounce/complaint state, and test-send.
+- [ ] **C1.15** Build the notification fanout model and inbox: in-app, email,
+  SMS/push adapters, preferences, digesting, deduplication and escalation.
+
+#### International, analytics, security, and quality
+
+- [ ] **C1.16** Finish translated site chrome and all customer-facing locale
+  selection; make contact locale drive portal, templates and notifications.
+- [ ] **C1.17** Complete and continuously verify English, French and Spanish
+  catalogs; add pseudo-locale, RTL layout tests and locale-specific fixtures.
+- [ ] **C1.18** Add analytics consent policy, configurable retention/pruning,
+  bot correction, Core Web Vitals, campaign attribution and anonymized export.
+- [ ] **C1.19** Add a Content Security Policy compatible with editor preview,
+  uploads and explicitly consented third-party creatives; report violations.
+- [ ] **C1.20** Patch all actionable dependency advisories and keep a zero
+  known-high/critical policy with documented exceptions for lower severities.
+- [ ] **C1.21** Replace simulated public accessibility checks with real-browser
+  keyboard, focus, reflow, contrast, reduced-motion and screen-reader-oriented
+  tests for setup, admin, editor, storefront and portal.
+- [ ] **C1.22** Add Playwright-style browser journeys for setup, auth, editing,
+  publishing, forms, contacts, translations, API keys, MCP and recovery.
+- [ ] **C1.23** Add database backup/restore drills, complete export, media
+  manifest, configuration/credential-key handling, retention and erasure proof.
+- [ ] **C1.24** Make a fresh development/demo install serve a complete seeded
+  home at `/`, with no route depending on manually repaired database content.
+
+**C1 exit:** several humans can safely administer one business; the foundation
+is recoverable, accessible, international, observable and ready to carry money.
+
+### 43.7 C2 — Universal editor and CMS perfection
+
+#### Safe content lifecycle and collaboration
+
+- [ ] **C2.01** Separate working drafts from published revisions for every
+  public entity; autosave must never mutate the live version.
+- [ ] **C2.02** Add preview links, scheduled publish/unpublish, approval state,
+  compare/diff, named revisions, restore-as-draft and complete author history.
+- [ ] **C2.03** Add optimistic concurrency/version tokens, presence, edit
+  leases, conflict detection and an explicit merge/reload workflow.
+- [ ] **C2.04** Add comments, mentions, review requests and resolved threads
+  attached to blocks/revisions without contaminating published content.
+- [ ] **C2.05** Specify and implement constrained typed rich-text inline nodes
+  for emphasis, links, code and lists—never stored HTML soup.
+- [ ] **C2.06** Add slash-command insertion, keyboard block movement, undo/
+  redo, duplicate/copy/paste, multi-select and reliable nested drag semantics.
+
+#### Complete block and design vocabulary
+
+- [ ] **C2.07** Finish foundational blocks: rich text, heading, image, video,
+  button, columns/container, divider/spacer and admin-only custom HTML.
+- [ ] **C2.08** Finish trust/content blocks: FAQ with schema, testimonial/
+  review, gallery, map/location, social embed, share and knowledge-base blocks.
+- [ ] **C2.09** Finish conversion blocks: live product/service card, booking,
+  form, quote request, newsletter signup, tip/support and site-chat assistant.
+- [ ] **C2.10** Finish controlled-access/revenue blocks: paywall gate and ad
+  slot with server-side content exclusion and layout-shift-safe sizing.
+- [ ] **C2.11** Make headers, footers, navigation, announcement bars and menus
+  first-class synced Sections with accessible responsive behavior.
+- [ ] **C2.12** Support save-as-Section, synced instances, detach-to-copy,
+  dependency-aware deletion, and searchable palettes.
+- [ ] **C2.13** Build page/post/product/service/email templates and per-business
+  presets with reset-to-default, create-from-template and preview.
+- [ ] **C2.14** Add per-entity layout overrides and clean detach/rejoin behavior
+  for products, services, posts, locations, events and galleries.
+- [ ] **C2.15** Build visual design controls over semantic tokens: colors,
+  typography, spacing, radius, borders, shadows, responsive layout, logo and
+  motion—preserving light/dark and WCAG invariants.
+- [ ] **C2.16** Support locale-aware content workflow, side-by-side source/
+  translation editing, machine drafts, reviewer state, translated chrome and
+  locale-specific SEO completeness.
+
+#### Experiments, email, SEO, and performance
+
+- [ ] **C2.17** Add variants to blocks, Sections, pages and entity layouts;
+  server-side sticky assignment, traffic allocation and cache variation.
+- [ ] **C2.18** Record experiment impressions/conversions and join outcomes to
+  contacts, bookings, invoices and revenue with statistically honest reporting.
+- [ ] **C2.19** Reuse the block editor for email-safe output with restricted
+  palette, table rendering, variable slots, inbox preview and test-send.
+- [ ] **C2.20** Enforce one H1, heading order, semantic landmarks, required alt
+  decisions, link meaning, responsive images and per-page accessibility hints.
+- [ ] **C2.21** Generate OG images, IndexNow notifications and product/location/
+  event/newsletter feeds from the same public entity registry.
+- [ ] **C2.22** Add draft/published cache invalidation, image and page budgets,
+  zero client-side layout swap, and performance regression tests.
+- [ ] **C2.23** Prove a plugin can register a schema, renderer, editor fields,
+  migration, sitemap source and seed block with zero core-editor changes.
+
+**C2 exit:** every public or message-facing surface is safely editable by a
+human, collaboratively, without code, lock-in markup or accidental publication.
+
+### 43.8 C3 — Living contract, plugins, packages, and portable operation
+
+#### One generated platform contract
+
+- [ ] **C3.01** Add required output schemas to every service and validate
+  handler responses against them in tests and development.
+- [ ] **C3.02** Generate complete OpenAPI request, success, error, auth and
+  webhook schemas with stable operation IDs and version metadata.
+- [ ] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
+  service registry; remove every package scaffold/no-op build.
+- [ ] **C3.04** Make MCP discovery actor-aware—including actor kind, service
+  opt-out and approval annotations—so listed tools are genuinely callable.
+- [ ] **C3.05** Complete MCP resources/prompts and supported transport/session
+  behavior where they improve discovery without creating a second registry.
+- [ ] **C3.06** Generate human reference docs and `llms.txt` contract sections
+  from the same schemas; add a drift/completeness gate over all projections.
+- [ ] **C3.07** Add webhook subscriptions, delivery inspection/replay, schema
+  versioning, endpoint rotation and explicit sensitive-field redaction.
+
+#### Plugin system and registries
+
+- [ ] **C3.08** Finalize plugin manifest/version/capability contracts, module
+  dependencies, permissions, configuration, migrations and compatibility.
+- [ ] **C3.09** Implement install, enable, disable, update and uninstall with
+  signature/integrity verification, rollback, data-retention choice and doctor.
+- [ ] **C3.10** Enforce plugin boundaries and failure isolation so a bad plugin
+  is named and disabled rather than taking down the instance.
+- [ ] **C3.11** Build local/community/verified/private registries, signed
+  metadata, federation, caching and declarative instance configuration.
+- [ ] **C3.12** Ship plugin scaffolding, dev harness, fixture instance, contract
+  tests and examples for a block, service, adapter, automation verb and route.
+- [ ] **C3.13** Ship first-party plugins for gift options/registries, print-on-
+  demand, advanced communities, voice and video artifacts, and marketplace
+  channel sync seams, as assigned by §§4.14 and 36.
+
+#### Packages, installation, export, and target parity
+
+- [ ] **C3.14** Implement `create-freeholder` with explicit environment checks,
+  target selection, migration, setup URL, demo choice and actionable recovery.
+- [ ] **C3.15** Turn `@freeholder/templates` into tested business presets using
+  Bench tokens, seeded content and full-page/entity/email templates.
+- [ ] **C3.16** Provide working recipes for Replit, DigitalOcean App Platform,
+  DigitalOcean Droplet, Railway, Render and bare Docker Compose with Postgres
+  and S3-compatible storage.
+- [ ] **C3.17** Give every Tier-1 recipe install, verify, backup, restore,
+  migrate-in, migrate-out, update and rollback steps; continuously test matrix.
+- [ ] **C3.18** Build one-command full export of normalized data, media manifest,
+  human-readable archive, configuration and checksums without exporting secrets.
+- [ ] **C3.19** Prove round-trip migration between every Tier-1 pair while
+  preserving IDs, money, timestamps, media, locales and public URLs.
+- [ ] **C3.20** Add semantic platform/plugin/API versions, compatibility
+  reporting and a truthful instance version in health, admin, CLI and contract.
+
+**C3 exit:** every capability has one machine-checked contract; extensions and
+deployments are portable, testable and incapable of silently forking the truth.
+
+### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
+
+#### Workforce completion
+
+- [ ] **C4.01** Build the work board, task tree/dependency view, assignment,
+  filters, due/priority controls and needs-attention workflow.
+- [ ] **C4.02** Build live run streaming, redacted step inspection, retry,
+  cancellation and a stop control that revokes/ends active work.
+- [ ] **C4.03** Enforce suggest/approve/autonomous behavior for every managed
+  write, with previews for block diffs, messages, money and destructive actions.
+- [ ] **C4.04** Build approval inbox, expiry, rejection notes, step-up auth,
+  execution of approved input exactly once and immutable decision audit.
+- [ ] **C4.05** Implement the managed-agent adapter family, provider/model
+  selection, tool loop, time/step limits, retries and provider-independent use.
+- [ ] **C4.06** Enforce per-run/task/agent/period budgets before every step;
+  build spend ledger, estimates, alerts and owner-readable reporting.
+- [ ] **C4.07** Add per-agent pause and global kill switch that prevent new
+  claims and safely stop or expire current leases.
+- [ ] **C4.08** Complete playbooks with parameter schemas, manual/event/schedule
+  triggers, versioned prompts, permissions and import/export as data.
+- [ ] **C4.09** Harden untrusted-input envelopes, indirect prompt-injection
+  tests, secret/output redaction, URL/network policies and exfiltration limits.
+
+#### Connected accounts and recurring work
+
+- [ ] **C4.10** Complete credential-key rotation, backup/recovery documentation,
+  per-agent/per-connection grants, revocation and reconnect notifications.
+- [ ] **C4.11** Implement Google and Microsoft OAuth with incremental calendar
+  scopes and several accounts per provider/person.
+- [ ] **C4.12** Sync external calendars with tokens, busy-only default,
+  optional details, health/errors and privacy-preserving storage.
+- [ ] **C4.13** Build unified calendar display and connect busy unions to the
+  availability engine without leaking private event details.
+- [ ] **C4.14** Implement runtime playbook scheduling with timezone/DST,
+  `next_run_at`, catch-up policy, overlap refusal and outage-safe advancement.
+- [ ] **C4.15** Build briefing entities, contributor registry, preassembly,
+  needs-me-first ordering, read state and per-section preferences.
+- [ ] **C4.16** Add core briefing contributors for appointments, enquiries,
+  overdue invoices, agent failures, webhook failures, reconnects and updates.
+- [ ] **C4.17** Add playbook/module contributions plus email, SMS and push
+  delivery through notification preferences.
+- [ ] **C4.18** Add Gmail/Microsoft mail read and contact import as untrusted
+  data through `contacts.resolve`, timeline and duplicate workflow.
+
+#### Owner-facing self-builder
+
+- [ ] **C4.19** Implement the content lane: owner brief → scoped proposal →
+  block/content diff → preview → approval → atomic apply → one-click rollback.
+- [ ] **C4.20** Implement the code lane: isolated worktree, budget/permission
+  envelope, gates, preview environment, owner-readable diff and pull request.
+- [ ] **C4.21** Keep `builder.*` separately granted from workforce scopes and
+  prove content/customer input can never instruct either builder lane.
+- [ ] **C4.22** Expose the builder safely through admin, API and MCP and emit
+  complete source/audit provenance including `/source` AGPL compliance.
+- [ ] **C4.23** Add a federated catalogue for shareable agent/playbook
+  definitions with declared scopes, compatibility, provenance, preview and
+  owner approval before installation; definitions remain data, never bundled
+  credentials or ambient authority.
+
+**C4 exit:** owners can delegate recurring work and product changes while
+permissions, budgets, untrusted input, approvals and rollback remain enforceable.
+
+### 43.10 C5 — Complete money, catalog, inventory, and commerce path
+
+#### Money and tax foundations
+
+- [ ] **C5.01** Land `none` plus real adapter contracts for payments, tax,
+  calendar, SMS, bulk mail, AI, social, shipping/carrier and point-of-sale edges.
+- [ ] **C5.02** Implement tax zones and most-specific matching, categories,
+  registrations/thresholds, compound/sequential rates and inclusive/exclusive
+  presentation.
+- [ ] **C5.03** Implement exemptions, reverse charge, shipping tax, rounding,
+  immutable `TaxLine` snapshots and owner-visible calculation explanations.
+- [ ] **C5.04** Ship and verify Canada, EU, UK, US, Australia and New Zealand
+  tax templates, while allowing explicit owner-defined zones elsewhere.
+- [ ] **C5.05** Implement invoice/line/payment/refund/credit-note state machines,
+  integer-money invariants, numbering, receipts, reconciliation and audit.
+- [ ] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
+  signed/idempotent webhooks, saved methods, disputes and refunds.
+- [ ] **C5.07** Implement Square, Mollie, Razorpay and Paystack/Flutterwave
+  adapters behind the identical contract and contract test suite.
+- [ ] **C5.08** Support deposits, balances, payment plans, tips, pay-what-you-
+  want, late fees, partial/multi-payment invoices and provider payout tracking.
+
+#### Catalog and pricing
+
+- [ ] **C5.09** Build product lifecycle for physical, digital, service,
+  rental, bundle and pass kinds with draft/active/archive and visibility states.
+- [ ] **C5.10** Build option types/values, reusable dimensions, generated
+  variant matrices, SKU fragments, defaults and safe matrix reconciliation.
+- [ ] **C5.11** Build attributes/filtering/comparison, unlimited ordered media,
+  role/variant swaps, video, documents and 3D/AR assets.
+- [ ] **C5.12** Build product relations, bundle components, upsell/cross-sell/
+  accessory/replacement semantics and deterministic bundle price/stock rules.
+- [ ] **C5.13** Build price lists, entries, audiences, customer groups,
+  contracts, sale windows and explicit per-currency availability.
+- [ ] **C5.14** Implement tiered and volume price breaks plus one deterministic,
+  explainable resolver with exhaustive arithmetic/property tests.
+- [ ] **C5.15** Complete service offerings, deposits, policies, forms, waivers,
+  calendars, capacity and price-rule configuration over the shared catalog.
+
+#### Inventory, shipping, checkout, and orders
+
+- [ ] **C5.16** Implement append-only stock movements, multi-location balances,
+  reservations/expiry, counts, adjustments, transfers, damage and audit.
+- [ ] **C5.17** Implement safety/reorder levels, incoming stock, backorders,
+  back-in-stock subscriptions, suppliers, purchase orders and receiving.
+- [ ] **C5.18** Implement shipping zones, deterministic rate engine, packaging,
+  dimensional weight, carrier seam, pickup and local-delivery windows.
+- [ ] **C5.19** Implement shipments, split fulfillment, tracking, digital
+  delivery, returns/RMA, restock/refund convergence and customer notices.
+- [ ] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
+  cross-device restore, price/stock refresh and abandonment events.
+- [ ] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
+  consent, payment, idempotency, failure recovery and accessible confirmation.
+- [ ] **C5.22** Build order lifecycle, mixed physical/digital/service lines,
+  fulfillment state, owner/customer views and complete timeline events.
+- [ ] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
+  post-add offers and abandoned-cart recovery without parallel money paths.
+- [ ] **C5.24** Add in-person payment through capable adapters, including
+  Stripe Terminal/tap-to-pay representation, receipts and reconciliation.
+
+**C5 exit:** every form of value converges through one explainable invoice,
+payment, tax, inventory and reporting path, with no floating-point money.
+
+### 43.11 C6 — Scheduling, bookings, services, quotes, and work delivery
+
+#### Scheduling engine
+
+- [ ] **C6.01** Build calendars for business, users and resources with timezone,
+  capacity, ownership and sharing semantics.
+- [ ] **C6.02** Build normalized availability rules, opening hours, exceptions,
+  buffers, lead time, horizon and recurrence.
+- [ ] **C6.03** Implement the availability resolver for compound resources,
+  assignment pools/round-robin, capacity, travel time and daily/period caps.
+- [ ] **C6.04** Enforce no-overlap/exclusion constraints in Postgres and prove
+  concurrent attempts cannot double-book.
+- [ ] **C6.05** Add booking audiences—public, token, tags and sign-in—with
+  separate hours, services, calendars, notice, horizon and buffers.
+- [ ] **C6.06** Publish/import ICS and implement Google/Microsoft booking write,
+  cancellation and read-busy reconciliation without general event sync.
+
+#### Bookings, rentals, and events
+
+- [ ] **C6.07** Build booking create/hold/confirm/complete/cancel/no-show state,
+  contact resolution, capacity, deposits and invoice convergence.
+- [ ] **C6.08** Add group bookings, waitlists/promotion, reschedule tokens,
+  policy/deadline enforcement and cancellation/refund outcomes.
+- [ ] **C6.09** Add intake forms, e-sign waivers/documents, reminders over
+  consented channels and completion preconditions.
+- [ ] **C6.10** Build rentals as resources plus catalog/inventory, availability,
+  pickup/return, deposits, late/damage state and order/payment convergence.
+- [ ] **C6.11** Build events/classes with venue, sessions, seat inventory,
+  tickets/passes, waitlists, schema.org Event, ICS and check-in.
+
+#### Quotes, contracts, projects, and time
+
+- [ ] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
+  reject state with versioned line items, public tokens and owner alerts.
+- [ ] **C6.13** Convert accepted quotes atomically into contracts, projects,
+  bookings and invoices as configured, without copied customer identities.
+- [ ] **C6.14** Build contract/waiver templates, variables, click/e-sign,
+  signer identity, immutable evidence, countersignature and document export.
+- [ ] **C6.15** Build project/work records linking contacts, services, quotes,
+  contracts, bookings, tasks, files, outcomes and invoices.
+- [ ] **C6.16** Build time entries against projects/bookings, rate resolution,
+  billable review and one-step conversion to invoice lines.
+- [ ] **C6.17** Build manual invoicing, recurring/payment-plan schedules,
+  overdue state, reminders, receipts and accounting-ready audit.
+
+**C6 exit:** the same availability and money engines can sell time, spaces,
+equipment, classes and expertise without double-booking or duplicated records.
+
+### 43.12 C7 — Working CRM, messaging, inbox, and human operations
+
+#### CRM as the daily work surface
+
+- [ ] **C7.01** Build configurable lifecycle and deal pipelines, stages,
+  kanban/list views, ownership, probability, loss reasons and transition events.
+- [ ] **C7.02** Build tasks attachable to any entity, assignment, due/reminder,
+  priority, recurrence, completion and briefing/notification integration.
+- [ ] **C7.03** Build notes with mentions, pinning, visibility, edit history and
+  entity/contact timeline projection.
+- [ ] **C7.04** Build the canonical segment query model, static/dynamic modes,
+  preview/count, explainability and reuse by pricing, campaigns, automation and
+  reporting.
+- [ ] **C7.05** Build transparent scoring rules with decay, reason display,
+  stage actions and no black-box scoring path.
+- [ ] **C7.06** Build saved views with filters/columns/sort, ownership/sharing
+  and durable URL/state semantics across major admin entities.
+- [ ] **C7.07** Build CSV import as map → validate → dry-run diff → commit →
+  audit → reversible batch, always using contact resolution.
+
+#### Conversations and messaging
+
+- [ ] **C7.08** Build canonical conversations/messages/deliveries threaded by
+  contact across form, email, SMS/MMS, chat, assistant and social sources.
+- [ ] **C7.09** Build assign/snooze/close/unread/search/filter/bulk workflows,
+  reply context and one unified inbox without reimplementing a mail client.
+- [ ] **C7.10** Build SMS adapter contract and at least one production adapter,
+  number provisioning/health and country/capability metadata.
+- [ ] **C7.11** Track 10DLC/toll-free/alphanumeric registration states and
+  prevent unsupported/unapproved sending with actionable setup guidance.
+- [ ] **C7.12** Enforce per-purpose/channel consent, STOP/START/HELP before all
+  other processing, localized keywords and global opt-out propagation.
+- [ ] **C7.13** Enforce recipient-timezone quiet hours, frequency caps and
+  explicit transactional exceptions in the service layer.
+- [ ] **C7.14** Add templates/locale variables, two-way keywords, booking
+  actions, MMS via media, delivery receipts, invalid-number state and cost.
+- [ ] **C7.15** Add site live chat, assistant escalation and WhatsApp/Messenger
+  deep links while preserving contact threads and consent boundaries.
+
+**C7 exit:** Freeholder tells the owner what work is owed and carries every
+permitted conversation on the same contact timeline.
+
+### 43.13 C8 — Content proof, galleries, portal, reviews, and knowledge
+
+- [ ] **C8.01** Build projects/case studies with services, outcomes, metrics,
+  before/after pairs, contact-backed testimonials and reciprocal public links.
+- [ ] **C8.02** Build public portfolios and collections using CMS templates,
+  filters, sharing, structured data, sitemaps and accessible media.
+- [ ] **C8.03** Build private client galleries with PIN/magic-link/login access,
+  scoped guests, expiry, per-asset permissions and access audit.
+- [ ] **C8.04** Add proofing, favorites/selects, comments, approval rounds,
+  watermarking, download policies, archive/package delivery and notifications.
+- [ ] **C8.05** Add print/digital gallery sales through catalog/cart/orders and
+  preserve asset/product/selection provenance.
+- [ ] **C8.06** Build review requests after purchases/bookings, moderation,
+  replies, photo/video media, incentives, review-wall blocks and
+  `AggregateRating` rules that never misrepresent hidden reviews.
+- [ ] **C8.07** Build the customer portal shell with magic-link/password auth,
+  profile, locale, consent/preferences, sessions and accessible navigation.
+- [ ] **C8.08** Add portal quotes/contracts/invoices/payments, bookings/events/
+  rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
+  referrals and messages using the same services as admin.
+- [ ] **C8.09** Build a CMS-backed help centre/knowledge base with categories,
+  search, locale variants, feedback, SEO and owner editing.
+- [ ] **C8.10** Build documents/files shared to contacts/projects/portal with
+  versioning, access rules, expiry, download audit and export.
+
+**C8 exit:** the business can prove, deliver and support its work while each
+customer has one secure, comprehensible home for the relationship.
+
+### 43.14 C9 — Automations, audience growth, recurring access, and media reach
+
+#### Automation, email, and reporting
+
+- [ ] **C9.01** Build visual trigger → condition → action automations over the
+  event registry, with module/plugin verbs, drafts, validation and versioning.
+- [ ] **C9.02** Add delays, schedules, branches, loops with hard bounds,
+  idempotency, per-contact state, retries, pause/kill and run inspection.
+- [ ] **C9.03** Enforce consent, quiet hours, budgets, approval requirements and
+  untrusted-input rules for every automated action.
+- [ ] **C9.04** Build newsletters, double-opt-in subscriptions, RFC 8058 one-
+  click unsubscribe, public issue archive and per-newsletter preference state.
+- [ ] **C9.05** Build shared block-based templates for transactional, campaign,
+  newsletter, automation and SMS uses with locale variants and locked variables.
+- [ ] **C9.06** Build broadcasts/segments, test sends, scheduling, provider
+  batches, suppression, bounce/complaint handling and honest local analytics.
+- [ ] **C9.07** Complete the funnel from visit → lead → quote/booking/cart →
+  invoice → paid/refunded and make attribution/query definitions inspectable.
+- [ ] **C9.08** Build reporting saved views, revenue/service/product/location/
+  cohort/funnel reports, scheduled exports and CSV/QuickBooks/Xero shapes.
+
+#### Referral, loyalty, subscriptions, and paywalls
+
+- [ ] **C9.09** Build first-party attribution touches, codes, invitations,
+  configurable first/last/position models, cookie windows and manual/QR entry.
+- [ ] **C9.10** Build commission events, holdbacks, refund reversal, payout
+  batches/CSV, tax-form status, portal earnings and one-hop enforcement.
+- [ ] **C9.11** Build loyalty programs, accounts and append-only points ledger,
+  earn listeners/caps, reversal, expiry notices and explainable balances.
+- [ ] **C9.12** Build tiers/evaluation, rewards/redemption through normal money,
+  referral dual rewards, fraud controls and outstanding-liability reporting.
+- [ ] **C9.13** Build plans, subscription lifecycle and events, provider/
+  platform/manual billing, trials, proration, pause/cancel and portal self-service.
+- [ ] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
+  one-time unlocks, loyalty tiers and manually granted access.
+- [ ] **C9.15** Build hard/soft/metered/registration paywalls, server-side
+  exclusion, anonymous/contact counters, teasers, upsell and accurate SEO markup.
+- [ ] **C9.16** Build dunning retries, grace periods, consented notices, final
+  policy actions and access continuity/expiry guarantees.
+
+#### Advertising, assistant, social, and sharing
+
+- [ ] **C9.17** Build ad sizes/slots, breakpoint reservations, advertisers,
+  campaigns, line items, targeting/dayparting/frequency caps and approvals.
+- [ ] **C9.18** Build house/sold creatives, money-path invoices, labelled
+  sponsored markup, signed click redirect and house fill.
+- [ ] **C9.19** Build first-party impression/viewability/unique/click events,
+  MRC timing, daily rollups, pacing, advertiser reports and reconciliation.
+- [ ] **C9.20** Support consent-gated third-party tags off by default and
+  generate accurate `ads.txt`/`app-ads.txt`.
+- [ ] **C9.21** Build the optional front-site assistant with AI adapters,
+  provider/model/key settings, hard scopes, spend/rate limits and off fallback.
+- [ ] **C9.22** Ground the assistant from published content/catalog/hours/
+  policies plus locale-aware `KnowledgeEntry` rows in pgvector/Postgres.
+- [ ] **C9.23** Prevent invented price/availability, enforce refusals and
+  escalation, attach consented transcripts to contacts, surface knowledge gaps
+  and prove prompt-injection resistance.
+- [ ] **C9.24** Build social OAuth/adapters for Instagram, Facebook, TikTok,
+  YouTube, LinkedIn, X, Pinterest and Google Business Profile with token health.
+- [ ] **C9.25** Ingest owned posts/media/provenance/comments/mentions, resolve
+  identifiable contacts conservatively and route social threads to inbox.
+- [ ] **C9.26** Build multi-platform composer, crops/captions/hashtags, ffmpeg
+  media preparation, human-reviewed auto-clipping, per-platform variants,
+  calendar and scheduled publishing.
+- [ ] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
+  outbound social links to visits, contacts and revenue.
+- [ ] **C9.28** Build universal `ShareTarget`, native/channel intents, generated
+  OG assets, tracked short links and entity-level controls.
+- [ ] **C9.29** Build scoped gallery/quote/product gift-registry sharing and
+  embeds for galleries, reviews, bookings and newsletter forms with backlinks.
+- [ ] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,
+  targeting, consent-aware capture and accessibility-safe dismissal.
+
+**C9 exit:** audience, access, attribution and recurring revenue compound on
+the spine without surveillance, shadow ledgers or channel-specific silos.
+
+### 43.15 C10 — Ownership durability, self-update, and mobile applications
+
+#### Safe update system
+
+- [ ] **C10.01** Enforce customization seams—database, plugins, configuration,
+  uploads—and detect unsupported live core-file modifications.
+- [ ] **C10.02** Implement semantic stable/security/edge channels and
+  machine-readable compatibility, schema-risk, CVSS and manual-step metadata.
+- [ ] **C10.03** Publish signed `releases.json`, image digest/signature and
+  provenance; embed and rotate a trusted release public key.
+- [ ] **C10.04** Build private daily update checks with jitter, no instance ID
+  or telemetry, explicit setup policy and an off path.
+- [ ] **C10.05** Build preflight: signatures, plugin compatibility, shadow-DB
+  migration, drift, disk/Postgres/extensions/adapters and downtime estimate.
+- [ ] **C10.06** Build snapshot → verify/pull → migrate → health/smoke → cutover
+  → release-note flow with drain, grace period and automatic rollback.
+- [ ] **C10.07** Enforce N-1 schema readability in migrations and prove update
+  plus rollback from the previous released image in CI.
+- [ ] **C10.08** Build update policy/windows in business timezone, security-
+  auto defaults, snapshot retention and feature-update approval.
+- [ ] **C10.09** Build fork-lane upstream merge/worktree/gates/PR, drift and
+  missing-security visibility without overwriting owner code.
+- [ ] **C10.10** Implement and continuously test target-specific update/
+  rollback actions for every Tier-1 recipe.
+- [ ] **C10.11** Build update entities/history and matching admin, CLI, MCP and
+  email/SMS notification surfaces with separate read/apply scopes.
+
+#### Customer and owner mobile apps
+
+- [ ] **C10.12** Create the MIT Expo/React Native package entirely against the
+  generated SDK with instance discovery, auth, branding and offline-safe state.
+- [ ] **C10.13** Build customer home, catalog/services, booking, invoice pay,
+  galleries/proofing, portal messages, newsletters and deep links.
+- [ ] **C10.14** Build push registration/preferences and booking, gallery,
+  invoice and back-in-stock notifications through core notification services.
+- [ ] **C10.15** Implement `freeholder-app init`: pull branding, generate
+  icons/splash/store metadata/screenshots and emit an auditable config diff.
+- [ ] **C10.16** Continuously build iOS/Android against the demo contract and
+  maintain Apple/Google submission, privacy and data-safety checklists.
+- [ ] **C10.17** Build role-gated owner companion mode for today, invoice,
+  inbox, reviews, approvals, agent status and critical notifications.
+
+**C10 exit:** an owner can leave, restore, update, fork and serve customers on
+mobile without surrendering the code, data, deployment or upgrade path.
+
+### 43.16 C11 — Product-perfection and final DONE proof
+
+#### Cross-module journeys
+
+- [ ] **C11.01** Prove site visitor → localized page → form/chat → one contact
+  → inbox/task → quote → contract → invoice → payment → timeline/report.
+- [ ] **C11.02** Prove product browse → variant/price/tax/stock → cart → mixed
+  checkout → payment → split/digital fulfillment → return/refund/reconciliation.
+- [ ] **C11.03** Prove service/event/rental discovery → real availability →
+  booking/waitlist → deposit → reminders/waiver → completion → review/loyalty.
+- [ ] **C11.04** Prove project → private gallery → proof/select → delivery/
+  print order → sharing/referral → attributed conversion.
+- [ ] **C11.05** Prove subscription/pass/retainer → entitlement → server-side
+  access → dunning/renewal → portal change/cancel → correct grant expiry.
+- [ ] **C11.06** Prove prompt → agent proposal → approval → safe service calls
+  → visual review/publish, and separately code proposal → gates → PR/rollback.
+- [ ] **C11.07** Prove connected mail/calendar → contact/busy time → scheduled
+  playbook → untrusted-input-safe draft → briefing → owner decision.
+- [ ] **C11.08** Prove fresh install → productive demo → full export → restore
+  on another Tier-1 target → signed update → failed-update rollback.
+
+#### Whole-product quality
+
+- [ ] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
+  package row and record evidence beside each remaining checkbox.
+- [ ] **C11.10** Complete independent security review of auth, payments,
+  webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
+  resolve every critical/high and disposition every lower finding.
+- [ ] **C11.11** Meet defined performance budgets on seeded small/medium/large
+  datasets, including public Core Web Vitals, admin lists, editor, reporting,
+  queues, search and migrations.
+- [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
+  light/dark, mobile/desktop, English/French/Spanish and representative RTL.
+- [ ] **C11.13** Complete failure drills for database/storage/mail/payment/SMS/
+  OAuth/AI/provider outages, process death, duplicate webhook/job, clock skew,
+  low disk, lost credential key and interrupted update.
+- [ ] **C11.14** Verify every user-owned record participates correctly in
+  search, permissions, audit, export, restore, retention, erasure and contact
+  merge; there are no orphan or shadow stores.
+- [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
+  stale TODO, unimplemented UI action and documentation claim unsupported by a
+  passing acceptance test.
+- [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
+  prove there is no affirmative feature without a completed checklist item.
+- [ ] **C11.17 — DONE** Run the full clean-room install, migration, test,
+  browser, accessibility, security, performance, export/restore, update/
+  rollback and cross-module journey suite with zero unexplained failures; have
+  the product owner sign the completion record in this control block.
+
+### 43.17 Working protocol
+
+1. Select the first unchecked item whose dependencies are complete. If it is
+   too large for one reviewable change, split it here before coding.
+2. In the change description, name the checklist ID and applicable F01–F12
+   criteria. Do not invent a parallel issue-only definition of done.
+3. Update the normative specification in §§1–42 if implementation teaches us
+   something new. Then update this checklist in the same change.
+4. Check an item only after its tests and operational proof pass. Add the
+   merge commit or changeset name in parentheses when checked so status remains
+   auditable without a separate completion log.
+5. A newly discussed affirmative feature must be added to §§1–42 and to the
+   appropriate C-workstream before implementation. Explicit refusals go in the
+   anti-roadmap and do not create unchecked work.
+6. Never optimize this plan for announcing the product. Optimize for an owner
+   trusting it with the whole business and for the next maintainer being able
+   to prove why that trust is warranted.

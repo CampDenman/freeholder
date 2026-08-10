@@ -9,8 +9,8 @@
 //
 // §18 note: the bytes go to the storage adapter, never to instance disk, and
 // this app never becomes the thing holding an owner's archive. Uploads pass
-// *through* the app for now; presigned direct-to-bucket uploads are a later
-// improvement, tracked in the backlog.
+// *through* the app for now; presigned direct-to-bucket uploads are tracked by
+// `MASTER.md` §43 item C1.12.
 import { uploadAsset } from "@/core/media/service";
 import { serviceRoute } from "@/core/http/route";
 

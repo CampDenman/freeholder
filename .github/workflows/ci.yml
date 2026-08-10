@@ -40,6 +40,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Product plan consistency (MASTER.md §43)
+        run: pnpm plan:check
       - name: License headers (LICENSING.md boundary)
         run: pnpm license:check
       # §36 lists dependency audit among the v1.0 security gates. Scoped to

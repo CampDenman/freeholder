@@ -32,9 +32,8 @@ import { listServices, permits, type Actor, type Service } from "@/core/service"
  * business. An agent authenticates with the key it was given; managing
  * credentials is the owner's work, done while signed in.
  *
- * A per-service opt-out on `ServiceDef` would express this better than a list
- * of families, and is the right shape once a third family needs it. Recorded
- * in the backlog rather than built for two.
+ * A per-service opt-out on `ServiceDef` expresses this better than a list of
+ * families; `MASTER.md` §43 item C3.04 tracks that contract.
  */
 const EXCLUDED_FAMILIES = new Set(["auth", "apikeys"]);
 

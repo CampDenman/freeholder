@@ -6,6 +6,8 @@
 
 - [ ] This change is consistent with `MASTER.md` (or this PR updates it in
       the same change).
+- [ ] Product work names its `MASTER.md` §43 checklist ID and includes the
+      evidence required by the applicable F01–F12 criteria.
 
 ## Licensing
 

@@ -69,4 +69,5 @@ reserve intrinsic dimensions so nothing reflows when they land.
 Modules do not yet contribute their own seed data through their manifests
 (§11). When commerce and booking exist, this becomes a registry of
 per-module seeds rather than one file — and the one-click purge from admin
-lands with it.
+lands with it. `MASTER.md` C3.15 and the applicable module work items are the
+authoritative checklist.

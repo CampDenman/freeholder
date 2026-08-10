@@ -10,9 +10,10 @@ the license texts themselves are authoritative.
 | Freeholder core (the platform: server, web app, admin, all modules) | everything in this repository **except** `packages/` | **AGPL-3.0-only** ([`LICENSE`](LICENSE)) |
 | SDKs, client libraries, templates, and integration packages | `packages/*` | **MIT** (a `LICENSE` file in each package) |
 
-Copyright (C) 2026 Tony Aly. The repository is hosted under the
-`CampDenman` organisation on GitHub; that is where the code lives, not a
-separate rights holder.
+Copyright (C) 2026 Tony Aly. Freeholder was created, originally authored, and
+is owned and maintained by Tony Aly ([tonyaly.com](https://tonyaly.com),
+`tony@paradisemodern.com`). The repository is hosted under the `CampDenman`
+GitHub organization; that is where the code lives, not a separate rights holder.
 
 ## Why this split
 
@@ -20,14 +21,12 @@ The core is AGPL so that Freeholder stays open: anyone may self-host, modify,
 and redistribute it, but if you run a modified Freeholder as a network service
 you must offer your users the corresponding source (AGPL section 13).
 
-The copyright is held by one person rather than a foundation, and that is worth
-being straight about. A single holder can relicense; a steward organisation is
-harder to capture and that is most of the reassurance such a structure offers.
-What stands in place of it here is the licence itself: every release is AGPL,
-every release is public, and a fork made today stays free under those terms
-regardless of what the holder does later. That is a floor a change of heart
-cannot lower — it can only affect what comes *after* it, and the code you
-already have keeps its licence forever.
+Tony Aly holds and stewards the original project's copyright and chooses to
+share Freeholder as open-source software. Every AGPL release remains available
+under the terms under which it was received: a fork made today stays free under
+those terms regardless of a later change in stewardship or licensing strategy.
+Contributors retain copyright in their own contributions under the
+DCO/inbound-equals-outbound model described below.
 
 The SDKs and templates are MIT so that creators, businesses, and third-party
 developers can integrate with a Freeholder site — build themes, external

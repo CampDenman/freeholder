@@ -2,7 +2,8 @@
 
 ICU MessageFormat JSON, one file per locale (`en.json`, `fr.json`, `es.json`, …).
 UI strings live here; *content* translations live in the `EntityTranslation`
-table (`MASTER.md` §4.9). Translations are the easiest first PR.
+table (`MASTER.md` §4.9). Native review and locale completion are tracked in
+`MASTER.md` C1.17.
 
 ## Adding a locale
 

@@ -1,8 +1,10 @@
 # Freeholder — agent instructions
 
-`MASTER.md` is ground truth. Read it before making any product or
-architecture decision. If your change contradicts the master doc, stop:
-either the change is wrong, or the doc must be updated in the same PR.
+`MASTER.md` is the only product, architecture, status, and delivery source of
+truth. Read it before making any product decision and select work from its §43
+checklist. If a change contradicts the master doc, stop: either the change is
+wrong, or the doc must be updated in the same PR. Do not create another roadmap
+or backlog.
 
 ## Non-negotiables
 
@@ -47,6 +49,8 @@ either the change is wrong, or the doc must be updated in the same PR.
 
 ## Conventions
 
+- Name the §43 checklist ID in every product change. Split oversized items in
+  `MASTER.md` before coding and check them only with the evidence §43 requires.
 - Commits are signed off (`git commit -s`) — DCO, no CLA.
 - `main` is protected: PR + green checks only.
 - Release notes are religion: every user-facing change gets a note.

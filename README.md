@@ -10,11 +10,15 @@ replaces the stack with one self-hosted platform where a contact is **one
 record**: their bookings, orders, quotes, gallery access, messages, and email
 history all hang off one CRM timeline.
 
-> **Status: pre-alpha.** The repository is being scaffolded. The canonical
-> product and architecture specification lives in [`MASTER.md`](MASTER.md);
-> code lands next. Watch the repo or join Discussions to follow along.
+> **Status: active product development.** The core platform, visual CMS,
+> forms, analytics, HTTP API, webhooks, MCP, agent task substrate and encrypted
+> connection model are implemented. The complete scope, verified baseline and
+> remaining checklist live only in [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
 
-## What's in the box (planned v1 surface)
+## Product-complete target
+
+This is the intended finished surface, not a claim that every item below is
+already implemented. `MASTER.md` §43 is authoritative about current status.
 
 - **Website + CMS** — pages, blog, portfolio, SEO-as-architecture (schema.org,
   sitemaps, OG images) baked in
@@ -51,15 +55,13 @@ Freeholder core is **AGPL-3.0-only**; the SDKs and templates under
 External apps talking to a Freeholder site via SDK/API/MCP can be licensed
 however you like.
 
-## Governance
+## Ownership and authorship
 
-Freeholder is maintained by **Tony Aly**, who holds the project's copyright.
-The repository is hosted under the `CampDenman` organisation, which is an
-account, not a separate rights holder — the copyright is Tony Aly's.
-
-That is a single person rather than a foundation, and the licence is what does
-the reassuring: every release is AGPL and public, so a fork taken today stays
-free on those terms no matter what happens to the project later.
+Freeholder was created, originally authored, and is owned and maintained by
+**Tony Aly** ([tonyaly.com](https://tonyaly.com),
+`tony@paradisemodern.com`), who makes it available to the world as open-source
+software. The repository is hosted under the `CampDenman` GitHub organization;
+that is where the code lives, not a separate author or rights holder.
 
 Contributions are welcome under the DCO — see
 [`CONTRIBUTING.md`](CONTRIBUTING.md). The DCO rather than a CLA is deliberate:
@@ -72,7 +74,7 @@ relicensed out from under the people who built it.
 app/            Next.js App Router — public site, portal, admin, API (AGPL-3.0-only)
 src/            core spine, feature modules, adapters, MCP server (AGPL-3.0-only)
 packages/       separately published MIT packages (@freeholder/sdk, …)
-MASTER.md       canonical product & architecture specification
+MASTER.md       sole product specification, status, and completion plan
 ```
 
 The core application lives at the repository root — one monolith, not a
