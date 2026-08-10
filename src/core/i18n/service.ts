@@ -177,6 +177,33 @@ export const listTranslations = defineService({
       ),
 });
 
+/**
+ * Every translation of one type, across locales — the admin's index.
+ *
+ * One query rather than one per entity per locale, because the screen this
+ * feeds asks the same question about everything at once: what is missing.
+ * `fields` is deliberately not selected; the index needs to know a translation
+ * exists and how far along it is, not what it says.
+ */
+export const translationIndex = defineService({
+  name: "i18n.translationIndex",
+  summary: "Which entities have a translation, and how far along it is.",
+  kind: "query",
+  permission: "staff",
+  input: z.object({ entityType: z.string().min(1).max(40) }),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select({
+        id: entityTranslations.id,
+        entityId: entityTranslations.entityId,
+        locale: entityTranslations.locale,
+        status: entityTranslations.status,
+        updatedAt: entityTranslations.updatedAt,
+      })
+      .from(entityTranslations)
+      .where(eq(entityTranslations.entityType, input.entityType)),
+});
+
 export const deleteTranslation = defineService({
   name: "i18n.deleteTranslation",
   summary: "Remove a translation.",
@@ -199,5 +226,6 @@ export default [
   getTranslation,
   translatedIds,
   listTranslations,
+  translationIndex,
   deleteTranslation,
 ];

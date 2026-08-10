@@ -12,6 +12,7 @@ import {
   Envelope,
   Stethoscope,
   SlidersHorizontal,
+  Translate as TranslateIcon,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
@@ -25,6 +26,7 @@ export interface AdminNavLabels {
   forms: string;
   contacts: string;
   locations: string;
+  translations: string;
   traffic: string;
   health: string;
   settings: string;
@@ -40,17 +42,33 @@ const LINKS = [
   { href: "/admin/forms", key: "forms", Icon: Envelope },
   { href: "/admin/contacts", key: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", Icon: MapPin },
+  { href: "/admin/translations", key: "translations", Icon: TranslateIcon },
   { href: "/admin/traffic", key: "traffic", Icon: ChartLine },
   { href: "/admin/settings", key: "settings", Icon: SlidersHorizontal },
   { href: "/admin/health", key: "health", Icon: Stethoscope },
 ] as const;
 
-export function AdminNav({ labels }: { labels: AdminNavLabels }) {
+export function AdminNav({
+  labels,
+  multilingual,
+}: {
+  labels: AdminNavLabels;
+  /**
+   * Whether the site publishes more than one language. Translations is the
+   * one entry that is conditional: on a single-language site it leads to a
+   * screen with nothing on it, and a nav entry that goes nowhere teaches
+   * people to stop reading the nav.
+   */
+  multilingual: boolean;
+}) {
   const pathname = usePathname();
+  const links = LINKS.filter(
+    (link) => link.key !== "translations" || multilingual,
+  );
   return (
     <nav aria-label={labels.region}>
       <ul className="-mb-px flex list-none gap-1 p-0">
-        {LINKS.map(({ href, key, Icon }) => {
+        {links.map(({ href, key, Icon }) => {
           const active =
             href === "/admin" ? pathname === href : pathname.startsWith(href);
           return (
