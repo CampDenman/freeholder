@@ -1234,6 +1234,18 @@ This is what keeps §37 honest, too. A builder that can add a page is doing a da
 
 **The service registry is the single choke point.** Admin UI, HTTP API, and MCP all call `services.quotes.send(...)`. Every service method: validates with Zod, checks permissions from session/API-key scopes, executes in a transaction, emits TimelineEvents, writes AuditLog. A service method that skips any of these fails code review — this is the invariant that makes the platform agent-safe.
 
+**Background work crosses that same transaction boundary.** A service calls
+`ctx.queueJob(...)`; pg-boss inserts the job through the caller's Drizzle
+transaction, so the domain row, audit record, durable idempotency claim and
+queue row commit or roll back together. There is no best-effort send primitive
+for request code. Each job definition owns bounded retry/backoff, a
+database-coordinated concurrency limit, a heartbeat lease and retained-history
+window. Idempotency keys are unique per job name for a bounded TTL and reject
+reuse with different canonical payloads. Queued work can be cancelled before
+execution; active handlers observe durable cooperative cancellation at safe
+boundaries. The default web process both produces and works jobs, while a
+`FREEHOLDER_JOBS=off` web process remains a producer for a separate worker.
+
 ---
 
 ## 12. Adapter Contract
@@ -2742,11 +2754,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-11 |
-| Evidence snapshot | `main` at `5a13f27` (C1.07 merged); C1.08 changeset `contact-privacy-rights.md` |
+| Evidence snapshot | `main` at `2d376b6` (C1.08 merged); C1.09 changeset `transactional-jobs.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.09 transactional job enqueueing, idempotency, retries, concurrency, cancellation and leases; no public-launch work is required |
+| Current focus | C1.10 owner job history, run detail, retry/cancel controls, dead-letter queue, stuck-job detection and briefing contribution; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2846,8 +2858,8 @@ green test/build suite. Later checklist items name the remaining depth.
 - [x] **B11 — Deployment baseline:** production container, GHCR publishing,
   DigitalOcean Droplet/Caddy/Postgres/S3-compatible recipe, backup script, and
   live health verification.
-- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 851
-  tests pass with the C1.08 evidence change.
+- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 861
+  tests pass with the C1.09 evidence change.
 
 ### 43.4 Dependency order
 
@@ -2933,8 +2945,12 @@ reading chat logs.
 
 #### Jobs, events, files, mail, and notifications
 
-- [ ] **C1.09** Enqueue jobs inside the caller transaction; add idempotency
+- [x] **C1.09** Enqueue jobs inside the caller transaction; add idempotency
   keys, retry/backoff policy, concurrency limits, cancellation, and leases.
+  (`0025_transactional-jobs.sql`;
+  `tests/core/transactional-jobs.test.ts`; transactional webhook fan-out in
+  `tests/core/webhooks.test.ts`; changeset `transactional-jobs.md`; operator
+  runbook `deploy/background-jobs.md`)
 - [ ] **C1.10** Build owner job history, run detail, retry/cancel controls,
   dead-letter queue, stuck-job detection, and briefing contribution.
 - [ ] **C1.11** Add dead-letter handling for unconsumed or permanently failing

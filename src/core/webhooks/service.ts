@@ -9,6 +9,7 @@ import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { violates } from "@/core/db/errors";
+import { enqueueJob } from "@/core/jobs";
 import { webhookDeliveries, webhookSubscriptions } from "@/core/webhooks/schema";
 import {
   assertDeliverableUrl,
@@ -296,8 +297,14 @@ export const testWebhook = defineService({
       })
       .returning({ id: webhookDeliveries.id });
 
+    const queued = await ctx.queueJob(
+      "core.deliverWebhooks",
+      {},
+      { idempotencyKey: `webhook-test:${delivery!.id}` },
+    );
+
     ctx.setSubject("webhook", input.id);
-    return { deliveryId: delivery!.id };
+    return { deliveryId: delivery!.id, jobId: queued.id };
   },
 });
 
@@ -336,21 +343,25 @@ export async function fanOut(
   );
   if (wanted.length === 0) return 0;
 
-  await db()
-    .insert(webhookDeliveries)
-    .values(
-      wanted.map((subscription) => ({
-        subscriptionId: subscription.id,
-        eventName,
-        payload: (payload ?? {}) as Record<string, unknown>,
-      })),
-    );
+  await db().transaction(async (tx) => {
+    const created = await tx
+      .insert(webhookDeliveries)
+      .values(
+        wanted.map((subscription) => ({
+          subscriptionId: subscription.id,
+          eventName,
+          payload: (payload ?? {}) as Record<string, unknown>,
+        })),
+      )
+      .returning({ id: webhookDeliveries.id });
 
-  // Nudge the worker so a delivery does not wait for the next scheduled tick.
-  // Best-effort: the schedule is what guarantees it goes out, this only makes
-  // the common case fast.
-  const { send } = await import("@/core/jobs");
-  await send("core.deliverWebhooks").catch(() => null);
+    // The delivery rows and their immediate nudge are one commit. If queue
+    // storage is unavailable the outbox listener fails and retries instead of
+    // leaving deliveries that wait silently for the next minute tick.
+    await enqueueJob(tx, "core.deliverWebhooks", {}, {
+      idempotencyKey: `webhook-fanout:${created[0]!.id}`,
+    });
+  });
 
   return wanted.length;
 }
