@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   pgTable,
   primaryKey,
   text,
@@ -127,5 +128,52 @@ export const passwordResets = pgTable(
   (t) => [
     uniqueIndex("password_resets_token_idx").on(t.tokenHash),
     index("password_resets_user_idx").on(t.userId),
+  ],
+);
+
+/**
+ * A one-person business still needs a deliberate way to add the second
+ * person. The bearer token is stored only as a hash; status is explicit so a
+ * partial unique index can guarantee one live invitation per address even
+ * when two owners or agents act concurrently.
+ *
+ * `roleKey` is an intentional snapshot rather than a foreign key. Invitation
+ * history must survive deleting a custom role, while acceptance revalidates
+ * that the role still exists, is assignable, and can enter the admin shell.
+ */
+export const staffInvitations = pgTable(
+  "staff_invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    roleKey: text("role_key").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    status: text("status", {
+      enum: ["pending", "accepted", "revoked", "expired"],
+    })
+      .notNull()
+      .default("pending"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdBy: text("created_by").notNull(),
+    sendCount: integer("send_count").notNull().default(1),
+    lastAttemptedAt: timestamp("last_attempted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastSentAt: timestamp("last_sent_at", { withTimezone: true }),
+    deliveryAdapter: text("delivery_adapter"),
+    providerRef: text("provider_ref"),
+    acceptedUserId: uuid("accepted_user_id"),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("staff_invitations_token_idx").on(t.tokenHash),
+    uniqueIndex("staff_invitations_pending_email_idx")
+      .on(t.email)
+      .where(sql`${t.status} = 'pending'`),
+    index("staff_invitations_status_expiry_idx").on(t.status, t.expiresAt),
+    index("staff_invitations_created_idx").on(t.createdAt),
   ],
 );

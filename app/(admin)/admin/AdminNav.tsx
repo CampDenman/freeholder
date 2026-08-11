@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
   ShieldCheck,
   Translate as TranslateIcon,
+  UserPlus,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
@@ -32,6 +33,7 @@ export interface AdminNavLabels {
   health: string;
   settings: string;
   roles: string;
+  invitations: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -47,6 +49,7 @@ const LINKS = [
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
   { href: "/admin/traffic", key: "traffic", module: "analytics", Icon: ChartLine },
   { href: "/admin/roles", key: "roles", module: "roles", Icon: ShieldCheck },
+  { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
   { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
   { href: "/admin/health", key: "health", module: "platform", Icon: Stethoscope },
 ] as const;

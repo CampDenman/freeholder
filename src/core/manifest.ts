@@ -53,6 +53,10 @@ export default defineModule({
       "role.updated",
       "role.deleted",
       "role.assigned",
+      "staffInvitation.created",
+      "staffInvitation.resent",
+      "staffInvitation.revoked",
+      "staffInvitation.accepted",
     ],
   },
 });

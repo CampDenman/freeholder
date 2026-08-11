@@ -73,6 +73,7 @@ export default async function AdminLayout({
               translations: t("admin.nav.translations"),
               settings: t("admin.nav.settings"),
               roles: t("admin.nav.roles"),
+              invitations: t("admin.nav.invitations"),
             }}
           />
         </div>

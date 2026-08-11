@@ -179,7 +179,12 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     // service an owner may call is offered, and nothing else is.
     const offered = new Set(toolsFor(OWNER).map((tool) => tool.name));
     const expected = [...listServices().values()]
-      .filter((service) => !["auth", "apikeys"].includes(service.def.name.split(".")[0]!))
+      .filter(
+        (service) =>
+          !["auth", "apikeys", "invitations"].includes(
+            service.def.name.split(".")[0]!,
+          ),
+      )
       .map((service) => toolName(service.def.name));
     expect(offered).toEqual(new Set(expected));
   });
@@ -190,6 +195,8 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     const names = toolsFor(OWNER).map((tool) => tool.name);
     expect(names).not.toContain("auth_login");
     expect(names).not.toContain("apikeys_create");
+    expect(names).not.toContain("invitations_accept");
+    expect(names).not.toContain("invitations_create");
     // And they cannot be reached by naming them either.
     expect(serviceForTool(OWNER, "auth_login")).toBeUndefined();
   });
