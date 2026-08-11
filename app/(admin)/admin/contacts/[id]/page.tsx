@@ -36,6 +36,7 @@ function describe(eventType: string, t: Translate): string {
       "created",
       "updated",
       "merged",
+      "mergeUndone",
       "magicLinkRequested",
       "portalAccountLinked",
       "magicLinkSignedIn",

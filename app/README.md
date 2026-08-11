@@ -9,8 +9,9 @@ The thin routing layer over `src/`. Route groups per `MASTER.md` §10:
   enrollment, factor management, active-device revocation, recent-login
   notices and fresh-verification screens. Contact administration includes
   organizations, tags, typed custom fields, explicit relationships, regional
-  preferences and lifecycle history; its translated forms call core services
-  rather than writing the spine directly
+  preferences, lifecycle history and a human-only duplicate review queue with
+  merge recovery; its translated forms call core services rather than writing
+  the spine directly
 - `portal/` — the noindex customer entry door. Request and confirmation are
   intentionally separate so a mail scanner's GET cannot consume a sign-in link
 - `setup/` — first-boot owner/business/location flow

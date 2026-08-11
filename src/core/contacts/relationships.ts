@@ -330,6 +330,118 @@ export async function repointContactRelationships(
   }
 }
 
+interface RelationshipSnapshot {
+  id: string;
+  fromContactId: string;
+  toContactId: string;
+  kind: RelationshipKind;
+  since: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function relationshipSnapshot(
+  row: typeof contactRelationships.$inferSelect,
+): RelationshipSnapshot {
+  return {
+    id: row.id,
+    fromContactId: row.fromContactId,
+    toContactId: row.toContactId,
+    kind: row.kind,
+    since: row.since,
+    notes: row.notes,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/** Capture every edge a merge can move, coalesce, or remove. */
+export async function captureContactRelationships(
+  tx: Tx,
+  duplicateId: string,
+  survivingId: string,
+): Promise<RelationshipSnapshot[]> {
+  return (
+    await tx
+      .select()
+      .from(contactRelationships)
+      .where(
+        or(
+          inArray(contactRelationships.fromContactId, [duplicateId, survivingId]),
+          inArray(contactRelationships.toContactId, [duplicateId, survivingId]),
+        ),
+      )
+      .orderBy(asc(contactRelationships.id))
+  ).map(relationshipSnapshot);
+}
+
+const relationshipSnapshotSchema = z.array(
+  z.object({
+    id: z.string().uuid(),
+    fromContactId: z.string().uuid(),
+    toContactId: z.string().uuid(),
+    kind: relationshipKind,
+    since: calendarDate.nullable(),
+    notes: z.string().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  }),
+);
+
+/** Restore the exact pre-merge edge set only while its post-merge rows are untouched. */
+export async function restoreContactRelationships(
+  tx: Tx,
+  beforeState: unknown,
+  afterState: unknown,
+): Promise<void> {
+  const before = relationshipSnapshotSchema.parse(beforeState);
+  const after = relationshipSnapshotSchema.parse(afterState);
+  const afterIds = after.map((row) => row.id);
+  const current = afterIds.length
+    ? await tx
+        .select()
+        .from(contactRelationships)
+        .where(inArray(contactRelationships.id, afterIds))
+    : [];
+  const expected = new Map(after.map((row) => [row.id, JSON.stringify(row)]));
+  if (
+    current.length !== after.length ||
+    current.some(
+      (row) => JSON.stringify(relationshipSnapshot(row)) !== expected.get(row.id),
+    )
+  ) {
+    throw new ServiceError(
+      "conflict",
+      "A relationship changed after this merge. Leave the merge in place or restore that relationship first.",
+    );
+  }
+  try {
+    if (afterIds.length) {
+      await tx
+        .delete(contactRelationships)
+        .where(inArray(contactRelationships.id, afterIds));
+    }
+    if (before.length) {
+      await tx.insert(contactRelationships).values(
+        before.map((row) => ({
+          ...row,
+          createdAt: new Date(row.createdAt),
+          updatedAt: new Date(row.updatedAt),
+        })),
+      );
+    }
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ServiceError(
+        "conflict",
+        "A newer relationship now occupies an edge this undo would restore.",
+      );
+    }
+    throw error;
+  }
+}
+
 export default [
   createRelationship,
   updateRelationship,

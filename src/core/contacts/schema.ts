@@ -117,6 +117,16 @@ export const contacts = pgTable(
       "gin",
       t.email.op("gin_trgm_ops"),
     ),
+    index("contacts_normalized_name_idx").on(
+      sql`regexp_replace(lower(trim(${t.name})), '[[:space:]]+', ' ', 'g')`,
+    ),
+    index("contacts_normalized_phone_idx").on(
+      sql`(case
+        when regexp_replace(${t.phone}, '[^0-9]', '', 'g') ~ '^1[0-9]{10}$'
+          then substring(regexp_replace(${t.phone}, '[^0-9]', '', 'g') from 2)
+        else regexp_replace(${t.phone}, '[^0-9]', '', 'g')
+      end)`,
+    ),
   ],
 );
 
@@ -150,6 +160,73 @@ export const contactRelationships = pgTable(
       "contact_relationships_not_self",
       sql`${t.fromContactId} <> ${t.toContactId}`,
     ),
+  ],
+);
+
+/** A human-reviewable suspicion, never permission to merge automatically. */
+export const mergeCandidates = pgTable(
+  "merge_candidates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactAId: uuid("contact_a_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    contactBId: uuid("contact_b_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    contactAName: text("contact_a_name").notNull(),
+    contactAEmail: text("contact_a_email"),
+    contactBName: text("contact_b_name").notNull(),
+    contactBEmail: text("contact_b_email"),
+    score: integer("score").notNull(),
+    /** [{ code, points, value? }] — translated by each human surface. */
+    reasons: jsonb("reasons").notNull().default([]),
+    status: text("status", { enum: ["open", "dismissed", "merged"] })
+      .notNull()
+      .default("open"),
+    detectedAt: timestamp("detected_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+    mergedAt: timestamp("merged_at", { withTimezone: true }),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("merge_candidates_pair_idx").on(t.contactAId, t.contactBId),
+    index("merge_candidates_a_idx").on(t.contactAId),
+    index("merge_candidates_b_idx").on(t.contactBId),
+    index("merge_candidates_status_score_idx").on(t.status, t.score),
+  ],
+);
+
+/** The evidence needed for a conservative, conflict-checked merge undo. */
+export const contactMergeOperations = pgTable(
+  "contact_merge_operations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    candidateId: uuid("candidate_id").references(() => mergeCandidates.id, {
+      onDelete: "set null",
+    }),
+    survivingContactId: uuid("surviving_contact_id").notNull(),
+    duplicateContactId: uuid("duplicate_contact_id").notNull(),
+    survivorBefore: jsonb("survivor_before").notNull(),
+    duplicateBefore: jsonb("duplicate_before").notNull(),
+    survivorAfter: jsonb("survivor_after").notNull(),
+    referenceState: jsonb("reference_state").notNull().default([]),
+    undoable: boolean("undoable").notNull().default(true),
+    undoBlockers: text("undo_blockers").array().notNull().default([]),
+    mergedAt: timestamp("merged_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("contact_merge_operations_candidate_idx").on(t.candidateId),
+    index("contact_merge_operations_survivor_idx").on(
+      t.survivingContactId,
+      t.mergedAt,
+    ),
+    index("contact_merge_operations_merged_at_idx").on(t.mergedAt),
   ],
 );
 

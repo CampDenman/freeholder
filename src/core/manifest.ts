@@ -21,6 +21,7 @@ export default defineModule({
     emits: [
       "contact.created",
       "contact.merged",
+      "contact.mergeUndone",
       "settings.businessUpdated",
       "settings.setupCompleted",
       "module.enabled",

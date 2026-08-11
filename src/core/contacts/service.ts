@@ -12,17 +12,24 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   or,
   sql,
 } from "drizzle-orm";
 import {
+  contactMergeOperations,
   contacts,
   customerMagicLinks,
+  mergeCandidates,
   organizations,
   timelineEvents,
 } from "@/core/contacts/schema";
 import { applyCustomFieldPatch } from "@/core/contacts/custom-fields";
-import { repointContactRelationships } from "@/core/contacts/relationships";
+import {
+  captureContactRelationships,
+  repointContactRelationships,
+  restoreContactRelationships,
+} from "@/core/contacts/relationships";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 
@@ -369,6 +376,53 @@ export interface ContactReference {
     duplicateId: string,
     survivingId: string,
   ) => Promise<unknown>;
+  /** State before/after repointing, plus whether exact recovery is safe. */
+  captureForUndo: (
+    tx: Tx,
+    duplicateId: string,
+    survivingId: string,
+  ) => Promise<{ state: unknown; undoable: boolean; blocker?: string }>;
+  /** Restore `before` after verifying the table still matches `after`. */
+  restoreAfterUndo: (
+    tx: Tx,
+    before: unknown,
+    after: unknown,
+    duplicateId: string,
+    survivingId: string,
+  ) => Promise<void>;
+}
+
+interface ContactPointer {
+  id: string;
+  contactId: string | null;
+}
+
+function pointerCapture(state: ContactPointer[]): {
+  state: ContactPointer[];
+  undoable: true;
+} {
+  return { state, undoable: true };
+}
+
+function assertPointerState(
+  current: ContactPointer[],
+  expectedState: unknown,
+  label: string,
+): ContactPointer[] {
+  const parsed = z
+    .array(z.object({ id: z.string(), contactId: z.string().uuid().nullable() }))
+    .parse(expectedState);
+  const byId = new Map(current.map((row) => [row.id, row.contactId]));
+  if (
+    current.length !== parsed.length ||
+    parsed.some((row) => byId.get(row.id) !== row.contactId)
+  ) {
+    throw new ServiceError(
+      "conflict",
+      `${label} changed after this merge. Restore that record first or leave the merge in place.`,
+    );
+  }
+  return parsed;
 }
 
 /**
@@ -394,6 +448,12 @@ const references: ContactReference[] = [
   {
     table: "contact_relationships",
     repoint: repointContactRelationships,
+    captureForUndo: async (tx, duplicateId, survivingId) => ({
+      state: await captureContactRelationships(tx, duplicateId, survivingId),
+      undoable: true,
+    }),
+    restoreAfterUndo: (tx, before, after) =>
+      restoreContactRelationships(tx, before, after),
   },
   {
     // A bearer link sent for the duplicate identity must not silently become a
@@ -403,6 +463,44 @@ const references: ContactReference[] = [
       tx
         .delete(customerMagicLinks)
         .where(eq(customerMagicLinks.contactId, duplicateId)),
+    captureForUndo: async (tx, duplicateId) => {
+      const rows = await tx
+        .select({ id: customerMagicLinks.id })
+        .from(customerMagicLinks)
+        .where(eq(customerMagicLinks.contactId, duplicateId));
+      return {
+        state: rows,
+        undoable: rows.length === 0,
+        blocker:
+          rows.length > 0
+            ? "A customer sign-in link was invalidated for security and cannot be restored."
+            : undefined,
+      };
+    },
+    // An empty capture is safe; a non-empty capture marks the whole operation
+    // non-undoable before this callback can ever run.
+    restoreAfterUndo: async () => undefined,
+  },
+  {
+    // Candidate rows are derived review metadata. The selected row is marked
+    // merged before this runs; every other open suspicion touching the deleted
+    // identity is retired and can be rediscovered by the next scan after undo.
+    table: "merge_candidates",
+    repoint: (tx, duplicateId) =>
+      tx
+        .update(mergeCandidates)
+        .set({ status: "dismissed", dismissedAt: new Date() })
+        .where(
+          and(
+            eq(mergeCandidates.status, "open"),
+            or(
+              eq(mergeCandidates.contactAId, duplicateId),
+              eq(mergeCandidates.contactBId, duplicateId),
+            ),
+          ),
+        ),
+    captureForUndo: async () => ({ state: [], undoable: true }),
+    restoreAfterUndo: async () => undefined,
   },
   {
     table: "timeline_events",
@@ -411,6 +509,37 @@ const references: ContactReference[] = [
         .update(timelineEvents)
         .set({ contactId: survivingId })
         .where(eq(timelineEvents.contactId, duplicateId)),
+    captureForUndo: async (tx, duplicateId, survivingId) =>
+      pointerCapture(
+        await tx
+          .select({ id: timelineEvents.id, contactId: timelineEvents.contactId })
+          .from(timelineEvents)
+          .where(inArray(timelineEvents.contactId, [duplicateId, survivingId])),
+      ),
+    restoreAfterUndo: async (tx, before, after, duplicateId) => {
+      const expected = z
+        .array(z.object({ id: z.string(), contactId: z.string().uuid().nullable() }))
+        .parse(after);
+      const ids = expected.map((row) => row.id);
+      const current = ids.length
+        ? await tx
+            .select({ id: timelineEvents.id, contactId: timelineEvents.contactId })
+            .from(timelineEvents)
+            .where(inArray(timelineEvents.id, ids))
+        : [];
+      const prior = assertPointerState(current, after, "Contact history");
+      const moved = z
+        .array(z.object({ id: z.string(), contactId: z.string().uuid().nullable() }))
+        .parse(before)
+        .filter((row) => row.contactId === duplicateId);
+      if (moved.length) {
+        await tx
+          .update(timelineEvents)
+          .set({ contactId: duplicateId })
+          .where(inArray(timelineEvents.id, moved.map((row) => row.id)));
+      }
+      void prior;
+    },
   },
 ];
 
@@ -441,6 +570,51 @@ export function contactReferences(): readonly ContactReference[] {
 /** @deprecated Read through `contactReferences()` so modules are included. */
 export const CONTACT_REFERENCES: readonly ContactReference[] = references;
 
+const contactSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid().nullable(),
+  name: z.string(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  orgId: z.string().uuid().nullable(),
+  source: z.string().nullable(),
+  tags: z.array(z.string()),
+  customFields: z.record(z.string(), z.unknown()),
+  lifecycleStage,
+  preferredLocale: z.string().nullable(),
+  timezone: z.string().nullable(),
+  country: z.string().nullable(),
+  ownerNotes: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+type ContactSnapshot = z.infer<typeof contactSnapshotSchema>;
+
+function contactSnapshot(row: ContactRow): ContactSnapshot {
+  return {
+    ...row,
+    customFields: row.customFields as Record<string, unknown>,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function contactSnapshotValues(snapshot: ContactSnapshot) {
+  return {
+    ...snapshot,
+    createdAt: new Date(snapshot.createdAt),
+    updatedAt: new Date(snapshot.updatedAt),
+  };
+}
+
+const storedReferenceStateSchema = z.array(
+  z.object({
+    table: z.string(),
+    before: z.unknown(),
+    after: z.unknown(),
+  }),
+);
+
 /** Fold a duplicate into the record that survives. */
 export const mergeContacts = defineService({
   name: "contacts.merge",
@@ -450,25 +624,67 @@ export const mergeContacts = defineService({
   input: z.object({
     survivingId: z.string().uuid(),
     duplicateId: z.string().uuid(),
+    candidateId: z.string().uuid().optional(),
   }),
   handler: async (input, ctx) => {
     if (input.survivingId === input.duplicateId) {
       throw new ServiceError(
         "validation",
-        "contacts.merge: a contact cannot be merged into itself",
+        "A contact cannot be merged into itself.",
       );
     }
-    const load = async (id: string) => {
-      const [row] = await ctx.tx
-        .select()
-        .from(contacts)
-        .where(eq(contacts.id, id))
-        .limit(1);
-      if (!row) throw new ServiceError("not_found", `no contact with id ${id}`);
-      return row;
-    };
-    const surviving = await load(input.survivingId);
-    const duplicate = await load(input.duplicateId);
+    // Lock in canonical id order so reverse merge requests cannot deadlock.
+    const pair = await ctx.tx
+      .select()
+      .from(contacts)
+      .where(inArray(contacts.id, [input.survivingId, input.duplicateId]))
+      .orderBy(contacts.id)
+      .for("update");
+    const byId = new Map(pair.map((row) => [row.id, row]));
+    const surviving = byId.get(input.survivingId);
+    const duplicate = byId.get(input.duplicateId);
+    if (!surviving || !duplicate) {
+      throw new ServiceError("not_found", "One of those contacts no longer exists.");
+    }
+
+    const canonicalIds = [surviving.id, duplicate.id].sort();
+    const [candidate] = input.candidateId
+      ? await ctx.tx
+          .select()
+          .from(mergeCandidates)
+          .where(eq(mergeCandidates.id, input.candidateId))
+          .limit(1)
+          .for("update")
+      : await ctx.tx
+          .select()
+          .from(mergeCandidates)
+          .where(
+            and(
+              eq(mergeCandidates.status, "open"),
+              eq(mergeCandidates.contactAId, canonicalIds[0]!),
+              eq(mergeCandidates.contactBId, canonicalIds[1]!),
+            ),
+          )
+          .limit(1)
+          .for("update");
+    if (
+      input.candidateId &&
+      (!candidate ||
+        candidate.status !== "open" ||
+        candidate.contactAId !== canonicalIds[0] ||
+        candidate.contactBId !== canonicalIds[1])
+    ) {
+      throw new ServiceError(
+        "conflict",
+        "That duplicate candidate is no longer open for these contacts.",
+      );
+    }
+    if (candidate) {
+      await ctx.tx
+        .update(mergeCandidates)
+        .set({ status: "merged", mergedAt: new Date(), dismissedAt: null })
+        .where(eq(mergeCandidates.id, candidate.id));
+    }
 
     // Two contacts, two logins, one survivor: `contacts.user_id` is unique and
     // 1:1, so the merge can keep only one of them. Every way of choosing
@@ -494,10 +710,28 @@ export const mergeContacts = defineService({
       );
     }
 
+    const referenceState: Array<{
+      table: string;
+      before: unknown;
+      after: unknown;
+    }> = [];
+    const undoBlockers: string[] = [];
+
     // Every contact_id FK in the schema, repointed — core's and every
-    // installed module's. See contactReferences().
+    // installed module's, with an explicit recovery boundary.
     for (const reference of contactReferences()) {
+      const before = await reference.captureForUndo(
+        ctx.tx,
+        duplicate.id,
+        surviving.id,
+      );
+      if (!before.undoable) {
+        undoBlockers.push(
+          before.blocker ?? `${reference.table} cannot be restored safely.`,
+        );
+      }
       await reference.repoint(ctx.tx, duplicate.id, surviving.id);
+      referenceState.push({ table: reference.table, before: before.state, after: null });
     }
 
     // The survivor keeps what it has and inherits what it lacks; no field the
@@ -541,6 +775,28 @@ export const mergeContacts = defineService({
       .where(eq(contacts.id, surviving.id))
       .returning();
 
+    for (const state of referenceState) {
+      const reference = contactReferences().find((item) => item.table === state.table)!;
+      state.after = (
+        await reference.captureForUndo(ctx.tx, duplicate.id, surviving.id)
+      ).state;
+    }
+
+    const [operation] = await ctx.tx
+      .insert(contactMergeOperations)
+      .values({
+        candidateId: candidate?.id,
+        survivingContactId: surviving.id,
+        duplicateContactId: duplicate.id,
+        survivorBefore: contactSnapshot(surviving),
+        duplicateBefore: contactSnapshot(duplicate),
+        survivorAfter: contactSnapshot(result!),
+        referenceState,
+        undoable: undoBlockers.length === 0,
+        undoBlockers: [...new Set(undoBlockers)],
+      })
+      .returning();
+
     ctx.setSubject("contact", surviving.id);
     await ctx.emitTimeline({
       contactId: surviving.id,
@@ -551,6 +807,7 @@ export const mergeContacts = defineService({
         mergedFrom: duplicate.id,
         mergedEmail: duplicate.email,
         mergedName: duplicate.name,
+        mergeOperationId: operation!.id,
       },
     });
     if (result!.lifecycleStage !== surviving.lifecycleStage) {
@@ -574,8 +831,137 @@ export const mergeContacts = defineService({
     ctx.queueEvent("contact.merged", {
       contactId: surviving.id,
       mergedFrom: duplicate.id,
+      mergeOperationId: operation!.id,
     });
-    return result!;
+    return { ...result!, mergeOperationId: operation!.id };
+  },
+});
+
+/** Restore two identities only while every merge-owned value is untouched. */
+export const undoContactMerge = defineService({
+  name: "contacts.undoMerge",
+  summary: "Undo a contact merge when no later change would be overwritten.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ operationId: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    const [operation] = await ctx.tx
+      .select()
+      .from(contactMergeOperations)
+      .where(eq(contactMergeOperations.id, input.operationId))
+      .limit(1)
+      .for("update");
+    if (!operation) {
+      throw new ServiceError("not_found", "That merge record no longer exists.");
+    }
+    if (operation.undoneAt) {
+      throw new ServiceError("conflict", "That merge has already been undone.");
+    }
+    if (!operation.undoable) {
+      throw new ServiceError(
+        "conflict",
+        operation.undoBlockers[0] ?? "That merge cannot be restored safely.",
+      );
+    }
+    const survivorBefore = contactSnapshotSchema.parse(operation.survivorBefore);
+    const duplicateBefore = contactSnapshotSchema.parse(operation.duplicateBefore);
+    const survivorAfter = contactSnapshotSchema.parse(operation.survivorAfter);
+    const [current] = await ctx.tx
+      .select()
+      .from(contacts)
+      .where(eq(contacts.id, operation.survivingContactId))
+      .limit(1)
+      .for("update");
+    if (!current) {
+      throw new ServiceError(
+        "conflict",
+        "The surviving contact no longer exists, so this merge cannot be undone.",
+      );
+    }
+    if (JSON.stringify(contactSnapshot(current)) !== JSON.stringify(survivorAfter)) {
+      throw new ServiceError(
+        "conflict",
+        "The surviving contact changed after this merge. Undo would overwrite newer work.",
+      );
+    }
+    const [duplicateExists] = await ctx.tx
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(eq(contacts.id, operation.duplicateContactId))
+      .limit(1);
+    if (duplicateExists) {
+      throw new ServiceError(
+        "conflict",
+        "The deleted contact identifier is already in use again.",
+      );
+    }
+
+    const { id: _survivorId, ...survivorValues } =
+      contactSnapshotValues(survivorBefore);
+    await ctx.tx
+      .update(contacts)
+      .set(survivorValues)
+      .where(eq(contacts.id, survivorBefore.id));
+    await ctx.tx.insert(contacts).values(contactSnapshotValues(duplicateBefore));
+
+    for (const state of storedReferenceStateSchema.parse(operation.referenceState)) {
+      const reference = contactReferences().find((item) => item.table === state.table);
+      if (!reference) {
+        throw new ServiceError(
+          "conflict",
+          `${state.table} is not available, so its merge changes cannot be restored.`,
+        );
+      }
+      await reference.restoreAfterUndo(
+        ctx.tx,
+        state.before,
+        state.after,
+        duplicateBefore.id,
+        survivorBefore.id,
+      );
+    }
+
+    if (operation.candidateId) {
+      const pair = [survivorBefore.id, duplicateBefore.id].sort();
+      await ctx.tx
+        .update(mergeCandidates)
+        .set({
+          contactAId: pair[0],
+          contactBId: pair[1],
+          status: "open",
+          dismissedAt: null,
+          mergedAt: null,
+        })
+        .where(eq(mergeCandidates.id, operation.candidateId));
+    }
+    await ctx.tx
+      .update(contactMergeOperations)
+      .set({ undoneAt: new Date() })
+      .where(eq(contactMergeOperations.id, operation.id));
+
+    ctx.setSubject("merge", operation.id);
+    for (const contactId of [survivorBefore.id, duplicateBefore.id]) {
+      await ctx.emitTimeline({
+        contactId,
+        eventType: "contact.mergeUndone",
+        subjectType: "merge",
+        subjectId: operation.id,
+        payload: {
+          survivingContactId: survivorBefore.id,
+          restoredContactId: duplicateBefore.id,
+        },
+      });
+    }
+    ctx.queueEvent("contact.mergeUndone", {
+      mergeOperationId: operation.id,
+      survivingContactId: survivorBefore.id,
+      restoredContactId: duplicateBefore.id,
+    });
+    return {
+      operationId: operation.id,
+      survivingContact: contactSnapshotValues(survivorBefore),
+      restoredContact: contactSnapshotValues(duplicateBefore),
+    };
   },
 });
 
@@ -800,6 +1186,7 @@ export default [
   createContact,
   resolveContact,
   mergeContacts,
+  undoContactMerge,
   updateContact,
   getContact,
   listContacts,

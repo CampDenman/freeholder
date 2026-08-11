@@ -41,8 +41,10 @@ export {
   organizations,
   contacts,
   contactRelationships,
+  contactMergeOperations,
   customFieldDefinitions,
   customerMagicLinks,
+  mergeCandidates,
   timelineEvents,
 } from "@/core/contacts/schema";
 export { auditLog } from "@/core/events/schema";
