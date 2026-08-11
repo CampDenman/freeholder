@@ -10,7 +10,7 @@ import { requireStaffActor } from "../guard";
 export const dynamic = "force-dynamic";
 
 export default async function SectionsPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("cms");
   const [sections, t] = await Promise.all([
     listSections.call({}, actor),
     getT(),

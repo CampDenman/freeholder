@@ -44,6 +44,12 @@ import {
 
 /** vitest.config.ts supplies a deterministic CREDENTIAL_KEY for the run. */
 const AGENT: Actor = { kind: "agent", keyName: "Zapier", scopes: ["connections.*"] };
+const VIEWER: Actor = {
+  kind: "user",
+  userId: STAFF.userId,
+  role: "calendar-viewer",
+  grants: [{ module: "connections", access: "view" }],
+};
 
 const TOKENS = { access_token: "ya29.a0-secret", refresh_token: "1//refresh-secret" };
 
@@ -248,9 +254,13 @@ describe.runIf(hasDatabase)("keeping a connection", () => {
     expect(listedByOther.some((row) => row.id === id)).toBe(false);
   });
 
-  it("refuses to connect an account to somebody else's profile", async () => {
-    const error = await failure(record({ userId: OWNER.userId }, STAFF));
-    expect(error.code).toBe("permission");
+  it("lets a connection manager act for the business, but not a viewer", async () => {
+    await expect(record({ userId: OWNER.userId }, STAFF)).resolves.toHaveProperty(
+      "id",
+    );
+    expect(
+      (await failure(record({ userId: OWNER.userId }, VIEWER))).code,
+    ).toBe("permission");
   });
 
   it("is closed to API keys entirely", async () => {
@@ -373,8 +383,11 @@ describe.runIf(hasDatabase)("rotating the key", () => {
     expect(row?.lastError).toContain("Reconnect");
   });
 
-  it("is owner-only and closed to keys", async () => {
-    expect((await failure(rotateCredentials.call({}, STAFF))).code).toBe("permission");
+  it("requires connections manage and remains closed to keys", async () => {
+    await expect(rotateCredentials.call({}, STAFF)).resolves.toBeDefined();
+    expect((await failure(rotateCredentials.call({}, VIEWER))).code).toBe(
+      "permission",
+    );
     expect((await failure(rotateCredentials.call({}, AGENT))).code).toBe("permission");
   });
 });

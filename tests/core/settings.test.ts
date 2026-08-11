@@ -114,8 +114,13 @@ describe.runIf(hasDatabase)("business settings", () => {
       expect(await getBusiness.call({}, ANONYMOUS)).toBeNull();
     });
 
-    it("refuses writes from staff", async () => {
-      const error = await failure(updateBusiness.call(A_BUSINESS, STAFF));
+    it("refuses writes from a settings viewer", async () => {
+      const error = await failure(
+        updateBusiness.call(A_BUSINESS, {
+          ...STAFF,
+          grants: [{ module: "settings", access: "view" }],
+        }),
+      );
       expect(error.code).toBe("permission");
     });
   });
@@ -257,12 +262,16 @@ describe.runIf(hasDatabase)("business settings", () => {
       expect(await listModules.call({}, STAFF)).toHaveLength(0);
     });
 
-    it("is owner-only to write and staff-readable", async () => {
+    it("requires settings manage to write and lets a viewer read", async () => {
+      const viewer = {
+        ...STAFF,
+        grants: [{ module: "settings", access: "view" as const }],
+      };
       const error = await failure(
-        setModuleEnabled.call({ module: "cms", enabled: false }, STAFF),
+        setModuleEnabled.call({ module: "cms", enabled: false }, viewer),
       );
       expect(error.code).toBe("permission");
-      await expect(listModules.call({}, STAFF)).resolves.toEqual([]);
+      await expect(listModules.call({}, viewer)).resolves.toEqual([]);
     });
   });
 });
@@ -309,11 +318,14 @@ describe.runIf(hasDatabase)("a module's own settings (§11 settingsSchema)", () 
     expect(error.code).toBe("not_found");
   });
 
-  it("is the owner's decision, not staff's", async () => {
+  it("requires settings manage rather than a role name", async () => {
     const error = await failure(
       setModuleConfig.call(
         { module: "analytics", config: { includeBots: true } },
-        STAFF,
+        {
+          ...STAFF,
+          grants: [{ module: "settings", access: "view" }],
+        },
       ),
     );
     expect(error.code).toBe("permission");

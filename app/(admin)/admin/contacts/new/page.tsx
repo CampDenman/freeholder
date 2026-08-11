@@ -10,7 +10,7 @@ import { requireStaffActor } from "../../guard";
 export const dynamic = "force-dynamic";
 
 export default async function NewContactPage() {
-  await requireStaffActor();
+  await requireStaffActor("contacts", "manage");
   const t = await getT();
   return (
     <div className="grid gap-6">

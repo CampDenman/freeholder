@@ -7,9 +7,9 @@
 // the session rather than logging the user out mid-work.
 import { createHmac, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { sessions, users } from "@/core/auth/schema";
+import { roleGrants, sessions, users } from "@/core/auth/schema";
 import { env } from "@/core/env";
-import type { Role, Tx } from "@/core/service";
+import type { ModuleGrant, Tx } from "@/core/service";
 
 export const SESSION_COOKIE = "freeholder_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -31,7 +31,8 @@ export function hashSessionToken(token: string): string {
 
 export interface SessionUser {
   userId: string;
-  role: Role;
+  role: string;
+  grants: ModuleGrant[];
   email: string;
   sessionId: string;
   expiresAt: Date;
@@ -84,7 +85,11 @@ export async function validateSession(
       .where(eq(sessions.id, row.sessionId));
     row.expiresAt = renewed;
   }
-  return row;
+  const grants = await tx
+    .select({ module: roleGrants.module, access: roleGrants.access })
+    .from(roleGrants)
+    .where(eq(roleGrants.roleKey, row.role));
+  return { ...row, grants };
 }
 
 export async function revokeSession(tx: Tx, sessionId: string): Promise<void> {

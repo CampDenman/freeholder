@@ -32,7 +32,7 @@ export const setTranslation = defineService({
   name: "i18n.setTranslation",
   summary: "Write a translation of one entity into one locale.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     entityType: z.string().min(1).max(40),
     entityId: z.string().uuid(),
@@ -160,7 +160,7 @@ export const listTranslations = defineService({
   name: "i18n.listTranslations",
   summary: "Every translation of one entity, for the admin.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     entityType: z.string().min(1).max(40),
     entityId: z.string().uuid(),
@@ -189,7 +189,7 @@ export const translationIndex = defineService({
   name: "i18n.translationIndex",
   summary: "Which entities have a translation, and how far along it is.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ entityType: z.string().min(1).max(40) }),
   handler: (input, ctx) =>
     ctx.tx
@@ -208,7 +208,7 @@ export const deleteTranslation = defineService({
   name: "i18n.deleteTranslation",
   summary: "Remove a translation.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx

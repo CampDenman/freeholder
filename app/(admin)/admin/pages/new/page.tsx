@@ -9,7 +9,7 @@ import { NewPageForm } from "./NewPageForm";
 export const dynamic = "force-dynamic";
 
 export default async function NewPagePage() {
-  await requireStaffActor();
+  await requireStaffActor("cms", "manage");
   const t = await getT();
   return (
     <div className="grid gap-6">

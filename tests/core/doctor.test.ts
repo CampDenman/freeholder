@@ -123,12 +123,23 @@ describe("the report as somebody reads it", () => {
 });
 
 describe.runIf(hasDatabase)("who may ask", () => {
-  it("is owner-only, because the report is a map of what is weak", async () => {
+  it("requires platform view because the report is a map of what is weak", async () => {
     // Which adapters are configured and how each is failing is precisely the
     // reconnaissance somebody probing an instance would like. /api/health
     // stays public and stays shallow.
     expect((await failure(doctor.call({}, ANONYMOUS))).code).toBe("permission");
-    expect((await failure(doctor.call({}, STAFF))).code).toBe("permission");
+    expect(
+      (await failure(doctor.call({}, { ...STAFF, grants: [] }))).code,
+    ).toBe("permission");
+    await expect(
+      doctor.call(
+        {},
+        {
+          ...STAFF,
+          grants: [{ module: "platform", access: "view" }],
+        },
+      ),
+    ).resolves.toHaveProperty("verdict");
     await expect(doctor.call({}, OWNER)).resolves.toHaveProperty("verdict");
   });
 });

@@ -18,6 +18,7 @@ import { getT } from "../../i18n";
 import { themeLabels } from "../../themeLabels";
 import { SignInForm } from "./SignInForm";
 import { currentBusiness } from "@/core/settings/read";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function LoginPage() {
   const actor = await actorFromToken(
     (await cookies()).get(SESSION_COOKIE)?.value,
   );
-  if (actor.kind === "user" && actor.role !== "customer") redirect("/admin");
+  if (hasModuleAccess(actor, "admin")) redirect("/admin");
 
   const [business, theme, t] = await Promise.all([
     currentBusiness(),

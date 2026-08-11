@@ -15,16 +15,17 @@ import {
 } from "@/modules/analytics/service";
 import { setIncludeBotsAction } from "../../analytics-actions";
 import { currentBusiness } from "@/core/settings/read";
-import { Card, CardBody, CardHeader } from "@/ui/primitives";
+import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
 const DAYS = 30;
 
 export default async function TrafficPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("analytics");
   const [business, includeBots] = await Promise.all([
     currentBusiness(),
     includeBotsSetting(),
@@ -40,6 +41,7 @@ export default async function TrafficPage() {
   ]);
 
   const peak = Math.max(1, ...daily.map((row) => Number(row.views)));
+  const canConfigure = hasModuleAccess(actor, "settings", "manage");
 
   return (
     <div className="grid gap-6">
@@ -56,24 +58,30 @@ export default async function TrafficPage() {
         screen reader without any ARIA at all.
       */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1 rounded-md border border-rule p-1">
-          {[false, true].map((value) => (
-            <form key={String(value)} action={setIncludeBotsAction}>
-              <input type="hidden" name="includeBots" value={value ? "1" : "0"} />
-              <button
-                type="submit"
-                aria-pressed={includeBots === value}
-                className={
-                  includeBots === value
-                    ? "rounded bg-accent-soft px-3 py-1.5 text-sm font-semibold text-accent"
-                    : "rounded px-3 py-1.5 text-sm text-ink-muted"
-                }
-              >
-                {value ? t("analytics.everything") : t("analytics.people")}
-              </button>
-            </form>
-          ))}
-        </div>
+        {canConfigure ? (
+          <div className="flex gap-1 rounded-md border border-rule p-1">
+            {[false, true].map((value) => (
+              <form key={String(value)} action={setIncludeBotsAction}>
+                <input type="hidden" name="includeBots" value={value ? "1" : "0"} />
+                <button
+                  type="submit"
+                  aria-pressed={includeBots === value}
+                  className={
+                    includeBots === value
+                      ? "rounded bg-accent-soft px-3 py-1.5 text-sm font-semibold text-accent"
+                      : "rounded px-3 py-1.5 text-sm text-ink-muted"
+                  }
+                >
+                  {value ? t("analytics.everything") : t("analytics.people")}
+                </button>
+              </form>
+            ))}
+          </div>
+        ) : (
+          <Pill tone="neutral">
+            {includeBots ? t("analytics.everything") : t("analytics.people")}
+          </Pill>
+        )}
         <p className="text-xs text-ink-muted">
           {t(
             includeBots ? "analytics.automatedShown" : "analytics.automated",

@@ -55,7 +55,7 @@ describe.runIf(hasDatabase)("events survive the process that made them", () => {
       name: "test.failsAfterQueueing",
       summary: "Queue an event and then throw.",
       kind: "mutation",
-      permission: "staff",
+      permission: "scoped",
       input: z.object({}),
       handler: (_input, ctx) => {
         ctx.queueEvent("test.shouldNeverArrive", {});

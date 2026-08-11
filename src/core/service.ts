@@ -24,18 +24,24 @@ import { ready } from "@/core/runtime";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-export type Role = "owner" | "staff" | "customer";
+export type GrantAccess = "view" | "manage";
+
+export interface ModuleGrant {
+  module: string;
+  access: GrantAccess;
+}
 
 export type Actor =
-  | { kind: "user"; userId: string; role: Role }
+  | { kind: "user"; userId: string; role: string; grants: readonly ModuleGrant[] }
   | { kind: "agent"; keyName: string; scopes: string[] }
   | { kind: "system" }
   | { kind: "anonymous" };
 
-/** Minimum role required; "public" admits anonymous callers. */
-export type Permission = "public" | Role;
-
-const roleRank: Record<Role, number> = { customer: 1, staff: 2, owner: 3 };
+/**
+ * A service declares only whether it is public, personal to a signed-in user,
+ * or governed by module grants. No role name appears in this contract.
+ */
+export type Permission = "public" | "authenticated" | "scoped";
 
 export class ServiceError extends Error {
   constructor(
@@ -84,15 +90,40 @@ export function permits(
   actor: Actor,
   required: Permission,
   serviceName: string,
+  kind: "query" | "mutation" = "mutation",
 ): boolean {
   if (actor.kind === "system") return true;
   if (required === "public") return true;
   if (actor.kind === "anonymous") return false;
   if (actor.kind === "agent") {
+    if (required === "authenticated") return false;
     const family = `${serviceName.split(".")[0]}.*`;
     return actor.scopes.includes(serviceName) || actor.scopes.includes(family);
   }
-  return roleRank[actor.role] >= roleRank[required];
+  if (required === "authenticated") return true;
+  return hasModuleAccess(
+    actor,
+    serviceName.split(".")[0]!,
+    kind === "query" ? "view" : "manage",
+  );
+}
+
+/** The same stored-grant decision used by services, routes, and navigation. */
+export function hasModuleAccess(
+  actor: Actor,
+  module: string,
+  required: GrantAccess = "view",
+): boolean {
+  if (actor.kind === "system") return true;
+  if (actor.kind !== "user") return false;
+  const applicable = actor.grants.filter(
+    (candidate) => candidate.module === "*" || candidate.module === module,
+  );
+  if (required === "view") return applicable.length > 0;
+  // The database does not promise row order. A wildcard and a specific grant
+  // may coexist, so authorization must depend on their meaning rather than on
+  // whichever row happened to be returned first.
+  return applicable.some((grant) => grant.access === "manage");
 }
 
 const REDACTED_KEY = /pass(word)?|secret|token|otp|key/i;
@@ -210,7 +241,7 @@ export function defineService<In extends z.ZodType, Out>(
       actor: Actor,
       options?: ServiceCallOptions,
     ): Promise<Out> {
-      if (!permits(actor, def.permission, def.name)) {
+      if (!permits(actor, def.permission, def.name, def.kind)) {
         // Written for whoever reads it, which is a business owner looking at a
         // form that just refused them — not the author of this file. The old
         // message ("anonymous may not call settings.updateBusiness.") reached
@@ -228,7 +259,7 @@ export function defineService<In extends z.ZodType, Out>(
               // give them: they already hold a credential for this instance,
               // and §28 publishes the whole registry to them anyway.
               ? `This API key is not allowed to call ${def.name}. Grant it "${def.name}" or "${def.name.split(".")[0]}.*" in Settings.`
-              : "Your account does not have permission to do that.",
+              : `Your role does not have permission to ${def.kind === "query" ? "view" : "manage"} ${def.name.split(".")[0]}.`,
         );
       }
       const parsed = def.input.safeParse(rawInput);

@@ -9,12 +9,13 @@ import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { SeedSiteButton } from "./SeedSiteButton";
 import { currentBusiness } from "@/core/settings/read";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
 
 export default async function PagesPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("cms");
   const [pages, business, t] = await Promise.all([
     listPages.call({}, actor),
     currentBusiness(),
@@ -23,7 +24,7 @@ export default async function PagesPage() {
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
-  const owner = actor.kind === "user" && actor.role === "owner";
+  const canManage = hasModuleAccess(actor, "cms", "manage");
 
   return (
     <div className="grid gap-6">
@@ -34,13 +35,15 @@ export default async function PagesPage() {
           </h1>
           <p className="mt-1 text-sm text-ink-muted">{t("cms.pages.intro")}</p>
         </div>
-        <a
-          href="/admin/pages/new"
-          className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
-        >
-          <Plus size={15} weight="bold" />
-          {t("cms.pages.new")}
-        </a>
+        {canManage ? (
+          <a
+            href="/admin/pages/new"
+            className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
+          >
+            <Plus size={15} weight="bold" />
+            {t("cms.pages.new")}
+          </a>
+        ) : null}
       </div>
 
       <Card>
@@ -50,7 +53,7 @@ export default async function PagesPage() {
             <p className="text-sm text-ink-muted">{t("cms.pages.empty")}</p>
             {/* Owner-only: re-creating the starting site is a repair, and
                 offering it to staff invites a confusing refusal. */}
-            {owner ? <SeedSiteButton label={t("cms.pages.seed")} /> : null}
+            {canManage ? <SeedSiteButton label={t("cms.pages.seed")} /> : null}
           </div>
         ) : (
           <ul className="grid list-none gap-0 p-0">
@@ -59,12 +62,16 @@ export default async function PagesPage() {
                 key={page.id}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-rule px-4 py-3 last:border-b-0"
               >
-                <a
-                  href={`/admin/pages/${page.id}`}
-                  className="font-medium underline decoration-rule underline-offset-2"
-                >
-                  {page.title}
-                </a>
+                {canManage ? (
+                  <a
+                    href={`/admin/pages/${page.id}`}
+                    className="font-medium underline decoration-rule underline-offset-2"
+                  >
+                    {page.title}
+                  </a>
+                ) : (
+                  <span className="font-medium">{page.title}</span>
+                )}
                 <span className="font-mono text-xs text-ink-muted">
                   /{page.slug}
                 </span>

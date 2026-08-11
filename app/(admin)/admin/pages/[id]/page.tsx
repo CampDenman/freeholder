@@ -29,7 +29,7 @@ export default async function EditPagePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("cms", "manage");
   const { id } = await params;
 
   const page = await getPage.call({ id }, actor).catch((error: unknown) => {

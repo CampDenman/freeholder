@@ -54,7 +54,7 @@ export const installDemo = defineService({
   // Owner rather than staff: this rewrites the business profile, which is the
   // instance's identity. `system` reaches it through ctx.callAsSystem at boot
   // when FREEHOLDER_SEED_DEMO is set.
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     /** Publish the pages, rather than leaving them as drafts to look at. */
     publish: z.boolean().default(true),

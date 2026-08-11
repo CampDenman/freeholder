@@ -269,7 +269,7 @@ describe.runIf(hasDatabase)("keeping subscriptions", () => {
     expect(error.code).toBe("validation");
   });
 
-  it("is owner-only, and closed to API keys entirely", async () => {
+  it("requires webhooks manage and remains closed to API keys", async () => {
     // A key that could point the business's events at an address of its
     // choosing is exfiltration wearing configuration's clothes.
     expect(
@@ -277,7 +277,10 @@ describe.runIf(hasDatabase)("keeping subscriptions", () => {
         await failure(
           createWebhook.call(
             { name: "X", url: "https://example.test/h", events: ["*"] },
-            STAFF,
+            {
+              ...STAFF,
+              grants: [{ module: "webhooks", access: "view" }],
+            },
           ),
         )
       ).code,
@@ -290,7 +293,7 @@ describe.runIf(hasDatabase)("keeping subscriptions", () => {
       ),
     );
     expect(error.code).toBe("permission");
-    expect(error.message).toContain("Sign in as the owner");
+    expect(error.message).toContain("Sign in");
   });
 
   it("clears the pause when an owner turns one back on", async () => {

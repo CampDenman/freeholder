@@ -20,7 +20,7 @@ export default async function EditSectionPage({
 }: {
   params: Promise<{ key: string }>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("cms", "manage");
   const { key } = await params;
   const [section, library, t] = await Promise.all([
     getSection.call({ key }, ANONYMOUS),

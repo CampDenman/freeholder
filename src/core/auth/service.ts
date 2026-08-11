@@ -18,6 +18,7 @@ import {
 } from "@/core/auth/sessions";
 import { defineService, ServiceError } from "@/core/service";
 import { rateLimitKey, reset as resetRateLimit } from "@/core/security/rate-limit";
+import { seedDefaultRoles } from "@/core/roles/defaults";
 
 const sessionMeta = {
   ip: z.string().optional(),
@@ -70,6 +71,10 @@ export const registerOwner = defineService({
     message: "Too many setup attempts. Wait a few minutes and try again.",
   },
   handler: async (input, ctx) => {
+    // Migrations seed these too, but first boot is deliberately self-healing:
+    // a test database or a restored pre-role database still gets the same
+    // data-backed permission catalogue before the owner row refers to it.
+    await seedDefaultRoles(ctx.tx);
     const [row] = await ctx.tx.select({ n: count() }).from(users);
     if ((row?.n ?? 0) > 0) {
       throw new ServiceError(
@@ -162,7 +167,7 @@ export const logout = defineService({
   // Takes the token, never a session id: naming a row would let any logged-in
   // caller revoke a session that isn't theirs, and no permission level can
   // express "this one is mine". Holding the token is the proof.
-  permission: "customer",
+  permission: "authenticated",
   input: z.object({ token: z.string().min(1) }),
   handler: async (input, ctx) => {
     const sessionId = await revokeSessionByToken(ctx.tx, input.token);
@@ -189,7 +194,7 @@ export const changePassword = defineService({
   name: "auth.changePassword",
   summary: "Change your own password.",
   kind: "mutation",
-  permission: "customer",
+  permission: "authenticated",
   input: z.object({
     currentPassword: z.string().min(1),
     // §9's floor. Length rather than character classes: a passphrase somebody

@@ -16,20 +16,29 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { setupState } from "@/core/settings/service";
-import type { Actor } from "@/core/service";
+import { hasModuleAccess, type Actor, type GrantAccess } from "@/core/service";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
-/** The signed-in owner or staff member, or a redirect away from here. */
-export async function requireStaffActor(): Promise<Actor> {
+/** A signed-in person granted the admin shell and, optionally, one module. */
+export async function requireStaffActor(
+  module?: string,
+  access: GrantAccess = "view",
+): Promise<Actor> {
   const state = await setupState.call({}, ANONYMOUS);
   if (!state.hasOwner) redirect("/setup");
 
   const actor = await actorFromToken(
     (await cookies()).get(SESSION_COOKIE)?.value,
   );
-  // Customers have accounts too (§4.1) and the portal is theirs; the admin is
-  // not. Anyone who is not staff or better goes to sign in.
-  if (actor.kind !== "user" || actor.role === "customer") redirect("/login");
+  // A role name is display data, not authority. The customer default has no
+  // admin grant, while an owner-defined role may enter when its stored grants
+  // say so.
+  if (actor.kind !== "user" || !hasModuleAccess(actor, "admin")) {
+    redirect("/login");
+  }
+  if (module && !hasModuleAccess(actor, module, access)) {
+    redirect(`/admin?denied=${encodeURIComponent(module)}`);
+  }
   return actor;
 }

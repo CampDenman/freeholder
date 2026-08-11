@@ -100,7 +100,7 @@ export const updateBusiness = defineService({
   name: "settings.updateBusiness",
   summary: "Create or change the business profile.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: createProfile,
   handler: async (input, ctx) => {
     // Upsert on the fixed id: setup writes the first version and the admin
@@ -128,7 +128,7 @@ export const patchBusiness = defineService({
   name: "settings.patchBusiness",
   summary: "Change part of the business profile.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: patchProfile,
   handler: async (input, ctx) => {
     if (Object.keys(input).length === 0) {
@@ -158,7 +158,7 @@ export const completeSetup = defineService({
   name: "settings.completeSetup",
   summary: "Finish first-boot setup and lock the wizard.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) => {
     const [profile] = await ctx.tx
@@ -201,7 +201,7 @@ export const setModuleConfig = defineService({
   name: "settings.setModuleConfig",
   summary: "Change a module's own settings.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     module: z.string().min(1),
     config: z.record(z.string(), z.unknown()),
@@ -273,7 +273,7 @@ export const listModules = defineService({
   name: "settings.listModules",
   summary: "Module toggles that have been set.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({}),
   // Only modules with a stored row. The set of *installed* modules comes from
   // the boot report; the admin screen merges the two so a module that has
@@ -286,7 +286,7 @@ export const setModuleEnabled = defineService({
   name: "settings.setModuleEnabled",
   summary: "Turn a module on or off.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ module: z.string().min(1), enabled: z.boolean() }),
   handler: async (input, ctx) => {
     if (input.module === "core") {

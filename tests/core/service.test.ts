@@ -20,10 +20,14 @@ import {
 } from "@/core/service";
 import { failure } from "../helpers/spine";
 
-const user = (role: "owner" | "staff" | "customer"): Actor => ({
+const user = (
+  role: string,
+  grants: Array<{ module: string; access: "view" | "manage" }> = [],
+): Actor => ({
   kind: "user",
   userId: "u1",
   role,
+  grants,
 });
 const agent = (scopes: string[]): Actor => ({
   kind: "agent",
@@ -34,59 +38,95 @@ const SYSTEM: Actor = { kind: "system" };
 const ANON: Actor = { kind: "anonymous" };
 
 describe("permits() — the authorization matrix", () => {
-  it("ranks roles, so owner ⊇ staff ⊇ customer", () => {
-    expect(permits(user("owner"), "staff", "x.y")).toBe(true);
-    expect(permits(user("staff"), "staff", "x.y")).toBe(true);
-    expect(permits(user("customer"), "staff", "x.y")).toBe(false);
-    expect(permits(user("staff"), "owner", "x.y")).toBe(false);
-    expect(permits(user("customer"), "owner", "x.y")).toBe(false);
-    expect(permits(user("customer"), "customer", "x.y")).toBe(true);
+  it("gives role names no authority of their own", () => {
+    expect(permits(user("owner"), "scoped", "contacts.list", "query")).toBe(
+      false,
+    );
+    expect(
+      permits(user("made-up-superuser"), "scoped", "contacts.list", "query"),
+    ).toBe(false);
+  });
+
+  it("lets view grants read but requires manage grants to mutate", () => {
+    const viewer = user("editor", [{ module: "cms", access: "view" }]);
+    const manager = user("editor", [{ module: "cms", access: "manage" }]);
+    expect(permits(viewer, "scoped", "cms.listPages", "query")).toBe(true);
+    expect(permits(viewer, "scoped", "cms.updatePage", "mutation")).toBe(false);
+    expect(permits(manager, "scoped", "cms.listPages", "query")).toBe(true);
+    expect(permits(manager, "scoped", "cms.updatePage", "mutation")).toBe(true);
+  });
+
+  it("supports a stored all-module grant without naming the owner role", () => {
+    const full = user("anything", [{ module: "*", access: "manage" }]);
+    expect(permits(full, "scoped", "contacts.merge", "mutation")).toBe(true);
+    expect(permits(full, "scoped", "cms.listPages", "query")).toBe(true);
+  });
+
+  it("uses the strongest applicable grant regardless of database row order", () => {
+    const wildcardLast = user("custom", [
+      { module: "contacts", access: "view" },
+      { module: "*", access: "manage" },
+    ]);
+    const specificLast = user("custom", [
+      { module: "*", access: "view" },
+      { module: "contacts", access: "manage" },
+    ]);
+    expect(permits(wildcardLast, "scoped", "contacts.merge", "mutation")).toBe(
+      true,
+    );
+    expect(permits(specificLast, "scoped", "contacts.merge", "mutation")).toBe(
+      true,
+    );
+  });
+
+  it("admits any signed-in person to personal authenticated services", () => {
+    expect(permits(user("customer"), "authenticated", "auth.logout")).toBe(
+      true,
+    );
   });
 
   it("lets system through anything — it is the platform itself", () => {
-    expect(permits(SYSTEM, "owner", "x.y")).toBe(true);
+    expect(permits(SYSTEM, "scoped", "x.y")).toBe(true);
     expect(permits(SYSTEM, "public", "x.y")).toBe(true);
   });
 
   it("admits anonymous callers only to public services", () => {
     expect(permits(ANON, "public", "x.y")).toBe(true);
-    expect(permits(ANON, "customer", "x.y")).toBe(false);
-    expect(permits(ANON, "staff", "x.y")).toBe(false);
-    expect(permits(ANON, "owner", "x.y")).toBe(false);
+    expect(permits(ANON, "authenticated", "x.y")).toBe(false);
+    expect(permits(ANON, "scoped", "x.y")).toBe(false);
   });
 
   it("grants an agent an exact service name", () => {
-    expect(permits(agent(["contacts.create"]), "staff", "contacts.create")).toBe(
+    expect(permits(agent(["contacts.create"]), "scoped", "contacts.create")).toBe(
       true,
     );
-    expect(permits(agent(["contacts.create"]), "staff", "contacts.merge")).toBe(
+    expect(permits(agent(["contacts.create"]), "scoped", "contacts.merge")).toBe(
       false,
     );
   });
 
   it("grants an agent a module wildcard", () => {
-    expect(permits(agent(["contacts.*"]), "staff", "contacts.merge")).toBe(true);
-    expect(permits(agent(["contacts.*"]), "owner", "contacts.merge")).toBe(true);
-    expect(permits(agent(["contacts.*"]), "staff", "auth.login")).toBe(false);
+    expect(permits(agent(["contacts.*"]), "scoped", "contacts.merge")).toBe(true);
+    expect(permits(agent(["contacts.*"]), "scoped", "auth.login")).toBe(false);
   });
 
   it("does not let a wildcard for one module reach another", () => {
-    expect(permits(agent(["auth.*"]), "staff", "contacts.create")).toBe(false);
+    expect(permits(agent(["auth.*"]), "scoped", "contacts.create")).toBe(false);
     // Nor a prefix that merely looks similar.
-    expect(permits(agent(["contact.*"]), "staff", "contacts.create")).toBe(
+    expect(permits(agent(["contact.*"]), "scoped", "contacts.create")).toBe(
       false,
     );
   });
 
   it("refuses a scopeless agent everything that isn't public", () => {
-    expect(permits(agent([]), "customer", "contacts.get")).toBe(false);
-    expect(permits(agent([]), "owner", "contacts.merge")).toBe(false);
+    expect(permits(agent([]), "scoped", "contacts.get")).toBe(false);
+    expect(permits(agent([]), "scoped", "contacts.merge")).toBe(false);
   });
 
-  it("ignores role rank for agents — scopes are the only currency", () => {
-    // An agent has no role, so a broad scope is required even for a
-    // customer-level service.
-    expect(permits(agent(["other.*"]), "customer", "contacts.get")).toBe(false);
+  it("keeps personal authenticated services away from API keys", () => {
+    expect(permits(agent(["auth.*"]), "authenticated", "auth.logout")).toBe(
+      false,
+    );
   });
 });
 
@@ -96,7 +136,7 @@ describe("rejection happens before the handler", () => {
     name: "probe.run",
     summary: "Records whether it was reached.",
     kind: "mutation",
-    permission: "staff",
+    permission: "scoped",
     input: z.object({ n: z.number().int() }),
     handler: async () => {
       runs += 1;
@@ -134,8 +174,12 @@ describe("rejection happens before the handler", () => {
   });
 
   it("rejects invalid input without running the handler", async () => {
-    const error = await failure(probe
-      .call({ n: "not a number" }, user("owner")));
+    const error = await failure(
+      probe.call(
+        { n: "not a number" },
+        user("owner", [{ module: "*", access: "manage" }]),
+      ),
+    );
     expect(error.code).toBe("validation");
     expect(error.message).toContain("n:");
     expect(runs).toBe(0);

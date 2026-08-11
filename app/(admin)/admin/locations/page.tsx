@@ -16,15 +16,17 @@ import { renderNAP } from "@/core/locations/nap";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { PrimaryButton } from "./PrimaryButton";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
 export default async function LocationsPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("locations");
   const [t, locations] = await Promise.all([
     getT(),
     listLocations.call({ includeHidden: true }, actor),
   ]);
+  const canManage = hasModuleAccess(actor, "locations", "manage");
 
   return (
     <div className="grid gap-6">
@@ -37,13 +39,15 @@ export default async function LocationsPage() {
             {t("admin.locations.intro")}
           </p>
         </div>
-        <a
-          href="/admin/locations/new"
-          className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-on-accent"
-        >
-          <Plus size={15} weight="bold" />
-          {t("admin.locations.add")}
-        </a>
+        {canManage ? (
+          <a
+            href="/admin/locations/new"
+            className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-on-accent"
+          >
+            <Plus size={15} weight="bold" />
+            {t("admin.locations.add")}
+          </a>
+        ) : null}
       </div>
 
       {locations.length === 0 ? (
@@ -72,12 +76,12 @@ export default async function LocationsPage() {
                     <div className="flex items-center gap-2">
                       {location.isPrimary ? (
                         <Pill tone="accent">{t("admin.locations.primary")}</Pill>
-                      ) : (
+                      ) : canManage ? (
                         <PrimaryButton
                           id={location.id}
                           label={t("admin.locations.makePrimary")}
                         />
-                      )}
+                      ) : null}
                       {location.status === "hidden" ? (
                         <Pill tone="neutral">{t("admin.locations.hidden")}</Pill>
                       ) : null}
@@ -93,12 +97,14 @@ export default async function LocationsPage() {
                       <span className="text-ink-muted">{nap.phone}</span>
                     ) : null}
                     <div className="flex flex-wrap gap-3 pt-1">
-                      <a
-                        href={`/admin/locations/${location.id}`}
-                        className="text-sm font-semibold text-accent"
-                      >
-                        {t("common.edit")}
-                      </a>
+                      {canManage ? (
+                        <a
+                          href={`/admin/locations/${location.id}`}
+                          className="text-sm font-semibold text-accent"
+                        >
+                          {t("common.edit")}
+                        </a>
+                      ) : null}
                       <a href={publicPath} className="text-sm text-ink-muted">
                         {publicPath}
                       </a>

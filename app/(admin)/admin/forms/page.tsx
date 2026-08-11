@@ -8,11 +8,12 @@ import { currentBusiness } from "@/core/settings/read";
 import { Card, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
 export default async function FormsPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("forms");
   const [forms, counts, business, t] = await Promise.all([
     listForms.call({}, actor),
     submissionCounts.call({}, actor),
@@ -22,6 +23,7 @@ export default async function FormsPage() {
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
+  const canManage = hasModuleAccess(actor, "forms", "manage");
 
   return (
     <div className="grid gap-6">
@@ -38,13 +40,15 @@ export default async function FormsPage() {
             {t("forms.quarantine", { count: counts.spam })}
           </Pill>
         ) : null}
-        <a
-          href="/admin/forms/new"
-          className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-on-accent"
-        >
-          <Plus size={15} weight="bold" />
-          {t("forms.builder.new")}
-        </a>
+        {canManage ? (
+          <a
+            href="/admin/forms/new"
+            className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-on-accent"
+          >
+            <Plus size={15} weight="bold" />
+            {t("forms.builder.new")}
+          </a>
+        ) : null}
       </div>
 
       {forms.length === 0 ? (

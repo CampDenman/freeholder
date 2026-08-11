@@ -202,8 +202,13 @@ describe.runIf(hasDatabase)("installing the demo", () => {
     );
   });
 
-  it("is owner-only", async () => {
-    const error = await failure(installDemo.call({ publish: true }, STAFF));
+  it("requires demo manage access", async () => {
+    const error = await failure(
+      installDemo.call(
+        { publish: true },
+        { ...STAFF, grants: [{ module: "demo", access: "view" }] },
+      ),
+    );
     expect(error.code).toBe("permission");
   });
 });

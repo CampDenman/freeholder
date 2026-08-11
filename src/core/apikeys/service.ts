@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // API keys (MASTER.md §11, §26, §28).
 //
-// Owner-only, and specifically *human*-owner-only: see `refuseAgents` below.
+// Human-only and separately grant-scoped: see `refuseAgents` below.
 // A key is a standing grant against the whole service registry, so minting one
 // is closer to creating a user than to changing a setting.
 import { z } from "zod";
@@ -20,11 +20,10 @@ import {
 /**
  * Keys cannot mint or revoke keys.
  *
- * §11's scope model is deliberately independent of role rank: `permits()` asks
- * an agent only whether its scopes name the service, so a key scoped
- * `apikeys.*` would satisfy an `owner` permission the way a key scoped
- * `contacts.*` satisfies a `staff` one. That is right for business services
- * and wrong here, because it makes a limited key a route to an unlimited one —
+ * §11's scope model deliberately gives API keys only their explicit scopes.
+ * A key scoped `apikeys.*` could therefore satisfy this module like any other.
+ * That is right for business services and wrong here, because it makes a
+ * limited key a route to an unlimited one —
  * mint a second key with every scope, and the first key's limits were
  * decoration.
  *
@@ -36,7 +35,7 @@ function refuseAgents(actor: Actor, verb: string): void {
   if (actor.kind === "agent") {
     throw new ServiceError(
       "permission",
-      `An API key cannot ${verb} API keys. Sign in as the owner to manage them.`,
+      `An API key cannot ${verb} API keys. Sign in with API-key management access.`,
     );
   }
 }
@@ -71,7 +70,7 @@ export const listScopes = defineService({
   name: "apikeys.scopes",
   summary: "Every capability a key can be granted.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, _ctx) => {
     const services = [...listServices().values()];
@@ -100,7 +99,7 @@ export const createApiKey = defineService({
   name: "apikeys.create",
   summary: "Mint an API key.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     name: z.string().min(1).max(80),
     scopes: z.array(z.string().min(1).max(120)).max(200).default([]),
@@ -149,7 +148,7 @@ export const listApiKeys = defineService({
   name: "apikeys.list",
   summary: "Every API key, live and revoked.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ includeRevoked: z.boolean().default(false) }),
   handler: async (input, ctx) =>
     ctx.tx
@@ -172,7 +171,7 @@ export const revokeApiKey = defineService({
   name: "apikeys.revoke",
   summary: "Stop an API key working.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "revoke");

@@ -4,7 +4,7 @@
 // tables in its manifest). Drizzle's migration generator reads the schema
 // files directly, so this barrel exists for the things that need the set:
 // boot-time introspection, relations, and test truncation.
-export { users, sessions } from "@/core/auth/schema";
+export { roles, roleGrants, users, sessions } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
 export {
   agentConnections,

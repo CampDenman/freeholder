@@ -23,7 +23,7 @@ export default async function TranslatePagePage({
 }: {
   params: Promise<{ locale: string; id: string }>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("i18n", "manage");
   const { locale, id } = await params;
   const [t, business] = await Promise.all([getT(), currentBusiness()]);
 

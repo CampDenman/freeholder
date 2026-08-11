@@ -123,7 +123,7 @@ export const getPage = defineService({
   name: "cms.getPage",
   summary: "One page by id, including drafts.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
@@ -140,7 +140,7 @@ export const listPages = defineService({
   name: "cms.listPages",
   summary: "Every page, newest first.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({}),
   handler: (_input, ctx) =>
     ctx.tx.select().from(pages).orderBy(desc(pages.updatedAt)),
@@ -218,7 +218,7 @@ export const createPage = defineService({
   name: "cms.createPage",
   summary: "Add a page.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     slug,
     locale: z.string().default("en"),
@@ -254,7 +254,7 @@ export const updatePage = defineService({
   name: "cms.updatePage",
   summary: "Change a page's content or settings.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     id: z.string().uuid(),
     slug: slug.optional(),
@@ -322,7 +322,7 @@ export const publishPage = defineService({
   name: "cms.publishPage",
   summary: "Make a page live, or take it back to draft.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid(), published: z.boolean() }),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
@@ -369,7 +369,7 @@ export const listSections = defineService({
   name: "cms.listSections",
   summary: "Every section, chrome first.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({}),
   handler: (_input, ctx) =>
     ctx.tx.select().from(sections).orderBy(sections.kind, sections.name),
@@ -379,7 +379,7 @@ export const updateSection = defineService({
   name: "cms.updateSection",
   summary: "Change a section's content.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     key: z.string().min(1),
     locale: z.string().default("en"),
@@ -422,7 +422,7 @@ export const listRevisions = defineService({
   name: "cms.listRevisions",
   summary: "Earlier versions of a page or section.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     subjectType: z.enum(["page", "section"]),
     subjectId: z.string().uuid(),
@@ -453,7 +453,7 @@ export const restoreRevision = defineService({
   name: "cms.restoreRevision",
   summary: "Put a page or section back to an earlier version.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ revisionId: z.string().uuid() }),
   handler: async (input, ctx) => {
     const [revision] = await ctx.tx
@@ -539,7 +539,7 @@ export const ensureDefaults = defineService({
   name: "cms.ensureDefaults",
   summary: "Create the starting header, footer and home page if absent.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ locale: z.string().default("en") }),
   handler: async (input, ctx) => {
     const [business] = await ctx.tx

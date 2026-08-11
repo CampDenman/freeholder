@@ -20,11 +20,12 @@ import { currentBusiness } from "@/core/settings/read";
 import { Card, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
 export default async function TranslationsPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("i18n");
   const [pages, rows, business, t] = await Promise.all([
     listPages.call({}, actor),
     translationIndex.call({ entityType: "page" }, actor),
@@ -41,6 +42,7 @@ export default async function TranslationsPage() {
   if (targets.length === 0) notFound();
 
   const timezone = business?.timezone ?? "UTC";
+  const canManage = hasModuleAccess(actor, "i18n", "manage");
   const names = new Intl.DisplayNames([sourceLocale], { type: "language" });
   const byKey = new Map(rows.map((row) => [`${row.entityId}:${row.locale}`, row]));
 
@@ -90,33 +92,44 @@ export default async function TranslationsPage() {
                     </th>
                     {targets.map((locale) => {
                       const row = byKey.get(`${page.id}:${locale}`);
+                      const status = (
+                        <>
+                          {row ? (
+                            <Pill
+                              tone={row.status === "reviewed" ? "success" : "warning"}
+                            >
+                              {t(`translations.status.${row.status}`)}
+                            </Pill>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-accent">
+                              <TranslateIcon size={14} weight="bold" />
+                              {t("translations.missing")}
+                            </span>
+                          )}
+                          {row ? (
+                            <time
+                              dateTime={row.updatedAt.toISOString()}
+                              className="font-mono text-xs text-ink-muted tabular-nums"
+                            >
+                              {formatDateTime(row.updatedAt, timezone, sourceLocale)}
+                            </time>
+                          ) : null}
+                        </>
+                      );
                       return (
                         <td key={locale} className="p-3">
-                          <a
-                            href={`/admin/translations/${locale}/${page.id}`}
-                            className="inline-flex items-center gap-2"
-                          >
-                            {row ? (
-                              <Pill
-                                tone={row.status === "reviewed" ? "success" : "warning"}
-                              >
-                                {t(`translations.status.${row.status}`)}
-                              </Pill>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 text-accent">
-                                <TranslateIcon size={14} weight="bold" />
-                                {t("translations.missing")}
-                              </span>
-                            )}
-                            {row ? (
-                              <time
-                                dateTime={row.updatedAt.toISOString()}
-                                className="font-mono text-xs text-ink-muted tabular-nums"
-                              >
-                                {formatDateTime(row.updatedAt, timezone, sourceLocale)}
-                              </time>
-                            ) : null}
-                          </a>
+                          {canManage ? (
+                            <a
+                              href={`/admin/translations/${locale}/${page.id}`}
+                              className="inline-flex items-center gap-2"
+                            >
+                              {status}
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center gap-2">
+                              {status}
+                            </span>
+                          )}
                         </td>
                       );
                     })}

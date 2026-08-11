@@ -34,9 +34,11 @@ export interface ContactValues {
 export function ContactForm({
   values,
   labels,
+  readOnly = false,
 }: {
   values: ContactValues;
   labels: ContactFormLabels;
+  readOnly?: boolean;
 }) {
   const editing = Boolean(values.id);
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -90,6 +92,7 @@ export function ContactForm({
               defaultValue={seed.name}
               required
               autoFocus={!editing}
+              disabled={readOnly}
             />
           </Field>
 
@@ -105,6 +108,7 @@ export function ContactForm({
                 name="email"
                 type="email"
                 defaultValue={seed.email}
+                disabled={readOnly}
               />
             </Field>
             <Field label={labels.phone} htmlFor="phone">
@@ -114,6 +118,7 @@ export function ContactForm({
                 name="phone"
                 type="tel"
                 defaultValue={seed.phone}
+                disabled={readOnly}
               />
             </Field>
           </div>
@@ -125,6 +130,7 @@ export function ContactForm({
                 id="lifecycleStage"
                 name="lifecycleStage"
                 defaultValue={seed.lifecycleStage}
+                disabled={readOnly}
               >
                 {labels.stages.map((stage) => (
                   <option key={stage.value} value={stage.value}>
@@ -140,6 +146,7 @@ export function ContactForm({
                 name="tags"
                 defaultValue={seed.tags}
                 className="font-mono"
+                disabled={readOnly}
               />
             </Field>
           </div>
@@ -155,18 +162,21 @@ export function ContactForm({
               name="ownerNotes"
               rows={3}
               defaultValue={seed.ownerNotes}
+              disabled={readOnly}
               className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink focus-visible:border-accent"
             />
           </Field>
         </CardBody>
         <CardFooter>
-          <Button type="submit" disabled={pending}>
-            {pending
-              ? labels.saving
-              : editing
-                ? labels.saveChanges
-                : labels.add}
-          </Button>
+          {!readOnly ? (
+            <Button type="submit" disabled={pending}>
+              {pending
+                ? labels.saving
+                : editing
+                  ? labels.saveChanges
+                  : labels.add}
+            </Button>
+          ) : null}
           <a href="/admin/contacts" className="text-sm text-ink-muted">
             {labels.cancel}
           </a>

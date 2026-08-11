@@ -22,7 +22,7 @@ export default async function EditFormPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("forms", "manage");
   const { id } = await params;
   const [t, form] = await Promise.all([
     getT(),

@@ -58,6 +58,7 @@ export default async function AdminLayout({
         <div className="mx-auto max-w-5xl px-6">
           <AdminNav
             multilingual={(business?.enabledLocales ?? []).length > 1}
+            grants={actor.kind === "user" ? actor.grants : []}
             labels={{
               region: t("admin.nav.label"),
               overview: t("admin.nav.overview"),
@@ -71,6 +72,7 @@ export default async function AdminLayout({
               locations: t("admin.nav.locations"),
               translations: t("admin.nav.translations"),
               settings: t("admin.nav.settings"),
+              roles: t("admin.nav.roles"),
             }}
           />
         </div>

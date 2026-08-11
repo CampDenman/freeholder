@@ -26,7 +26,13 @@ import {
   needsRotation,
 } from "@/core/connections/crypto";
 import { violates } from "@/core/db/errors";
-import { defineService, ServiceError, type Actor, type Tx } from "@/core/service";
+import {
+  defineService,
+  hasModuleAccess,
+  ServiceError,
+  type Actor,
+  type Tx,
+} from "@/core/service";
 import type { Database } from "@/core/db";
 
 /**
@@ -72,8 +78,8 @@ async function reachable(
   if (!row) throw new ServiceError("not_found", "No such connected account.");
 
   const isHolder = actor.kind === "user" && actor.userId === row.userId;
-  const isOwner = actor.kind === "user" && actor.role === "owner";
-  if (!isHolder && !isOwner && actor.kind !== "system") {
+  const canManage = hasModuleAccess(actor, "connections", "manage");
+  if (!isHolder && !canManage && actor.kind !== "system") {
     throw new ServiceError("not_found", "No such connected account.");
   }
   return row;
@@ -90,13 +96,23 @@ export const listConnections = defineService({
   name: "connections.list",
   summary: "The third-party accounts connected to this site.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ mine: z.boolean().default(true) }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "agent") {
       throw new ServiceError(
         "permission",
         "An API key cannot read connected accounts.",
+      );
+    }
+    if (
+      !input.mine &&
+      !hasModuleAccess(ctx.actor, "connections", "manage") &&
+      ctx.actor.kind !== "system"
+    ) {
+      throw new ServiceError(
+        "permission",
+        "Manage access is required to list another person's connections.",
       );
     }
     const onlyMine =
@@ -137,7 +153,7 @@ export const recordConnection = defineService({
   name: "connections.record",
   summary: "Store a completed connection and its credentials.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     userId: z.uuid(),
     provider: z.enum(["google", "microsoft", "apple", "caldav", "imap"]),
@@ -163,7 +179,7 @@ export const recordConnection = defineService({
     if (
       ctx.actor.kind === "user" &&
       ctx.actor.userId !== input.userId &&
-      ctx.actor.role !== "owner"
+      !hasModuleAccess(ctx.actor, "connections", "manage")
     ) {
       throw new ServiceError(
         "permission",
@@ -265,7 +281,7 @@ export const setConnectionOptions = defineService({
   name: "connections.setOptions",
   summary: "Change what a connection shares and how much detail it syncs.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     id: z.uuid(),
     kind: z.enum(["personal", "business"]).optional(),
@@ -300,7 +316,7 @@ export const setCapability = defineService({
   name: "connections.setCapability",
   summary: "Turn one thing a connection is used for on or off.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     id: z.uuid(),
     capability: z.enum(CAPABILITIES),
@@ -341,7 +357,7 @@ export const removeConnection = defineService({
   name: "connections.remove",
   summary: "Disconnect an account and forget its credentials.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     await reachable(ctx.tx, ctx.actor, input.id);
@@ -369,7 +385,7 @@ export const flagConnection = defineService({
   name: "connections.flag",
   summary: "Record that a connection stopped working.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     id: z.uuid(),
     status: z.enum(["needs_reconnect", "revoked"]),
@@ -403,7 +419,7 @@ export const rotateCredentials = defineService({
   name: "connections.rotateCredentials",
   summary: "Re-encrypt stored credentials under the current key.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) => {
     if (ctx.actor.kind === "agent") {
