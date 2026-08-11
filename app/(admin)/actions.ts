@@ -9,7 +9,7 @@
 // REST API and MCP server call (§11) — the admin is a caller, never a
 // shortcut. Next verifies the Origin header for Server Actions, so this path
 // carries its own CSRF defence.
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { login, logout } from "@/core/auth/service";
@@ -19,6 +19,7 @@ import { LOGIN_CHALLENGE_COOKIE } from "@/core/auth/two-factor";
 import { getT } from "../i18n";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import {
   createContact,
   mergeContacts,
@@ -103,7 +104,10 @@ export async function signInAction(
   try {
     result = await login.call(
       { email: field(form, "email"), password: field(form, "password") },
-      { kind: "anonymous" },
+      {
+        kind: "anonymous",
+        request: requestMetadataFromHeaders(await headers()),
+      },
     );
   } catch (error) {
     // Same reason as the contact form: React resets the form, and retyping an

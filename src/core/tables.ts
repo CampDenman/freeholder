@@ -9,6 +9,7 @@ export {
   roleGrants,
   users,
   sessions,
+  loginSecurityEvents,
   staffInvitations,
   totpFactors,
   twoFactorChallenges,

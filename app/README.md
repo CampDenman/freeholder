@@ -6,7 +6,8 @@ The thin routing layer over `src/`. Route groups per `MASTER.md` §10:
 - `(preview)/` — isolated editor previews
 - `(admin)/admin/` — admin app (noindex); `(admin)/invite/` is the public,
   noindex staff-invitation acceptance door; `(admin)/security/` owns forced
-  enrollment, factor management and fresh-verification screens
+  enrollment, factor management, active-device revocation, recent-login
+  notices and fresh-verification screens
 - `setup/` — first-boot owner/business/location flow
 - `api/` — HTTP RPC/API routes, thin wrappers over `src/` services
 

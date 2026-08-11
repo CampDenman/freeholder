@@ -3,8 +3,9 @@
 // Privileged-session 2FA, replay resistance, recovery and step-up (C1.03).
 import { readFileSync } from "node:fs";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { desc } from "drizzle-orm";
 import { db } from "@/core/db";
-import { users } from "@/core/auth/schema";
+import { loginSecurityEvents, sessions, users } from "@/core/auth/schema";
 import { hashPassword } from "@/core/auth/passwords";
 import { login } from "@/core/auth/service";
 import { createSession } from "@/core/auth/sessions";
@@ -218,7 +219,11 @@ describe.runIf(hasDatabase)("the two-factor lifecycle", () => {
     const pending = await loginRoute(
       new Request("https://example.test/api/auth/login", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/126.0.0.0",
+          "x-forwarded-for": "203.0.113.44",
+        },
         body: JSON.stringify({ email: "owner-2fa@example.test", password: PASSWORD }),
       }),
     );
@@ -238,6 +243,17 @@ describe.runIf(hasDatabase)("the two-factor lifecycle", () => {
     expect(completed.status).toBe(200);
     expect(completed.headers.getSetCookie().some((value) => value.startsWith(`${SESSION_COOKIE}=`))).toBe(true);
     expect(completed.headers.getSetCookie().some((value) => value.includes(`${LOGIN_CHALLENGE_COOKIE}=`) && value.includes("Max-Age=0"))).toBe(true);
+    const [newest] = await db()
+      .select({ ip: sessions.ip, userAgent: sessions.userAgent })
+      .from(sessions)
+      .orderBy(desc(sessions.createdAt))
+      .limit(1);
+    expect(newest).toMatchObject({
+      ip: "203.0.113.xxx",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/126.0.0.0",
+    });
+    const activity = await db().select().from(loginSecurityEvents);
+    expect(activity.at(-1)?.ipHint).toBe("203.0.113.xxx");
   });
 });
 

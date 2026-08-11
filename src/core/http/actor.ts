@@ -10,6 +10,7 @@
 import { whoami } from "@/core/auth/service";
 import type { SessionUser } from "@/core/auth/sessions";
 import { readSessionToken } from "@/core/http/cookies";
+import { requestMetadata } from "@/core/http/request-metadata";
 import type { Actor } from "@/core/service";
 
 const ANONYMOUS: Actor = { kind: "anonymous" };
@@ -69,7 +70,12 @@ export async function resolveApiKey(request: Request): Promise<Actor | undefined
   if (!key) return undefined;
 
   touchApiKey(key.id);
-  return { kind: "agent", keyName: key.name, scopes: key.scopes };
+  return {
+    kind: "agent",
+    keyName: key.name,
+    scopes: key.scopes,
+    request: requestMetadata(request),
+  };
 }
 
 /**
@@ -87,7 +93,8 @@ export async function actorFromRequest(request: Request): Promise<Actor> {
   if (key) return key;
 
   const session = await resolveSession(request);
-  if (!session) return ANONYMOUS;
+  const metadata = requestMetadata(request);
+  if (!session) return { ...ANONYMOUS, request: metadata };
   return {
     kind: "user",
     userId: session.userId,
@@ -95,5 +102,6 @@ export async function actorFromRequest(request: Request): Promise<Actor> {
     grants: session.grants,
     sessionId: session.sessionId,
     security: session.security,
+    request: metadata,
   };
 }

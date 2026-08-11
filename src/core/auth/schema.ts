@@ -97,6 +97,12 @@ export const sessions = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     ip: text("ip"),
     userAgent: text("user_agent"),
+    /** HMAC fingerprints support new-device/network detection without raw IP history. */
+    deviceHash: text("device_hash"),
+    networkHash: text("network_hash"),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     /** The factor was proven for this session; null means password-only. */
     twoFactorVerifiedAt: timestamp("two_factor_verified_at", {
       withTimezone: true,
@@ -108,6 +114,46 @@ export const sessions = pgTable(
   (t) => [
     index("sessions_user_id_idx").on(t.userId),
     uniqueIndex("sessions_token_hash_idx").on(t.tokenHash),
+  ],
+);
+
+/**
+ * Privacy-limited successful-login history and suspicious-login delivery.
+ * Raw IPs and full user agents never land here: only HMAC fingerprints and
+ * owner-readable coarse labels survive after the active session is gone.
+ */
+export const loginSecurityEvents = pgTable(
+  "login_security_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // Deliberately not a foreign key. Revoking a session must not erase the
+    // security notice that explains why the owner revoked it.
+    sessionId: uuid("session_id").notNull(),
+    deviceHash: text("device_hash"),
+    networkHash: text("network_hash"),
+    deviceLabel: text("device_label").notNull(),
+    ipHint: text("ip_hint"),
+    reason: text("reason", { enum: ["new_device", "new_network"] }),
+    noticeStatus: text("notice_status", {
+      enum: ["not_needed", "pending", "sent", "failed", "unavailable"],
+    })
+      .notNull()
+      .default("not_needed"),
+    noticeAttempts: integer("notice_attempts").notNull().default(0),
+    noticeError: text("notice_error"),
+    noticeSentAt: timestamp("notice_sent_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    expiresAt: timestamp("expires_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now() + interval '90 days'`),
+  },
+  (t) => [
+    index("login_security_events_user_created_idx").on(t.userId, t.createdAt),
+    index("login_security_events_notice_idx").on(t.noticeStatus, t.createdAt),
+    index("login_security_events_expiry_idx").on(t.expiresAt),
   ],
 );
 
@@ -182,6 +228,11 @@ export const twoFactorChallenges = pgTable(
     tokenHash: text("token_hash").notNull(),
     challenge: text("challenge"),
     pendingSecret: text("pending_secret"),
+    /** Protected request metadata carried across password → second factor. */
+    ipHint: text("ip_hint"),
+    userAgent: text("user_agent"),
+    deviceHash: text("device_hash"),
+    networkHash: text("network_hash"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     usedAt: timestamp("used_at", { withTimezone: true }),
     createdAt: createdAtColumn(),

@@ -25,7 +25,9 @@ import {
 } from "@/core/auth/schema";
 import {
   createSession,
+  describeDevice,
   markSessionStepUp,
+  type ProtectedSessionMetadata,
 } from "@/core/auth/sessions";
 import {
   decryptTwoFactorSecret,
@@ -39,6 +41,7 @@ import {
 } from "@/core/auth/two-factor-crypto";
 import { env } from "@/core/env";
 import { defineService, ServiceError, type Actor, type Tx } from "@/core/service";
+import { recordSuccessfulLogin } from "@/core/auth/session-management/service";
 
 export const LOGIN_CHALLENGE_COOKIE = "freeholder_login_challenge";
 const CHALLENGE_TTL_MS = 10 * 60 * 1000;
@@ -94,7 +97,11 @@ async function challenge(
   tx: Tx,
   userId: string,
   purpose: "login" | "totp-enrollment" | "webauthn-registration" | "webauthn-step-up",
-  values: { challenge?: string; pendingSecret?: string } = {},
+  values: {
+    challenge?: string;
+    pendingSecret?: string;
+    loginMetadata?: ProtectedSessionMetadata;
+  } = {},
 ) {
   const token = generateChallengeToken();
   await tx.insert(twoFactorChallenges).values({
@@ -103,6 +110,10 @@ async function challenge(
     tokenHash: hashTwoFactorToken(token),
     challenge: values.challenge,
     pendingSecret: values.pendingSecret,
+    ipHint: values.loginMetadata?.ipHint,
+    userAgent: values.loginMetadata?.userAgent,
+    deviceHash: values.loginMetadata?.deviceHash,
+    networkHash: values.loginMetadata?.networkHash,
     expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS),
   });
   return token;
@@ -227,7 +238,11 @@ async function verifyWebAuthn(
     .where(eq(webauthnCredentials.id, credential.id));
 }
 
-export async function createLoginChallenge(tx: Tx, userId: string) {
+export async function createLoginChallenge(
+  tx: Tx,
+  userId: string,
+  loginMetadata?: ProtectedSessionMetadata,
+) {
   const credentials = await credentialsFor(tx, userId);
   const [[totp], [recovery]] = await Promise.all([
     tx.select({ userId: totpFactors.userId }).from(totpFactors).where(eq(totpFactors.userId, userId)).limit(1),
@@ -250,6 +265,7 @@ export async function createLoginChallenge(tx: Tx, userId: string) {
   }
   const challengeToken = await challenge(tx, userId, "login", {
     challenge: webauthnChallenge,
+    loginMetadata,
   });
   return {
     challengeToken,
@@ -294,8 +310,6 @@ export const loginChallengeDetails = defineService({
 const completeLoginInput = z.object({
   challengeToken: z.string().min(20),
   code: z.string().trim().min(6).max(40),
-  ip: z.string().optional(),
-  userAgent: z.string().optional(),
 });
 
 export const completeTwoFactorLogin = defineService({
@@ -315,7 +329,23 @@ export const completeTwoFactorLogin = defineService({
     const method = await consumeCode(ctx.tx, row.userId, input.code);
     await spendChallenge(ctx.tx, row.id);
     await ctx.tx.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, row.userId));
-    const session = await createSession(ctx.tx, row.userId, { ...input, twoFactorVerified: true });
+    const metadata = {
+      ipHint: row.ipHint ?? undefined,
+      userAgent: row.userAgent ?? undefined,
+      deviceHash: row.deviceHash ?? undefined,
+      networkHash: row.networkHash ?? undefined,
+      deviceLabel: describeDevice(row.userAgent),
+    };
+    const session = await createSession(ctx.tx, row.userId, {
+      ...metadata,
+      twoFactorVerified: true,
+    });
+    await recordSuccessfulLogin(
+      ctx.tx,
+      row.userId,
+      session.sessionId,
+      metadata,
+    );
     ctx.setSubject("user", row.userId);
     return { userId: row.userId, method, ...session };
   },
@@ -329,8 +359,6 @@ export const completeWebAuthnLogin = defineService({
   input: z.object({
     challengeToken: z.string().min(20),
     credentialResponse: responseValue,
-    ip: z.string().optional(),
-    userAgent: z.string().optional(),
   }),
   rateLimit: {
     limit: 10,
@@ -349,7 +377,23 @@ export const completeWebAuthnLogin = defineService({
     );
     await spendChallenge(ctx.tx, row.id);
     await ctx.tx.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, row.userId));
-    const session = await createSession(ctx.tx, row.userId, { ...input, twoFactorVerified: true });
+    const metadata = {
+      ipHint: row.ipHint ?? undefined,
+      userAgent: row.userAgent ?? undefined,
+      deviceHash: row.deviceHash ?? undefined,
+      networkHash: row.networkHash ?? undefined,
+      deviceLabel: describeDevice(row.userAgent),
+    };
+    const session = await createSession(ctx.tx, row.userId, {
+      ...metadata,
+      twoFactorVerified: true,
+    });
+    await recordSuccessfulLogin(
+      ctx.tx,
+      row.userId,
+      session.sessionId,
+      metadata,
+    );
     ctx.setSubject("user", row.userId);
     return { userId: row.userId, method: "webauthn" as const, ...session };
   },
