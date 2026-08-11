@@ -60,7 +60,7 @@ export const listForms = defineService({
   name: "forms.list",
   summary: "Every form, with how many submissions each has taken.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx
@@ -112,7 +112,7 @@ export const getFormById = defineService({
   name: "forms.byId",
   summary: "One form, whole, for editing it.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const [form] = await ctx.tx
@@ -128,7 +128,7 @@ export const createForm = defineService({
   name: "forms.create",
   summary: "Add a form.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     slug,
     name: z.string().min(1).max(120),
@@ -162,7 +162,7 @@ export const updateForm = defineService({
   name: "forms.update",
   summary: "Change a form's questions or settings.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     id: z.string().uuid(),
     name: z.string().min(1).max(120).optional(),
@@ -312,7 +312,7 @@ export const listSubmissions = defineService({
   name: "forms.listSubmissions",
   summary: "Submissions for one form, newest first.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     formId: z.string().uuid(),
     status: z.enum(["received", "spam", "all"]).default("received"),
@@ -345,7 +345,7 @@ export const reviewSubmission = defineService({
   name: "forms.reviewSubmission",
   summary: "Mark a submission as spam, or rescue one that is not.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     id: z.string().uuid(),
     status: z.enum(["received", "spam"]),
@@ -403,7 +403,7 @@ export const submissionCounts = defineService({
   name: "forms.submissionCounts",
   summary: "How many submissions are waiting, and how many are flagged.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) => {
     const [row] = await ctx.tx

@@ -1,13 +1,15 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
-// Identity & access tables (MASTER.md §4.1). A User is a login — owner,
-// staff, or customer; customers may be magic-link-only (null password_hash).
+// Identity & access tables (MASTER.md §4.1). A User is a login linked to one
+// named role; customers may be magic-link-only (null password_hash).
 // Sessions are server-side per §9: hand-rolled Lucia-style, token hashed at
 // rest so a database leak never yields a usable session.
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -15,13 +17,55 @@ import {
 } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
+/**
+ * A role is a named bundle of stored grants, never a rank embedded in code.
+ * `key` is stable because users and audit history refer to it; the owner may
+ * change the human name without changing what those records mean.
+ */
+export const roles = pgTable("roles", {
+  key: text("key").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  isSystem: boolean("is_system").notNull().default(false),
+  assignable: boolean("assignable").notNull().default(true),
+  createdAt: createdAtColumn(),
+  updatedAt: updatedAtColumn(),
+});
+
+/**
+ * Per-module access. `view` admits queries and `manage` admits both queries
+ * and mutations. A `*` module is stored like any other grant; the permission
+ * engine never infers it from a role name.
+ */
+export const roleGrants = pgTable(
+  "role_grants",
+  {
+    roleKey: text("role_key")
+      .notNull()
+      .references(() => roles.key, { onDelete: "cascade" }),
+    module: text("module").notNull(),
+    access: text("access", { enum: ["view", "manage"] }).notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    primaryKey({
+      name: "role_grants_role_module_pk",
+      columns: [t.roleKey, t.module],
+    }),
+    index("role_grants_module_idx").on(t.module),
+  ],
+);
+
 export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").notNull(),
     passwordHash: text("password_hash"),
-    role: text("role", { enum: ["owner", "staff", "customer"] }).notNull(),
+    role: text("role")
+      .notNull()
+      .references(() => roles.key),
     otpSecret: text("otp_secret"),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     createdAt: createdAtColumn(),

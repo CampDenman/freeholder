@@ -21,7 +21,7 @@ export const doctor = defineService({
   name: "platform.doctor",
   summary: "Check this instance's configuration and adapters.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({}),
   handler: () => runDoctor(),
 });

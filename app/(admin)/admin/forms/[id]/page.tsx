@@ -13,6 +13,7 @@ import { currentBusiness } from "@/core/settings/read";
 import { Card, Pill } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
+import { hasModuleAccess } from "@/core/service";
 import { reviewSubmissionAction } from "../../../forms-actions";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export default async function FormSubmissionsPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ status?: string }>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("forms");
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const status: Status =
     query.status === "spam" || query.status === "all" ? query.status : "received";
@@ -59,6 +60,7 @@ export default async function FormSubmissionsPage({
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
+  const canManage = hasModuleAccess(actor, "forms", "manage");
   const fields = Array.isArray(form.fields)
     ? (form.fields as Array<{ key: string; label: string }>)
     : [];
@@ -75,12 +77,14 @@ export default async function FormSubmissionsPage({
         </a>
         <div className="mt-1 flex flex-wrap items-baseline gap-3">
           <h1 className="text-xl font-bold tracking-tight">{form.name}</h1>
-          <a
-            href={`/admin/forms/${id}/edit`}
-            className="text-sm font-semibold text-accent"
-          >
-            {t("forms.builder.edit")}
-          </a>
+          {canManage ? (
+            <a
+              href={`/admin/forms/${id}/edit`}
+              className="text-sm font-semibold text-accent"
+            >
+              {t("forms.builder.edit")}
+            </a>
+          ) : null}
         </div>
       </div>
 

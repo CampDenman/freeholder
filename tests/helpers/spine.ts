@@ -8,6 +8,7 @@ import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { db } from "@/core/db";
 import manifests from "@/modules";
 import type { Actor, ServiceError } from "@/core/service";
+import { seedDefaultRoles } from "@/core/roles/defaults";
 
 export const hasDatabase = Boolean(process.env.DATABASE_URL);
 
@@ -18,16 +19,19 @@ export const OWNER: UserActor = {
   kind: "user",
   userId: "00000000-0000-4000-8000-000000000001",
   role: "owner",
+  grants: [{ module: "*", access: "manage" }],
 };
 export const STAFF: UserActor = {
   kind: "user",
   userId: "00000000-0000-4000-8000-000000000002",
   role: "staff",
+  grants: [{ module: "*", access: "manage" }],
 };
 export const CUSTOMER: UserActor = {
   kind: "user",
   userId: "00000000-0000-4000-8000-000000000003",
   role: "customer",
+  grants: [],
 };
 export const ANONYMOUS: Actor = { kind: "anonymous" };
 
@@ -71,6 +75,7 @@ export async function truncateSpine(): Promise<void> {
   await db().execute(
     sql.raw(`truncate table ${names.join(", ")} restart identity cascade`),
   );
+  await db().transaction(seedDefaultRoles);
 }
 
 export { closeDb } from "@/core/db";

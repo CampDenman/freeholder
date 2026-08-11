@@ -59,7 +59,7 @@ export const listRedirects = defineService({
   name: "seo.listRedirects",
   summary: "Every redirect, newest first.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({}),
   handler: (_input, ctx) =>
     ctx.tx.select().from(redirects).orderBy(desc(redirects.createdAt)),
@@ -76,7 +76,7 @@ export const recordRedirect = defineService({
   name: "seo.recordRedirect",
   summary: "Point an old path at a new one.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     fromPath: path,
     toPath: path,
@@ -130,7 +130,7 @@ export const deleteRedirect = defineService({
   name: "seo.deleteRedirect",
   summary: "Stop redirecting a path.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx

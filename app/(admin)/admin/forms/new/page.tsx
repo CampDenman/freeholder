@@ -9,7 +9,7 @@ import { builderLabels, kindOptions } from "../builderLabels";
 export const dynamic = "force-dynamic";
 
 export default async function NewFormPage() {
-  await requireStaffActor();
+  await requireStaffActor("forms", "manage");
   const t = await getT();
 
   return (

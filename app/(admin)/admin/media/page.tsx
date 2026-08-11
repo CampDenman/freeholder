@@ -11,13 +11,14 @@ import { UploadForm } from "./UploadForm";
 import { AltTextForm } from "./AltTextForm";
 import { DeleteAssetButton } from "./DeleteAssetButton";
 import { currentBusiness } from "@/core/settings/read";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function MediaPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("media");
   const [library, business, t] = await Promise.all([
     listAssets.call({}, actor),
     currentBusiness(),
@@ -26,14 +27,12 @@ export default async function MediaPage() {
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
-  // Deleting is irreversible, so it is owner-only at the service and hidden
-  // from staff here rather than offered and refused.
-  const owner = actor.kind === "user" && actor.role === "owner";
+  const canManage = hasModuleAccess(actor, "media", "manage");
 
   // Where each file is still referenced, so the confirmation can say what will
   // be left with a gap.
   const usage = new Map(
-    owner
+    canManage
       ? await Promise.all(
           library.rows.map(
             async (asset) =>
@@ -66,15 +65,17 @@ export default async function MediaPage() {
         <p className="mt-1 text-sm text-ink-muted">{t("media.intro")}</p>
       </div>
 
-      <UploadForm
-        labels={{
-          file: t("media.file"),
-          fileHint: t("media.fileHint"),
-          submit: t("media.upload"),
-          pending: t("media.uploading"),
-          failed: t("media.uploadFailed"),
-        }}
-      />
+      {canManage ? (
+        <UploadForm
+          labels={{
+            file: t("media.file"),
+            fileHint: t("media.fileHint"),
+            submit: t("media.upload"),
+            pending: t("media.uploading"),
+            failed: t("media.uploadFailed"),
+          }}
+        />
+      ) : null}
 
       <Card>
         {library.rows.length === 0 ? (
@@ -131,7 +132,7 @@ export default async function MediaPage() {
                       </time>
                     </div>
 
-                    {owner ? (
+                    {canManage ? (
                       <div className="flex justify-end">
                         <DeleteAssetButton
                           id={asset.id}
@@ -154,7 +155,7 @@ export default async function MediaPage() {
                       </div>
                     ) : null}
 
-                    {asset.kind === "image" ? (
+                    {canManage && asset.kind === "image" ? (
                       <AltTextForm
                         id={asset.id}
                         value={asset.altText ?? ""}

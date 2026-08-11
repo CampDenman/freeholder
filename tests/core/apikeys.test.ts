@@ -29,7 +29,6 @@ import {
   failure,
   hasDatabase,
   OWNER,
-  STAFF,
   truncateSpine,
 } from "../helpers/spine";
 
@@ -58,20 +57,20 @@ describe("what a scope grants", () => {
   // permits() predates this table by several phases; these pin the behaviour
   // the key model is built on rather than re-testing the registry.
   it("admits the service it names", () => {
-    expect(permits(agent(["contacts.create"]), "staff", "contacts.create")).toBe(true);
-    expect(permits(agent(["contacts.create"]), "staff", "contacts.list")).toBe(false);
+    expect(permits(agent(["contacts.create"]), "scoped", "contacts.create")).toBe(true);
+    expect(permits(agent(["contacts.create"]), "scoped", "contacts.list")).toBe(false);
   });
 
   it("admits a whole area with a family scope", () => {
-    expect(permits(agent(["contacts.*"]), "owner", "contacts.merge")).toBe(true);
-    expect(permits(agent(["contacts.*"]), "owner", "media.delete")).toBe(false);
+    expect(permits(agent(["contacts.*"]), "scoped", "contacts.merge")).toBe(true);
+    expect(permits(agent(["contacts.*"]), "scoped", "media.delete")).toBe(false);
   });
 
   it("gives an unscoped key exactly what a visitor has", () => {
     // Not nothing, and not more: "public" is the same reach anonymous already
     // has, so granting it to a key grants nothing extra.
     expect(permits(agent([]), "public", "settings.getBusiness")).toBe(true);
-    expect(permits(agent([]), "staff", "contacts.list")).toBe(false);
+    expect(permits(agent([]), "scoped", "contacts.list")).toBe(false);
   });
 });
 
@@ -167,10 +166,17 @@ describe.runIf(hasDatabase)("minting a key", () => {
     ).resolves.toHaveProperty("token");
   });
 
-  it("is owner-only", async () => {
-    expect((await failure(createApiKey.call({ name: "x", scopes: [] }, STAFF))).code).toBe(
-      "permission",
-    );
+  it("requires the stored API-key manage grant, regardless of role name", async () => {
+    const restricted: Actor = {
+      kind: "user",
+      userId: OWNER.userId,
+      role: "owner",
+      grants: [{ module: "contacts", access: "manage" }],
+    };
+    expect(
+      (await failure(createApiKey.call({ name: "x", scopes: [] }, restricted)))
+        .code,
+    ).toBe("permission");
     expect(
       (await failure(createApiKey.call({ name: "x", scopes: [] }, ANONYMOUS))).code,
     ).toBe("permission");
@@ -192,7 +198,7 @@ describe.runIf(hasDatabase)("a key cannot become a bigger key", () => {
       createApiKey.call({ name: "Escalation", scopes: [] }, agent(["apikeys.*"])),
     );
     expect(error.code).toBe("permission");
-    expect(error.message).toContain("Sign in as the owner");
+    expect(error.message).toContain("Sign in");
   });
 
   it("refuses to revoke, so one key cannot disable another", async () => {

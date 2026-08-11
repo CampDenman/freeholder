@@ -196,11 +196,24 @@ freeholder/
 
 | Entity | Purpose | Key fields |
 |---|---|---|
-| `User` | A login. Owner, staff, or customer. | email, password_hash (nullable for magic-link-only customers), role, otp_secret, last_login_at |
+| `Role` | A named, owner-visible access profile. Role names never grant authority by themselves. | key, name, description, is_system, assignable |
+| `RoleGrant` | Stored per-module authority for one role. `view` admits queries; `manage` admits queries and mutations. | role_key, module (`*` is explicit full access), access (view/manage) |
+| `User` | A login linked to one named role. | email, password_hash (nullable for magic-link-only customers), role_key, otp_secret, last_login_at |
 | `Session` | Server-side sessions. | user_id, token_hash, expires_at, ip, user_agent |
 | `Contact` | **The spine.** Every human/org the business touches. May or may not have a `User`. | user_id (nullable, 1:1), name, email, phone, org_id, source, tags[], custom_fields (jsonb), lifecycle_stage (lead → prospect → customer → repeat), preferred_locale, timezone, country, owner_notes |
 | `Organization` | Optional B2B grouping of contacts. | name, domain, custom_fields |
 | `TimelineEvent` | Append-only polymorphic event log per contact. Powers the CRM timeline. | contact_id, actor (user/system/agent), event_type, subject_type, subject_id, payload (jsonb), occurred_at |
+
+**Authorization is data, not rank.** Every session resolves its role grants
+from the database. A scoped service derives its module from its registry name;
+a query requires `view` or `manage`, while a mutation requires `manage`.
+Public and personal authenticated services remain explicit exceptions. The
+owner's full access is the stored `* / manage` grant, not a branch that checks
+whether `role === "owner"`. Admin routes and navigation use the same decision.
+The seeded owner, administrator, editor, bookkeeper, service-provider and
+customer roles are starting data the owner may tune. A non-assignable `staff`
+record remains temporarily so an N-1 image can still write its legacy value
+during rollback.
 
 **Rule:** anything notable that happens to a contact — quote sent, invoice paid, gallery viewed, email opened, booking rescheduled, form submitted — emits a `TimelineEvent`. Modules write events; the CRM reads them. This is the integration contract between modules.
 
@@ -2707,11 +2720,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-10 |
-| Evidence snapshot | `main` at `bb16555` (translation admin merged); C0 completion changeset `product-completion-plan.md` |
+| Evidence snapshot | `main` at `125d676` (C0 controls merged); C1.01 changeset `named-roles-grants.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.01 roles and per-module grants; no public-launch work is required |
+| Current focus | C1.02 staff invitation lifecycle; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2859,9 +2872,10 @@ reading chat logs.
 
 #### Identity, roles, contacts, and privacy
 
-- [ ] **C1.01** Replace coarse roles with named roles and per-module grants;
+- [x] **C1.01** Replace coarse roles with named roles and per-module grants;
   seed owner, administrator, editor, bookkeeper, service-provider, and customer
-  defaults without hard-coding their permissions.
+  defaults without hard-coding their permissions. (`0017_named-roles-grants.sql`;
+  `tests/core/roles.test.ts`; changeset `named-roles-grants.md`)
 - [ ] **C1.02** Build staff invitations, acceptance, expiry/revocation,
   resend, role assignment, and invitation audit history.
 - [ ] **C1.03** Add TOTP/WebAuthn-capable 2FA, recovery codes, mandatory 2FA

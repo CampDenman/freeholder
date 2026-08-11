@@ -40,6 +40,12 @@ import {
   updateWebhook,
 } from "@/core/webhooks/service";
 import { patchBusiness } from "@/core/settings/service";
+import {
+  assignRole,
+  createRole,
+  deleteRole,
+  updateRole,
+} from "@/core/roles/service";
 import { ServiceError } from "@/core/service";
 
 export interface ActionState {
@@ -527,6 +533,92 @@ export async function revokeApiKeyAction(
     return present(error);
   }
   revalidatePath("/admin/settings");
+  return { saved: true };
+}
+
+/* --------------------------------------------------------- roles & grants */
+
+function grantsOf(form: FormData) {
+  const grants: Array<{
+    module: string;
+    access: "view" | "manage";
+  }> = [];
+  for (const [key, value] of form.entries()) {
+    if (!key.startsWith("grant-") || (value !== "view" && value !== "manage")) {
+      continue;
+    }
+    grants.push({ module: key.slice("grant-".length), access: value });
+  }
+  return grants;
+}
+
+export async function createRoleAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await createRole.call(
+      {
+        name: field(form, "name"),
+        description: field(form, "description"),
+        grants: grantsOf(form),
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  revalidatePath("/admin/roles");
+  return { saved: true };
+}
+
+export async function updateRoleAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await updateRole.call(
+      {
+        key: field(form, "key"),
+        name: field(form, "name"),
+        description: field(form, "description"),
+        grants: grantsOf(form),
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  revalidatePath("/admin/roles");
+  return { saved: true };
+}
+
+export async function deleteRoleAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await deleteRole.call({ key: field(form, "key") }, await currentActor());
+  } catch (error) {
+    return present(error);
+  }
+  revalidatePath("/admin/roles");
+  return { saved: true };
+}
+
+export async function assignRoleAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await assignRole.call(
+      { userId: field(form, "userId"), roleKey: field(form, "roleKey") },
+      await currentActor(),
+    );
+  } catch (error) {
+    return present(error);
+  }
+  revalidatePath("/admin/roles");
   return { saved: true };
 }
 

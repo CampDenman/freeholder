@@ -251,12 +251,20 @@ describe.runIf(hasDatabase)("the asset library", () => {
     expect((await listAssets.call({}, STAFF)).total).toBe(0);
   });
 
-  it("keeps deletion to the owner", async () => {
+  it("requires media manage for deletion", async () => {
     const asset = await uploadAsset.call(
       { filename: "a.png", contentType: "image/png", bytes: await png(50, 50) },
       STAFF,
     );
-    const error = await failure(deleteAsset.call({ id: asset.id }, STAFF));
+    const error = await failure(
+      deleteAsset.call(
+        { id: asset.id },
+        {
+          ...STAFF,
+          grants: [{ module: "media", access: "view" }],
+        },
+      ),
+    );
     expect(error.code).toBe("permission");
   });
 });

@@ -31,7 +31,7 @@ export const uploadAsset = defineService({
   name: "media.upload",
   summary: "Store a file and derive its responsive renditions.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     filename: z.string().min(1).max(255),
     contentType: z.string().min(1).max(255),
@@ -97,7 +97,7 @@ export const listAssets = defineService({
   name: "media.list",
   summary: "The asset library, newest first.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     kind: z.enum(["image", "video", "doc", "audio"]).optional(),
     limit: z.number().int().min(1).max(100).default(50),
@@ -124,7 +124,7 @@ export const getAsset = defineService({
   name: "media.get",
   summary: "One asset by id.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
@@ -208,7 +208,7 @@ export const setAltText = defineService({
   name: "media.setAltText",
   summary: "Describe an image for people who cannot see it.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     id: z.string().uuid(),
     altText: z.string().max(500),
@@ -245,7 +245,7 @@ export const assetUsage = defineService({
   name: "media.usage",
   summary: "How many pages and sections still reference a file.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     // The id travels as a jsonpath *variable* rather than being concatenated
@@ -280,7 +280,7 @@ export const deleteAsset = defineService({
   name: "media.delete",
   summary: "Delete a file and its renditions.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx

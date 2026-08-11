@@ -42,6 +42,12 @@ const worker: Actor = {
   keyName: "Inbox triager",
   scopes: ["agents.*", "contacts.*"],
 };
+const agentsViewer: Actor = {
+  kind: "user",
+  userId: STAFF.userId,
+  role: "agent-observer",
+  grants: [{ module: "agents", access: "view" }],
+};
 
 async function connection() {
   return connectAgentRuntime.call(
@@ -215,9 +221,9 @@ describe.runIf(hasDatabase)("hiring workers", () => {
     expect(hired.budgetCents).toBe(0);
   });
 
-  it("is closed to agents, and to staff", async () => {
+  it("is closed to agents and roles without agents manage access", async () => {
     const link = await connection();
-    for (const actor of [worker, STAFF]) {
+    for (const actor of [worker, agentsViewer]) {
       const error = await failure(
         hireAgent.call({ connectionId: link.id, name: "X", role: "y" }, actor),
       );
@@ -418,7 +424,10 @@ describe.runIf(hasDatabase)("the work itself", () => {
     expect(report[0]).toMatchObject({ budgetCents: 5_000, spentCents: 0 });
   });
 
-  it("keeps the worker list owner-only", async () => {
-    expect((await failure(listAgents.call({}, STAFF))).code).toBe("permission");
+  it("requires agents view access for the worker list", async () => {
+    expect(
+      (await failure(listAgents.call({}, { ...STAFF, grants: [] }))).code,
+    ).toBe("permission");
+    await expect(listAgents.call({}, agentsViewer)).resolves.toBeDefined();
   });
 });

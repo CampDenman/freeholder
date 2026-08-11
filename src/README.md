@@ -2,8 +2,9 @@
 
 Framework-agnostic application code, per `MASTER.md` §10:
 
-- `core/` — the implemented spine: db, auth, contacts, media, i18n, locations,
-  settings, events, jobs, SEO, API keys, webhooks, agents and connections.
+- `core/` — the implemented spine: db, auth, named roles and module grants,
+  contacts, media, i18n, locations, settings, events, jobs, SEO, API keys,
+  webhooks, agents and connections.
   Modules may import core; never the reverse.
 - `modules/` — current CMS, forms, analytics and seed modules, each a
   `defineModule()` manifest (`MASTER.md` §11). Modules communicate only via

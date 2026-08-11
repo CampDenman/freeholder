@@ -13,7 +13,7 @@ export const recentActivity = defineService({
   name: "events.recentActivity",
   summary: "What has changed on this site lately, newest first.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     limit: z.number().int().min(1).max(100).default(20),
   }),

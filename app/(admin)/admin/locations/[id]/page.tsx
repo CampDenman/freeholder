@@ -34,7 +34,7 @@ export default async function LocationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("locations", "manage");
   const { id } = await params;
   const [t, locale, business] = await Promise.all([
     getT(),

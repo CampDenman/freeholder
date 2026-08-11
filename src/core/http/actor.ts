@@ -41,7 +41,12 @@ export async function actorFromToken(
 ): Promise<Actor> {
   const session = await sessionFromToken(token);
   if (!session) return ANONYMOUS;
-  return { kind: "user", userId: session.userId, role: session.role };
+  return {
+    kind: "user",
+    userId: session.userId,
+    role: session.role,
+    grants: session.grants,
+  };
 }
 
 /**
@@ -81,5 +86,10 @@ export async function actorFromRequest(request: Request): Promise<Actor> {
 
   const session = await resolveSession(request);
   if (!session) return ANONYMOUS;
-  return { kind: "user", userId: session.userId, role: session.role };
+  return {
+    kind: "user",
+    userId: session.userId,
+    role: session.role,
+    grants: session.grants,
+  };
 }

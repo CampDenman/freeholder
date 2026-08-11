@@ -26,7 +26,7 @@ function actorLabel(actor: string, t: Translate): string {
 export default async function AdminOverviewPage() {
   // Its own guard, not the layout's: layouts and pages render in parallel, so
   // this must not assume anybody has vetted the caller yet.
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("admin");
   const [business, stats, activity, t] = await Promise.all([
     currentBusiness(),
     contactStats.call({}, actor),

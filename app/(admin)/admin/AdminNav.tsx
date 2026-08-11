@@ -12,6 +12,7 @@ import {
   Envelope,
   Stethoscope,
   SlidersHorizontal,
+  ShieldCheck,
   Translate as TranslateIcon,
   UsersThree,
 } from "@phosphor-icons/react/dist/ssr";
@@ -30,27 +31,30 @@ export interface AdminNavLabels {
   traffic: string;
   health: string;
   settings: string;
+  roles: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
 // the interface cannot keep; entries arrive with their modules.
 const LINKS = [
-  { href: "/admin", key: "overview", Icon: Gauge },
-  { href: "/admin/pages", key: "pages", Icon: FileText },
-  { href: "/admin/sections", key: "sections", Icon: Layout },
-  { href: "/admin/media", key: "media", Icon: ImageIcon },
-  { href: "/admin/forms", key: "forms", Icon: Envelope },
-  { href: "/admin/contacts", key: "contacts", Icon: UsersThree },
-  { href: "/admin/locations", key: "locations", Icon: MapPin },
-  { href: "/admin/translations", key: "translations", Icon: TranslateIcon },
-  { href: "/admin/traffic", key: "traffic", Icon: ChartLine },
-  { href: "/admin/settings", key: "settings", Icon: SlidersHorizontal },
-  { href: "/admin/health", key: "health", Icon: Stethoscope },
+  { href: "/admin", key: "overview", module: "admin", Icon: Gauge },
+  { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
+  { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },
+  { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },
+  { href: "/admin/forms", key: "forms", module: "forms", Icon: Envelope },
+  { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
+  { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
+  { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
+  { href: "/admin/traffic", key: "traffic", module: "analytics", Icon: ChartLine },
+  { href: "/admin/roles", key: "roles", module: "roles", Icon: ShieldCheck },
+  { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
+  { href: "/admin/health", key: "health", module: "platform", Icon: Stethoscope },
 ] as const;
 
 export function AdminNav({
   labels,
   multilingual,
+  grants,
 }: {
   labels: AdminNavLabels;
   /**
@@ -60,11 +64,15 @@ export function AdminNav({
    * people to stop reading the nav.
    */
   multilingual: boolean;
+  grants: ReadonlyArray<{ module: string; access: "view" | "manage" }>;
 }) {
   const pathname = usePathname();
-  const links = LINKS.filter(
-    (link) => link.key !== "translations" || multilingual,
-  );
+  const links = LINKS.filter((link) => {
+    if (link.key === "translations" && !multilingual) return false;
+    return grants.some(
+      (grant) => grant.module === "*" || grant.module === link.module,
+    );
+  });
   return (
     <nav aria-label={labels.region}>
       <ul className="-mb-px flex list-none gap-1 p-0">

@@ -45,7 +45,7 @@ export const listWebhooks = defineService({
   name: "webhooks.list",
   summary: "Every webhook this site sends events to.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) =>
     ctx.tx
@@ -68,7 +68,7 @@ export const createWebhook = defineService({
   name: "webhooks.create",
   summary: "Send this site's events to another server.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     name: z.string().min(1).max(80),
     url: z.string().min(1).max(2000),
@@ -109,7 +109,7 @@ export const updateWebhook = defineService({
   name: "webhooks.update",
   summary: "Change a webhook, or turn it back on.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     id: z.uuid(),
     name: z.string().min(1).max(80).optional(),
@@ -157,7 +157,7 @@ export const rotateWebhookSecret = defineService({
   name: "webhooks.rotateSecret",
   summary: "Issue a new signing secret for a webhook.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "change");
@@ -187,7 +187,7 @@ export const revealWebhookSecret = defineService({
   name: "webhooks.secret",
   summary: "Show a webhook's signing secret.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "agent") {
@@ -211,7 +211,7 @@ export const deleteWebhook = defineService({
   name: "webhooks.remove",
   summary: "Stop sending events to a server.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "remove");
@@ -231,7 +231,7 @@ export const listDeliveries = defineService({
   name: "webhooks.deliveries",
   summary: "What this site has tried to send, and how it went.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     subscriptionId: z.uuid().optional(),
     limit: z.number().int().min(1).max(200).default(50),
@@ -271,7 +271,7 @@ export const testWebhook = defineService({
   name: "webhooks.test",
   summary: "Send a test event to a webhook now.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "test");

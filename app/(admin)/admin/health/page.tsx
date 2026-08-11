@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function HealthPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("platform");
   const [report, business, t] = await Promise.all([
     doctor.call({}, actor),
     currentBusiness(),

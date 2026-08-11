@@ -526,11 +526,18 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
       expect(await contactRows()).toHaveLength(1);
     });
 
-    it("is owner-only", async () => {
+    it("requires contacts manage", async () => {
       const a = await createContact.call({ name: "A" }, STAFF);
       const b = await createContact.call({ name: "B" }, STAFF);
-      const error = await failure(mergeContacts
-        .call({ survivingId: a.id, duplicateId: b.id }, STAFF));
+      const error = await failure(
+        mergeContacts.call(
+          { survivingId: a.id, duplicateId: b.id },
+          {
+            ...STAFF,
+            grants: [{ module: "contacts", access: "view" }],
+          },
+        ),
+      );
       expect(error.code).toBe("permission");
       expect(await contactRows()).toHaveLength(2);
     });
@@ -541,7 +548,7 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
       name: "test.twoContacts",
       summary: "Creates two contacts through the service layer.",
       kind: "mutation",
-      permission: "staff",
+      permission: "scoped",
       input: z.object({ fail: z.boolean().default(false) }),
       handler: async (input, ctx) => {
         await ctx.call(createContact, {

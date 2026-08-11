@@ -73,7 +73,9 @@ function describe(service: Service): string {
     `Calls the \`${name}\` service. ${kind === "query" ? "Reads only." : "Changes data."}`,
     permission === "public"
       ? "Available to any caller."
-      : `Needs an API key scoped \`${name}\` or \`${family}\`.`,
+      : permission === "authenticated"
+        ? "Available only to a signed-in person."
+        : `Needs an API key scoped \`${name}\` or \`${family}\`.`,
   ].join("\n");
 }
 
@@ -110,7 +112,7 @@ export function toolsFor(actor: Actor): McpTool[] {
   for (const service of listServices().values()) {
     const { name, kind, permission, summary } = service.def;
     if (EXCLUDED_FAMILIES.has(name.split(".")[0]!)) continue;
-    if (!permits(actor, permission, name)) continue;
+    if (!permits(actor, permission, name, kind)) continue;
 
     const verb = name.split(".")[1] ?? "";
     tools.push({
@@ -140,7 +142,15 @@ export function serviceForTool(
     if (EXCLUDED_FAMILIES.has(service.def.name.split(".")[0]!)) return undefined;
     // Resolved through the same permission check as the listing, so a tool
     // that was never offered cannot be called by guessing its name.
-    if (!permits(actor, service.def.permission, service.def.name)) return undefined;
+    if (
+      !permits(
+        actor,
+        service.def.permission,
+        service.def.name,
+        service.def.kind,
+      )
+    )
+      return undefined;
     return service;
   }
   return undefined;

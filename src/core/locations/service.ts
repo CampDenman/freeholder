@@ -212,7 +212,7 @@ export const createLocationService = defineService({
   name: "locations.create",
   summary: "Add a location.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: createLocation,
   handler: async (input, ctx) => {
     const { isPrimary, ...values } = input;
@@ -250,7 +250,7 @@ export const updateLocation = defineService({
   name: "locations.update",
   summary: "Change a location's details.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: patchLocation,
   handler: async (input, ctx) => {
     const { id, ...changes } = input;
@@ -293,7 +293,7 @@ export const setPrimaryLocation = defineService({
   name: "locations.setPrimary",
   summary: "Choose the location whose NAP the site renders as its own.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     const [location] = await ctx.tx
@@ -341,7 +341,7 @@ export const setOpeningHours = defineService({
   name: "locations.setHours",
   summary: "Replace a location's opening hours.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     locationId: z.uuid(),
     entries: z.array(hoursEntry).max(120),
@@ -399,7 +399,7 @@ export const setServiceArea = defineService({
   name: "locations.setServiceArea",
   summary: "Set or clear where a location will travel to.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     locationId: z.uuid(),
     /** Null clears it — a business that has stopped travelling. */
@@ -457,7 +457,7 @@ export const deleteLocation = defineService({
   name: "locations.remove",
   summary: "Delete a location.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     const [location] = await ctx.tx

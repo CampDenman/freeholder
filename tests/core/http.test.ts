@@ -17,7 +17,12 @@ import { serviceRoute } from "@/core/http/route";
 import { defineService, ServiceError, type Actor } from "@/core/service";
 
 const ANON: Actor = { kind: "anonymous" };
-const CUSTOMER: Actor = { kind: "user", userId: "u1", role: "customer" };
+const CUSTOMER: Actor = {
+  kind: "user",
+  userId: "u1",
+  role: "customer",
+  grants: [],
+};
 
 const request = (
   url = "https://example.test/api/thing",
@@ -129,7 +134,7 @@ describe("serviceRoute()", () => {
     name: "http.guarded",
     summary: "Staff only.",
     kind: "query",
-    permission: "staff",
+    permission: "scoped",
     input: z.object({}),
     handler: async () => ({ ok: true }),
   });

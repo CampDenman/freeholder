@@ -11,7 +11,7 @@ import {
   listContacts,
 } from "@/core/contacts/service";
 import { formatDateTime, type Translate } from "@/core/i18n";
-import { ServiceError } from "@/core/service";
+import { hasModuleAccess, ServiceError } from "@/core/service";
 import { Card, CardBody, CardHeader } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { contactFormLabels, mergePanelLabels } from "../contactLabels";
@@ -47,7 +47,7 @@ export default async function ContactDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("contacts");
   const { id } = await params;
   const query = await searchParams;
   const mergeQuery = (
@@ -70,9 +70,7 @@ export default async function ContactDetailPage({
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
 
-  // Merging destroys a record, so it is owner-only at the service; not
-  // rendering the panel for staff saves them discovering that by being refused.
-  const canMerge = actor.kind === "user" && actor.role === "owner";
+  const canMerge = hasModuleAccess(actor, "contacts", "manage");
   const candidates =
     canMerge && mergeQuery
       ? (await listContacts.call({ search: mergeQuery, limit: 10 }, actor)).rows
@@ -97,6 +95,7 @@ export default async function ContactDetailPage({
       </div>
 
       <ContactForm
+        readOnly={!canMerge}
         labels={contactFormLabels(t)}
         values={{
           id: contact.id,

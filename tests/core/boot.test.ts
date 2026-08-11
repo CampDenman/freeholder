@@ -59,7 +59,7 @@ describe("boot()", () => {
     );
     expect(listServices().size).toBe(report.services.length);
     // Reachable by name is the point: this is how the API and MCP find them.
-    expect(getService("contacts.resolve").def.permission).toBe("staff");
+    expect(getService("contacts.resolve").def.permission).toBe("scoped");
   });
 
   it("wires modules in dependency order", async () => {

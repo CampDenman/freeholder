@@ -44,6 +44,7 @@ export function SettingsForm({
   values,
   labels,
   options,
+  readOnly = false,
 }: {
   values: BusinessValues;
   labels: SettingsFormLabels;
@@ -53,6 +54,7 @@ export function SettingsForm({
    * options omit its own value falls back to the first one.
    */
   options: BusinessOptions;
+  readOnly?: boolean;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     saveBusinessSettingsAction,
@@ -60,8 +62,10 @@ export function SettingsForm({
   );
 
   return (
-    <form action={action}>
-      <Card>
+    <form action={readOnly ? undefined : action}>
+      <fieldset disabled={readOnly} className="contents">
+        <legend className="sr-only">{labels.cardTitle}</legend>
+        <Card>
         <CardHeader title={labels.cardTitle} />
         <CardBody>
           {state.error ? (
@@ -188,12 +192,15 @@ export function SettingsForm({
             />
           </Field>
         </CardBody>
-        <CardFooter>
-          <Button type="submit" disabled={pending}>
-            {pending ? labels.pending : labels.submit}
-          </Button>
-        </CardFooter>
-      </Card>
+          {!readOnly ? (
+            <CardFooter>
+              <Button type="submit" disabled={pending}>
+                {pending ? labels.pending : labels.submit}
+              </Button>
+            </CardFooter>
+          ) : null}
+        </Card>
+      </fieldset>
     </form>
   );
 }

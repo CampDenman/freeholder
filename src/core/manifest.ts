@@ -49,6 +49,10 @@ export default defineModule({
       "connection.removed",
       "connection.needsAttention",
       "connection.rotated",
+      "role.created",
+      "role.updated",
+      "role.deleted",
+      "role.assigned",
     ],
   },
 });

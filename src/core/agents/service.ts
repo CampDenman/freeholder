@@ -75,7 +75,7 @@ export const listConnections = defineService({
   name: "agents.connections",
   summary: "Every agent runtime this site can reach.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) =>
     ctx.tx
@@ -99,7 +99,7 @@ export const connectAgentRuntime = defineService({
   name: "agents.connect",
   summary: "Add an agent runtime.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z
     .object({
       name: z.string().min(1).max(80),
@@ -152,7 +152,7 @@ export const listAgents = defineService({
   name: "agents.list",
   summary: "The workers this business has.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) =>
     ctx.tx
@@ -188,7 +188,7 @@ export const hireAgent = defineService({
   name: "agents.hire",
   summary: "Create a worker with its own credential and scopes.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     connectionId: z.uuid(),
     name: z.string().min(1).max(80),
@@ -262,7 +262,7 @@ export const updateAgent = defineService({
   name: "agents.update",
   summary: "Change a worker's brief, autonomy, budget or status.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     id: z.uuid(),
     role: z.string().min(1).max(200).optional(),
@@ -303,7 +303,7 @@ export const pauseAllAgents = defineService({
   name: "agents.pauseAll",
   summary: "Pause every agent immediately.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ paused: z.boolean().default(true) }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "pause agents");
@@ -347,7 +347,7 @@ export const createTask = defineService({
   name: "agents.createTask",
   summary: "Create a task for an agent to do.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object(taskInput),
   handler: async (input, ctx) => {
     let rootId: string | undefined;
@@ -427,7 +427,7 @@ export const listTasks = defineService({
   name: "agents.tasks",
   summary: "The board of work.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     status: z
       .array(
@@ -468,7 +468,7 @@ export const getTask = defineService({
   name: "agents.task",
   summary: "One task, with its runs and what each did.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     const [task] = await ctx.tx
@@ -511,7 +511,7 @@ export const assignTask = defineService({
   name: "agents.assignTask",
   summary: "Give a task to a particular worker.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({ id: z.uuid(), agentId: z.uuid().nullable() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "reassign work");
@@ -531,7 +531,7 @@ export const cancelTask = defineService({
   name: "agents.cancelTask",
   summary: "Stop a task, and everything it spawned.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.uuid(), reason: z.string().max(500).optional() }),
   handler: async (input, ctx) => {
     const [task] = await ctx.tx
@@ -570,7 +570,7 @@ export const agentSpendReport = defineService({
   name: "agents.spend",
   summary: "What each worker has cost this period.",
   kind: "query",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx

@@ -13,6 +13,7 @@ import { getT } from "../../../i18n";
 import { CONTACT_STAGES } from "./contactLabels";
 import { requireStaffActor } from "../guard";
 import { currentBusiness } from "@/core/settings/read";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ export default async function ContactsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("contacts");
   const params = await searchParams;
 
   const one = (key: string): string => {
@@ -69,6 +70,7 @@ export default async function ContactsPage({
   if (search) filters.search = search;
   if (stage) filters.stage = stage;
   const filtered = Boolean(search || stage);
+  const canManage = hasModuleAccess(actor, "contacts", "manage");
   const stageOptions = [
     { value: "", label: t("contacts.allStages") },
     ...CONTACT_STAGES.map((value) => ({
@@ -86,13 +88,15 @@ export default async function ContactsPage({
           </h1>
           <p className="mt-1 text-sm text-ink-muted">{t("contacts.intro")}</p>
         </div>
-        <a
-          href="/admin/contacts/new"
-          className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
-        >
-          <Plus size={15} weight="bold" />
-          {t("contacts.new")}
-        </a>
+        {canManage ? (
+          <a
+            href="/admin/contacts/new"
+            className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
+          >
+            <Plus size={15} weight="bold" />
+            {t("contacts.new")}
+          </a>
+        ) : null}
       </div>
 
       <form

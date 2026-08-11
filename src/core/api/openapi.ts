@@ -127,7 +127,9 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
       "",
       permission === "public"
         ? "Open to anyone, including callers with no credential."
-        : `Requires the ${permission} role, or an API key scoped \`${name}\` or \`${tag}.*\`.`,
+        : permission === "authenticated"
+          ? "Requires a signed-in person and is not available to API keys."
+          : `Requires ${kind === "query" ? "view" : "manage"} access to the ${tag} module, or an API key scoped \`${name}\` or \`${tag}.*\`.`,
       service.def.rateLimit ? `\nRate limited: ${service.def.rateLimit.message}` : "",
     ]
       .join("\n")

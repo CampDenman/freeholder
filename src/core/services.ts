@@ -16,6 +16,7 @@ import eventServices from "@/core/events/service";
 import i18nServices from "@/core/i18n/service";
 import locationServices from "@/core/locations/service";
 import mediaServices from "@/core/media/service";
+import roleServices from "@/core/roles/service";
 import seoServices from "@/core/seo/service";
 import settingsServices from "@/core/settings/service";
 import webhookServices from "@/core/webhooks/service";
@@ -34,6 +35,7 @@ const services: Service[] = [
   ...i18nServices,
   ...locationServices,
   ...mediaServices,
+  ...roleServices,
   ...seoServices,
   ...settingsServices,
   ...webhookServices,

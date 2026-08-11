@@ -170,7 +170,7 @@ export const overview = defineService({
   name: "analytics.overview",
   summary: "Visits, visitors and conversions over a window.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ days: since, includeBots }),
   handler: async (input, ctx) => {
     const from = new Date(Date.now() - input.days * 86_400_000);
@@ -233,7 +233,7 @@ export const topPages = defineService({
   name: "analytics.topPages",
   summary: "Which pages were read, most first.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     days: since,
     includeBots,
@@ -263,7 +263,7 @@ export const topReferrers = defineService({
   name: "analytics.topReferrers",
   summary: "Where visitors came from.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     days: since,
     includeBots,
@@ -292,7 +292,7 @@ export const dailyViews = defineService({
   name: "analytics.daily",
   summary: "Views and visitors per day, for the chart.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ days: since, includeBots, timezone: z.string().default("UTC") }),
   handler: async (input, ctx) => {
     // Bucketed in the *business's* timezone, not UTC. An owner in Vancouver
@@ -328,7 +328,7 @@ export const contactActivity = defineService({
   name: "analytics.contactActivity",
   summary: "What one contact looked at.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     contactId: z.string().uuid(),
     limit: z.number().int().min(1).max(200).default(50),

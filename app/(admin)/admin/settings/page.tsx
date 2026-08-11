@@ -13,27 +13,25 @@ import { listApiKeys, listScopes } from "@/core/apikeys/service";
 import { listDeliveries, listWebhooks } from "@/core/webhooks/service";
 import { WebhooksCard } from "./WebhooksCard";
 import { currentBusiness } from "@/core/settings/read";
-import type { Actor } from "@/core/service";
+import { hasModuleAccess, type Actor } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
 
 export default async function AdminSettingsPage() {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("settings");
   const business = await currentBusiness();
   // Reachable only if setup was skipped somehow; the wizard is the way in.
   if (!business) redirect("/setup");
 
   const [t, locale] = await Promise.all([getT(), getLocale()]);
 
-  // Keys are owner-only while this screen is staff-accessible, so the card is
-  // fetched conditionally rather than rendered from a call that would refuse.
-  // Asking the actor here rather than catching a permission error keeps the
-  // service layer's refusal meaning "something went wrong" everywhere else.
-  const keys =
-    actor.kind === "user" && actor.role === "owner"
-      ? await loadKeys(actor, locale)
-      : null;
+  // Sensitive integration cards are fetched only when this stored role may
+  // manage their modules, rather than rendered from calls that would refuse.
+  const access = await loadAccess(actor, locale, {
+    apiKeys: hasModuleAccess(actor, "apikeys", "manage"),
+    webhooks: hasModuleAccess(actor, "webhooks", "manage"),
+  });
 
   return (
     <div className="grid gap-6">
@@ -46,6 +44,7 @@ export default async function AdminSettingsPage() {
         </p>
       </div>
       <SettingsForm
+        readOnly={!hasModuleAccess(actor, "settings", "manage")}
         labels={{
           ...businessFormLabels(t),
           cardTitle: t("business.cardTitle"),
@@ -70,10 +69,10 @@ export default async function AdminSettingsPage() {
         }}
       />
 
-      {keys ? (
+      {access.keys ? (
         <ApiKeysCard
-          areas={keys.areas}
-          keys={keys.rows}
+          areas={access.keys.areas}
+          keys={access.keys.rows}
           labels={{
             cardTitle: t("apikeys.title"),
             intro: t("apikeys.intro"),
@@ -102,10 +101,10 @@ export default async function AdminSettingsPage() {
         />
       ) : null}
 
-      {keys ? (
+      {access.webhooks ? (
         <WebhooksCard
-          hooks={keys.hooks}
-          deliveries={keys.deliveries}
+          hooks={access.webhooks.hooks}
+          deliveries={access.webhooks.deliveries}
           labels={{
             cardTitle: t("webhooks.title"),
             intro: t("webhooks.intro"),
@@ -158,53 +157,74 @@ export default async function AdminSettingsPage() {
  * exactly this instance's query services — including any a module added
  * yesterday (§28). Nothing here is a second list to maintain.
  */
-async function loadKeys(actor: Actor, locale: string) {
-  const [areas, rows, hooks, deliveries] = await Promise.all([
-    listScopes.call({}, actor),
-    listApiKeys.call({}, actor),
-    listWebhooks.call({}, actor),
-    listDeliveries.call({ limit: 10 }, actor),
-  ]);
+async function loadAccess(
+  actor: Actor,
+  locale: string,
+  include: { apiKeys: boolean; webhooks: boolean },
+) {
+  const [areas, rows] = include.apiKeys
+    ? await Promise.all([listScopes.call({}, actor), listApiKeys.call({}, actor)])
+    : [null, null];
+  const [hooks, deliveries] = include.webhooks
+    ? await Promise.all([
+        listWebhooks.call({}, actor),
+        listDeliveries.call({ limit: 10 }, actor),
+      ])
+    : [null, null];
   const when = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   const exact = new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
   });
   return {
-    areas: areas.map((area) => ({
-      area: area.area,
-      family: area.family,
-      reads: area.services.filter((s) => s.kind === "query").map((s) => s.name),
-      total: area.services.length,
-    })),
-    rows: rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      prefix: row.prefix,
-      scopes: row.scopes,
-      lastUsed: row.lastUsedAt ? when.format(row.lastUsedAt) : null,
-      expires: row.expiresAt ? when.format(row.expiresAt) : null,
-    })),
-    hooks: hooks.map((hook) => ({
-      id: hook.id,
-      name: hook.name,
-      url: hook.url,
-      events: hook.events,
-      status: hook.status,
-      pausedReason: hook.pausedReason,
-      lastDelivery: hook.lastDeliveryAt ? exact.format(hook.lastDeliveryAt) : null,
-    })),
-    deliveries: deliveries.map((delivery) => ({
-      id: delivery.id,
-      event: delivery.eventName,
-      status: delivery.status,
-      attempts: delivery.attempts,
-      // What an owner needs from a failed delivery is the reason, and from a
-      // successful one the status code that proves it landed.
-      detail:
-        delivery.error ??
-        (delivery.responseStatus ? String(delivery.responseStatus) : ""),
-      when: exact.format(delivery.createdAt),
-    })),
+    keys:
+      areas && rows
+        ? {
+            areas: areas.map((area) => ({
+              area: area.area,
+              family: area.family,
+              reads: area.services
+                .filter((service) => service.kind === "query")
+                .map((service) => service.name),
+              total: area.services.length,
+            })),
+            rows: rows.map((row) => ({
+              id: row.id,
+              name: row.name,
+              prefix: row.prefix,
+              scopes: row.scopes,
+              lastUsed: row.lastUsedAt ? when.format(row.lastUsedAt) : null,
+              expires: row.expiresAt ? when.format(row.expiresAt) : null,
+            })),
+          }
+        : null,
+    webhooks:
+      hooks && deliveries
+        ? {
+            hooks: hooks.map((hook) => ({
+              id: hook.id,
+              name: hook.name,
+              url: hook.url,
+              events: hook.events,
+              status: hook.status,
+              pausedReason: hook.pausedReason,
+              lastDelivery: hook.lastDeliveryAt
+                ? exact.format(hook.lastDeliveryAt)
+                : null,
+            })),
+            deliveries: deliveries.map((delivery) => ({
+              id: delivery.id,
+              event: delivery.eventName,
+              status: delivery.status,
+              attempts: delivery.attempts,
+              detail:
+                delivery.error ??
+                (delivery.responseStatus
+                  ? String(delivery.responseStatus)
+                  : ""),
+              when: exact.format(delivery.createdAt),
+            })),
+          }
+        : null,
   };
 }

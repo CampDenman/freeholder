@@ -46,7 +46,12 @@ describe.runIf(hasDatabase)("changing your own password", () => {
     await closeDb();
   });
 
-  const asOwner = { kind: "user", userId: "", role: "owner" } as const;
+  const asOwner = {
+    kind: "user",
+    userId: "",
+    role: "owner",
+    grants: [{ module: "*", access: "manage" }],
+  } as const;
   const actor = () => ({ ...asOwner, userId: ownerId });
 
   it("replaces the password, and the old one stops working", async () => {

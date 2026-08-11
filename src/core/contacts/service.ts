@@ -67,7 +67,7 @@ export const createContact = defineService({
   name: "contacts.create",
   summary: "Add a person or organization member to the spine.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: contactFields,
   handler: async (input, ctx) => {
     const [contact] = await guardDuplicateEmail(input.email, () =>
@@ -164,7 +164,7 @@ export const resolveContact = defineService({
   name: "contacts.resolve",
   summary: "Find the contact for an email address, creating it only if new.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: contactFields.partial().extend({
     email: z.string().email().toLowerCase(),
   }),
@@ -316,7 +316,7 @@ export const mergeContacts = defineService({
   name: "contacts.merge",
   summary: "Merge a duplicate contact into the one that survives.",
   kind: "mutation",
-  permission: "owner",
+  permission: "scoped",
   input: z.object({
     survivingId: z.string().uuid(),
     duplicateId: z.string().uuid(),
@@ -435,7 +435,7 @@ export const updateContact = defineService({
   name: "contacts.update",
   summary: "Change spine fields on a contact.",
   kind: "mutation",
-  permission: "staff",
+  permission: "scoped",
   input: contactFields.partial().extend({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const { id, ...changes } = input;
@@ -468,7 +468,7 @@ export const getContact = defineService({
   name: "contacts.get",
   summary: "Fetch one contact by id.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const [contact] = await ctx.tx
@@ -487,7 +487,7 @@ export const listContacts = defineService({
   name: "contacts.list",
   summary: "Search and page through the spine.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     search: z.string().optional(),
     lifecycleStage: lifecycleStage.optional(),
@@ -541,7 +541,7 @@ export const contactTimeline = defineService({
   name: "contacts.timeline",
   summary: "Everything that has happened to one contact, newest first.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({
     contactId: z.string().uuid(),
     limit: z.number().int().min(1).max(200).default(50),
@@ -564,7 +564,7 @@ export const contactStats = defineService({
   name: "contacts.stats",
   summary: "How many contacts there are, and where they are in the lifecycle.",
   kind: "query",
-  permission: "staff",
+  permission: "scoped",
   input: z.object({}),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx

@@ -417,12 +417,16 @@ describe.runIf(hasDatabase)("keeping locations", () => {
     await expect(listLocations.call({}, ANONYMOUS)).resolves.toEqual([]);
   });
 
-  it("is owner-only to write and public to read", async () => {
+  it("requires locations manage to write and remains public to read", async () => {
     const location = await createLocationService.call(CANADIAN, OWNER);
-    expect((await failure(createLocationService.call({ ...CANADIAN, slug: "x" }, STAFF))).code).toBe(
+    const viewer = {
+      ...STAFF,
+      grants: [{ module: "locations", access: "view" as const }],
+    };
+    expect((await failure(createLocationService.call({ ...CANADIAN, slug: "x" }, viewer))).code).toBe(
       "permission",
     );
-    expect((await failure(updateLocation.call({ id: location.id, name: "Nope" }, STAFF))).code).toBe(
+    expect((await failure(updateLocation.call({ id: location.id, name: "Nope" }, viewer))).code).toBe(
       "permission",
     );
     await expect(listLocations.call({}, ANONYMOUS)).resolves.toHaveLength(1);
