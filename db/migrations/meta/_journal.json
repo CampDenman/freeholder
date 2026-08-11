@@ -127,6 +127,13 @@
       "when": 1786407562224,
       "tag": "0017_named-roles-grants",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786418452210,
+      "tag": "0018_staff-invitations",
+      "breakpoints": true
     }
   ]
 }

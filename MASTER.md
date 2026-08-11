@@ -200,6 +200,7 @@ freeholder/
 | `RoleGrant` | Stored per-module authority for one role. `view` admits queries; `manage` admits queries and mutations. | role_key, module (`*` is explicit full access), access (view/manage) |
 | `User` | A login linked to one named role. | email, password_hash (nullable for magic-link-only customers), role_key, otp_secret, last_login_at |
 | `Session` | Server-side sessions. | user_id, token_hash, expires_at, ip, user_agent |
+| `StaffInvitation` | A short-lived, auditable bearer invitation into one assignable admin role. The raw token is never stored. | email, role_key snapshot, token_hash, status, expires_at, created_by, send_count, delivery metadata, accepted_user_id, accepted_at, revoked_at |
 | `Contact` | **The spine.** Every human/org the business touches. May or may not have a `User`. | user_id (nullable, 1:1), name, email, phone, org_id, source, tags[], custom_fields (jsonb), lifecycle_stage (lead → prospect → customer → repeat), preferred_locale, timezone, country, owner_notes |
 | `Organization` | Optional B2B grouping of contacts. | name, domain, custom_fields |
 | `TimelineEvent` | Append-only polymorphic event log per contact. Powers the CRM timeline. | contact_id, actor (user/system/agent), event_type, subject_type, subject_id, payload (jsonb), occurred_at |
@@ -214,6 +215,15 @@ The seeded owner, administrator, editor, bookkeeper, service-provider and
 customer roles are starting data the owner may tune. A non-assignable `staff`
 record remains temporarily so an N-1 image can still write its legacy value
 during rollback.
+
+**Staff accounts enter by invitation.** An owner or permitted administrator
+chooses an assignable role that can enter the admin shell and sends a private,
+expiring link. Resending rotates the token, revocation stops it immediately,
+and acceptance atomically retires the invitation and creates exactly one user
+with that role. The selected role is revalidated at acceptance, every
+lifecycle mutation is in the audit log, expired rows release their address for
+a fresh invitation, and delivery truthfully distinguishes sent mail from a
+link written only to the development/server log.
 
 **Rule:** anything notable that happens to a contact — quote sent, invoice paid, gallery viewed, email opened, booking rescheduled, form submitted — emits a `TimelineEvent`. Modules write events; the CRM reads them. This is the integration contract between modules.
 
@@ -2720,11 +2730,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-10 |
-| Evidence snapshot | `main` at `125d676` (C0 controls merged); C1.01 changeset `named-roles-grants.md` |
+| Evidence snapshot | `main` at `e287e72` (C1.01 merged); C1.02 changeset `staff-invitations.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.02 staff invitation lifecycle; no public-launch work is required |
+| Current focus | C1.03 privileged-account 2FA and step-up authentication; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2876,8 +2886,10 @@ reading chat logs.
   seed owner, administrator, editor, bookkeeper, service-provider, and customer
   defaults without hard-coding their permissions. (`0017_named-roles-grants.sql`;
   `tests/core/roles.test.ts`; changeset `named-roles-grants.md`)
-- [ ] **C1.02** Build staff invitations, acceptance, expiry/revocation,
+- [x] **C1.02** Build staff invitations, acceptance, expiry/revocation,
   resend, role assignment, and invitation audit history.
+  (`0018_staff-invitations.sql`; `tests/core/invitations.test.ts`; changeset
+  `staff-invitations.md`)
 - [ ] **C1.03** Add TOTP/WebAuthn-capable 2FA, recovery codes, mandatory 2FA
   policy for privileged roles, and step-up authentication for critical work.
 - [ ] **C1.04** Add owner-visible session/device management, revoke-one,

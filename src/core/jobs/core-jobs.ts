@@ -6,10 +6,10 @@
 // table was introduced. That is the pattern to expect:
 // tables that grow are cheap to write and only become somebody's problem
 // months later, on an instance nobody is watching.
-import { isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { defineJob } from "@/core/jobs";
-import { passwordResets, sessions } from "@/core/auth/schema";
+import { passwordResets, sessions, staffInvitations } from "@/core/auth/schema";
 import { rateLimitCounters } from "@/core/security/schema";
 import { pruneDispatched, redeliverPending } from "@/core/events/outbox";
 
@@ -101,6 +101,29 @@ export const sweepPasswordResets = defineJob({
   },
 });
 
+/**
+ * Make invitation expiry explicit so the one-pending-per-address constraint
+ * releases without depending on somebody opening the old link first.
+ */
+export const expireStaffInvitations = defineJob({
+  name: "core.expireStaffInvitations",
+  summary: "Mark pending staff invitations as expired when their links lapse.",
+  schedule: "*/15 * * * *",
+  handler: async () => {
+    const expired = await db()
+      .update(staffInvitations)
+      .set({ status: "expired", updatedAt: new Date() })
+      .where(
+        and(
+          eq(staffInvitations.status, "pending"),
+          lt(staffInvitations.expiresAt, sql`now()`),
+        ),
+      )
+      .returning({ id: staffInvitations.id });
+    return { expired: expired.length };
+  },
+});
+
 /** The outbox is a delivery mechanism, not a history. */
 export const pruneOutbox = defineJob({
   name: "core.pruneOutbox",
@@ -159,6 +182,7 @@ export default [
   sweepSessions,
   sweepRateLimits,
   sweepPasswordResets,
+  expireStaffInvitations,
   dispatchOutbox,
   pruneOutbox,
   deliverWebhooks,

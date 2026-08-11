@@ -31,11 +31,15 @@ import { listServices, permits, type Actor, type Service } from "@/core/service"
  * is an invitation to guess at credentials rather than a capability of the
  * business. An agent authenticates with the key it was given; managing
  * credentials is the owner's work, done while signed in.
+ * Staff invitations are the same boundary: accepting one chooses a password,
+ * while creating or resending one issues a credential that can create an
+ * account. They stay available through the human UI and HTTP service surface,
+ * but an MCP client is never prompted to handle either side of that secret.
  *
  * A per-service opt-out on `ServiceDef` expresses this better than a list of
  * families; `MASTER.md` §43 item C3.04 tracks that contract.
  */
-const EXCLUDED_FAMILIES = new Set(["auth", "apikeys"]);
+const EXCLUDED_FAMILIES = new Set(["auth", "apikeys", "invitations"]);
 
 export interface McpTool {
   name: string;
