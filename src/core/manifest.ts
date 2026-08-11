@@ -59,6 +59,9 @@ export default defineModule({
       "staffInvitation.accepted",
       "auth.sessionRevoked",
       "auth.otherSessionsRevoked",
+      "contact.magicLinkRequested",
+      "contact.portalAccountLinked",
+      "contact.magicLinkSignedIn",
     ],
   },
 });

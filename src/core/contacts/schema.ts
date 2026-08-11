@@ -95,3 +95,26 @@ export const timelineEvents = pgTable(
     index("timeline_events_subject_idx").on(t.subjectType, t.subjectId),
   ],
 );
+
+/**
+ * Short-lived proof that the current holder controls a contact's email.
+ * Linking the Contact to a User happens only when this proof is consumed.
+ */
+export const customerMagicLinks = pgTable(
+  "customer_magic_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("customer_magic_links_token_idx").on(t.tokenHash),
+    index("customer_magic_links_contact_expiry_idx").on(t.contactId, t.expiresAt),
+  ],
+);

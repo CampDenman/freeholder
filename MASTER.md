@@ -202,6 +202,7 @@ freeholder/
 | `Session` | Server-side active session. Detailed request metadata exists only while the session remains active. | user_id, token_hash, expires_at, last_seen_at, masked ip hint, bounded user_agent, device/network HMACs |
 | `LoginSecurityEvent` | Privacy-limited successful-login history and suspicious-login notice delivery; deleted after 90 days. | user_id, session_id, coarse device label, masked ip hint, device/network HMACs, reason, notice status/attempts, expires_at |
 | `StaffInvitation` | A short-lived, auditable bearer invitation into one assignable admin role. The raw token is never stored. | email, role_key snapshot, token_hash, status, expires_at, created_by, send_count, delivery metadata, accepted_user_id, accepted_at, revoked_at |
+| `CustomerMagicLink` | A 15-minute, one-use proof of an existing Contact's current email. The raw token is never stored and merge invalidates the duplicate's proof. | contact_id, email snapshot, token_hash, expires_at, used_at |
 | `Contact` | **The spine.** Every human/org the business touches. May or may not have a `User`. | user_id (nullable, 1:1), name, email, phone, org_id, source, tags[], custom_fields (jsonb), lifecycle_stage (lead → prospect → customer → repeat), preferred_locale, timezone, country, owner_notes |
 | `Organization` | Optional B2B grouping of contacts. | name, domain, custom_fields |
 | `TimelineEvent` | Append-only polymorphic event log per contact. Powers the CRM timeline. | contact_id, actor (user/system/agent), event_type, subject_type, subject_id, payload (jsonb), occurred_at |
@@ -225,6 +226,16 @@ with that role. The selected role is revalidated at acceptance, every
 lifecycle mutation is in the audit log, expired rows release their address for
 a fresh invitation, and delivery truthfully distinguishes sent mail from a
 link written only to the development/server log.
+
+**Customer accounts prove the Contact; they never create a parallel customer
+record.** The public request gives the same response for known and unknown
+addresses. A raw link exists only in mail, expires after 15 minutes, works once,
+and is invalidated if the Contact email changes or the Contact is merged away.
+GET stages the credential in a narrow HttpOnly cookie and removes it from the
+URL; an explicit POST consumes it, so mail-link scanners cannot spend it. Only
+after proof does Freeholder create or link a passwordless `customer` User to
+the existing Contact. Magic-link authentication refuses any role with stored
+module grants, so it can never become a shortcut around staff authentication.
 
 **Rule:** anything notable that happens to a contact — quote sent, invoice paid, gallery viewed, email opened, booking rescheduled, form submitted — emits a `TimelineEvent`. Modules write events; the CRM reads them. This is the integration contract between modules.
 
@@ -2730,12 +2741,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-10 |
-| Evidence snapshot | `main` at `bfc99a3` (C1.03 merged); C1.04 changeset `session-device-management.md` |
+| Last reconciled | 2026-08-11 |
+| Evidence snapshot | `main` at `bf7b7a8` (C1.04 merged); C1.05 changeset `customer-magic-links.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.05 customer magic links and portal account linking; no public-launch work is required |
+| Current focus | C1.06 contact and organization data depth; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2900,8 +2911,10 @@ reading chat logs.
   (`0020_session-device-management.sql`;
   `tests/core/session-management.test.ts`; changeset
   `session-device-management.md`)
-- [ ] **C1.05** Add customer magic links and portal account linking without
-  creating a second contact identity.
+- [x] **C1.05** Add customer magic links and portal account linking without
+  creating a second contact identity. (`0021_customer-magic-links.sql`;
+  `tests/core/customer-magic-links.test.ts`; changeset
+  `customer-magic-links.md`)
 - [ ] **C1.06** Complete organizations, contact tags, owner-defined custom
   fields, relationships, preferred locale/timezone/country, and lifecycle data.
 - [ ] **C1.07** Build duplicate candidate detection/queue, explainable scores,

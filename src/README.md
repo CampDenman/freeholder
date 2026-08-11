@@ -4,7 +4,8 @@ Framework-agnostic application code, per `MASTER.md` §10:
 
 - `core/` — the implemented spine: db, privacy-bounded session/device history,
   suspicious-login notices, TOTP/WebAuthn/recovery and step-up auth, named
-  roles and module grants, staff invitations, contacts,
+  roles and module grants, staff invitations, customer magic-link proof and
+  single-spine portal account linking, contacts,
   media, i18n, locations, settings, events, jobs, SEO, API keys, webhooks,
   agents and connections.
   Modules may import core; never the reverse.
