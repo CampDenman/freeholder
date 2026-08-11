@@ -15,7 +15,7 @@ export function JobActionForm({
   disabled = false,
   children,
 }: {
-  intent: "cancel" | "retry" | "redrive";
+  intent: "cancel" | "retry" | "redrive" | "replay";
   hidden: Record<string, string>;
   submitLabel: string;
   pendingLabel: string;

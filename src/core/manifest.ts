@@ -75,6 +75,7 @@ export default defineModule({
       "job.cancelled",
       "job.retried",
       "job.deadLettersRedriven",
+      "outbox.replayed",
     ],
   },
 });

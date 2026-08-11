@@ -1,0 +1,5 @@
+ALTER TABLE "outbox_event_deliveries" ADD CONSTRAINT "outbox_event_deliveries_processing_lease_check" CHECK ("outbox_event_deliveries"."status" <> 'processing' or "outbox_event_deliveries"."lease_expires_at" is not null);--> statement-breakpoint
+ALTER TABLE "outbox_event_deliveries" ADD CONSTRAINT "outbox_event_deliveries_delivered_timestamp_check" CHECK ("outbox_event_deliveries"."status" <> 'delivered' or "outbox_event_deliveries"."delivered_at" is not null);--> statement-breakpoint
+ALTER TABLE "outbox_event_deliveries" ADD CONSTRAINT "outbox_event_deliveries_dead_letter_timestamp_check" CHECK ("outbox_event_deliveries"."status" <> 'dead_letter' or "outbox_event_deliveries"."dead_lettered_at" is not null);--> statement-breakpoint
+ALTER TABLE "outbox_events" ADD CONSTRAINT "outbox_events_dispatched_timestamp_check" CHECK ("outbox_events"."status" <> 'dispatched' or "outbox_events"."dispatched_at" is not null);--> statement-breakpoint
+ALTER TABLE "outbox_events" ADD CONSTRAINT "outbox_events_dead_letter_timestamp_check" CHECK ("outbox_events"."status" <> 'dead_letter' or "outbox_events"."dead_lettered_at" is not null);

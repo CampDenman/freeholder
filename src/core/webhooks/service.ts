@@ -320,6 +320,7 @@ export const testWebhook = defineService({
 export async function fanOut(
   eventName: string,
   payload: unknown,
+  outboxEventId?: string,
 ): Promise<number> {
   // The webhook system does not report on itself. A subscription to `*` would
   // otherwise be told every time a webhook was created or changed — including
@@ -349,17 +350,21 @@ export async function fanOut(
       .values(
         wanted.map((subscription) => ({
           subscriptionId: subscription.id,
+          outboxEventId,
           eventName,
           payload: (payload ?? {}) as Record<string, unknown>,
         })),
       )
+      .onConflictDoNothing()
       .returning({ id: webhookDeliveries.id });
+
+    if (created.length === 0) return;
 
     // The delivery rows and their immediate nudge are one commit. If queue
     // storage is unavailable the outbox listener fails and retries instead of
     // leaving deliveries that wait silently for the next minute tick.
     await enqueueJob(tx, "core.deliverWebhooks", {}, {
-      idempotencyKey: `webhook-fanout:${created[0]!.id}`,
+      idempotencyKey: `webhook-fanout:${outboxEventId ?? created[0]!.id}`,
     });
   });
 

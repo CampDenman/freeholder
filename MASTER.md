@@ -1257,6 +1257,19 @@ require manage access, fresh step-up authentication, exact typed confirmation,
 an audit row and a committed event. API keys and agents never receive job
 payload history, even with a broad platform scope.
 
+Committed module events use a separate listener-aware dead-letter contract.
+Boot derives a stable identity from module, event and exported handler; the
+outbox stores one leased receipt per event/listener pair and marks the event
+delivered only when every receipt succeeds. Unregistered listeners and
+permanent failures retry with bounded exponential backoff, stop after eight
+attempts and remain recoverable for 90 days. Owner replay resets only failed
+receipts: delivered listeners are immutable and cannot repeat. The human-only
+`/admin/jobs/outbox` ledger redacts payload secrets, and replay requires
+platform manage access, step-up authentication, exact `REPLAY` confirmation,
+an audit row and a transactionally queued targeted dispatch. Listeners that
+cross a network receive the durable event ID as their provider idempotency
+seam; built-in webhook fan-out enforces it with a unique database key.
+
 ---
 
 ## 12. Adapter Contract
@@ -2765,11 +2778,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-11 |
-| Evidence snapshot | `main` at `6773816` (C1.09 merged); C1.10 changeset `job-operations.md` |
+| Evidence snapshot | `main` at `922c220` (C1.10 merged); C1.11 changeset `outbox-dead-letters.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.11 dead-letter handling and duplicate-safe replay for unconsumed or permanently failing outbox events; no public-launch work is required |
+| Current focus | C1.12 complete media support for video, audio and documents, including safe direct uploads, scanning, provenance and lifecycle; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2869,8 +2882,8 @@ green test/build suite. Later checklist items name the remaining depth.
 - [x] **B11 — Deployment baseline:** production container, GHCR publishing,
   DigitalOcean Droplet/Caddy/Postgres/S3-compatible recipe, backup script, and
   live health verification.
-- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 862
-  tests pass with the C1.10 evidence change.
+- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 867
+  tests pass with the C1.11 evidence change.
 
 ### 43.4 Dependency order
 
@@ -2968,8 +2981,15 @@ reading chat logs.
   redaction, audit, lease and briefing evidence in
   `tests/core/transactional-jobs.test.ts`; changeset `job-operations.md`;
   operator runbook `deploy/background-jobs.md`)
-- [ ] **C1.11** Add dead-letter handling for unconsumed or permanently failing
+- [x] **C1.11** Add dead-letter handling for unconsumed or permanently failing
   outbox events and prove replay cannot duplicate side effects.
+  (`0026_outbox-dead-letters.sql` through
+  `0028_outbox-state-invariants.sql`; stable listener identities, leased
+  per-listener receipts, bounded retry and selective replay in
+  `src/core/events`; human-only redacted `/admin/jobs/outbox` recovery with
+  step-up, typed confirmation and audit evidence in `tests/core/outbox.test.ts`;
+  webhook replay convergence in `tests/core/webhooks.test.ts`; changeset
+  `outbox-dead-letters.md`; operator runbook `deploy/event-outbox.md`)
 - [ ] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.

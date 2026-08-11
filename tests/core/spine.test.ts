@@ -607,8 +607,8 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
 
     it("publishes queued events once, only after the outer commit", async () => {
       const seen: string[] = [];
-      subscribe("contact.created", () => void seen.push("contact.created"));
-      subscribe("test.composed", () => void seen.push("test.composed"));
+      subscribe("contact.created", "test:contact.created:first", () => void seen.push("contact.created"));
+      subscribe("test.composed", "test:test.composed:first", () => void seen.push("test.composed"));
 
       await twoContacts.call({}, STAFF);
       expect(seen.filter((e) => e === "contact.created")).toHaveLength(2);
@@ -617,8 +617,8 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
 
     it("publishes nothing when the outer call rolls back", async () => {
       const seen: string[] = [];
-      subscribe("contact.created", () => void seen.push("contact.created"));
-      subscribe("test.composed", () => void seen.push("test.composed"));
+      subscribe("contact.created", "test:contact.created:rollback", () => void seen.push("contact.created"));
+      subscribe("test.composed", "test:test.composed:rollback", () => void seen.push("test.composed"));
 
       await expect(twoContacts.call({ fail: true }, STAFF)).rejects.toThrow();
       expect(seen).toEqual([]);
@@ -666,10 +666,10 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
   describe("the event bus", () => {
     it("isolates a failing listener from the publisher", async () => {
       const reached: string[] = [];
-      subscribe("boom", () => {
+      subscribe("boom", "test:boom:failing", () => {
         throw new Error("listener exploded");
       });
-      subscribe("boom", () => void reached.push("second"));
+      subscribe("boom", "test:boom:second", () => void reached.push("second"));
       await expect(publish("boom", {})).resolves.toBeUndefined();
       expect(reached).toEqual(["second"]);
     });

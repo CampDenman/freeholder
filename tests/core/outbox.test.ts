@@ -1,19 +1,29 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
-// The transactional outbox and the job registry (MASTER.md §11).
-//
-// The hole this closes is invisible on a healthy instance and impossible to
-// notice on a broken one: a mutation commits, the process dies before its
-// events reach anybody, and nothing is inconsistent — it is simply that
-// something which should have happened never did. So the tests are mostly
-// about the unhappy paths, because the happy one was already working.
+// Durable outbox delivery, dead letters, and duplicate-safe replay (§11).
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
-import { outboxEvents } from "@/core/events/schema";
+import {
+  auditLog,
+  outboxEventDeliveries,
+  outboxEvents,
+} from "@/core/events/schema";
 import { resetBusForTests, subscribe } from "@/core/events";
-import { pruneDispatched, redeliverPending } from "@/core/events/outbox";
+import {
+  OUTBOX_MAX_ATTEMPTS,
+  pruneDeadLetters,
+  pruneDispatched,
+  redeliverOutboxEvent,
+  redeliverPending,
+  replayOutboxEvent,
+} from "@/core/events/outbox";
+import {
+  getOutboxEvent,
+  listOutboxEvents,
+  replayOutboxEvent as replayOutboxEventService,
+} from "@/core/events/outbox-service";
 import { defineService, ServiceError } from "@/core/service";
 import { defineJob, listJobs, registerJob } from "@/core/jobs";
 import { ready } from "@/core/runtime";
@@ -27,6 +37,17 @@ import {
 } from "../helpers/spine";
 
 const rows = () => db().select().from(outboxEvents);
+
+async function makeDue(id: string): Promise<void> {
+  await db()
+    .update(outboxEvents)
+    .set({ nextAttemptAt: sql`now() - interval '1 second'` })
+    .where(eq(outboxEvents.id, id));
+  await db()
+    .update(outboxEventDeliveries)
+    .set({ nextAttemptAt: sql`now() - interval '1 second'` })
+    .where(eq(outboxEventDeliveries.eventId, id));
+}
 
 describe.runIf(hasDatabase)("events survive the process that made them", () => {
   beforeEach(async () => {
@@ -43,14 +64,10 @@ describe.runIf(hasDatabase)("events survive the process that made them", () => {
     await createContact.call({ name: "Ada" }, STAFF);
     const stored = await rows();
     expect(stored.map((row) => row.eventName)).toContain("contact.created");
-    // Dispatched in the same request, so a healthy instance leaves nothing
-    // for the sweeper to find.
-    expect(stored.every((row) => row.dispatchedAt !== null)).toBe(true);
+    expect(stored.every((row) => row.status === "dispatched")).toBe(true);
   });
 
   it("writes nothing when the mutation rolls back", async () => {
-    // The property that makes an outbox an outbox: no event for a change that
-    // did not happen.
     const failing = defineService({
       name: "test.failsAfterQueueing",
       summary: "Queue an event and then throw.",
@@ -68,81 +85,245 @@ describe.runIf(hasDatabase)("events survive the process that made them", () => {
   });
 
   it("redelivers what a crash left behind", async () => {
-    // What a dead process leaves: a committed row nobody dispatched. Written
-    // directly, because the alternative is killing a real process mid-request.
     const seen: unknown[] = [];
-    subscribe("test.stranded", (payload) => {
+    subscribe("test.stranded", "test:stranded:collector", (payload) => {
       seen.push(payload);
     });
-    await db()
-      .insert(outboxEvents)
-      .values({
-        eventName: "test.stranded",
-        payload: { note: "committed, never announced" },
-        // Older than the grace period, so the sweeper does not race a request
-        // that might still be dispatching it.
-        createdAt: sql`now() - interval '5 minutes'`,
-      });
+    await db().insert(outboxEvents).values({
+      eventName: "test.stranded",
+      payload: { note: "committed, never announced" },
+      createdAt: sql`now() - interval '5 minutes'`,
+    });
 
-    const result = await redeliverPending();
-    expect(result).toEqual({ redelivered: 1, failed: 0 });
+    expect(await redeliverPending()).toEqual({ redelivered: 1, failed: 0 });
     expect(seen).toEqual([{ note: "committed, never announced" }]);
-
-    // And marked, so the next sweep does not deliver it again.
-    expect((await rows())[0]?.dispatchedAt).not.toBeNull();
+    expect((await rows())[0]).toMatchObject({ status: "dispatched" });
     expect((await redeliverPending()).redelivered).toBe(0);
   });
 
   it("leaves a fresh event alone", async () => {
-    // Inside the grace period the request that created it is probably still
-    // dispatching. At-least-once is the contract; duplicating routinely is
-    // carelessness.
     await db()
       .insert(outboxEvents)
       .values({ eventName: "test.fresh", payload: {} });
     expect((await redeliverPending()).redelivered).toBe(0);
   });
 
-  it("keeps an event a listener could not handle, and records why", async () => {
-    subscribe("test.explodes", () => {
+  it("dead-letters only the failing listener and replays without duplicate side effects", async () => {
+    let completedSideEffects = 0;
+    let failingAttempts = 0;
+    let recoveredSideEffects = 0;
+    subscribe(
+      "test.explodes",
+      "test:explodes:completed",
+      (_payload, _name, context) => {
+        completedSideEffects += 1;
+        expect(context?.eventId).toBeTruthy();
+      },
+    );
+    subscribe("test.explodes", "test:explodes:failing", () => {
+      failingAttempts += 1;
       throw new Error("the listener is having a bad afternoon");
     });
-    await db()
+    const [inserted] = await db()
       .insert(outboxEvents)
       .values({
         eventName: "test.explodes",
         payload: {},
         createdAt: sql`now() - interval '5 minutes'`,
-      });
+      })
+      .returning({ id: outboxEvents.id });
 
-    // `publish` isolates listener failures so one broken listener cannot
-    // strand an event for the others — so the event is *delivered* and marked.
-    // What must not happen is the row vanishing without a trace either way.
-    await redeliverPending();
-    const [row] = await rows();
-    expect(row?.attempts).toBeGreaterThan(0);
+    for (let attempt = 0; attempt < OUTBOX_MAX_ATTEMPTS; attempt += 1) {
+      await redeliverPending(0);
+      if (attempt < OUTBOX_MAX_ATTEMPTS - 1) await makeDue(inserted!.id);
+    }
+    const [event] = await rows();
+    expect(event).toMatchObject({
+      status: "dead_letter",
+      attempts: OUTBOX_MAX_ATTEMPTS,
+      replayCount: 0,
+    });
+    expect(event?.lastError).toContain("bad afternoon");
+    expect(completedSideEffects).toBe(1);
+    expect(failingAttempts).toBe(OUTBOX_MAX_ATTEMPTS);
+
+    const deliveries = await db()
+      .select()
+      .from(outboxEventDeliveries)
+      .where(eq(outboxEventDeliveries.eventId, inserted!.id));
+    expect(deliveries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          listenerId: "test:explodes:completed",
+          status: "delivered",
+          attempts: 1,
+        }),
+        expect.objectContaining({
+          listenerId: "test:explodes:failing",
+          status: "dead_letter",
+          attempts: OUTBOX_MAX_ATTEMPTS,
+        }),
+      ]),
+    );
+
+    resetBusForTests();
+    subscribe("test.explodes", "test:explodes:completed", () => {
+      completedSideEffects += 1;
+    });
+    subscribe(
+      "test.explodes",
+      "test:explodes:failing",
+      (_payload, _name, context) => {
+        recoveredSideEffects += 1;
+        expect(context).toMatchObject({ replay: true, attempt: 1 });
+      },
+    );
+    expect(await replayOutboxEvent(inserted!.id)).toBe(true);
+    expect(await redeliverOutboxEvent(inserted!.id)).toBe(true);
+
+    expect(completedSideEffects).toBe(1);
+    expect(recoveredSideEffects).toBe(1);
+    expect((await rows())[0]).toMatchObject({
+      status: "dispatched",
+      replayCount: 1,
+    });
+  });
+
+  it("dead-letters an unconsumed event and recovers when a listener appears", async () => {
+    const [inserted] = await db()
+      .insert(outboxEvents)
+      .values({
+        eventName: "test.noListenerYet",
+        payload: { durable: true },
+        createdAt: sql`now() - interval '5 minutes'`,
+      })
+      .returning({ id: outboxEvents.id });
+
+    for (let attempt = 0; attempt < OUTBOX_MAX_ATTEMPTS; attempt += 1) {
+      await redeliverPending(0);
+      if (attempt < OUTBOX_MAX_ATTEMPTS - 1) await makeDue(inserted!.id);
+    }
+    expect((await rows())[0]).toMatchObject({ status: "dead_letter" });
+    expect(await db().select().from(outboxEventDeliveries)).toHaveLength(0);
+
+    const seen: unknown[] = [];
+    subscribe("test.noListenerYet", "test:no-listener:recovered", (payload) => {
+      seen.push(payload);
+    });
+    expect(await replayOutboxEvent(inserted!.id)).toBe(true);
+    expect(await redeliverOutboxEvent(inserted!.id)).toBe(true);
+    expect(seen).toEqual([{ durable: true }]);
+    expect((await rows())[0]).toMatchObject({ status: "dispatched" });
+  });
+
+  it("claims a listener once when dispatchers race", async () => {
+    let sideEffects = 0;
+    subscribe("test.race", "test:race:once", async () => {
+      sideEffects += 1;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    const [inserted] = await db()
+      .insert(outboxEvents)
+      .values({ eventName: "test.race", payload: {} })
+      .returning({ id: outboxEvents.id });
+
+    await Promise.all([
+      redeliverOutboxEvent(inserted!.id),
+      redeliverOutboxEvent(inserted!.id),
+      redeliverOutboxEvent(inserted!.id),
+    ]);
+    expect(sideEffects).toBe(1);
+    expect((await rows())[0]).toMatchObject({ status: "dispatched" });
+  });
+
+  it("keeps inspection human-only, redacts payloads, and audits replay", async () => {
+    const [inserted] = await db()
+      .insert(outboxEvents)
+      .values({
+        eventName: "test.operator",
+        payload: { email: "ada@example.test", password: "never-show-this" },
+        status: "dead_letter",
+        deadLetteredAt: new Date(),
+        lastError: "listener exhausted",
+      })
+      .returning({ id: outboxEvents.id });
+
+    const agentError = await failure(
+      listOutboxEvents.call(
+        { status: "dead_letter" },
+        { kind: "agent", keyName: "operator", scopes: ["platform.*"] },
+      ),
+    );
+    expect(agentError.code).toBe("permission");
+
+    const detail = await getOutboxEvent.call({ id: inserted!.id }, STAFF);
+    expect(detail.payload).toEqual({
+      email: "ada@example.test",
+      password: "[redacted]",
+    });
+
+    const stepUpError = await failure(
+      replayOutboxEventService.call(
+        { id: inserted!.id, confirm: "REPLAY" },
+        {
+          ...STAFF,
+          security: {
+            twoFactorRequired: true,
+            twoFactorEnrolled: true,
+            twoFactorVerified: true,
+            stepUpValid: false,
+          },
+        },
+      ),
+    );
+    expect(stepUpError.code).toBe("step_up_required");
+
+    const confirmationError = await failure(
+      replayOutboxEventService.call(
+        { id: inserted!.id, confirm: "WRONG" as "REPLAY" },
+        STAFF,
+      ),
+    );
+    expect(confirmationError.code).toBe("validation");
+
+    await expect(
+      replayOutboxEventService.call(
+        { id: inserted!.id, confirm: "REPLAY" },
+        STAFF,
+      ),
+    ).resolves.toMatchObject({ replayed: true, replayCount: 1 });
+    const [replayed] = await db()
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, inserted!.id));
+    expect(replayed).toMatchObject({ status: "pending", replayCount: 1 });
+    expect(
+      (await db().select().from(auditLog)).some(
+        (entry) =>
+          entry.action === "platform.replayOutboxEvent" &&
+          entry.subjectId === inserted!.id,
+      ),
+    ).toBe(true);
   });
 
   it("forgets what it delivered a week ago", async () => {
-    // A delivery mechanism, not a history: the audit log and the timeline are
-    // where "what happened" lives.
-    await db()
-      .insert(outboxEvents)
-      .values({
+    await db().insert(outboxEvents).values([
+      {
         eventName: "test.old",
         payload: {},
+        status: "dispatched",
         dispatchedAt: sql`now() - interval '30 days'`,
-      });
-    await db()
-      .insert(outboxEvents)
-      .values({
+      },
+      {
         eventName: "test.recent",
         payload: {},
+        status: "dispatched",
         dispatchedAt: sql`now()`,
-      });
+      },
+    ]);
 
     expect(await pruneDispatched()).toBe(1);
-    expect((await rows()).map((r) => r.eventName)).toEqual(["test.recent"]);
+    expect((await rows()).map((row) => row.eventName)).toEqual(["test.recent"]);
   });
 
   it("never leaves an undelivered event behind when pruning", async () => {
@@ -153,6 +334,27 @@ describe.runIf(hasDatabase)("events survive the process that made them", () => {
     });
     expect(await pruneDispatched()).toBe(0);
     expect(await rows()).toHaveLength(1);
+  });
+
+  it("retains dead letters for 90 days and then prunes them", async () => {
+    await db().insert(outboxEvents).values([
+      {
+        eventName: "test.dead.old",
+        payload: {},
+        status: "dead_letter",
+        deadLetteredAt: sql`now() - interval '91 days'`,
+      },
+      {
+        eventName: "test.dead.recent",
+        payload: {},
+        status: "dead_letter",
+        deadLetteredAt: sql`now() - interval '89 days'`,
+      },
+    ]);
+    expect(await pruneDeadLetters()).toBe(1);
+    expect((await rows()).map((row) => row.eventName)).toEqual([
+      "test.dead.recent",
+    ]);
   });
 });
 
@@ -173,7 +375,6 @@ describe("the job registry", () => {
   it("gives every scheduled job a cron expression that parses", () => {
     for (const job of listJobs().values()) {
       if (!job.schedule) continue;
-      // Five fields, and nothing that would silently never fire.
       expect({ job: job.name, fields: job.schedule.split(/\s+/).length }).toEqual({
         job: job.name,
         fields: 5,
@@ -182,16 +383,20 @@ describe("the job registry", () => {
   });
 
   it("refuses two different jobs claiming one name", () => {
-    // The same collision the service registry refuses, for the same reason:
-    // silently letting the second win routes work to whichever loaded last.
-    const one = defineJob({ name: "test.collide", summary: "a", handler: async () => null });
-    const two = defineJob({ name: "test.collide", summary: "b", handler: async () => null });
+    const one = defineJob({
+      name: "test.collide",
+      summary: "a",
+      handler: async () => null,
+    });
+    const two = defineJob({
+      name: "test.collide",
+      summary: "b",
+      handler: async () => null,
+    });
     registerJob(one);
     expect(() => {
       registerJob(two);
     }).toThrow(/registered twice/);
-    // Registering the same definition again is a no-op, because boot is a
-    // precondition rather than a one-shot event.
     expect(() => {
       registerJob(one);
     }).not.toThrow();

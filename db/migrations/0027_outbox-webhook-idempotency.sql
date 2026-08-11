@@ -1,0 +1,3 @@
+ALTER TABLE "webhook_deliveries" ADD COLUMN "outbox_event_id" uuid;--> statement-breakpoint
+ALTER TABLE "webhook_deliveries" ADD CONSTRAINT "webhook_deliveries_outbox_event_id_outbox_events_id_fk" FOREIGN KEY ("outbox_event_id") REFERENCES "public"."outbox_events"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "webhook_deliveries_outbox_event_idx" ON "webhook_deliveries" USING btree ("subscription_id","outbox_event_id") WHERE "webhook_deliveries"."outbox_event_id" is not null;

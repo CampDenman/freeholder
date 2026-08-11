@@ -84,6 +84,7 @@ import {
   redriveJobDeadLetters,
   retryJobRun,
 } from "@/core/jobs/service";
+import { replayOutboxEvent } from "@/core/events/outbox-service";
 
 export interface ActionState {
   error?: string;
@@ -637,6 +638,13 @@ export async function jobControlAction(
         );
         messageKey = "jobs.message.redriven";
         break;
+      case "replay":
+        await replayOutboxEvent.call(
+          { id, confirm: field(form, "confirmation") },
+          actor,
+        );
+        messageKey = "outbox.message.replayed";
+        break;
       default:
         throw new ServiceError("validation", "Choose a background-work action.");
     }
@@ -645,7 +653,9 @@ export async function jobControlAction(
   }
   revalidatePath("/admin");
   revalidatePath("/admin/jobs");
+  revalidatePath("/admin/jobs/outbox");
   if (name && id) revalidatePath(`/admin/jobs/${name}/${id}`);
+  if (intent === "replay" && id) revalidatePath(`/admin/jobs/outbox/${id}`);
   const t = await getT();
   return { saved: true, message: t(messageKey) };
 }

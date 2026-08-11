@@ -16,6 +16,7 @@ import { db } from "@/core/db";
 import { stopJobs } from "@/core/jobs";
 import type { Actor } from "@/core/service";
 import { users } from "@/core/auth/schema";
+import { outboxEvents } from "@/core/events/schema";
 import { webhookDeliveries, webhookSubscriptions } from "@/core/webhooks/schema";
 import {
   createWebhook,
@@ -355,6 +356,23 @@ describe.runIf(hasDatabase)("queueing what happened", () => {
 
     expect(await fanOut("contact.created", { id: "x" })).toBe(2);
     expect(await db().select().from(webhookDeliveries)).toHaveLength(2);
+  });
+
+  it("uses the outbox event id to make webhook fan-out replay idempotent", async () => {
+    await createWebhook.call(
+      { name: "Replay safe", url: "https://a.test/hook", events: ["contact.*"] },
+      OWNER,
+    );
+    const [event] = await db()
+      .insert(outboxEvents)
+      .values({ eventName: "contact.created", payload: { id: "x" } })
+      .returning({ id: outboxEvents.id });
+
+    expect(await fanOut("contact.created", { id: "x" }, event!.id)).toBe(1);
+    expect(await fanOut("contact.created", { id: "x" }, event!.id)).toBe(1);
+    const deliveries = await db().select().from(webhookDeliveries);
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]?.outboxEventId).toBe(event!.id);
   });
 
   it("skips a paused subscription", async () => {

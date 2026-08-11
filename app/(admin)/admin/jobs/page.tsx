@@ -10,6 +10,7 @@ import {
   listJobQueues,
   listJobRuns,
 } from "@/core/jobs/service";
+import { outboxSummary } from "@/core/events/outbox-service";
 import { currentBusiness } from "@/core/settings/read";
 import { Callout, Card, CardBody, CardHeader, Field, Pill, Select } from "@/ui/primitives";
 import { getT } from "../../../i18n";
@@ -63,11 +64,12 @@ export default async function JobsPage({
   const rawState = one("state");
   const state = STATES.includes(rawState as JobState) ? rawState as JobState : undefined;
   const offset = Math.max(0, Number(one("offset")) || 0);
-  const [t, business, summary, queues] = await Promise.all([
+  const [t, business, summary, queues, eventSummary] = await Promise.all([
     getT(),
     currentBusiness(),
     getJobSummary.call({}, actor),
     listJobQueues.call({}, actor),
+    outboxSummary.call({}, actor),
   ]);
   const name = queues.includes(rawName) ? rawName : undefined;
   const result = await listJobRuns.call(
@@ -76,7 +78,8 @@ export default async function JobsPage({
   );
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
-  const needsAttention = summary.failed + summary.deadLetters + summary.stuck;
+  const needsAttention =
+    summary.failed + summary.deadLetters + summary.stuck + eventSummary.deadLetters;
   const rail = [
     ["queued", summary.queued, "border-ink-muted"],
     ["active", summary.active, "border-accent"],
@@ -108,6 +111,23 @@ export default async function JobsPage({
           {t("jobs.attention", { count: needsAttention })}
         </Callout>
       ) : null}
+
+      <Card>
+        <CardHeader
+          title={t("outbox.card.title")}
+          status={
+            <Pill tone={eventSummary.deadLetters > 0 ? "danger" : "success"}>
+              {eventSummary.deadLetters}
+            </Pill>
+          }
+        />
+        <CardBody>
+          <p className="text-sm text-ink-muted">{t("outbox.card.body")}</p>
+          <a className="text-sm font-semibold text-accent underline" href="/admin/jobs/outbox">
+            {t("outbox.card.link")}
+          </a>
+        </CardBody>
+      </Card>
 
       <section aria-labelledby="jobs-state-title">
         <h2 id="jobs-state-title" className="sr-only">{t("jobs.stateRail")}</h2>

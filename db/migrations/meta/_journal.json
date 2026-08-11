@@ -183,6 +183,27 @@
       "when": 1786479450206,
       "tag": "0025_transactional-jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786484814949,
+      "tag": "0026_outbox-dead-letters",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1786486258441,
+      "tag": "0027_outbox-webhook-idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786492383782,
+      "tag": "0028_outbox-state-invariants",
+      "breakpoints": true
     }
   ]
 }

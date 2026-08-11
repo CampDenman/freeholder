@@ -18,7 +18,12 @@ import {
 } from "@/core/auth/schema";
 import { rateLimitCounters } from "@/core/security/schema";
 import { customerMagicLinks } from "@/core/contacts/schema";
-import { pruneDispatched, redeliverPending } from "@/core/events/outbox";
+import {
+  pruneDeadLetters,
+  pruneDispatched,
+  redeliverOutboxEvent,
+  redeliverPending,
+} from "@/core/events/outbox";
 import { deliverPendingSecurityNotices } from "@/core/auth/session-management/service";
 
 /**
@@ -102,6 +107,21 @@ export const dispatchOutbox = defineJob({
       );
     }
     return result;
+  },
+});
+
+/** Immediate, targeted recovery after an owner replays one dead letter. */
+export const dispatchOutboxEvent = defineJob({
+  name: "core.dispatchOutboxEvent",
+  summary: "Dispatch one explicitly replayed outbox event.",
+  retry: { limit: 3, delaySeconds: 15, backoff: true, maxDelaySeconds: 300 },
+  concurrency: 4,
+  leaseSeconds: 5 * 60,
+  handler: async (data) => {
+    if (typeof data.id !== "string") {
+      throw new Error("core.dispatchOutboxEvent requires an event id");
+    }
+    return { dispatched: await redeliverOutboxEvent(data.id) };
   },
 });
 
@@ -195,9 +215,12 @@ export const expireStaffInvitations = defineJob({
 /** The outbox is a delivery mechanism, not a history. */
 export const pruneOutbox = defineJob({
   name: "core.pruneOutbox",
-  summary: "Forget events that were delivered a week ago.",
+  summary: "Prune delivered events and expired dead letters.",
   schedule: "41 4 * * *",
-  handler: async () => ({ deleted: await pruneDispatched() }),
+  handler: async () => ({
+    dispatched: await pruneDispatched(),
+    deadLetters: await pruneDeadLetters(),
+  }),
 });
 
 /**
@@ -278,6 +301,7 @@ export default [
   sweepCustomerMagicLinks,
   expireStaffInvitations,
   dispatchOutbox,
+  dispatchOutboxEvent,
   pruneOutbox,
   deliverWebhooks,
   pruneWebhookDeliveries,

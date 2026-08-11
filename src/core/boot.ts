@@ -115,7 +115,11 @@ export async function boot(
           `module "${manifest.name}" listens for "${event}" with "${handlerName}", but its services module exports no such function.`,
         );
       }
-      subscribe(event, handler as (payload: unknown) => void | Promise<void>);
+      subscribe(
+        event,
+        `${manifest.name}:${event}:${handlerName}`,
+        handler as (payload: unknown) => void | Promise<void>,
+      );
       report.listeners.push({
         event,
         module: manifest.name,

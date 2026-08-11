@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { boot, bootOnce, resetBootForTests } from "@/core/boot";
 import coreManifest from "@/core/manifest";
-import { publish, resetBusForTests } from "@/core/events";
+import { eventListeners, publish, resetBusForTests } from "@/core/events";
 import type { ModuleManifest } from "@/core/module";
 import {
   defineService,
@@ -84,6 +84,9 @@ describe("boot()", () => {
 
     expect(report.listeners).toEqual([
       { event: "invoice.paid", module: "demo", handler: "onInvoicePaid" },
+    ]);
+    expect(eventListeners("invoice.paid").map((listener) => listener.id)).toEqual([
+      "demo:invoice.paid:onInvoicePaid",
     ]);
     await publish("invoice.paid", { invoiceId: "inv_1" });
     expect(received).toEqual([{ invoiceId: "inv_1" }]);
