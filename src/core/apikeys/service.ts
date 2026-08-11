@@ -100,6 +100,7 @@ export const createApiKey = defineService({
   summary: "Mint an API key.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     name: z.string().min(1).max(80),
     scopes: z.array(z.string().min(1).max(120)).max(200).default([]),
@@ -172,6 +173,7 @@ export const revokeApiKey = defineService({
   summary: "Stop an API key working.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "revoke");

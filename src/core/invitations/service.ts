@@ -235,6 +235,7 @@ export const createInvitation = defineService({
   summary: "Invite a new staff member into an assignable admin role.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     email: emailAddress,
     roleKey,
@@ -333,6 +334,7 @@ export const resendInvitation = defineService({
   summary: "Rotate and resend a pending or expired staff invitation.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ id: invitationId }),
   handler: async (input, ctx) => {
     const [invitation] = await ctx.tx
@@ -436,6 +438,7 @@ export const revokeInvitation = defineService({
   summary: "Revoke a live staff invitation immediately.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ id: invitationId }),
   handler: async (input, ctx) => {
     const now = new Date();

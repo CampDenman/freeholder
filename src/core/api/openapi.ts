@@ -45,6 +45,7 @@ const ERROR_SCHEMA = {
             "not_found",
             "conflict",
             "rate_limited",
+            "step_up_required",
             "internal",
           ],
         },
@@ -125,7 +126,9 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
     const description = [
       summary,
       "",
-      permission === "public"
+      service.def.stepUp
+        ? "Requires a signed-in person whose second-factor proof is no more than ten minutes old; API keys cannot call it."
+        : permission === "public"
         ? "Open to anyone, including callers with no credential."
         : permission === "authenticated"
           ? "Requires a signed-in person and is not available to API keys."

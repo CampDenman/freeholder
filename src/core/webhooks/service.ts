@@ -69,6 +69,7 @@ export const createWebhook = defineService({
   summary: "Send this site's events to another server.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     name: z.string().min(1).max(80),
     url: z.string().min(1).max(2000),
@@ -110,6 +111,7 @@ export const updateWebhook = defineService({
   summary: "Change a webhook, or turn it back on.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     id: z.uuid(),
     name: z.string().min(1).max(80).optional(),
@@ -158,6 +160,7 @@ export const rotateWebhookSecret = defineService({
   summary: "Issue a new signing secret for a webhook.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "change");
@@ -188,6 +191,7 @@ export const revealWebhookSecret = defineService({
   summary: "Show a webhook's signing secret.",
   kind: "query",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "agent") {
@@ -212,6 +216,7 @@ export const deleteWebhook = defineService({
   summary: "Stop sending events to a server.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "remove");

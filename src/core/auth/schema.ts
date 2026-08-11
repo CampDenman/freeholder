@@ -6,6 +6,7 @@
 // rest so a database leak never yields a usable session.
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -96,11 +97,98 @@ export const sessions = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     ip: text("ip"),
     userAgent: text("user_agent"),
+    /** The factor was proven for this session; null means password-only. */
+    twoFactorVerifiedAt: timestamp("two_factor_verified_at", {
+      withTimezone: true,
+    }),
+    /** Fresh factor proof used by services that declare `stepUp: true`. */
+    stepUpAt: timestamp("step_up_at", { withTimezone: true }),
     createdAt: createdAtColumn(),
   },
   (t) => [
     index("sessions_user_id_idx").on(t.userId),
     uniqueIndex("sessions_token_hash_idx").on(t.tokenHash),
+  ],
+);
+
+/** One encrypted TOTP seed per user. The legacy users.otp_secret stays unused. */
+export const totpFactors = pgTable("totp_factors", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  encryptedSecret: text("encrypted_secret").notNull(),
+  lastUsedStep: integer("last_used_step"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdAt: createdAtColumn(),
+  updatedAt: updatedAtColumn(),
+});
+
+/** Passkeys/security keys. Public keys are credentials, but not secrets. */
+export const webauthnCredentials = pgTable(
+  "webauthn_credentials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id").notNull(),
+    name: text("name").notNull(),
+    publicKey: text("public_key").notNull(),
+    // Authenticator counters are unsigned 32-bit values; PostgreSQL integer
+    // stops halfway through that range, while bigint safely covers it.
+    counter: bigint("counter", { mode: "number" }).notNull().default(0),
+    transports: text("transports").array().notNull().default(sql`ARRAY[]::text[]`),
+    deviceType: text("device_type").notNull(),
+    backedUp: boolean("backed_up").notNull().default(false),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("webauthn_credentials_credential_idx").on(t.credentialId),
+    index("webauthn_credentials_user_idx").on(t.userId),
+  ],
+);
+
+/** Random, one-use recovery codes. Only HMACs are retained. */
+export const twoFactorRecoveryCodes = pgTable(
+  "two_factor_recovery_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("two_factor_recovery_codes_hash_idx").on(t.codeHash),
+    index("two_factor_recovery_codes_user_idx").on(t.userId),
+  ],
+);
+
+/** Short-lived, single-purpose state for login and factor enrollment. */
+export const twoFactorChallenges = pgTable(
+  "two_factor_challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    purpose: text("purpose", {
+      enum: ["login", "totp-enrollment", "webauthn-registration", "webauthn-step-up"],
+    }).notNull(),
+    tokenHash: text("token_hash").notNull(),
+    challenge: text("challenge"),
+    pendingSecret: text("pending_secret"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("two_factor_challenges_token_idx").on(t.tokenHash),
+    index("two_factor_challenges_user_expiry_idx").on(t.userId, t.expiresAt),
   ],
 );
 

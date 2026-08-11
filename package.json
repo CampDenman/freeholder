@@ -10,7 +10,7 @@
     "url": "https://github.com/campdenman/freeholder.git"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19"
   },
   "packageManager": "pnpm@11.1.3",
   "scripts": {
@@ -31,6 +31,8 @@
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.2",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.45.2",
     "intl-messageformat": "^11.2.12",
@@ -39,6 +41,7 @@
     "nodemailer": "^9.0.3",
     "pg-boss": "^12.26.2",
     "postgres": "^3.4.9",
+    "qr": "^0.6.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "sharp": "^0.35.3",

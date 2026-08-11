@@ -25,7 +25,7 @@
 // do the whole thing itself.
 //
 // Usage:
-//   node scripts/owner-password.mjs [new-password]
+//   node scripts/owner-password.mjs [new-password] [--disable-2fa]
 import { randomBytes, scrypt as scryptCb } from "node:crypto";
 import { promisify } from "node:util";
 
@@ -59,7 +59,8 @@ function generatePassword() {
   return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
 }
 
-const password = process.argv[2] ?? generatePassword();
+const disableTwoFactor = process.argv.includes("--disable-2fa");
+const password = process.argv.slice(2).find((value) => value !== "--disable-2fa") ?? generatePassword();
 if (password.length < 12) {
   console.error("A password needs at least 12 characters.");
   process.exit(1);
@@ -70,8 +71,16 @@ const hash = await hashPassword(password);
 // Sessions go too. If somebody is resetting the owner's password, the
 // assumption that every existing session is theirs is exactly the assumption
 // worth abandoning.
+const ownerIds = "select id from users where role = 'owner'";
+const twoFactorReset = disableTwoFactor
+  ? `
+delete from two_factor_challenges where user_id in (${ownerIds});
+delete from two_factor_recovery_codes where user_id in (${ownerIds});
+delete from webauthn_credentials where user_id in (${ownerIds});
+delete from totp_factors where user_id in (${ownerIds});`
+  : "";
 const sql = `update users set password_hash = '${hash}' where role = 'owner';
-delete from sessions where user_id in (select id from users where role = 'owner');`;
+delete from sessions where user_id in (${ownerIds});${twoFactorReset}`;
 
 console.log(`
 The new owner password — copy it somewhere safe now, it is not stored anywhere
@@ -86,5 +95,5 @@ ${sql}
 SQL
 
 Then sign in and change it from Settings, so the password that ends up in your
-shell history is not the one you keep.
+shell history is not the one you keep.${disableTwoFactor ? " Two-factor authentication was also disabled; enrol it again immediately from Security." : ""}
 `);

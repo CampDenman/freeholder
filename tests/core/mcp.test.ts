@@ -176,11 +176,13 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
 
   it("derives tools from the registry rather than a list", async () => {
     // §28: "New feature merged → new MCP tool exists." Every non-excluded
-    // service an owner may call is offered, and nothing else is.
+    // service an owner may call is offered, except operations that explicitly
+    // require fresh interactive two-factor proof, and nothing else is.
     const offered = new Set(toolsFor(OWNER).map((tool) => tool.name));
     const expected = [...listServices().values()]
       .filter(
         (service) =>
+          !service.def.stepUp &&
           !["auth", "apikeys", "invitations"].includes(
             service.def.name.split(".")[0]!,
           ),
@@ -199,6 +201,7 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     expect(names).not.toContain("invitations_create");
     // And they cannot be reached by naming them either.
     expect(serviceForTool(OWNER, "auth_login")).toBeUndefined();
+    expect(serviceForTool(OWNER, "roles_assign")).toBeUndefined();
   });
 
   it("offers a scoped key only what it can actually call", async () => {

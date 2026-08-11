@@ -9,7 +9,12 @@
 import { and, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { defineJob } from "@/core/jobs";
-import { passwordResets, sessions, staffInvitations } from "@/core/auth/schema";
+import {
+  passwordResets,
+  sessions,
+  staffInvitations,
+  twoFactorChallenges,
+} from "@/core/auth/schema";
 import { rateLimitCounters } from "@/core/security/schema";
 import { pruneDispatched, redeliverPending } from "@/core/events/outbox";
 
@@ -101,6 +106,25 @@ export const sweepPasswordResets = defineJob({
   },
 });
 
+/** Verification attempts are short-lived credentials, not history. */
+export const sweepTwoFactorChallenges = defineJob({
+  name: "core.sweepTwoFactorChallenges",
+  summary: "Delete spent and expired two-factor verification attempts.",
+  schedule: "37 3 * * *",
+  handler: async () => {
+    const deleted = await db()
+      .delete(twoFactorChallenges)
+      .where(
+        or(
+          isNotNull(twoFactorChallenges.usedAt),
+          lt(twoFactorChallenges.expiresAt, sql`now()`),
+        ),
+      )
+      .returning({ id: twoFactorChallenges.id });
+    return { deleted: deleted.length };
+  },
+});
+
 /**
  * Make invitation expiry explicit so the one-pending-per-address constraint
  * releases without depending on somebody opening the old link first.
@@ -182,6 +206,7 @@ export default [
   sweepSessions,
   sweepRateLimits,
   sweepPasswordResets,
+  sweepTwoFactorChallenges,
   expireStaffInvitations,
   dispatchOutbox,
   pruneOutbox,

@@ -19,6 +19,7 @@ import {
 import { defineService, ServiceError } from "@/core/service";
 import { rateLimitKey, reset as resetRateLimit } from "@/core/security/rate-limit";
 import { seedDefaultRoles } from "@/core/roles/defaults";
+import { createLoginChallenge } from "@/core/auth/two-factor";
 
 const sessionMeta = {
   ip: z.string().optional(),
@@ -151,12 +152,34 @@ export const login = defineService({
     // right password do not leave someone one mistake from being throttled for
     // the rest of the window. Only a run of *failures* is suspicious.
     await resetRateLimit(rateLimitKey("auth.login", input.email));
+    const twoFactor = await createLoginChallenge(ctx.tx, user.id);
+    if (twoFactor) {
+      return {
+        userId: user.id,
+        role: user.role,
+        twoFactorRequired: true as const,
+        // Compatibility fields keep the service result ergonomic for callers
+        // that know they are password-only. They are never cookies and name
+        // no session: an enrolled account still has no session at this point.
+        token: "",
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        ...twoFactor,
+      };
+    }
     await ctx.tx
       .update(users)
       .set({ lastLoginAt: sql`now()` })
       .where(eq(users.id, user.id));
     const session = await createSession(ctx.tx, user.id, input);
-    return { userId: user.id, role: user.role, ...session };
+    return {
+      userId: user.id,
+      role: user.role,
+      twoFactorRequired: false as const,
+      challengeToken: "",
+      methods: { totp: false, recovery: false, webauthn: false },
+      webauthnOptions: undefined,
+      ...session,
+    };
   },
 });
 
@@ -212,6 +235,15 @@ export const changePassword = defineService({
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "user") {
       throw new ServiceError("permission", "Sign in to change your password.");
+    }
+    if (
+      ctx.actor.security?.twoFactorEnrolled &&
+      !ctx.actor.security.stepUpValid
+    ) {
+      throw new ServiceError(
+        "step_up_required",
+        "Confirm your identity with two-factor authentication before changing your password.",
+      );
     }
     const userId = ctx.actor.userId;
 

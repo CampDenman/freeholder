@@ -36,6 +36,12 @@ export default async function LoginPage() {
   const actor = await actorFromToken(
     (await cookies()).get(SESSION_COOKIE)?.value,
   );
+  if (actor.kind === "user" && actor.security?.twoFactorRequired) {
+    if (!actor.security.twoFactorEnrolled) redirect("/security?required=1");
+    if (!actor.security.twoFactorVerified) {
+      redirect("/security/verify?returnTo=/admin");
+    }
+  }
   if (hasModuleAccess(actor, "admin")) redirect("/admin");
 
   const [business, theme, t] = await Promise.all([

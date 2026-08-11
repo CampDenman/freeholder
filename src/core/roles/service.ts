@@ -124,6 +124,7 @@ export const createRole = defineService({
   summary: "Create an owner-defined named role with per-module grants.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     name: z.string().trim().min(2).max(80),
     key: roleKey.optional(),
@@ -170,6 +171,7 @@ export const updateRole = defineService({
   summary: "Update a role and atomically replace its module grants.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     key: roleKey,
     name: z.string().trim().min(2).max(80),
@@ -223,6 +225,7 @@ export const deleteRole = defineService({
   summary: "Delete an unused owner-defined role.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ key: roleKey }),
   handler: async (input, ctx) => {
     const [role] = await ctx.tx
@@ -277,6 +280,7 @@ export const assignRole = defineService({
   summary: "Assign an existing non-owner account to a named role.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ userId: z.string().uuid(), roleKey }),
   handler: async (input, ctx) => {
     const [targetRole] = await ctx.tx

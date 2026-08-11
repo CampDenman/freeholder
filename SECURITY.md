@@ -25,3 +25,25 @@ repository.
 
 Pre-alpha: only the `main` branch is supported. A versioned support policy
 will land with the first release.
+
+## Account recovery and two-factor keys
+
+Roles that can manage roles, invitations, API keys, or connected credentials
+must enrol two-factor authentication before their module grants become usable.
+TOTP seeds are encrypted at rest, recovery codes and login challenges are
+hashed, WebAuthn requires user verification, and critical credential/authority
+changes require a factor proof no more than ten minutes old.
+
+Keep `SESSION_SECRET` stable and backed up with the rest of the deployment
+secrets. Changing it invalidates sessions, API keys, pending auth links, TOTP
+seeds, and recovery codes. If the owner loses every factor or that secret is
+unavailable, use the explicit break-glass command from the application image:
+
+```sh
+node scripts/owner-password.mjs --disable-2fa
+```
+
+Run the printed SQL against Freeholder's database, sign in with the one-time
+password, and immediately enrol new factors from **Security**. The flag clears
+only the owner's factor credentials and sessions; it never deletes business or
+customer data.

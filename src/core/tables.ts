@@ -10,6 +10,10 @@ export {
   users,
   sessions,
   staffInvitations,
+  totpFactors,
+  twoFactorChallenges,
+  twoFactorRecoveryCodes,
+  webauthnCredentials,
 } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
 export {

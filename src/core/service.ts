@@ -32,7 +32,20 @@ export interface ModuleGrant {
 }
 
 export type Actor =
-  | { kind: "user"; userId: string; role: string; grants: readonly ModuleGrant[] }
+  | {
+      kind: "user";
+      userId: string;
+      role: string;
+      grants: readonly ModuleGrant[];
+      /** Present on actors resolved from a live browser session. */
+      sessionId?: string;
+      security?: {
+        twoFactorRequired: boolean;
+        twoFactorEnrolled: boolean;
+        twoFactorVerified: boolean;
+        stepUpValid: boolean;
+      };
+    }
   | { kind: "agent"; keyName: string; scopes: string[] }
   | { kind: "system" }
   | { kind: "anonymous" };
@@ -50,7 +63,8 @@ export class ServiceError extends Error {
       | "permission"
       | "not_found"
       | "conflict"
-      | "rate_limited",
+      | "rate_limited"
+      | "step_up_required",
     message: string,
     /** Seconds until a rate-limited caller may retry; surfaced as Retry-After. */
     readonly retryAfterSeconds?: number,
@@ -116,6 +130,12 @@ export function hasModuleAccess(
 ): boolean {
   if (actor.kind === "system") return true;
   if (actor.kind !== "user") return false;
+  if (
+    actor.security?.twoFactorRequired &&
+    (!actor.security.twoFactorEnrolled || !actor.security.twoFactorVerified)
+  ) {
+    return false;
+  }
   const applicable = actor.grants.filter(
     (candidate) => candidate.module === "*" || candidate.module === module,
   );
@@ -126,7 +146,7 @@ export function hasModuleAccess(
   return applicable.some((grant) => grant.access === "manage");
 }
 
-const REDACTED_KEY = /pass(word)?|secret|token|otp|key/i;
+const REDACTED_KEY = /pass(word)?|secret|token|otp|key|credential|response/i;
 
 /** Secrets never reach the audit trail, whatever shape the input takes. */
 export function redact(value: unknown): unknown {
@@ -219,6 +239,8 @@ export interface ServiceDef<In extends z.ZodType, Out> {
   input: In;
   /** Optional throttle, consumed before the transaction opens. */
   rateLimit?: ServiceRateLimit & { subject: (input: z.output<In>) => string | undefined };
+  /** Require a fresh second-factor proof from an interactive user session. */
+  stepUp?: boolean;
   handler: (input: z.output<In>, ctx: ServiceContext) => Promise<Out>;
 }
 
@@ -260,6 +282,27 @@ export function defineService<In extends z.ZodType, Out>(
               // and §28 publishes the whole registry to them anyway.
               ? `This API key is not allowed to call ${def.name}. Grant it "${def.name}" or "${def.name.split(".")[0]}.*" in Settings.`
               : `Your role does not have permission to ${def.kind === "query" ? "view" : "manage"} ${def.name.split(".")[0]}.`,
+        );
+      }
+      if (
+        def.stepUp &&
+        actor.kind !== "system" &&
+        actor.kind === "agent"
+      ) {
+        throw new ServiceError(
+          "permission",
+          "Sign in as a person to perform this security-sensitive action.",
+        );
+      }
+      if (
+        def.stepUp &&
+        actor.kind === "user" &&
+        actor.security !== undefined &&
+        !actor.security.stepUpValid
+      ) {
+        throw new ServiceError(
+          "step_up_required",
+          "Confirm your identity with two-factor authentication to continue.",
         );
       }
       const parsed = def.input.safeParse(rawInput);

@@ -41,8 +41,9 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
 - **Full admin** — CRUD everything, toggle modules, seed/demo mode
 - **MCP server** — the whole site is operable by the owner's AI assistant,
   out of the box
-- **Auth** — email + password with OTP verification for owners; magic links
-  for customers
+- **Auth** — email + password, TOTP, passkeys/security keys, recovery codes,
+  mandatory 2FA for privileged roles, and fresh verification for critical
+  work; customer magic links are tracked in `MASTER.md` C1.05
 
 Deployment targets one-click simplicity on vibe-coding platforms, starting
 with Replit: single-tenant by design (one deploy = one business), a monolith

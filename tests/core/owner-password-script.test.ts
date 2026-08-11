@@ -14,10 +14,10 @@ import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { hashPassword, verifyPassword } from "@/core/auth/passwords";
 
-function runScript(password?: string): string {
+function runScript(password?: string, options: string[] = []): string {
   return execFileSync(
     process.execPath,
-    ["scripts/owner-password.mjs", ...(password ? [password] : [])],
+    ["scripts/owner-password.mjs", ...(password ? [password] : []), ...options],
     { encoding: "utf8" },
   );
 }
@@ -68,6 +68,14 @@ describe("the owner password script", () => {
     // Somebody resetting the owner's password is precisely somebody who should
     // stop assuming every existing session is theirs.
     expect(runScript("a-long-enough-password")).toContain("delete from sessions");
+  });
+
+  it("can deliberately clear every second factor for break-glass recovery", () => {
+    const output = runScript("a-long-enough-password", ["--disable-2fa"]);
+    expect(output).toContain("delete from totp_factors");
+    expect(output).toContain("delete from webauthn_credentials");
+    expect(output).toContain("delete from two_factor_recovery_codes");
+    expect(output).toMatch(/enrol it again immediately/i);
   });
 
   it("refuses a password too short to be worth setting", () => {

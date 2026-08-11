@@ -46,6 +46,9 @@ export default async function AdminLayout({
             {actor.kind === "user" ? actor.role : ""}
           </span>
           <div className="ms-auto flex items-center gap-3">
+            <a href="/security" className="text-sm text-ink-muted hover:text-ink">
+              {t("security.nav")}
+            </a>
             <ThemeToggle
               current={theme}
               action={setThemeAction}
