@@ -15,6 +15,7 @@ import apiKeyServices from "@/core/apikeys/service";
 import connectionServices from "@/core/connections/service";
 import contactServices from "@/core/contacts/service";
 import customFieldServices from "@/core/contacts/custom-fields";
+import duplicateServices from "@/core/contacts/duplicates";
 import organizationServices from "@/core/contacts/organizations";
 import relationshipServices from "@/core/contacts/relationships";
 import doctorServices from "@/core/doctor/service";
@@ -41,6 +42,7 @@ const services: Service[] = [
   ...connectionServices,
   ...contactServices,
   ...customFieldServices,
+  ...duplicateServices,
   ...organizationServices,
   ...relationshipServices,
   ...doctorServices,

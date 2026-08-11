@@ -2742,11 +2742,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-11 |
-| Evidence snapshot | `main` at `f3d8b64` (C1.05 merged); C1.06 changeset `contact-data-depth.md` |
+| Evidence snapshot | `main` at `59aff26` (C1.06 merged); C1.07 changeset `contact-duplicate-review.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.07 duplicate detection, explainable review queue, merge and safe undo; no public-launch work is required |
+| Current focus | C1.08 consent, preference, privacy-rights workflow, retention exceptions and audit artifacts; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2846,8 +2846,8 @@ green test/build suite. Later checklist items name the remaining depth.
 - [x] **B11 — Deployment baseline:** production container, GHCR publishing,
   DigitalOcean Droplet/Caddy/Postgres/S3-compatible recipe, backup script, and
   live health verification.
-- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 762
-  tests pass at the evidence snapshot.
+- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 839
+  tests pass with the C1.07 evidence change.
 
 ### 43.4 Dependency order
 
@@ -2919,8 +2919,11 @@ reading chat logs.
   fields, relationships, preferred locale/timezone/country, and lifecycle data.
   (`0022_contact-data-depth.sql`; `tests/core/contact-data-depth.test.ts`;
   changeset `contact-data-depth.md`)
-- [ ] **C1.07** Build duplicate candidate detection/queue, explainable scores,
+- [x] **C1.07** Build duplicate candidate detection/queue, explainable scores,
   dismiss/merge workflow, and merge undo where no destructive conflict exists.
+  (`0023_contact-duplicate-review.sql`;
+  `tests/core/contact-duplicate-review.test.ts`; changeset
+  `contact-duplicate-review.md`)
 - [ ] **C1.08** Build consent records, preference centre, data-access/export/
   correction/erasure workflows, legal-retention exceptions, and audit artifacts.
 

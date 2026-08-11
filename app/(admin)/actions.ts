@@ -23,8 +23,14 @@ import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import {
   createContact,
   mergeContacts,
+  undoContactMerge,
   updateContact,
 } from "@/core/contacts/service";
+import {
+  dismissDuplicateCandidate,
+  mergeDuplicateCandidate,
+  scanDuplicateCandidates,
+} from "@/core/contacts/duplicates";
 import {
   createCustomField,
   updateCustomField,
@@ -360,6 +366,57 @@ export async function mergeContactAction(
     return present(error);
   }
   redirect(`/admin/contacts/${survivingId}`);
+}
+
+/** One action boundary for every deliberate decision in the duplicate desk. */
+export async function duplicateReviewAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const intent = field(form, "intent");
+  let messageKey: string;
+  try {
+    const actor = await currentActor();
+    switch (intent) {
+      case "scan":
+        await scanDuplicateCandidates.call({}, actor);
+        messageKey = "contacts.duplicates.scanComplete";
+        break;
+      case "dismiss":
+        await dismissDuplicateCandidate.call(
+          { id: field(form, "candidateId") },
+          actor,
+        );
+        messageKey = "contacts.duplicates.dismissed";
+        break;
+      case "merge":
+        await mergeDuplicateCandidate.call(
+          {
+            candidateId: field(form, "candidateId"),
+            survivingId: field(form, "survivingId"),
+            duplicateId: field(form, "duplicateId"),
+          },
+          actor,
+        );
+        messageKey = "contacts.duplicates.merged";
+        break;
+      case "undo":
+        await undoContactMerge.call(
+          { operationId: field(form, "operationId") },
+          actor,
+        );
+        messageKey = "contacts.duplicates.undoneMessage";
+        break;
+      default:
+        throw new ServiceError("validation", "Choose a duplicate-review action.");
+    }
+  } catch (error) {
+    return present(error);
+  }
+  revalidatePath("/admin/contacts");
+  revalidatePath("/admin/contacts/duplicates");
+  const t = await getT();
+  return { saved: true, message: t(messageKey) };
 }
 
 /* --------------------------------------------- contact data depth (C1.06) */

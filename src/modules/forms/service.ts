@@ -12,7 +12,7 @@
 // never `contacts.create`, reached through `ctx.callAsSystem` so the elevation
 // is one greppable call rather than a service that quietly trusts its caller.
 import { z } from "zod";
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import {
@@ -45,6 +45,43 @@ registerContactReference({
       .update(formSubmissions)
       .set({ contactId: survivingId })
       .where(eq(formSubmissions.contactId, duplicateId)),
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({ id: formSubmissions.id, contactId: formSubmissions.contactId })
+      .from(formSubmissions)
+      .where(inArray(formSubmissions.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, afterState, duplicateId) => {
+    const schema = z.array(
+      z.object({ id: z.string().uuid(), contactId: z.string().uuid().nullable() }),
+    );
+    const before = schema.parse(beforeState);
+    const after = schema.parse(afterState);
+    const current = after.length
+      ? await tx
+          .select({ id: formSubmissions.id, contactId: formSubmissions.contactId })
+          .from(formSubmissions)
+          .where(inArray(formSubmissions.id, after.map((row) => row.id)))
+      : [];
+    const byId = new Map(current.map((row) => [row.id, row.contactId]));
+    if (
+      current.length !== after.length ||
+      after.some((row) => byId.get(row.id) !== row.contactId)
+    ) {
+      throw new ServiceError(
+        "conflict",
+        "A form submission changed after this merge. Leave the merge in place or restore that submission first.",
+      );
+    }
+    const moved = before.filter((row) => row.contactId === duplicateId);
+    if (moved.length) {
+      await tx
+        .update(formSubmissions)
+        .set({ contactId: duplicateId })
+        .where(inArray(formSubmissions.id, moved.map((row) => row.id)));
+    }
+  },
 });
 
 const slug = z

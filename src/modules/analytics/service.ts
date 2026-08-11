@@ -18,11 +18,12 @@ import {
   gte,
   isNotNull,
   isNull,
+  inArray,
   ne,
   sql,
   type SQL,
 } from "drizzle-orm";
-import { defineService } from "@/core/service";
+import { defineService, ServiceError } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { analyticsEvents } from "./schema";
 
@@ -36,6 +37,43 @@ registerContactReference({
       .update(analyticsEvents)
       .set({ contactId: survivingId })
       .where(eq(analyticsEvents.contactId, duplicateId)),
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({ id: analyticsEvents.id, contactId: analyticsEvents.contactId })
+      .from(analyticsEvents)
+      .where(inArray(analyticsEvents.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, afterState, duplicateId) => {
+    const schema = z.array(
+      z.object({ id: z.string().uuid(), contactId: z.string().uuid().nullable() }),
+    );
+    const before = schema.parse(beforeState);
+    const after = schema.parse(afterState);
+    const current = after.length
+      ? await tx
+          .select({ id: analyticsEvents.id, contactId: analyticsEvents.contactId })
+          .from(analyticsEvents)
+          .where(inArray(analyticsEvents.id, after.map((row) => row.id)))
+      : [];
+    const byId = new Map(current.map((row) => [row.id, row.contactId]));
+    if (
+      current.length !== after.length ||
+      after.some((row) => byId.get(row.id) !== row.contactId)
+    ) {
+      throw new ServiceError(
+        "conflict",
+        "An analytics event changed after this merge. Leave the merge in place or restore that event first.",
+      );
+    }
+    const moved = before.filter((row) => row.contactId === duplicateId);
+    if (moved.length) {
+      await tx
+        .update(analyticsEvents)
+        .set({ contactId: duplicateId })
+        .where(inArray(analyticsEvents.id, moved.map((row) => row.id)));
+    }
+  },
 });
 
 /**
