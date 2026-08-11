@@ -2,15 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The overview. Real numbers from the spine and the real audit trail — a
 // dashboard of invented figures teaches an owner to distrust the screen.
-import { Users } from "@phosphor-icons/react/dist/ssr";
+import { Users, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { contactStats } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
 import { formatDateTime, type Translate } from "@/core/i18n";
 import { describeAction } from "./describeAction";
-import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../i18n";
 import { requireStaffActor } from "./guard";
 import { currentBusiness } from "@/core/settings/read";
+import {
+  backgroundJobsBriefingContribution,
+  getJobSummary,
+} from "@/core/jobs/service";
+import { hasModuleAccess } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +32,17 @@ export default async function AdminOverviewPage() {
   // Its own guard, not the layout's: layouts and pages render in parallel, so
   // this must not assume anybody has vetted the caller yet.
   const actor = await requireStaffActor("admin");
-  const [business, stats, activity, t] = await Promise.all([
+  const canViewPlatform = hasModuleAccess(actor, "platform", "view");
+  const [business, stats, activity, t, jobSummary] = await Promise.all([
     currentBusiness(),
     contactStats.call({}, actor),
     recentActivity.call({ limit: 12 }, actor),
     getT(),
+    canViewPlatform ? getJobSummary.call({}, actor) : Promise.resolve(null),
   ]);
+  const jobsBriefing = jobSummary
+    ? await backgroundJobsBriefingContribution(jobSummary)
+    : null;
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
@@ -47,6 +57,23 @@ export default async function AdminOverviewPage() {
           {t("admin.overview.intro")}
         </p>
       </div>
+
+      {jobsBriefing ? (
+        <Callout
+          tone={jobsBriefing.severity}
+          icon={<WarningCircle size={17} weight="fill" />}
+        >
+          <div className="grid gap-1">
+            <strong>{t("jobs.briefing.title")}</strong>
+            <span>
+              {t("jobs.attention", {
+                count: jobsBriefing.items.reduce((total, item) => total + item.count, 0),
+              })}
+            </span>
+            <a href={jobsBriefing.href} className="font-semibold">{t("jobs.briefing.link")}</a>
+          </div>
+        </Callout>
+      ) : null}
 
       <Card>
         <CardHeader

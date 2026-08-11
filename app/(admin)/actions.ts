@@ -79,6 +79,11 @@ import {
   startDataRequest,
   verifyDataRequest,
 } from "@/core/privacy/service";
+import {
+  cancelJobRun,
+  redriveJobDeadLetters,
+  retryJobRun,
+} from "@/core/jobs/service";
 
 export interface ActionState {
   error?: string;
@@ -591,6 +596,56 @@ export async function privacyDeskAction(
   revalidatePath("/admin/contacts/privacy");
   const requestId = field(form, "requestId");
   if (requestId) revalidatePath(`/admin/contacts/privacy/${requestId}`);
+  const t = await getT();
+  return { saved: true, message: t(messageKey) };
+}
+
+/** High-risk queue recovery stays behind one step-up-protected service boundary. */
+export async function jobControlAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const intent = field(form, "intent");
+  const name = field(form, "name");
+  const id = field(form, "id");
+  let messageKey: string;
+  try {
+    const actor = await currentActor();
+    switch (intent) {
+      case "cancel":
+        await cancelJobRun.call(
+          { name, id, confirm: field(form, "confirmation") },
+          actor,
+        );
+        messageKey = "jobs.message.cancelled";
+        break;
+      case "retry":
+        await retryJobRun.call(
+          { name, id, confirm: field(form, "confirmation") },
+          actor,
+        );
+        messageKey = "jobs.message.retried";
+        break;
+      case "redrive":
+        await redriveJobDeadLetters.call(
+          {
+            sourceName: field(form, "sourceName") || undefined,
+            limit: 1,
+            confirm: field(form, "confirmation"),
+          },
+          actor,
+        );
+        messageKey = "jobs.message.redriven";
+        break;
+      default:
+        throw new ServiceError("validation", "Choose a background-work action.");
+    }
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  revalidatePath("/admin");
+  revalidatePath("/admin/jobs");
+  if (name && id) revalidatePath(`/admin/jobs/${name}/${id}`);
   const t = await getT();
   return { saved: true, message: t(messageKey) };
 }

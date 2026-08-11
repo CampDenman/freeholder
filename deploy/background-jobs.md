@@ -94,9 +94,37 @@ effect, so long handlers call `throwIfCancelled()` between atomic units. A
 handler must not swallow `JobCancelledError` and continue.
 
 `cancelJob(tx, name, id)` and `retryJob(tx, name, id)` accept the caller's
-transaction. Owner-facing history and controls are delivered by the next
-completion item (MASTER.md C1.10); this contract is the lower-level safe
-primitive those services use.
+transaction. The permissioned services and owner console use these same
+transactional primitives; the UI does not edit pg-boss tables directly.
+
+## Owner history and recovery
+
+Staff with `platform` view access can inspect retained work at `/admin/jobs`.
+The summary and filters read pg-boss itself, so the screen cannot drift from a
+shadow history table. Run detail shows queue policy, retry count, lease times,
+source identity and retained payload/output. Secret-shaped fields are redacted
+recursively before they reach the UI. Agents and API keys cannot inspect this
+surface even when they hold a broad platform scope because job payloads may
+contain cross-module customer data.
+
+Every ordinary queue sends work that exhausts its retry policy to the retained
+`core.deadLetter` queue. Dead letters keep their original queue, run ID, age
+and retry count for 90 days. No worker consumes that queue automatically: a
+person must inspect the failure, correct its cause, and deliberately redrive
+it. The overview briefing calls out failed, dead-lettered and lease-overdue
+work without exposing payload data.
+
+Cancel, retry and redrive require `platform` manage access, a fresh step-up
+proof and exact typed confirmation (`CANCEL`, `RETRY`, or `REDRIVE`). Each
+action runs through a service transaction, writes the audit trail and emits a
+committed event. Redrive is intentionally rate-shaped one retained failure at
+a time in the owner UI; automation can use the same service with a bounded
+batch after a human has diagnosed the source queue.
+
+An active run is shown as lease-overdue when its latest heartbeat (or start,
+before the first heartbeat) is older than the configured heartbeat/lease
+window. That is an operational signal, not permission to enqueue a duplicate:
+the pg-boss supervisor remains responsible for lease expiry and retry.
 
 ## Process layouts
 
@@ -123,9 +151,9 @@ database fixtures.
    backup that excludes pg-boss can lose committed pending work.
 4. Restart the worker. Active jobs whose leases lapse retry automatically;
    do not insert replacement rows by hand.
-5. If a known failed/cancelled job must run again, use the permissioned retry
-   control once C1.10 is present. Until then, diagnose through application logs
-   and pg-boss state; do not edit queue tables directly.
+5. Open `/admin/jobs`, inspect the sanitized failure and fix the underlying
+   code or configuration. Retry a retained failed/cancelled run, or redrive a
+   dead letter, only after the cause is understood.
 6. A repeated deterministic failure is code or configuration trouble. Raising
    its retry limit only delays the diagnosis.
 

@@ -7,6 +7,7 @@ import {
   Gauge,
   Image as ImageIcon,
   Layout,
+  ListChecks,
   MapPin,
   ChartLine,
   Envelope,
@@ -31,6 +32,7 @@ export interface AdminNavLabels {
   translations: string;
   traffic: string;
   health: string;
+  jobs: string;
   settings: string;
   roles: string;
   invitations: string;
@@ -52,6 +54,7 @@ const LINKS = [
   { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
   { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
   { href: "/admin/health", key: "health", module: "platform", Icon: Stethoscope },
+  { href: "/admin/jobs", key: "jobs", module: "platform", Icon: ListChecks },
 ] as const;
 
 export function AdminNav({
@@ -77,8 +80,8 @@ export function AdminNav({
     );
   });
   return (
-    <nav aria-label={labels.region}>
-      <ul className="-mb-px flex list-none gap-1 p-0">
+    <nav aria-label={labels.region} className="overflow-x-auto">
+      <ul className="-mb-px flex min-w-max list-none gap-1 p-0">
         {links.map(({ href, key, Icon }) => {
           const active =
             href === "/admin" ? pathname === href : pathname.startsWith(href);

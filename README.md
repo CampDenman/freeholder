@@ -16,7 +16,9 @@ history all hang off one CRM timeline.
 > centre, protected data exports/corrections, and audited erasure with legal
 > retention exceptions are also implemented. Background work now commits
 > atomically with its caller and has durable idempotency, bounded retry/backoff,
-> global concurrency, cancellation, and heartbeat leases. The complete scope,
+> global concurrency, cancellation, heartbeat leases, an owner-visible run
+> ledger, retained dead letters, stuck-work warnings, and audited recovery
+> controls. The complete scope,
 > verified baseline and remaining checklist live only in
 > [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
 
@@ -46,6 +48,8 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
 - **First-party analytics** — privacy-first pageviews plus the full funnel
   (visit → lead → quote → paid), joined to the CRM
 - **Full admin** — CRUD everything, toggle modules, seed/demo mode
+- **Operational control** — retained background-work history, sanitized run
+  detail, dead-letter recovery, lease-overdue warnings, and audited controls
 - **MCP server** — the whole site is operable by the owner's AI assistant,
   out of the box
 - **Auth** — email + password, TOTP, passkeys/security keys, recovery codes,

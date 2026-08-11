@@ -23,6 +23,37 @@ import { jobIdempotencyKeys } from "@/core/jobs/schema";
 type JobTx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 const DAY_SECONDS = 24 * 60 * 60;
+export const DEAD_LETTER_QUEUE = "core.deadLetter";
+
+export type JobState =
+  | "created"
+  | "retry"
+  | "active"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+export type JobHistoryRow = JobWithMetadata<Record<string, unknown>> & {
+  stuck: boolean;
+};
+
+export interface JobHistoryQuery {
+  name?: string;
+  state?: JobState;
+  limit?: number;
+  offset?: number;
+}
+
+export interface JobOperationalSummary {
+  queued: number;
+  active: number;
+  completed: number;
+  cancelled: number;
+  failed: number;
+  deadLetters: number;
+  stuck: number;
+  total: number;
+}
 
 export interface JobRetryPolicy {
   /** Retries after the first attempt. */
@@ -114,6 +145,9 @@ function integerInRange(value: number, name: string, min: number, max: number): 
 }
 
 function validateJob(job: JobDefinition): void {
+  if (job.name === DEAD_LETTER_QUEUE) {
+    throw new JobContractError(`Job name "${DEAD_LETTER_QUEUE}" is reserved for recovery.`);
+  }
   if (!/^[a-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)+$/.test(job.name)) {
     throw new JobContractError(`Job name "${job.name}" must be dotted and stable.`);
   }
@@ -205,17 +239,28 @@ function schedulesEnabled(): boolean {
 
 function queueOptions(job: JobDefinition): QueueOptions {
   const policy = resolvedJobPolicy(job);
-  return {
+  const options: QueueOptions = {
     retryLimit: policy.retry.limit,
     retryDelay: policy.retry.delaySeconds,
     retryBackoff: policy.retry.backoff,
-    retryDelayMax: policy.retry.maxDelaySeconds,
     expireInSeconds: policy.leaseSeconds,
     heartbeatSeconds: policy.heartbeatSeconds,
     retentionSeconds: 30 * DAY_SECONDS,
     deleteAfterSeconds: policy.historySeconds,
   };
+  if (policy.retry.backoff) options.retryDelayMax = policy.retry.maxDelaySeconds;
+  return options;
 }
+
+const deadLetterOptions: QueueOptions = {
+  retryLimit: 0,
+  retryDelay: 0,
+  retryBackoff: false,
+  expireInSeconds: 15 * 60,
+  heartbeatSeconds: 60,
+  retentionSeconds: 90 * DAY_SECONDS,
+  deleteAfterSeconds: 90 * DAY_SECONDS,
+};
 
 function executionOptions(
   job: JobDefinition,
@@ -227,6 +272,7 @@ function executionOptions(
     // One shared group gives pg-boss a database-coordinated limit for the
     // entire queue, not merely a per-process localConcurrency setting.
     group: { id: job.name },
+    deadLetter: DEAD_LETTER_QUEUE,
     expireInSeconds: policy.leaseSeconds,
     heartbeatSeconds: policy.heartbeatSeconds,
   };
@@ -242,12 +288,23 @@ async function ensureQueue(instance: PgBoss, job: JobDefinition): Promise<void> 
   if (mountedQueues.has(job.name)) return;
   const options = queueOptions(job);
   const existing = await instance.getQueue(job.name);
-  if (existing) await instance.updateQueue(job.name, options);
-  else await instance.createQueue(job.name, options);
+  if (existing) await instance.updateQueue(job.name, { ...options, deadLetter: DEAD_LETTER_QUEUE });
+  else {
+    await instance.createQueue(job.name, options);
+    await instance.updateQueue(job.name, { deadLetter: DEAD_LETTER_QUEUE });
+  }
   if (job.schedule && schedulesEnabled()) {
     await instance.schedule(job.name, job.schedule, {}, executionOptions(job));
   }
   mountedQueues.add(job.name);
+}
+
+async function ensureDeadLetterQueue(instance: PgBoss): Promise<void> {
+  if (mountedQueues.has(DEAD_LETTER_QUEUE)) return;
+  const existing = await instance.getQueue(DEAD_LETTER_QUEUE);
+  if (existing) await instance.updateQueue(DEAD_LETTER_QUEUE, deadLetterOptions);
+  else await instance.createQueue(DEAD_LETTER_QUEUE, deadLetterOptions);
+  mountedQueues.add(DEAD_LETTER_QUEUE);
 }
 
 /**
@@ -269,6 +326,7 @@ export async function startJobProducer(): Promise<PgBoss | undefined> {
     instance.on("error", (error) => console.error("[jobs] pg-boss error", error));
     try {
       await instance.start();
+      await ensureDeadLetterQueue(instance);
       for (const job of registry.values()) await ensureQueue(instance, job);
       boss = instance;
       return instance;
@@ -527,10 +585,99 @@ export async function getJob(
   name: string,
   id: string,
 ): Promise<JobWithMetadata<Record<string, unknown>> | null> {
-  definition(name);
+  if (name !== DEAD_LETTER_QUEUE) definition(name);
   const instance = await startJobProducer();
   if (!instance) return null;
   return (await instance.findJobs<Record<string, unknown>>(name, { id }))[0] ?? null;
+}
+
+export function isJobStuck(
+  job: JobWithMetadata<Record<string, unknown>>,
+  now = new Date(),
+): boolean {
+  if (job.state !== "active") return false;
+  const checkpoint = job.heartbeatOn ?? job.startedOn;
+  if (!checkpoint) return false;
+  const allowedSeconds = job.heartbeatSeconds || job.expireInSeconds;
+  return checkpoint.getTime() + allowedSeconds * 1000 <= now.getTime();
+}
+
+function historyNames(name?: string): string[] {
+  if (name) {
+    if (name !== DEAD_LETTER_QUEUE) definition(name);
+    return [name];
+  }
+  return [...registry.keys(), DEAD_LETTER_QUEUE];
+}
+
+async function retainedHistory(name?: string): Promise<JobHistoryRow[]> {
+  const instance = await startJobProducer();
+  if (!instance) return [];
+  const batches = await Promise.all(
+    historyNames(name).map((queue) =>
+      instance.findJobs<Record<string, unknown>>(queue),
+    ),
+  );
+  return batches
+    .flat()
+    .map((job) => ({ ...job, stuck: isJobStuck(job) }));
+}
+
+function activityTime(job: JobWithMetadata<Record<string, unknown>>): number {
+  return (
+    job.completedOn ??
+    job.heartbeatOn ??
+    job.startedOn ??
+    job.createdOn
+  ).getTime();
+}
+
+export async function listJobHistory(
+  query: JobHistoryQuery = {},
+): Promise<{ items: JobHistoryRow[]; total: number }> {
+  const limit = query.limit ?? 50;
+  const offset = query.offset ?? 0;
+  integerInRange(limit, "limit", 1, 100);
+  integerInRange(offset, "offset", 0, 1_000_000);
+  const rows = (await retainedHistory(query.name))
+    .filter((job) => !query.state || job.state === query.state)
+    .sort((left, right) => activityTime(right) - activityTime(left));
+  return { items: rows.slice(offset, offset + limit), total: rows.length };
+}
+
+export async function jobOperationalSummary(): Promise<JobOperationalSummary> {
+  const rows = await retainedHistory();
+  const ordinary = rows.filter((job) => job.name !== DEAD_LETTER_QUEUE);
+  return {
+    queued: ordinary.filter((job) => job.state === "created" || job.state === "retry").length,
+    active: ordinary.filter((job) => job.state === "active").length,
+    completed: ordinary.filter((job) => job.state === "completed").length,
+    cancelled: ordinary.filter((job) => job.state === "cancelled").length,
+    // A routed terminal failure remains in its source queue as immutable
+    // history, but the corresponding DLQ row is the actionable copy. Counting
+    // both would keep the briefing red forever after a successful redrive.
+    failed: ordinary.filter((job) => job.state === "failed" && !job.deadLetter).length,
+    deadLetters: rows.filter((job) => job.name === DEAD_LETTER_QUEUE).length,
+    stuck: ordinary.filter((job) => job.stuck).length,
+    total: rows.length,
+  };
+}
+
+/** Move retained dead letters back to their original queue, oldest first. */
+export async function redriveDeadLetters(
+  tx: JobTx,
+  input: { sourceName?: string; limit?: number } = {},
+): Promise<number> {
+  if (input.sourceName) definition(input.sourceName);
+  const limit = input.limit ?? 1;
+  integerInRange(limit, "limit", 1, 100);
+  const instance = await startJobProducer();
+  if (!instance) throw new JobContractError("Background job storage is unavailable.");
+  return instance.redrive(DEAD_LETTER_QUEUE, {
+    sourceName: input.sourceName,
+    limit,
+    db: transactionDatabase(tx),
+  });
 }
 
 export async function pruneJobIdempotencyKeys(): Promise<number> {
