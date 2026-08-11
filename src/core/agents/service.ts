@@ -100,6 +100,7 @@ export const connectAgentRuntime = defineService({
   summary: "Add an agent runtime.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z
     .object({
       name: z.string().min(1).max(80),
@@ -189,6 +190,7 @@ export const hireAgent = defineService({
   summary: "Create a worker with its own credential and scopes.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     connectionId: z.uuid(),
     name: z.string().min(1).max(80),
@@ -263,6 +265,7 @@ export const updateAgent = defineService({
   summary: "Change a worker's brief, autonomy, budget or status.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     id: z.uuid(),
     role: z.string().min(1).max(200).optional(),

@@ -31,6 +31,12 @@ export async function requireStaffActor(
   const actor = await actorFromToken(
     (await cookies()).get(SESSION_COOKIE)?.value,
   );
+  if (actor.kind === "user" && actor.security?.twoFactorRequired) {
+    if (!actor.security.twoFactorEnrolled) redirect("/security?required=1");
+    if (!actor.security.twoFactorVerified) {
+      redirect("/security/verify?returnTo=/admin");
+    }
+  }
   // A role name is display data, not authority. The customer default has no
   // admin grant, while an owner-defined role may enter when its stored grants
   // say so.

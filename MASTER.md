@@ -2730,11 +2730,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-10 |
-| Evidence snapshot | `main` at `e287e72` (C1.01 merged); C1.02 changeset `staff-invitations.md` |
+| Evidence snapshot | `main` at `d0fddfd` (C1.02 merged); C1.03 changeset `privileged-two-factor.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.03 privileged-account 2FA and step-up authentication; no public-launch work is required |
+| Current focus | C1.04 session/device management and suspicious-login safety; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2890,8 +2890,10 @@ reading chat logs.
   resend, role assignment, and invitation audit history.
   (`0018_staff-invitations.sql`; `tests/core/invitations.test.ts`; changeset
   `staff-invitations.md`)
-- [ ] **C1.03** Add TOTP/WebAuthn-capable 2FA, recovery codes, mandatory 2FA
+- [x] **C1.03** Add TOTP/WebAuthn-capable 2FA, recovery codes, mandatory 2FA
   policy for privileged roles, and step-up authentication for critical work.
+  (`0019_privileged-2fa-step-up.sql`; `tests/core/two-factor.test.ts`;
+  changeset `privileged-two-factor.md`)
 - [ ] **C1.04** Add owner-visible session/device management, revoke-one,
   revoke-all, suspicious-login notices, and secure session metadata retention.
 - [ ] **C1.05** Add customer magic links and portal account linking without

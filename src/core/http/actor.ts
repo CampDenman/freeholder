@@ -46,6 +46,8 @@ export async function actorFromToken(
     userId: session.userId,
     role: session.role,
     grants: session.grants,
+    sessionId: session.sessionId,
+    security: session.security,
   };
 }
 
@@ -91,5 +93,7 @@ export async function actorFromRequest(request: Request): Promise<Actor> {
     userId: session.userId,
     role: session.role,
     grants: session.grants,
+    sessionId: session.sessionId,
+    security: session.security,
   };
 }

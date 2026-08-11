@@ -8,6 +8,7 @@
 // page and a stolen session token is a full account takeover.
 import { env } from "@/core/env";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { LOGIN_CHALLENGE_COOKIE } from "@/core/auth/two-factor";
 
 export function readCookie(
   request: Request,
@@ -54,6 +55,32 @@ export function clearedSessionCookie(): string {
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
+    "Max-Age=0",
+  ];
+  if (env().NODE_ENV === "production") attributes.push("Secure");
+  return attributes.join("; ");
+}
+
+/** Password succeeded, but a second factor still has to finish the login. */
+export function loginChallengeCookie(token: string): string {
+  const expires = new Date(Date.now() + 10 * 60 * 1000);
+  const attributes = [
+    `${LOGIN_CHALLENGE_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Expires=${expires.toUTCString()}`,
+  ];
+  if (env().NODE_ENV === "production") attributes.push("Secure");
+  return attributes.join("; ");
+}
+
+export function clearedLoginChallengeCookie(): string {
+  const attributes = [
+    `${LOGIN_CHALLENGE_COOKIE}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
     "Max-Age=0",
   ];
   if (env().NODE_ENV === "production") attributes.push("Secure");

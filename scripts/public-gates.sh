@@ -104,8 +104,9 @@ curl -s -o /dev/null -X POST "${BASE}/api/setup/owner"   -H 'content-type: appli
 # here, where it is visible, rather than in a check that would then be wrong
 # for everybody.
 set +e
-FREEHOLDER_URL="$BASE" FREEHOLDER_EMAIL="$DOCTOR_EMAIL"   FREEHOLDER_PASSWORD="$DOCTOR_PASSWORD" node scripts/doctor.mjs
-FREEHOLDER_URL="$BASE" FREEHOLDER_EMAIL="$DOCTOR_EMAIL"   FREEHOLDER_PASSWORD="$DOCTOR_PASSWORD" node scripts/doctor.mjs --json > /tmp/doctor.json
+FREEHOLDER_URL="$BASE" FREEHOLDER_EMAIL="$DOCTOR_EMAIL" \
+  FREEHOLDER_PASSWORD="$DOCTOR_PASSWORD" \
+  node scripts/doctor.mjs --enroll-totp --json > /tmp/doctor.json
 set -e
 
 node -e '

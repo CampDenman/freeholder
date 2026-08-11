@@ -15,6 +15,7 @@ import { revalidatePath } from "next/cache";
 import { login, logout } from "@/core/auth/service";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { changePassword } from "@/core/auth/service";
+import { LOGIN_CHALLENGE_COOKIE } from "@/core/auth/two-factor";
 import { getT } from "../i18n";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
@@ -98,15 +99,12 @@ export async function signInAction(
   _previous: ActionState,
   form: FormData,
 ): Promise<ActionState> {
-  let token: string;
-  let expiresAt: Date;
+  let result: Awaited<ReturnType<typeof login.call>>;
   try {
-    const result = await login.call(
+    result = await login.call(
       { email: field(form, "email"), password: field(form, "password") },
       { kind: "anonymous" },
     );
-    token = result.token;
-    expiresAt = result.expiresAt;
   } catch (error) {
     // Same reason as the contact form: React resets the form, and retyping an
     // address after a mistyped password is a needless indignity. `echo` never
@@ -116,19 +114,29 @@ export async function signInAction(
 
   const jar = await cookies();
   const secure = process.env.NODE_ENV === "production";
-  jar.set(SESSION_COOKIE, token, {
+  if (result.twoFactorRequired) {
+    jar.set(LOGIN_CHALLENGE_COOKIE, result.challengeToken, {
+      httpOnly: true,
+      sameSite: "strict",
+      path: "/",
+      secure,
+      expires: new Date(Date.now() + 10 * 60 * 1000),
+    });
+    redirect("/login/verify");
+  }
+  jar.set(SESSION_COOKIE, result.token, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
     secure,
-    expires: expiresAt,
+    expires: result.expiresAt,
   });
   jar.set(CSRF_COOKIE, issueCsrfToken(), {
     httpOnly: false,
     sameSite: "lax",
     path: "/",
     secure,
-    expires: expiresAt,
+    expires: result.expiresAt,
   });
   redirect("/admin");
 }

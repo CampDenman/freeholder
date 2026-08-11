@@ -6,14 +6,22 @@
 // session. Sliding expiration: validating within the renewal window extends
 // the session rather than logging the user out mid-work.
 import { createHmac, randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { roleGrants, sessions, users } from "@/core/auth/schema";
+import { count, eq } from "drizzle-orm";
+import {
+  roleGrants,
+  sessions,
+  totpFactors,
+  users,
+  webauthnCredentials,
+} from "@/core/auth/schema";
 import { env } from "@/core/env";
 import type { ModuleGrant, Tx } from "@/core/service";
+import { isPrivilegedGrants } from "@/core/auth/two-factor-crypto";
 
 export const SESSION_COOKIE = "freeholder_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const RENEWAL_WINDOW_MS = SESSION_TTL_MS / 2;
+export const STEP_UP_TTL_MS = 10 * 60 * 1000;
 
 function sessionSecret(): string {
   const secret = env().SESSION_SECRET;
@@ -36,12 +44,22 @@ export interface SessionUser {
   email: string;
   sessionId: string;
   expiresAt: Date;
+  security: {
+    twoFactorRequired: boolean;
+    twoFactorEnrolled: boolean;
+    twoFactorVerified: boolean;
+    stepUpValid: boolean;
+  };
 }
 
 export async function createSession(
   tx: Tx,
   userId: string,
-  meta: { ip?: string; userAgent?: string } = {},
+  meta: {
+    ip?: string;
+    userAgent?: string;
+    twoFactorVerified?: boolean;
+  } = {},
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
@@ -51,6 +69,8 @@ export async function createSession(
     expiresAt,
     ip: meta.ip,
     userAgent: meta.userAgent,
+    twoFactorVerifiedAt: meta.twoFactorVerified ? new Date() : null,
+    stepUpAt: meta.twoFactorVerified ? new Date() : null,
   });
   return { token, expiresAt };
 }
@@ -66,6 +86,8 @@ export async function validateSession(
       userId: users.id,
       role: users.role,
       email: users.email,
+      twoFactorVerifiedAt: sessions.twoFactorVerifiedAt,
+      stepUpAt: sessions.stepUpAt,
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
@@ -89,7 +111,30 @@ export async function validateSession(
     .select({ module: roleGrants.module, access: roleGrants.access })
     .from(roleGrants)
     .where(eq(roleGrants.roleKey, row.role));
-  return { ...row, grants };
+  const [[totp], [webauthn]] = await Promise.all([
+    tx.select({ n: count() }).from(totpFactors).where(eq(totpFactors.userId, row.userId)),
+    tx.select({ n: count() }).from(webauthnCredentials).where(eq(webauthnCredentials.userId, row.userId)),
+  ]);
+  const twoFactorEnrolled = (totp?.n ?? 0) + (webauthn?.n ?? 0) > 0;
+  return {
+    ...row,
+    grants,
+    security: {
+      twoFactorRequired: isPrivilegedGrants(grants),
+      twoFactorEnrolled,
+      twoFactorVerified: Boolean(row.twoFactorVerifiedAt),
+      stepUpValid: Boolean(
+        row.stepUpAt && Date.now() - row.stepUpAt.getTime() <= STEP_UP_TTL_MS,
+      ),
+    },
+  };
+}
+
+export async function markSessionStepUp(tx: Tx, sessionId: string): Promise<void> {
+  await tx
+    .update(sessions)
+    .set({ twoFactorVerifiedAt: new Date(), stepUpAt: new Date() })
+    .where(eq(sessions.id, sessionId));
 }
 
 export async function revokeSession(tx: Tx, sessionId: string): Promise<void> {

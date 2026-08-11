@@ -154,6 +154,7 @@ export const recordConnection = defineService({
   summary: "Store a completed connection and its credentials.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     userId: z.uuid(),
     provider: z.enum(["google", "microsoft", "apple", "caldav", "imap"]),
@@ -282,6 +283,7 @@ export const setConnectionOptions = defineService({
   summary: "Change what a connection shares and how much detail it syncs.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     id: z.uuid(),
     kind: z.enum(["personal", "business"]).optional(),
@@ -317,6 +319,7 @@ export const setCapability = defineService({
   summary: "Turn one thing a connection is used for on or off.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({
     id: z.uuid(),
     capability: z.enum(CAPABILITIES),
@@ -358,6 +361,7 @@ export const removeConnection = defineService({
   summary: "Disconnect an account and forget its credentials.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({ id: z.uuid() }),
   handler: async (input, ctx) => {
     await reachable(ctx.tx, ctx.actor, input.id);
@@ -420,6 +424,7 @@ export const rotateCredentials = defineService({
   summary: "Re-encrypt stored credentials under the current key.",
   kind: "mutation",
   permission: "scoped",
+  stepUp: true,
   input: z.object({}),
   handler: async (_input, ctx) => {
     if (ctx.actor.kind === "agent") {
