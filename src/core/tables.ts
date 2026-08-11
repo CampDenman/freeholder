@@ -56,6 +56,12 @@ export { entityTranslations } from "@/core/i18n/schema";
 export { passwordResets } from "@/core/auth/schema";
 export { outboxEvents } from "@/core/events/schema";
 export {
+  consentRecords,
+  dataRequests,
+  dataRequestArtifacts,
+  privacyRetentionExceptions,
+} from "@/core/privacy/schema";
+export {
   businessLocations,
   openingHours,
   serviceAreas,

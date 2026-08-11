@@ -2742,11 +2742,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-11 |
-| Evidence snapshot | `main` at `59aff26` (C1.06 merged); C1.07 changeset `contact-duplicate-review.md` |
+| Evidence snapshot | `main` at `5a13f27` (C1.07 merged); C1.08 changeset `contact-privacy-rights.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.08 consent, preference, privacy-rights workflow, retention exceptions and audit artifacts; no public-launch work is required |
+| Current focus | C1.09 transactional job enqueueing, idempotency, retries, concurrency, cancellation and leases; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2846,8 +2846,8 @@ green test/build suite. Later checklist items name the remaining depth.
 - [x] **B11 — Deployment baseline:** production container, GHCR publishing,
   DigitalOcean Droplet/Caddy/Postgres/S3-compatible recipe, backup script, and
   live health verification.
-- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 839
-  tests pass with the C1.07 evidence change.
+- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 851
+  tests pass with the C1.08 evidence change.
 
 ### 43.4 Dependency order
 
@@ -2924,8 +2924,12 @@ reading chat logs.
   (`0023_contact-duplicate-review.sql`;
   `tests/core/contact-duplicate-review.test.ts`; changeset
   `contact-duplicate-review.md`)
-- [ ] **C1.08** Build consent records, preference centre, data-access/export/
+- [x] **C1.08** Build consent records, preference centre, data-access/export/
   correction/erasure workflows, legal-retention exceptions, and audit artifacts.
+  (`0024_contact-privacy-rights.sql`;
+  `tests/core/contact-privacy-rights.test.ts`; privacy-source completeness in
+  `tests/core/merge-completeness.test.ts`; changeset
+  `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md`)
 
 #### Jobs, events, files, mail, and notifications
 

@@ -3,24 +3,49 @@
 "use server";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import {
   CUSTOMER_MAGIC_COOKIE,
   consumeCustomerMagicLink,
   requestCustomerMagicLink,
 } from "@/core/auth/magic-links/service";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { logout } from "@/core/auth/service";
+import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { ServiceError } from "@/core/service";
+import {
+  cancelMyDataRequest,
+  createMyDataRequest,
+  setMyMarketingPreference,
+} from "@/core/privacy/service";
+import { getT } from "../i18n";
 
 export interface MagicLinkState {
   sent?: boolean;
   error?: string;
 }
 
+export interface PrivacyActionState {
+  saved?: boolean;
+  message?: string;
+  error?: string;
+}
+
 function field(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value : "";
+}
+
+async function currentPortalActor() {
+  const actor = await actorFromToken(
+    (await cookies()).get(SESSION_COOKIE)?.value,
+  );
+  return {
+    ...actor,
+    request: requestMetadataFromHeaders(await headers()),
+  };
 }
 
 export async function requestMagicLinkAction(
@@ -92,5 +117,97 @@ export async function confirmMagicLinkAction(
     secure,
     maxAge: 0,
   });
+  redirect("/portal/login");
+}
+
+export async function portalPrivacyAction(
+  _previous: PrivacyActionState,
+  form: FormData,
+): Promise<PrivacyActionState> {
+  const intent = field(form, "intent");
+  let messageKey: string;
+  try {
+    const actor = await currentPortalActor();
+    if (intent === "preference") {
+      await setMyMarketingPreference.call(
+        {
+          channel: field(form, "channel") as "email" | "sms" | "push",
+          state: field(form, "state") as "granted" | "withdrawn",
+          termsVersion: "portal-privacy-v1",
+        },
+        actor,
+      );
+      messageKey = "privacy.portal.preferenceSaved";
+    } else if (intent === "request") {
+      const kind = field(form, "kind") as
+        | "access"
+        | "export"
+        | "correction"
+        | "erasure";
+      const note = field(form, "note") || undefined;
+      const name = field(form, "name") || undefined;
+      const email = field(form, "clearEmail") === "on"
+        ? null
+        : field(form, "email") || undefined;
+      const phone = field(form, "clearPhone") === "on"
+        ? null
+        : field(form, "phone") || undefined;
+      const preferredLocale = field(form, "preferredLocale") || undefined;
+      const timezone = field(form, "timezone") || undefined;
+      const country = field(form, "country") || undefined;
+      await createMyDataRequest.call(
+        {
+          jurisdiction: field(form, "jurisdiction") || null,
+          request:
+            kind === "correction"
+              ? {
+                  kind,
+                  note,
+                  changes: {
+                    name,
+                    email,
+                    phone,
+                    preferredLocale,
+                    timezone,
+                    country,
+                  },
+                }
+              : { kind, note },
+        },
+        actor,
+      );
+      messageKey = "privacy.portal.requestSaved";
+    } else if (intent === "cancel") {
+      await cancelMyDataRequest.call(
+        { id: field(form, "requestId") },
+        actor,
+      );
+      messageKey = "privacy.portal.requestCancelled";
+    } else {
+      throw new ServiceError("validation", "Choose a privacy action.");
+    }
+  } catch (error) {
+    return {
+      error:
+        error instanceof ServiceError
+          ? error.message
+          : "Something went wrong. Try again.",
+    };
+  }
+  revalidatePath("/portal/privacy");
+  const t = await getT();
+  return { saved: true, message: t(messageKey) };
+}
+
+export async function portalSignOutAction(): Promise<void> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (token) {
+    await logout
+      .call({ token }, await currentPortalActor())
+      .catch(() => undefined);
+  }
+  jar.delete(SESSION_COOKIE);
+  jar.delete(CSRF_COOKIE);
   redirect("/portal/login");
 }

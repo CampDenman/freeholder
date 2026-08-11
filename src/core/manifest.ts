@@ -67,6 +67,11 @@ export default defineModule({
       "contact.relationshipAdded",
       "contact.relationshipUpdated",
       "contact.relationshipRemoved",
+      "contact.consentChanged",
+      "contact.dataRequestSubmitted",
+      "contact.dataRequestVerified",
+      "contact.dataRequestCompleted",
+      "contact.dataErased",
     ],
   },
 });

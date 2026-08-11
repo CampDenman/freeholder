@@ -93,6 +93,9 @@ export default async function ContactsPage({
           <p className="mt-1 text-sm text-ink-muted">{t("contacts.intro")}</p>
         </div>
         <div className="ms-auto flex flex-wrap items-center gap-3">
+          <a href="/admin/contacts/privacy" className="text-sm text-ink-muted">
+            {t("privacy.title")}
+          </a>
           <a href="/admin/contacts/duplicates" className="text-sm text-ink-muted">
             {t("contacts.duplicates.title")}
           </a>

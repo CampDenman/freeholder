@@ -58,6 +58,12 @@ whole story, which is the point.
 > repository is public. Set it to public once, under the repository's Packages
 > tab, or nobody else can pull it.
 
+## Operational runbooks
+
+- [`privacy-rights.md`](privacy-rights.md) — consent evidence, access/export,
+  correction, erasure, legal-retention exceptions, artifact retention, backup
+  guidance, module registration, and the threat model.
+
 ## Known gaps
 
 - arm64 images. `linux/amd64` covers the current DigitalOcean recipe; ARM wants
