@@ -8,7 +8,7 @@
 // months later, on an instance nobody is watching.
 import { and, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/core/db";
-import { defineJob } from "@/core/jobs";
+import { defineJob, pruneJobIdempotencyKeys } from "@/core/jobs";
 import {
   passwordResets,
   loginSecurityEvents,
@@ -213,6 +213,9 @@ export const deliverWebhooks = defineJob({
   name: "core.deliverWebhooks",
   summary: "Send queued webhook deliveries that are due.",
   schedule: "* * * * *",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 1,
+  leaseSeconds: 5 * 60,
   handler: async () => {
     const { deliverDue } = await import("@/core/webhooks/deliver");
     return { attempted: await deliverDue() };
@@ -257,6 +260,14 @@ export const prunePrivacyArtifacts = defineJob({
   },
 });
 
+/** Idempotency is bounded durable state, not an unbounded second job history. */
+export const pruneJobKeys = defineJob({
+  name: "core.pruneJobKeys",
+  summary: "Delete expired background-job idempotency claims.",
+  schedule: "53 4 * * *",
+  handler: async () => ({ deleted: await pruneJobIdempotencyKeys() }),
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
@@ -272,4 +283,5 @@ export default [
   pruneWebhookDeliveries,
   reapAgentLeases,
   prunePrivacyArtifacts,
+  pruneJobKeys,
 ];

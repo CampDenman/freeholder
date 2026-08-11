@@ -20,6 +20,11 @@ import { writeTimelineEvent } from "@/core/events";
 import { dispatchNow, enqueue } from "@/core/events/outbox";
 import type { TimelineEventInput } from "@/core/events";
 import { consume, rateLimitKey, type RateLimitPolicy } from "@/core/security/rate-limit";
+import {
+  enqueueJob,
+  type EnqueuedJob,
+  type EnqueueJobOptions,
+} from "@/core/jobs";
 import { ready } from "@/core/runtime";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -202,6 +207,15 @@ export interface ServiceContext {
   /** Queues a bus event; published to listeners only after commit (§11). */
   queueEvent: (eventName: string, payload: unknown) => void;
   /**
+   * Insert durable background work through this caller's transaction. The
+   * returned id is stable when an idempotency key suppresses a duplicate.
+   */
+  queueJob: (
+    name: string,
+    data?: Record<string, unknown>,
+    options?: EnqueueJobOptions,
+  ) => Promise<EnqueuedJob>;
+  /**
    * Call another service inside *this* transaction, as the same actor.
    * Composition is how modules reach each other (§11), and sharing the
    * transaction is what makes a multi-service mutation atomic (§2 principle
@@ -378,6 +392,8 @@ export function defineService<In extends z.ZodType, Out>(
             // caller in the codebase treats it as fire-and-forget.
             queued.push({ eventName, payload });
           },
+          queueJob: (name, data = {}, jobOptions = {}) =>
+            enqueueJob(tx, name, data, jobOptions),
           call: (service, input) => service.call(input, actor, { tx, queued }),
           callAsSystem: (service, input) =>
             service.call(input, { kind: "system" }, { tx, queued }),

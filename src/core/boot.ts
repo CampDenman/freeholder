@@ -1,13 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 // The boot sequence (MASTER.md §11): load manifests → topo-sort by requires →
-// register services in the registry → subscribe event listeners.
+// register jobs → register services in the registry → subscribe listeners.
 //
-// Two steps from the doc are deliberately absent, because doing them here
-// would be a lie about how this repo works: migrations are global (one
-// db/migrations folder, run by drizzle-kit or the test globalSetup, not
-// per-module), and routes, jobs and MCP tools have no surfaces to mount yet.
-// Each joins this function in the PR that gives it something to mount.
+// Migrations remain deliberately absent: they are global (one db/migrations
+// folder, run before boot or by the test globalSetup), not per-module. Routes
+// are App Router files, while the HTTP/MCP registries derive from services.
 import { requireProductionEnv } from "@/core/env";
 import { subscribe } from "@/core/events";
 import { sortModules, type ModuleManifest } from "@/core/module";

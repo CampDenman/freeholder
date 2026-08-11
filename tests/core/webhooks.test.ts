@@ -13,6 +13,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
+import { stopJobs } from "@/core/jobs";
 import type { Actor } from "@/core/service";
 import { users } from "@/core/auth/schema";
 import { webhookDeliveries, webhookSubscriptions } from "@/core/webhooks/schema";
@@ -53,6 +54,10 @@ interface Received {
   body: string;
   headers: Record<string, string | undefined>;
 }
+
+afterAll(async () => {
+  await stopJobs();
+});
 
 /** A receiver, as a customer would run one. */
 function receiver(handler: (received: Received) => { status: number; body?: string }) {

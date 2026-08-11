@@ -176,6 +176,13 @@
       "when": 1786466664512,
       "tag": "0024_contact-privacy-rights",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786479450206,
+      "tag": "0025_transactional-jobs",
+      "breakpoints": true
     }
   ]
 }

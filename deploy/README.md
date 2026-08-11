@@ -63,6 +63,9 @@ whole story, which is the point.
 - [`privacy-rights.md`](privacy-rights.md) — consent evidence, access/export,
   correction, erasure, legal-retention exceptions, artifact retention, backup
   guidance, module registration, and the threat model.
+- [`background-jobs.md`](background-jobs.md) — transactional enqueue,
+  idempotency, retry/backoff, global concurrency, leases, cancellation,
+  process layouts, backup scope, and failure recovery.
 
 ## Known gaps
 

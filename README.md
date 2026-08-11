@@ -14,8 +14,11 @@ history all hang off one CRM timeline.
 > forms, analytics, HTTP API, webhooks, MCP, agent task substrate and encrypted
 > connection model are implemented. Consent evidence, the customer privacy
 > centre, protected data exports/corrections, and audited erasure with legal
-> retention exceptions are also implemented. The complete scope, verified baseline and
-> remaining checklist live only in [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
+> retention exceptions are also implemented. Background work now commits
+> atomically with its caller and has durable idempotency, bounded retry/backoff,
+> global concurrency, cancellation, and heartbeat leases. The complete scope,
+> verified baseline and remaining checklist live only in
+> [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
 
 ## Product-complete target
 
