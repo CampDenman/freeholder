@@ -4,7 +4,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { startRegistration } from "@simplewebauthn/browser";
-import { CheckCircle, Key, WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import { CheckCircle, Desktop, Key, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { Button, Callout, Field, Input, Pill } from "@/ui/primitives";
 import {
   beginTotpAction,
@@ -14,10 +14,34 @@ import {
   regenerateRecoveryCodesAction,
   removeTotpAction,
   removeWebAuthnAction,
+  revokeOtherSessionsAction,
+  revokeSessionAction,
   type SecurityActionState,
 } from "../security-actions";
 
 type Credential = { id: string; name: string; createdAt: Date | string; lastUsedAt: Date | string | null };
+type Session = {
+  id: string;
+  deviceLabel: string;
+  ipHint: string | null;
+  current: boolean;
+  createdAt: Date | string;
+  lastSeenAt: Date | string;
+  expiresAt: Date | string;
+  twoFactorVerifiedAt: Date | string | null;
+};
+type LoginActivity = {
+  id: string;
+  deviceLabel: string;
+  ipHint: string | null;
+  reason: "new_device" | "new_network" | null;
+  noticeStatus: "not_needed" | "pending" | "sent" | "failed" | "unavailable";
+  createdAt: Date | string;
+};
+
+function utc(value: Date | string): string {
+  return `${new Date(value).toISOString().replace("T", " ").slice(0, 16)} UTC`;
+}
 
 function RecoveryCodes({ codes, label }: { codes?: string[]; label: string }) {
   if (!codes?.length) return null;
@@ -43,6 +67,8 @@ export function SecurityControls({
     totp: boolean;
     webauthn: Credential[];
     recoveryCodesRemaining: number;
+    sessions: Session[];
+    loginActivity: LoginActivity[];
   };
   labels: Record<string, string>;
 }) {
@@ -141,6 +167,51 @@ export function SecurityControls({
           <Button type="button" variant="quiet" disabled={pending} onClick={() => run(regenerateRecoveryCodesAction)}>{labels.regenerate}</Button>
         </section>
       ) : null}
+
+      <section className="grid gap-4 rounded-lg border border-rule bg-surface p-5">
+        <div><h2 className="font-semibold">{labels.sessions}</h2><p className="text-sm text-ink-muted">{labels.sessionsIntro}</p></div>
+        <div className="grid gap-3">
+          {status.sessions.map((session) => (
+            <div key={session.id} className="grid gap-2 rounded-md bg-surface-muted p-3 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+              <Desktop size={20} className="text-accent" />
+              <div>
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  <span>{session.deviceLabel}</span>
+                  {session.current ? <Pill tone="success">{labels.currentSession}</Pill> : null}
+                </div>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {labels.lastSeen}: {utc(session.lastSeenAt)} · {labels.network}: {session.ipHint ?? labels.unknownNetwork}
+                </p>
+                <p className="text-xs text-ink-muted">{labels.expires}: {utc(session.expiresAt)}</p>
+              </div>
+              <Button type="button" variant="quiet" disabled={pending} onClick={() => run(async () => { const form = new FormData(); form.set("id", session.id); return revokeSessionAction(form); })}>{labels.signOutSession}</Button>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-rule pt-4">
+          <p className="mb-3 text-sm text-ink-muted">{labels.signOutOthersIntro}</p>
+          {!status.stepUpValid ? <a href="/security/verify?returnTo=/security" className="mb-3 block text-sm font-medium text-accent underline">{labels.verifyFirst}</a> : null}
+          <Button type="button" variant="quiet" disabled={pending || status.sessions.length < 2} onClick={() => run(revokeOtherSessionsAction)}>{labels.signOutOthers}</Button>
+        </div>
+      </section>
+
+      <section className="grid gap-4 rounded-lg border border-rule bg-surface p-5">
+        <div><h2 className="font-semibold">{labels.loginActivity}</h2><p className="text-sm text-ink-muted">{labels.loginActivityIntro}</p></div>
+        {status.loginActivity.length === 0 ? <p className="text-sm text-ink-muted">{labels.noLoginActivity}</p> : (
+          <div className="grid gap-3">
+            {status.loginActivity.map((activity) => (
+              <div key={activity.id} className="rounded-md bg-surface-muted p-3">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  <span>{activity.deviceLabel}</span>
+                  {activity.reason ? <Pill tone="warning">{activity.reason === "new_device" ? labels.newDevice : labels.newNetwork}</Pill> : null}
+                </div>
+                <p className="mt-1 text-xs text-ink-muted">{utc(activity.createdAt)} · {labels.network}: {activity.ipHint ?? labels.unknownNetwork}</p>
+                {activity.reason ? <p className="mt-1 text-xs text-ink-muted">{labels.noticed}: {activity.noticeStatus === "sent" ? labels.noticeSent : activity.noticeStatus === "unavailable" ? labels.noticeUnavailable : labels.noticePending}</p> : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

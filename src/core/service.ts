@@ -31,7 +31,14 @@ export interface ModuleGrant {
   access: GrantAccess;
 }
 
-export type Actor =
+export interface RequestMetadata {
+  /** Transient source address reported by the deployment proxy. */
+  ip?: string;
+  /** Sanitized and bounded at the HTTP boundary. */
+  userAgent?: string;
+}
+
+type ActorIdentity =
   | {
       kind: "user";
       userId: string;
@@ -49,6 +56,11 @@ export type Actor =
   | { kind: "agent"; keyName: string; scopes: string[] }
   | { kind: "system" }
   | { kind: "anonymous" };
+
+export type Actor = ActorIdentity & {
+  /** Request context is advisory metadata, never authorization input. */
+  request?: RequestMetadata;
+};
 
 /**
  * A service declares only whether it is public, personal to a signed-in user,

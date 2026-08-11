@@ -57,6 +57,8 @@ export default defineModule({
       "staffInvitation.resent",
       "staffInvitation.revoked",
       "staffInvitation.accepted",
+      "auth.sessionRevoked",
+      "auth.otherSessionsRevoked",
     ],
   },
 });

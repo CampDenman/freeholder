@@ -9,12 +9,13 @@
 // JavaScript has loaded, which is exactly the property the first screen of a
 // fresh deploy needs. Next verifies the request Origin for actions, so this
 // path carries its own CSRF defence without the token dance the JSON API uses.
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { registerOwner } from "@/core/auth/service";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
+import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { completeSetup, updateBusiness } from "@/core/settings/service";
 import { createLocationService } from "@/core/locations/service";
 import { ServiceError } from "@/core/service";
@@ -52,7 +53,10 @@ export async function createOwnerAction(
         email: text(form, "email", ""),
         password: text(form, "password", ""),
       },
-      { kind: "anonymous" },
+      {
+        kind: "anonymous",
+        request: requestMetadataFromHeaders(await headers()),
+      },
     );
     token = result.token;
     expiresAt = result.expiresAt;

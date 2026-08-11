@@ -43,7 +43,9 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
   out of the box
 - **Auth** — email + password, TOTP, passkeys/security keys, recovery codes,
   mandatory 2FA for privileged roles, and fresh verification for critical
-  work; customer magic links are tracked in `MASTER.md` C1.05
+  work; personal session/device controls and privacy-limited suspicious-login
+  notices are included, while customer magic links are tracked in `MASTER.md`
+  C1.05
 
 Deployment targets one-click simplicity on vibe-coding platforms, starting
 with Replit: single-tenant by design (one deploy = one business), a monolith

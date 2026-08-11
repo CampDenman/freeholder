@@ -199,7 +199,8 @@ freeholder/
 | `Role` | A named, owner-visible access profile. Role names never grant authority by themselves. | key, name, description, is_system, assignable |
 | `RoleGrant` | Stored per-module authority for one role. `view` admits queries; `manage` admits queries and mutations. | role_key, module (`*` is explicit full access), access (view/manage) |
 | `User` | A login linked to one named role. | email, password_hash (nullable for magic-link-only customers), role_key, otp_secret, last_login_at |
-| `Session` | Server-side sessions. | user_id, token_hash, expires_at, ip, user_agent |
+| `Session` | Server-side active session. Detailed request metadata exists only while the session remains active. | user_id, token_hash, expires_at, last_seen_at, masked ip hint, bounded user_agent, device/network HMACs |
+| `LoginSecurityEvent` | Privacy-limited successful-login history and suspicious-login notice delivery; deleted after 90 days. | user_id, session_id, coarse device label, masked ip hint, device/network HMACs, reason, notice status/attempts, expires_at |
 | `StaffInvitation` | A short-lived, auditable bearer invitation into one assignable admin role. The raw token is never stored. | email, role_key snapshot, token_hash, status, expires_at, created_by, send_count, delivery metadata, accepted_user_id, accepted_at, revoked_at |
 | `Contact` | **The spine.** Every human/org the business touches. May or may not have a `User`. | user_id (nullable, 1:1), name, email, phone, org_id, source, tags[], custom_fields (jsonb), lifecycle_stage (lead → prospect → customer → repeat), preferred_locale, timezone, country, owner_notes |
 | `Organization` | Optional B2B grouping of contacts. | name, domain, custom_fields |
@@ -2730,11 +2731,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-10 |
-| Evidence snapshot | `main` at `d0fddfd` (C1.02 merged); C1.03 changeset `privileged-two-factor.md` |
+| Evidence snapshot | `main` at `bfc99a3` (C1.03 merged); C1.04 changeset `session-device-management.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.04 session/device management and suspicious-login safety; no public-launch work is required |
+| Current focus | C1.05 customer magic links and portal account linking; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2894,8 +2895,11 @@ reading chat logs.
   policy for privileged roles, and step-up authentication for critical work.
   (`0019_privileged-2fa-step-up.sql`; `tests/core/two-factor.test.ts`;
   changeset `privileged-two-factor.md`)
-- [ ] **C1.04** Add owner-visible session/device management, revoke-one,
+- [x] **C1.04** Add owner-visible session/device management, revoke-one,
   revoke-all, suspicious-login notices, and secure session metadata retention.
+  (`0020_session-device-management.sql`;
+  `tests/core/session-management.test.ts`; changeset
+  `session-device-management.md`)
 - [ ] **C1.05** Add customer magic links and portal account linking without
   creating a second contact identity.
 - [ ] **C1.06** Complete organizations, contact tags, owner-defined custom

@@ -13,6 +13,7 @@ import { hashPassword, verifyPassword } from "@/core/auth/passwords";
 import {
   createSession,
   hashSessionToken,
+  protectSessionMetadata,
   revokeSessionByToken,
   validateSession,
 } from "@/core/auth/sessions";
@@ -20,17 +21,12 @@ import { defineService, ServiceError } from "@/core/service";
 import { rateLimitKey, reset as resetRateLimit } from "@/core/security/rate-limit";
 import { seedDefaultRoles } from "@/core/roles/defaults";
 import { createLoginChallenge } from "@/core/auth/two-factor";
-
-const sessionMeta = {
-  ip: z.string().optional(),
-  userAgent: z.string().optional(),
-};
+import { recordSuccessfulLogin } from "@/core/auth/session-management/service";
 
 /** Registration is where the password policy lives. */
 const registration = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(12, "use at least 12 characters"),
-  ...sessionMeta,
 });
 
 /**
@@ -44,7 +40,6 @@ const registration = z.object({
 const loginCredentials = z.object({
   email: z.string().min(1).toLowerCase(),
   password: z.string().min(1),
-  ...sessionMeta,
 });
 
 export const registerOwner = defineService({
@@ -111,7 +106,14 @@ export const registerOwner = defineService({
         throw error;
       });
     ctx.setSubject("user", user!.id);
-    const session = await createSession(ctx.tx, user!.id, input);
+    const metadata = protectSessionMetadata(ctx.actor.request);
+    const session = await createSession(ctx.tx, user!.id, metadata);
+    await recordSuccessfulLogin(
+      ctx.tx,
+      user!.id,
+      session.sessionId,
+      metadata,
+    );
     return { userId: user!.id, ...session };
   },
 });
@@ -152,7 +154,8 @@ export const login = defineService({
     // right password do not leave someone one mistake from being throttled for
     // the rest of the window. Only a run of *failures* is suspicious.
     await resetRateLimit(rateLimitKey("auth.login", input.email));
-    const twoFactor = await createLoginChallenge(ctx.tx, user.id);
+    const metadata = protectSessionMetadata(ctx.actor.request);
+    const twoFactor = await createLoginChallenge(ctx.tx, user.id, metadata);
     if (twoFactor) {
       return {
         userId: user.id,
@@ -170,7 +173,13 @@ export const login = defineService({
       .update(users)
       .set({ lastLoginAt: sql`now()` })
       .where(eq(users.id, user.id));
-    const session = await createSession(ctx.tx, user.id, input);
+    const session = await createSession(ctx.tx, user.id, metadata);
+    await recordSuccessfulLogin(
+      ctx.tx,
+      user.id,
+      session.sessionId,
+      metadata,
+    );
     return {
       userId: user.id,
       role: user.role,

@@ -11,12 +11,14 @@ import { db } from "@/core/db";
 import { defineJob } from "@/core/jobs";
 import {
   passwordResets,
+  loginSecurityEvents,
   sessions,
   staffInvitations,
   twoFactorChallenges,
 } from "@/core/auth/schema";
 import { rateLimitCounters } from "@/core/security/schema";
 import { pruneDispatched, redeliverPending } from "@/core/events/outbox";
+import { deliverPendingSecurityNotices } from "@/core/auth/session-management/service";
 
 /**
  * Expired sessions.
@@ -34,6 +36,28 @@ export const sweepSessions = defineJob({
       .delete(sessions)
       .where(lt(sessions.expiresAt, sql`now()`))
       .returning({ id: sessions.id });
+    return { deleted: deleted.length };
+  },
+});
+
+/** Suspicious-login mail is retried out of band; authentication never waits. */
+export const deliverSecurityNotices = defineJob({
+  name: "core.deliverSecurityNotices",
+  summary: "Deliver pending suspicious-login notices.",
+  schedule: "* * * * *",
+  handler: () => deliverPendingSecurityNotices(),
+});
+
+/** Coarse login history has a hard 90-day retention boundary. */
+export const sweepLoginSecurityEvents = defineJob({
+  name: "core.sweepLoginSecurityEvents",
+  summary: "Delete expired login security history.",
+  schedule: "29 4 * * *",
+  handler: async () => {
+    const deleted = await db()
+      .delete(loginSecurityEvents)
+      .where(lt(loginSecurityEvents.expiresAt, sql`now()`))
+      .returning({ id: loginSecurityEvents.id });
     return { deleted: deleted.length };
   },
 });
@@ -204,6 +228,8 @@ export const reapAgentLeases = defineJob({
 
 export default [
   sweepSessions,
+  deliverSecurityNotices,
+  sweepLoginSecurityEvents,
   sweepRateLimits,
   sweepPasswordResets,
   sweepTwoFactorChallenges,

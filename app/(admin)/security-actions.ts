@@ -24,6 +24,10 @@ import {
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { ServiceError } from "@/core/service";
+import {
+  revokeOtherSessions,
+  revokeSession,
+} from "@/core/auth/session-management/service";
 
 export interface SecurityActionState {
   error?: string;
@@ -219,6 +223,37 @@ export async function removeWebAuthnAction(form: FormData): Promise<SecurityActi
   } catch (error) {
     return present(error);
   }
+}
+
+export async function revokeSessionAction(form: FormData): Promise<SecurityActionState> {
+  let current = false;
+  try {
+    const result = await revokeSession.call(
+      { id: field(form, "id") },
+      await currentActor(),
+    );
+    current = result.current;
+  } catch (error) {
+    return present(error);
+  }
+  if (current) {
+    const jar = await cookies();
+    jar.delete(SESSION_COOKIE);
+    jar.delete(CSRF_COOKIE);
+    redirect("/login");
+  }
+  revalidatePath("/security");
+  return { saved: true };
+}
+
+export async function revokeOtherSessionsAction(): Promise<SecurityActionState> {
+  try {
+    await revokeOtherSessions.call({}, await currentActor());
+  } catch (error) {
+    return present(error);
+  }
+  revalidatePath("/security");
+  return { saved: true };
 }
 
 function safeReturnTo(value: string): string {

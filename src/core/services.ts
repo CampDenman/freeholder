@@ -6,6 +6,7 @@
 // separate mistake anyone can make.
 import authServices from "@/core/auth/service";
 import twoFactorServices from "@/core/auth/two-factor";
+import sessionManagementServices from "@/core/auth/session-management/service";
 import resetServices from "@/core/auth/reset";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
@@ -27,6 +28,7 @@ import type { Service } from "@/core/service";
 const services: Service[] = [
   ...authServices,
   ...twoFactorServices,
+  ...sessionManagementServices,
   ...resetServices,
   ...agentServices,
   ...agentExecution,

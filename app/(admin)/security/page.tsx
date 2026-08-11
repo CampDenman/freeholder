@@ -6,6 +6,10 @@ import { redirect } from "next/navigation";
 import { ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { twoFactorStatus } from "@/core/auth/two-factor";
+import {
+  listSessions,
+  recentLoginSecurity,
+} from "@/core/auth/session-management/service";
 import { actorFromToken } from "@/core/http/actor";
 import { getT } from "../../i18n";
 import { SecurityControls } from "./SecurityControls";
@@ -16,7 +20,12 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 export default async function SecurityPage() {
   const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
   if (actor.kind !== "user") redirect("/login");
-  const [status, t] = await Promise.all([twoFactorStatus.call({}, actor), getT()]);
+  const [status, activeSessions, loginActivity, t] = await Promise.all([
+    twoFactorStatus.call({}, actor),
+    listSessions.call({}, actor),
+    recentLoginSecurity.call({ limit: 10 }, actor),
+    getT(),
+  ]);
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <div className="mb-8 flex items-start gap-4">
@@ -31,12 +40,18 @@ export default async function SecurityPage() {
           totp: Boolean(status.totp),
           webauthn: status.webauthn,
           recoveryCodesRemaining: status.recoveryCodesRemaining,
+          sessions: activeSessions,
+          loginActivity,
         }}
         labels={Object.fromEntries([
           "requiredReady", "requiredMissing", "saved", "saveCodes", "authenticator",
           "authenticatorIntro", "enrolled", "notEnrolled", "remove", "setUpAuthenticator",
           "manualSecret", "code", "confirm", "keys", "keysIntro", "addKey", "defaultKeyName",
           "keyFailed", "keyName", "keyNameHint", "recovery", "recoveryIntro", "verifyFirst", "regenerate",
+          "sessions", "sessionsIntro", "currentSession", "lastSeen", "expires", "network",
+          "unknownNetwork", "signOutSession", "signOutOthers", "signOutOthersIntro",
+          "loginActivity", "loginActivityIntro", "noLoginActivity", "newDevice",
+          "newNetwork", "noticeSent", "noticePending", "noticeUnavailable", "noticed",
         ].map((key) => [key, t(`security.${key}`)]))}
       />
     </main>
