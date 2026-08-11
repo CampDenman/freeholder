@@ -69,3 +69,19 @@ transactional email. Login never depends on mail uptime: failed delivery is
 shown in the security history and retried up to five times. These are useful
 signals, not geolocation or proof of compromise; forwarding headers must be
 replaced by the deployment's trusted proxy as documented in its recipe.
+
+## Customer magic links
+
+Customer sign-in starts only from an email already held by the single Contact
+spine. The request response does not reveal whether that Contact exists. The
+raw token is sent by mail and never stored; Freeholder stores a keyed hash, a
+snapshot of the proven email, a 15-minute expiry, and one-use state. Changing
+the Contact email or merging away that Contact invalidates the link.
+
+Following a link performs no authentication. The GET removes the credential
+from the URL and stages it in an HttpOnly, SameSite=Strict cookie scoped to the
+confirmation path; a deliberate POST consumes it. This prevents ordinary mail
+security scanners from spending a customer's link. Successful proof links one
+passwordless customer User to the existing Contact, rather than creating a
+second customer identity. Any role with stored module grants is categorically
+ineligible for magic-link login and must use the staff authentication flow.

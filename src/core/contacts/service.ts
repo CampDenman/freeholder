@@ -14,7 +14,11 @@ import {
   ilike,
   or,
 } from "drizzle-orm";
-import { contacts, timelineEvents } from "@/core/contacts/schema";
+import {
+  contacts,
+  customerMagicLinks,
+  timelineEvents,
+} from "@/core/contacts/schema";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 
@@ -274,6 +278,15 @@ export interface ContactReference {
  * obligation to write it is enforced.
  */
 const references: ContactReference[] = [
+  {
+    // A bearer link sent for the duplicate identity must not silently become a
+    // credential for the survivor after a merge. Invalidate it by deletion.
+    table: "customer_magic_links",
+    repoint: (tx, duplicateId) =>
+      tx
+        .delete(customerMagicLinks)
+        .where(eq(customerMagicLinks.contactId, duplicateId)),
+  },
   {
     table: "timeline_events",
     repoint: (tx, duplicateId, survivingId) =>

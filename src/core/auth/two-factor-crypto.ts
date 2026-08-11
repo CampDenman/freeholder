@@ -34,6 +34,10 @@ export function hashTwoFactorToken(token: string): string {
   return keyed("freeholder:2fa-token:v1", token).toString("hex");
 }
 
+export function hashCustomerMagicLinkToken(token: string): string {
+  return keyed("freeholder:customer-magic:v1", token).toString("hex");
+}
+
 export function hashRecoveryCode(code: string): string {
   return keyed("freeholder:recovery-code:v1", normalizeRecoveryCode(code)).toString("hex");
 }

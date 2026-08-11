@@ -17,6 +17,7 @@ import {
   twoFactorChallenges,
 } from "@/core/auth/schema";
 import { rateLimitCounters } from "@/core/security/schema";
+import { customerMagicLinks } from "@/core/contacts/schema";
 import { pruneDispatched, redeliverPending } from "@/core/events/outbox";
 import { deliverPendingSecurityNotices } from "@/core/auth/session-management/service";
 
@@ -149,6 +150,25 @@ export const sweepTwoFactorChallenges = defineJob({
   },
 });
 
+/** Customer magic links are short-lived credentials, not account history. */
+export const sweepCustomerMagicLinks = defineJob({
+  name: "core.sweepCustomerMagicLinks",
+  summary: "Delete used and expired customer sign-in links.",
+  schedule: "43 3 * * *",
+  handler: async () => {
+    const deleted = await db()
+      .delete(customerMagicLinks)
+      .where(
+        or(
+          isNotNull(customerMagicLinks.usedAt),
+          lt(customerMagicLinks.expiresAt, sql`now()`),
+        ),
+      )
+      .returning({ id: customerMagicLinks.id });
+    return { deleted: deleted.length };
+  },
+});
+
 /**
  * Make invitation expiry explicit so the one-pending-per-address constraint
  * releases without depending on somebody opening the old link first.
@@ -233,6 +253,7 @@ export default [
   sweepRateLimits,
   sweepPasswordResets,
   sweepTwoFactorChallenges,
+  sweepCustomerMagicLinks,
   expireStaffInvitations,
   dispatchOutbox,
   pruneOutbox,

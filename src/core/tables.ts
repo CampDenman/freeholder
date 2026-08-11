@@ -37,7 +37,12 @@ export {
   webhookSubscriptions,
   webhookDeliveries,
 } from "@/core/webhooks/schema";
-export { organizations, contacts, timelineEvents } from "@/core/contacts/schema";
+export {
+  organizations,
+  contacts,
+  customerMagicLinks,
+  timelineEvents,
+} from "@/core/contacts/schema";
 export { auditLog } from "@/core/events/schema";
 export { assets } from "@/core/media/schema";
 export { redirects } from "@/core/seo/schema";
