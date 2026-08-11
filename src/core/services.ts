@@ -18,6 +18,7 @@ import customFieldServices from "@/core/contacts/custom-fields";
 import duplicateServices from "@/core/contacts/duplicates";
 import organizationServices from "@/core/contacts/organizations";
 import relationshipServices from "@/core/contacts/relationships";
+import privacyServices from "@/core/privacy/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
 import i18nServices from "@/core/i18n/service";
@@ -45,6 +46,7 @@ const services: Service[] = [
   ...duplicateServices,
   ...organizationServices,
   ...relationshipServices,
+  ...privacyServices,
   ...doctorServices,
   ...eventServices,
   ...i18nServices,

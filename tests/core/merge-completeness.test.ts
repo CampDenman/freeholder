@@ -23,6 +23,7 @@ import manifests from "@/modules";
 import { contacts } from "@/core/contacts/schema";
 import { contactReferences } from "@/core/contacts/service";
 import { ready } from "@/core/runtime";
+import { contactPrivacySources } from "@/core/privacy/service";
 
 /**
  * Every table any installed module owns — not core's barrel alone.
@@ -141,6 +142,28 @@ describe("contacts.merge covers the whole spine", () => {
         ? ""
         : `CONTACT_REFERENCES lists ${stale.join(", ")}, which no longer reference ` +
             `contacts.id. Remove the stale entries from src/core/contacts/service.ts.`,
+    ).toEqual([]);
+  });
+});
+
+describe("privacy rights cover the whole spine", () => {
+  it("registers export and erasure behavior for every contact foreign key", () => {
+    const covered = new Set(
+      contactPrivacySources().flatMap((source) => source.tables),
+    );
+    const missing = [
+      ...new Set(
+        tablesReferencingContacts()
+          .map((reference) => reference.table)
+          .filter((table) => !covered.has(table)),
+      ),
+    ];
+    expect(
+      missing,
+      missing.length === 0
+        ? ""
+        : `These tables can hold contact data but have no export/erasure handler: ${missing.join(", ")}. ` +
+          "Register the table with registerContactPrivacySource() beside its service.",
     ).toEqual([]);
   });
 });

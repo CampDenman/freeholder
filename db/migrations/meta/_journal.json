@@ -169,6 +169,13 @@
       "when": 1786437703567,
       "tag": "0023_contact-duplicate-review",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786466664512,
+      "tag": "0024_contact-privacy-rights",
+      "breakpoints": true
     }
   ]
 }

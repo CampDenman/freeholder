@@ -25,6 +25,7 @@ import {
 } from "drizzle-orm";
 import { defineService, ServiceError } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
+import { registerContactPrivacySource } from "@/core/privacy/service";
 import { analyticsEvents } from "./schema";
 
 // CLAUDE.md's non-negotiable: events point at contacts, so a merge has to
@@ -73,6 +74,32 @@ registerContactReference({
         .set({ contactId: duplicateId })
         .where(inArray(analyticsEvents.id, moved.map((row) => row.id)));
     }
+  },
+});
+
+registerContactPrivacySource({
+  scope: "analytics.events",
+  tables: ["analytics_events"],
+  exportData: (tx, contactId) =>
+    tx
+      .select()
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.contactId, contactId))
+      .orderBy(analyticsEvents.at),
+  erase: async (tx, contactId) => {
+    const rows = await tx
+      .update(analyticsEvents)
+      .set({
+        contactId: null,
+        anonId: sql`'erased-' || ${analyticsEvents.id}::text`,
+        sessionId: sql`'erased-' || ${analyticsEvents.id}::text`,
+        referrer: null,
+        locale: null,
+        props: {},
+      })
+      .where(eq(analyticsEvents.contactId, contactId))
+      .returning({ id: analyticsEvents.id });
+    return { affected: rows.length };
   },
 });
 

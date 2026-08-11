@@ -12,7 +12,9 @@ history all hang off one CRM timeline.
 
 > **Status: active product development.** The core platform, visual CMS,
 > forms, analytics, HTTP API, webhooks, MCP, agent task substrate and encrypted
-> connection model are implemented. The complete scope, verified baseline and
+> connection model are implemented. Consent evidence, the customer privacy
+> centre, protected data exports/corrections, and audited erasure with legal
+> retention exceptions are also implemented. The complete scope, verified baseline and
 > remaining checklist live only in [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
 
 ## Product-complete target
@@ -24,7 +26,8 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
   sitemaps, OG images) baked in
 - **Unified CRM spine** — contacts, organizations, canonical tags, typed custom
   fields, relationships, lifecycle history, explainable duplicate review with
-  conflict-safe merge undo, and one shared timeline that every module writes to
+  conflict-safe merge undo, consent/privacy-rights workflows, and one shared
+  timeline that every module writes to
 - **Commerce** — products, digital downloads, services, coupons, gift cards;
   Stripe by default, PayPal as an option
 - **Quotes → contracts → invoices** — negotiate line items with logged-in

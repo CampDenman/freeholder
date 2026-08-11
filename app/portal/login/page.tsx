@@ -33,7 +33,10 @@ export default async function PortalLoginPage() {
       <h1 className="text-2xl font-bold tracking-tight">{t("portal.login.title")}</h1>
       <p className="mt-2 mb-8 text-ink-muted">{t("portal.login.intro")}</p>
       {signedIn ? (
-        <Callout tone="success">{t("portal.login.signedIn")}</Callout>
+        <Callout tone="success">
+          {t("portal.login.signedIn")} {" "}
+          <a href="/portal/privacy">{t("privacy.portal.open")}</a>
+        </Callout>
       ) : (
         <MagicLinkForm labels={{
           email: t("portal.login.email"),

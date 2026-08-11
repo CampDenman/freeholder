@@ -69,6 +69,16 @@ import {
   updateRole,
 } from "@/core/roles/service";
 import { ServiceError } from "@/core/service";
+import {
+  addRetentionException,
+  createDataRequest,
+  denyDataRequest,
+  fulfillDataRequest,
+  recordConsent,
+  removeRetentionException,
+  startDataRequest,
+  verifyDataRequest,
+} from "@/core/privacy/service";
 
 export interface ActionState {
   error?: string;
@@ -113,7 +123,13 @@ function echo(
 }
 
 async function currentActor() {
-  return actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const actor = await actorFromToken(
+    (await cookies()).get(SESSION_COOKIE)?.value,
+  );
+  return {
+    ...actor,
+    request: requestMetadataFromHeaders(await headers()),
+  };
 }
 
 export async function signInAction(
@@ -415,6 +431,166 @@ export async function duplicateReviewAction(
   }
   revalidatePath("/admin/contacts");
   revalidatePath("/admin/contacts/duplicates");
+  const t = await getT();
+  return { saved: true, message: t(messageKey) };
+}
+
+/* --------------------------------------------- privacy rights (C1.08) */
+
+function correctionFrom(form: FormData) {
+  const name = field(form, "name").trim();
+  const email = field(form, "email").trim();
+  const phone = field(form, "phone").trim();
+  const preferredLocale = field(form, "preferredLocale").trim();
+  const timezone = field(form, "timezone").trim();
+  const country = field(form, "country").trim();
+  return {
+    name: name || undefined,
+    email: field(form, "clearEmail") === "on" ? null : email || undefined,
+    phone: field(form, "clearPhone") === "on" ? null : phone || undefined,
+    preferredLocale: preferredLocale || undefined,
+    timezone: timezone || undefined,
+    country: country || undefined,
+  };
+}
+
+/** One auditable boundary for the privacy desk's explicit human decisions. */
+export async function privacyDeskAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const intent = field(form, "intent");
+  let messageKey: string;
+  try {
+    const actor = await currentActor();
+    switch (intent) {
+      case "consent":
+        await recordConsent.call(
+          {
+            contactId: field(form, "contactId"),
+            purpose: field(form, "purpose") as
+              | "marketing"
+              | "analytics"
+              | "data_processing",
+            channel: (field(form, "channel") || null) as
+              | "email"
+              | "sms"
+              | "push"
+              | "web"
+              | null,
+            state: field(form, "state") as "granted" | "denied" | "withdrawn",
+            method: field(form, "method") as
+              | "form"
+              | "preference_center"
+              | "double_opt_in"
+              | "verbal"
+              | "written"
+              | "contract"
+              | "import"
+              | "system",
+            termsVersion: field(form, "termsVersion") || null,
+            sourceUrl: field(form, "sourceUrl") || null,
+            expiresAt: field(form, "expiresAt")
+              ? new Date(field(form, "expiresAt")).toISOString()
+              : null,
+            evidence: field(form, "evidenceNote")
+              ? { note: field(form, "evidenceNote") }
+              : {},
+          },
+          actor,
+        );
+        messageKey = "privacy.message.consentRecorded";
+        break;
+      case "create": {
+        const kind = field(form, "kind") as
+          | "access"
+          | "export"
+          | "correction"
+          | "erasure";
+        const note = field(form, "note") || undefined;
+        await createDataRequest.call(
+          {
+            contactId: field(form, "contactId"),
+            jurisdiction: field(form, "jurisdiction") || null,
+            request:
+              kind === "correction"
+                ? { kind, note, changes: correctionFrom(form) }
+                : { kind, note },
+          },
+          actor,
+        );
+        messageKey = "privacy.message.requestCreated";
+        break;
+      }
+      case "verify":
+        await verifyDataRequest.call(
+          { id: field(form, "requestId"), method: field(form, "method") },
+          actor,
+        );
+        messageKey = "privacy.message.verified";
+        break;
+      case "start":
+        await startDataRequest.call({ id: field(form, "requestId") }, actor);
+        messageKey = "privacy.message.started";
+        break;
+      case "retain":
+        await addRetentionException.call(
+          {
+            dataRequestId: field(form, "requestId"),
+            scope: field(form, "scope"),
+            reason: field(form, "reason") as
+              | "legal_obligation"
+              | "legal_claim"
+              | "contractual_obligation"
+              | "accounting_tax"
+              | "security_fraud",
+            legalBasis: field(form, "legalBasis"),
+            notes: field(form, "notes") || null,
+            expiresAt: field(form, "expiresAt")
+              ? new Date(field(form, "expiresAt")).toISOString()
+              : null,
+          },
+          actor,
+        );
+        messageKey = "privacy.message.exceptionSaved";
+        break;
+      case "remove-retention":
+        await removeRetentionException.call(
+          { id: field(form, "exceptionId") },
+          actor,
+        );
+        messageKey = "privacy.message.exceptionRemoved";
+        break;
+      case "fulfill":
+        await fulfillDataRequest.call(
+          {
+            id: field(form, "requestId"),
+            confirmation: field(form, "confirmation") || undefined,
+          },
+          actor,
+        );
+        messageKey = "privacy.message.fulfilled";
+        break;
+      case "deny":
+        await denyDataRequest.call(
+          {
+            id: field(form, "requestId"),
+            resolution: field(form, "resolution"),
+          },
+          actor,
+        );
+        messageKey = "privacy.message.denied";
+        break;
+      default:
+        throw new ServiceError("validation", "Choose a privacy-desk action.");
+    }
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  revalidatePath("/admin/contacts");
+  revalidatePath("/admin/contacts/privacy");
+  const requestId = field(form, "requestId");
+  if (requestId) revalidatePath(`/admin/contacts/privacy/${requestId}`);
   const t = await getT();
   return { saved: true, message: t(messageKey) };
 }

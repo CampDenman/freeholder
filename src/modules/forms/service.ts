@@ -20,6 +20,7 @@ import {
   resolveContact,
 } from "@/core/contacts/service";
 import { db } from "@/core/db";
+import { registerContactPrivacySource } from "@/core/privacy/service";
 import { forms, formSubmissions } from "./schema";
 import {
   emailFrom,
@@ -81,6 +82,25 @@ registerContactReference({
         .set({ contactId: duplicateId })
         .where(inArray(formSubmissions.id, moved.map((row) => row.id)));
     }
+  },
+});
+
+registerContactPrivacySource({
+  scope: "forms.submissions",
+  tables: ["form_submissions"],
+  exportData: (tx, contactId) =>
+    tx
+      .select()
+      .from(formSubmissions)
+      .where(eq(formSubmissions.contactId, contactId))
+      .orderBy(formSubmissions.createdAt),
+  erase: async (tx, contactId) => {
+    const rows = await tx
+      .update(formSubmissions)
+      .set({ data: {}, sourceUrl: null, spamReasons: [] })
+      .where(eq(formSubmissions.contactId, contactId))
+      .returning({ id: formSubmissions.id });
+    return { affected: rows.length };
   },
 });
 

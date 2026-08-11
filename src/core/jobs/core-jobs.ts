@@ -246,6 +246,17 @@ export const reapAgentLeases = defineJob({
   },
 });
 
+/** Export artifacts are delivery files, not a second permanent copy of PII. */
+export const prunePrivacyArtifacts = defineJob({
+  name: "core.prunePrivacyArtifacts",
+  summary: "Delete expired protected privacy-request artifacts.",
+  schedule: "47 4 * * *",
+  handler: async () => {
+    const { pruneExpiredPrivacyArtifacts } = await import("@/core/privacy/service");
+    return { deleted: await pruneExpiredPrivacyArtifacts() };
+  },
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
@@ -260,4 +271,5 @@ export default [
   deliverWebhooks,
   pruneWebhookDeliveries,
   reapAgentLeases,
+  prunePrivacyArtifacts,
 ];
