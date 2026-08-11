@@ -7,21 +7,32 @@ import { z } from "zod";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
 import {
+  DEAD_LETTER_QUEUE,
   cancelJob,
   defineJob,
   enqueueJob,
   getJob,
+  isJobStuck,
   JobContractError,
   pruneJobIdempotencyKeys,
   registerJob,
   resolvedJobPolicy,
-  retryJob,
   startJobProducer,
   startJobs,
   stopJobs,
   type EnqueuedJob,
 } from "@/core/jobs";
+import {
+  backgroundJobsBriefingContribution,
+  cancelJobRun,
+  getJobSummary,
+  listJobQueues,
+  listJobRuns,
+  redriveJobDeadLetters,
+  retryJobRun,
+} from "@/core/jobs/service";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
+import { auditLog } from "@/core/events/schema";
 import { ready } from "@/core/runtime";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import {
@@ -88,6 +99,13 @@ describe("job definitions", () => {
         handler: async () => null,
       }),
     ).toThrow(/leaseSeconds/);
+    expect(() =>
+      defineJob({
+        name: DEAD_LETTER_QUEUE,
+        summary: "Attempt to claim the platform recovery queue.",
+        handler: async () => null,
+      }),
+    ).toThrow(/reserved/);
   });
 });
 
@@ -162,6 +180,16 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     },
   });
 
+  const deadLettered = defineJob({
+    name: "test.deadLettered",
+    summary: "Exhaust immediately so the recovery queue can be exercised.",
+    retry: { limit: 0, delaySeconds: 0, backoff: false, maxDelaySeconds: 1 },
+    leaseSeconds: 30,
+    handler: async () => {
+      throw new Error("deliberate dead-letter failure");
+    },
+  });
+
   const queueFromService = defineService({
     name: "test.queueFromService",
     summary: "Queue work from a service transaction.",
@@ -187,7 +215,7 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     process.env.FREEHOLDER_JOBS = "on";
     resetEnvForTests();
     await ready();
-    for (const job of [transactional, retries, serial, cancellable, leased]) {
+    for (const job of [transactional, retries, serial, cancellable, leased, deadLettered]) {
       registerJob(job);
     }
     await startJobProducer();
@@ -196,9 +224,10 @@ describe.runIf(hasDatabase)("transactional background work", () => {
   beforeEach(async () => {
     await truncateSpine();
     const producer = await startJobProducer();
-    for (const job of [transactional, retries, serial, cancellable, leased]) {
+    for (const job of [transactional, retries, serial, cancellable, leased, deadLettered]) {
       await producer?.deleteAllJobs(job.name);
     }
+    await producer?.deleteAllJobs(DEAD_LETTER_QUEUE);
     attempts.clear();
     observedRetryAttempts.length = 0;
     active = 0;
@@ -303,6 +332,7 @@ describe.runIf(hasDatabase)("transactional background work", () => {
       retryDelayMax: 2,
       expireInSeconds: 30,
       heartbeatSeconds: 10,
+      deadLetter: DEAD_LETTER_QUEUE,
     });
     expect(resolvedJobPolicy(serial).concurrency).toBe(1);
     expect(resolvedJobPolicy(leased)).toMatchObject({
@@ -311,14 +341,76 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     });
   });
 
-  it("cancels and can deliberately retry retained queued work", async () => {
+  it("permission-checks, cancels and deliberately retries retained work through services", async () => {
     const queued = await db().transaction((tx) =>
       ctxlessEnqueue(tx, transactional.name, { value: "cancel me" }),
     );
-    expect(await db().transaction((tx) => cancelJob(tx, transactional.name, queued.id))).toBe(true);
+    const agentError = await failure(
+      listJobRuns.call(
+        { name: transactional.name },
+        { kind: "agent", keyName: "operator", scopes: ["platform.*"] },
+      ),
+    );
+    expect(agentError.code).toBe("permission");
+    await expect(listJobQueues.call({}, STAFF)).resolves.toEqual(
+      expect.arrayContaining([transactional.name, DEAD_LETTER_QUEUE]),
+    );
+
+    const stepUpError = await failure(
+      cancelJobRun.call(
+        { name: transactional.name, id: queued.id, confirm: "CANCEL" },
+        {
+          ...STAFF,
+          security: {
+            twoFactorRequired: true,
+            twoFactorEnrolled: true,
+            twoFactorVerified: true,
+            stepUpValid: false,
+          },
+        },
+      ),
+    );
+    expect(stepUpError.code).toBe("step_up_required");
+
+    await expect(
+      cancelJobRun.call(
+        { name: transactional.name, id: queued.id, confirm: "CANCEL" },
+        STAFF,
+      ),
+    ).resolves.toEqual({ cancelled: true });
     expect((await getJob(transactional.name, queued.id))?.state).toBe("cancelled");
-    expect(await db().transaction((tx) => retryJob(tx, transactional.name, queued.id))).toBe(true);
+    await expect(
+      retryJobRun.call(
+        { name: transactional.name, id: queued.id, confirm: "RETRY" },
+        STAFF,
+      ),
+    ).resolves.toEqual({ retried: true });
     expect((await getJob(transactional.name, queued.id))?.state).not.toBe("cancelled");
+
+    const retained = await getJob(transactional.name, queued.id);
+    expect(
+      isJobStuck(
+        {
+          ...retained!,
+          state: "active",
+          startedOn: new Date("2026-01-01T00:00:00.000Z"),
+          heartbeatOn: new Date("2026-01-01T00:00:10.000Z"),
+          heartbeatSeconds: 10,
+        },
+        new Date("2026-01-01T00:00:20.000Z"),
+      ),
+    ).toBe(true);
+    expect(
+      isJobStuck(
+        { ...retained!, state: "completed" },
+        new Date("2027-01-01T00:00:00.000Z"),
+      ),
+    ).toBe(false);
+
+    const audit = await db().select({ action: auditLog.action }).from(auditLog);
+    expect(audit.map((row) => row.action)).toEqual(
+      expect.arrayContaining(["platform.cancelJob", "platform.retryJob"]),
+    );
   });
 
   it(
@@ -370,6 +462,61 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     await eventually(async () => (await getJob(leased.name, leaseReceipt.id))?.state === "completed");
     expect(leaseHeartbeatLive).toBe(true);
   });
+
+  it(
+    "retains exhausted failures, redacts inspection, reports them and redrives deliberately",
+    async () => {
+      await startJobs();
+      const receipt = await db().transaction((tx) =>
+        ctxlessEnqueue(tx, deadLettered.name, {
+          customer: "Ada",
+          apiToken: "must-never-render",
+          nested: { password: "also-secret", note: "visible" },
+        }),
+      );
+
+      await eventually(async () => {
+        const rows = await (await startJobProducer())?.findJobs(DEAD_LETTER_QUEUE);
+        return rows?.some((job) => job.sourceId === receipt.id) ?? false;
+      });
+
+      const runs = await listJobRuns.call(
+        { name: DEAD_LETTER_QUEUE, limit: 50, offset: 0 },
+        STAFF,
+      );
+      const dead = runs.items.find((job) => job.sourceId === receipt.id);
+      expect(dead).toMatchObject({
+        name: DEAD_LETTER_QUEUE,
+        sourceName: deadLettered.name,
+        sourceId: receipt.id,
+        data: {
+          customer: "Ada",
+          apiToken: "[redacted]",
+          nested: { password: "[redacted]", note: "visible" },
+        },
+      });
+
+      const summary = await getJobSummary.call({}, STAFF);
+      expect(summary.deadLetters).toBeGreaterThanOrEqual(1);
+      expect(summary.failed).toBe(0);
+      const contribution = await backgroundJobsBriefingContribution(summary);
+      expect(contribution).toMatchObject({
+        key: "platform.jobs",
+        severity: "danger",
+        href: "/admin/jobs",
+      });
+
+      await expect(
+        redriveJobDeadLetters.call(
+          { sourceName: deadLettered.name, limit: 1, confirm: "REDRIVE" },
+          STAFF,
+        ),
+      ).resolves.toEqual({ moved: 1 });
+      const audit = await db().select({ action: auditLog.action }).from(auditLog);
+      expect(audit.map((row) => row.action)).toContain("platform.redriveDeadLetters");
+    },
+    20_000,
+  );
 });
 
 async function ctxlessEnqueue(

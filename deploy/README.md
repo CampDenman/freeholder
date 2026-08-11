@@ -65,7 +65,8 @@ whole story, which is the point.
   guidance, module registration, and the threat model.
 - [`background-jobs.md`](background-jobs.md) — transactional enqueue,
   idempotency, retry/backoff, global concurrency, leases, cancellation,
-  process layouts, backup scope, and failure recovery.
+  owner history, retained dead letters, redrive controls, process layouts,
+  backup scope, and failure recovery.
 
 ## Known gaps
 

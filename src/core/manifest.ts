@@ -72,6 +72,9 @@ export default defineModule({
       "contact.dataRequestVerified",
       "contact.dataRequestCompleted",
       "contact.dataErased",
+      "job.cancelled",
+      "job.retried",
+      "job.deadLettersRedriven",
     ],
   },
 });

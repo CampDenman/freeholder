@@ -1246,6 +1246,17 @@ execution; active handlers observe durable cooperative cancellation at safe
 boundaries. The default web process both produces and works jobs, while a
 `FREEHOLDER_JOBS=off` web process remains a producer for a separate worker.
 
+Every ordinary queue routes work that permanently exhausts its retry policy to
+the retained `core.deadLetter` queue. Dead letters preserve source queue/run
+identity and true age for 90 days and are never consumed automatically. The
+owner's `/admin/jobs` ledger reads pg-boss as the authoritative history,
+recursively redacts secret-shaped payload/output fields, identifies active
+runs whose heartbeat lease is overdue, and contributes unhealthy counts to the
+owner briefing. Human `platform` viewers may inspect; cancel, retry and redrive
+require manage access, fresh step-up authentication, exact typed confirmation,
+an audit row and a committed event. API keys and agents never receive job
+payload history, even with a broad platform scope.
+
 ---
 
 ## 12. Adapter Contract
@@ -2754,11 +2765,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-11 |
-| Evidence snapshot | `main` at `2d376b6` (C1.08 merged); C1.09 changeset `transactional-jobs.md` |
+| Evidence snapshot | `main` at `6773816` (C1.09 merged); C1.10 changeset `job-operations.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.10 owner job history, run detail, retry/cancel controls, dead-letter queue, stuck-job detection and briefing contribution; no public-launch work is required |
+| Current focus | C1.11 dead-letter handling and duplicate-safe replay for unconsumed or permanently failing outbox events; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2858,8 +2869,8 @@ green test/build suite. Later checklist items name the remaining depth.
 - [x] **B11 — Deployment baseline:** production container, GHCR publishing,
   DigitalOcean Droplet/Caddy/Postgres/S3-compatible recipe, backup script, and
   live health verification.
-- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 861
-  tests pass with the C1.09 evidence change.
+- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 862
+  tests pass with the C1.10 evidence change.
 
 ### 43.4 Dependency order
 
@@ -2951,8 +2962,12 @@ reading chat logs.
   `tests/core/transactional-jobs.test.ts`; transactional webhook fan-out in
   `tests/core/webhooks.test.ts`; changeset `transactional-jobs.md`; operator
   runbook `deploy/background-jobs.md`)
-- [ ] **C1.10** Build owner job history, run detail, retry/cancel controls,
+- [x] **C1.10** Build owner job history, run detail, retry/cancel controls,
   dead-letter queue, stuck-job detection, and briefing contribution.
+  (`src/core/jobs/service.ts`; `/admin/jobs`; live routing/redrive, permissions,
+  redaction, audit, lease and briefing evidence in
+  `tests/core/transactional-jobs.test.ts`; changeset `job-operations.md`;
+  operator runbook `deploy/background-jobs.md`)
 - [ ] **C1.11** Add dead-letter handling for unconsumed or permanently failing
   outbox events and prove replay cannot duplicate side effects.
 - [ ] **C1.12** Complete media support for video, audio and documents,
