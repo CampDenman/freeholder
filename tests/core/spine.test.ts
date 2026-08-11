@@ -22,6 +22,7 @@ import {
   resolveContact,
   updateContact,
 } from "@/core/contacts/service";
+import { createCustomField } from "@/core/contacts/custom-fields";
 import { defineService, ServiceError, type Actor } from "@/core/service";
 import {
   ANONYMOUS,
@@ -408,13 +409,22 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
 
   describe("contacts.merge", () => {
     it("moves history, unions tags, and advances lifecycle", async () => {
+      await createCustomField.call(
+        {
+          entity: "contact",
+          key: "referred_by",
+          label: "Referred by",
+          kind: "text",
+        },
+        STAFF,
+      );
       const survivor = await createContact.call(
         {
           name: "Grace Hopper",
           email: "grace@example.test",
           tags: ["vip"],
           lifecycleStage: "lead",
-          customFields: { referredBy: "conference" },
+          customFields: { referred_by: "conference" },
         },
         STAFF,
       );
@@ -441,11 +451,11 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
       expect(merged.ownerNotes).toBe("Met at the meetup");
       expect([...merged.tags].sort()).toEqual(["newsletter", "vip"]);
       expect(merged.lifecycleStage).toBe("customer"); // only moves forward
-      expect(merged.customFields).toEqual({ referredBy: "conference" });
+      expect(merged.customFields).toEqual({ referred_by: "conference" });
 
       // No history is orphaned: both creation events now hang off the survivor.
       const timeline = await timelineRows();
-      expect(timeline).toHaveLength(3); // 2 creates + 1 merge
+      expect(timeline).toHaveLength(4); // 2 creates + merge + lifecycle transition
       expect(timeline.every((e) => e.contactId === survivor.id)).toBe(true);
       expect(timeline.some((e) => e.eventType === "contact.merged")).toBe(true);
     });

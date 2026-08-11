@@ -13,33 +13,84 @@ import {
   eq,
   ilike,
   or,
+  sql,
 } from "drizzle-orm";
 import {
   contacts,
   customerMagicLinks,
+  organizations,
   timelineEvents,
 } from "@/core/contacts/schema";
+import { applyCustomFieldPatch } from "@/core/contacts/custom-fields";
+import { repointContactRelationships } from "@/core/contacts/relationships";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 
 const STAGES = ["lead", "prospect", "customer", "repeat"] as const;
 const lifecycleStage = z.enum(STAGES);
 
+const localeValue = z
+  .string()
+  .trim()
+  .min(2)
+  .max(35)
+  .refine((value) => {
+    try {
+      return Intl.getCanonicalLocales(value).length === 1;
+    } catch {
+      return false;
+    }
+  }, "Enter a valid locale such as en, fr-CA, or es-MX.")
+  .transform((value) => Intl.getCanonicalLocales(value)[0]!);
+
+const timezoneValue = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .refine((value) => {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: value }).format();
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Enter a valid IANA time zone such as America/Vancouver.");
+
+const countryValue = z
+  .string()
+  .trim()
+  .length(2)
+  .regex(/^[A-Za-z]{2}$/, "Use a two-letter country code.")
+  .transform((value) => value.toUpperCase());
+
+const contactTags = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(50)
+      .transform((value) => value.toLowerCase()),
+  )
+  .max(50)
+  .transform((values) => [...new Set(values)]);
+
 const contactFields = z.object({
-  name: z.string().min(1),
-  email: z.string().email().toLowerCase().optional(),
-  phone: z.string().optional(),
-  orgId: z.string().uuid().optional(),
-  source: z.string().optional(),
-  tags: z.array(z.string()).default([]),
-  customFields: z.record(z.string(), z.unknown()).default({}),
-  lifecycleStage: lifecycleStage.default("lead"),
+  name: z.string().trim().min(1).max(200),
+  email: z.string().trim().email().toLowerCase().nullable().optional(),
+  phone: z.string().trim().max(100).nullable().optional(),
+  orgId: z.string().uuid().nullable().optional(),
+  source: z.string().trim().max(200).nullable().optional(),
+  tags: contactTags.optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
+  lifecycleStage: lifecycleStage.optional(),
   /** BCP-47; customer-facing surfaces follow this (§4.9). */
-  preferredLocale: z.string().optional(),
-  timezone: z.string().optional(),
+  preferredLocale: localeValue.nullable().optional(),
+  timezone: timezoneValue.nullable().optional(),
   /** ISO-3166-1 alpha-2, uppercased; tax keys off this (§4.10). */
-  country: z.string().length(2).toUpperCase().optional(),
-  ownerNotes: z.string().optional(),
+  country: countryValue.nullable().optional(),
+  ownerNotes: z.string().max(10_000).nullable().optional(),
 });
 
 /**
@@ -48,7 +99,7 @@ const contactFields = z.object({
  * lets the caller choose between resolving and merging.
  */
 async function guardDuplicateEmail<T>(
-  email: string | undefined,
+  email: string | null | undefined,
   run: () => Promise<T>,
 ): Promise<T> {
   try {
@@ -66,6 +117,21 @@ async function guardDuplicateEmail<T>(
   }
 }
 
+async function ensureOrganization(
+  tx: Tx,
+  id: string | null | undefined,
+): Promise<void> {
+  if (!id) return;
+  const [organization] = await tx
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.id, id))
+    .limit(1);
+  if (!organization) {
+    throw new ServiceError("not_found", "That organization no longer exists.");
+  }
+}
+
 /** Deliberate creation by a human. Automated paths use `contacts.resolve`. */
 export const createContact = defineService({
   name: "contacts.create",
@@ -74,8 +140,14 @@ export const createContact = defineService({
   permission: "scoped",
   input: contactFields,
   handler: async (input, ctx) => {
+    await ensureOrganization(ctx.tx, input.orgId);
+    const customFields = await applyCustomFieldPatch(
+      ctx.tx,
+      "contact",
+      input.customFields ?? {},
+    );
     const [contact] = await guardDuplicateEmail(input.email, () =>
-      ctx.tx.insert(contacts).values(input).returning(),
+      ctx.tx.insert(contacts).values({ ...input, customFields }).returning(),
     );
     ctx.setSubject("contact", contact!.id);
     await ctx.emitTimeline({
@@ -126,7 +198,13 @@ function incomingChanges(
   if (input.name && existing.name === existing.email) {
     changes.name = input.name;
   }
-  for (const field of ["phone", "preferredLocale", "timezone", "country"] as const) {
+  for (const field of [
+    "phone",
+    "orgId",
+    "preferredLocale",
+    "timezone",
+    "country",
+  ] as const) {
     const value = input[field];
     if (value && !existing[field]) changes[field] = value;
   }
@@ -170,9 +248,18 @@ export const resolveContact = defineService({
   kind: "mutation",
   permission: "scoped",
   input: contactFields.partial().extend({
-    email: z.string().email().toLowerCase(),
+    email: z.string().trim().email().toLowerCase(),
   }),
   handler: async (input, ctx) => {
+    await ensureOrganization(ctx.tx, input.orgId);
+    const resolvedInput: ResolveInput = {
+      ...input,
+      customFields: await applyCustomFieldPatch(
+        ctx.tx,
+        "contact",
+        input.customFields ?? {},
+      ),
+    };
     const found = async () =>
       (
         await ctx.tx
@@ -185,7 +272,7 @@ export const resolveContact = defineService({
     /** Fill blanks on a contact the business already knows (see above). */
     const enrich = async (existing: ContactRow) => {
       ctx.setSubject("contact", existing.id);
-      const changes = incomingChanges(existing, input);
+      const changes = incomingChanges(existing, resolvedInput);
       if (Object.keys(changes).length === 0) {
         return { contact: existing, created: false, updated: false };
       }
@@ -194,13 +281,39 @@ export const resolveContact = defineService({
         .set(changes)
         .where(eq(contacts.id, existing.id))
         .returning();
-      await ctx.emitTimeline({
-        contactId: existing.id,
-        eventType: "contact.updated",
-        subjectType: "contact",
-        subjectId: existing.id,
-        payload: { fields: Object.keys(changes), via: input.source ?? "resolve" },
-      });
+      const changedFields = Object.keys(changes).filter(
+        (field) => field !== "lifecycleStage",
+      );
+      if (changedFields.length > 0) {
+        await ctx.emitTimeline({
+          contactId: existing.id,
+          eventType: "contact.updated",
+          subjectType: "contact",
+          subjectId: existing.id,
+          payload: {
+            fields: changedFields,
+            via: resolvedInput.source ?? "resolve",
+          },
+        });
+      }
+      if (changes.lifecycleStage) {
+        await ctx.emitTimeline({
+          contactId: existing.id,
+          eventType: "contact.lifecycleChanged",
+          subjectType: "contact",
+          subjectId: existing.id,
+          payload: {
+            from: existing.lifecycleStage,
+            to: changes.lifecycleStage,
+            via: resolvedInput.source ?? "resolve",
+          },
+        });
+        ctx.queueEvent("contact.lifecycleChanged", {
+          contactId: existing.id,
+          from: existing.lifecycleStage,
+          to: changes.lifecycleStage,
+        });
+      }
       return { contact: updated!, created: false, updated: true };
     };
 
@@ -210,11 +323,11 @@ export const resolveContact = defineService({
     const [inserted] = await ctx.tx
       .insert(contacts)
       .values({
-        ...input,
-        name: input.name ?? input.email,
-        tags: input.tags ?? [],
-        customFields: input.customFields ?? {},
-        lifecycleStage: input.lifecycleStage ?? "lead",
+        ...resolvedInput,
+        name: resolvedInput.name ?? input.email,
+        tags: resolvedInput.tags ?? [],
+        customFields: resolvedInput.customFields ?? {},
+        lifecycleStage: resolvedInput.lifecycleStage ?? "lead",
       })
       .onConflictDoNothing({ target: contacts.email })
       .returning();
@@ -240,7 +353,7 @@ export const resolveContact = defineService({
       eventType: "contact.created",
       subjectType: "contact",
       subjectId: inserted.id,
-      payload: { source: input.source ?? "resolve" },
+      payload: { source: resolvedInput.source ?? "resolve" },
     });
     ctx.queueEvent("contact.created", { contactId: inserted.id });
     return { contact: inserted, created: true, updated: false };
@@ -278,6 +391,10 @@ export interface ContactReference {
  * obligation to write it is enforced.
  */
 const references: ContactReference[] = [
+  {
+    table: "contact_relationships",
+    repoint: repointContactRelationships,
+  },
   {
     // A bearer link sent for the duplicate identity must not silently become a
     // credential for the survivor after a merge. Invalidate it by deletion.
@@ -436,6 +553,24 @@ export const mergeContacts = defineService({
         mergedName: duplicate.name,
       },
     });
+    if (result!.lifecycleStage !== surviving.lifecycleStage) {
+      await ctx.emitTimeline({
+        contactId: surviving.id,
+        eventType: "contact.lifecycleChanged",
+        subjectType: "contact",
+        subjectId: surviving.id,
+        payload: {
+          from: surviving.lifecycleStage,
+          to: result!.lifecycleStage,
+          via: "merge",
+        },
+      });
+      ctx.queueEvent("contact.lifecycleChanged", {
+        contactId: surviving.id,
+        from: surviving.lifecycleStage,
+        to: result!.lifecycleStage,
+      });
+    }
     ctx.queueEvent("contact.merged", {
       contactId: surviving.id,
       mergedFrom: duplicate.id,
@@ -451,28 +586,74 @@ export const updateContact = defineService({
   permission: "scoped",
   input: contactFields.partial().extend({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
-    const { id, ...changes } = input;
-    if (Object.keys(changes).length === 0) {
-      throw new ServiceError("validation", "contacts.update: nothing to change");
+    const { id, ...requested } = input;
+    if (Object.keys(requested).length === 0) {
+      throw new ServiceError("validation", "Choose something to change.");
     }
-    const [contact] = await guardDuplicateEmail(changes.email, () =>
+    const [existing] = await ctx.tx
+      .select()
+      .from(contacts)
+      .where(eq(contacts.id, id))
+      .limit(1);
+    if (!existing) {
+      throw new ServiceError("not_found", "That contact no longer exists.");
+    }
+    await ensureOrganization(ctx.tx, requested.orgId);
+    const changes = {
+      ...requested,
+      customFields:
+        requested.customFields === undefined
+          ? undefined
+          : await applyCustomFieldPatch(
+              ctx.tx,
+              "contact",
+              requested.customFields,
+              existing.customFields as Record<string, unknown>,
+            ),
+    };
+    const [contact] = await guardDuplicateEmail(requested.email, () =>
       ctx.tx
         .update(contacts)
-        .set({ ...changes })
+        .set(changes)
         .where(eq(contacts.id, id))
         .returning(),
     );
     if (!contact) {
-      throw new ServiceError("not_found", `no contact with id ${id}`);
+      throw new ServiceError("not_found", "That contact no longer exists.");
     }
     ctx.setSubject("contact", contact.id);
-    await ctx.emitTimeline({
-      contactId: contact.id,
-      eventType: "contact.updated",
-      subjectType: "contact",
-      subjectId: contact.id,
-      payload: { fields: Object.keys(changes) },
-    });
+    const changedFields = Object.keys(changes).filter(
+      (field) => field !== "lifecycleStage" && changes[field as keyof typeof changes] !== undefined,
+    );
+    if (changedFields.length > 0) {
+      await ctx.emitTimeline({
+        contactId: contact.id,
+        eventType: "contact.updated",
+        subjectType: "contact",
+        subjectId: contact.id,
+        payload: { fields: changedFields },
+      });
+    }
+    if (
+      requested.lifecycleStage !== undefined &&
+      requested.lifecycleStage !== existing.lifecycleStage
+    ) {
+      await ctx.emitTimeline({
+        contactId: contact.id,
+        eventType: "contact.lifecycleChanged",
+        subjectType: "contact",
+        subjectId: contact.id,
+        payload: {
+          from: existing.lifecycleStage,
+          to: requested.lifecycleStage,
+        },
+      });
+      ctx.queueEvent("contact.lifecycleChanged", {
+        contactId: contact.id,
+        from: existing.lifecycleStage,
+        to: requested.lifecycleStage,
+      });
+    }
     return contact;
   },
 });
@@ -490,7 +671,7 @@ export const getContact = defineService({
       .where(eq(contacts.id, input.id))
       .limit(1);
     if (!contact) {
-      throw new ServiceError("not_found", `no contact with id ${input.id}`);
+      throw new ServiceError("not_found", "That contact no longer exists.");
     }
     return contact;
   },
@@ -502,9 +683,10 @@ export const listContacts = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({
-    search: z.string().optional(),
+    search: z.string().trim().max(200).optional(),
     lifecycleStage: lifecycleStage.optional(),
-    tag: z.string().optional(),
+    tag: z.string().trim().toLowerCase().max(50).optional(),
+    organizationId: z.string().uuid().optional(),
     limit: z.number().int().min(1).max(100).default(25),
     offset: z.number().int().min(0).default(0),
   }),
@@ -520,6 +702,7 @@ export const listContacts = defineService({
         ? eq(contacts.lifecycleStage, input.lifecycleStage)
         : undefined,
       input.tag ? arrayContains(contacts.tags, [input.tag]) : undefined,
+      input.organizationId ? eq(contacts.orgId, input.organizationId) : undefined,
     ].filter((f) => f !== undefined);
     const where = filters.length ? and(...filters) : undefined;
 
@@ -541,6 +724,22 @@ export const listContacts = defineService({
       .where(where);
 
     return { rows, total: totals?.n ?? 0 };
+  },
+});
+
+export const listContactTags = defineService({
+  name: "contacts.listTags",
+  summary: "List the canonical tags currently used on contacts.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  handler: async (_input, ctx) => {
+    const rows = await ctx.tx.execute<{ tag: string }>(sql`
+      select distinct unnest(${contacts.tags}) as tag
+      from ${contacts}
+      order by tag
+    `);
+    return rows.map((row) => row.tag);
   },
 });
 
@@ -604,6 +803,7 @@ export default [
   updateContact,
   getContact,
   listContacts,
+  listContactTags,
   contactTimeline,
   contactStats,
 ];

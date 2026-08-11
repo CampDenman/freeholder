@@ -19,12 +19,34 @@ import { ContactForm } from "../ContactForm";
 import { MergePanel } from "./MergePanel";
 import { requireStaffActor } from "../../guard";
 import { currentBusiness } from "@/core/settings/read";
+import { listOrganizations } from "@/core/contacts/organizations";
+import { listCustomFields } from "@/core/contacts/custom-fields";
+import { listRelationships } from "@/core/contacts/relationships";
+import { RelationshipPanel } from "./RelationshipPanel";
 
 export const dynamic = "force-dynamic";
 
 
-/** "contact.created" → "Contact created", for someone who did not build this. */
-function describe(eventType: string): string {
+/** Known Contact events are translated; module events retain a readable fallback. */
+function describe(eventType: string, t: Translate): string {
+  const contactEvent = /^contact\.(.+)$/.exec(eventType)?.[1];
+  if (
+    contactEvent &&
+    [
+      "created",
+      "updated",
+      "merged",
+      "magicLinkRequested",
+      "portalAccountLinked",
+      "magicLinkSignedIn",
+      "lifecycleChanged",
+      "relationshipAdded",
+      "relationshipUpdated",
+      "relationshipRemoved",
+    ].includes(contactEvent)
+  ) {
+    return t(`contacts.timeline.event.${contactEvent}`);
+  }
   const [subject, ...rest] = eventType.split(".");
   if (!subject || rest.length === 0) return eventType;
   const verb = rest.join(" ").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
@@ -53,6 +75,9 @@ export default async function ContactDetailPage({
   const mergeQuery = (
     Array.isArray(query.merge) ? query.merge[0] : query.merge
   )?.trim();
+  const relatedQuery = (
+    Array.isArray(query.related) ? query.related[0] : query.related
+  )?.trim();
 
   const contact = await getContact.call({ id }, actor).catch((error: unknown) => {
     // A bad id in the address bar is a 404, not a 500 — and a malformed one
@@ -61,10 +86,20 @@ export default async function ContactDetailPage({
     throw error;
   });
 
-  const [business, timeline, t] = await Promise.all([
+  const [
+    business,
+    timeline,
+    t,
+    organizationResult,
+    customFields,
+    relationships,
+  ] = await Promise.all([
     currentBusiness(),
     contactTimeline.call({ contactId: contact.id }, actor),
     getT(),
+    listOrganizations.call({ limit: 100 }, actor),
+    listCustomFields.call({ entity: "contact" }, actor),
+    listRelationships.call({ contactId: contact.id }, actor),
   ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -77,6 +112,47 @@ export default async function ContactDetailPage({
           .filter((row) => row.id !== contact.id)
           .map((row) => ({ id: row.id, name: row.name, email: row.email }))
       : [];
+  const relatedIds = new Set(
+    relationships.map((relationship) => relationship.otherContact.id),
+  );
+  const relationshipCandidates =
+    canMerge && relatedQuery
+      ? (
+          await listContacts.call(
+            { search: relatedQuery, limit: 10 },
+            actor,
+          )
+        ).rows
+          .filter((row) => row.id !== contact.id && !relatedIds.has(row.id))
+          .map((row) => ({ id: row.id, name: row.name, email: row.email }))
+      : [];
+
+  const relationshipLabels: Record<string, string> = {
+    title: t("contacts.relationships.title"),
+    intro: t("contacts.relationships.intro"),
+    empty: t("contacts.relationships.empty"),
+    search: t("contacts.relationships.search"),
+    find: t("common.search"),
+    noResults: t("contacts.relationships.noResults", {
+      query: relatedQuery ?? "",
+    }),
+    person: t("contacts.relationships.person"),
+    kind: t("contacts.relationships.kind"),
+    since: t("contacts.relationships.since"),
+    notes: t("contacts.relationships.notes"),
+    add: t("contacts.relationships.add"),
+    save: t("common.saveChanges"),
+    remove: t("contacts.relationships.remove"),
+  };
+  for (const kind of ["household", "employer", "referred_by", "partner", "guardian"] as const) {
+    relationshipLabels[`kind.${kind}`] = t(`contacts.relationships.kind.${kind}`);
+    relationshipLabels[`create.${kind}`] = t(`contacts.relationships.create.${kind}`);
+    for (const direction of ["peer", "outgoing", "incoming"] as const) {
+      relationshipLabels[`display.${kind}.${direction}`] = t(
+        `contacts.relationships.display.${kind}.${direction}`,
+      );
+    }
+  }
 
   return (
     <div className="grid gap-6">
@@ -97,15 +173,31 @@ export default async function ContactDetailPage({
       <ContactForm
         readOnly={!canMerge}
         labels={contactFormLabels(t)}
+        organizations={organizationResult.rows}
+        customFields={customFields}
         values={{
           id: contact.id,
           name: contact.name,
           email: contact.email ?? "",
           phone: contact.phone ?? "",
+          orgId: contact.orgId ?? "",
           lifecycleStage: contact.lifecycleStage,
           tags: contact.tags,
+          preferredLocale: contact.preferredLocale ?? "",
+          timezone: contact.timezone ?? "",
+          country: contact.country ?? "",
+          customFields: contact.customFields as Record<string, unknown>,
           ownerNotes: contact.ownerNotes ?? "",
         }}
+      />
+
+      <RelationshipPanel
+        contactId={contact.id}
+        query={relatedQuery ?? ""}
+        candidates={relationshipCandidates}
+        relationships={relationships}
+        labels={relationshipLabels}
+        canManage={canMerge}
       />
 
       {canMerge ? (
@@ -138,7 +230,7 @@ export default async function ContactDetailPage({
                   className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-rule py-2.5 last:border-b-0"
                 >
                   <span className="text-sm font-medium">
-                    {describe(event.eventType)}
+                    {describe(event.eventType, t)}
                   </span>
                   <span className="text-xs text-ink-muted">
                     {actorLabel(event.actor, t)}

@@ -2742,11 +2742,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-11 |
-| Evidence snapshot | `main` at `bf7b7a8` (C1.04 merged); C1.05 changeset `customer-magic-links.md` |
+| Evidence snapshot | `main` at `f3d8b64` (C1.05 merged); C1.06 changeset `contact-data-depth.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.06 contact and organization data depth; no public-launch work is required |
+| Current focus | C1.07 duplicate detection, explainable review queue, merge and safe undo; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2915,8 +2915,10 @@ reading chat logs.
   creating a second contact identity. (`0021_customer-magic-links.sql`;
   `tests/core/customer-magic-links.test.ts`; changeset
   `customer-magic-links.md`)
-- [ ] **C1.06** Complete organizations, contact tags, owner-defined custom
+- [x] **C1.06** Complete organizations, contact tags, owner-defined custom
   fields, relationships, preferred locale/timezone/country, and lifecycle data.
+  (`0022_contact-data-depth.sql`; `tests/core/contact-data-depth.test.ts`;
+  changeset `contact-data-depth.md`)
 - [ ] **C1.07** Build duplicate candidate detection/queue, explainable scores,
   dismiss/merge workflow, and merge undo where no destructive conflict exists.
 - [ ] **C1.08** Build consent records, preference centre, data-access/export/

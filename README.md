@@ -22,8 +22,9 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
 
 - **Website + CMS** — pages, blog, portfolio, SEO-as-architecture (schema.org,
   sitemaps, OG images) baked in
-- **Unified CRM spine** — contacts, companies, timelines; every module writes
-  to it
+- **Unified CRM spine** — contacts, organizations, canonical tags, typed custom
+  fields, relationships, lifecycle history, and one shared timeline that every
+  module writes to
 - **Commerce** — products, digital downloads, services, coupons, gift cards;
   Stripe by default, PayPal as an option
 - **Quotes → contracts → invoices** — negotiate line items with logged-in

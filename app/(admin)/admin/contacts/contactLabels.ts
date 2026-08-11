@@ -19,11 +19,27 @@ export interface ContactFormLabels {
   email: string;
   emailHint: string;
   phone: string;
+  organization: string;
+  noOrganization: string;
   stage: string;
   tags: string;
   tagsHint: string;
   notes: string;
   notesHint: string;
+  preferredLocale: string;
+  preferredLocaleHint: string;
+  preferredLocalePlaceholder: string;
+  timezone: string;
+  timezoneHint: string;
+  timezonePlaceholder: string;
+  country: string;
+  countryHint: string;
+  countryPlaceholder: string;
+  customFields: string;
+  customFieldsIntro: string;
+  emptyValue: string;
+  yes: string;
+  no: string;
   saved: string;
   saving: string;
   saveChanges: string;
@@ -40,11 +56,27 @@ export function contactFormLabels(t: Translate): ContactFormLabels {
     email: t("contacts.field.email"),
     emailHint: t("contacts.field.emailHint"),
     phone: t("contacts.field.phone"),
+    organization: t("contacts.field.organization"),
+    noOrganization: t("contacts.field.noOrganization"),
     stage: t("contacts.field.stage"),
     tags: t("contacts.field.tags"),
     tagsHint: t("contacts.field.tagsHint"),
     notes: t("contacts.field.notes"),
     notesHint: t("contacts.field.notesHint"),
+    preferredLocale: t("contacts.field.preferredLocale"),
+    preferredLocaleHint: t("contacts.field.preferredLocaleHint"),
+    preferredLocalePlaceholder: t("contacts.field.preferredLocalePlaceholder"),
+    timezone: t("contacts.field.timezone"),
+    timezoneHint: t("contacts.field.timezoneHint"),
+    timezonePlaceholder: t("contacts.field.timezonePlaceholder"),
+    country: t("contacts.field.country"),
+    countryHint: t("contacts.field.countryHint"),
+    countryPlaceholder: t("contacts.field.countryPlaceholder"),
+    customFields: t("contacts.fields.valuesTitle"),
+    customFieldsIntro: t("contacts.fields.valuesIntro"),
+    emptyValue: t("common.emptyValue"),
+    yes: t("common.yes"),
+    no: t("common.no"),
     saved: t("common.saved"),
     saving: t("common.saving"),
     saveChanges: t("common.saveChanges"),

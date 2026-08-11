@@ -5,8 +5,13 @@
 // happens to a contact lands in timeline_events — the append-only integration
 // contract between modules. custom_fields is jsonb by design (§8): genuinely
 // owner-defined schemaless data, with generated columns when a field gets hot.
+import { sql } from "drizzle-orm";
 import {
+  boolean,
+  check,
+  date,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -17,14 +22,52 @@ import {
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
-export const organizations = pgTable("organizations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  domain: text("domain"),
-  customFields: jsonb("custom_fields").notNull().default({}),
-  createdAt: createdAtColumn(),
-  updatedAt: updatedAtColumn(),
-});
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    domain: text("domain"),
+    customFields: jsonb("custom_fields").notNull().default({}),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("organizations_domain_idx").on(t.domain),
+    index("organizations_name_search_idx").using(
+      "gin",
+      t.name.op("gin_trgm_ops"),
+    ),
+    index("organizations_domain_search_idx").using(
+      "gin",
+      t.domain.op("gin_trgm_ops"),
+    ),
+  ],
+);
+
+/** Owner-authored schema for the deliberately schemaless JSONB value maps. */
+export const customFieldDefinitions = pgTable(
+  "custom_field_definitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    entity: text("entity", { enum: ["contact", "organization"] }).notNull(),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    kind: text("kind", {
+      enum: ["text", "number", "boolean", "date", "select"],
+    }).notNull(),
+    helpText: text("help_text"),
+    options: text("options").array().notNull().default([]),
+    position: integer("position").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("custom_field_definitions_entity_key_idx").on(t.entity, t.key),
+    index("custom_field_definitions_order_idx").on(t.entity, t.active, t.position),
+  ],
+);
 
 export const contacts = pgTable(
   "contacts",
@@ -68,6 +111,45 @@ export const contacts = pgTable(
     // lowercased by the service layer before they ever reach this column.
     uniqueIndex("contacts_email_idx").on(t.email),
     index("contacts_lifecycle_stage_idx").on(t.lifecycleStage),
+    index("contacts_tags_idx").using("gin", t.tags),
+    index("contacts_name_search_idx").using("gin", t.name.op("gin_trgm_ops")),
+    index("contacts_email_search_idx").using(
+      "gin",
+      t.email.op("gin_trgm_ops"),
+    ),
+  ],
+);
+
+/** A typed, auditable edge between two identities on the Contact spine. */
+export const contactRelationships = pgTable(
+  "contact_relationships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fromContactId: uuid("from_contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    toContactId: uuid("to_contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    kind: text("kind", {
+      enum: ["household", "employer", "referred_by", "partner", "guardian"],
+    }).notNull(),
+    since: date("since", { mode: "string" }),
+    notes: text("notes"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("contact_relationships_edge_idx").on(
+      t.fromContactId,
+      t.toContactId,
+      t.kind,
+    ),
+    index("contact_relationships_to_idx").on(t.toContactId),
+    check(
+      "contact_relationships_not_self",
+      sql`${t.fromContactId} <> ${t.toContactId}`,
+    ),
   ],
 );
 

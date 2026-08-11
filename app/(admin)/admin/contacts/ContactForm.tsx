@@ -20,24 +20,37 @@ import {
   type ActionState,
 } from "../../actions";
 import type { ContactFormLabels } from "./contactLabels";
+import {
+  CustomFieldInputs,
+  type CustomFieldInputDefinition,
+} from "./CustomFieldInputs";
 
 export interface ContactValues {
   id?: string;
   name: string;
   email: string;
   phone: string;
+  orgId: string;
   lifecycleStage: string;
   tags: string[];
+  preferredLocale: string;
+  timezone: string;
+  country: string;
+  customFields: Record<string, unknown>;
   ownerNotes: string;
 }
 
 export function ContactForm({
   values,
   labels,
+  organizations,
+  customFields,
   readOnly = false,
 }: {
   values: ContactValues;
   labels: ContactFormLabels;
+  organizations: Array<{ id: string; name: string }>;
+  customFields: CustomFieldInputDefinition[];
   readOnly?: boolean;
 }) {
   const editing = Boolean(values.id);
@@ -56,8 +69,12 @@ export function ContactForm({
     name: echoed?.name ?? values.name,
     email: echoed?.email ?? values.email,
     phone: echoed?.phone ?? values.phone,
+    orgId: echoed?.orgId ?? values.orgId,
     lifecycleStage: echoed?.lifecycleStage ?? values.lifecycleStage,
     tags: echoed?.tags ?? values.tags.join(", "),
+    preferredLocale: echoed?.preferredLocale ?? values.preferredLocale,
+    timezone: echoed?.timezone ?? values.timezone,
+    country: echoed?.country ?? values.country,
     ownerNotes: echoed?.ownerNotes ?? values.ownerNotes,
   };
 
@@ -123,6 +140,23 @@ export function ContactForm({
             </Field>
           </div>
 
+          <Field label={labels.organization} htmlFor="orgId">
+            <Select
+              key={`organization-${generation}`}
+              id="orgId"
+              name="orgId"
+              defaultValue={seed.orgId}
+              disabled={readOnly}
+            >
+              <option value="">{labels.noOrganization}</option>
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label={labels.stage} htmlFor="lifecycleStage">
               <Select
@@ -150,6 +184,72 @@ export function ContactForm({
               />
             </Field>
           </div>
+
+          <div className="grid gap-5 sm:grid-cols-3">
+            <Field
+              label={labels.preferredLocale}
+              htmlFor="preferredLocale"
+              hint={labels.preferredLocaleHint}
+            >
+              <Input
+                key={`locale-${generation}`}
+                id="preferredLocale"
+                name="preferredLocale"
+                defaultValue={seed.preferredLocale}
+                placeholder={labels.preferredLocalePlaceholder}
+                disabled={readOnly}
+              />
+            </Field>
+            <Field
+              label={labels.timezone}
+              htmlFor="timezone"
+              hint={labels.timezoneHint}
+            >
+              <Input
+                key={`timezone-${generation}`}
+                id="timezone"
+                name="timezone"
+                defaultValue={seed.timezone}
+                placeholder={labels.timezonePlaceholder}
+                disabled={readOnly}
+              />
+            </Field>
+            <Field label={labels.country} htmlFor="country" hint={labels.countryHint}>
+              <Input
+                key={`country-${generation}`}
+                id="country"
+                name="country"
+                defaultValue={seed.country}
+                placeholder={labels.countryPlaceholder}
+                maxLength={2}
+                className="uppercase"
+                disabled={readOnly}
+              />
+            </Field>
+          </div>
+
+          {customFields.length > 0 ? (
+            <section className="grid gap-5 border-t border-rule pt-5">
+              <div>
+                <h3 className="text-sm font-semibold">{labels.customFields}</h3>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {labels.customFieldsIntro}
+                </p>
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <CustomFieldInputs
+                  definitions={customFields}
+                  values={values.customFields}
+                  echoed={echoed}
+                  generation={generation}
+                  readOnly={readOnly}
+                  emptyLabel={labels.emptyValue}
+                  yesLabel={labels.yes}
+                  noLabel={labels.no}
+                />
+              </div>
+            </section>
+          ) : null}
 
           <Field
             label={labels.notes}
