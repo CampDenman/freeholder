@@ -62,6 +62,10 @@ export default defineModule({
       "contact.magicLinkRequested",
       "contact.portalAccountLinked",
       "contact.magicLinkSignedIn",
+      "contact.lifecycleChanged",
+      "contact.relationshipAdded",
+      "contact.relationshipUpdated",
+      "contact.relationshipRemoved",
     ],
   },
 });

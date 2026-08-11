@@ -119,7 +119,7 @@ describe.runIf(hasDatabase)("browsing contacts", () => {
         STAFF,
       );
       expect(timeline.map((e) => e.eventType)).toEqual([
-        "contact.updated",
+        "contact.lifecycleChanged",
         "contact.created",
       ]);
     });

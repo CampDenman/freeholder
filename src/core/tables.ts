@@ -40,6 +40,8 @@ export {
 export {
   organizations,
   contacts,
+  contactRelationships,
+  customFieldDefinitions,
   customerMagicLinks,
   timelineEvents,
 } from "@/core/contacts/schema";

@@ -26,6 +26,20 @@ import {
   updateContact,
 } from "@/core/contacts/service";
 import {
+  createCustomField,
+  updateCustomField,
+} from "@/core/contacts/custom-fields";
+import {
+  createOrganization,
+  deleteOrganization,
+  updateOrganization,
+} from "@/core/contacts/organizations";
+import {
+  createRelationship,
+  deleteRelationship,
+  updateRelationship,
+} from "@/core/contacts/relationships";
+import {
   createLocationService as createLocation,
   deleteLocation,
   setOpeningHours,
@@ -245,6 +259,31 @@ function tagsOf(form: FormData): string[] {
     .filter(Boolean);
 }
 
+function customFieldsOf(form: FormData): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const descriptor of form.getAll("customField")) {
+    if (typeof descriptor !== "string") continue;
+    const [key, kind] = descriptor.split("|", 2);
+    if (!key || !kind) continue;
+    const raw = field(form, `custom:${key}`).trim();
+    if (!raw) {
+      values[key] = null;
+    } else if (kind === "number") {
+      const number = Number(raw);
+      values[key] = Number.isFinite(number) ? number : raw;
+    } else if (kind === "boolean") {
+      values[key] = raw === "true" ? true : raw === "false" ? false : raw;
+    } else {
+      values[key] = raw;
+    }
+  }
+  return values;
+}
+
+function optionalId(form: FormData, key: string): string | null {
+  return field(form, key).trim() || null;
+}
+
 export async function createContactAction(
   _previous: ActionState,
   form: FormData,
@@ -254,11 +293,16 @@ export async function createContactAction(
     const contact = await createContact.call(
       {
         name: field(form, "name"),
-        email: field(form, "email") || undefined,
-        phone: field(form, "phone") || undefined,
+        email: field(form, "email") || null,
+        phone: field(form, "phone") || null,
+        orgId: optionalId(form, "orgId"),
         lifecycleStage: stageOf(form),
         tags: tagsOf(form),
-        ownerNotes: field(form, "ownerNotes") || undefined,
+        customFields: customFieldsOf(form),
+        preferredLocale: field(form, "preferredLocale") || null,
+        timezone: field(form, "timezone") || null,
+        country: field(form, "country") || null,
+        ownerNotes: field(form, "ownerNotes") || null,
         source: "admin",
       },
       await currentActor(),
@@ -279,11 +323,16 @@ export async function updateContactAction(
       {
         id: field(form, "id"),
         name: field(form, "name"),
-        email: field(form, "email") || undefined,
-        phone: field(form, "phone") || undefined,
+        email: field(form, "email") || null,
+        phone: field(form, "phone") || null,
+        orgId: optionalId(form, "orgId"),
         lifecycleStage: stageOf(form),
         tags: tagsOf(form),
-        ownerNotes: field(form, "ownerNotes") || undefined,
+        customFields: customFieldsOf(form),
+        preferredLocale: field(form, "preferredLocale") || null,
+        timezone: field(form, "timezone") || null,
+        country: field(form, "country") || null,
+        ownerNotes: field(form, "ownerNotes") || null,
       },
       await currentActor(),
     );
@@ -311,6 +360,196 @@ export async function mergeContactAction(
     return present(error);
   }
   redirect(`/admin/contacts/${survivingId}`);
+}
+
+/* --------------------------------------------- contact data depth (C1.06) */
+
+function optionsOf(form: FormData): string[] {
+  return field(form, "options")
+    .split(/[\n,]/)
+    .map((option) => option.trim())
+    .filter(Boolean);
+}
+
+export async function createOrganizationAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  let id: string;
+  try {
+    const organization = await createOrganization.call(
+      {
+        name: field(form, "name"),
+        domain: field(form, "domain") || null,
+        customFields: customFieldsOf(form),
+      },
+      await currentActor(),
+    );
+    id = organization.id;
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  redirect(`/admin/contacts/organizations/${id}`);
+}
+
+export async function updateOrganizationAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await updateOrganization.call(
+      {
+        id: field(form, "id"),
+        name: field(form, "name"),
+        domain: field(form, "domain") || null,
+        customFields: customFieldsOf(form),
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  return { saved: true };
+}
+
+export async function deleteOrganizationAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await deleteOrganization.call({ id: field(form, "id") }, await currentActor());
+  } catch (error) {
+    return present(error);
+  }
+  redirect("/admin/contacts/organizations");
+}
+
+const FIELD_KINDS = ["text", "number", "boolean", "date", "select"] as const;
+const FIELD_ENTITIES = ["contact", "organization"] as const;
+
+export async function createCustomFieldAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const kind = field(form, "kind");
+  const entity = field(form, "entity");
+  try {
+    await createCustomField.call(
+      {
+        entity: FIELD_ENTITIES.includes(entity as (typeof FIELD_ENTITIES)[number])
+          ? (entity as (typeof FIELD_ENTITIES)[number])
+          : "contact",
+        key: field(form, "key"),
+        label: field(form, "label"),
+        kind: FIELD_KINDS.includes(kind as (typeof FIELD_KINDS)[number])
+          ? (kind as (typeof FIELD_KINDS)[number])
+          : "text",
+        helpText: field(form, "helpText") || null,
+        options: optionsOf(form),
+        position: Number(field(form, "position", "0")) || 0,
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  redirect("/admin/contacts/fields");
+}
+
+export async function updateCustomFieldAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await updateCustomField.call(
+      {
+        id: field(form, "id"),
+        label: field(form, "label"),
+        helpText: field(form, "helpText") || null,
+        ...(field(form, "kind") === "select" ? { options: optionsOf(form) } : {}),
+        position: Number(field(form, "position", "0")) || 0,
+        active: field(form, "active") === "true",
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  redirect("/admin/contacts/fields");
+}
+
+const RELATIONSHIP_KINDS = [
+  "household",
+  "employer",
+  "referred_by",
+  "partner",
+  "guardian",
+] as const;
+
+function relationshipKindOf(form: FormData): (typeof RELATIONSHIP_KINDS)[number] {
+  const value = field(form, "kind");
+  return RELATIONSHIP_KINDS.includes(value as (typeof RELATIONSHIP_KINDS)[number])
+    ? (value as (typeof RELATIONSHIP_KINDS)[number])
+    : "household";
+}
+
+export async function createRelationshipAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const contactId = field(form, "contactId");
+  try {
+    await createRelationship.call(
+      {
+        fromContactId: contactId,
+        toContactId: field(form, "otherContactId"),
+        kind: relationshipKindOf(form),
+        since: field(form, "since") || null,
+        notes: field(form, "notes") || null,
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  redirect(`/admin/contacts/${contactId}`);
+}
+
+export async function updateRelationshipAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const contactId = field(form, "contactId");
+  try {
+    await updateRelationship.call(
+      {
+        id: field(form, "id"),
+        fromContactId: contactId,
+        toContactId: field(form, "otherContactId"),
+        kind: relationshipKindOf(form),
+        since: field(form, "since") || null,
+        notes: field(form, "notes") || null,
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  redirect(`/admin/contacts/${contactId}`);
+}
+
+export async function deleteRelationshipAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const contactId = field(form, "contactId");
+  try {
+    await deleteRelationship.call({ id: field(form, "id") }, await currentActor());
+  } catch (error) {
+    return present(error);
+  }
+  revalidatePath(`/admin/contacts/${contactId}`);
+  redirect(`/admin/contacts/${contactId}`);
 }
 
 /* ------------------------------------------------------------- locations */

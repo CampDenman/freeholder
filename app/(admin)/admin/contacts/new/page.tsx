@@ -6,12 +6,18 @@ import { getT } from "../../../../i18n";
 import { contactFormLabels } from "../contactLabels";
 import { ContactForm } from "../ContactForm";
 import { requireStaffActor } from "../../guard";
+import { listOrganizations } from "@/core/contacts/organizations";
+import { listCustomFields } from "@/core/contacts/custom-fields";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewContactPage() {
-  await requireStaffActor("contacts", "manage");
-  const t = await getT();
+  const actor = await requireStaffActor("contacts", "manage");
+  const [t, organizationResult, customFields] = await Promise.all([
+    getT(),
+    listOrganizations.call({ limit: 100 }, actor),
+    listCustomFields.call({ entity: "contact" }, actor),
+  ]);
   return (
     <div className="grid gap-6">
       <div>
@@ -24,12 +30,19 @@ export default async function NewContactPage() {
       </div>
       <ContactForm
         labels={contactFormLabels(t)}
+        organizations={organizationResult.rows}
+        customFields={customFields}
         values={{
           name: "",
           email: "",
           phone: "",
+          orgId: "",
           lifecycleStage: "lead",
           tags: [],
+          preferredLocale: "",
+          timezone: "",
+          country: "",
+          customFields: {},
           ownerNotes: "",
         }}
       />

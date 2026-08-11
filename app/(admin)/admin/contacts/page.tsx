@@ -6,7 +6,7 @@
 // it works before JavaScript loads, the back button behaves, and a filtered
 // view is a URL somebody can bookmark or send to their bookkeeper.
 import { MagnifyingGlass, Plus, UserPlus } from "@phosphor-icons/react/dist/ssr";
-import { listContacts } from "@/core/contacts/service";
+import { listContacts, listContactTags } from "@/core/contacts/service";
 import { formatDateTime } from "@/core/i18n";
 import { Button, Card, Input, Pill, Select, cx } from "@/ui/primitives";
 import { getT } from "../../../i18n";
@@ -48,20 +48,23 @@ export default async function ContactsPage({
   };
   const search = one("search");
   const stage = one("stage");
+  const tag = one("tag");
   const offset = Math.max(0, Number(one("offset")) || 0);
 
-  const [business, t, result] = await Promise.all([
+  const [business, t, result, tags] = await Promise.all([
     currentBusiness(),
     getT(),
     listContacts.call(
       {
         search: search || undefined,
         lifecycleStage: stage || undefined,
+        tag: tag || undefined,
         limit: PAGE_SIZE,
         offset,
       },
       actor,
     ),
+    listContactTags.call({}, actor),
   ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -69,7 +72,8 @@ export default async function ContactsPage({
   const filters: Record<string, string> = {};
   if (search) filters.search = search;
   if (stage) filters.stage = stage;
-  const filtered = Boolean(search || stage);
+  if (tag) filters.tag = tag;
+  const filtered = Boolean(search || stage || tag);
   const canManage = hasModuleAccess(actor, "contacts", "manage");
   const stageOptions = [
     { value: "", label: t("contacts.allStages") },
@@ -88,15 +92,25 @@ export default async function ContactsPage({
           </h1>
           <p className="mt-1 text-sm text-ink-muted">{t("contacts.intro")}</p>
         </div>
-        {canManage ? (
-          <a
-            href="/admin/contacts/new"
-            className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
-          >
-            <Plus size={15} weight="bold" />
-            {t("contacts.new")}
+        <div className="ms-auto flex flex-wrap items-center gap-3">
+          <a href="/admin/contacts/organizations" className="text-sm text-ink-muted">
+            {t("contacts.organizations.title")}
           </a>
-        ) : null}
+          {canManage ? (
+            <a href="/admin/contacts/fields" className="text-sm text-ink-muted">
+              {t("contacts.fields.title")}
+            </a>
+          ) : null}
+          {canManage ? (
+            <a
+              href="/admin/contacts/new"
+              className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
+            >
+              <Plus size={15} weight="bold" />
+              {t("contacts.new")}
+            </a>
+          ) : null}
+        </div>
       </div>
 
       <form
@@ -133,6 +147,24 @@ export default async function ContactsPage({
             ))}
           </Select>
         </div>
+        {tags.length > 0 ? (
+          <div className="grid gap-1.5">
+            <label
+              htmlFor="tag"
+              className="font-mono text-xs font-medium text-ink-muted"
+            >
+              {t("contacts.tagLabel")}
+            </label>
+            <Select id="tag" name="tag" defaultValue={tag}>
+              <option value="">{t("contacts.allTags")}</option>
+              {tags.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
         <Button type="submit" variant="quiet">
           <MagnifyingGlass size={15} weight="bold" />
           {t("common.search")}

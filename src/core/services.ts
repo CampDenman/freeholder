@@ -14,6 +14,9 @@ import agentExecution from "@/core/agents/execution";
 import apiKeyServices from "@/core/apikeys/service";
 import connectionServices from "@/core/connections/service";
 import contactServices from "@/core/contacts/service";
+import customFieldServices from "@/core/contacts/custom-fields";
+import organizationServices from "@/core/contacts/organizations";
+import relationshipServices from "@/core/contacts/relationships";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
 import i18nServices from "@/core/i18n/service";
@@ -37,6 +40,9 @@ const services: Service[] = [
   ...apiKeyServices,
   ...connectionServices,
   ...contactServices,
+  ...customFieldServices,
+  ...organizationServices,
+  ...relationshipServices,
   ...doctorServices,
   ...eventServices,
   ...i18nServices,
