@@ -315,6 +315,57 @@ export const purgeExpiredMediaAssets = defineJob({
   },
 });
 
+/** Immediate external notification work, also swept after a crash. */
+export const deliverNotifications = defineJob({
+  name: "core.deliverNotifications",
+  summary: "Deliver pending notification channels.",
+  schedule: "* * * * *",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 1,
+  leaseSeconds: 5 * 60,
+  handler: async () => {
+    const { deliverDueNotifications } = await import("@/core/notifications/service");
+    return deliverDueNotifications();
+  },
+});
+
+/** One bounded email replaces a pile of low-urgency messages. */
+export const deliverNotificationDigests = defineJob({
+  name: "core.deliverNotificationDigests",
+  summary: "Deliver notification digests that have reached their local schedule.",
+  schedule: "* * * * *",
+  concurrency: 1,
+  leaseSeconds: 5 * 60,
+  handler: async () => {
+    const { deliverDueDigests } = await import("@/core/notifications/service");
+    return deliverDueDigests();
+  },
+});
+
+/** Critical items get one second pass only while they remain unread. */
+export const escalateNotifications = defineJob({
+  name: "core.escalateNotifications",
+  summary: "Escalate unread critical notifications after the personal delay.",
+  schedule: "* * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { escalateUnreadNotifications } = await import("@/core/notifications/service");
+    return escalateUnreadNotifications();
+  },
+});
+
+/** Archived inbox material is operational history, not permanent storage. */
+export const pruneOldNotifications = defineJob({
+  name: "core.pruneNotifications",
+  summary: "Delete notifications archived for more than one year.",
+  schedule: "7 5 * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { pruneNotifications } = await import("@/core/notifications/service");
+    return pruneNotifications();
+  },
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
@@ -334,4 +385,8 @@ export default [
   pruneJobKeys,
   sweepMediaOrphans,
   purgeExpiredMediaAssets,
+  deliverNotifications,
+  deliverNotificationDigests,
+  escalateNotifications,
+  pruneOldNotifications,
 ];

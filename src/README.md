@@ -8,12 +8,12 @@ Framework-agnostic application code, per `MASTER.md` §10:
   single-spine portal account linking, contacts with organizations, canonical
   tags, typed owner fields, relationships, regional preferences and lifecycle
   history, media, i18n, locations, settings, events, jobs, SEO, API keys,
-  webhooks, agents and connections.
+  webhooks, agents, connections, and the personal notification fanout/inbox.
   Modules may import core; never the reverse.
 - `modules/` — current CMS, forms, analytics and seed modules, each a
   `defineModule()` manifest (`MASTER.md` §11). Modules communicate only via
   events and core services.
-- `adapters/` — current storage and mail vendor isolation (`MASTER.md` §12).
+- `adapters/` — current storage, mail, and notification-channel vendor isolation (`MASTER.md` §12).
   Remaining adapter families are tracked from C5.01; core never imports a
   vendor SDK directly.
 - `mcp/` — the bundled MCP server; tools generated from the service registry.

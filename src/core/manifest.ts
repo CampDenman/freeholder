@@ -13,8 +13,8 @@ export default defineModule({
   services: () => import("@/core/services"),
   jobs: () => import("@/core/jobs/core-jobs"),
   events: {
-    // Core listens to *everything*, once, to fan committed events out to the
-    // owner's webhook subscriptions. It goes through the ordinary manifest
+    // Core listens to *everything*, once, to fan committed events out to
+    // webhook subscriptions and personal notification inboxes. It goes through the ordinary manifest
     // mechanism rather than a special case in boot, so the listener shows up
     // in the boot report like any other.
     listens: { "*": "onAnyEvent" },

@@ -45,6 +45,10 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
   galleries, files, and messages
 - **Email** — transactional via the owner's Google/Outlook account, bulk via
   a provider adapter; broadcasts and simple automations
+- **Notification inbox** — a personal in-app attention queue with immediate
+  email or scheduled digests, preference controls, replay-safe deduplication,
+  and one-time escalation for unread critical work. SMS and push remain
+  explicit disabled adapters until their carrier/compliance checkpoints.
 - **First-party analytics** — privacy-first pageviews plus the full funnel
   (visit → lead → quote → paid), joined to the CRM
 - **Full admin** — CRUD everything, toggle modules, seed/demo mode

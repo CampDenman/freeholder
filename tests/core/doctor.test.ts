@@ -43,6 +43,8 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
       "media.altTextSuggester",
       "mail.delivers",
       "mail.bulk",
+      "notifications.sms",
+      "notifications.push",
       "jobs.worker",
     ]) {
       expect({ id, checked: ids.includes(id) }).toEqual({ id, checked: true });

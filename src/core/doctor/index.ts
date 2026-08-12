@@ -440,6 +440,26 @@ async function checkMail(): Promise<Check[]> {
   return checks;
 }
 
+async function checkNotificationChannels(): Promise<Check[]> {
+  const { notificationAdapterStatus } = await import("@/adapters/notifications");
+  return notificationAdapterStatus().map((status) =>
+    status.available
+      ? ok(
+          `notifications.${status.channel}`,
+          `${status.channel.toUpperCase()} notifications`,
+          `${status.provider} is ready. Doctor did not send a billable message.`,
+        )
+      : warn(
+          `notifications.${status.channel}`,
+          `${status.channel.toUpperCase()} notifications`,
+          status.message,
+          status.channel === "sms"
+            ? "Leave SMS preferences off until the C7.10 carrier and consent controls are installed. In-app and email delivery continue normally."
+            : "Leave push preferences off until C10.14 installs device registration and a production carrier. In-app and email delivery continue normally.",
+        ),
+  );
+}
+
 async function checkJobs(): Promise<Check> {
   const { listJobs } = await import("@/core/jobs");
   const jobs = [...listJobs().values()];
@@ -679,6 +699,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     await checkMalwareScanner(),
     await checkAltTextSuggester(),
     ...(await checkMail()),
+    ...(await checkNotificationChannels()),
     await checkJobs(),
     ...(await checkCredentialKey()),
     ...(await checkSecurity()),

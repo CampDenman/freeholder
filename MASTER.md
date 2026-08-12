@@ -2894,11 +2894,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-12 |
-| Evidence snapshot | `main` at `9a9f927` (C1.11 merged); C1.12 changeset `media-lifecycle.md` |
+| Evidence snapshot | `main` at `b2348e7` (C1.14 merged); C1.15 changeset `notification-fanout-inbox.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.15 notification fanout and inbox; no public-launch work is required |
+| Current focus | C1.16 customer-facing locale selection and locale-driven notifications; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3140,8 +3140,22 @@ reading chat logs.
   integration; doctor and threat-model/migration runbook; 69 focused mail/
   doctor tests and 961-test full suite; changeset `mail-adapter-completion.md`;
   operator guide `deploy/mail-delivery.md`)
-- [ ] **C1.15** Build the notification fanout model and inbox: in-app, email,
+- [x] **C1.15** Build the notification fanout model and inbox: in-app, email,
   SMS/push adapters, preferences, digesting, deduplication and escalation.
+  (`0032_fancy_namora.sql` and `0033_thin_lady_bullseye.sql`; separate durable
+  notification, replay-receipt, channel-delivery, preference, settings and
+  digest facts with bounded schema invariants; personal in-app attention queue
+  and account-mail delivery; carrier-neutral SMS/push contracts with honest
+  unavailable adapters pending C7.10/C10.14; per-topic immediate/digest/off
+  controls and DST-aware daily/weekly scheduling; stable replay receipts plus
+  advisory-locked live-condition coalescing; one-time unread critical
+  escalation, bounded retry/lease recovery and one-year archived retention;
+  form/core-event fanout; contact merge/undo and privacy export/erasure;
+  English/French/Spanish admin bell, queue and settings UI with static
+  axe/keyboard coverage; doctor readiness without provider calls; 23 focused
+  notification/migration/UI tests and 982-test full suite; changeset
+  `notification-fanout-inbox.md`; operator guide
+  `deploy/notification-fanout.md`)
 
 #### International, analytics, security, and quality
 
