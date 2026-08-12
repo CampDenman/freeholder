@@ -12,13 +12,19 @@
 // Everything below is one of those three being enforced somewhere it could
 // otherwise be forgotten.
 import { z } from "zod";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
-import { defineService, ServiceError } from "@/core/service";
+import { actorString, defineService, ServiceError } from "@/core/service";
 import { passwordResets, sessions, users } from "@/core/auth/schema";
 import { hashPassword } from "@/core/auth/passwords";
 import { businessProfile } from "@/core/settings/schema";
-import { mail } from "@/adapters/mail";
+import { sendMail } from "@/core/mail/service";
+import { db } from "@/core/db";
+import { mailSenders } from "@/core/mail/schema";
+import {
+  connectedAccounts,
+  connectionCapabilities,
+} from "@/core/connections/schema";
 import { env } from "@/core/env";
 
 /** An hour. Long enough to find the email; short enough to matter if leaked. */
@@ -75,9 +81,10 @@ export const requestPasswordReset = defineService({
       );
 
     const token = randomBytes(32).toString("base64url");
+    const tokenHash = hashToken(token);
     await ctx.tx.insert(passwordResets).values({
       userId: user.id,
-      tokenHash: hashToken(token),
+      tokenHash,
       expiresAt: sql`now() + make_interval(mins => ${LIFETIME_MINUTES})`,
     });
 
@@ -88,19 +95,34 @@ export const requestPasswordReset = defineService({
     const site = business?.name ?? "your Freeholder site";
     const url = resetUrl(token);
 
-    await mail().send({
-      to: input.email,
-      subject: `Reset your password for ${site}`,
-      text: [
-        `Somebody asked to reset the password for ${site}.`,
-        "",
-        "If it was you, open this link within the hour:",
-        url,
-        "",
-        "If it was not you, nothing has changed and you can ignore this. The",
-        "link stops working as soon as it is used, or after an hour.",
-      ].join("\n"),
-    });
+    try {
+      await sendMail(ctx.tx, {
+        to: input.email,
+        subject: `Reset your password for ${site}`,
+        text: [
+          `Somebody asked to reset the password for ${site}.`,
+          "",
+          "If it was you, open this link within the hour:",
+          url,
+          "",
+          "If it was not you, nothing has changed and you can ignore this. The",
+          "link stops working as soon as it is used, or after an hour.",
+        ].join("\n"),
+      }, {
+        requestedBy: actorString(ctx.actor),
+        idempotencyKey: `password-reset:${tokenHash}`,
+      });
+    } catch {
+      // A provider or suppression failure must not reveal that this address
+      // belongs to an account. Retire the credential and return the same
+      // response as an unknown address; the mail ledger/suppression list holds
+      // the operator-facing evidence without putting the address in a log.
+      await ctx.tx
+        .delete(passwordResets)
+        .where(eq(passwordResets.tokenHash, tokenHash));
+      console.error("password-reset mail delivery failed");
+      return answer;
+    }
 
     // The token is never returned, logged or audited — the redaction rule
     // covers the input, and nothing here puts it anywhere else.
@@ -174,8 +196,38 @@ export const resetPassword = defineService({
  * The screen asks, so it can tell somebody the truth rather than "check your
  * inbox" when there is no mailer configured and the link went to a log file.
  */
-export function canDeliverMail(): boolean {
+export async function canDeliverMail(): Promise<boolean> {
   try {
+    const [sender] = await db()
+      .select({ id: mailSenders.id })
+      .from(mailSenders)
+      .leftJoin(
+        connectedAccounts,
+        eq(connectedAccounts.id, mailSenders.connectedAccountId),
+      )
+      .leftJoin(
+        connectionCapabilities,
+        and(
+          eq(
+            connectionCapabilities.connectedAccountId,
+            connectedAccounts.id,
+          ),
+          eq(connectionCapabilities.capability, "mail_send"),
+        ),
+      )
+      .where(
+        and(
+          eq(mailSenders.purpose, "transactional"),
+          eq(mailSenders.isDefault, true),
+          eq(mailSenders.status, "active"),
+          eq(mailSenders.verificationStatus, "verified"),
+          ne(mailSenders.provider, "console"),
+          sql`(${mailSenders.connectedAccountId} is null or (${connectedAccounts.status} = 'active' and ${connectionCapabilities.enabled} = true))`,
+        ),
+      )
+      .limit(1);
+    if (sender) return true;
+    const { mail } = await import("@/adapters/mail");
     return mail().delivers;
   } catch {
     return false;

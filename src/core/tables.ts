@@ -34,6 +34,13 @@ export {
   externalEvents,
 } from "@/core/connections/schema";
 export {
+  mailDeliveries,
+  mailOauthStates,
+  mailProviderEvents,
+  mailSenders,
+  mailSuppressions,
+} from "@/core/mail/schema";
+export {
   webhookSubscriptions,
   webhookDeliveries,
 } from "@/core/webhooks/schema";

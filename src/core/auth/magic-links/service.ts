@@ -4,7 +4,7 @@
 import { randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { mail } from "@/adapters/mail";
+import { sendMail } from "@/core/mail/service";
 import { roleGrants, users } from "@/core/auth/schema";
 import {
   createSession,
@@ -15,7 +15,7 @@ import { hashCustomerMagicLinkToken } from "@/core/auth/two-factor-crypto";
 import { contacts, customerMagicLinks } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { businessProfile } from "@/core/settings/schema";
-import { defineService, ServiceError } from "@/core/service";
+import { actorString, defineService, ServiceError } from "@/core/service";
 
 export const CUSTOMER_MAGIC_COOKIE = "freeholder_customer_magic";
 const MAGIC_LINK_TTL_MINUTES = 15;
@@ -75,7 +75,7 @@ export const requestCustomerMagicLink = defineService({
       .limit(1);
     const site = business?.name ?? "this business";
     try {
-      await mail().send({
+      await sendMail(ctx.tx, {
         to: contact.email,
         subject: `Your sign-in link for ${site}`,
         text: [
@@ -85,15 +85,18 @@ export const requestCustomerMagicLink = defineService({
           "",
           "The link expires in 15 minutes and works once. If you did not request it, ignore this email.",
         ].join("\n"),
+      }, {
+        requestedBy: actorString(ctx.actor),
+        idempotencyKey: `customer-magic-link:${created.id}`,
       });
-    } catch (error) {
+    } catch {
       // The public service must not reveal that only an existing address
       // reached the adapter. Retire the undelivered credential and return the
       // same answer an unknown address receives; operators still get evidence.
       await ctx.tx
         .delete(customerMagicLinks)
         .where(eq(customerMagicLinks.id, created.id));
-      console.error("customer magic-link delivery failed", error);
+      console.error("customer magic-link delivery failed");
     }
     ctx.setSubject("contact", contact.id);
     await ctx.emitTimeline({

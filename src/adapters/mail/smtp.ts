@@ -5,10 +5,14 @@
 // The implementation every self-hoster can actually use: a mailbox they
 // already have, or a transactional provider's SMTP endpoint. §12 prefers
 // Gmail/Outlook OAuth for transactional mail — the owner's own address, so
-// replies land where they read — and that needs a consent flow this does not
-// have yet. SMTP is the honest interim: the same address, one password.
+// replies land where they read. SMTP remains the portable alternative for a
+// mailbox or transactional provider the owner already operates.
 import { createTransport } from "nodemailer";
-import type { MailAdapter, OutboundEmail } from "@/adapters/mail/types";
+import {
+  MailAdapterError,
+  type MailAdapter,
+  type OutboundEmail,
+} from "@/adapters/mail/types";
 
 export interface SmtpConfig {
   host: string;
@@ -35,7 +39,9 @@ export function createSmtpMail(config: SmtpConfig): MailAdapter {
     // may legitimately broadcast through it. Pointing it at a personal mailbox
     // and then broadcasting is a mistake this cannot see — which is why §12
     // puts the warning in the email-marketing module, next to the send.
-    kind: "both",
+    // Bulk delivery needs provider feedback and suppression state. Treating a
+    // generic SMTP mailbox as a broadcast carrier would bypass both.
+    kind: "transactional",
     delivers: true,
     async send(message: OutboundEmail) {
       // Connected on first use rather than at import, like the database pool:
@@ -47,15 +53,33 @@ export function createSmtpMail(config: SmtpConfig): MailAdapter {
         auth: config.user ? { user: config.user, pass: config.password } : undefined,
       }) as Sender);
 
-      const info = await sender.sendMail({
-        from: message.from ?? config.from,
-        to: message.to,
-        subject: message.subject,
-        text: message.text,
-        html: message.html,
-        replyTo: message.replyTo,
-      });
-      return { providerRef: info.messageId };
+      try {
+        const info = await sender.sendMail({
+          from: message.from ?? config.from,
+          to: message.to,
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
+          replyTo: message.replyTo,
+          headers: message.deliveryId
+            ? { "X-Freeholder-Delivery": message.deliveryId }
+            : undefined,
+        });
+        if (!info.messageId) {
+          throw new MailAdapterError(
+            "SMTP accepted the request without a message id.",
+          );
+        }
+        return { providerRef: info.messageId };
+      } catch (error) {
+        if (error instanceof MailAdapterError) throw error;
+        // Nodemailer errors can include server banners, hostnames and command
+        // fragments. Keep those out of API responses and the delivery ledger.
+        throw new MailAdapterError(
+          "SMTP could not submit the message. Check the configured transport.",
+          true,
+        );
+      }
     },
   };
 }

@@ -61,13 +61,40 @@ const envSchema = z.object({
    * instance can walk a password reset with no account anywhere, and says
    * loudly in production that nothing is arriving.
    */
-  MAIL_ADAPTER: z.enum(["smtp", "console"]).optional(),
+  MAIL_ADAPTER: z.enum(["smtp", "console", "gmail", "outlook"]).optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   /** The address mail comes from: "Aurora Coast <hello@auroracoast.ca>". */
   MAIL_FROM: z.string().optional(),
+
+  /** OAuth applications used to connect user-held transactional mailboxes. */
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  MICROSOFT_OAUTH_CLIENT_ID: z.string().optional(),
+  MICROSOFT_OAUTH_CLIENT_SECRET: z.string().optional(),
+  MICROSOFT_OAUTH_TENANT: z.string().default("common"),
+
+  /** Bulk mail is separate so personal Gmail/Outlook can never broadcast. */
+  MAIL_BULK_ADAPTER: z
+    .enum(["resend", "postmark", "ses", "none"])
+    .optional(),
+  MAIL_BULK_FROM: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
+  POSTMARK_SERVER_TOKEN: z.string().optional(),
+  POSTMARK_ACCOUNT_TOKEN: z.string().optional(),
+  POSTMARK_MESSAGE_STREAM: z.string().optional(),
+  POSTMARK_WEBHOOK_USER: z.string().optional(),
+  POSTMARK_WEBHOOK_PASSWORD: z.string().optional(),
+  SES_ACCESS_KEY_ID: z.string().optional(),
+  SES_SECRET_ACCESS_KEY: z.string().optional(),
+  SES_SESSION_TOKEN: z.string().optional(),
+  SES_REGION: z.string().optional(),
+  SES_CONFIGURATION_SET: z.string().optional(),
+  /** Exact SNS topic ARN accepted by the SES feedback endpoint. */
+  SES_SNS_TOPIC_ARN: z.string().optional(),
 
   /** Replit Object Storage (§20). Discovered from the environment on Replit. */
   REPLIT_BUCKET_ID: z.string().optional(),

@@ -28,7 +28,7 @@ export default async function ForgotPasswordPage() {
   ]);
   // Said before they wait for an email that is never coming. An instance with
   // no mailer still has a way back in — it is just not this one.
-  const delivers = canDeliverMail();
+  const delivers = await canDeliverMail();
 
   return (
     <div className="min-h-svh bg-paper">
