@@ -17,13 +17,129 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { IntlMessageFormat } from "intl-messageformat";
+import {
+  isArgumentElement,
+  isDateElement,
+  isLiteralElement,
+  isNumberElement,
+  isPluralElement,
+  isPoundElement,
+  isSelectElement,
+  isTagElement,
+  isTimeElement,
+} from "@formatjs/icu-messageformat-parser";
 import { availableLocales, catalogKeys, DEFAULT_LOCALE } from "@/core/i18n";
 import { BUSINESS_TYPES } from "@/core/settings/defaults";
 import { THEME_PREFERENCES } from "@/core/design/theme";
 import { CONTACT_STAGES } from "../../app/(admin)/admin/contacts/contactLabels";
+import en from "../../locales/en.json";
+import es from "../../locales/es.json";
+import fr from "../../locales/fr.json";
+import { LOCALE_FIXTURES } from "../fixtures/locales";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const defaultKeys = new Set(catalogKeys(DEFAULT_LOCALE));
+const catalogData: Record<string, Record<string, string>> = { en, es, fr };
+
+type MessageAst = ReturnType<InstanceType<typeof IntlMessageFormat>["getAst"]>;
+type FormatValues = NonNullable<
+  Parameters<InstanceType<typeof IntlMessageFormat>["format"]>[0]
+>;
+
+/** Argument names, kinds and selector branches are API, not translator copy. */
+function messageContract(message: string, locale: string): string[] {
+  const found = new Set<string>();
+  const walk = (elements: MessageAst) => {
+    for (const element of elements) {
+      if (!isLiteralElement(element) && !isPoundElement(element)) {
+        found.add(`${element.type}:${element.value}`);
+      }
+      if (isSelectElement(element)) {
+        found.add(
+          `${element.type}:${element.value}:options:${Object.keys(element.options).sort().join(",")}`,
+        );
+        for (const option of Object.values(element.options)) walk(option.value);
+      }
+      if (isPluralElement(element)) {
+        found.add(`${element.type}:${element.value}:pluralType:${element.pluralType}`);
+        for (const option of Object.values(element.options)) walk(option.value);
+      }
+      if (isTagElement(element)) walk(element.children);
+    }
+  };
+  walk(new IntlMessageFormat(message, locale).getAst());
+  return [...found].sort();
+}
+
+interface PluralContract {
+  pluralType: "cardinal" | "ordinal";
+  options: Set<string>;
+}
+
+/** Plural categories may grow for another language; explicit branches may not vanish. */
+function pluralContracts(message: string, locale: string): Map<string, PluralContract> {
+  const found = new Map<string, PluralContract>();
+  const walk = (elements: MessageAst) => {
+    for (const element of elements) {
+      if (isSelectElement(element)) {
+        for (const option of Object.values(element.options)) walk(option.value);
+      }
+      if (isPluralElement(element)) {
+        const pluralType = element.pluralType ?? "cardinal";
+        const key = `${element.value}:${pluralType}`;
+        const contract = found.get(key) ?? {
+          pluralType,
+          options: new Set<string>(),
+        };
+        for (const option of Object.keys(element.options)) contract.options.add(option);
+        found.set(key, contract);
+        for (const option of Object.values(element.options)) walk(option.value);
+      }
+      if (isTagElement(element)) walk(element.children);
+    }
+  };
+  walk(new IntlMessageFormat(message, locale).getAst());
+  return found;
+}
+
+/** Values that take every message through a real formatter during the gate. */
+function fixtureValues(ast: MessageAst): FormatValues {
+  const values: Record<string, unknown> = {};
+  const priority = new Map<string, number>();
+  const set = (name: string, value: unknown, rank: number) => {
+    if ((priority.get(name) ?? -1) <= rank) {
+      values[name] = value;
+      priority.set(name, rank);
+    }
+  };
+  const walk = (elements: MessageAst) => {
+    for (const element of elements) {
+      if (isArgumentElement(element)) set(element.value, "Fixture", 0);
+      if (isNumberElement(element)) set(element.value, 1234, 2);
+      if (isDateElement(element) || isTimeElement(element)) {
+        set(element.value, new Date("2026-08-12T12:00:00Z"), 2);
+      }
+      if (isSelectElement(element)) {
+        const branch = Object.hasOwn(element.options, "other")
+          ? "other"
+          : Object.keys(element.options)[0] ?? "other";
+        set(element.value, branch, 3);
+        for (const option of Object.values(element.options)) walk(option.value);
+      }
+      if (isPluralElement(element)) {
+        set(element.value, 7, 4);
+        for (const option of Object.values(element.options)) walk(option.value);
+      }
+      if (isTagElement(element)) {
+        set(element.value, (chunks: unknown) => chunks, 5);
+        walk(element.children);
+      }
+    }
+  };
+  walk(ast);
+  return values;
+}
 
 /** Every .ts/.tsx under app/ and src/, skipping build output. */
 function sourceFiles(dir: string, found: string[] = []): string[] {
@@ -132,4 +248,82 @@ describe("translated catalogs match the default", () => {
       ).toEqual([]);
     },
   );
+});
+
+describe("every shipped catalog is executable", () => {
+  it("has one maintained fixture for every selectable catalog", () => {
+    expect(Object.keys(catalogData).sort()).toEqual(availableLocales().sort());
+    expect(LOCALE_FIXTURES.map(({ locale }) => locale).sort()).toEqual(
+      availableLocales().sort(),
+    );
+  });
+
+  it("contains only non-empty ICU messages", () => {
+    const invalid = Object.entries(catalogData).flatMap(([locale, catalog]) =>
+      Object.entries(catalog)
+        .filter(([, message]) => typeof message !== "string" || message.trim() === "")
+        .map(([key]) => `${locale}:${key}`),
+    );
+    expect(invalid).toEqual([]);
+  });
+
+  it("parses and formats every message in English, French and Spanish", () => {
+    const failures: string[] = [];
+    for (const [locale, catalog] of Object.entries(catalogData)) {
+      for (const [key, message] of Object.entries(catalog)) {
+        try {
+          const formatter = new IntlMessageFormat(message, locale);
+          const rendered = String(formatter.format(fixtureValues(formatter.getAst())));
+          if (rendered.trim() === "") failures.push(`${locale}:${key} rendered empty`);
+        } catch (error) {
+          failures.push(
+            `${locale}:${key} ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  it("keeps ICU arguments and selector branches identical to English", () => {
+    const failures: string[] = [];
+    for (const locale of ["fr", "es"]) {
+      for (const [key, source] of Object.entries(en)) {
+        const expected = messageContract(source, DEFAULT_LOCALE);
+        const translated = catalogData[locale]![key]!;
+        const actual = messageContract(translated, locale);
+        if (expected.join("|") !== actual.join("|")) {
+          failures.push(
+            `${locale}:${key}\n  en ${expected.join("|")}\n  ${locale} ${actual.join("|")}`,
+          );
+        }
+
+        const sourcePlurals = pluralContracts(source, DEFAULT_LOCALE);
+        const translatedPlurals = pluralContracts(translated, locale);
+        for (const [pluralKey, sourcePlural] of sourcePlurals) {
+          const translatedPlural = translatedPlurals.get(pluralKey);
+          if (!translatedPlural) continue;
+          const validCategories: Set<string> = new Set(
+            new Intl.PluralRules(locale, { type: translatedPlural.pluralType })
+              .resolvedOptions().pluralCategories,
+          );
+          const required = [...sourcePlural.options].filter(
+            (option) => option.startsWith("=") || validCategories.has(option),
+          );
+          const missing = required.filter(
+            (option) => !translatedPlural.options.has(option),
+          );
+          const invalid = [...translatedPlural.options].filter(
+            (option) => !option.startsWith("=") && !validCategories.has(option),
+          );
+          if (missing.length > 0 || invalid.length > 0) {
+            failures.push(
+              `${locale}:${key}:${pluralKey} missing [${missing.join(",")}] invalid [${invalid.join(",")}]`,
+            );
+          }
+        }
+      }
+    }
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
 });

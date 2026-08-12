@@ -146,7 +146,7 @@ export function WebhooksCard({
           <div className="grid gap-2">
             <h3 className="text-sm font-semibold text-ink">{labels.recent}</h3>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-start text-xs">
                 <tbody>
                   {deliveries.map((delivery) => (
                     <tr key={delivery.id} className="border-b border-rule last:border-0">

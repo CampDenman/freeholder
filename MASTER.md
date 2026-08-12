@@ -2894,11 +2894,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-12 |
-| Evidence snapshot | `main` at `a2315ff` (C1.15 merged); C1.16 changeset `locale-driven-customer-surfaces.md` |
+| Evidence snapshot | `main` at `329ccff` (C1.16 merged); C1.17 changeset `catalog-quality-rtl.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.17 catalog completeness, pseudo-locale, RTL and locale fixtures; no public-launch work is required |
+| Current focus | C1.18 analytics consent, retention, quality signals, attribution and export; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3167,8 +3167,10 @@ reading chat logs.
   `tests/core/cms-service.test.ts`; `tests/core/notifications.test.ts`;
   changeset `locale-driven-customer-surfaces.md`; operator guide
   `deploy/customer-locales.md`)
-- [ ] **C1.17** Complete and continuously verify English, French and Spanish
+- [x] **C1.17** Complete and continuously verify English, French and Spanish
   catalogs; add pseudo-locale, RTL layout tests and locale-specific fixtures.
+  (`tests/core/i18n-gate.test.ts`; `tests/core/locale-quality.test.ts`;
+  `tests/fixtures/locales.ts`; changeset `catalog-quality-rtl.md`)
 - [ ] **C1.18** Add analytics consent policy, configurable retention/pruning,
   bot correction, Core Web Vitals, campaign attribution and anonymized export.
 - [ ] **C1.19** Add a Content Security Policy compatible with editor preview,

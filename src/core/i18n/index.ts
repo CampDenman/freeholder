@@ -7,6 +7,12 @@
 // (amount_cents, currency) convention (§2 principle 9): formatting is the
 // only place cents meet decimals.
 import { IntlMessageFormat } from "intl-messageformat";
+import {
+  isLiteralElement,
+  isPluralElement,
+  isSelectElement,
+  isTagElement,
+} from "@formatjs/icu-messageformat-parser";
 import en from "../../../locales/en.json";
 import es from "../../../locales/es.json";
 import fr from "../../../locales/fr.json";
@@ -20,12 +26,105 @@ import fr from "../../../locales/fr.json";
 const catalogs: Record<string, Record<string, string>> = { en, es, fr };
 
 export const DEFAULT_LOCALE = "en";
+/**
+ * A synthesized, deliberately expanded locale for layout and catalog QA.
+ *
+ * It is not in `catalogs`, so it can never appear in the production language
+ * chooser by accident. Tests and local previews may still ask `t()` for it to
+ * expose clipped controls, concatenated copy and strings that bypass catalogs.
+ */
+export const PSEUDO_LOCALE = "en-XA";
+
+export type TextDirection = "ltr" | "rtl";
+
+// Direction belongs to the script, not the language alone: `ar-Latn` is LTR
+// while ordinary Arabic maximizes to Arab and is RTL. `Intl.Locale#maximize`
+// supplies the likely script for tags that omit it.
+const RTL_SCRIPTS = new Set([
+  "Adlm",
+  "Arab",
+  "Aran",
+  "Hebr",
+  "Mand",
+  "Nkoo",
+  "Rohg",
+  "Samr",
+  "Syrc",
+  "Thaa",
+  "Yezi",
+]);
+
+/** The document direction implied by a BCP-47 locale. Invalid tags stay LTR. */
+export function localeDirection(locale: string): TextDirection {
+  try {
+    return RTL_SCRIPTS.has(new Intl.Locale(locale).maximize().script ?? "")
+      ? "rtl"
+      : "ltr";
+  } catch {
+    return "ltr";
+  }
+}
 
 export function availableLocales(): string[] {
   return Object.keys(catalogs);
 }
 
 const formatterCache = new Map<string, IntlMessageFormat>();
+
+const PSEUDO_GLYPHS: Record<string, string> = {
+  a: "à", b: "ƀ", c: "ç", d: "ð", e: "ë", f: "ƒ", g: "ğ", h: "ħ",
+  i: "ï", j: "ĵ", k: "ķ", l: "ļ", m: "ɱ", n: "ñ", o: "ö", p: "þ",
+  q: "ʠ", r: "ŕ", s: "š", t: "ţ", u: "ü", v: "ṽ", w: "ŵ", x: "ẋ",
+  y: "ÿ", z: "ž",
+  A: "À", B: "Ƀ", C: "Ç", D: "Ð", E: "Ë", F: "Ƒ", G: "Ğ", H: "Ħ",
+  I: "Ï", J: "Ĵ", K: "Ķ", L: "Ļ", M: "Ṁ", N: "Ñ", O: "Ö", P: "Þ",
+  Q: "Ɋ", R: "Ŕ", S: "Š", T: "Ţ", U: "Ü", V: "Ṽ", W: "Ŵ", X: "Ẋ",
+  Y: "Ÿ", Z: "Ž",
+};
+
+type MessageAst = ReturnType<InstanceType<typeof IntlMessageFormat>["getAst"]>;
+
+function pseudoLiteral(value: string): string {
+  const transformed = [...value]
+    .map((character) => PSEUDO_GLYPHS[character] ?? character)
+    .join("");
+  const letters = [...value].filter((character) => /[A-Za-z]/.test(character)).length;
+  return letters > 0
+    ? `${transformed}${"·".repeat(Math.max(1, Math.ceil(letters * 0.3)))}`
+    : transformed;
+}
+
+/** Accent and expand only literal AST nodes, never names or other parameters. */
+function pseudoAst(elements: MessageAst): MessageAst {
+  return elements.map((element) => {
+    if (isLiteralElement(element)) {
+      return { ...element, value: pseudoLiteral(element.value) };
+    }
+    if (isSelectElement(element) || isPluralElement(element)) {
+      return {
+        ...element,
+        options: Object.fromEntries(
+          Object.entries(element.options).map(([key, option]) => [
+            key,
+            { ...option, value: pseudoAst(option.value) },
+          ]),
+        ),
+      };
+    }
+    if (isTagElement(element)) {
+      return { ...element, children: pseudoAst(element.children) };
+    }
+    return element;
+  });
+}
+
+function isPseudoLocale(locale: string): boolean {
+  try {
+    return Intl.getCanonicalLocales(locale)[0] === PSEUDO_LOCALE;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Narrow a BCP-47 tag toward the default: fr-CA → fr → en. Locales in §4.9 are
@@ -65,13 +164,20 @@ export function t(
     }
     return key;
   }
+  const pseudo = isPseudoLocale(locale);
   const cacheKey = `${locale}|${from}|${key}`;
   let formatter = formatterCache.get(cacheKey);
   if (!formatter) {
-    formatter = new IntlMessageFormat(message, locale);
+    formatter = pseudo
+      ? new IntlMessageFormat(
+          pseudoAst(new IntlMessageFormat(message, DEFAULT_LOCALE).getAst()),
+          locale,
+        )
+      : new IntlMessageFormat(message, locale);
     formatterCache.set(cacheKey, formatter);
   }
-  return String(formatter.format(params));
+  const formatted = String(formatter.format(params));
+  return pseudo ? `⟦${formatted}⟧` : formatted;
 }
 
 /**

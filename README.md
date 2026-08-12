@@ -47,7 +47,10 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
   other locales use stable path prefixes, and a signed-in customer's Contact
   preference drives portal chrome, transactional templates, notification
   wrappers, digests, dates, and internal links. Header/footer variants remain
-  editable CMS data rather than hardcoded layout markup.
+  editable CMS data rather than hardcoded layout markup. English, French and
+  Spanish catalogs are exhaustively ICU-checked; an internal expanded
+  pseudo-locale and script-derived document direction keep layouts ready for
+  longer translations and RTL catalogs.
 - **Email** — transactional via the owner's Google/Outlook account, bulk via
   a provider adapter; broadcasts and simple automations
 - **Notification inbox** — a personal in-app attention queue with immediate

@@ -614,7 +614,7 @@ function DeliveryLedger({
         <p className="text-sm text-ink-muted">{labels.noDeliveries}</p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-rule">
-          <table className="w-full min-w-[46rem] text-left text-xs">
+          <table className="w-full min-w-[46rem] text-start text-xs">
             <thead className="border-b border-rule bg-surface-muted font-mono text-ink-muted">
               <tr>
                 <th scope="col" className="px-3 py-2 font-medium">{labels.recipient}</th>
