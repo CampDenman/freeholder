@@ -6,7 +6,7 @@
 // and has a fixed 90-day expiry.
 import { and, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { mail } from "@/adapters/mail";
+import { sendMail } from "@/core/mail/service";
 import { loginSecurityEvents, sessions, users } from "@/core/auth/schema";
 import {
   describeDevice,
@@ -222,10 +222,27 @@ export async function deliverPendingSecurityNotices(limit = 25): Promise<{
   let failed = 0;
   let unavailable = 0;
   for (const event of candidates) {
-    let adapter;
     try {
-      adapter = mail();
-      if (!adapter.delivers) {
+      const reason =
+        event.reason === "new_network"
+          ? "a familiar device signed in from a new network"
+          : "a new device signed in";
+      const delivery = await db().transaction((tx) =>
+        sendMail(tx, {
+          to: event.email,
+          subject: "New sign-in to your Freeholder account",
+          text:
+            `Freeholder noticed that ${reason}.\n\n` +
+            `Device: ${event.deviceLabel}\n` +
+            `Network: ${event.ipHint ?? "Unavailable"}\n` +
+            `Time: ${event.createdAt.toISOString()}\n\n` +
+            "If this was not you, open Account security, revoke that session, and change your password.",
+        }, {
+          requestedBy: "system",
+          idempotencyKey: `security-notice:${event.id}`,
+        }),
+      );
+      if (!delivery.delivers) {
         await db()
           .update(loginSecurityEvents)
           .set({
@@ -237,20 +254,6 @@ export async function deliverPendingSecurityNotices(limit = 25): Promise<{
         unavailable += 1;
         continue;
       }
-      const reason =
-        event.reason === "new_network"
-          ? "a familiar device signed in from a new network"
-          : "a new device signed in";
-      await adapter.send({
-        to: event.email,
-        subject: "New sign-in to your Freeholder account",
-        text:
-          `Freeholder noticed that ${reason}.\n\n` +
-          `Device: ${event.deviceLabel}\n` +
-          `Network: ${event.ipHint ?? "Unavailable"}\n` +
-          `Time: ${event.createdAt.toISOString()}\n\n` +
-          "If this was not you, open Account security, revoke that session, and change your password.",
-      });
       await db()
         .update(loginSecurityEvents)
         .set({

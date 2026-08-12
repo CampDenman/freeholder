@@ -511,9 +511,9 @@ export async function onFormSubmitted(payload: unknown): Promise<void> {
     .filter((line): line is string => line !== null);
 
   const from = emailFrom(fields, data);
-  const { mail } = await import("@/adapters/mail");
+  const { sendMail } = await import("@/core/mail/service");
   for (const to of recipients) {
-    await mail().send({
+    await db().transaction((tx) => sendMail(tx, {
       to,
       subject: `${row.form.name}: a new submission`,
       // The reply goes to the person who wrote, not to the platform — an
@@ -528,7 +528,10 @@ export async function onFormSubmitted(payload: unknown): Promise<void> {
       ]
         .filter(Boolean)
         .join("\n"),
-    });
+    }, {
+      requestedBy: "system",
+      idempotencyKey: `form:${submissionId}:notify:${to.toLowerCase()}`,
+    }));
   }
 }
 

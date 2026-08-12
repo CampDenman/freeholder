@@ -14,17 +14,27 @@ import { listDeliveries, listWebhooks } from "@/core/webhooks/service";
 import { WebhooksCard } from "./WebhooksCard";
 import { currentBusiness } from "@/core/settings/read";
 import { hasModuleAccess, type Actor } from "@/core/service";
+import { mailStatus } from "@/core/mail/service";
+import { MailSettingsCard } from "./MailSettingsCard";
 
 export const dynamic = "force-dynamic";
 
 
-export default async function AdminSettingsPage() {
+export default async function AdminSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mail?: string }>;
+}) {
   const actor = await requireStaffActor("settings");
   const business = await currentBusiness();
   // Reachable only if setup was skipped somehow; the wizard is the way in.
   if (!business) redirect("/setup");
 
-  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const [t, locale, query] = await Promise.all([
+    getT(),
+    getLocale(),
+    searchParams,
+  ]);
 
   // Sensitive integration cards are fetched only when this stored role may
   // manage their modules, rather than rendered from calls that would refuse.
@@ -32,6 +42,9 @@ export default async function AdminSettingsPage() {
     apiKeys: hasModuleAccess(actor, "apikeys", "manage"),
     webhooks: hasModuleAccess(actor, "webhooks", "manage"),
   });
+  const mailAccess = hasModuleAccess(actor, "mail", "view")
+    ? await loadMailAccess(actor, locale)
+    : null;
 
   return (
     <div className="grid gap-6">
@@ -68,6 +81,91 @@ export default async function AdminSettingsPage() {
           firstDayOfWeek: business.firstDayOfWeek,
         }}
       />
+
+      {mailAccess ? (
+        <MailSettingsCard
+          {...mailAccess}
+          canManage={hasModuleAccess(actor, "mail", "manage")}
+          notice={mailNotice(query.mail, t)}
+          labels={{
+            title: t("mail.title"),
+            intro: t("mail.intro"),
+            route: t("mail.route"),
+            transactional: t("mail.transactional"),
+            transactionalIntro: t("mail.transactionalIntro"),
+            bulk: t("mail.bulk"),
+            bulkIntro: t("mail.bulkIntro"),
+            provider: t("mail.provider"),
+            delivers: t("mail.delivers"),
+            notDelivering: t("mail.notDelivering"),
+            configured: t("mail.configured"),
+            incomplete: t("mail.incomplete"),
+            notConfigured: t("mail.notConfigured"),
+            missing: t("mail.missing"),
+            connectGoogle: t("mail.connectGoogle"),
+            connectMicrosoft: t("mail.connectMicrosoft"),
+            register: t("mail.register"),
+            senderEmail: t("mail.senderEmail"),
+            displayName: t("mail.displayName"),
+            providerIdentity: t("mail.providerIdentity"),
+            providerIdentityHint: t("mail.providerIdentityHint"),
+            webhook: t("mail.webhook"),
+            feedbackReady: t("mail.feedbackReady"),
+            feedbackMissing: t("mail.feedbackMissing"),
+            senders: t("mail.senders"),
+            noSenders: t("mail.noSenders"),
+            default: t("mail.default"),
+            chooseDefault: t("mail.chooseDefault"),
+            verify: t("mail.verify"),
+            recheck: t("mail.recheck"),
+            pause: t("mail.pause"),
+            reactivate: t("mail.reactivate"),
+            test: t("mail.test"),
+            verified: t("mail.verified"),
+            pending: t("mail.pending"),
+            failed: t("mail.failed"),
+            active: t("mail.active"),
+            paused: t("mail.paused"),
+            needsAttention: t("mail.needsAttention"),
+            needsReconnect: t("mail.needsReconnect"),
+            revoked: t("mail.revoked"),
+            permissionOff: t("mail.permissionOff"),
+            lastChecked: t("mail.lastChecked"),
+            recentDeliveries: t("mail.recentDeliveries"),
+            noDeliveries: t("mail.noDeliveries"),
+            recipient: t("mail.recipient"),
+            subject: t("mail.subject"),
+            status: t("mail.status"),
+            attempts: t("mail.attempts"),
+            when: t("mail.when"),
+            suppressions: t("mail.suppressions"),
+            suppressionIntro: t("mail.suppressionIntro"),
+            noSuppressions: t("mail.noSuppressions"),
+            reason: t("mail.reason"),
+            release: t("mail.release"),
+            releaseHint: t("mail.releaseHint"),
+            confirmation: t("mail.confirmation"),
+            readOnly: t("mail.readOnly"),
+            actionDone: t("mail.actionDone"),
+            pendingAction: t("mail.pendingAction"),
+            deliveryStatuses: {
+              queued: t("mail.delivery.queued"),
+              submitted: t("mail.delivery.submitted"),
+              delivered: t("mail.delivery.delivered"),
+              bounced: t("mail.delivery.bounced"),
+              complained: t("mail.delivery.complained"),
+              failed: t("mail.delivery.failed"),
+              suppressed: t("mail.delivery.suppressed"),
+            },
+            suppressionReasons: {
+              hard_bounce: t("mail.suppression.hardBounce"),
+              complaint: t("mail.suppression.complaint"),
+              provider: t("mail.suppression.provider"),
+              manual: t("mail.suppression.manual"),
+            },
+          }}
+        />
+      ) : null}
 
       {access.keys ? (
         <ApiKeysCard
@@ -148,6 +246,65 @@ export default async function AdminSettingsPage() {
       />
     </div>
   );
+}
+
+function mailNotice(
+  value: string | undefined,
+  t: Awaited<ReturnType<typeof getT>>,
+): { tone: "success" | "warning" | "danger"; text: string } | undefined {
+  switch (value) {
+    case "connected":
+      return { tone: "success", text: t("mail.oauth.connected") };
+    case "oauth_cancelled":
+      return { tone: "warning", text: t("mail.oauth.cancelled") };
+    case "oauth_conflict":
+      return { tone: "danger", text: t("mail.oauth.conflict") };
+    case "oauth_expired":
+      return { tone: "warning", text: t("mail.oauth.expired") };
+    case "oauth_incomplete":
+    case "oauth_invalid_provider":
+      return { tone: "danger", text: t("mail.oauth.incomplete") };
+    case "oauth_failed":
+      return { tone: "danger", text: t("mail.oauth.failed") };
+    default:
+      return undefined;
+  }
+}
+
+async function loadMailAccess(actor: Actor, locale: string) {
+  const status = await mailStatus.call({ limit: 25 }, actor);
+  const exact = new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  return {
+    configuration: status.configuration,
+    senders: status.senders.map((sender) => ({
+      ...sender,
+      lastVerified: sender.lastVerifiedAt
+        ? exact.format(sender.lastVerifiedAt)
+        : null,
+      lastVerifiedAt: undefined,
+      createdAt: undefined,
+    })),
+    deliveries: status.deliveries.map((delivery) => ({
+      id: delivery.id,
+      provider: delivery.provider,
+      recipient: delivery.recipient,
+      subject: delivery.subject,
+      status: delivery.status,
+      attempts: delivery.attempts,
+      detail: delivery.lastError,
+      when: exact.format(delivery.createdAt),
+    })),
+    suppressions: status.suppressions.map((suppression) => ({
+      email: suppression.email,
+      reason: suppression.reason,
+      provider: suppression.provider,
+      detail: suppression.detail,
+      when: exact.format(suppression.createdAt),
+    })),
+  };
 }
 
 /**

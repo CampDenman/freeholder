@@ -22,10 +22,28 @@ export interface OutboundEmail {
   replyTo?: string;
   /** Overrides the configured sender. Rare, and audited when it happens. */
   from?: string;
+  /** Stable internal correlation/idempotency value, never shown as content. */
+  deliveryId?: string;
+}
+
+export type MailProvider =
+  | "smtp"
+  | "console"
+  | "gmail"
+  | "outlook"
+  | "resend"
+  | "postmark"
+  | "ses"
+  | "none";
+
+export interface SenderVerification {
+  status: "pending" | "verified" | "failed";
+  detail: Record<string, unknown>;
+  message?: string;
 }
 
 export interface MailAdapter {
-  readonly id: "smtp" | "console" | "gmail" | "outlook" | "resend" | "none";
+  readonly id: MailProvider;
   readonly kind: "transactional" | "bulk" | "both";
   /**
    * Whether this adapter can actually deliver to a stranger.
@@ -36,4 +54,21 @@ export interface MailAdapter {
    */
   readonly delivers: boolean;
   send(message: OutboundEmail): Promise<{ providerRef: string }>;
+  /** Provider-backed proof that this From identity is permitted to send. */
+  verifySender?(sender: {
+    email: string;
+    providerIdentity?: string;
+  }): Promise<SenderVerification>;
+}
+
+export class MailAdapterError extends Error {
+  constructor(
+    message: string,
+    readonly retryable = false,
+    readonly httpStatus?: number,
+    readonly providerCode?: string,
+  ) {
+    super(message);
+    this.name = "MailAdapterError";
+  }
 }

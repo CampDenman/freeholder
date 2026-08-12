@@ -7,9 +7,10 @@
 // than no doctor, because somebody trusted it. So the tests are mostly about
 // whether it can go red — and about the difference between a check that
 // *tried* something and one that read a setting back.
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { formatReport, runDoctor } from "@/core/doctor";
 import { doctor } from "@/core/doctor/service";
+import { resetEnvForTests } from "@/core/env";
 import {
   ANONYMOUS,
   closeDb,
@@ -17,9 +18,14 @@ import {
   hasDatabase,
   OWNER,
   STAFF,
+  truncateSpine,
 } from "../helpers/spine";
 
 describe.runIf(hasDatabase)("what doctor checks", () => {
+  beforeEach(async () => {
+    await truncateSpine();
+  });
+
   afterAll(async () => {
     await closeDb();
   });
@@ -36,6 +42,7 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
       "media.malwareScanner",
       "media.altTextSuggester",
       "mail.delivers",
+      "mail.bulk",
       "jobs.worker",
     ]) {
       expect({ id, checked: ids.includes(id) }).toEqual({ id, checked: true });
@@ -66,6 +73,44 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
     const mail = report.checks.find((c) => c.id === "mail.delivers");
     expect(mail?.verdict).toBe("warn");
     expect(mail?.remedy).toContain("MAIL_ADAPTER");
+  });
+
+  it("gives SES the exact authenticated feedback URL and SHA-256 remedy without sending", async () => {
+    const names = [
+      "MAIL_BULK_ADAPTER",
+      "MAIL_BULK_FROM",
+      "SES_ACCESS_KEY_ID",
+      "SES_SECRET_ACCESS_KEY",
+      "SES_REGION",
+      "SES_CONFIGURATION_SET",
+      "SES_SNS_TOPIC_ARN",
+    ] as const;
+    const previous = new Map(names.map((name) => [name, process.env[name]]));
+    process.env.MAIL_BULK_ADAPTER = "ses";
+    process.env.MAIL_BULK_FROM = "news@example.test";
+    process.env.SES_ACCESS_KEY_ID = "test-access";
+    process.env.SES_SECRET_ACCESS_KEY = "test-secret";
+    process.env.SES_REGION = "us-east-1";
+    delete process.env.SES_CONFIGURATION_SET;
+    delete process.env.SES_SNS_TOPIC_ARN;
+    resetEnvForTests();
+    try {
+      const report = await runDoctor();
+      const feedback = report.checks.find((check) => check.id === "mail.feedback");
+      expect(feedback).toMatchObject({ verdict: "fail" });
+      expect(feedback?.detail).not.toContain("test-secret");
+      expect(feedback?.remedy).toContain("SES_CONFIGURATION_SET");
+      expect(feedback?.remedy).toContain("SES_SNS_TOPIC_ARN");
+      expect(feedback?.remedy).toContain("/api/mail/webhooks/ses");
+      expect(feedback?.remedy).toContain("SignatureVersion 2");
+      expect(feedback?.remedy).toContain("SHA-1");
+    } finally {
+      for (const [name, value] of previous) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      resetEnvForTests();
+    }
   });
 
   it("gives every problem a sentence that fixes it", async () => {

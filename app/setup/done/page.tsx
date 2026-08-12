@@ -9,6 +9,9 @@ import { Callout } from "@/ui/primitives";
 import { getT } from "../../i18n";
 import { Steps } from "../Steps";
 import { DoneForm } from "./DoneForm";
+import { MailReadiness } from "./MailReadiness";
+import { mailConfigurationStatus } from "@/adapters/mail";
+import { env } from "@/core/env";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +45,31 @@ export default async function SetupDonePage() {
             timezone: business?.timezone ?? "",
           })}
         </Callout>
+      </div>
+      <div className="mb-8">
+        <MailReadiness
+          configuration={mailConfigurationStatus()}
+          appUrl={env().APP_URL}
+          labels={{
+            title: t("setup.mail.title"),
+            intro: t("setup.mail.intro"),
+            account: t("setup.mail.account"),
+            broadcast: t("setup.mail.broadcast"),
+            configured: t("setup.mail.configured"),
+            pending: t("setup.mail.pending"),
+            disabled: t("setup.mail.disabled"),
+            accountSmtp: t("setup.mail.accountSmtp"),
+            accountOauth: t("setup.mail.accountOauth"),
+            accountMissing: t("setup.mail.accountMissing"),
+            accountVariables: t("setup.mail.accountVariables"),
+            bulkDisabled: t("setup.mail.bulkDisabled"),
+            bulkReady: t("setup.mail.bulkReady"),
+            feedbackMissing: t("setup.mail.feedbackMissing"),
+            webhook: t("setup.mail.webhook"),
+            sesSecurity: t("setup.mail.sesSecurity"),
+            next: t("setup.mail.next"),
+          }}
+        />
       </div>
       <DoneForm
         labels={{

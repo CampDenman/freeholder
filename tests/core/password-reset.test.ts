@@ -11,6 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { passwordResets, sessions, users } from "@/core/auth/schema";
 import { auditLog } from "@/core/events/schema";
+import { mailSuppressions } from "@/core/mail/schema";
 import { login, registerOwner } from "@/core/auth/service";
 import { requestPasswordReset, resetPassword } from "@/core/auth/reset";
 import { createConsoleMail } from "@/adapters/mail/console";
@@ -73,6 +74,23 @@ describe.runIf(hasDatabase)("asking for a reset", () => {
     expect(unknown).toEqual(known);
     // And no row was created for somebody who does not exist.
     expect(await db().select().from(passwordResets)).toHaveLength(1);
+  });
+
+  it("does not reveal a known account when delivery is suppressed", async () => {
+    await db().insert(mailSuppressions).values({
+      email: EMAIL,
+      reason: "manual",
+      provider: "manual",
+    });
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const known = await requestPasswordReset.call({ email: EMAIL }, ANONYMOUS);
+    const unknown = await requestPasswordReset.call(
+      { email: "nobody@example.test" },
+      ANONYMOUS,
+    );
+    expect(known).toEqual(unknown);
+    expect(await db().select().from(passwordResets)).toHaveLength(0);
+    expect(errorLog).toHaveBeenCalledWith("password-reset mail delivery failed");
   });
 
   it("normalises the address the way sign-in does", async () => {

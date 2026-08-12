@@ -18,7 +18,7 @@
 //
 // And every failure carries the sentence that fixes it. A check that reports
 // "storage misconfigured" has told an owner what they already knew.
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
@@ -247,27 +247,197 @@ async function checkStorage(): Promise<Check> {
   }
 }
 
-async function checkMail(): Promise<Check> {
+async function checkMail(): Promise<Check[]> {
+  const { mailConfigurationStatus } = await import("@/adapters/mail");
+  const { connectedAccounts, connectionCapabilities } = await import(
+    "@/core/connections/schema"
+  );
+  const { mailSenders } = await import("@/core/mail/schema");
+  const configuration = mailConfigurationStatus();
+  let senders: Array<{
+    purpose: "transactional" | "bulk";
+    provider: string;
+    email: string;
+    verificationStatus: "pending" | "verified" | "failed";
+    status: "active" | "paused" | "needs_attention";
+    isDefault: boolean;
+    verificationDetail: unknown;
+    accountStatus: "active" | "needs_reconnect" | "revoked" | null;
+    capabilityEnabled: boolean | null;
+  }>;
   try {
-    const { mail } = await import("@/adapters/mail");
-    const adapter = mail();
-    if (!adapter.delivers) {
-      return warn(
-        "mail.delivers",
-        "Email",
-        "No mail is configured, so password resets and notifications are written to the log instead of being sent.",
-        "Set MAIL_ADAPTER=smtp with SMTP_HOST and MAIL_FROM. Until then, a locked-out owner needs `node scripts/owner-password.mjs` on the server.",
+    senders = await db()
+      .select({
+        purpose: mailSenders.purpose,
+        provider: mailSenders.provider,
+        email: mailSenders.email,
+        verificationStatus: mailSenders.verificationStatus,
+        status: mailSenders.status,
+        isDefault: mailSenders.isDefault,
+        verificationDetail: mailSenders.verificationDetail,
+        accountStatus: connectedAccounts.status,
+        capabilityEnabled: connectionCapabilities.enabled,
+      })
+      .from(mailSenders)
+      .leftJoin(
+        connectedAccounts,
+        eq(connectedAccounts.id, mailSenders.connectedAccountId),
+      )
+      .leftJoin(
+        connectionCapabilities,
+        and(
+          eq(
+            connectionCapabilities.connectedAccountId,
+            connectedAccounts.id,
+          ),
+          eq(connectionCapabilities.capability, "mail_send"),
+        ),
       );
-    }
-    return ok("mail.delivers", "Email", `Configured to send through ${adapter.id}.`);
-  } catch (error) {
-    return fail(
+  } catch {
+    return [
+      fail(
+        "mail.delivers",
+        "Account email",
+        "Mail configuration exists, but sender state could not be read from the database.",
+        "Apply the current migrations, then run doctor again.",
+      ),
+    ];
+  }
+
+  const transactional = senders.filter(
+    (sender) => sender.purpose === "transactional",
+  );
+  const readyTransactional = transactional.find(
+    (sender) =>
+      sender.isDefault &&
+      sender.status === "active" &&
+      sender.verificationStatus === "verified" &&
+      sender.provider !== "console" &&
+      sender.accountStatus !== "needs_reconnect" &&
+      sender.accountStatus !== "revoked" &&
+      sender.capabilityEnabled !== false,
+  );
+  const brokenConnection = transactional.find(
+    (sender) =>
+      sender.accountStatus === "needs_reconnect" ||
+      sender.accountStatus === "revoked" ||
+      sender.capabilityEnabled === false,
+  );
+  let transactionalCheck: Check;
+  if (configuration.transactional.missing.length > 0) {
+    transactionalCheck = fail(
       "mail.delivers",
-      "Email",
-      `Mail is configured but could not be set up: ${reason(error)}`,
-      "Check MAIL_ADAPTER and the SMTP_* variables.",
+      "Account email",
+      `${configuration.transactional.provider} is selected but its setup is incomplete.`,
+      `Set ${configuration.transactional.missing.join(", ")}, restart Freeholder, and register or connect the sender in Admin → Settings → Mail.`,
+    );
+  } else if (brokenConnection) {
+    transactionalCheck = fail(
+      "mail.delivers",
+      "Account email",
+      `${brokenConnection.email} cannot send because its provider authorization needs attention.`,
+      "Reconnect the mailbox in Admin → Settings → Mail and approve mail-send permission.",
+    );
+  } else if (readyTransactional) {
+    const detail =
+      readyTransactional.provider === "smtp"
+        ? `${readyTransactional.email} is registered through SMTP. Transport is configured; DNS ownership is not proven by SMTP setup alone.`
+        : `${readyTransactional.email} is verified and selected through ${readyTransactional.provider}.`;
+    transactionalCheck =
+      readyTransactional.provider === "smtp"
+        ? warn(
+            "mail.delivers",
+            "Account email",
+            detail,
+            "Send a test from Admin → Settings → Mail, then confirm SPF, DKIM and DMARC with the mailbox provider.",
+          )
+        : ok("mail.delivers", "Account email", detail);
+  } else if (configuration.transactional.provider === "smtp") {
+    transactionalCheck = warn(
+      "mail.delivers",
+      "Account email",
+      "SMTP is configured, but its sender is not registered in the delivery console.",
+      "Open Admin → Settings → Mail, register the configured MAIL_FROM address, and send a non-billable test to your own account.",
+    );
+  } else {
+    transactionalCheck = warn(
+      "mail.delivers",
+      "Account email",
+      "No active verified sender is selected, so password resets and account messages cannot reach an inbox.",
+      "Configure Google or Microsoft OAuth and CREDENTIAL_KEY, or set MAIL_ADAPTER=smtp with SMTP_HOST and MAIL_FROM. Then connect or register the sender in Admin → Settings → Mail. A locked-out owner can use `node scripts/owner-password.mjs` on the server.",
     );
   }
+
+  const checks = [transactionalCheck];
+  const bulk = configuration.bulk;
+  const bulkSenders = senders.filter((sender) => sender.purpose === "bulk");
+  const readyBulk = bulkSenders.find(
+    (sender) =>
+      sender.provider === bulk.provider &&
+      sender.isDefault &&
+      sender.status === "active" &&
+      sender.verificationStatus === "verified",
+  );
+  if (bulk.provider === "none") {
+    checks.push(
+      warn(
+        "mail.bulk",
+        "Broadcast email",
+        "Broadcast mail is off. Campaign sends are refused rather than falling back to a personal mailbox.",
+        "When campaigns are needed, choose Resend, Postmark or Amazon SES with MAIL_BULK_ADAPTER and complete the provider variables in .env.example.",
+      ),
+    );
+  } else if (!bulk.sendConfigured) {
+    checks.push(
+      fail(
+        "mail.bulk",
+        "Broadcast email",
+        `${bulk.provider} is selected but cannot submit mail.`,
+        `Set ${bulk.missing.join(", ")}, restart Freeholder, then register and verify MAIL_BULK_FROM in Admin → Settings → Mail.`,
+      ),
+    );
+  } else if (!readyBulk) {
+    const pending = bulkSenders.find(
+      (sender) => sender.verificationStatus === "pending",
+    );
+    checks.push(
+      warn(
+        "mail.bulk",
+        "Broadcast email",
+        pending
+          ? `${pending.email} is registered with ${bulk.provider}, but provider verification is still pending.`
+          : `${bulk.provider} is configured, but no active verified default broadcast sender is selected.`,
+        "Open Admin → Settings → Mail, register MAIL_BULK_FROM, check provider verification, and choose it as the default. Doctor never makes a billable campaign send.",
+      ),
+    );
+  } else {
+    checks.push(
+      ok(
+        "mail.bulk",
+        "Broadcast email",
+        `${readyBulk.email} is verified and selected through ${bulk.provider}. No billable test was sent.`,
+      ),
+    );
+  }
+
+  if (bulk.provider !== "none") {
+    const endpoint = `${env().APP_URL.replace(/\/+$/, "")}${bulk.webhookPath}`;
+    checks.push(
+      bulk.feedbackConfigured
+        ? ok(
+            "mail.feedback",
+            "Delivery feedback",
+            `${bulk.provider} feedback is configured for ${endpoint}${bulk.provider === "ses" ? " with Amazon SNS SignatureVersion 2 (RSA-SHA256) required" : ""}.`,
+          )
+        : fail(
+            "mail.feedback",
+            "Delivery feedback",
+            `${bulk.provider} can submit mail, but authenticated bounce and complaint feedback is incomplete.`,
+            `Set ${bulk.missing.join(", ")} and point the provider webhook at ${endpoint}.${bulk.provider === "ses" ? " Configure the exact SES SNS topic and require SNS SignatureVersion 2; SHA-1 messages are refused." : ""}`,
+          ),
+    );
+  }
+  return checks;
 }
 
 async function checkJobs(): Promise<Check> {
@@ -508,7 +678,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     await checkStorage(),
     await checkMalwareScanner(),
     await checkAltTextSuggester(),
-    await checkMail(),
+    ...(await checkMail()),
     await checkJobs(),
     ...(await checkCredentialKey()),
     ...(await checkSecurity()),

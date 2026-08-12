@@ -26,6 +26,8 @@ import i18nServices from "@/core/i18n/service";
 import jobServices from "@/core/jobs/service";
 import invitationServices from "@/core/invitations/service";
 import locationServices from "@/core/locations/service";
+import mailServices from "@/core/mail/service";
+import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
 import roleServices from "@/core/roles/service";
 import seoServices from "@/core/seo/service";
@@ -57,6 +59,8 @@ const services: Service[] = [
   ...jobServices,
   ...invitationServices,
   ...locationServices,
+  ...mailServices,
+  ...mailOAuthServices,
   ...mediaServices,
   ...roleServices,
   ...seoServices,

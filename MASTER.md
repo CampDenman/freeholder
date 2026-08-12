@@ -2893,12 +2893,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-11 |
+| Last reconciled | 2026-08-12 |
 | Evidence snapshot | `main` at `9a9f927` (C1.11 merged); C1.12 changeset `media-lifecycle.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.14 transactional and bulk-mail adapter completion; no public-launch work is required |
+| Current focus | C1.15 notification fanout and inbox; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3128,8 +3128,18 @@ reading chat logs.
   and Spanish UI; 74 focused adapter/media/doctor/MCP tests and 900-test full
   suite; changeset `alt-text-suggestions.md`; operator guide
   `deploy/alt-text-suggestions.md`)
-- [ ] **C1.14** Complete Gmail and Microsoft transactional OAuth adapters,
+- [x] **C1.14** Complete Gmail and Microsoft transactional OAuth adapters,
   bulk-mail adapters, sender verification, bounce/complaint state, and test-send.
+  (`0031_lucky_maria_hill.sql`; least-privilege Gmail and Microsoft delegated
+  OAuth with encrypted, rollback-durable token rotation and reconnect evidence;
+  SMTP account mail plus separate Resend, Postmark and Amazon SES broadcast
+  carriers; provider sender verification; authenticated, replay-safe and
+  bounded feedback webhooks with non-regressive delivery/suppression state;
+  admin and first-run English/French/Spanish surfaces with static axe/keyboard
+  coverage; password-reset, portal-link, invitation, security-notice and form
+  integration; doctor and threat-model/migration runbook; 69 focused mail/
+  doctor tests and 961-test full suite; changeset `mail-adapter-completion.md`;
+  operator guide `deploy/mail-delivery.md`)
 - [ ] **C1.15** Build the notification fanout model and inbox: in-app, email,
   SMS/push adapters, preferences, digesting, deduplication and escalation.
 

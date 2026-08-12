@@ -218,6 +218,13 @@
       "when": 1786500470101,
       "tag": "0030_tired_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786560048711,
+      "tag": "0031_lucky_maria_hill",
+      "breakpoints": true
     }
   ]
 }

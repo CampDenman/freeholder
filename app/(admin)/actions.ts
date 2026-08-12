@@ -85,6 +85,15 @@ import {
   retryJobRun,
 } from "@/core/jobs/service";
 import { replayOutboxEvent } from "@/core/events/outbox-service";
+import { beginMailOAuth } from "@/core/mail/oauth";
+import {
+  registerMailSender,
+  releaseMailSuppression,
+  setDefaultMailSender,
+  testMailSender,
+  updateMailSender,
+  verifyMailSender,
+} from "@/core/mail/service";
 
 export interface ActionState {
   error?: string;
@@ -1237,6 +1246,115 @@ export async function webhookAction(
     }
   } catch (error) {
     return present(error);
+  }
+  revalidatePath("/admin/settings");
+  return { saved: true };
+}
+
+/* ------------------------------------------------------------------- mail */
+
+export async function connectMailAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const rawProvider = field(form, "provider");
+  if (rawProvider !== "google" && rawProvider !== "microsoft") {
+    return { error: "Choose Google or Microsoft." };
+  }
+  let authorizationUrl: string;
+  try {
+    const result = await beginMailOAuth.call(
+      {
+        provider: rawProvider,
+        returnTo: "/admin/settings?section=mail",
+      },
+      await currentActor(),
+    );
+    authorizationUrl = result.authorizationUrl;
+  } catch (error) {
+    return present(error);
+  }
+  redirect(authorizationUrl);
+}
+
+export async function registerMailSenderAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const purpose = field(form, "purpose");
+  const provider = field(form, "provider");
+  if (
+    (purpose !== "transactional" && purpose !== "bulk") ||
+    !["smtp", "resend", "postmark", "ses"].includes(provider)
+  ) {
+    return { error: "That configured mail sender is not available." };
+  }
+  try {
+    await registerMailSender.call(
+      {
+        purpose,
+        provider: provider as "smtp" | "resend" | "postmark" | "ses",
+        email: field(form, "email"),
+        displayName: field(form, "displayName") || undefined,
+        providerIdentity: field(form, "providerIdentity") || undefined,
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  revalidatePath("/admin/settings");
+  return { saved: true };
+}
+
+export async function mailSenderAction(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const id = field(form, "id");
+  const intent = field(form, "intent");
+  try {
+    const actor = await currentActor();
+    switch (intent) {
+      case "verify":
+        await verifyMailSender.call({ id }, actor);
+        break;
+      case "default":
+        await setDefaultMailSender.call({ id }, actor);
+        break;
+      case "pause":
+        await updateMailSender.call({ id, status: "paused" }, actor);
+        break;
+      case "activate":
+        await updateMailSender.call({ id, status: "active" }, actor);
+        break;
+      case "test":
+        await testMailSender.call({ id }, actor);
+        break;
+      default:
+        return { error: "Unknown mail action." };
+    }
+  } catch (error) {
+    return present(error);
+  }
+  revalidatePath("/admin/settings");
+  return { saved: true };
+}
+
+export async function releaseMailSuppressionAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  try {
+    await releaseMailSuppression.call(
+      {
+        email: field(form, "email"),
+        confirmation: field(form, "confirmation"),
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
   }
   revalidatePath("/admin/settings");
   return { saved: true };

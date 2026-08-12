@@ -19,7 +19,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
-import { mail } from "@/adapters/mail";
+import { sendMail } from "@/core/mail/service";
 import {
   roleGrants,
   roles,
@@ -124,6 +124,7 @@ async function deliver(
     roleName: string;
     token: string;
     expiresAt: Date;
+    idempotencyKey: string;
   },
 ) {
   const [business] = await tx
@@ -131,8 +132,7 @@ async function deliver(
     .from(businessProfile)
     .limit(1);
   const site = business?.name ?? "this Freeholder site";
-  const adapter = mail();
-  const result = await adapter.send({
+  const result = await sendMail(tx, {
     to: input.email,
     subject: `You are invited to ${site}`,
     text: [
@@ -144,10 +144,13 @@ async function deliver(
       `This private link expires ${input.expiresAt.toISOString()}.`,
       "If you were not expecting it, you can ignore this message.",
     ].join("\n"),
+  }, {
+    requestedBy: "system",
+    idempotencyKey: input.idempotencyKey,
   });
   return {
-    adapter: adapter.id,
-    delivers: adapter.delivers,
+    adapter: result.provider,
+    delivers: result.delivers,
     providerRef: result.providerRef,
   };
 }
@@ -303,6 +306,7 @@ export const createInvitation = defineService({
       roleName: role.name,
       token,
       expiresAt,
+      idempotencyKey: `staff-invitation:${row!.id}:send:1`,
     });
     await ctx.tx
       .update(staffInvitations)
@@ -409,6 +413,7 @@ export const resendInvitation = defineService({
       roleName: role.name,
       token,
       expiresAt,
+      idempotencyKey: `staff-invitation:${invitation.id}:send:${invitation.sendCount + 1}`,
     });
     await ctx.tx
       .update(staffInvitations)
