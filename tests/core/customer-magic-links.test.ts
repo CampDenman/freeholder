@@ -17,6 +17,7 @@ import { mergeContacts } from "@/core/contacts/service";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
 import { auditLog } from "@/core/events/schema";
+import { businessProfile } from "@/core/settings/schema";
 import { sweepCustomerMagicLinks } from "@/core/jobs/core-jobs";
 import {
   ANONYMOUS,
@@ -30,7 +31,7 @@ import {
 const EMAIL = "portal-customer@example.test";
 
 function tokenFrom(logged: string[]): string {
-  const match = /\/portal\/magic\?token=([^\s]+)/.exec(logged.join("\n"));
+  const match = /[?&]token=([^&\s]+)/.exec(logged.join("\n"));
   if (!match) throw new Error(`no customer magic link in:\n${logged.join("\n")}`);
   return decodeURIComponent(match[1]!);
 }
@@ -49,9 +50,19 @@ describe("the customer magic-link browser handoff", () => {
     expect(cookie).toContain("freeholder_customer_magic=");
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Strict");
-    expect(cookie).toContain("Path=/portal/magic");
+    expect(cookie).toContain("Path=/portal");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+
+  it("preserves a non-default locale through the scanner-safe confirmation", () => {
+    const response = stageMagicLink(new Request(
+      "https://freeholder.example/fr/portal/magic?token=scanner-safe-customer-magic-token&locale=fr&default=en",
+    ));
+    expect(response.headers.get("location")).toBe(
+      "https://freeholder.example/fr/portal/magic/confirm",
+    );
+    expect(response.headers.get("set-cookie")).toContain("Path=/fr/portal");
   });
 });
 
@@ -99,6 +110,48 @@ describe.runIf(hasDatabase)("customer magic-link lifecycle", () => {
     expect(rows[0]?.tokenHash).not.toBe(token);
     expect(JSON.stringify(rows)).not.toContain(token);
     expect(JSON.stringify(await db().select().from(auditLog))).not.toContain(token);
+  });
+
+  it("renders the magic-link template and URL from Contact.preferred_locale", async () => {
+    await db().insert(businessProfile).values({
+      name: "Atelier Rivage",
+      country: "CA",
+      defaultLocale: "en",
+      enabledLocales: ["en", "fr"],
+      baseCurrency: "CAD",
+      timezone: "America/Toronto",
+    });
+    await db().insert(contacts).values({
+      email: EMAIL,
+      name: "Cliente francophone",
+      preferredLocale: "fr",
+    });
+    await requestCustomerMagicLink.call({ email: EMAIL }, ANONYMOUS);
+    const output = logged.join("\n");
+    expect(output).toContain("Votre lien de connexion à Atelier Rivage");
+    expect(output).toContain("Le lien expire dans 15 minutes");
+    expect(output).toContain("/fr/portal/magic?token=");
+    expect(output).toContain("locale=fr");
+  });
+
+  it("makes a proven first-use portal selection the Contact preference", async () => {
+    await db().insert(businessProfile).values({
+      name: "Atelier Rivage",
+      country: "CA",
+      defaultLocale: "en",
+      enabledLocales: ["en", "fr"],
+      baseCurrency: "CAD",
+      timezone: "America/Toronto",
+    });
+    await createContact();
+    await requestCustomerMagicLink.call({ email: EMAIL, locale: "fr" }, ANONYMOUS);
+    expect(logged.join("\n")).toContain("Votre lien de connexion à Atelier Rivage");
+    const result = await consumeCustomerMagicLink.call(
+      { token: tokenFrom(logged) },
+      ANONYMOUS,
+    );
+    expect(result.locale).toBe("fr");
+    expect((await db().select().from(contacts))[0]?.preferredLocale).toBe("fr");
   });
 
   it("proves the email, creates one passwordless customer User, and links the same Contact", async () => {

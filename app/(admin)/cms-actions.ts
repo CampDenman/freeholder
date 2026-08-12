@@ -15,6 +15,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
   createPage,
+  createSectionLocale,
   ensureDefaults,
   publishPage,
   restoreRevision,
@@ -72,15 +73,25 @@ export async function savePageBlocksAction(
 
 export async function saveSectionBlocksAction(
   key: string,
+  locale: string,
   blocks: unknown,
 ): Promise<SaveResult> {
   try {
-    await updateSection.call({ key, blocks }, await currentActor());
+    await updateSection.call({ key, locale, blocks }, await currentActor());
     revalidatePath("/", "layout");
     return {};
   } catch (error) {
     return present(error);
   }
+}
+
+export async function createSectionLocaleAction(
+  key: string,
+  locale: string,
+): Promise<void> {
+  await createSectionLocale.call({ key, locale }, await currentActor());
+  revalidatePath("/", "layout");
+  redirect(`/admin/sections/${encodeURIComponent(key)}?locale=${encodeURIComponent(locale)}`);
 }
 
 export async function savePageDetailsAction(

@@ -268,6 +268,8 @@ export const customerMagicLinks = pgTable(
       .references(() => contacts.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
     tokenHash: text("token_hash").notNull(),
+    /** Anonymous explicit choice, made canonical only after token proof. */
+    locale: text("locale"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     usedAt: timestamp("used_at", { withTimezone: true }),
     createdAt: createdAtColumn(),

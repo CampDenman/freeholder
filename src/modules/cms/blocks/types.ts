@@ -40,6 +40,8 @@ export interface BlockRenderContext {
   } | null;
   /** Path currently being rendered, so nav can mark itself current. */
   path: string;
+  /** Keep internal public/customer links in this render's selected locale. */
+  localizeHref?: (href: string) => string;
   /**
    * The URL's query, for blocks whose state survives a page load.
    *

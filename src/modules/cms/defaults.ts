@@ -21,10 +21,11 @@ export function defaultHeader(): BlockNode[] {
     {
       id: "header-row",
       type: "columns",
-      props: { count: 2, gap: "normal" },
+      props: { count: 3, gap: "normal" },
       children: [
         { id: "header-brand", type: "brand", props: { href: "/", showTagline: false } },
         { id: "header-nav", type: "nav", props: { links: [], ariaLabelKey: "cms.nav.primary" } },
+        { id: "header-locales", type: "locales", props: { separator: "·" } },
       ],
     },
   ];

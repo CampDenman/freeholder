@@ -74,6 +74,9 @@ whole story, which is the point.
 - [`media-lifecycle.md`](media-lifecycle.md) — accepted formats and limits,
   private-bucket multipart CORS, malware scanning, controlled delivery,
   resumable recovery, trash/purge, and orphan cleanup.
+- [`customer-locales.md`](customer-locales.md) — public and portal locale
+  precedence, translated chrome authoring, contact-driven templates and
+  notification evidence, migration behavior, and verification.
 
 ## Known gaps
 

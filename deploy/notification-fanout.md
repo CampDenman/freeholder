@@ -44,7 +44,9 @@ Digest time is interpreted in the saved IANA timezone, including DST changes.
 Due rows for one recipient are claimed together and linked to a normalized
 `notification_digests` batch before account mail is called. The message is
 plain text, bounded, and contains internal action links resolved against
-`APP_URL`.
+`APP_URL`. Contact-addressed notifications also snapshot the enabled Contact
+locale; digest groups and catalog boilerplate use that snapshot. See
+`deploy/customer-locales.md` for selection and fallback rules.
 
 ## Critical escalation
 
@@ -82,8 +84,9 @@ For a delivery incident:
    prevents a second notification even if webhook and notification fanout
    completed on different attempts.
 
-Migrations `0032_fancy_namora.sql` and `0033_thin_lady_bullseye.sql` are
-additive. The previous release ignores these tables and remains read/write
-compatible after forward migration, so rollback is an image swap. Do not drop
-notification tables merely to disable a channel; set its preference or adapter
-to off/none so delivery history remains truthful.
+Migrations `0032_fancy_namora.sql`, `0033_thin_lady_bullseye.sql`, and the
+locale snapshot additions in `0034_furry_ozymandias.sql` are additive. The
+previous release ignores these tables/columns and remains read/write compatible
+after forward migration, so rollback is an image swap. Do not drop notification
+tables merely to disable a channel; set its preference or adapter to off/none
+so delivery history remains truthful.

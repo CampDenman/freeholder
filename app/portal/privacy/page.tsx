@@ -9,9 +9,11 @@ import { actorFromToken } from "@/core/http/actor";
 import { formatDateTime } from "@/core/i18n";
 import { getMyPrivacyProfile, listMyDataRequests } from "@/core/privacy/service";
 import { currentBusiness } from "@/core/settings/read";
-import { getT } from "../../i18n";
+import { getLocale, getT } from "../../i18n";
+import { localizeCustomerHref } from "@/core/i18n/customer";
 import { portalSignOutAction } from "../actions";
 import { PortalPrivacyCentre } from "./PortalPrivacyCentre";
+import { PortalLocaleChooser } from "../PortalLocaleChooser";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -24,17 +26,25 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function PortalPrivacyPage() {
-  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
-  if (actor.kind !== "user") redirect("/portal/login");
+  const [actor, business, locale] = await Promise.all([
+    cookies().then((jar) => actorFromToken(jar.get(SESSION_COOKIE)?.value)),
+    currentBusiness(),
+    getLocale(),
+  ]);
+  const policy = {
+    defaultLocale: business?.defaultLocale ?? "en",
+    enabledLocales: business?.enabledLocales ?? ["en"],
+  };
+  if (actor.kind !== "user") {
+    redirect(localizeCustomerHref("/portal/login", locale, policy));
+  }
   if (actor.grants.length > 0) redirect("/admin");
-  const [profile, requests, business, t] = await Promise.all([
+  const [profile, requests, t] = await Promise.all([
     getMyPrivacyProfile.call({}, actor),
     listMyDataRequests.call({}, actor),
-    currentBusiness(),
     getT(),
   ]);
   const timezone = profile.contact.timezone ?? business?.timezone ?? "UTC";
-  const locale = profile.contact.preferredLocale ?? business?.defaultLocale ?? "en";
   const kinds = Object.fromEntries(
     (["access", "export", "correction", "erasure"] as const).map((kind) => [kind, t(`privacy.kind.${kind}`)]),
   );
@@ -52,6 +62,13 @@ export default async function PortalPrivacyPage() {
         <form action={portalSignOutAction} className="ms-auto">
           <button type="submit" className="text-sm text-ink-muted underline">{t("auth.logout")}</button>
         </form>
+        <PortalLocaleChooser
+          locale={locale}
+          policy={policy}
+          path="/portal/privacy"
+          signedIn
+          t={t}
+        />
       </header>
       <p className="mb-6 max-w-3xl text-sm text-ink-muted">{t("privacy.portal.intro")}</p>
       <PortalPrivacyCentre

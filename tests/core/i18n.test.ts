@@ -8,6 +8,11 @@ import {
   formatMoney,
   t,
 } from "@/core/i18n";
+import {
+  localizeCustomerHref,
+  localePath,
+  resolveEnabledLocale,
+} from "@/core/i18n/customer";
 
 describe("t()", () => {
   it("formats ICU plurals, including the zero case", () => {
@@ -88,6 +93,40 @@ describe("catalogChain()", () => {
   it("does not repeat the default locale", () => {
     expect(catalogChain("en")).toEqual(["en"]);
     expect(catalogChain("en-GB")).toEqual(["en-GB", "en"]);
+  });
+});
+
+describe("customer locale policy", () => {
+  const policy = { defaultLocale: "en", enabledLocales: ["en", "fr", "es-MX"] };
+
+  it("honours an enabled preference, including a related regional tag", () => {
+    expect(resolveEnabledLocale("fr", policy)).toBe("fr");
+    expect(resolveEnabledLocale("es", policy)).toBe("es-MX");
+    expect(resolveEnabledLocale("de", policy)).toBe("en");
+  });
+
+  it("uses an unprefixed default and a prefix for every other locale", () => {
+    expect(localePath("services/photo", "en", "en")).toBe("/services/photo");
+    expect(localePath("services/photo", "fr", "en")).toBe("/fr/services/photo");
+    expect(localePath("", "fr", "en")).toBe("/fr");
+  });
+
+  it("keeps public and portal links in the selected locale without touching internals", () => {
+    expect(localizeCustomerHref("/about?from=home#team", "fr", policy))
+      .toBe("/fr/about?from=home#team");
+    expect(localizeCustomerHref("/es-MX/portal/privacy", "fr", policy))
+      .toBe("/fr/portal/privacy");
+    expect(localizeCustomerHref("/admin/settings", "fr", policy))
+      .toBe("/admin/settings");
+    expect(localizeCustomerHref("mailto:hello@example.test", "fr", policy))
+      .toBe("mailto:hello@example.test");
+  });
+
+  it("formats localized notification select and plural messages", () => {
+    expect(t("fr", "notifications.event.mail.body", { type: "complaint" }))
+      .toContain("Une plainte");
+    expect(t("es", "notifications.digest.subject", { count: 2 }))
+      .toBe("2 notificaciones de Freeholder");
   });
 });
 

@@ -12,6 +12,12 @@ import { and, eq, inArray } from "drizzle-orm";
 import { defineService, ServiceError } from "@/core/service";
 import { entityTranslations } from "@/core/i18n/schema";
 import { businessProfile } from "@/core/settings/schema";
+import { contacts } from "@/core/contacts/schema";
+import {
+  customerLocalePolicy,
+  localeForUser,
+  resolveEnabledLocale,
+} from "@/core/i18n/customer";
 
 const locale = z
   .string()
@@ -221,6 +227,71 @@ export const deleteTranslation = defineService({
   },
 });
 
+/** The locale policy that drives this signed-in customer's portal. */
+export const getMyLocale = defineService({
+  name: "i18n.getMyLocale",
+  summary: "Resolve the signed-in customer's enabled locale and fallback policy.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({}),
+  handler: async (_input, ctx) => {
+    if (ctx.actor.kind !== "user") {
+      throw new ServiceError("permission", "A customer locale requires a signed-in person.");
+    }
+    return localeForUser(ctx.tx, ctx.actor.userId);
+  },
+});
+
+/**
+ * Change the linked Contact fact directly from the customer portal. Only an
+ * enabled instance locale is accepted, so the next page, template and
+ * notification all have the same answer immediately.
+ */
+export const setMyLocale = defineService({
+  name: "i18n.setMyLocale",
+  summary: "Set the signed-in customer's preferred locale.",
+  kind: "mutation",
+  permission: "authenticated",
+  input: z.object({ locale }),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind !== "user") {
+      throw new ServiceError("permission", "A customer locale requires a signed-in person.");
+    }
+    const [contact] = await ctx.tx
+      .select({ id: contacts.id, preferredLocale: contacts.preferredLocale })
+      .from(contacts)
+      .where(eq(contacts.userId, ctx.actor.userId))
+      .limit(1);
+    if (!contact) {
+      throw new ServiceError("permission", "This account is not linked to a customer profile.");
+    }
+    const policy = await customerLocalePolicy(ctx.tx);
+    if (!policy.enabledLocales.some(
+      (enabled) => enabled.toLowerCase() === input.locale.toLowerCase(),
+    )) {
+      throw new ServiceError("validation", "Choose a language this site publishes.");
+    }
+    const selected = resolveEnabledLocale(input.locale, policy);
+    if (contact.preferredLocale === selected) {
+      ctx.setSubject("contact", contact.id);
+      return { ...policy, locale: selected };
+    }
+    await ctx.tx
+      .update(contacts)
+      .set({ preferredLocale: selected })
+      .where(eq(contacts.id, contact.id));
+    ctx.setSubject("contact", contact.id);
+    await ctx.emitTimeline({
+      contactId: contact.id,
+      eventType: "contact.localeChanged",
+      subjectType: "contact",
+      subjectId: contact.id,
+      payload: { locale: selected },
+    });
+    return { ...policy, locale: selected };
+  },
+});
+
 export default [
   setTranslation,
   getTranslation,
@@ -228,4 +299,6 @@ export default [
   listTranslations,
   translationIndex,
   deleteTranslation,
+  getMyLocale,
+  setMyLocale,
 ];

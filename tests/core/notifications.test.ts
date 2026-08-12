@@ -34,6 +34,7 @@ import { createForm, submitForm } from "@/modules/forms/service";
 import { issueStamp, STAMP_FIELD } from "@/modules/forms/antispam";
 import { contactPrivacySources } from "@/core/privacy/service";
 import { mailSuppressions } from "@/core/mail/schema";
+import { businessProfile } from "@/core/settings/schema";
 import {
   closeDb,
   failure,
@@ -192,6 +193,58 @@ describe.runIf(hasDatabase)("notifications", () => {
       expect.objectContaining({ channel: "email", status: "skipped", provider: "console", attempts: 1 }),
     ]));
     expect(JSON.stringify(rows)).not.toContain("Reconnect the calendar");
+  });
+
+  it("snapshots a Contact locale and renders catalog notification wrappers in it", async () => {
+    await db().insert(businessProfile).values({
+      name: "Atelier Notifications",
+      country: "CA",
+      defaultLocale: "en",
+      enabledLocales: ["en", "fr"],
+      baseCurrency: "CAD",
+      timezone: "America/Toronto",
+    });
+    const [contact] = await db().insert(contacts).values({
+      name: "Cliente francophone",
+      email: "cliente@example.test",
+      preferredLocale: "fr",
+    }).returning();
+    const logs: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((value: unknown) => {
+      logs.push(String(value));
+    });
+    const created = await createNotification.call({
+      recipient: { kind: "contact", id: contact!.id },
+      topic: "connections.attention",
+      priority: "warning",
+      titleKey: "notifications.event.connection.title",
+      bodyKey: "notifications.event.connection.body",
+      href: "/portal/privacy",
+      idempotencyKey: "locale:contact:first",
+      dedupeKey: "locale:contact",
+    }, SYSTEM);
+    await createNotification.call({
+      recipient: { kind: "contact", id: contact!.id },
+      topic: "connections.attention",
+      priority: "warning",
+      titleKey: "notifications.event.connection.title",
+      bodyKey: "notifications.event.connection.body",
+      href: "/portal/privacy",
+      idempotencyKey: "locale:contact:second",
+      dedupeKey: "locale:contact",
+    }, SYSTEM);
+
+    expect((await db().select().from(notifications).where(eq(notifications.id, created.id)))[0])
+      .toMatchObject({
+        locale: "fr",
+        title: "Une connexion demande votre attention",
+        href: "/fr/portal/privacy",
+        occurrenceCount: 2,
+      });
+    expect((await deliverDueNotifications()).attempted).toBe(1);
+    expect(logs.join("\n")).toContain("Cette notification s’est répétée 2 fois.");
+    expect(logs.join("\n")).toContain("Ouvrir :");
+    expect(logs.join("\n")).toContain("/fr/portal/privacy");
   });
 
   it("batches due digest rows into one durable digest", async () => {

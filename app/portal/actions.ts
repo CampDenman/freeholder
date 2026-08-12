@@ -20,7 +20,10 @@ import {
   createMyDataRequest,
   setMyMarketingPreference,
 } from "@/core/privacy/service";
-import { getT } from "../i18n";
+import { getLocale, getT, requestedLocale } from "../i18n";
+import { setMyLocale } from "@/core/i18n/service";
+import { localizeCustomerHref } from "@/core/i18n/customer";
+import { currentBusiness } from "@/core/settings/read";
 
 export interface MagicLinkState {
   sent?: boolean;
@@ -53,8 +56,9 @@ export async function requestMagicLinkAction(
   form: FormData,
 ): Promise<MagicLinkState> {
   try {
+    const locale = await getLocale();
     await requestCustomerMagicLink.call(
-      { email: field(form, "email") },
+      { email: field(form, "email"), locale },
       {
         kind: "anonymous",
         request: requestMetadataFromHeaders(await headers()),
@@ -62,7 +66,7 @@ export async function requestMagicLinkAction(
     );
   } catch (error) {
     if (error instanceof ServiceError && error.code === "rate_limited") {
-      return { error: error.message };
+      return { error: (await getT())("portal.login.rateLimited") };
     }
     // Delivery errors must not reveal that this address was the one that
     // reached the mail adapter while an unknown address did not.
@@ -77,7 +81,11 @@ export async function confirmMagicLinkAction(
 ): Promise<MagicLinkState> {
   const jar = await cookies();
   const token = jar.get(CUSTOMER_MAGIC_COOKIE)?.value;
-  if (!token) return { error: "That sign-in link is no longer available. Ask for a new one." };
+  const [t, askedLocale] = await Promise.all([
+    getT(),
+    requestedLocale(),
+  ]);
+  if (!token) return { error: t("portal.magic.unavailable") };
   let result;
   try {
     result = await consumeCustomerMagicLink.call(
@@ -91,8 +99,8 @@ export async function confirmMagicLinkAction(
     return {
       error:
         error instanceof ServiceError
-          ? error.message
-          : "That sign-in link could not be used. Ask for a new one.",
+          ? t("portal.magic.unavailable")
+          : t("portal.magic.failed"),
     };
   }
   const secure = process.env.NODE_ENV === "production";
@@ -113,11 +121,27 @@ export async function confirmMagicLinkAction(
   jar.set(CUSTOMER_MAGIC_COOKIE, "", {
     httpOnly: true,
     sameSite: "strict",
-    path: "/portal/magic",
+    // Clear the exact path where the GET staged it. Even a tampered/disabled
+    // locale prefix must not leave a spent bearer cookie behind.
+    path: askedLocale ? `/${askedLocale}/portal` : "/portal",
     secure,
     maxAge: 0,
   });
-  redirect("/portal/login");
+  redirect(localizeCustomerHref("/portal/login", result.locale, result));
+}
+
+export async function setPortalLocaleAction(form: FormData): Promise<void> {
+  const selected = field(form, "locale");
+  const rawReturnTo = field(form, "returnTo");
+  const returnTo = /^\/portal(?:\/|$)/.test(rawReturnTo)
+    ? rawReturnTo
+    : "/portal/login";
+  const result = await setMyLocale.call(
+    { locale: selected },
+    await currentPortalActor(),
+  );
+  revalidatePath("/portal", "layout");
+  redirect(localizeCustomerHref(returnTo, result.locale, result));
 }
 
 export async function portalPrivacyAction(
@@ -187,11 +211,12 @@ export async function portalPrivacyAction(
       throw new ServiceError("validation", "Choose a privacy action.");
     }
   } catch (error) {
+    const t = await getT();
     return {
       error:
-        error instanceof ServiceError
-          ? error.message
-          : "Something went wrong. Try again.",
+        error instanceof ServiceError && error.code === "rate_limited"
+          ? t("common.tryAgainLater")
+          : t("common.somethingWentWrong"),
     };
   }
   revalidatePath("/portal/privacy");
@@ -200,6 +225,7 @@ export async function portalPrivacyAction(
 }
 
 export async function portalSignOutAction(): Promise<void> {
+  const [locale, business] = await Promise.all([getLocale(), currentBusiness()]);
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (token) {
@@ -209,5 +235,9 @@ export async function portalSignOutAction(): Promise<void> {
   }
   jar.delete(SESSION_COOKIE);
   jar.delete(CSRF_COOKIE);
-  redirect("/portal/login");
+  redirect(
+    business
+      ? localizeCustomerHref("/portal/login", locale, business)
+      : "/portal/login",
+  );
 }

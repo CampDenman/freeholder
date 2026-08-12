@@ -2894,11 +2894,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-12 |
-| Evidence snapshot | `main` at `b2348e7` (C1.14 merged); C1.15 changeset `notification-fanout-inbox.md` |
+| Evidence snapshot | `main` at `a2315ff` (C1.15 merged); C1.16 changeset `locale-driven-customer-surfaces.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.16 customer-facing locale selection and locale-driven notifications; no public-launch work is required |
+| Current focus | C1.17 catalog completeness, pseudo-locale, RTL and locale fixtures; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3159,8 +3159,14 @@ reading chat logs.
 
 #### International, analytics, security, and quality
 
-- [ ] **C1.16** Finish translated site chrome and all customer-facing locale
+- [x] **C1.16** Finish translated site chrome and all customer-facing locale
   selection; make contact locale drive portal, templates and notifications.
+  (`0034_furry_ozymandias.sql`; `0035_slim_wiccan.sql`;
+  `tests/core/customer-locale.test.ts`;
+  `tests/core/customer-locale-ui.test.ts`; `tests/core/customer-magic-links.test.ts`;
+  `tests/core/cms-service.test.ts`; `tests/core/notifications.test.ts`;
+  changeset `locale-driven-customer-surfaces.md`; operator guide
+  `deploy/customer-locales.md`)
 - [ ] **C1.17** Complete and continuously verify English, French and Spanish
   catalogs; add pseudo-locale, RTL layout tests and locale-specific fixtures.
 - [ ] **C1.18** Add analytics consent policy, configurable retention/pruning,

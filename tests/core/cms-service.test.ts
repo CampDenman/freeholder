@@ -13,6 +13,7 @@ import coreManifest from "@/core/manifest";
 import cmsManifest from "@/modules/cms/manifest";
 import {
   createPage,
+  createSectionLocale,
   ensureDefaults,
   getSection,
   listRevisions,
@@ -285,6 +286,49 @@ describe.runIf(hasDatabase)("the cms module", () => {
         ),
       );
       expect(error.code).toBe("validation");
+    });
+
+    it("falls back coherently, then creates an independently editable locale variant", async () => {
+      await updateBusiness.call({
+        ...BUSINESS,
+        defaultLocale: "en",
+        enabledLocales: ["en", "fr"],
+      }, OWNER);
+      await ensureDefaults.call({}, OWNER);
+
+      const fallback = await getSection.call(
+        { key: "header", locale: "fr" },
+        ANONYMOUS,
+      );
+      expect(fallback?.locale).toBe("en");
+      expect(await getSection.call(
+        { key: "header", locale: "fr", fallback: false },
+        ANONYMOUS,
+      )).toBeNull();
+
+      const localized = await createSectionLocale.call(
+        { key: "header", locale: "fr" },
+        STAFF,
+      );
+      expect(localized.locale).toBe("fr");
+      expect(JSON.stringify(localized.blocks)).toContain('"type":"locales"');
+
+      await updateSection.call({
+        key: "header",
+        locale: "fr",
+        blocks: [{
+          id: "nav-fr",
+          type: "nav",
+          props: { links: [{ label: "À propos", href: "/about" }] },
+        }],
+      }, STAFF);
+      const french = await getSection.call(
+        { key: "header", locale: "fr", fallback: false },
+        ANONYMOUS,
+      );
+      expect(JSON.stringify(french?.blocks)).toContain("À propos");
+      expect((await getSection.call({ key: "header" }, ANONYMOUS))?.locale)
+        .toBe("en");
     });
   });
 });
