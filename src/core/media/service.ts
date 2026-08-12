@@ -10,7 +10,12 @@ import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { db } from "@/core/db";
-import { assets, mediaObjects, mediaUploads } from "@/core/media/schema";
+import {
+  assets,
+  mediaAltTextSuggestions,
+  mediaObjects,
+  mediaUploads,
+} from "@/core/media/schema";
 import {
   actorString,
   defineService,
@@ -25,6 +30,10 @@ import {
   type MultipartPart,
 } from "@/adapters/storage/types";
 import { malwareScanner, type MalwareScanResult } from "@/adapters/malware";
+import {
+  altTextSuggester,
+  AltTextSuggestionError,
+} from "@/adapters/alt-text";
 import {
   expectedKind,
   MEDIA_LIMITS,
@@ -49,6 +58,7 @@ const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
 const MAX_MULTIPART_PARTS = 10_000;
 const LEGACY_MAX_BYTES = 2_147_483_647;
+const ALT_TEXT_PROMPT_VERSION = "accessible-image-v1";
 
 const sourceSchema = z.enum(["upload", "import", "generated", "migration"]);
 const provenanceSchema = z
@@ -1171,14 +1181,370 @@ export const setAltText = defineService({
     if (existing.kind !== "image") {
       throw new ServiceError("validation", "Only images use alternative text.");
     }
+    const now = new Date();
     const [asset] = await ctx.tx
       .update(assets)
-      .set({ altText: input.altText })
+      .set({ altText: input.altText, updatedAt: now })
       .where(eq(assets.id, input.id))
       .returning();
     if (!asset) throw new ServiceError("not_found", "That file is not here.");
+    // A person or agent authored new text outside the suggestion review. Any
+    // proposal still on screen is now stale and may never overwrite it.
+    await ctx.tx
+      .update(mediaAltTextSuggestions)
+      .set({
+        status: "superseded",
+        reviewedBy: actorString(ctx.actor),
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(mediaAltTextSuggestions.assetId, asset.id),
+          eq(mediaAltTextSuggestions.status, "ready"),
+        ),
+      );
     ctx.setSubject("asset", asset.id);
     return asset;
+  },
+});
+
+function requireHumanReview(actor: Actor): void {
+  if (actor.kind !== "user") {
+    throw new ServiceError(
+      "permission",
+      "Sign in as a person to review generated alternative text.",
+    );
+  }
+}
+
+function sourceIdentity(asset: typeof assets.$inferSelect): string {
+  return asset.checksumSha256 ?? `storage:${asset.storageKey}`;
+}
+
+async function suggestionPreview(asset: typeof assets.$inferSelect): Promise<{
+  image: Uint8Array<ArrayBuffer>;
+  contentType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+}> {
+  const variants = asset.variants as VariantSet;
+  const webp = variants.webp ?? [];
+  const rendition = webp.find((candidate) => candidate.width >= 800) ?? webp.at(-1);
+  if (rendition) {
+    const image = await storage().get(rendition.key);
+    if (image) return { image, contentType: "image/webp" };
+  }
+
+  const supported = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+  const contentType = supported.find((candidate) => candidate === asset.mime);
+  if (!contentType) {
+    throw new ServiceError(
+      "conflict",
+      "This image has no safe provider-compatible preview. Rescan it to rebuild renditions, then try again.",
+    );
+  }
+  const image = await storage().get(asset.storageKey);
+  if (!image) throw new ServiceError("not_found", "That image file is missing.");
+  return { image, contentType };
+}
+
+/** Provider readiness plus the one proposal awaiting a person's decision. */
+export const altTextSuggestionState = defineService({
+  name: "media.altTextSuggestionState",
+  summary: "Show provider readiness and the pending alt-text suggestion.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ id: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    const [asset] = await ctx.tx
+      .select({ id: assets.id, kind: assets.kind })
+      .from(assets)
+      .where(eq(assets.id, input.id))
+      .limit(1);
+    if (!asset) throw new ServiceError("not_found", "That file is not here.");
+    if (asset.kind !== "image") {
+      throw new ServiceError("validation", "Only images use alternative text.");
+    }
+    const [suggestion] = await ctx.tx
+      .select()
+      .from(mediaAltTextSuggestions)
+      .where(
+        and(
+          eq(mediaAltTextSuggestions.assetId, asset.id),
+          eq(mediaAltTextSuggestions.status, "ready"),
+        ),
+      )
+      .orderBy(desc(mediaAltTextSuggestions.createdAt))
+      .limit(1);
+    const provider = altTextSuggester();
+    return {
+      available: provider.available,
+      provider: provider.id,
+      model: provider.model ?? null,
+      unavailableReason: provider.unavailableReason ?? null,
+      suggestion: suggestion ?? null,
+    };
+  },
+});
+
+/** One provider status and pending proposals for a media-library page. */
+export const listAltTextSuggestionStates = defineService({
+  name: "media.listAltTextSuggestionStates",
+  summary: "List pending alt-text suggestions for a set of images.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    ids: z.array(z.string().uuid()).min(1).max(100),
+  }),
+  handler: async (input, ctx) => {
+    const suggestions = await ctx.tx
+      .select()
+      .from(mediaAltTextSuggestions)
+      .where(
+        and(
+          inArray(mediaAltTextSuggestions.assetId, input.ids),
+          eq(mediaAltTextSuggestions.status, "ready"),
+        ),
+      )
+      .orderBy(desc(mediaAltTextSuggestions.createdAt));
+    const provider = altTextSuggester();
+    return {
+      available: provider.available,
+      provider: provider.id,
+      model: provider.model ?? null,
+      unavailableReason: provider.unavailableReason ?? null,
+      suggestions,
+    };
+  },
+});
+
+/**
+ * Generate only a proposal. This operation cannot write `assets.alt_text` and
+ * is unavailable to API keys because each call can have provider cost and the
+ * workflow is intentionally initiated by a person looking at the image.
+ */
+export const generateAltTextSuggestion = defineService({
+  name: "media.generateAltTextSuggestion",
+  summary: "Generate an image description for explicit human review.",
+  kind: "mutation",
+  permission: "scoped",
+  agentCallable: false,
+  rateLimit: {
+    windowSeconds: 60 * 60,
+    limit: 5,
+    subject: (input) => input.id,
+    message: "That image has had several suggestions generated recently. Review one or try again later.",
+  },
+  input: z.object({ id: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    requireHumanReview(ctx.actor);
+    const [asset] = await ctx.tx
+      .select()
+      .from(assets)
+      .where(eq(assets.id, input.id))
+      .limit(1);
+    if (!asset || asset.status === "trashed") {
+      throw new ServiceError("not_found", "That image is not here.");
+    }
+    if (asset.kind !== "image" || asset.status !== "ready") {
+      throw new ServiceError(
+        "conflict",
+        "Only a ready, verified image can be sent for an alt-text suggestion.",
+      );
+    }
+    const provider = altTextSuggester();
+    if (!provider.available) {
+      throw new ServiceError(
+        "conflict",
+        provider.unavailableReason ?? "Generated alt text is not configured.",
+      );
+    }
+    const preview = await suggestionPreview(asset);
+    let generated;
+    try {
+      generated = await provider.suggest(preview);
+    } catch (error) {
+      if (error instanceof AltTextSuggestionError) {
+        throw new ServiceError("conflict", error.message);
+      }
+      throw new ServiceError(
+        "conflict",
+        "The alt-text provider could not produce a suggestion. Try again in a moment.",
+      );
+    }
+    const suggestion = generated.text.replace(/\s+/g, " ").trim();
+    if (!suggestion || suggestion.length > 500) {
+      throw new ServiceError(
+        "conflict",
+        "The provider returned a suggestion that cannot be reviewed safely.",
+      );
+    }
+
+    const now = new Date();
+    const reviewer = actorString(ctx.actor);
+    // The provider call happens without a row lock. Re-lock and compare now,
+    // so a person can author text while it runs and that newer work wins.
+    const [currentAsset] = await ctx.tx
+      .select()
+      .from(assets)
+      .where(eq(assets.id, asset.id))
+      .limit(1)
+      .for("update");
+    if (
+      !currentAsset ||
+      currentAsset.status !== "ready" ||
+      currentAsset.kind !== "image" ||
+      sourceIdentity(currentAsset) !== sourceIdentity(asset) ||
+      currentAsset.altText !== asset.altText
+    ) {
+      throw new ServiceError(
+        "conflict",
+        "The image or its authored alt text changed while the suggestion was generated. Nothing was overwritten; try again from the current image.",
+      );
+    }
+    await ctx.tx
+      .update(mediaAltTextSuggestions)
+      .set({
+        status: "superseded",
+        reviewedBy: reviewer,
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(mediaAltTextSuggestions.assetId, asset.id),
+          eq(mediaAltTextSuggestions.status, "ready"),
+        ),
+      );
+    const [stored] = await ctx.tx
+      .insert(mediaAltTextSuggestions)
+      .values({
+        assetId: currentAsset.id,
+        suggestion,
+        provider: generated.provider,
+        model: generated.model,
+        promptVersion: ALT_TEXT_PROMPT_VERSION,
+        sourceChecksum: sourceIdentity(currentAsset),
+        authoredAltTextAtRequest: currentAsset.altText,
+        requestedBy: reviewer,
+      })
+      .returning();
+    ctx.setSubject("asset", asset.id);
+    ctx.queueEvent("media.altTextSuggested", {
+      assetId: asset.id,
+      suggestionId: stored!.id,
+      provider: stored!.provider,
+      model: stored!.model,
+    });
+    return stored!;
+  },
+});
+
+export const acceptAltTextSuggestion = defineService({
+  name: "media.acceptAltTextSuggestion",
+  summary: "Accept or edit a generated image description after human review.",
+  kind: "mutation",
+  permission: "scoped",
+  agentCallable: false,
+  input: z.object({
+    id: z.string().uuid(),
+    suggestionId: z.string().uuid(),
+    altText: z.string().trim().min(1).max(500),
+  }),
+  handler: async (input, ctx) => {
+    requireHumanReview(ctx.actor);
+    const [asset] = await ctx.tx
+      .select()
+      .from(assets)
+      .where(eq(assets.id, input.id))
+      .limit(1)
+      .for("update");
+    const [suggestion] = await ctx.tx
+      .select()
+      .from(mediaAltTextSuggestions)
+      .where(eq(mediaAltTextSuggestions.id, input.suggestionId))
+      .limit(1)
+      .for("update");
+    if (!asset || asset.kind !== "image" || suggestion?.assetId !== asset.id) {
+      throw new ServiceError("not_found", "That alt-text suggestion is not here.");
+    }
+    if (asset.status !== "ready") {
+      throw new ServiceError(
+        "conflict",
+        "Only a ready, verified image can receive reviewed alternative text.",
+      );
+    }
+    if (suggestion.status !== "ready") {
+      throw new ServiceError("conflict", "That suggestion has already been reviewed.");
+    }
+    if (
+      suggestion.sourceChecksum !== sourceIdentity(asset) ||
+      suggestion.authoredAltTextAtRequest !== asset.altText
+    ) {
+      throw new ServiceError(
+        "conflict",
+        "The image or its authored alt text changed after this suggestion was generated. Generate a fresh suggestion instead.",
+      );
+    }
+    const now = new Date();
+    const reviewer = actorString(ctx.actor);
+    const [updated] = await ctx.tx
+      .update(assets)
+      .set({ altText: input.altText, updatedAt: now })
+      .where(eq(assets.id, asset.id))
+      .returning();
+    await ctx.tx
+      .update(mediaAltTextSuggestions)
+      .set({
+        status: "accepted",
+        reviewedBy: reviewer,
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(mediaAltTextSuggestions.id, suggestion.id));
+    ctx.setSubject("asset", asset.id);
+    ctx.queueEvent("media.altTextAccepted", {
+      assetId: asset.id,
+      suggestionId: suggestion.id,
+      edited: input.altText !== suggestion.suggestion,
+    });
+    return updated!;
+  },
+});
+
+export const dismissAltTextSuggestion = defineService({
+  name: "media.dismissAltTextSuggestion",
+  summary: "Dismiss a generated image description after human review.",
+  kind: "mutation",
+  permission: "scoped",
+  agentCallable: false,
+  input: z.object({ id: z.string().uuid(), suggestionId: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    requireHumanReview(ctx.actor);
+    const [suggestion] = await ctx.tx
+      .select()
+      .from(mediaAltTextSuggestions)
+      .where(eq(mediaAltTextSuggestions.id, input.suggestionId))
+      .limit(1)
+      .for("update");
+    if (suggestion?.assetId !== input.id || suggestion.status !== "ready") {
+      throw new ServiceError("not_found", "That pending suggestion is not here.");
+    }
+    const now = new Date();
+    await ctx.tx
+      .update(mediaAltTextSuggestions)
+      .set({
+        status: "dismissed",
+        reviewedBy: actorString(ctx.actor),
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(mediaAltTextSuggestions.id, suggestion.id));
+    ctx.setSubject("asset", input.id);
+    ctx.queueEvent("media.altTextDismissed", {
+      assetId: input.id,
+      suggestionId: suggestion.id,
+    });
+    return { ok: true };
   },
 });
 
@@ -1631,6 +1997,11 @@ export default [
   authorizeAssetDownload,
   authorizeObjectDelivery,
   assetUsage,
+  altTextSuggestionState,
+  listAltTextSuggestionStates,
+  generateAltTextSuggestion,
+  acceptAltTextSuggestion,
+  dismissAltTextSuggestion,
   setAltText,
   setFocalPoint,
   updateAssetDetails,

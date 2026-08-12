@@ -128,6 +128,8 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
       "",
       service.def.stepUp
         ? "Requires a signed-in person whose second-factor proof is no more than ten minutes old; API keys cannot call it."
+        : service.def.agentCallable === false
+          ? "Requires a signed-in person; API keys cannot call this human-review operation."
         : permission === "public"
         ? "Open to anyone, including callers with no credential."
         : permission === "authenticated"

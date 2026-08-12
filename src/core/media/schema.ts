@@ -113,6 +113,58 @@ export const assets = pgTable(
 );
 
 /**
+ * Generated descriptions wait here until a person makes the accessibility
+ * decision. They never share the authored `assets.alt_text` column: producing
+ * a suggestion therefore cannot publish it, and accept/dismiss remains an
+ * attributable review action even when the provider is changed later.
+ */
+export const mediaAltTextSuggestions = pgTable(
+  "media_alt_text_suggestions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    status: text("status", {
+      enum: ["ready", "accepted", "dismissed", "superseded"],
+    })
+      .notNull()
+      .default("ready"),
+    suggestion: text("suggestion").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    /** Digest of the immutable source original (or a legacy fallback). */
+    sourceChecksum: text("source_checksum").notNull(),
+    /** Prevents an old review screen overwriting newer authored text. */
+    authoredAltTextAtRequest: text("authored_alt_text_at_request"),
+    requestedBy: text("requested_by").notNull(),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("media_alt_text_asset_created_idx").on(t.assetId, t.createdAt),
+    uniqueIndex("media_alt_text_one_ready_per_asset")
+      .on(t.assetId)
+      .where(sql`${t.status} = 'ready'`),
+    check(
+      "media_alt_text_status_valid",
+      sql`${t.status} in ('ready', 'accepted', 'dismissed', 'superseded')`,
+    ),
+    check(
+      "media_alt_text_review_consistent",
+      sql`(${t.status} = 'ready' and ${t.reviewedBy} is null and ${t.reviewedAt} is null) or (${t.status} <> 'ready' and ${t.reviewedBy} is not null and ${t.reviewedAt} is not null)`,
+    ),
+    check(
+      "media_alt_text_suggestion_length",
+      sql`char_length(${t.suggestion}) between 1 and 500`,
+    ),
+  ],
+);
+
+/**
  * Durable browser-to-object-store upload state. S3 uses multipart upload;
  * adapters without that capability truthfully fall back to the bounded proxy
  * path instead of pretending a direct URL exists.

@@ -15,6 +15,7 @@ import { formatDateTime } from "@/core/i18n";
 import {
   assetUsage,
   listAssets,
+  listAltTextSuggestionStates,
   resolveAsset,
   resolveImage,
 } from "@/core/media/service";
@@ -88,6 +89,19 @@ export default async function MediaPage({
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
   const canManage = hasModuleAccess(actor, "media", "manage");
+  const imageIds = library.rows
+    .filter((asset) => asset.kind === "image")
+    .map((asset) => asset.id);
+  const altSuggestionBatch =
+    canManage && !trashed && imageIds.length > 0
+      ? await listAltTextSuggestionStates.call({ ids: imageIds }, actor)
+      : null;
+  const altSuggestions = new Map(
+    altSuggestionBatch?.suggestions.map((suggestion) => [
+      suggestion.assetId,
+      suggestion,
+    ]) ?? [],
+  );
   const usage = new Map(
     canManage && !trashed
       ? await Promise.all(
@@ -198,6 +212,7 @@ export default async function MediaPage({
               const places =
                 (usage.get(asset.id)?.pages ?? 0) +
                 (usage.get(asset.id)?.sections ?? 0);
+              const altSuggestion = altSuggestions.get(asset.id) ?? null;
               return (
                 <li
                   key={asset.id}
@@ -311,10 +326,23 @@ export default async function MediaPage({
                         <AltTextForm
                           id={asset.id}
                           value={asset.altText ?? ""}
+                          available={altSuggestionBatch?.available ?? false}
+                          unavailableReason={
+                            altSuggestionBatch?.unavailableReason ?? null
+                          }
+                          suggestion={altSuggestion}
                           labels={{
                             label: t("media.altText"),
                             hint: t("media.altTextHint"),
                             save: t("common.save"),
+                            generate: t("media.altSuggestionGenerate"),
+                            generating: t("media.altSuggestionGenerating"),
+                            disclosure: t("media.altSuggestionDisclosure"),
+                            reviewHeading: t("media.altSuggestionReview"),
+                            reviewHint: t("media.altSuggestionReviewHint"),
+                            accept: t("media.altSuggestionAccept"),
+                            dismiss: t("media.altSuggestionDismiss"),
+                            unavailable: t("media.altSuggestionUnavailable"),
                           }}
                         />
                         <FocalPointForm

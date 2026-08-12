@@ -117,6 +117,7 @@ export function toolsFor(actor: Actor): McpTool[] {
     const { name, kind, permission, summary } = service.def;
     if (EXCLUDED_FAMILIES.has(name.split(".")[0]!)) continue;
     if (service.def.stepUp) continue;
+    if (service.def.agentCallable === false) continue;
     if (!permits(actor, permission, name, kind)) continue;
 
     const verb = name.split(".")[1] ?? "";
@@ -146,6 +147,7 @@ export function serviceForTool(
     if (toolName(service.def.name) !== tool) continue;
     if (EXCLUDED_FAMILIES.has(service.def.name.split(".")[0]!)) return undefined;
     if (service.def.stepUp) return undefined;
+    if (service.def.agentCallable === false) return undefined;
     // Resolved through the same permission check as the listing, so a tool
     // that was never offered cannot be called by guessing its name.
     if (

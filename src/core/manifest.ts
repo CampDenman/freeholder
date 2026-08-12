@@ -81,6 +81,9 @@ export default defineModule({
       "media.restored",
       "media.purged",
       "media.scanned",
+      "media.altTextSuggested",
+      "media.altTextAccepted",
+      "media.altTextDismissed",
     ],
   },
 });

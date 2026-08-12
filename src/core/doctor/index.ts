@@ -467,6 +467,33 @@ async function checkMalwareScanner(): Promise<Check> {
   }
 }
 
+/** Configuration-only: doctor must never spend provider credits on a probe. */
+async function checkAltTextSuggester(): Promise<Check> {
+  const { altTextSuggester } = await import("@/adapters/alt-text");
+  const provider = altTextSuggester();
+  if (provider.available) {
+    return ok(
+      "media.altTextSuggester",
+      "Generated image descriptions",
+      `${provider.id} model ${provider.model} is configured. A request is made only when a signed-in person asks for a suggestion.`,
+    );
+  }
+  if (provider.id === "none") {
+    return warn(
+      "media.altTextSuggester",
+      "Generated image descriptions",
+      "No suggestion provider is connected. Authored alternative text continues to work normally.",
+      'To offer suggestions, set adapters.ai to "openai" in freeholder.config.ts and set OPENAI_API_KEY plus OPENAI_ALT_TEXT_MODEL.',
+    );
+  }
+  return fail(
+    "media.altTextSuggester",
+    "Generated image descriptions",
+    provider.unavailableReason ?? `${provider.id} is not ready.`,
+    "Complete the selected AI adapter configuration, or set adapters.ai to none. Doctor does not make a billable test request.",
+  );
+}
+
 /**
  * Run every check.
  *
@@ -480,6 +507,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...(await checkDatabase()),
     await checkStorage(),
     await checkMalwareScanner(),
+    await checkAltTextSuggester(),
     await checkMail(),
     await checkJobs(),
     ...(await checkCredentialKey()),

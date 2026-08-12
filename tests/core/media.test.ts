@@ -5,7 +5,7 @@
 // §36 puts image optimization among the things Freeholder absorbs rather than
 // leaves to a plugin, so "an owner uploads a camera JPEG and gets sensible
 // renditions" is a promise with tests behind it.
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { eq, sql } from "drizzle-orm";
 import { readFileSync } from "node:fs";
@@ -14,7 +14,12 @@ import type { AddressInfo } from "node:net";
 import { db } from "@/core/db";
 import { GET as serveMedia } from "../../app/media/[...key]/route";
 import { GET as downloadMedia } from "../../app/media/download/[id]/route";
-import { assets, mediaObjects, mediaUploads } from "@/core/media/schema";
+import {
+  assets,
+  mediaAltTextSuggestions,
+  mediaObjects,
+  mediaUploads,
+} from "@/core/media/schema";
 import { validateMediaFile } from "@/core/media/validation";
 import {
   buildRenditions,
@@ -24,13 +29,18 @@ import {
   toVariantSet,
 } from "@/core/media/variants";
 import {
+  acceptAltTextSuggestion,
+  altTextSuggestionState,
   assetUsage,
   beginUpload,
   cleanupOrphanedMedia,
   completeUpload,
   deleteAsset,
+  dismissAltTextSuggestion,
+  generateAltTextSuggestion,
   getAsset,
   listAssets,
+  listAltTextSuggestionStates,
   purgeAsset,
   purgeExpiredAsset,
   rescanAsset,
@@ -51,6 +61,10 @@ import {
 } from "@/modules/cms/service";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { resetMalwareScannerForTests } from "@/adapters/malware";
+import {
+  resetAltTextSuggesterForTests,
+  setAltTextSuggesterForTests,
+} from "@/adapters/alt-text";
 import { resetEnvForTests } from "@/core/env";
 import {
   ANONYMOUS,
@@ -199,6 +213,20 @@ describe("the additive media lifecycle migration", () => {
     expect(migration).toContain("'variant',");
     expect(migration).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|CONSTRAINT)\b/i);
   });
+
+  it("adds a normalized human-review ledger without destructive schema work", () => {
+    const migration = readFileSync(
+      "db/migrations/0030_tired_northstar.sql",
+      "utf8",
+    );
+    expect(migration).toContain('CREATE TABLE "media_alt_text_suggestions"');
+    expect(migration).toContain('"authored_alt_text_at_request" text');
+    expect(migration).toContain(
+      'WHERE "media_alt_text_suggestions"."status" = \'ready\'',
+    );
+    expect(migration).toContain('CONSTRAINT "media_alt_text_status_valid"');
+    expect(migration).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|CONSTRAINT)\b/i);
+  });
 });
 
 describe("renditions", () => {
@@ -258,6 +286,11 @@ describe.runIf(hasDatabase)("the asset library", () => {
   beforeEach(async () => {
     await truncateSpine();
     resetStorageForTests();
+    resetAltTextSuggesterForTests();
+  });
+
+  afterEach(() => {
+    resetAltTextSuggesterForTests();
   });
 
   afterAll(async () => {
@@ -540,6 +573,191 @@ describe.runIf(hasDatabase)("the asset library", () => {
     await setAltText.call({ id: asset.id, altText: "A blue square" }, STAFF);
     const resolved = await resolveImage.call({ id: asset.id }, ANONYMOUS);
     expect(resolved!.altText).toBe("A blue square");
+  });
+
+  it("keeps a generated suggestion separate until a person accepts it", async () => {
+    let preview: { bytes: number; contentType: string } | undefined;
+    setAltTextSuggesterForTests({
+      id: "test-vision",
+      model: "deterministic-v1",
+      available: true,
+      async suggest(input) {
+        preview = {
+          bytes: input.image.byteLength,
+          contentType: input.contentType,
+        };
+        return {
+          text: "A blue square on a plain background",
+          provider: "test-vision",
+          model: "deterministic-v1",
+        };
+      },
+    });
+    const asset = await uploadAsset.call(
+      { filename: "suggest.png", contentType: "image/png", bytes: await png(1200, 800) },
+      STAFF,
+    );
+
+    const suggested = await generateAltTextSuggestion.call({ id: asset.id }, STAFF);
+    expect(suggested).toMatchObject({
+      status: "ready",
+      suggestion: "A blue square on a plain background",
+      requestedBy: `user:${STAFF.userId}`,
+    });
+    expect(preview?.contentType).toBe("image/webp");
+    expect(preview!.bytes).toBeLessThan(asset.bytes);
+    expect((await getAsset.call({ id: asset.id }, STAFF)).altText).toBeNull();
+    expect(
+      (await altTextSuggestionState.call({ id: asset.id }, STAFF)).suggestion,
+    ).toMatchObject({ id: suggested.id, status: "ready" });
+    expect(
+      (await listAltTextSuggestionStates.call({ ids: [asset.id] }, STAFF))
+        .suggestions,
+    ).toEqual([expect.objectContaining({ id: suggested.id })]);
+
+    await acceptAltTextSuggestion.call(
+      {
+        id: asset.id,
+        suggestionId: suggested.id,
+        altText: "A blue square against a plain background",
+      },
+      STAFF,
+    );
+    expect((await getAsset.call({ id: asset.id }, STAFF)).altText).toBe(
+      "A blue square against a plain background",
+    );
+    const [reviewed] = await db()
+      .select()
+      .from(mediaAltTextSuggestions)
+      .where(eq(mediaAltTextSuggestions.id, suggested.id));
+    expect(reviewed).toMatchObject({
+      status: "accepted",
+      reviewedBy: `user:${STAFF.userId}`,
+    });
+    expect(reviewed!.reviewedAt).toBeInstanceOf(Date);
+  });
+
+  it("never lets a pending suggestion overwrite newer authored alt text", async () => {
+    setAltTextSuggesterForTests({
+      id: "test-vision",
+      model: "deterministic-v1",
+      available: true,
+      async suggest() {
+        return {
+          text: "Generated words",
+          provider: "test-vision",
+          model: "deterministic-v1",
+        };
+      },
+    });
+    const asset = await uploadAsset.call(
+      { filename: "authored.png", contentType: "image/png", bytes: await png(100, 100) },
+      STAFF,
+    );
+    const suggested = await generateAltTextSuggestion.call({ id: asset.id }, STAFF);
+    await setAltText.call({ id: asset.id, altText: "Written by a person" }, STAFF);
+
+    const error = await failure(
+      acceptAltTextSuggestion.call(
+        { id: asset.id, suggestionId: suggested.id, altText: suggested.suggestion },
+        STAFF,
+      ),
+    );
+    expect(error.code).toBe("conflict");
+    expect((await getAsset.call({ id: asset.id }, STAFF)).altText).toBe(
+      "Written by a person",
+    );
+  });
+
+  it("refuses acceptance after the image leaves the verified ready state", async () => {
+    setAltTextSuggesterForTests({
+      id: "test-vision",
+      model: "deterministic-v1",
+      available: true,
+      async suggest() {
+        return {
+          text: "Generated words",
+          provider: "test-vision",
+          model: "deterministic-v1",
+        };
+      },
+    });
+    const asset = await uploadAsset.call(
+      {
+        filename: "trashed-review.png",
+        contentType: "image/png",
+        bytes: await png(100, 100),
+      },
+      STAFF,
+    );
+    const suggested = await generateAltTextSuggestion.call({ id: asset.id }, STAFF);
+    await deleteAsset.call({ id: asset.id }, OWNER);
+
+    const error = await failure(
+      acceptAltTextSuggestion.call(
+        { id: asset.id, suggestionId: suggested.id, altText: suggested.suggestion },
+        STAFF,
+      ),
+    );
+    expect(error.code).toBe("conflict");
+    expect((await getAsset.call({ id: asset.id }, STAFF)).altText).toBeNull();
+  });
+
+  it("dismisses a proposal without changing authored alt text", async () => {
+    setAltTextSuggesterForTests({
+      id: "test-vision",
+      model: "deterministic-v1",
+      available: true,
+      async suggest() {
+        return {
+          text: "Not useful",
+          provider: "test-vision",
+          model: "deterministic-v1",
+        };
+      },
+    });
+    const asset = await uploadAsset.call(
+      {
+        filename: "dismiss.png",
+        contentType: "image/png",
+        bytes: await png(100, 100),
+        altText: "Existing authored description",
+      },
+      STAFF,
+    );
+    const suggested = await generateAltTextSuggestion.call({ id: asset.id }, STAFF);
+    await dismissAltTextSuggestion.call(
+      { id: asset.id, suggestionId: suggested.id },
+      STAFF,
+    );
+    expect((await getAsset.call({ id: asset.id }, STAFF)).altText).toBe(
+      "Existing authored description",
+    );
+    expect(
+      (await altTextSuggestionState.call({ id: asset.id }, STAFF)).suggestion,
+    ).toBeNull();
+  });
+
+  it("keeps generation and review human-only", async () => {
+    setAltTextSuggesterForTests({
+      id: "test-vision",
+      model: "deterministic-v1",
+      available: true,
+      async suggest() {
+        return { text: "Words", provider: "test-vision", model: "deterministic-v1" };
+      },
+    });
+    const asset = await uploadAsset.call(
+      { filename: "human.png", contentType: "image/png", bytes: await png(50, 50) },
+      STAFF,
+    );
+    const error = await failure(
+      generateAltTextSuggestion.call(
+        { id: asset.id },
+        { kind: "agent", keyName: "robot", scopes: ["media.*"] },
+      ),
+    );
+    expect(error.code).toBe("permission");
   });
 
   it("trashes reversibly, restores, then purges every stored object", async () => {
