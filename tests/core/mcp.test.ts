@@ -209,7 +209,7 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     // and every failure is a real request in the audit log.
     const names = toolsFor(agent(["contacts.*"])).map((tool) => tool.name);
     expect(names).toContain("contacts_create");
-    expect(names).not.toContain("media_delete");
+    expect(names).not.toContain("media_trash");
   });
 
   it("offers an anonymous caller the public tools and no more", async () => {
@@ -222,7 +222,7 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     // Hints, so a client knows what to confirm with a person first.
     const tools = toolsFor(OWNER);
     const list = tools.find((tool) => tool.name === "contacts_list")!;
-    const remove = tools.find((tool) => tool.name === "media_delete")!;
+    const remove = tools.find((tool) => tool.name === "media_trash")!;
     expect(list.annotations.readOnlyHint).toBe(true);
     expect(remove.annotations.readOnlyHint).toBe(false);
     expect(remove.annotations.destructiveHint).toBe(true);
@@ -328,7 +328,7 @@ describe.runIf(hasDatabase)("running a tool", () => {
     );
     const forbidden = await rpc(
       "tools/call",
-      { name: "media_delete", arguments: {} },
+      { name: "media_trash", arguments: {} },
       { authorization: `Bearer ${token}` },
     );
     expect((unknown.body.error as { code: number }).code).toBe(

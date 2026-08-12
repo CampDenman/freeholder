@@ -2778,11 +2778,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-11 |
-| Evidence snapshot | `main` at `922c220` (C1.10 merged); C1.11 changeset `outbox-dead-letters.md` |
+| Evidence snapshot | `main` at `9a9f927` (C1.11 merged); C1.12 changeset `media-lifecycle.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.12 complete media support for video, audio and documents, including safe direct uploads, scanning, provenance and lifecycle; no public-launch work is required |
+| Current focus | C1.13 generated image alt-text suggestions with explicit human review; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2990,9 +2990,16 @@ reading chat logs.
   step-up, typed confirmation and audit evidence in `tests/core/outbox.test.ts`;
   webhook replay convergence in `tests/core/webhooks.test.ts`; changeset
   `outbox-dead-letters.md`; operator runbook `deploy/event-outbox.md`)
-- [ ] **C1.12** Complete media support for video, audio and documents,
+- [x] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.
+  (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
+  legacy-write inventory trigger; signature/extension/type/size validation;
+  private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
+  SHA-256, provenance, focal point and media metadata; controlled downloads;
+  quarantine/rescan; 30-day trash, restore, owner-confirmed purge and scheduled
+  cleanup; admin/API/MCP parity; 83 focused media/storage/scanner/MCP tests;
+  changeset `media-lifecycle.md`; runbook `deploy/media-lifecycle.md`)
 - [ ] **C1.13** Add generated image alt-text suggestions with explicit human
   review and never silently overwrite authored alt text.
 - [ ] **C1.14** Complete Gmail and Microsoft transactional OAuth adapters,

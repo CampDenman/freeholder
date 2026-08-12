@@ -81,6 +81,26 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
       return new Uint8Array(result.value[0]!);
     },
 
+    async head(key) {
+      const body = await this.get(key);
+      return body
+        ? { key, bytes: body.byteLength, contentType: "application/octet-stream" }
+        : undefined;
+    },
+
+    async readRange(key, start, endInclusive) {
+      const body = await this.get(key);
+      return body?.slice(start, endInclusive + 1);
+    },
+
+    async stream(key) {
+      const body = await this.get(key);
+      if (!body) return undefined;
+      return (async function* () {
+        yield body;
+      })();
+    },
+
     async delete(key): Promise<void> {
       const result = await (await clientOnce()).delete(key);
       // Deleting what is not there already satisfies the caller.

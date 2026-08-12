@@ -71,6 +71,9 @@ whole story, which is the point.
 - [`event-outbox.md`](event-outbox.md) — per-listener delivery receipts,
   leases, bounded retries, event dead letters, duplicate-safe replay,
   webhook idempotency, retention, and recovery.
+- [`media-lifecycle.md`](media-lifecycle.md) — accepted formats and limits,
+  private-bucket multipart CORS, malware scanning, controlled delivery,
+  resumable recovery, trash/purge, and orphan cleanup.
 
 ## Known gaps
 

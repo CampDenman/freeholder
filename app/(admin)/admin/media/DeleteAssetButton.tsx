@@ -1,14 +1,12 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: AGPL-3.0-only
 "use client";
-// Deleting a file, with the two things that make it safe to offer.
+// Moving a file to recoverable trash, with explicit confirmation.
 //
-// It asks twice, because deleting media is one of the few things in this
-// platform that genuinely cannot be undone — the bytes leave the bucket. §37's
-// "reversible within one action" is not achievable here, so the next best
-// thing is that it cannot happen by a single misplaced click.
+// It asks twice so a misplaced click cannot remove a live image. The bytes
+// remain in recoverable trash for thirty days; permanent purge is separate.
 //
-// And it says what will break. A page still pointing at this file renders a
+// It also says what will disappear. A page still pointing at this file renders a
 // gap rather than an error, so nothing goes down — but an owner should learn
 // that before rather than discover it afterwards.
 import { useState } from "react";

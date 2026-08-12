@@ -87,6 +87,11 @@ const envSchema = z.object({
    */
   FREEHOLDER_STORAGE: z.enum(["s3", "replit", "local"]).optional(),
 
+  /** Optional self-hosted ClamAV seam for originals (C1.12). */
+  MALWARE_SCANNER: z.enum(["none", "clamav"]).default("none"),
+  CLAMAV_HOST: z.string().min(1).optional(),
+  CLAMAV_PORT: z.string().regex(/^\d+$/).optional(),
+
   /**
    * Permits local-disk storage in production, against §18's mandate.
    *

@@ -7,7 +7,8 @@
 // It exists so `pnpm dev` works with no cloud account at all, and so the
 // adapter contract has a second implementation keeping it honest: an interface
 // with one implementation is just that implementation with extra steps.
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { StorageAdapter, StoredObject } from "@/adapters/storage/types";
 import { env } from "@/core/env";
@@ -90,6 +91,55 @@ export function createLocalStorage(config: LocalConfig): StorageAdapter {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
         throw error;
       }
+    },
+
+    async head(key) {
+      try {
+        const facts = await stat(pathFor(key));
+        return {
+          key,
+          bytes: facts.size,
+          // Local storage has no sidecar metadata; callers already own the
+          // authoritative type on the upload/asset row.
+          contentType: "application/octet-stream",
+        };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+        throw error;
+      }
+    },
+
+    async readRange(key, start, endInclusive) {
+      try {
+        const handle = await open(pathFor(key), "r");
+        try {
+          const length = Math.max(0, endInclusive - start + 1);
+          const buffer = Buffer.alloc(length);
+          const { bytesRead } = await handle.read(buffer, 0, length, start);
+          return new Uint8Array(buffer.subarray(0, bytesRead));
+        } finally {
+          await handle.close();
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+        throw error;
+      }
+    },
+
+    async stream(key) {
+      try {
+        await stat(pathFor(key));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+        throw error;
+      }
+      const source = createReadStream(pathFor(key));
+      return (async function* () {
+        for await (const chunk of source) {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          yield new Uint8Array(buffer);
+        }
+      })();
     },
 
     async delete(key): Promise<void> {

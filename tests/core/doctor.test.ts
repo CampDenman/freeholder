@@ -33,6 +33,7 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
       "db.connection",
       "db.migrations",
       "storage.roundTrip",
+      "media.malwareScanner",
       "mail.delivers",
       "jobs.worker",
     ]) {

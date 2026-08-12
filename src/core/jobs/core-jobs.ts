@@ -291,6 +291,30 @@ export const pruneJobKeys = defineJob({
   handler: async () => ({ deleted: await pruneJobIdempotencyKeys() }),
 });
 
+/** Staged uploads and pre-commit object ledgers must never grow forever. */
+export const sweepMediaOrphans = defineJob({
+  name: "core.sweepMediaOrphans",
+  summary: "Abort expired media uploads and remove unattached storage objects.",
+  schedule: "11 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { cleanupOrphanedMedia } = await import("@/core/media/service");
+    return cleanupOrphanedMedia();
+  },
+});
+
+/** Trash is reversible for thirty days, then storage is reclaimed in batches. */
+export const purgeExpiredMediaAssets = defineJob({
+  name: "core.purgeExpiredMedia",
+  summary: "Permanently purge media whose thirty-day trash window elapsed.",
+  schedule: "19 5 * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { purgeExpiredMedia } = await import("@/core/media/service");
+    return { purged: await purgeExpiredMedia() };
+  },
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
@@ -308,4 +332,6 @@ export default [
   reapAgentLeases,
   prunePrivacyArtifacts,
   pruneJobKeys,
+  sweepMediaOrphans,
+  purgeExpiredMediaAssets,
 ];

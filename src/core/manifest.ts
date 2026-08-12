@@ -76,6 +76,11 @@ export default defineModule({
       "job.retried",
       "job.deadLettersRedriven",
       "outbox.replayed",
+      "media.uploaded",
+      "media.trashed",
+      "media.restored",
+      "media.purged",
+      "media.scanned",
     ],
   },
 });
