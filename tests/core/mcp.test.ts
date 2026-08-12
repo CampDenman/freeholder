@@ -183,6 +183,7 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
       .filter(
         (service) =>
           !service.def.stepUp &&
+          service.def.agentCallable !== false &&
           !["auth", "apikeys", "invitations"].includes(
             service.def.name.split(".")[0]!,
           ),
@@ -202,6 +203,16 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     // And they cannot be reached by naming them either.
     expect(serviceForTool(OWNER, "auth_login")).toBeUndefined();
     expect(serviceForTool(OWNER, "roles_assign")).toBeUndefined();
+  });
+
+  it("keeps explicit human-review operations out of agent discovery", async () => {
+    const names = toolsFor(OWNER).map((tool) => tool.name);
+    expect(names).not.toContain("media_generateAltTextSuggestion");
+    expect(names).not.toContain("media_acceptAltTextSuggestion");
+    expect(names).not.toContain("media_dismissAltTextSuggestion");
+    expect(
+      serviceForTool(OWNER, "media_generateAltTextSuggestion"),
+    ).toBeUndefined();
   });
 
   it("offers a scoped key only what it can actually call", async () => {

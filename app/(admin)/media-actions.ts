@@ -7,6 +7,9 @@ import { revalidatePath } from "next/cache";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import {
+  acceptAltTextSuggestion,
+  dismissAltTextSuggestion,
+  generateAltTextSuggestion,
   purgeAsset,
   rescanAsset,
   restoreAsset,
@@ -136,4 +139,65 @@ export async function setAltTextAction(form: FormData): Promise<void> {
   );
   // Alt text is rendered on the public surface, so the whole tree revalidates.
   revalidatePath("/", "layout");
+}
+
+async function suggestionAction(
+  operation: () => Promise<unknown>,
+): Promise<MediaActionState> {
+  try {
+    await operation();
+    revalidatePath("/", "layout");
+    return { saved: true };
+  } catch (error) {
+    if (error instanceof ServiceError) return { error: error.message };
+    console.error("alt-text suggestion action failed", error);
+    const t = await getT();
+    return { error: t("media.altSuggestionFailed") };
+  }
+}
+
+export async function generateAltTextSuggestionAction(
+  _previous: MediaActionState,
+  form: FormData,
+): Promise<MediaActionState> {
+  const actor = await actorFromToken(
+    (await cookies()).get(SESSION_COOKIE)?.value,
+  );
+  return suggestionAction(() =>
+    generateAltTextSuggestion.call({ id: text(form, "id") }, actor),
+  );
+}
+
+export async function acceptAltTextSuggestionAction(
+  _previous: MediaActionState,
+  form: FormData,
+): Promise<MediaActionState> {
+  const actor = await actorFromToken(
+    (await cookies()).get(SESSION_COOKIE)?.value,
+  );
+  return suggestionAction(() =>
+    acceptAltTextSuggestion.call(
+      {
+        id: text(form, "id"),
+        suggestionId: text(form, "suggestionId"),
+        altText: text(form, "altText"),
+      },
+      actor,
+    ),
+  );
+}
+
+export async function dismissAltTextSuggestionAction(
+  _previous: MediaActionState,
+  form: FormData,
+): Promise<MediaActionState> {
+  const actor = await actorFromToken(
+    (await cookies()).get(SESSION_COOKIE)?.value,
+  );
+  return suggestionAction(() =>
+    dismissAltTextSuggestion.call(
+      { id: text(form, "id"), suggestionId: text(form, "suggestionId") },
+      actor,
+    ),
+  );
 }

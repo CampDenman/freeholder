@@ -51,7 +51,12 @@ describe("two-factor cryptography", () => {
     const encrypted = encryptTwoFactorSecret(secret);
     expect(encrypted).not.toContain(secret);
     expect(decryptTwoFactorSecret(encrypted)).toBe(secret);
-    expect(() => decryptTwoFactorSecret(`${encrypted.slice(0, -1)}x`)).toThrow();
+    const parts = encrypted.split(":");
+    const body = Buffer.from(parts[3]!, "base64url");
+    body[0] = body[0]! ^ 1;
+    parts[3] = body.toString("base64url");
+    expect(() => decryptTwoFactorSecret(parts.join(":"))).toThrow();
+    expect(() => decryptTwoFactorSecret(`${encrypted}=`)).toThrow();
   });
 
   it("matches the RFC 6238 SHA-1 vector and only its adjacent window", () => {

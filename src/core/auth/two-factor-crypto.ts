@@ -54,14 +54,34 @@ export function encryptTwoFactorSecret(plain: string): string {
   return ["v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), encrypted.toString("base64url")].join(":");
 }
 
+function canonicalBase64Url(value: string, expectedBytes?: number): Buffer {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error("Invalid encrypted two-factor secret.");
+  }
+  const decoded = Buffer.from(value, "base64url");
+  if (
+    decoded.length === 0 ||
+    (expectedBytes !== undefined && decoded.length !== expectedBytes) ||
+    decoded.toString("base64url") !== value
+  ) {
+    throw new Error("Invalid encrypted two-factor secret.");
+  }
+  return decoded;
+}
+
 export function decryptTwoFactorSecret(value: string): string {
-  const [version, iv, tag, encrypted] = value.split(":");
-  if (version !== "v1" || !iv || !tag || !encrypted) throw new Error("Invalid encrypted two-factor secret.");
+  const parts = value.split(":");
+  if (parts.length !== 4 || parts[0] !== "v1") {
+    throw new Error("Invalid encrypted two-factor secret.");
+  }
+  const iv = canonicalBase64Url(parts[1]!, 12);
+  const tag = canonicalBase64Url(parts[2]!, 16);
+  const encrypted = canonicalBase64Url(parts[3]!);
   const key = keyed("freeholder:2fa-encryption-key:v1", "key");
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"));
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
   return Buffer.concat([
-    decipher.update(Buffer.from(encrypted, "base64url")),
+    decipher.update(encrypted),
     decipher.final(),
   ]).toString("utf8");
 }

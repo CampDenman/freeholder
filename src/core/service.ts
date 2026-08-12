@@ -267,6 +267,12 @@ export interface ServiceDef<In extends z.ZodType, Out> {
   rateLimit?: ServiceRateLimit & { subject: (input: z.output<In>) => string | undefined };
   /** Require a fresh second-factor proof from an interactive user session. */
   stepUp?: boolean;
+  /**
+   * False when the operation inherently needs a person at the controls, such
+   * as reviewing generated accessibility copy. It remains in the human UI and
+   * HTTP contract, but API-key actors are refused and MCP never advertises it.
+   */
+  agentCallable?: boolean;
   handler: (input: z.output<In>, ctx: ServiceContext) => Promise<Out>;
 }
 
@@ -308,6 +314,12 @@ export function defineService<In extends z.ZodType, Out>(
               // and §28 publishes the whole registry to them anyway.
               ? `This API key is not allowed to call ${def.name}. Grant it "${def.name}" or "${def.name.split(".")[0]}.*" in Settings.`
               : `Your role does not have permission to ${def.kind === "query" ? "view" : "manage"} ${def.name.split(".")[0]}.`,
+        );
+      }
+      if (def.agentCallable === false && actor.kind === "agent") {
+        throw new ServiceError(
+          "permission",
+          "Sign in as a person to perform this human-review action.",
         );
       }
       if (

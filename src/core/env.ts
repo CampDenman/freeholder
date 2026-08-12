@@ -93,6 +93,20 @@ const envSchema = z.object({
   CLAMAV_PORT: z.string().regex(/^\d+$/).optional(),
 
   /**
+   * Optional vision model used only after a person asks for an image alt-text
+   * suggestion. The checked-in `adapters.ai` choice selects the provider;
+   * credentials and the deliberately explicit model name stay in env.
+   */
+  // Empty is accepted because `.env.example` is copyable as-is; the adapter
+  // treats it as missing and doctor names the exact variables to fill in.
+  OPENAI_API_KEY: z.string().trim().optional(),
+  OPENAI_ALT_TEXT_MODEL: z
+    .string()
+    .trim()
+    .regex(/^(?:|[A-Za-z0-9][A-Za-z0-9._:-]{0,199})$/)
+    .optional(),
+
+  /**
    * Permits local-disk storage in production, against §18's mandate.
    *
    * Declared here rather than read where it is used, because a guard that

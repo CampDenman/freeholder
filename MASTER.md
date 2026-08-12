@@ -511,12 +511,24 @@ Series:   active → paused → completed | cancelled   (per-occurrence override
 | Entity | Purpose | Key fields |
 |---|---|---|
 | `Asset` | Any uploaded file. | kind (image/video/doc/audio), storage_key, mime, bytes, width/height/duration, variants (jsonb: thumbs, web, watermarked), alt_text, blurhash |
+| `MediaCaptureSession` | One explicit browser, device, share-target or upload-link capture/import session that converges on normal Assets. | created_by_user_id, source (camera/microphone/screen/share_sheet/camera_roll/upload_link/import/social), status, target_type + target_id, upload_count, expires_at, completed_at |
 | `Gallery` | Collection of assets. `kind: portfolio \| client_delivery` | title, slug, kind, contact_id (client galleries), cover_asset_id, access (public/password/pin/login), expires_at, download_policy (none/web_res/full_res/limit_n), watermark (bool) |
 | `GalleryItem` | Ordered membership. | gallery_id, asset_id, position |
 | `GallerySelection` | Client proofing. | gallery_id, contact_id, asset_id, kind (favorite/select/reject), comment |
 | `GalleryAccessLog` | Views/downloads → also emits TimelineEvents. | gallery_id, contact_id, action, asset_id, at |
 
 Print/digital sales from a gallery: `GalleryItem` links to `ProductVariant` price sheets → standard `Order` flow. No parallel commerce path.
+
+**Capture is a first-class media origin, not a browser trick.** Admin surfaces
+can record the screen, a window/tab, camera and microphone through explicit
+browser permission, with an unmistakable live indicator and always-available
+stop control. A recording is previewed, trimmed/cropped, captioned and
+confirmed before it becomes an `Asset`; Freeholder never records in the
+background. Camera-roll/share-sheet uploads, QR-opened capture pages and
+expiring no-app upload links use the same resumable direct-upload, validation,
+malware, deduplication, metadata, provenance, retention and audit pipeline as
+desktop files. A phone with a poor connection can close and resume without
+starting the batch again.
 
 #### Portfolio and proof of work
 
@@ -566,8 +578,11 @@ structure a search engine and a skim-reading human can both follow.
 | `EmailCampaign` | Broadcast or automation step. | subject, body (blocks), segment (jsonb query over spine), status, scheduled_at |
 | `EmailMessage` | Per-recipient send record. | campaign_id (nullable for transactional), contact_id, status, opened_at, clicked_at → TimelineEvents |
 | `Review` | Collected feedback. | contact_id, source (post_booking/post_order/manual), rating, body, status (pending/approved), display_locations[] |
-| `SocialAccount` | Connected profiles. | platform, auth (encrypted), status |
-| `SocialPost` | Prepared + scheduled content. | assets[], variants per platform (jsonb: crop, caption, hashtags), scheduled_at, status, results (jsonb) |
+| `SocialAccount` | One connected external profile; credentials remain encrypted and grants explicit. | platform, provider_account_id, display_name, auth (encrypted), scopes_granted[], capabilities[], status, last_sync_at, last_error |
+| `SocialAccountAssignment` | Explicitly makes a profile personal to an admin, business-wide or associated with one/more locations without duplicating it. | social_account_id, scope_kind (user/business/location), user_id (nullable), location_id (nullable), role, publish_policy |
+| `SocialContentPackage` | Canonical owned content that can be ingested once, edited once and cross-published without creating loops. | source_kind, source_ref, author_user_id, body, assets[], rights, locale, canonical_url, provenance |
+| `SocialVariant` | A reviewable rendition for one platform/account capability set. | package_id, social_account_id, caption, hashtags[], asset_ids[], aspect_ratio, safe_area, duration, status |
+| `SocialPublication` | One scheduled/published attempt and its reconciliation state. | variant_id, scheduled_at, published_at, provider_ref, status, attempts, result_metrics, last_error |
 | `AnalyticsEvent` | First-party events. | anon_id, contact_id (once identified), session_id, name (pageview/add_to_cart/quote_viewed/…), props (jsonb), url, referrer, at |
 
 Funnel = `AnalyticsEvent` joined through `contact_id` to money tables. Visit → lead → quote → paid, one query.
@@ -581,6 +596,9 @@ Funnel = `AnalyticsEvent` joined through `contact_id` to money tables. Visit →
 | `AuditLog` | Every admin/agent mutation. | actor, action, subject, diff (jsonb), at |
 | `ReleaseNote` | The instance's own changelog — every functional change to *this site*, auto-drafted, owner-publishable. | kind (platform_upgrade/module_toggled/plugin_installed/plugin_updated/plugin_removed/setting_changed/custom), title, body, actor (owner/staff/agent/system), source_ref (version, plugin@version, audit ids), visibility (internal/public), occurred_at |
 | `ModuleSetting` | Toggles + per-module config. | module, enabled, config (jsonb) |
+| `GuidanceFlow` | Versioned, role/capability-scoped onboarding assembled from core, modules and plugins. | key, version, audience_roles[], required_capabilities[], steps, status |
+| `GuidanceProgress` | Per-user progress that can be resumed, dismissed or reset as roles/features change. | user_id, flow_key, flow_version, completed_steps[], state, started_at, completed_at |
+| `DemoScenario` | A deterministic, isolated, purgeable example business journey with expected outcomes. | key, version, preset, required_modules[], fixture_manifest, tour_flow_key, status |
 
 The MCP server authenticates as a scoped `ApiKey`, calls the same service layer, and every mutation lands in `AuditLog` with `actor = agent:<key-name>`. The owner can read a plain-English log of everything their AI did.
 
@@ -1355,9 +1373,22 @@ Fresh deploy with empty DB → `/setup` (locked after completion):
 4. **Location / NAP** — optional: address or service area, phone, hours → primary `BusinessLocation`
 5. **Payments** — Stripe connect (or skip; "manual invoicing" works with zero providers)
 6. **Modules** — sensible presets: *Creator* (galleries, booking, quotes), *Service business* (booking, quotes, contracts, invoicing), *Shop* (catalog, orders), *Everything*
-7. **Demo data?** — load "Aurora Coast Photography" seed to explore, one-click purge later
+7. **Start path** — import an existing site (§23), load a complete demo scenario,
+   or begin clean; every choice stays reversible until setup is confirmed
+8. **Your first guided win** — role-aware checklist takes the owner from the
+   chosen start path to a published page, captured enquiry and visible result
 
 Every step writes real settings; nothing is a dead-end. `scripts/doctor.ts` re-validates env + adapters anytime.
+
+Setup is only the first onboarding surface. Every shipped role—owner,
+administrator, editor, bookkeeper, service provider and customer—gets a short,
+task-based flow built from the capabilities that role can actually use. Guidance
+is resumable, dismissible, resettable and available later from contextual help;
+it never points at a forbidden control or requires repository knowledge. New
+core features, modules and plugins contribute versioned `GuidanceFlow` and
+`DemoScenario` definitions through the same manifest registry, with fixtures,
+expected outcomes and purge rules. That makes adding or updating a demo/tour a
+normal tested extension rather than bespoke UI work.
 
 ---
 
@@ -1601,6 +1632,43 @@ Migration is not a docs page; it's part of a recipe's definition of done (§18 m
 
 "Start on Replit, graduate to DigitalOcean, never lose a byte" is the growth story — the mandates make it a tested property of the system rather than a hope.
 
+### Bring an existing website into Freeholder
+
+Deployment migration and content migration share integrity/audit machinery but
+are not the same operation. Freeholder ships an owner-facing **site import
+studio**: connect or enter a source, discover content, preview the mapping and
+diff, then stage and commit a reversible import. Nothing is published and DNS
+never changes merely because the crawler finished.
+
+- **WordPress is the first complete importer:** WordPress REST and WXR/export
+  paths cover pages, posts, media, authors, categories/tags, menus, comments
+  when selected, publication dates, slugs and common SEO metadata. Original
+  URLs either survive or receive explicit `Redirect` rows; media alt text,
+  captions and provenance come across rather than becoming anonymous files.
+- **The generic-site importer is built in:** it discovers `sitemap.xml`, RSS/
+  Atom, canonical links, JSON-LD, Open Graph and semantic HTML, then crawls only
+  owner-approved origins with visible depth/page/byte/rate limits. It resumes
+  from checkpoints, respects robots and authentication boundaries, blocks
+  private/link-local network targets and redirect escapes, and records every
+  fetched source and transform. Its output is typed Freeholder blocks—not a
+  permanent HTML blob—and uncertain mappings stay in a review queue.
+- **Standard sources have pre-built paths:** static HTML archives and common
+  hosted-site exports/feeds use the same importer pipeline. Sources whose APIs
+  or export formats change frequently (for example Shopify, Squarespace, Wix or
+  Webflow) can ship as first-party or verified connector plugins without
+  changing core.
+- **Importing is an extension point:** an importer declares its source/auth
+  schema, discovery and pagination/checkpoint behavior, typed mapping outputs,
+  capability/permission needs, provenance and fixture contract. Core owns dry
+  run, conflict policy, contact/media resolution, jobs, progress, retries,
+  audit, rollback and reporting; a plugin owns only how its platform is read
+  and mapped. The plugin kit includes a generated importer skeleton and a
+  hostile/partial-source conformance suite.
+
+An import run is not “done” until its page/media counts reconcile, internal
+links and canonical/redirect coverage are checked, the staged site passes SEO
+and accessibility scans, and an owner approves the publish/cutover plan.
+
 ---
 
 ## 24. Plugins: The Design Bet
@@ -1629,6 +1697,10 @@ export default definePlugin({
 - **Adapter implementations** — a plugin can ship a whole new payments/mail/storage/sms adapter (`registerAdapter("payments", squareAdapter)`); this is how Square, Wise, Paddle etc. arrive without core PRs
 - **Theme hooks** — declared slots in public templates (header, footer, product page sections); no monkey-patching
 - **Automation actions/triggers** — new verbs for the email-marketing automations and future workflow builder
+- **Import connectors** — typed source discovery/auth, checkpointed reads and
+  mappings into core services; core retains preview, commit, rollback and audit
+- **Demo and onboarding contributions** — deterministic fixture scenarios and
+  role/capability-scoped guidance flows with purge and conformance tests
 - **Custom entities** — plugin tables that attach to the spine the only legal way: `contact_id` foreign keys + TimelineEvent emission. The CRM timeline shows plugin events with zero integration work.
 
 **Hard rules (enforced, not requested):**
@@ -1823,6 +1895,17 @@ last. These are core entities, not a plugin.
 - **Import is a first-class workflow**, not a one-shot script: upload, map
   columns, dry-run with a diff, then commit — with every created and updated
   row attributed to the import in the audit trail, and a way back out.
+- **Contact import can be offered during user signup, by the site owner.** Each
+  signup flow has an owner-controlled, off-by-choice setting that can offer an
+  optional post-account step for Google/Microsoft contacts, vCard, CSV and
+  device-supported contact selection. The new user sees the exact fields and
+  count before granting/importing, can skip without losing signup, and can
+  revoke/delete the batch they supplied. Imports are attributed to that user,
+  resolve through the spine and duplicate queue, and create relationships—not
+  marketing consent. No imported person is subscribed, invited or messaged
+  until a separate, explicit purpose and consent/basis permits it. Owners can
+  choose allowed sources, fields, maximum counts and which signup forms expose
+  the option; staff cannot silently widen those rules.
 
 **Lead lifecycles, configurable:** the hardcoded lifecycle_stage becomes a definable pipeline. `LifecyclePipeline` (name, stages[] with order, color, and stage-entry automations) — default ships as Subscriber → Lead → Prospect → Customer → Repeat → Advocate, fully editable. Stage transitions are service-layer events: they emit TimelineEvents, can trigger automations ("entered Prospect → send case-study sequence"), and power a kanban pipeline view in admin. Multiple pipelines allowed (e.g., a wholesale pipeline beside retail). Lead scoring v1: simple, transparent point rules on spine events (opened 3 emails +5, viewed pricing +10, quote accepted → auto-advance) — no black-box scoring.
 
@@ -1864,11 +1947,11 @@ One block editor for **everything with a public face** — pages, posts, email t
 
 ## 33. Social Media Hub (central ingest & export)
 
-Upgrades the `growth/social` module into the media traffic-controller: **one place where media flows in from and out to every connected platform.**
+Upgrades the `growth/social` module into the media traffic-controller: **one place where media flows in from and out to every connected platform.** The connection hub and its onboarding are enabled in the normal business presets, so supported networks are discoverable on day one; no account is authorized, data pulled or post published until a person completes the provider's explicit OAuth/consent and Freeholder's review step.
 
-- **Connections:** admin OAuth connect for Instagram, Facebook, TikTok, YouTube, LinkedIn, X, Pinterest, Google Business Profile — each a `SocialAccount` with health status (token expiry warnings surfaced, not discovered at post time). Platform adapters isolate each API's chaos behind one interface (`adapters/social/*`), so a broken platform API is one adapter patch, not a core release.
-- **Ingest:** pull your own published posts and their media back into the Asset library (creators' camera rolls live on Instagram; their site should be able to reclaim them). Imported assets carry provenance (platform, original post, date) and can be dropped into galleries, pages, and testimonial blocks. Comment/mention ingestion queues into a lightweight social inbox that attaches to Contacts where identifiable.
-- **Export:** compose once in the block editor's social composer → per-platform variants (crop presets 9:16/1:1/16:9, caption lengths, hashtag sets per platform, burned-in captions via ffmpeg) → schedule across accounts from one calendar view. Every published post links back to a site URL with share tracking (§34), closing the loop in first-party analytics: which post drove which visit drove which sale.
+- **Connections:** admin OAuth connect for Instagram, Facebook, TikTok, YouTube, LinkedIn, X, Pinterest, Google Business Profile and every conforming installed adapter. Multiple profiles per provider are normal. Each profile is assigned explicitly to an individual admin, the business, or one/more business locations, with separate read/respond/publish permissions, defaults and approval policy. Health and token-expiry warnings surface before post time. Capability negotiation describes what each account/API currently permits rather than pretending every network supports the same operations. Platform adapters and a fixture-based conformance kit isolate each API's chaos behind `adapters/social/*`; plugins can add a network without editing the composer or core tables.
+- **Ingest:** pull owned published posts and their media back into a canonical `SocialContentPackage` and the Asset library (creators' camera rolls live on social platforms; their site should be able to reclaim them). Imported assets retain platform, profile, original post, timestamp, rights and checksum provenance. Any owned source post can become a reviewed cross-pollination draft for other selected profiles without copy/paste; source IDs, content digests and publication ancestry prevent repost loops. Comment/mention ingestion queues into the unified inbox and attaches to Contacts only where identity resolution is defensible.
+- **Export:** compose once—or start from an ingested post, phone upload or screen capture—then generate editable per-account variants using live capability/policy data: safe-area-aware crops (9:16/1:1/16:9 and provider sizes), clip selection, duration/size/codec limits, thumbnails, caption lengths, alt text, hashtag sets and optional burned-in captions via ffmpeg. Automation may propose clips/copy but a human can review each rendition and destination before schedule/publish. One calendar supports immediate, scheduled and staggered cross-posting, idempotent retries and provider reconciliation; partial platform failure never duplicates successful posts. Every publication can link back to a canonical site URL with share tracking (§34), closing the first-party loop from post to visit/contact/revenue.
 - **Google Business Profile is a first-class citizen** (posts, hours sync from `OpeningHours`, review ingestion into the reviews module) — for local businesses GBP outranks every social network in revenue impact, and almost no tool treats it seriously.
 
 ---
@@ -2000,6 +2083,35 @@ the first time they look?* A platform can ship every module on the list and
 still feel unfinished if the connective work is missing — and it is always the
 same connective work, in every business, which is why it belongs in the spec
 rather than in a backlog.
+
+### Teach the whole product by doing
+
+- **Powerful demos are the default learning environment.** Freeholder ships
+  several complete, coherent scenarios—not loose lorem ipsum—including a
+  creator, service business, shop and everything-enabled business. Each has
+  realistic contacts, media, content, locations, conversations, bookings,
+  commerce, reports and edge states, plus a guided “day in the life” that ends
+  in visible outcomes. Scenarios are deterministic, locale-aware, safe to
+  reload and purge in one action, visibly marked as demo data and never mixed
+  ambiguously with production records.
+- **Every role gets a useful first run.** Owner, administrator, editor,
+  bookkeeper, service provider and customer guidance is task-based and
+  permission-derived. It can resume, skip, reset and reappear when a new role
+  or capability is granted; contextual help launches the relevant miniature
+  flow from the feature itself. Completion measures real service outcomes, not
+  tooltip clicks.
+- **Demos and onboarding use a public extension contract.** Core modules and
+  plugins register versioned fixtures, role/capability prerequisites, guidance
+  steps, expected outcomes and purge behavior. The dev harness renders and
+  exercises contributions against representative roles, while CI rejects
+  missing targets, forbidden controls, stale selectors, non-idempotent seeds or
+  incomplete cleanup. Adding guidance for an existing or new feature is one
+  manifest contribution, not a tour-framework rewrite.
+- **Capture and phone ingest are part of the first lesson.** The owner can
+  record a screen/camera/microphone sample, scan a QR code on a phone, use the
+  phone's share target or open an expiring upload link, then watch the same
+  resumable media pipeline produce a reusable Asset. This path works in the
+  browser before the optional native app exists.
 
 ### Sell time, things, and expertise from one system
 
@@ -2600,6 +2712,10 @@ for a brother-in-law with different results.
 - **Contact import is a merge, not an insert.** It goes through
   `contacts.resolve` and the duplicate queue (§30), because an import that
   creates six copies of a customer is how an address book stops being trusted.
+  The same provider capability may appear as an owner-configured, optional
+  contact-import step after a public user signs up (§30); it uses incremental
+  `contacts_read` authorization, preview, attribution and revocation, never an
+  ambient grant or inferred marketing consent.
 
 ### The part that has to be got right: untrusted content
 
@@ -2782,7 +2898,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.13 generated image alt-text suggestions with explicit human review; no public-launch work is required |
+| Current focus | C1.14 transactional and bulk-mail adapter completion; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -2941,7 +3057,8 @@ reading chat logs.
 - [x] **C1.03** Add TOTP/WebAuthn-capable 2FA, recovery codes, mandatory 2FA
   policy for privileged roles, and step-up authentication for critical work.
   (`0019_privileged-2fa-step-up.sql`; `tests/core/two-factor.test.ts`;
-  changeset `privileged-two-factor.md`)
+  canonical fail-closed encrypted-envelope parsing; changesets
+  `privileged-two-factor.md` and `canonical-two-factor-envelope.md`)
 - [x] **C1.04** Add owner-visible session/device management, revoke-one,
   revoke-all, suspicious-login notices, and secure session metadata retention.
   (`0020_session-device-management.sql`;
@@ -3000,8 +3117,17 @@ reading chat logs.
   quarantine/rescan; 30-day trash, restore, owner-confirmed purge and scheduled
   cleanup; admin/API/MCP parity; 83 focused media/storage/scanner/MCP tests;
   changeset `media-lifecycle.md`; runbook `deploy/media-lifecycle.md`)
-- [ ] **C1.13** Add generated image alt-text suggestions with explicit human
+- [x] **C1.13** Add generated image alt-text suggestions with explicit human
   review and never silently overwrite authored alt text.
+  (`0030_tired_northstar.sql`; normalized proposal/review ledger separate from
+  authored `assets.alt_text`; optional OpenAI Responses vision adapter using a
+  bounded rendition only after a human request; edit/accept/dismiss UI;
+  digest/authored-text stale-write protection; human-only provider calls with
+  rate limits and MCP opt-out; provider/model/requester/reviewer audit evidence;
+  doctor configuration check that makes no billable request; English, French
+  and Spanish UI; 74 focused adapter/media/doctor/MCP tests and 900-test full
+  suite; changeset `alt-text-suggestions.md`; operator guide
+  `deploy/alt-text-suggestions.md`)
 - [ ] **C1.14** Complete Gmail and Microsoft transactional OAuth adapters,
   bulk-mail adapters, sender verification, bounce/complaint state, and test-send.
 - [ ] **C1.15** Build the notification fanout model and inbox: in-app, email,
@@ -3028,6 +3154,23 @@ reading chat logs.
   manifest, configuration/credential-key handling, retention and erasure proof.
 - [ ] **C1.24** Make a fresh development/demo install serve a complete seeded
   home at `/`, with no route depending on manually repaired database content.
+- [ ] **C1.25** Build resumable, role/capability-derived onboarding for owner,
+  administrator, editor, bookkeeper, service provider and customer, with
+  first-win tasks, contextual relaunch, skip/reset, progress and forbidden-
+  control accessibility/permission tests.
+- [ ] **C1.26** Ship deterministic creator, service, shop and everything demo
+  scenarios with realistic cross-module states, locale variants, expected-
+  outcome journeys, visible isolation and idempotent one-action load/reset/
+  purge; add module/plugin manifest contributions and conformance tests so any
+  feature can add or revise demos and onboarding without framework changes.
+- [ ] **C1.27** Make screen/window/tab, camera and microphone recording a
+  first-class media workflow with explicit permission, persistent live/stop
+  affordances, chunked resume, preview, trim/crop/caption, confirmation,
+  provenance, privacy/audit/retention handling and normal Asset processing.
+- [ ] **C1.28** Make phone ingest require no app: QR and expiring upload-link
+  capture, camera roll/file picker and PWA/Web Share target feed resumable
+  batches into any permitted media target, survive weak connections and
+  converge on the same validation, scan, dedupe, metadata and recovery path.
 
 **C1 exit:** several humans can safely administer one business; the foundation
 is recoverable, accessible, international, observable and ready to carry money.
@@ -3146,6 +3289,18 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   preserving IDs, money, timestamps, media, locales and public URLs.
 - [ ] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
+- [ ] **C3.21** Define the importer plugin contract and kit: typed source/auth
+  config, least-privilege permissions, discovery/pagination/checkpoints,
+  transforms into core service inputs, provenance, fixtures and hostile/
+  partial-source conformance; core retains jobs, preview, commit and rollback.
+- [ ] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
+  sitemap/RSS/Atom/semantic-HTML importers plus static archive/common hosted-
+  site paths; preserve content/media/SEO/URL intent and generate redirects
+  while enforcing SSRF, origin, robots, rate, page, byte and depth limits.
+- [ ] **C3.23** Build the owner import studio and resumable run ledger:
+  discover → map → staged preview/diff → conflict review → commit → reconcile
+  counts/links/SEO/accessibility → reversible batch → approved publish/cutover,
+  with actionable progress, retry and audit for core and plugin sources.
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.
@@ -3361,6 +3516,11 @@ equipment, classes and expertise without double-booking or duplicated records.
   actions, MMS via media, delivery receipts, invalid-number state and cost.
 - [ ] **C7.15** Add site live chat, assistant escalation and WhatsApp/Messenger
   deep links while preserving contact threads and consent boundaries.
+- [ ] **C7.16** Let owners opt selected signup flows into a skippable post-
+  signup contact import from Google/Microsoft, vCard, CSV and supported device
+  selection, with source/field/count controls, least-privilege consent, exact
+  preview, user-attributed reversible batches, spine dedupe/relationships and
+  proof that imports never imply subscription, invitation or marketing consent.
 
 **C7 exit:** Freeholder tells the owner what work is owed and carries every
 permitted conversation on the same contact timeline.
@@ -3451,12 +3611,19 @@ customer has one secure, comprehensible home for the relationship.
   escalation, attach consented transcripts to contacts, surface knowledge gaps
   and prove prompt-injection resistance.
 - [ ] **C9.24** Build social OAuth/adapters for Instagram, Facebook, TikTok,
-  YouTube, LinkedIn, X, Pinterest and Google Business Profile with token health.
-- [ ] **C9.25** Ingest owned posts/media/provenance/comments/mentions, resolve
-  identifiable contacts conservatively and route social threads to inbox.
-- [ ] **C9.26** Build multi-platform composer, crops/captions/hashtags, ffmpeg
-  media preparation, human-reviewed auto-clipping, per-platform variants,
-  calendar and scheduled publishing.
+  YouTube, LinkedIn, X, Pinterest and Google Business Profile with multiple
+  profiles/provider, capability discovery and health; explicitly assign each
+  profile to an admin, the business or one/more locations with granular read,
+  respond, publish and approval policy.
+- [ ] **C9.25** Ingest owned posts/media into canonical packages with rights,
+  checksum, source/publication ancestry and provenance; reclaim Assets, prevent
+  repost loops, resolve identifiable contacts conservatively and route social
+  threads to the unified inbox.
+- [ ] **C9.26** Build multi-platform composer/cross-pollination from authored,
+  ingested, phone and screen-captured media; generate editable safe-area crops,
+  clips, thumbnails, captions/alt/hashtags and codec/size/duration variants via
+  ffmpeg, require human review where generated, and schedule/publish/reconcile
+  every selected account idempotently from one calendar.
 - [ ] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
   outbound social links to visits, contacts and revenue.
 - [ ] **C9.28** Build universal `ShareTarget`, native/channel intents, generated
@@ -3465,6 +3632,10 @@ customer has one secure, comprehensible home for the relationship.
   embeds for galleries, reviews, bookings and newsletter forms with backlinks.
 - [ ] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,
   targeting, consent-aware capture and accessibility-safe dismissal.
+- [ ] **C9.31** Enable the social connection/onboarding surface in normal
+  presets while never auto-authorizing or auto-publishing; make every installed
+  conforming social adapter discoverable through one capability-negotiated UI
+  and prove a fixture plugin adds a network without core/composer changes.
 
 **C9 exit:** audience, access, attribution and recurring revenue compound on
 the spine without surveillance, shadow ledgers or channel-specific silos.
@@ -3509,7 +3680,11 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 - [ ] **C10.16** Continuously build iOS/Android against the demo contract and
   maintain Apple/Google submission, privacy and data-safety checklists.
 - [ ] **C10.17** Build role-gated owner companion mode for today, invoice,
-  inbox, reviews, approvals, agent status and critical notifications.
+  inbox, reviews, approvals, agent status, critical notifications and direct
+  camera-roll/camera/screen/share-target ingest through the core media contract.
+- [ ] **C10.18** Add offline/background-safe mobile capture batches with clear
+  consent, progress, pause/resume/cancel, retry and destination selection, and
+  prove the native app and app-free phone path create equivalent Assets.
 
 **C10 exit:** an owner can leave, restore, update, fork and serve customers on
 mobile without surrendering the code, data, deployment or upgrade path.
@@ -3518,22 +3693,26 @@ mobile without surrendering the code, data, deployment or upgrade path.
 
 #### Cross-module journeys
 
-- [ ] **C11.01** Prove site visitor → localized page → form/chat → one contact
-  → inbox/task → quote → contract → invoice → payment → timeline/report.
+- [ ] **C11.01** Prove site visitor → localized signup/page → optional consent-
+  safe contact import → form/chat → one resolved contact → inbox/task → quote
+  → contract → invoice → payment → timeline/report.
 - [ ] **C11.02** Prove product browse → variant/price/tax/stock → cart → mixed
   checkout → payment → split/digital fulfillment → return/refund/reconciliation.
 - [ ] **C11.03** Prove service/event/rental discovery → real availability →
   booking/waitlist → deposit → reminders/waiver → completion → review/loyalty.
-- [ ] **C11.04** Prove project → private gallery → proof/select → delivery/
-  print order → sharing/referral → attributed conversion.
+- [ ] **C11.04** Prove phone/screen capture → interrupted/resumed Asset ingest →
+  project/private gallery → proof/select → delivery/print order, and canonical
+  social package → per-account media variants → multi-network publish → sharing/
+  referral → attributed conversion without duplicate posts or shadow media.
 - [ ] **C11.05** Prove subscription/pass/retainer → entitlement → server-side
   access → dunning/renewal → portal change/cancel → correct grant expiry.
 - [ ] **C11.06** Prove prompt → agent proposal → approval → safe service calls
   → visual review/publish, and separately code proposal → gates → PR/rollback.
 - [ ] **C11.07** Prove connected mail/calendar → contact/busy time → scheduled
   playbook → untrusted-input-safe draft → briefing → owner decision.
-- [ ] **C11.08** Prove fresh install → productive demo → full export → restore
-  on another Tier-1 target → signed update → failed-update rollback.
+- [ ] **C11.08** Prove both fresh install → role-guided productive demo and
+  WordPress/generic-site crawl → staged/reconciled imported site → full export
+  → restore on another Tier-1 target → signed update → failed-update rollback.
 
 #### Whole-product quality
 

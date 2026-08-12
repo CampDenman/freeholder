@@ -211,6 +211,13 @@
       "when": 1786493947801,
       "tag": "0029_closed_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786500470101,
+      "tag": "0030_tired_northstar",
+      "breakpoints": true
     }
   ]
 }

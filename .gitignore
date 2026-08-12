@@ -29,6 +29,10 @@ Thumbs.db
 .vscode/
 *.swp
 
+# local agent/session state (never product source or planning truth)
+.claude/
+.codex/
+
 # typescript / next
 *.tsbuildinfo
 next-env.d.ts
