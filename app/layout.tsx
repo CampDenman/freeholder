@@ -20,6 +20,7 @@ import { themeStylesheet } from "@/core/design/tokens";
 import { themeAttribute } from "@/core/design/theme";
 import { readThemePreference } from "./theme";
 import { getLocale } from "./i18n";
+import { localeDirection } from "@/core/i18n";
 import "./globals.css";
 
 export default async function RootLayout({
@@ -33,7 +34,7 @@ export default async function RootLayout({
   ]);
 
   return (
-    <html lang={locale} data-theme={theme}>
+    <html lang={locale} dir={localeDirection(locale)} data-theme={theme}>
       <head>
         <style dangerouslySetInnerHTML={{ __html: themeStylesheet() }} />
       </head>

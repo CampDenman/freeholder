@@ -97,7 +97,7 @@ export function PreferencesForm({
   return (
     <form action={action} className="grid gap-4" aria-busy={pending}>
       <div className="overflow-x-auto rounded-md border border-rule">
-        <table className="w-full min-w-[42rem] text-left text-sm">
+        <table className="w-full min-w-[42rem] text-start text-sm">
           <thead className="border-b border-rule bg-surface-muted font-mono text-xs text-ink-muted">
             <tr>
               <th scope="col" className="px-3 py-2.5 font-medium">{topicLabel}</th>
