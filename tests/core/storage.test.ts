@@ -3,7 +3,7 @@
 // The storage adapter contract (MASTER.md §12). One suite runs against every
 // implementation that can be exercised without a cloud account, because an
 // interface whose implementations are only tested individually drifts.
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +18,8 @@ const text = (data: Uint8Array | undefined) =>
   data ? new TextDecoder().decode(data) : undefined;
 
 let root: string;
+
+afterEach(() => vi.restoreAllMocks());
 
 async function localAdapter(): Promise<StorageAdapter> {
   root = await mkdtemp(join(tmpdir(), "freeholder-storage-"));
@@ -79,6 +81,24 @@ describe("the local adapter", () => {
     expect(text(await storage.get("2026/07/a-note.txt"))).toBe("coastal light");
   });
 
+  it("supports bounded inspection and streaming without loading by contract", async () => {
+    await storage.put(
+      "2026/07/inspect.bin",
+      bytes("0123456789"),
+      "application/octet-stream",
+    );
+    expect(await storage.head("2026/07/inspect.bin")).toMatchObject({
+      bytes: 10,
+    });
+    expect(text(await storage.readRange("2026/07/inspect.bin", 2, 5))).toBe(
+      "2345",
+    );
+    const stream = await storage.stream("2026/07/inspect.bin");
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream!) chunks.push(chunk);
+    expect(text(Buffer.concat(chunks))).toBe("0123456789");
+  });
+
   it("answers undefined for something never stored", async () => {
     expect(await storage.get("2026/07/absent.txt")).toBeUndefined();
   });
@@ -109,6 +129,10 @@ describe("the local adapter", () => {
 
   it("builds a URL under the media path", async () => {
     expect(await storage.url("2026/07/a b.jpg")).toBe("/media/2026/07/a%20b.jpg");
+  });
+
+  it("does not claim direct multipart support", () => {
+    expect(storage.directMultipart).toBeUndefined();
   });
 });
 
@@ -163,6 +187,78 @@ describe("the S3 adapter", () => {
     expect(url.searchParams.get("response-content-disposition")).toBe(
       'attachment; filename="Aurora Coast.jpg"',
     );
+  });
+
+  it("presigns resumable multipart parts without exposing credentials", async () => {
+    const storage = createS3Storage(config);
+    const signed = await storage.directMultipart!.signPart(
+      "2026/07/large.mp4",
+      "provider-upload-id",
+      7,
+      90,
+    );
+    const url = new URL(signed.url);
+    expect(signed.method).toBe("PUT");
+    expect(url.searchParams.get("uploadId")).toBe("provider-upload-id");
+    expect(url.searchParams.get("partNumber")).toBe("7");
+    expect(url.searchParams.get("X-Amz-Expires")).toBe("90");
+    expect(url.searchParams.get("X-Amz-Signature")).toBeTruthy();
+    expect(signed.url).not.toContain(config.secretAccessKey);
+  });
+
+  it("initiates, resumes, and completes the S3 multipart protocol", async () => {
+    const requests: Request[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      requests.push(request);
+      const url = new URL(request.url);
+      if (request.method === "POST" && url.searchParams.has("uploads")) {
+        return new Response(
+          "<InitiateMultipartUploadResult><UploadId>up-123</UploadId></InitiateMultipartUploadResult>",
+        );
+      }
+      if (request.method === "GET" && url.searchParams.get("uploadId")) {
+        return new Response(
+          "<ListPartsResult><Part><PartNumber>1</PartNumber><ETag>etag-one</ETag><Size>8388608</Size></Part></ListPartsResult>",
+        );
+      }
+      if (request.method === "POST" && url.searchParams.get("uploadId")) {
+        return new Response("<CompleteMultipartUploadResult />");
+      }
+      if (request.method === "HEAD") {
+        return new Response(null, {
+          headers: {
+            "content-length": "8388608",
+            "content-type": "video/mp4",
+            etag: "whole-etag",
+          },
+        });
+      }
+      return new Response(null, { status: 500 });
+    });
+
+    const multipart = createS3Storage(config).directMultipart!;
+    await expect(multipart.create("2026/07/movie.mp4", "video/mp4")).resolves.toEqual({
+      uploadId: "up-123",
+    });
+    await expect(
+      multipart.listParts("2026/07/movie.mp4", "up-123"),
+    ).resolves.toEqual([{ partNumber: 1, etag: "etag-one", bytes: 8388608 }]);
+    await expect(
+      multipart.complete("2026/07/movie.mp4", "up-123", [
+        { partNumber: 1, etag: '"etag-one"' },
+      ]),
+    ).resolves.toMatchObject({ bytes: 8388608, contentType: "video/mp4" });
+    expect(requests.map((request) => request.method)).toEqual([
+      "POST",
+      "GET",
+      "POST",
+      "HEAD",
+    ]);
+  });
+
+  it("never exposes an unvalidated direct upload through a public bucket", () => {
+    expect(createS3Storage({ ...config, isPublic: true }).directMultipart).toBeUndefined();
   });
 });
 

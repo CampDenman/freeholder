@@ -48,7 +48,7 @@ export {
   timelineEvents,
 } from "@/core/contacts/schema";
 export { auditLog } from "@/core/events/schema";
-export { assets } from "@/core/media/schema";
+export { assets, mediaObjects, mediaUploads } from "@/core/media/schema";
 export { redirects } from "@/core/seo/schema";
 export { rateLimitCounters } from "@/core/security/schema";
 export { businessProfile, moduleSettings } from "@/core/settings/schema";

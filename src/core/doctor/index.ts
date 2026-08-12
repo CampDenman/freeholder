@@ -405,7 +405,66 @@ async function checkSecurity(): Promise<Check[]> {
     );
   }
 
+  if (e.FREEHOLDER_STORAGE === "s3" && e.S3_PUBLIC === "true") {
+    checks.push(
+      warn(
+        "security.publicMediaBucket",
+        "Media bucket privacy",
+        "The S3 bucket is public, so resumable direct upload is disabled until each original can be validated and scanned.",
+        "Make the bucket private and leave S3_PUBLIC unset. Freeholder signs ready media URLs and proxies document downloads.",
+      ),
+    );
+  }
+
   return checks;
+}
+
+async function checkMalwareScanner(): Promise<Check> {
+  const e = env();
+  if (e.MALWARE_SCANNER !== "clamav") {
+    return warn(
+      "media.malwareScanner",
+      "Uploaded-file malware scanner",
+      "No antivirus engine is connected. File signatures are still verified and documents are forced to download.",
+      "Run clamd, set MALWARE_SCANNER=clamav and CLAMAV_HOST, then run doctor again.",
+    );
+  }
+  try {
+    const { malwareScanner } = await import("@/adapters/malware");
+    const test = new Uint8Array(
+      Buffer.from(
+        "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*",
+      ),
+    );
+    const result = await malwareScanner().scan({
+      filename: "freeholder-doctor-eicar.txt",
+      contentType: "text/plain",
+      bytes: test.byteLength,
+      body: (async function* () {
+        yield test;
+      })(),
+    });
+    if (result.status !== "infected") {
+      return fail(
+        "media.malwareScanner",
+        "Uploaded-file malware scanner",
+        `The scanner answered ${result.status} to its harmless standard test signature.`,
+        "Check clamd connectivity and signature databases before accepting uploads.",
+      );
+    }
+    return ok(
+      "media.malwareScanner",
+      "Uploaded-file malware scanner",
+      "ClamAV detected the standard test signature over its streaming interface.",
+    );
+  } catch (error) {
+    return fail(
+      "media.malwareScanner",
+      "Uploaded-file malware scanner",
+      `ClamAV could not scan a test stream: ${reason(error)}`,
+      "Check MALWARE_SCANNER, CLAMAV_HOST, CLAMAV_PORT and clamd availability.",
+    );
+  }
 }
 
 /**
@@ -420,6 +479,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...(await checkEnvironment()),
     ...(await checkDatabase()),
     await checkStorage(),
+    await checkMalwareScanner(),
     await checkMail(),
     await checkJobs(),
     ...(await checkCredentialKey()),

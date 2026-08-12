@@ -66,7 +66,7 @@ export function toolName(serviceName: string): string {
 }
 
 /** Verbs that destroy something a person would miss. */
-const DESTRUCTIVE = /^(delete|remove|revoke|purge|merge)/;
+const DESTRUCTIVE = /^(delete|remove|revoke|purge|trash|merge)/;
 
 function describe(service: Service): string {
   const { name, summary, permission, kind } = service.def;

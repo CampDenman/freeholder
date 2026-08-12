@@ -17,11 +17,44 @@ export interface StoredObject {
   contentType: string;
 }
 
+export interface StoredObjectHead {
+  key: string;
+  bytes: number;
+  contentType: string;
+  etag?: string;
+}
+
+export interface MultipartPart {
+  partNumber: number;
+  etag: string;
+  bytes?: number;
+}
+
+/** Optional capability: only object stores that really support it expose it. */
+export interface DirectMultipartStorage {
+  create(key: string, contentType: string): Promise<{ uploadId: string }>;
+  signPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    expiresIn?: number,
+  ): Promise<{ url: string; method: "PUT" }>;
+  listParts(key: string, uploadId: string): Promise<MultipartPart[]>;
+  complete(
+    key: string,
+    uploadId: string,
+    parts: MultipartPart[],
+  ): Promise<StoredObjectHead>;
+  abort(key: string, uploadId: string): Promise<void>;
+}
+
 export interface SignedUrlOptions {
   /** Seconds. Implementations may cap this; none may ignore it. */
   expiresIn?: number;
   /** Ask the browser to download rather than display, under this filename. */
   downloadAs?: string;
+  /** Override provider metadata with the server-verified canonical type. */
+  contentType?: string;
 }
 
 export interface StorageAdapter {
@@ -33,6 +66,9 @@ export interface StorageAdapter {
    * buckets, so callers must ask rather than assume.
    */
   readonly isPublic: boolean;
+
+  /** Present only when the browser can upload resumable parts directly. */
+  readonly directMultipart?: DirectMultipartStorage;
 
   /**
    * The buffer type is named explicitly: a bare `Uint8Array` is backed by
@@ -46,6 +82,20 @@ export interface StorageAdapter {
   ): Promise<StoredObject>;
 
   get(key: string): Promise<Uint8Array<ArrayBuffer> | undefined>;
+
+  /** Metadata and a bounded prefix let completion validate huge files safely. */
+  head(key: string): Promise<StoredObjectHead | undefined>;
+
+  readRange(
+    key: string,
+    start: number,
+    endInclusive: number,
+  ): Promise<Uint8Array<ArrayBuffer> | undefined>;
+
+  /** A fresh stream for hashing or an attached malware scanner. */
+  stream(
+    key: string,
+  ): Promise<AsyncIterable<Uint8Array<ArrayBuffer>> | undefined>;
 
   delete(key: string): Promise<void>;
 

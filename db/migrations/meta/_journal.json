@@ -204,6 +204,13 @@
       "when": 1786492383782,
       "tag": "0028_outbox-state-invariants",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1786493947801,
+      "tag": "0029_closed_rockslide",
+      "breakpoints": true
     }
   ]
 }
