@@ -79,6 +79,7 @@ describe.runIf(hasDatabase)("mail OAuth", () => {
   });
 
   afterAll(async () => {
+    await truncateSpine();
     await closeDb();
   });
 

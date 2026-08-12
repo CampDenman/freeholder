@@ -70,6 +70,7 @@ describe.runIf(hasDatabase)("mail services", () => {
   });
 
   afterAll(async () => {
+    await truncateSpine();
     await closeDb();
   });
 

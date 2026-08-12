@@ -61,6 +61,7 @@ describe.runIf(hasDatabase)("the migrated mail constraints", () => {
   });
 
   afterAll(async () => {
+    await truncateSpine();
     await closeDb();
   });
 
