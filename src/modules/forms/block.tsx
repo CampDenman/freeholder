@@ -16,6 +16,7 @@ import { defineBlock } from "@/modules/cms/blocks/types";
 import { submitPublicForm } from "../../../app/(public)/form-actions";
 import { HONEYPOT_FIELD, issueStamp, STAMP_FIELD } from "./antispam";
 import type { FormField } from "./fields";
+import type { Translate } from "@/core/i18n";
 
 interface Resolved {
   slug: string;
@@ -67,7 +68,7 @@ export const formBlock = defineBlock({
           role="status"
           className="max-w-prose rounded-md border border-rule bg-success-soft px-4 py-3 text-sm text-success"
         >
-          {resolved.successMessage ?? "Thank you — your message has been sent."}
+          {resolved.successMessage ?? ctx.t("forms.public.success")}
         </p>
       );
     }
@@ -76,12 +77,21 @@ export const formBlock = defineBlock({
       <RenderedForm
         form={resolved}
         failed={ctx.query?.formError === resolved.slug}
+        t={ctx.t}
       />
     );
   },
 });
 
-function RenderedForm({ form, failed }: { form: Resolved; failed: boolean }) {
+function RenderedForm({
+  form,
+  failed,
+  t,
+}: {
+  form: Resolved;
+  failed: boolean;
+  t: Translate;
+}) {
   return (
     <form action={submitPublicForm} className="grid max-w-prose gap-4">
       <input type="hidden" name="form_slug" value={form.slug} />
@@ -92,7 +102,7 @@ function RenderedForm({ form, failed }: { form: Resolved; failed: boolean }) {
           role="alert"
           className="rounded-md border border-rule bg-danger-soft px-4 py-3 text-sm text-danger"
         >
-          That did not go through. Check the fields below and try again.
+          {t("forms.public.error")}
         </p>
       ) : null}
 
@@ -103,7 +113,7 @@ function RenderedForm({ form, failed }: { form: Resolved; failed: boolean }) {
       */}
       <div className="hidden" aria-hidden="true">
         <label htmlFor={`${form.slug}-${HONEYPOT_FIELD}`}>
-          Leave this field empty
+          {t("forms.public.leaveBlank")}
         </label>
         <input
           id={`${form.slug}-${HONEYPOT_FIELD}`}
@@ -115,20 +125,28 @@ function RenderedForm({ form, failed }: { form: Resolved; failed: boolean }) {
       </div>
 
       {form.fields.map((field) => (
-        <Field key={field.key} slug={form.slug} field={field} />
+        <Field key={field.key} slug={form.slug} field={field} t={t} />
       ))}
 
       <button
         type="submit"
         className="inline-flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
       >
-        {form.submitLabel ?? "Send"}
+        {form.submitLabel ?? t("forms.public.submit")}
       </button>
     </form>
   );
 }
 
-function Field({ slug, field }: { slug: string; field: FormField }) {
+function Field({
+  slug,
+  field,
+  t,
+}: {
+  slug: string;
+  field: FormField;
+  t: Translate;
+}) {
   const id = `${slug}-${field.key}`;
   const describedBy = field.help ? `${id}-help` : undefined;
   const control =
@@ -170,7 +188,7 @@ function Field({ slug, field }: { slug: string; field: FormField }) {
           className={control}
         >
           <option value="" disabled>
-            Choose one
+            {t("forms.public.chooseOne")}
           </option>
           {(field.options ?? []).map((option) => (
             <option key={option} value={option}>

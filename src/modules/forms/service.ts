@@ -517,23 +517,21 @@ export async function onFormSubmitted(
     .filter((line): line is string => line !== null);
 
   const from = emailFrom(fields, data);
-  const notificationBody = [
-    `Somebody filled in "${row.form.name}".`,
-    "",
-    ...answers,
-    "",
-    row.submission.sourceUrl ? `Sent from ${row.submission.sourceUrl}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n")
-    .slice(0, 4000);
+  const messageParams = {
+    form: row.form.name,
+    answers: answers.join("\n").slice(0, 3400),
+    ...(row.submission.sourceUrl ? { source: row.submission.sourceUrl } : {}),
+  };
   for (const to of recipients) {
     await createNotification.call({
       recipient: { kind: "email", address: to },
       topic: "forms.submission",
       priority: "information",
-      title: `${row.form.name}: a new submission`,
-      body: notificationBody,
+      titleKey: "notifications.form.title",
+      bodyKey: row.submission.sourceUrl
+        ? "notifications.form.bodyWithSource"
+        : "notifications.form.body",
+      messageParams,
       href: `/admin/forms/${row.form.id}`,
       replyTo: from,
       sourceEventId: context?.eventId,

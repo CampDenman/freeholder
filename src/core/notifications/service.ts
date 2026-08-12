@@ -35,6 +35,11 @@ import {
 } from "@/core/notifications/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { translator } from "@/core/i18n";
+import {
+  localeForRecipient,
+  localizeCustomerHref,
+} from "@/core/i18n/customer";
 import {
   defineService,
   ServiceError,
@@ -289,12 +294,23 @@ const recipient = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("email"), address: email }),
 ]);
 
+const notificationTitle = z.string().trim().min(1).max(240);
+const notificationBody = z.string().trim().min(1).max(4000);
+const messageParams = z.record(
+  z.string(),
+  z.union([z.string().max(4000), z.number().finite()]),
+);
+
 const createInput = z.object({
   recipient,
   topic,
   priority: z.enum(["information", "warning", "critical"]).default("information"),
-  title: z.string().trim().min(1).max(240),
-  body: z.string().trim().min(1).max(4000),
+  /** Literal owner/domain content, or a catalog key for platform boilerplate. */
+  title: notificationTitle.optional(),
+  titleKey: z.string().trim().min(1).max(200).optional(),
+  body: notificationBody.optional(),
+  bodyKey: z.string().trim().min(1).max(200).optional(),
+  messageParams: messageParams.optional().default({}),
   href: z.string().trim().regex(/^\/(?!\/)/).max(1000).optional(),
   replyTo: email.optional(),
   sourceEventId: z.string().trim().min(1).max(200).optional(),
@@ -302,9 +318,36 @@ const createInput = z.object({
   idempotencyKey: z.string().trim().min(1).max(500),
   dedupeKey: z.string().trim().min(1).max(500).optional(),
   occurredAt: z.coerce.date().optional(),
+}).superRefine((input, issue) => {
+  if (Boolean(input.title) === Boolean(input.titleKey)) {
+    issue.addIssue({
+      code: "custom",
+      path: ["title"],
+      message: "Provide exactly one of title or titleKey.",
+    });
+  }
+  if (Boolean(input.body) === Boolean(input.bodyKey)) {
+    issue.addIssue({
+      code: "custom",
+      path: ["body"],
+      message: "Provide exactly one of body or bodyKey.",
+    });
+  }
 });
 
 export type CreateNotificationInput = z.output<typeof createInput>;
+
+function localizedMessage(input: CreateNotificationInput, locale: string) {
+  const t = translator(locale);
+  return {
+    title: notificationTitle.parse(
+      input.titleKey ? t(input.titleKey, input.messageParams) : input.title,
+    ),
+    body: notificationBody.parse(
+      input.bodyKey ? t(input.bodyKey, input.messageParams) : input.body,
+    ),
+  };
+}
 
 function requirePerson(actor: Actor): asserts actor is Extract<Actor, { kind: "user" }> {
   if (actor.kind !== "user") {
@@ -558,6 +601,11 @@ export async function createNotificationTx(
   if (receipt) return { id: receipt.id, duplicate: true, coalesced: false } as const;
 
   const normalized = await normalizeRecipient(tx, input.recipient);
+  const localePolicy = await localeForRecipient(tx, normalized);
+  const message = localizedMessage(input, localePolicy.locale);
+  const href = input.href
+    ? localizeCustomerHref(input.href, localePolicy.locale, localePolicy)
+    : undefined;
   const occurredAt = input.occurredAt ?? new Date();
   const match = await findDedupeMatch(tx, input, normalized);
   if (match) {
@@ -565,9 +613,10 @@ export async function createNotificationTx(
     const [updated] = await tx
       .update(notifications)
       .set({
-        title: input.title,
-        body: input.body,
-        href: input.href,
+        locale: localePolicy.locale,
+        title: message.title,
+        body: message.body,
+        href,
         replyTo: input.replyTo,
         priority: input.priority,
         sourceEventId: input.sourceEventId,
@@ -600,9 +649,10 @@ export async function createNotificationTx(
       externalRecipient: normalized.kind === "email" ? normalized.address : null,
       topic: input.topic,
       priority: input.priority,
-      title: input.title,
-      body: input.body,
-      href: input.href,
+      locale: localePolicy.locale,
+      title: message.title,
+      body: message.body,
+      href,
       replyTo: input.replyTo,
       sourceEventId: input.sourceEventId,
       sourceEventName: input.sourceEventName,
@@ -687,6 +737,7 @@ export const listNotifications = defineService({
         id: notifications.id,
         topic: notifications.topic,
         priority: notifications.priority,
+        locale: notifications.locale,
         title: notifications.title,
         body: notifications.body,
         href: notifications.href,
@@ -1076,6 +1127,7 @@ export async function deliverDueNotifications(limit = 50) {
       continue;
     }
     const address = await addressFor(notification);
+    const t = translator(notification.locale);
     try {
       let outcome: { provider: string; providerRef: string | null; delivers: boolean; reason?: string };
       if (delivery.channel === "email") {
@@ -1089,8 +1141,12 @@ export async function deliverDueNotifications(limit = 50) {
               subject: notification.title,
               text: [
                 notification.body,
-                notification.occurrenceCount > 1 ? `Repeated ${notification.occurrenceCount} times.` : "",
-                absoluteHref(notification.href) ? `Open: ${absoluteHref(notification.href)}` : "",
+                notification.occurrenceCount > 1
+                  ? t("notifications.email.repeated", { count: notification.occurrenceCount })
+                  : "",
+                absoluteHref(notification.href)
+                  ? t("notifications.email.open", { url: absoluteHref(notification.href)! })
+                  : "",
               ].filter(Boolean).join("\n\n"),
               replyTo: notification.replyTo ?? undefined,
             },
@@ -1177,7 +1233,8 @@ export async function deliverDueDigests(limit = 100) {
     const identity = row.notification.recipientUserId
       ? `user:${row.notification.recipientUserId}`
       : `contact:${row.notification.recipientContactId}`;
-    groups.set(identity, [...(groups.get(identity) ?? []), row]);
+    const localizedIdentity = `${identity}:${row.notification.locale}`;
+    groups.set(localizedIdentity, [...(groups.get(localizedIdentity) ?? []), row]);
   }
   let digests = 0;
   for (const rows of groups.values()) {
@@ -1215,6 +1272,7 @@ export async function deliverDueDigests(limit = 100) {
       recipientUserId: rows[0]!.notification.recipientUserId,
       recipientContactId: rows[0]!.notification.recipientContactId,
       recipient: address.email,
+      locale: rows[0]!.notification.locale,
       idempotencyKey: key,
       itemCount: rows.length,
     }).onConflictDoUpdate({
@@ -1224,11 +1282,12 @@ export async function deliverDueDigests(limit = 100) {
     await db().update(notificationDeliveries).set({ digestId: digest!.id })
       .where(inArray(notificationDeliveries.id, ids));
     try {
+      const t = translator(rows[0]!.notification.locale);
       const result = await db().transaction((tx) => sendMail(tx, {
         to: address.email!,
-        subject: `${rows.length} Freeholder notification${rows.length === 1 ? "" : "s"}`,
+        subject: t("notifications.digest.subject", { count: rows.length }),
         text: [
-          "Here is what needs your attention:",
+          t("notifications.digest.intro"),
           "",
           ...rows.flatMap(({ notification }) => [
             `• ${notification.title}${notification.occurrenceCount > 1 ? ` (${notification.occurrenceCount}×)` : ""}`,
@@ -1344,8 +1403,10 @@ interface EventTemplate {
   module: string;
   topic: NotificationTopic;
   priority: "information" | "warning" | "critical";
-  title: string;
-  body: string;
+  titleKey: string;
+  body?: string;
+  bodyKey?: string;
+  messageParams?: Record<string, string | number>;
   href: string;
   dedupeKey: string;
 }
@@ -1356,8 +1417,8 @@ function eventTemplate(eventName: string, payload: Record<string, unknown>): Eve
       module: "connections",
       topic: "connections.attention",
       priority: "critical",
-      title: "A connection needs attention",
-      body: "Freeholder can no longer use one of its connected accounts. Reconnect or replace it to restore the affected work.",
+      titleKey: "notifications.event.connection.title",
+      bodyKey: "notifications.event.connection.body",
       href: "/admin/settings",
       dedupeKey: `connection:${payload.id}`,
     };
@@ -1367,8 +1428,10 @@ function eventTemplate(eventName: string, payload: Record<string, unknown>): Eve
       module: "agents",
       topic: "agents.failed",
       priority: "warning",
-      title: "An agent task failed",
-      body: typeof payload.outcome === "string" ? payload.outcome.slice(0, 4000) : "Review the task outcome before retrying or reassigning it.",
+      titleKey: "notifications.event.agent.title",
+      ...(typeof payload.outcome === "string"
+        ? { body: payload.outcome.slice(0, 4000) }
+        : { bodyKey: "notifications.event.agent.body" }),
       href: "/admin/jobs",
       dedupeKey: `agent-task:${payload.id}`,
     };
@@ -1382,8 +1445,16 @@ function eventTemplate(eventName: string, payload: Record<string, unknown>): Eve
       module: "mail",
       topic: "mail.delivery",
       priority: payload.type === "complaint" ? "critical" : "warning",
-      title: "Mail delivery needs attention",
-      body: `${String(payload.type).replace("_", " ")} was reported${typeof payload.recipient === "string" ? ` for ${payload.recipient}` : ""}. The address is protected from further sends until it is corrected or verified.`,
+      titleKey: "notifications.event.mail.title",
+      bodyKey: typeof payload.recipient === "string"
+        ? "notifications.event.mail.bodyWithRecipient"
+        : "notifications.event.mail.body",
+      messageParams: {
+        type: String(payload.type),
+        ...(typeof payload.recipient === "string"
+          ? { recipient: payload.recipient }
+          : {}),
+      },
       href: "/admin/settings?section=mail",
       dedupeKey: `mail:${typeof payload.recipient === "string" ? payload.recipient : payload.eventId}:${String(payload.type)}`,
     };

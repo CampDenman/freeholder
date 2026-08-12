@@ -7,15 +7,17 @@
 // instance what its locale is. It lives in app/ for the same reason theme.ts
 // does: src/ stays framework-agnostic (§10).
 //
-// Today the answer is the business's default locale. The rest of §4.9 arrives
-// with the public surface: a URL prefix for non-default locales, and
-// `Contact.preferred_locale` for customer-facing pages. Both change this
-// function only — every call site already takes whatever it returns.
+// Public requests use the URL prefix; signed-in portal requests use the linked
+// Contact preference; everything else uses the business default. Keeping that
+// choice here means every page and nested component receives the same answer.
 import { cache } from "react";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { DEFAULT_LOCALE, translator, type Translate } from "@/core/i18n";
-import { LOCALE_HEADER } from "@/core/http/headers";
+import { LOCALE_HEADER, PATH_HEADER } from "@/core/http/headers";
 import { currentBusiness } from "@/core/settings/read";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
+import { getMyLocale } from "@/core/i18n/service";
 
 /**
  * Memoized for the render pass, so a page, its layout and three nested
@@ -23,7 +25,10 @@ import { currentBusiness } from "@/core/settings/read";
  * `cache` is per-request, so two visitors never share an answer.
  */
 export const getLocale = cache(async (): Promise<string> => {
-  const business = await currentBusiness();
+  const [business, requestHeaders] = await Promise.all([
+    currentBusiness(),
+    headers(),
+  ]);
   // No profile yet means first boot: the setup wizard runs before there is a
   // business to have a locale, so the platform default carries those screens.
   const fallback = business?.defaultLocale ?? DEFAULT_LOCALE;
@@ -32,7 +37,20 @@ export const getLocale = cache(async (): Promise<string> => {
   // it. Honoured only if the instance actually publishes it — the edge cannot
   // check that, so this is where an invented `/xx/` prefix stops being a
   // locale and goes back to being an ordinary path (see requestedLocale).
-  const asked = (await headers()).get(LOCALE_HEADER);
+  // Once a customer is signed in, their Contact preference is the portal's
+  // source of truth (§4.9). It deliberately wins over a stale URL prefix: a
+  // language change must affect every following customer surface together.
+  const path = requestHeaders.get(PATH_HEADER) ?? "/";
+  if (/^\/portal(?:\/|$)/.test(path)) {
+    const actor = await actorFromToken(
+      (await cookies()).get(SESSION_COOKIE)?.value,
+    );
+    if (actor.kind === "user") {
+      return (await getMyLocale.call({}, actor)).locale;
+    }
+  }
+
+  const asked = requestHeaders.get(LOCALE_HEADER);
   if (asked && business?.enabledLocales.includes(asked)) return asked;
   return fallback;
 });

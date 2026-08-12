@@ -43,6 +43,11 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
   download tiers, watermarks, print sales
 - **Client portal** — one login for a customer's quotes, invoices, bookings,
   galleries, files, and messages
+- **International customer surfaces** — the default locale stays unprefixed,
+  other locales use stable path prefixes, and a signed-in customer's Contact
+  preference drives portal chrome, transactional templates, notification
+  wrappers, digests, dates, and internal links. Header/footer variants remain
+  editable CMS data rather than hardcoded layout markup.
 - **Email** — transactional via the owner's Google/Outlook account, bulk via
   a provider adapter; broadcasts and simple automations
 - **Notification inbox** — a personal in-app attention queue with immediate

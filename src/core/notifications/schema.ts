@@ -38,6 +38,8 @@ export const notifications = pgTable(
     })
       .notNull()
       .default("information"),
+    /** Recipient locale snapshotted when the human-facing fact is created. */
+    locale: text("locale").notNull().default("en"),
     title: text("title").notNull(),
     body: text("body").notNull(),
     href: text("href"),
@@ -250,6 +252,8 @@ export const notificationDigests = pgTable(
       onDelete: "cascade",
     }),
     recipient: text("recipient").notNull(),
+    /** All wrapper copy in this digest is rendered in this locale. */
+    locale: text("locale").notNull().default("en"),
     channel: text("channel", { enum: ["email"] }).notNull().default("email"),
     status: text("status", {
       enum: ["processing", "delivered", "skipped", "failed"],

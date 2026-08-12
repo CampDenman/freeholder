@@ -11,11 +11,13 @@ import { saveSectionBlocksAction } from "../../../cms-actions";
 
 export function SectionEditor({
   sectionKey,
+  locale,
   initialBlocks,
   blockTypes,
   labels,
 }: {
   sectionKey: string;
+  locale: string;
   initialBlocks: EditorNode[];
   blockTypes: EditorBlockType[];
   labels: EditorLabels;
@@ -25,8 +27,8 @@ export function SectionEditor({
       initialBlocks={initialBlocks}
       blockTypes={blockTypes}
       labels={labels}
-      previewSrc={`/preview/section/${sectionKey}`}
-      save={(blocks) => saveSectionBlocksAction(sectionKey, blocks)}
+      previewSrc={`/preview/section/${sectionKey}?locale=${encodeURIComponent(locale)}`}
+      save={(blocks) => saveSectionBlocksAction(sectionKey, locale, blocks)}
     />
   );
 }

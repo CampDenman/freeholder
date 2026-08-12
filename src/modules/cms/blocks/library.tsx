@@ -16,6 +16,7 @@
 import { Fragment } from "react";
 import { z } from "zod";
 import { renderNAP } from "@/core/locations/nap";
+import { languageName, localePath } from "@/core/i18n/customer";
 import { cx } from "@/ui/primitives";
 import { defineBlock } from "./types";
 
@@ -108,7 +109,7 @@ export const button = defineBlock({
   starter: () => ({ label: "Get in touch", href: "/contact" }),
   render: ({ props, ctx }) => (
     <a
-      href={props.href}
+      href={ctx.localizeHref?.(props.href) ?? props.href}
       {...ctx.editable?.("label")}
       className={cx(
         "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold",
@@ -237,20 +238,12 @@ export const locales = defineBlock({
     const fallback = ctx.business?.defaultLocale;
     if (enabled.length < 2 || !fallback) return null;
 
-    // The same page in each language, not everybody's home page: a visitor
-    // switching language on an article wants that article.
-    const bare = ctx.path.replace(
-      new RegExp(`^/(?:${enabled.filter((l) => l !== fallback).join("|")})(?=/|$)`),
-      "",
-    );
-
     return (
       <nav aria-label={ctx.t("cms.nav.locales")} className="flex items-center gap-2">
         {enabled.map((locale, index) => {
-          const href =
-            locale === fallback
-              ? bare || "/"
-              : `/${locale}${bare === "/" ? "" : bare}`;
+          // The same page in each language, not everybody's home page: a
+          // visitor switching on an article wants that article.
+          const href = localePath(ctx.path, locale, fallback);
           const current = ctx.locale === locale;
           return (
             <span key={locale} className="flex items-center gap-2">
@@ -262,6 +255,7 @@ export const locales = defineBlock({
               <a
                 href={href}
                 hrefLang={locale}
+                lang={locale}
                 aria-current={current ? "true" : undefined}
                 className={cx(
                   "text-xs",
@@ -280,17 +274,6 @@ export const locales = defineBlock({
   },
 });
 
-/** A locale's name in its own language, with the tag as a last resort. */
-function languageName(locale: string): string {
-  try {
-    const display = new Intl.DisplayNames([locale], { type: "language" });
-    const name = display.of(locale);
-    return name ? name.charAt(0).toUpperCase() + name.slice(1) : locale;
-  } catch {
-    return locale;
-  }
-}
-
 /**
  * The business's name, live from settings. §4.10's discipline applied to
  * branding: rendered from one source so it cannot drift between the header,
@@ -306,7 +289,7 @@ export const brand = defineBlock({
   }),
   starter: () => ({}),
   render: ({ props, ctx }) => (
-    <a href={props.href} className="grid gap-0.5">
+    <a href={ctx.localizeHref?.(props.href) ?? props.href} className="grid gap-0.5">
       <span className="text-sm font-semibold text-ink">
         {ctx.business?.name ?? ctx.t("common.appName")}
       </span>
@@ -349,7 +332,7 @@ export const nav = defineBlock({
             return (
               <li key={link.href}>
                 <a
-                  href={link.href}
+                  href={ctx.localizeHref?.(link.href) ?? link.href}
                   aria-current={current ? "page" : undefined}
                   className={cx(
                     "text-sm",
@@ -574,7 +557,7 @@ export const locationsIndex = defineBlock({
     const { listLocations } = await import("@/core/locations/service");
     return listLocations.call({}, { kind: "anonymous" });
   },
-  render: ({ props, resolved }) => {
+  render: ({ props, resolved, ctx }) => {
     if (!resolved || resolved.length === 0) return null;
     return (
       <ul className="grid list-none gap-4 p-0">
@@ -583,7 +566,7 @@ export const locationsIndex = defineBlock({
           return (
             <li key={location.id} className="border-b border-rule pb-4 last:border-0">
               <a
-                href={`/locations/${location.slug}`}
+                href={ctx.localizeHref?.(`/locations/${location.slug}`) ?? `/locations/${location.slug}`}
                 className="font-semibold text-ink"
               >
                 {location.name}

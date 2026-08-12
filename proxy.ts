@@ -52,6 +52,9 @@ const LOCALE_PREFIX = /^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(\/.*)?$/;
  */
 const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media)(\/|$)|\.(xml|txt|ico|png|jpg|svg|webp|avif)$/;
 
+/** Owner/internal routes may look like locale-prefixed public paths, but are not. */
+const NEVER_LOCALIZED = /^\/(admin|login|setup|preview|api|media)(\/|$)/;
+
 export function proxy(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);
   const path = request.nextUrl.pathname;
@@ -68,19 +71,21 @@ export function proxy(request: NextRequest): NextResponse {
     return NextResponse.rewrite(url, { request: { headers } });
   }
 
-  // §4.9's URL strategy, applied before anything else routes: the prefix is
-  // stripped, the remaining path is what the catch-all resolves, and the
-  // locale travels in a header. Public paths only — the admin is not
-  // translated by URL.
-  const prefixed = UNCOUNTED.test(path) ? null : LOCALE_PREFIX.exec(path);
-  if (prefixed) {
+  // §4.9's URL strategy, applied before anything else routes: public pages and
+  // the customer portal accept a prefix. Owner/internal routes never do, even
+  // when somebody types `/fr/admin` by hand.
+  const prefixed = LOCALE_PREFIX.exec(path);
+  if (prefixed && !NEVER_LOCALIZED.test(prefixed[2] ?? "/")) {
     const [, locale = "", rest = "/"] = prefixed;
     headers.set(LOCALE_HEADER, locale);
     headers.set(PATH_HEADER, rest);
     const url = request.nextUrl.clone();
     url.pathname = rest;
     const rewritten = NextResponse.rewrite(url, { request: { headers } });
-    return withVisitorCookies(request, rewritten, headers);
+    // A localized portal request is still account traffic, not analytics.
+    return UNCOUNTED.test(rest)
+      ? rewritten
+      : withVisitorCookies(request, rewritten, headers);
   }
 
   if (UNCOUNTED.test(path)) {

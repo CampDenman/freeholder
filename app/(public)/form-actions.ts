@@ -17,6 +17,9 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { submitForm } from "@/modules/forms/service";
 import { PATH_HEADER } from "@/core/http/headers";
+import { currentBusiness } from "@/core/settings/read";
+import { localizeCustomerHref } from "@/core/i18n/customer";
+import { getLocale } from "../i18n";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -35,7 +38,11 @@ export async function submitPublicForm(form: FormData): Promise<void> {
   const rawSlug = form.get("form_slug");
   const slug = typeof rawSlug === "string" ? rawSlug : "";
   const requestHeaders = await headers();
-  const path = requestHeaders.get(PATH_HEADER) ?? "/";
+  const barePath = requestHeaders.get(PATH_HEADER) ?? "/";
+  const [business, locale] = await Promise.all([currentBusiness(), getLocale()]);
+  const path = business
+    ? localizeCustomerHref(barePath, locale, business)
+    : barePath;
 
   const values: Record<string, unknown> = {};
   for (const [key, value] of form.entries()) {

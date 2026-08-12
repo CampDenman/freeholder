@@ -8,18 +8,11 @@
 // a locale with no translation — advertising a French version that does not
 // exist earns duplicate-content problems in two languages instead of one.
 import { translatedIds } from "@/core/i18n/service";
+import { localePath } from "@/core/i18n/customer";
+
+export { localePath } from "@/core/i18n/customer";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
-
-/** Where a page lives in a locale: default unprefixed, others prefixed. */
-export function localePath(
-  slug: string,
-  locale: string,
-  defaultLocale: string,
-): string {
-  const path = slug === "" ? "/" : `/${slug}`;
-  return locale === defaultLocale ? path : `/${locale}${path === "/" ? "" : path}`;
-}
 
 /** Which of the instance's other locales have a reviewed translation. */
 export async function translatedLocales(

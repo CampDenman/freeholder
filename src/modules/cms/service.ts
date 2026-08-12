@@ -7,7 +7,7 @@
 // safe: an agent rearranging a page goes through the same validation,
 // permission check, audit row and revision history a human does.
 import { z } from "zod";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import { businessProfile } from "@/core/settings/schema";
@@ -354,14 +354,48 @@ export const getSection = defineService({
   summary: "One section by key — the header, the footer, a saved arrangement.",
   kind: "query",
   permission: "public",
-  input: z.object({ key: z.string().min(1), locale: z.string().default("en") }),
+  input: z.object({
+    key: z.string().min(1),
+    locale: z.string().default("en"),
+    fallback: z.boolean().default(true),
+  }),
   handler: async (input, ctx) => {
     const [section] = await ctx.tx
       .select()
       .from(sections)
       .where(and(eq(sections.key, input.key), eq(sections.locale, input.locale)))
       .limit(1);
-    return section ?? null;
+    if (section || !input.fallback) return section ?? null;
+
+    // Missing translated chrome falls back as one coherent header/footer,
+    // just as an untranslated page falls back to its source content. It must
+    // not disappear around an otherwise usable translated page.
+    const [business] = await ctx.tx
+      .select({ defaultLocale: businessProfile.defaultLocale })
+      .from(businessProfile)
+      .limit(1);
+    const [source] = business ? await ctx.tx
+      .select()
+      .from(sections)
+      .where(
+        and(
+          eq(sections.key, input.key),
+          eq(sections.locale, business.defaultLocale),
+        ),
+      )
+      .limit(1) : [];
+    if (source) return source;
+
+    // A business may change its default after the original seed. Until the
+    // owner creates that new variant, keep the last complete chrome row rather
+    // than turning the whole shell blank.
+    const [existing] = await ctx.tx
+      .select()
+      .from(sections)
+      .where(eq(sections.key, input.key))
+      .orderBy(asc(sections.locale))
+      .limit(1);
+    return existing ?? null;
   },
 });
 
@@ -413,6 +447,83 @@ export const updateSection = defineService({
     ctx.setSubject("section", section!.id);
     ctx.queueEvent("cms.sectionUpdated", { key: section!.key });
     return section!;
+  },
+});
+
+/**
+ * Start one translated chrome row from the source section. The copy is data,
+ * visible in the ordinary section editor and removable/editable by the owner;
+ * there is no hidden hardcoded multilingual header in the layout.
+ */
+export const createSectionLocale = defineService({
+  name: "cms.createSectionLocale",
+  summary: "Create an editable locale variant of one site-chrome section.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    key: z.string().min(1),
+    locale: z.string().min(2).max(35),
+  }),
+  handler: async (input, ctx) => {
+    const [business] = await ctx.tx
+      .select({
+        defaultLocale: businessProfile.defaultLocale,
+        enabledLocales: businessProfile.enabledLocales,
+      })
+      .from(businessProfile)
+      .limit(1);
+    if (!business?.enabledLocales.includes(input.locale)) {
+      throw new ServiceError("validation", "Choose a locale this site publishes.");
+    }
+    const [existing] = await ctx.tx
+      .select({ id: sections.id })
+      .from(sections)
+      .where(and(eq(sections.key, input.key), eq(sections.locale, input.locale)))
+      .limit(1);
+    if (existing) {
+      throw new ServiceError("conflict", "That locale variant already exists.");
+    }
+    const [defaultSource] = await ctx.tx
+      .select()
+      .from(sections)
+      .where(
+        and(
+          eq(sections.key, input.key),
+          eq(sections.locale, business.defaultLocale),
+        ),
+      )
+      .limit(1);
+    const [anySource] = defaultSource ? [] : await ctx.tx
+      .select()
+      .from(sections)
+      .where(eq(sections.key, input.key))
+      .orderBy(asc(sections.locale))
+      .limit(1);
+    const source = defaultSource ?? anySource;
+    if (!source) throw new ServiceError("not_found", `no section named "${input.key}"`);
+    try {
+      const [created] = await ctx.tx
+        .insert(sections)
+        .values({
+          key: source.key,
+          locale: input.locale,
+          name: source.name,
+          kind: source.kind,
+          blocks: parseBlockTree(source.blocks, "chrome"),
+        })
+        .returning();
+      ctx.setSubject("section", created!.id);
+      ctx.queueEvent("cms.sectionLocalized", {
+        key: source.key,
+        locale: input.locale,
+      });
+      return created!;
+    } catch (error) {
+      if (isUniqueViolation(error, "sections_key_locale_idx")) {
+        throw new ServiceError("conflict", "That locale variant already exists.");
+      }
+      throw error;
+    }
   },
 });
 
@@ -618,6 +729,7 @@ export default [
   getSection,
   listSections,
   updateSection,
+  createSectionLocale,
   listRevisions,
   restoreRevision,
   ensureDefaults,

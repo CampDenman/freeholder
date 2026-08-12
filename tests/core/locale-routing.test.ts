@@ -73,6 +73,17 @@ describe("the URL strategy at the edge", () => {
   it("does not treat the admin as translatable", () => {
     // The admin is not a public surface and has no URL locale (§4.9).
     expect(rewriteOf("/admin/pages").to).toBeNull();
+    expect(rewriteOf("/fr/admin/pages").to).toBeNull();
+  });
+
+  it("rewrites the customer portal without minting analytics cookies", () => {
+    const response = proxy(new NextRequest(
+      new URL("https://example.test/fr/portal/privacy"),
+    ));
+    expect(new URL(response.headers.get("x-middleware-rewrite")!).pathname)
+      .toBe("/portal/privacy");
+    expect(response.headers.get("x-middleware-request-" + LOCALE_HEADER)).toBe("fr");
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 });
 

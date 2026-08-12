@@ -20,6 +20,7 @@ import type { BlockNode } from "@/modules/cms/blocks/types";
 import { getLocale, getT } from "../i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedSection } from "@/modules/cms/read";
+import { localizeCustomerHref } from "@/core/i18n/customer";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,9 @@ export default async function PublicLayout({
         }
       : null,
     path: requestHeaders.get(PATH_HEADER) ?? "/",
+    localizeHref: business
+      ? (href: string) => localizeCustomerHref(href, locale, business)
+      : undefined,
   };
 
   const [headerNodes, footerNodes] = await Promise.all([

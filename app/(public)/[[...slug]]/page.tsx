@@ -38,6 +38,7 @@ import { alternatesFor, localePath, translatedLocales } from "./alternates";
 import { recordPageView } from "./pageview";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
+import { localizeCustomerHref } from "@/core/i18n/customer";
 
 export const dynamic = "force-dynamic";
 
@@ -179,8 +180,11 @@ export default async function PublicPage({
     const moved = await resolveRedirect.call({ path, locale }, ANONYMOUS);
     if (moved) {
       const destination = moved.toPath === "" ? "/" : `/${moved.toPath}`;
-      if (moved.status === "301") permanentRedirect(destination);
-      redirect(destination);
+      const localized = business
+        ? localizeCustomerHref(destination, locale, business)
+        : destination;
+      if (moved.status === "301") permanentRedirect(localized);
+      redirect(localized);
     }
   }
   if (!page) notFound();
@@ -202,6 +206,9 @@ export default async function PublicPage({
           enabledLocales: business.enabledLocales,
         } : null,
     path: path === "" ? "/" : `/${path}`,
+    localizeHref: business
+      ? (href: string) => localizeCustomerHref(href, locale, business)
+      : undefined,
     // Blocks whose state survives a page load read it from here — see the
     // form block, which confirms a submission by re-rendering rather than by
     // holding the result in client state. Repeated parameters collapse to the

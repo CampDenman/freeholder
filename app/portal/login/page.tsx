@@ -7,8 +7,10 @@ import { Callout } from "@/ui/primitives";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { currentBusiness } from "@/core/settings/read";
-import { getT } from "../../i18n";
+import { getLocale, getT } from "../../i18n";
+import { localizeCustomerHref } from "@/core/i18n/customer";
 import { MagicLinkForm } from "./MagicLinkForm";
+import { PortalLocaleChooser } from "../PortalLocaleChooser";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -17,25 +19,41 @@ export const metadata: Metadata = {
 };
 
 export default async function PortalLoginPage() {
-  const [business, t, jar] = await Promise.all([
+  const [business, locale, t, jar] = await Promise.all([
     currentBusiness(),
+    getLocale(),
     getT(),
     cookies(),
   ]);
   const actor = await actorFromToken(jar.get(SESSION_COOKIE)?.value);
   const signedIn = actor.kind === "user" && actor.grants.length === 0;
+  const policy = {
+    defaultLocale: business?.defaultLocale ?? "en",
+    enabledLocales: business?.enabledLocales ?? ["en"],
+  };
   return (
     <main className="mx-auto max-w-md px-6 py-16">
       <div className="mb-8 flex items-center gap-3">
         <Storefront size={24} weight="duotone" className="text-accent" />
         <span className="font-semibold">{business?.name ?? t("common.appName")}</span>
+        <div className="ms-auto">
+          <PortalLocaleChooser
+            locale={locale}
+            policy={policy}
+            path="/portal/login"
+            signedIn={signedIn}
+            t={t}
+          />
+        </div>
       </div>
       <h1 className="text-2xl font-bold tracking-tight">{t("portal.login.title")}</h1>
       <p className="mt-2 mb-8 text-ink-muted">{t("portal.login.intro")}</p>
       {signedIn ? (
         <Callout tone="success">
           {t("portal.login.signedIn")} {" "}
-          <a href="/portal/privacy">{t("privacy.portal.open")}</a>
+          <a href={localizeCustomerHref("/portal/privacy", locale, policy)}>
+            {t("privacy.portal.open")}
+          </a>
         </Callout>
       ) : (
         <MagicLinkForm labels={{

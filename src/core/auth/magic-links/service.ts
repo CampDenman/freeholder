@@ -16,12 +16,31 @@ import { contacts, customerMagicLinks } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { businessProfile } from "@/core/settings/schema";
 import { actorString, defineService, ServiceError } from "@/core/service";
+import { DEFAULT_LOCALE, translator } from "@/core/i18n";
+import {
+  localeForContact,
+  customerLocalePolicy,
+  localePath,
+  resolveEnabledLocale,
+  type LocalePolicy,
+} from "@/core/i18n/customer";
 
 export const CUSTOMER_MAGIC_COOKIE = "freeholder_customer_magic";
 const MAGIC_LINK_TTL_MINUTES = 15;
+const requestedLocale = z.string().trim().min(2).max(35)
+  .regex(/^[a-z]{2}(-[A-Za-z]{2,4})?$/).optional();
 
-function linkUrl(token: string): string {
-  return `${env().APP_URL.replace(/\/+$/, "")}/portal/magic?token=${encodeURIComponent(token)}`;
+function linkUrl(token: string, locale: string, policy: LocalePolicy): string {
+  const url = new URL(
+    localePath("portal/magic", locale, policy.defaultLocale),
+    `${env().APP_URL.replace(/\/+$/, "")}/`,
+  );
+  url.searchParams.set("token", token);
+  // The GET handoff stays scanner-safe and synchronous. These two non-secret
+  // values let it preserve the contact's path prefix without a database read.
+  url.searchParams.set("locale", locale);
+  url.searchParams.set("default", policy.defaultLocale);
+  return url.toString();
 }
 
 const genericAnswer = {
@@ -34,7 +53,10 @@ export const requestCustomerMagicLink = defineService({
   summary: "Send a customer sign-in link without revealing whether the contact exists.",
   kind: "mutation",
   permission: "public",
-  input: z.object({ email: z.string().trim().email().toLowerCase().max(320) }),
+  input: z.object({
+    email: z.string().trim().email().toLowerCase().max(320),
+    locale: requestedLocale,
+  }),
   rateLimit: {
     limit: 5,
     windowSeconds: 15 * 60,
@@ -48,6 +70,26 @@ export const requestCustomerMagicLink = defineService({
       .where(eq(contacts.email, input.email))
       .limit(1);
     if (!contact?.email) return genericAnswer;
+
+    const [business] = await ctx.tx
+      .select({
+        name: businessProfile.name,
+        defaultLocale: businessProfile.defaultLocale,
+        enabledLocales: businessProfile.enabledLocales,
+      })
+      .from(businessProfile)
+      .limit(1);
+    const site = business?.name ?? "this business";
+    const policy: LocalePolicy = business ?? {
+      defaultLocale: DEFAULT_LOCALE,
+      enabledLocales: [DEFAULT_LOCALE],
+    };
+    // A stored Contact preference wins. The anonymous URL choice is only the
+    // first-use fallback and becomes a Contact fact after bearer proof.
+    const locale = resolveEnabledLocale(
+      contact.preferredLocale ?? input.locale,
+      policy,
+    );
 
     await ctx.tx
       .update(customerMagicLinks)
@@ -64,26 +106,24 @@ export const requestCustomerMagicLink = defineService({
       .values({
         contactId: contact.id,
         email: contact.email,
+        locale,
         tokenHash: hashCustomerMagicLinkToken(token),
         expiresAt: sql`now() + make_interval(mins => ${MAGIC_LINK_TTL_MINUTES})`,
       })
       .returning({ id: customerMagicLinks.id });
     if (!created) throw new Error("customer magic-link insert returned no row");
-    const [business] = await ctx.tx
-      .select({ name: businessProfile.name })
-      .from(businessProfile)
-      .limit(1);
-    const site = business?.name ?? "this business";
+    const t = translator(locale);
     try {
       await sendMail(ctx.tx, {
         to: contact.email,
-        subject: `Your sign-in link for ${site}`,
+        subject: t("portal.magic.email.subject", { site }),
         text: [
-          `Use this private link to sign in to ${site}:`,
+          t("portal.magic.email.intro", { site }),
           "",
-          linkUrl(token),
+          linkUrl(token, locale, policy),
           "",
-          "The link expires in 15 minutes and works once. If you did not request it, ignore this email.",
+          t("portal.magic.email.expires"),
+          t("portal.magic.email.ignore"),
         ].join("\n"),
       }, {
         requestedBy: actorString(ctx.actor),
@@ -155,6 +195,14 @@ export const consumeCustomerMagicLink = defineService({
       .limit(1);
     if (!contact?.email || contact.email !== link.email) invalidLink();
 
+    if (!contact.preferredLocale && link.locale) {
+      const policy = await customerLocalePolicy(ctx.tx);
+      await ctx.tx
+        .update(contacts)
+        .set({ preferredLocale: resolveEnabledLocale(link.locale, policy) })
+        .where(eq(contacts.id, contact.id));
+    }
+
     let [user] = contact.userId
       ? await ctx.tx.select().from(users).where(eq(users.id, contact.userId)).limit(1)
       : await ctx.tx.select().from(users).where(eq(users.email, contact.email)).limit(1);
@@ -202,7 +250,8 @@ export const consumeCustomerMagicLink = defineService({
       subjectType: "contact",
       subjectId: contact.id,
     });
-    return { contactId: contact.id, userId: user!.id, linked, ...session };
+    const locale = await localeForContact(ctx.tx, contact.id);
+    return { contactId: contact.id, userId: user!.id, linked, ...locale, ...session };
   },
 });
 

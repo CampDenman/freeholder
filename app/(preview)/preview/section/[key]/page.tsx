@@ -6,7 +6,8 @@ import { notFound } from "next/navigation";
 import { getSection } from "@/modules/cms/service";
 import { renderBlocks } from "@/modules/cms/render";
 import type { BlockNode } from "@/modules/cms/blocks/types";
-import { getLocale, getT } from "../../../../i18n";
+import { translator } from "@/core/i18n";
+import { localizeCustomerHref, resolveEnabledLocale } from "@/core/i18n/customer";
 import { requireStaffActor } from "../../../../(admin)/admin/guard";
 import { currentBusiness } from "@/core/settings/read";
 
@@ -16,19 +17,29 @@ const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function SectionPreview({
   params,
+  searchParams,
 }: {
   params: Promise<{ key: string }>;
+  searchParams: Promise<{ locale?: string }>;
 }) {
   await requireStaffActor();
-  const { key } = await params;
-
-  const [section, locale, t, business] = await Promise.all([
-    getSection.call({ key }, ANONYMOUS),
-    getLocale(),
-    getT(),
+  const [{ key }, query, business] = await Promise.all([
+    params,
+    searchParams,
     currentBusiness(),
   ]);
+  const policy = {
+    defaultLocale: business?.defaultLocale ?? "en",
+    enabledLocales: business?.enabledLocales ?? ["en"],
+  };
+  const locale = resolveEnabledLocale(query.locale, policy);
+
+  const section = await getSection.call(
+    { key, locale, fallback: false },
+    ANONYMOUS,
+  );
   if (!section) notFound();
+  const t = translator(locale);
 
   return (
     <>
@@ -44,6 +55,7 @@ export default async function SectionPreview({
         }
           : null,
         path: "/",
+        localizeHref: (href) => localizeCustomerHref(href, locale, policy),
         identifyBlocks: true,
       })}
     </>
