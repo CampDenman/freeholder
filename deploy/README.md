@@ -68,6 +68,10 @@ whole story, which is the point.
   owner history, retained dead letters, redrive controls, process layouts,
   backup scope, and failure recovery.
 
+- [`event-outbox.md`](event-outbox.md) — per-listener delivery receipts,
+  leases, bounded retries, event dead letters, duplicate-safe replay,
+  webhook idempotency, retention, and recovery.
+
 ## Known gaps
 
 - arm64 images. `linux/amd64` covers the current DigitalOcean recipe; ARM wants

@@ -21,6 +21,7 @@ import relationshipServices from "@/core/contacts/relationships";
 import privacyServices from "@/core/privacy/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
+import outboxServices from "@/core/events/outbox-service";
 import i18nServices from "@/core/i18n/service";
 import jobServices from "@/core/jobs/service";
 import invitationServices from "@/core/invitations/service";
@@ -31,6 +32,7 @@ import seoServices from "@/core/seo/service";
 import settingsServices from "@/core/settings/service";
 import webhookServices from "@/core/webhooks/service";
 import type { Service } from "@/core/service";
+import type { EventDeliveryContext } from "@/core/events";
 
 const services: Service[] = [
   ...authServices,
@@ -50,6 +52,7 @@ const services: Service[] = [
   ...privacyServices,
   ...doctorServices,
   ...eventServices,
+  ...outboxServices,
   ...i18nServices,
   ...jobServices,
   ...invitationServices,
@@ -73,7 +76,8 @@ export default services;
 export async function onAnyEvent(
   payload: unknown,
   eventName: string,
+  context?: EventDeliveryContext,
 ): Promise<void> {
   const { fanOut } = await import("@/core/webhooks/service");
-  await fanOut(eventName, payload);
+  await fanOut(eventName, payload, context?.eventId);
 }

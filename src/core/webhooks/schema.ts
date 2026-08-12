@@ -25,6 +25,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { outboxEvents } from "@/core/events/schema";
 
 export const webhookSubscriptions = pgTable(
   "webhook_subscriptions",
@@ -82,6 +83,10 @@ export const webhookDeliveries = pgTable(
     subscriptionId: uuid("subscription_id")
       .notNull()
       .references(() => webhookSubscriptions.id, { onDelete: "cascade" }),
+    /** Stable source event; makes fan-out replay idempotent per subscription. */
+    outboxEventId: uuid("outbox_event_id").references(() => outboxEvents.id, {
+      onDelete: "set null",
+    }),
     eventName: text("event_name").notNull(),
     /** Exactly what was sent, so a failed delivery can be read and re-sent. */
     payload: jsonb("payload").notNull().default({}),
@@ -109,6 +114,9 @@ export const webhookDeliveries = pgTable(
   },
   (t) => [
     index("webhook_deliveries_subscription_idx").on(t.subscriptionId),
+    uniqueIndex("webhook_deliveries_outbox_event_idx")
+      .on(t.subscriptionId, t.outboxEventId)
+      .where(sql`${t.outboxEventId} is not null`),
     // The worker's query: everything due, oldest first. Partial, because
     // finished deliveries are the overwhelming majority of the table and none
     // of them are ever due.
