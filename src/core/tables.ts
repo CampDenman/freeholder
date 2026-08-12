@@ -41,6 +41,14 @@ export {
   mailSuppressions,
 } from "@/core/mail/schema";
 export {
+  notificationDeliveries,
+  notificationDigests,
+  notificationPreferences,
+  notificationReceipts,
+  notificationSettings,
+  notifications,
+} from "@/core/notifications/schema";
+export {
   webhookSubscriptions,
   webhookDeliveries,
 } from "@/core/webhooks/schema";

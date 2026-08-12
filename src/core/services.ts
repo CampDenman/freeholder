@@ -29,6 +29,7 @@ import locationServices from "@/core/locations/service";
 import mailServices from "@/core/mail/service";
 import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
+import notificationServices from "@/core/notifications/service";
 import roleServices from "@/core/roles/service";
 import seoServices from "@/core/seo/service";
 import settingsServices from "@/core/settings/service";
@@ -62,6 +63,7 @@ const services: Service[] = [
   ...mailServices,
   ...mailOAuthServices,
   ...mediaServices,
+  ...notificationServices,
   ...roleServices,
   ...seoServices,
   ...settingsServices,
@@ -83,5 +85,9 @@ export async function onAnyEvent(
   context?: EventDeliveryContext,
 ): Promise<void> {
   const { fanOut } = await import("@/core/webhooks/service");
-  await fanOut(eventName, payload, context?.eventId);
+  const { fanOutEventNotification } = await import("@/core/notifications/service");
+  await Promise.all([
+    fanOut(eventName, payload, context?.eventId),
+    fanOutEventNotification(eventName, payload, context?.eventId),
+  ]);
 }

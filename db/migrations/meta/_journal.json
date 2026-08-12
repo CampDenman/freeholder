@@ -225,6 +225,20 @@
       "when": 1786560048711,
       "tag": "0031_lucky_maria_hill",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786569520120,
+      "tag": "0032_fancy_namora",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786569826352,
+      "tag": "0033_thin_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }

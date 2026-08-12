@@ -30,6 +30,8 @@ import {
   type FormField,
 } from "./fields";
 import { HONEYPOT_FIELD, inspect, STAMP_FIELD } from "./antispam";
+import type { EventDeliveryContext } from "@/core/events";
+import { createNotification } from "@/core/notifications/service";
 
 // CLAUDE.md's non-negotiable, honoured by the module that creates the
 // obligation: a submission points at a contact, so merging two duplicates has
@@ -485,7 +487,11 @@ export const submissionCounts = defineService({
  * Suspected spam is never notified. A quarantine that emails the owner about
  * every caught message is a quarantine that trains them to ignore it.
  */
-export async function onFormSubmitted(payload: unknown): Promise<void> {
+export async function onFormSubmitted(
+  payload: unknown,
+  _eventName?: string,
+  context?: EventDeliveryContext,
+): Promise<void> {
   const { submissionId } = (payload ?? {}) as { submissionId?: string };
   if (!submissionId) return;
 
@@ -511,27 +517,30 @@ export async function onFormSubmitted(payload: unknown): Promise<void> {
     .filter((line): line is string => line !== null);
 
   const from = emailFrom(fields, data);
-  const { sendMail } = await import("@/core/mail/service");
+  const notificationBody = [
+    `Somebody filled in "${row.form.name}".`,
+    "",
+    ...answers,
+    "",
+    row.submission.sourceUrl ? `Sent from ${row.submission.sourceUrl}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 4000);
   for (const to of recipients) {
-    await db().transaction((tx) => sendMail(tx, {
-      to,
-      subject: `${row.form.name}: a new submission`,
-      // The reply goes to the person who wrote, not to the platform — an
-      // owner reading this on a phone should be able to press reply.
+    await createNotification.call({
+      recipient: { kind: "email", address: to },
+      topic: "forms.submission",
+      priority: "information",
+      title: `${row.form.name}: a new submission`,
+      body: notificationBody,
+      href: `/admin/forms/${row.form.id}`,
       replyTo: from,
-      text: [
-        `Somebody filled in "${row.form.name}".`,
-        "",
-        ...answers,
-        "",
-        row.submission.sourceUrl ? `Sent from ${row.submission.sourceUrl}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    }, {
-      requestedBy: "system",
+      sourceEventId: context?.eventId,
+      sourceEventName: "forms.submitted",
       idempotencyKey: `form:${submissionId}:notify:${to.toLowerCase()}`,
-    }));
+      dedupeKey: `form-submission:${submissionId}:${to.toLowerCase()}`,
+    }, { kind: "system" });
   }
 }
 

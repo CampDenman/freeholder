@@ -13,6 +13,8 @@ import { requireStaffActor } from "./guard";
 import { AdminNav } from "./AdminNav";
 import { SignOutButton } from "./SignOutButton";
 import { currentBusiness } from "@/core/settings/read";
+import { unreadNotificationCount } from "@/core/notifications/service";
+import { Bell } from "@phosphor-icons/react/dist/ssr";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +31,11 @@ export default async function AdminLayout({
   children: ReactNode;
 }) {
   const actor = await requireStaffActor();
-  const [business, theme, t] = await Promise.all([
+  const [business, theme, t, unread] = await Promise.all([
     currentBusiness(),
     readThemePreference(),
     getT(),
+    unreadNotificationCount.call({}, actor),
   ]);
 
   return (
@@ -46,6 +49,18 @@ export default async function AdminLayout({
             {actor.kind === "user" ? actor.role : ""}
           </span>
           <div className="ms-auto flex items-center gap-3">
+            <a
+              href="/admin/notifications"
+              aria-label={t("notifications.bell", { count: unread })}
+              className="relative inline-flex size-9 items-center justify-center rounded-full border border-rule text-ink-muted hover:text-ink"
+            >
+              <Bell size={18} weight={unread > 0 ? "fill" : "regular"} />
+              {unread > 0 ? (
+                <span className="absolute -end-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center font-mono text-[0.65rem] font-bold leading-5 text-white">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              ) : null}
+            </a>
             <a href="/security" className="text-sm text-ink-muted hover:text-ink">
               {t("security.nav")}
             </a>
