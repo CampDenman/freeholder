@@ -45,7 +45,7 @@ unit suites always run.
 
 ```bash
 pnpm test          # vitest
-pnpm build && pnpm test:a11y # real Chromium accessibility gate (needs TEST_DATABASE_URL)
+pnpm build && pnpm test:browser # real Chromium accessibility + product journeys
 pnpm typecheck     # tsc --noEmit
 pnpm lint          # architecture, money (§15.4), service-layer (§15.5), i18n (§15.3)
 pnpm plan:check    # MASTER.md is the one complete, internally consistent plan
@@ -56,8 +56,9 @@ pnpm dependency:audit # advisories plus SECURITY.md's exception contract
 The browser gate truncates the throwaway database, never the development
 database. Install its pinned Chromium once with
 `pnpm exec playwright install chromium`; see
-[`deploy/accessibility-testing.md`](deploy/accessibility-testing.md) for the
-coverage matrix, artifacts and manual assistive-technology boundary.
+[`deploy/accessibility-testing.md`](deploy/accessibility-testing.md) and
+[`deploy/browser-journeys.md`](deploy/browser-journeys.md) for the coverage
+matrices, artifacts and fixture boundaries.
 
 CI runs all of the above plus the build, a dependency audit, and a Docker image
 that has to answer a real HTTP request. Run them before opening a PR and the

@@ -162,7 +162,7 @@ export function SecurityControls({
 
       {(status.totp || status.webauthn.length > 0) ? (
         <section className="grid gap-4 rounded-lg border border-rule bg-surface p-5">
-          <div><h2 className="font-semibold">{labels.recovery}</h2><p className="text-sm text-ink-muted">{labels.recoveryIntro!.replace("{count}", String(status.recoveryCodesRemaining))}</p></div>
+          <div><h2 className="font-semibold">{labels.recovery}</h2><p className="text-sm text-ink-muted">{labels.recoveryIntro}</p></div>
           {!status.stepUpValid ? <a href="/security/verify?returnTo=/security" className="text-sm font-medium text-accent underline">{labels.verifyFirst}</a> : null}
           <Button type="button" variant="quiet" disabled={pending} onClick={() => run(regenerateRecoveryCodesAction)}>{labels.regenerate}</Button>
         </section>

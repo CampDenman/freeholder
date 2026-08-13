@@ -58,13 +58,13 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
-      # C1.21 is deliberately separate from the jsdom unit helpers: Chromium
-      # supplies real layout, focus navigation, media preferences and an
-      # accessibility tree. The test itself resets only the disposable CI DB.
-      - name: Real-browser accessibility gate (§15.7, C1.21)
+      # C1.21/C1.22 are deliberately separate from the jsdom unit helpers:
+      # Chromium supplies real layout, focus, navigation and Server Action
+      # behaviour. The serial suites reset only the disposable CI database.
+      - name: Real-browser accessibility and journey gates (§15.7, C1.21-C1.22)
         run: |
           pnpm exec playwright install --with-deps chromium
-          pnpm test:a11y
+          pnpm test:browser
       # A recipe whose image does not build is a recipe nobody can use, and
       # this repo has no Docker on the development machine — so CI is where
       # that claim gets checked. First half of §18's recipe validation matrix.

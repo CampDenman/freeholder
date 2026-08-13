@@ -10,7 +10,12 @@ import { z } from "zod";
 import { eq, sql } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { businessProfile, moduleSettings } from "@/core/settings/schema";
-import { defineService, ServiceError } from "@/core/service";
+import { requireSetupOwner } from "@/core/settings/setup";
+import {
+  defineService,
+  ServiceError,
+  type ServiceContext,
+} from "@/core/service";
 
 const PROFILE_ID = 1;
 
@@ -96,26 +101,43 @@ export const setupState = defineService({
   },
 });
 
+async function writeBusiness(
+  input: z.output<typeof createProfile>,
+  ctx: ServiceContext,
+) {
+  const [profile] = await ctx.tx
+    .insert(businessProfile)
+    .values({ ...input, id: PROFILE_ID })
+    .onConflictDoUpdate({
+      target: businessProfile.id,
+      set: { ...input },
+    })
+    .returning();
+  ctx.setSubject("business_profile", String(PROFILE_ID));
+  ctx.queueEvent("settings.businessUpdated", { name: profile!.name });
+  return profile!;
+}
+
 export const updateBusiness = defineService({
   name: "settings.updateBusiness",
   summary: "Create or change the business profile.",
   kind: "mutation",
   permission: "scoped",
   input: createProfile,
+  handler: writeBusiness,
+});
+
+/** First boot's write, before the owner's mandatory second factor exists. */
+export const saveSetupBusiness = defineService({
+  name: "settings.saveSetupBusiness",
+  summary: "Save business details while first-boot setup is still open.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  input: createProfile,
   handler: async (input, ctx) => {
-    // Upsert on the fixed id: setup writes the first version and the admin
-    // screen edits it later, through one path rather than two.
-    const [profile] = await ctx.tx
-      .insert(businessProfile)
-      .values({ ...input, id: PROFILE_ID })
-      .onConflictDoUpdate({
-        target: businessProfile.id,
-        set: { ...input },
-      })
-      .returning();
-    ctx.setSubject("business_profile", String(PROFILE_ID));
-    ctx.queueEvent("settings.businessUpdated", { name: profile!.name });
-    return profile!;
+    await requireSetupOwner(ctx.tx, ctx.actor);
+    return writeBusiness(input, ctx);
   },
 });
 
@@ -154,37 +176,53 @@ export const patchBusiness = defineService({
   },
 });
 
+async function finishSetup(ctx: ServiceContext) {
+  const [profile] = await ctx.tx
+    .select()
+    .from(businessProfile)
+    .where(eq(businessProfile.id, PROFILE_ID))
+    .limit(1);
+  if (!profile) {
+    throw new ServiceError(
+      "not_found",
+      "There is no business profile to finish. Save the business details first.",
+    );
+  }
+  if (profile.setupCompletedAt) {
+    // §13: locked after completion. Replaying the wizard against a live
+    // business is how a demo instance gets reset by a passer-by.
+    throw new ServiceError("conflict", "Setup is already complete.");
+  }
+  const [updated] = await ctx.tx
+    .update(businessProfile)
+    .set({ setupCompletedAt: sql`now()` })
+    .where(eq(businessProfile.id, PROFILE_ID))
+    .returning();
+  ctx.setSubject("business_profile", String(PROFILE_ID));
+  ctx.queueEvent("settings.setupCompleted", {});
+  return updated!;
+}
+
 export const completeSetup = defineService({
   name: "settings.completeSetup",
   summary: "Finish first-boot setup and lock the wizard.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  handler: async (_input, ctx) => finishSetup(ctx),
+});
+
+/** Complete first boot before the owner's mandatory second factor exists. */
+export const finishSetupAsOwner = defineService({
+  name: "settings.finishSetupAsOwner",
+  summary: "Complete and lock first-boot setup as its registered owner.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  input: z.object({}),
   handler: async (_input, ctx) => {
-    const [profile] = await ctx.tx
-      .select()
-      .from(businessProfile)
-      .where(eq(businessProfile.id, PROFILE_ID))
-      .limit(1);
-    if (!profile) {
-      throw new ServiceError(
-        "not_found",
-        "There is no business profile to finish. Save the business details first.",
-      );
-    }
-    if (profile.setupCompletedAt) {
-      // §13: locked after completion. Replaying the wizard against a live
-      // business is how a demo instance gets reset by a passer-by.
-      throw new ServiceError("conflict", "Setup is already complete.");
-    }
-    const [updated] = await ctx.tx
-      .update(businessProfile)
-      .set({ setupCompletedAt: sql`now()` })
-      .where(eq(businessProfile.id, PROFILE_ID))
-      .returning();
-    ctx.setSubject("business_profile", String(PROFILE_ID));
-    ctx.queueEvent("settings.setupCompleted", {});
-    return updated!;
+    await requireSetupOwner(ctx.tx, ctx.actor);
+    return finishSetup(ctx);
   },
 });
 
@@ -319,8 +357,10 @@ export default [
   getModuleConfig,
   getBusiness,
   setupState,
+  saveSetupBusiness,
   updateBusiness,
   patchBusiness,
+  finishSetupAsOwner,
   completeSetup,
   listModules,
   setModuleEnabled,
