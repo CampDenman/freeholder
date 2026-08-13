@@ -55,6 +55,13 @@ const envSchema = z.object({
   S3_PUBLIC: z.enum(["true", "false"]).optional(),
 
   /**
+   * Exact external origins a reviewed third-party creative may use. Merely
+   * listing one never enables it: the visitor's separate `fh_tc=granted`
+   * choice is also required before the response policy includes these.
+   */
+  CSP_THIRD_PARTY_ORIGINS: z.string().optional(),
+
+  /**
    * Transactional mail (§12). Overrides `adapters.mailTransactional`.
    *
    * The default is `console`, which prints and does not send — so a fresh

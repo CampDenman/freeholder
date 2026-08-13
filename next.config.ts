@@ -67,14 +67,12 @@ const nextConfig: NextConfig = {
       },
       {
         // Same protections, minus the one that would stop the editor showing
-        // the page being edited. `frame-ancestors 'self'` is the modern
-        // expression of the same rule and is what a current browser honours;
-        // SAMEORIGIN is there for anything that does not.
+        // the page being edited. Proxy supplies the nonce-based CSP and its
+        // `frame-ancestors 'self'`; SAMEORIGIN remains the legacy fallback.
         source: "/preview/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
           {

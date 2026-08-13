@@ -2894,11 +2894,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-12 |
-| Evidence snapshot | `main` at `5f50047` (C1.17 merged); C1.18 changeset `analytics-governance.md` |
+| Evidence snapshot | `main` at `feae0f0` (C1.18 merged); C1.19 changeset `content-security-policy.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.19 Content Security Policy and violation reporting; no public-launch work is required |
+| Current focus | C1.20 dependency advisories and severity policy; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3184,8 +3184,17 @@ reading chat logs.
   `tests/core/analytics-governance-migration.test.ts`; 1,040-test full suite;
   changeset `analytics-governance.md`; operator guide
   `deploy/analytics-governance.md`)
-- [ ] **C1.19** Add a Content Security Policy compatible with editor preview,
+- [x] **C1.19** Add a Content Security Policy compatible with editor preview,
   uploads and explicitly consented third-party creatives; report violations.
+  (per-request nonce and strict-dynamic document policy; same-origin preview
+  framing; active-S3 media and admin-only upload origins; exact external
+  origins gated by separate `fh_tc` creative consent; legacy and Reporting API
+  intake with same-origin validation, redacted paths/origins, deduplication,
+  10,000-fingerprint capacity and 30-day daily pruning; Health diagnostics;
+  `0037_tidy_thunderbolts.sql`; `tests/core/csp.test.ts`;
+  `tests/core/csp-reports.test.ts`; `tests/core/csp-migration.test.ts`;
+  1,058-test full suite; changeset `content-security-policy.md`; operator guide
+  `deploy/content-security-policy.md`)
 - [ ] **C1.20** Patch all actionable dependency advisories and keep a zero
   known-high/critical policy with documented exceptions for lower severities.
 - [ ] **C1.21** Replace simulated public accessibility checks with real-browser

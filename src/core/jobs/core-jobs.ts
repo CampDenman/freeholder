@@ -294,6 +294,17 @@ export const pruneAnalyticsEvents = defineJob({
   },
 });
 
+/** Browser security diagnostics are useful briefly, never permanent history. */
+export const pruneContentSecurityPolicyViolations = defineJob({
+  name: "core.pruneCspViolations",
+  summary: "Delete expired deduplicated Content Security Policy reports.",
+  schedule: "59 4 * * *",
+  handler: async () => {
+    const { pruneCspViolations } = await import("@/core/security/csp-reports");
+    return { deleted: await pruneCspViolations() };
+  },
+});
+
 /** Idempotency is bounded durable state, not an unbounded second job history. */
 export const pruneJobKeys = defineJob({
   name: "core.pruneJobKeys",
@@ -394,6 +405,7 @@ export default [
   reapAgentLeases,
   prunePrivacyArtifacts,
   pruneAnalyticsEvents,
+  pruneContentSecurityPolicyViolations,
   pruneJobKeys,
   sweepMediaOrphans,
   purgeExpiredMediaAssets,

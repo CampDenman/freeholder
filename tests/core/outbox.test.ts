@@ -368,6 +368,7 @@ describe("the job registry", () => {
       "core.dispatchOutbox",
       "core.pruneOutbox",
       "core.pruneAnalytics",
+      "core.pruneCspViolations",
     ]) {
       expect({ name, mounted: jobs.has(name) }).toEqual({ name, mounted: true });
     }

@@ -17,11 +17,22 @@
 // multilingual: non-default locales are path-prefixed, and stripping that
 // prefix before the route sees it is exactly this layer's job.
 import { NextResponse, type NextRequest } from "next/server";
+import instanceConfig from "./freeholder.config";
 import {
   LOCALE_HEADER,
   PATH_HEADER,
   REQUEST_TARGET_HEADER,
 } from "@/core/http/headers";
+import { env } from "@/core/env";
+import {
+  CSP_NONCE_HEADER,
+  THIRD_PARTY_CREATIVE_CONSENT_COOKIE,
+  contentSecurityPolicy,
+  cspAppliesToPath,
+  parseCspOrigins,
+  reportingEndpointsHeader,
+  thirdPartyCreativeConsentGranted,
+} from "@/core/http/csp";
 import {
   ANALYTICS_BOOTSTRAP_COOKIE,
   ANALYTICS_BOOTSTRAP_HEADER,
@@ -69,6 +80,20 @@ export function proxy(request: NextRequest): NextResponse {
   const path = request.nextUrl.pathname;
   headers.set(PATH_HEADER, path);
   headers.set(REQUEST_TARGET_HEADER, `${path}${request.nextUrl.search}`);
+  const policy = requestPolicy(request, path);
+  if (policy) {
+    // Next parses the request policy and applies this nonce to its framework
+    // scripts and styles. The browser enforces the identical response policy.
+    headers.set(CSP_NONCE_HEADER, policy.nonce);
+    headers.set("content-security-policy", policy.value);
+  }
+  const finalize = (response: NextResponse): NextResponse => {
+    if (policy) {
+      response.headers.set("Content-Security-Policy", policy.value);
+      response.headers.set("Reporting-Endpoints", reportingEndpointsHeader());
+    }
+    return response;
+  };
 
   // Next matches a dynamic segment, never a dynamic part of one, so the file
   // cannot be named `sitemap-[locale].xml`. The published URL is the one in
@@ -78,7 +103,7 @@ export function proxy(request: NextRequest): NextResponse {
   if (sitemap) {
     const url = request.nextUrl.clone();
     url.pathname = `/sitemaps/${sitemap[1]}`;
-    return NextResponse.rewrite(url, { request: { headers } });
+    return finalize(NextResponse.rewrite(url, { request: { headers } }));
   }
 
   // §4.9's URL strategy, applied before anything else routes: public pages and
@@ -92,24 +117,62 @@ export function proxy(request: NextRequest): NextResponse {
     const url = request.nextUrl.clone();
     url.pathname = rest;
     // A localized portal request is still account traffic, not analytics.
-    return UNCOUNTED.test(rest)
+    return finalize(UNCOUNTED.test(rest)
       ? NextResponse.rewrite(url, { request: { headers } })
       : withAnalyticsIdentity(
           request,
           headers,
           (forwarded) => NextResponse.rewrite(url, { request: { headers: forwarded } }),
-        );
+        ));
   }
 
   if (UNCOUNTED.test(path)) {
-    return NextResponse.next({ request: { headers } });
+    return finalize(NextResponse.next({ request: { headers } }));
   }
 
-  return withAnalyticsIdentity(
+  return finalize(withAnalyticsIdentity(
     request,
     headers,
     (forwarded) => NextResponse.next({ request: { headers: forwarded } }),
-  );
+  ));
+}
+
+function originOf(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function requestPolicy(
+  request: NextRequest,
+  path: string,
+): { nonce: string; value: string } | null {
+  if (!cspAppliesToPath(path)) return null;
+  const runtime = env();
+  const storageOrigins = (runtime.FREEHOLDER_STORAGE ?? instanceConfig.adapters.storage) === "s3"
+    ? [
+        originOf(runtime.S3_ENDPOINT),
+        originOf(runtime.S3_PUBLIC_BASE_URL),
+      ].filter((value): value is string => Boolean(value))
+    : [];
+  const nonce = crypto.randomUUID().replaceAll("-", "");
+  return {
+    nonce,
+    value: contentSecurityPolicy({
+      nonce,
+      path,
+      production: runtime.NODE_ENV === "production",
+      mediaOrigins: storageOrigins,
+      uploadOrigins: storageOrigins,
+      creativeOrigins: parseCspOrigins(runtime.CSP_THIRD_PARTY_ORIGINS),
+      thirdPartyCreativeConsent: thirdPartyCreativeConsentGranted(
+        request.cookies.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
+      ),
+    }),
+  };
 }
 
 /**

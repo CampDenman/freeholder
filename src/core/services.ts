@@ -31,6 +31,7 @@ import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
 import notificationServices from "@/core/notifications/service";
 import roleServices from "@/core/roles/service";
+import cspServices from "@/core/security/csp-reports";
 import seoServices from "@/core/seo/service";
 import settingsServices from "@/core/settings/service";
 import webhookServices from "@/core/webhooks/service";
@@ -65,6 +66,7 @@ const services: Service[] = [
   ...mediaServices,
   ...notificationServices,
   ...roleServices,
+  ...cspServices,
   ...seoServices,
   ...settingsServices,
   ...webhookServices,

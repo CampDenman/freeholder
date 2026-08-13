@@ -16,6 +16,7 @@
 //   - A path with no published page is a real 404, not a soft one — §5 wants
 //     "clean structural 404s", and a 200 saying "not found" is neither.
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { setupState } from "@/core/settings/service";
@@ -39,6 +40,7 @@ import { recordPageView } from "./pageview";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
+import { CSP_NONCE_HEADER } from "@/core/http/csp";
 
 export const dynamic = "force-dynamic";
 
@@ -147,7 +149,12 @@ export default async function PublicPage({
   params: Promise<Params>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [{ slug }, query] = await Promise.all([params, searchParams]);
+  const [{ slug }, query, requestHeaders] = await Promise.all([
+    params,
+    searchParams,
+    headers(),
+  ]);
+  const nonce = requestHeaders.get(CSP_NONCE_HEADER) ?? undefined;
   const path = await pathFor(slug);
 
   const [locale, t] = await Promise.all([getLocale(), getT()]);
@@ -270,6 +277,7 @@ export default async function PublicPage({
       {jsonLd.map((entry, i) => (
         <script
           key={i}
+          nonce={nonce}
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(entry) }}
         />
