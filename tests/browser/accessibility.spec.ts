@@ -6,13 +6,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Frame, type Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
-import postgres from "postgres";
 import { contacts } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { users, totpFactors } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
-import { seedDefaultRoles } from "@/core/roles/defaults";
 import { pages } from "@/modules/cms/schema";
 import { registerBlock } from "@/modules/cms/blocks/registry";
 import { formBlock } from "@/modules/forms/block";
@@ -22,6 +20,7 @@ import {
   CUSTOMER,
   OWNER,
 } from "../helpers/spine";
+import { resetBrowserDatabase } from "./database";
 
 type Surface = "setup" | "admin" | "editor" | "storefront" | "portal";
 
@@ -356,27 +355,6 @@ async function installFixtures() {
     homePageId: home.id,
     ownerToken: ownerSession.token,
   };
-}
-
-async function resetBrowserDatabase() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL was not configured for the browser suite.");
-  const client = postgres(url, { max: 1, onnotice: () => {} });
-  try {
-    const rows = await client<{ tablename: string }[]>`
-      select tablename
-      from pg_tables
-      where schemaname = 'public'
-        and tablename <> '__drizzle_migrations'
-      order by tablename
-    `;
-    if (rows.length === 0) throw new Error("The browser test database has no migrated tables.");
-    const names = rows.map(({ tablename }) => `"${tablename.replaceAll('"', '""')}"`);
-    await client.unsafe(`truncate table ${names.join(", ")} restart identity cascade`);
-  } finally {
-    await client.end();
-  }
-  await db().transaction(seedDefaultRoles);
 }
 
 test.describe("real-browser accessibility", () => {

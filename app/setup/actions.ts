@@ -16,8 +16,11 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
-import { completeSetup, updateBusiness } from "@/core/settings/service";
-import { createLocationService } from "@/core/locations/service";
+import {
+  finishSetupAsOwner,
+  saveSetupBusiness,
+} from "@/core/settings/service";
+import { createSetupLocation } from "@/core/locations/service";
 import { ServiceError } from "@/core/service";
 
 export interface ActionState {
@@ -98,7 +101,7 @@ export async function saveBusinessAction(
     .filter(Boolean);
 
   try {
-    await updateBusiness.call(
+    await saveSetupBusiness.call(
       {
         name: text(form, "name", ""),
         tagline: text(form, "tagline") || undefined,
@@ -144,7 +147,7 @@ export async function saveSetupLocationAction(
       (await cookies()).get(SESSION_COOKIE)?.value,
     );
     try {
-      await createLocationService.call(
+      await createSetupLocation.call(
         {
           name: text(form, "name", ""),
           // The site address is derived rather than asked for: nobody setting
@@ -191,7 +194,7 @@ export async function completeSetupAction(
     (await cookies()).get(SESSION_COOKIE)?.value,
   );
   try {
-    await completeSetup.call({}, actor);
+    await finishSetupAsOwner.call({}, actor);
   } catch (error) {
     return present(error);
   }

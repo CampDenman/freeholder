@@ -29,13 +29,14 @@ surface it:
   that it had a real transition before reduction, so this cannot pass by
   checking an interface that never moved.
 
-Failures retain a screenshot, video and trace under `test-results/a11y`.
-Playwright's HTML report is retained under `playwright-report/a11y` in CI.
+Failures retain a screenshot, video and trace under `test-results/browser`.
+Playwright's HTML report is retained under `playwright-report/browser` in CI.
 Neither directory is committed.
 
 ## Run it locally
 
-Set `TEST_DATABASE_URL` (or the more specific `A11Y_DATABASE_URL`) to a
+Set `TEST_DATABASE_URL` (or the more specific `A11Y_DATABASE_URL` or shared
+`BROWSER_DATABASE_URL`) to a
 throwaway PostgreSQL database whose name contains `test` or `a11y`. The suite
 refuses every other database name before it connects or truncates anything.
 It migrates and resets that database, creates only deterministic fixtures,
@@ -51,8 +52,10 @@ pnpm test:a11y
 ```
 
 The app starts on `http://localhost:3100`. Override that with
-`A11Y_BASE_URL` only when the replacement URL reaches the same local test
-process and database.
+`A11Y_BASE_URL` (or shared `BROWSER_BASE_URL`) only when the replacement URL
+reaches the same local test process and database. `pnpm test:browser` runs this
+suite and the product journeys described in
+[`browser-journeys.md`](browser-journeys.md) serially against that database.
 
 ## Human verification still matters
 

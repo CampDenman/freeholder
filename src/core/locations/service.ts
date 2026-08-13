@@ -20,7 +20,12 @@ import {
   serviceAreas,
 } from "@/core/locations/schema";
 import { violates } from "@/core/db/errors";
-import { defineService, ServiceError } from "@/core/service";
+import { requireSetupOwner } from "@/core/settings/setup";
+import {
+  defineService,
+  ServiceError,
+  type ServiceContext,
+} from "@/core/service";
 
 /** A URL segment: lowercase, no punctuation to escape, no leading dash. */
 const slug = z
@@ -214,37 +219,52 @@ export const createLocationService = defineService({
   kind: "mutation",
   permission: "scoped",
   input: createLocation,
+  handler: createLocationRow,
+});
+
+/** First boot's optional location write, before owner 2FA can be enrolled. */
+export const createSetupLocation = defineService({
+  name: "locations.createSetupLocation",
+  summary: "Add the optional first location while setup is still open.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  input: createLocation,
   handler: async (input, ctx) => {
-    const { isPrimary, ...values } = input;
-
-    const [existingCount] = await ctx.tx
-      .select({ count: sql<number>`count(*)::int` })
-      .from(businessLocations);
-    const first = (existingCount?.count ?? 0) === 0;
-    const primary = isPrimary ?? first;
-
-    // Demoting the incumbent before inserting, rather than letting the partial
-    // unique index reject the write: an owner marking a new location primary
-    // means "this one instead", and answering with a constraint error would
-    // make them go and unset the old one first.
-    if (primary && !first) {
-      await ctx.tx
-        .update(businessLocations)
-        .set({ isPrimary: false })
-        .where(eq(businessLocations.isPrimary, true));
-    }
-
-    const [row] = await ctx.tx
-      .insert(businessLocations)
-      .values({ ...values, isPrimary: primary })
-      .returning()
-      .catch(slugConflict(values.slug));
-
-    ctx.setSubject("business_locations", row!.id);
-    ctx.queueEvent("location.created", { id: row!.id, slug: row!.slug });
-    return row!;
+    await requireSetupOwner(ctx.tx, ctx.actor);
+    return createLocationRow(input, ctx);
   },
 });
+
+async function createLocationRow(
+  input: z.output<typeof createLocation>,
+  ctx: ServiceContext,
+) {
+  const { isPrimary, ...values } = input;
+
+  const [existingCount] = await ctx.tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(businessLocations);
+  const first = (existingCount?.count ?? 0) === 0;
+  const primary = isPrimary ?? first;
+
+  if (primary && !first) {
+    await ctx.tx
+      .update(businessLocations)
+      .set({ isPrimary: false })
+      .where(eq(businessLocations.isPrimary, true));
+  }
+
+  const [row] = await ctx.tx
+    .insert(businessLocations)
+    .values({ ...values, isPrimary: primary })
+    .returning()
+    .catch(slugConflict(values.slug));
+
+  ctx.setSubject("business_locations", row!.id);
+  ctx.queueEvent("location.created", { id: row!.id, slug: row!.slug });
+  return row!;
+}
 
 export const updateLocation = defineService({
   name: "locations.update",
@@ -516,6 +536,7 @@ export default [
   listLocations,
   primaryLocation,
   getLocation,
+  createSetupLocation,
   createLocationService,
   updateLocation,
   setPrimaryLocation,

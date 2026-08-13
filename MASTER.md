@@ -2900,12 +2900,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-12 |
-| Evidence snapshot | `main` at `81d9cdc` (Apache-2.0 licensing merged); C1.21 changeset `real-browser-accessibility.md` |
+| Last reconciled | 2026-08-13 |
+| Evidence snapshot | `main` at `b3c8ee6` (C1.21 merged and post-merge CI/image publication green; C4.19 owner site-wide content builder merged); C1.22 changeset `browser-journeys.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.22 browser journeys; no public-launch work is required |
+| Current focus | C1.23 backup, restore, export, media, credential-key, retention and erasure drills; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3236,8 +3236,28 @@ reading chat logs.
   five-step production-browser matrix; operator/developer guide
   `deploy/accessibility-testing.md`; changeset
   `real-browser-accessibility.md`)
-- [ ] **C1.22** Add Playwright-style browser journeys for setup, auth, editing,
+- [x] **C1.22** Add Playwright-style browser journeys for setup, auth, editing,
   publishing, forms, contacts, translations, API keys, MCP and recovery.
+  (one serial production-Chromium story from empty migrated database through
+  owner/business/location setup and permanent wizard lock; narrow
+  authenticated-human/unique-owner/incomplete-setup services bridge mandatory
+  2FA without weakening ordinary scoped writes; TOTP enrollment, one-time
+  recovery codes, wrong-password and password-plus-factor login; form builder,
+  schema-derived page blocks, autosave, publishing and signed public form
+  submission into the shared Contact spine; direct Contact entry; reviewed
+  `fr-CA` translation on the localized public route; least-privilege API-key
+  minting and one-time reveal; authenticated MCP discovery and scoped
+  `contacts.list` JSON-RPC invocation; forgot/reset flow, old-password refusal,
+  session revocation and recovery-code restoration; known reset token exists
+  only as a test-side hash substitution after the public request because
+  production never exposes it; security-page ICU recovery count fixed;
+  reusable guarded database reset and serial combined browser gate;
+  `tests/browser/journeys.spec.ts`; `tests/browser/database.ts`;
+  `src/core/settings/setup.ts`; `pnpm test:journeys`; `pnpm test:browser`;
+  1,070-test Vitest suite plus the five-surface accessibility and ten-area
+  product journey matrices in production Chromium;
+  operator/developer guide `deploy/browser-journeys.md`; changeset
+  `browser-journeys.md`)
 - [ ] **C1.23** Add database backup/restore drills, complete export, media
   manifest, configuration/credential-key handling, retention and erasure proof.
 - [ ] **C1.24** Make a fresh development/demo install serve a complete seeded

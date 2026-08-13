@@ -9,9 +9,11 @@ import { businessProfile } from "@/core/settings/schema";
 import { auditLog } from "@/core/events/schema";
 import {
   completeSetup,
+  finishSetupAsOwner,
   getBusiness,
   getModuleConfig,
   listModules,
+  saveSetupBusiness,
   setModuleConfig,
   patchBusiness,
   setModuleEnabled,
@@ -19,6 +21,7 @@ import {
   updateBusiness,
 } from "@/core/settings/service";
 import { registerOwner } from "@/core/auth/service";
+import { createSetupLocation } from "@/core/locations/service";
 import {
   ANONYMOUS,
   closeDb,
@@ -167,6 +170,76 @@ describe.runIf(hasDatabase)("business settings", () => {
   });
 
   describe("setup state and locking", () => {
+    it("lets only the unverified owner finish first boot, then locks every setup write", async () => {
+      const registered = await registerOwner.call(
+        { email: "owner@example.test", password: "a-long-enough-password" },
+        ANONYMOUS,
+      );
+      const firstBootOwner = {
+        ...OWNER,
+        userId: registered.userId,
+        security: {
+          twoFactorRequired: true,
+          twoFactorEnrolled: false,
+          twoFactorVerified: false,
+          stepUpValid: false,
+        },
+      };
+
+      // The ordinary admin path remains protected by mandatory 2FA.
+      expect((await failure(updateBusiness.call(A_BUSINESS, firstBootOwner))).code).toBe(
+        "permission",
+      );
+
+      await expect(saveSetupBusiness.call(A_BUSINESS, firstBootOwner)).resolves.toMatchObject({
+        name: A_BUSINESS.name,
+      });
+      await expect(
+        createSetupLocation.call(
+          {
+            name: "Aurora Coast Studio",
+            slug: "courtenay",
+            street: "210 Fifth Street",
+            city: "Courtenay",
+            region: "BC",
+            postalCode: "V9N 1A1",
+            country: "CA",
+          },
+          firstBootOwner,
+        ),
+      ).resolves.toMatchObject({ slug: "courtenay", isPrimary: true });
+
+      expect((await failure(saveSetupBusiness.call(A_BUSINESS, STAFF))).code).toBe(
+        "permission",
+      );
+      await finishSetupAsOwner.call({}, firstBootOwner);
+      expect(await setupState.call({}, ANONYMOUS)).toMatchObject({ completed: true });
+      const completionAudits = (await db()
+        .select({ action: auditLog.action, actor: auditLog.actor })
+        .from(auditLog))
+        .filter((row) => row.action === "settings.finishSetupAsOwner");
+      expect(completionAudits).toEqual([
+        {
+          action: "settings.finishSetupAsOwner",
+          actor: `user:${registered.userId}`,
+        },
+      ]);
+
+      expect(
+        (await failure(saveSetupBusiness.call(A_BUSINESS, firstBootOwner))).code,
+      ).toBe("conflict");
+      expect(
+        (
+          await failure(
+            createSetupLocation.call(
+              { name: "Late", slug: "late", country: "CA" },
+              firstBootOwner,
+            ),
+          )
+        ).code,
+      ).toBe("conflict");
+    });
+
     it("reports what first boot still needs", async () => {
       expect(await setupState.call({}, ANONYMOUS)).toEqual({
         hasOwner: false,
