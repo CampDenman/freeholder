@@ -792,6 +792,7 @@
   "jobs.summary.queued": "En espera",
   "jobs.summary.stuck": "Arrendamiento vencido",
   "jobs.title": "Trabajo en segundo plano",
+  "guidance.actionError": "No se pudo actualizar esta guía. Actualiza la página e inténtalo de nuevo.",
   "guidance.allTitle": "Guías para tu trabajo",
   "guidance.completed": "Completada",
   "guidance.dismissed": "Omitida por ahora",

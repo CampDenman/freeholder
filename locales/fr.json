@@ -792,6 +792,7 @@
   "jobs.summary.queued": "En attente",
   "jobs.summary.stuck": "Bail dépassé",
   "jobs.title": "Travail en arrière-plan",
+  "guidance.actionError": "Impossible de mettre à jour ce guide. Actualisez la page, puis réessayez.",
   "guidance.allTitle": "Guides pour votre travail",
   "guidance.completed": "Terminé",
   "guidance.dismissed": "Ignoré pour le moment",

@@ -80,6 +80,9 @@ whole story, which is the point.
 - [`customer-locales.md`](customer-locales.md) — public and portal locale
   precedence, translated chrome authoring, contact-driven templates and
   notification evidence, migration behavior, and verification.
+- [`role-guidance.md`](role-guidance.md) — capability-derived owner, staff and
+  customer first-win guides, durable outcome evidence, lifecycle controls,
+  migration/versioning, rollback and post-deploy verification.
 
 - [`analytics-governance.md`](analytics-governance.md) — consent modes,
   analytics cookies, retention/pruning, reversible bot corrections, Web

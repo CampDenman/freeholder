@@ -792,6 +792,7 @@
   "jobs.summary.queued": "Waiting",
   "jobs.summary.stuck": "Lease overdue",
   "jobs.title": "Background work",
+  "guidance.actionError": "We couldn't update this guide. Refresh the page and try again.",
   "guidance.allTitle": "Guides for your work",
   "guidance.completed": "Completed",
   "guidance.dismissed": "Skipped for now",

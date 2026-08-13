@@ -1,7 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { listGuidance } from "@/core/guidance/service";
 import { GuidancePanel } from "@/ui/GuidancePanel";
+import { Callout } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { adminGuidanceAction } from "../../guidance-actions";
 import { requireStaffActor } from "../guard";
@@ -38,6 +40,11 @@ export default async function AdminGuidancePage({
           {t("guidance.intro")}
         </p>
       </div>
+      {query.error ? (
+        <Callout tone="danger" icon={<WarningCircle size={17} weight="fill" />}>
+          {t("guidance.actionError")}
+        </Callout>
+      ) : null}
       <GuidancePanel
         flows={ordered}
         action={adminGuidanceAction}
