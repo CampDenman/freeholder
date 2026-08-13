@@ -12,6 +12,8 @@
 // function, and only a flag differs.
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
+import { CSP_NONCE_HEADER } from "@/core/http/csp";
 import { getT } from "../i18n";
 
 export const dynamic = "force-dynamic";
@@ -240,15 +242,17 @@ export default async function PreviewLayout({
 }: {
   children: ReactNode;
 }) {
-  const t = await getT();
+  const [t, requestHeaders] = await Promise.all([getT(), headers()]);
+  const nonce = requestHeaders.get(CSP_NONCE_HEADER) ?? undefined;
   // The grip's tooltip is copy, so it comes from the catalog like the rest —
   // injected as a constant the script reads rather than hardcoded in it.
   const dragLabel = JSON.stringify(t("cms.editor.dragBlock"));
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: CANVAS_CSS }} />
+      <style nonce={nonce} dangerouslySetInnerHTML={{ __html: CANVAS_CSS }} />
       <div className="fh-canvas">{children}</div>
       <script
+        nonce={nonce}
         dangerouslySetInnerHTML={{
           __html: `var FH_DRAG_LABEL = ${dragLabel};` + BRIDGE + DRAG,
         }}

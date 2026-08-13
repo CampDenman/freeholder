@@ -81,6 +81,9 @@ whole story, which is the point.
 - [`analytics-governance.md`](analytics-governance.md) — consent modes,
   analytics cookies, retention/pruning, reversible bot corrections, Web
   Vitals, campaign attribution, anonymized export, and verification.
+- [`content-security-policy.md`](content-security-policy.md) — per-request
+  nonces, editor and upload boundaries, separately consented creative origins,
+  privacy-bounded violation reporting, retention, and verification.
 
 ## Known gaps
 

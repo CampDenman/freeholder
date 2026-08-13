@@ -17,15 +17,17 @@ import { currentBusiness } from "@/core/settings/read";
 import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
+import { listCspViolations } from "@/core/security/csp-reports";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function HealthPage() {
   const actor = await requireStaffActor("platform");
-  const [report, business, t] = await Promise.all([
+  const [report, business, violations, t] = await Promise.all([
     doctor.call({}, actor),
     currentBusiness(),
+    listCspViolations.call({ days: 7, limit: 20 }, actor),
     getT(),
   ]);
 
@@ -82,6 +84,51 @@ export default async function HealthPage() {
               </li>
             ))}
           </ul>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("csp.violations.title")} />
+        <CardBody>
+          <p className="mb-4 max-w-prose text-sm text-ink-muted">
+            {t("csp.violations.intro")}
+          </p>
+          {violations.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("csp.violations.empty")}</p>
+          ) : (
+            <ul className="grid list-none gap-4 p-0">
+              {violations.map((violation) => (
+                <li
+                  key={violation.fingerprint}
+                  className="grid gap-1 border-b border-rule pb-4 last:border-0"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Pill tone={violation.disposition === "enforce" ? "warning" : "neutral"}>
+                      {violation.effectiveDirective}
+                    </Pill>
+                    <span className="font-mono text-xs text-ink">
+                      {violation.documentPath}
+                    </span>
+                    <span className="ms-auto text-xs text-ink-muted">
+                      {t("csp.violations.count", { count: violation.occurrences })}
+                    </span>
+                  </div>
+                  <span className="font-mono text-xs text-ink-muted">
+                    {t("csp.violations.blocked", { source: violation.blockedSource })}
+                  </span>
+                  <span className="text-xs text-ink-muted">
+                    {t("csp.violations.lastSeen", {
+                      value: formatDateTime(
+                        violation.lastAt,
+                        business?.timezone ?? "UTC",
+                        business?.defaultLocale ?? "en",
+                      ),
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardBody>
       </Card>
     </div>
