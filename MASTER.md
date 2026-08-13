@@ -3439,8 +3439,11 @@ deployments are portable, testable and incapable of silently forking the truth.
 
 #### Owner-facing self-builder
 
-- [ ] **C4.19** Implement the content lane: owner brief → scoped proposal →
+- [x] **C4.19** Implement the content lane: owner brief → scoped proposal →
   block/content diff → preview → approval → atomic apply → one-click rollback.
+  Evidence: `src/modules/builder/`, `/admin/builder`, generated API/MCP
+  services, and `tests/core/builder-content-lane.test.ts` (including real
+  Postgres migration, apply, attribution, rollback and stale-write coverage).
 - [ ] **C4.20** Implement the code lane: isolated worktree, budget/permission
   envelope, gates, preview environment, owner-readable diff and pull request.
 - [ ] **C4.21** Keep `builder.*` separately granted from workforce scopes and

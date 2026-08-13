@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   Layout,
   ListChecks,
+  MagicWand,
   MapPin,
   ChartLine,
   Envelope,
@@ -36,6 +37,7 @@ export interface AdminNavLabels {
   settings: string;
   roles: string;
   invitations: string;
+  builder: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -44,6 +46,7 @@ const LINKS = [
   { href: "/admin", key: "overview", module: "admin", Icon: Gauge },
   { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
   { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },
+  { href: "/admin/builder", key: "builder", module: "builder", Icon: MagicWand },
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },
   { href: "/admin/forms", key: "forms", module: "forms", Icon: Envelope },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
@@ -61,6 +64,7 @@ export function AdminNav({
   labels,
   multilingual,
   grants,
+  owner,
 }: {
   labels: AdminNavLabels;
   /**
@@ -71,10 +75,12 @@ export function AdminNav({
    */
   multilingual: boolean;
   grants: ReadonlyArray<{ module: string; access: "view" | "manage" }>;
+  owner: boolean;
 }) {
   const pathname = usePathname();
   const links = LINKS.filter((link) => {
     if (link.key === "translations" && !multilingual) return false;
+    if (link.key === "builder" && !owner) return false;
     return grants.some(
       (grant) => grant.module === "*" || grant.module === link.module,
     );

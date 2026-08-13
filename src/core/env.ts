@@ -140,6 +140,18 @@ const envSchema = z.object({
     .regex(/^(?:|[A-Za-z0-9][A-Za-z0-9._:-]{0,199})$/)
     .optional(),
 
+  /** The owner-facing builder is a separate authority from drafting AI. */
+  FREEHOLDER_AGENT: z
+    .enum(["pm_brain", "anthropic", "openai", "local", "none"])
+    .optional(),
+  /** Purpose-bound Paradise Modern site credential for the PM Brain adapter. */
+  PARADISEMODERN_API_KEY: z.string().trim().min(1).optional(),
+  PARADISEMODERN_URL: z.string().url().optional(),
+  /** Visible, hard monthly cap for builder model usage. */
+  BUILDER_MONTHLY_TOKEN_BUDGET: z.string().regex(/^\d+$/).default("250000"),
+  /** Per-proposal output ceiling; the adapter never gets an open-ended call. */
+  BUILDER_MAX_OUTPUT_TOKENS: z.string().regex(/^\d+$/).default("8000"),
+
   /**
    * Permits local-disk storage in production, against §18's mandate.
    *

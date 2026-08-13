@@ -28,6 +28,7 @@ export default defineModule({
   events: {
     emits: [
       "cms.pageCreated",
+      "cms.pageDeleted",
       "cms.pageUpdated",
       "cms.pagePublished",
       "cms.pageUnpublished",

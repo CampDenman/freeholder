@@ -237,6 +237,21 @@ export interface ServiceContext {
     service: Service<I, O>,
     input: z.input<I>,
   ) => Promise<O>;
+  /**
+   * Attribute a composed operation to a named, narrowly-scoped builder.
+   *
+   * This is not ambient impersonation: the parent service still authorizes
+   * the human approval, names the exact key and scopes in code, shares the
+   * transaction, and receives its own audit row. The nested mutation receives
+   * the ordinary agent permission check and its audit row says who authored
+   * the content rather than pretending the approving owner typed it.
+   */
+  callAsAgent: <I extends z.ZodType, O>(
+    keyName: string,
+    scopes: string[],
+    service: Service<I, O>,
+    input: z.input<I>,
+  ) => Promise<O>;
 }
 
 /**
@@ -410,6 +425,12 @@ export function defineService<In extends z.ZodType, Out>(
           call: (service, input) => service.call(input, actor, { tx, queued }),
           callAsSystem: (service, input) =>
             service.call(input, { kind: "system" }, { tx, queued }),
+          callAsAgent: (keyName, scopes, service, input) =>
+            service.call(
+              input,
+              { kind: "agent", keyName, scopes },
+              { tx, queued },
+            ),
         };
         const out = await def.handler(parsed.data, ctx);
 

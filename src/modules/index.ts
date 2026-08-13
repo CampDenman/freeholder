@@ -19,6 +19,7 @@ import cmsManifest from "@/modules/cms/manifest";
 import analyticsManifest from "@/modules/analytics/manifest";
 import formsManifest from "@/modules/forms/manifest";
 import seedManifest from "@/modules/seed/manifest";
+import builderManifest from "@/modules/builder/manifest";
 import type { ModuleManifest } from "@/core/module";
 
 const manifests: ModuleManifest[] = [
@@ -27,6 +28,7 @@ const manifests: ModuleManifest[] = [
   formsManifest,
   analyticsManifest,
   seedManifest,
+  builderManifest,
 ];
 
 export default manifests;

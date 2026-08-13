@@ -8,7 +8,7 @@
 // permission check, audit row and revision history a human does.
 import { z } from "zod";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { defineService, ServiceError } from "@/core/service";
+import { actorString, defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import { businessProfile } from "@/core/settings/schema";
 import { getTranslation, translatedIds } from "@/core/i18n/service";
@@ -244,6 +244,46 @@ export const createPage = defineService({
 });
 
 /**
+ * Remove one draft page.
+ *
+ * Kept deliberately narrower than a generic delete: published content must be
+ * taken offline in a separate, auditable action first. The builder uses this
+ * only to make rolling back a proposal-created page restore the true prior
+ * state (non-existence), not leave an invisible draft behind.
+ */
+export const deleteDraftPage = defineService({
+  name: "cms.deleteDraftPage",
+  summary: "Permanently remove one draft page.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    const [page] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(eq(pages.id, input.id))
+      .limit(1);
+    if (!page) throw new ServiceError("not_found", `no page with id ${input.id}`);
+    if (page.status !== "draft") {
+      throw new ServiceError(
+        "conflict",
+        "A published page must be taken offline before it can be removed.",
+      );
+    }
+    await ctx.tx.delete(contentRevisions).where(
+      and(
+        eq(contentRevisions.subjectType, "page"),
+        eq(contentRevisions.subjectId, page.id),
+      ),
+    );
+    await ctx.tx.delete(pages).where(eq(pages.id, page.id));
+    ctx.setSubject("page", page.id);
+    ctx.queueEvent("cms.pageDeleted", { pageId: page.id, slug: page.slug });
+    return { id: page.id, slug: page.slug };
+  },
+});
+
+/**
  * Save a page, keeping the previous version.
  *
  * The revision is written *before* the update, inside the same transaction, so
@@ -280,7 +320,7 @@ export const updatePage = defineService({
       subjectId: before.id,
       title: before.title,
       blocks: before.blocks,
-      actor: ctx.actor.kind === "user" ? `user:${ctx.actor.userId}` : "system",
+      actor: actorString(ctx.actor),
     });
 
     const [page] = await ctx.tx
@@ -435,7 +475,7 @@ export const updateSection = defineService({
       subjectId: before.id,
       title: before.name,
       blocks: before.blocks,
-      actor: ctx.actor.kind === "user" ? `user:${ctx.actor.userId}` : "system",
+      actor: actorString(ctx.actor),
     });
 
     const [section] = await ctx.tx
@@ -576,8 +616,7 @@ export const restoreRevision = defineService({
       throw new ServiceError("not_found", "that version no longer exists");
     }
 
-    const actor =
-      ctx.actor.kind === "user" ? `user:${ctx.actor.userId}` : "system";
+    const actor = actorString(ctx.actor);
 
     if (revision.subjectType === "page") {
       const [before] = await ctx.tx
@@ -724,6 +763,7 @@ export default [
   listPages,
   publishedPaths,
   createPage,
+  deleteDraftPage,
   updatePage,
   publishPage,
   getSection,

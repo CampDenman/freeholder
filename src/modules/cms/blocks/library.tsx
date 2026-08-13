@@ -123,6 +123,66 @@ export const button = defineBlock({
   ),
 });
 
+/**
+ * A phone line deserves more than a small generic button in site chrome.
+ *
+ * The number is stored twice on purpose: `phone` is the machine-safe E.164
+ * destination and `displayPhone` is the human typography the owner chooses.
+ * Keeping those jobs separate prevents punctuation from breaking a `tel:` URL
+ * and prevents the editor from forcing every country into one visual format.
+ */
+export const callCta = defineBlock({
+  type: "callCta",
+  labelKey: "cms.block.callCta",
+  contexts: ["page", "chrome"],
+  schema: z.object({
+    eyebrow: z.string().min(1),
+    label: z.string().min(1),
+    phone: z.string().regex(/^\+[1-9]\d{7,14}$/, "Use an E.164 phone number, such as +16393834662."),
+    displayPhone: z.string().min(1),
+    supportText: z.string().min(1),
+  }),
+  starter: () => ({
+    eyebrow: "Direct line",
+    label: "Call now",
+    phone: "+15551234567",
+    displayPhone: "+1 (555) 123-4567",
+    supportText: "Tap to speak with us.",
+  }),
+  render: ({ props, ctx }) => (
+    <a
+      href={`tel:${props.phone}`}
+      aria-label={`${props.label}: ${props.displayPhone}`}
+      className={cx(
+        "group mb-4 grid w-full gap-3 rounded-xl border border-accent bg-accent px-5 py-4",
+        "text-on-accent shadow-[inset_0_-3px_0_rgb(0_0_0/0.18),0_12px_28px_rgb(0_0_0/0.12)]",
+        "transition-transform hover:-translate-y-0.5 sm:grid-cols-[1fr_auto] sm:items-center sm:px-6",
+      )}
+    >
+      <span className="grid gap-0.5">
+        <span
+          {...ctx.editable?.("eyebrow")}
+          className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.18em] opacity-80"
+        >
+          {props.eyebrow}
+        </span>
+        <span {...ctx.editable?.("label")} className="text-lg font-bold tracking-tight">
+          {props.label}
+        </span>
+        <span {...ctx.editable?.("supportText")} className="text-sm opacity-[0.85]">
+          {props.supportText}
+        </span>
+      </span>
+      <span
+        {...ctx.editable?.("displayPhone")}
+        className="font-mono text-2xl font-bold tracking-[-0.04em] sm:text-3xl"
+      >
+        {props.displayPhone}
+      </span>
+    </a>
+  ),
+});
+
 /* ----------------------------------------------------------------- layout */
 
 export const columns = defineBlock({
