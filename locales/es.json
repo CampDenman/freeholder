@@ -796,6 +796,7 @@
   "guidance.completed": "Completada",
   "guidance.dismissed": "Omitida por ahora",
   "guidance.doneHint": "Esta guía está completa porque el trabajo está completo. Restablécela cuando quieras practicar de nuevo.",
+  "guidance.empty": "Ninguna tarea guiada coincide con tu acceso actual. La navegación disponible sigue siendo la referencia.",
   "guidance.flow.administrator.description": "Configura las personas y alertas personales que mantienen esta instancia funcionando con calma.",
   "guidance.flow.administrator.title": "Gestiona el espacio de trabajo",
   "guidance.flow.bookkeeper.description": "Prepara una cola de atención tranquila y útil antes de revisar la actividad del negocio.",

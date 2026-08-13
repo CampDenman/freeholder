@@ -111,9 +111,10 @@ export function PortalPrivacyCentre({
   const marketing = ["email", "sms", "push"];
   return (
     <div className="grid gap-6">
-      <Card>
-        <CardHeader title={labels.preferencesTitle} />
-        <CardBody>
+      <section id="privacy-preferences" className="scroll-mt-6">
+        <Card>
+          <CardHeader title={labels.preferencesTitle} />
+          <CardBody>
           <p className="text-sm text-ink-muted">{labels.preferencesHint}</p>
           <div className="grid gap-4 sm:grid-cols-3">
             {marketing.map((channel) => {
@@ -136,8 +137,9 @@ export function PortalPrivacyCentre({
               );
             })}
           </div>
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      </section>
 
       <Card>
         <CardHeader title={labels.requestTitle} />

@@ -87,6 +87,33 @@ test.describe("real-browser product journeys", () => {
       await expect(page.getByRole("navigation", { name: "Admin" })).toBeVisible();
     });
 
+    await test.step("role guidance starts, skips, resumes, resets and relaunches in context", async () => {
+      const ownerGuide = page.locator('[data-guidance-flow="core.owner-first-win"]');
+      await expect(ownerGuide.getByRole("heading", { name: "Win with the whole business loop" })).toBeVisible();
+      await expect(ownerGuide.getByRole("progressbar")).toHaveAttribute(
+        "aria-label",
+        "0 of 3 tasks complete",
+      );
+      await ownerGuide.getByRole("button", { name: "Start guide" }).click();
+      await expect(ownerGuide.getByRole("button", { name: "Skip for now" })).toBeVisible();
+
+      await page.goto("/admin/invitations");
+      await page.getByRole("link", { name: "Guided help" }).click();
+      await expect(page).toHaveURL(/\/admin\/guidance\?flow=core\.administrator-first-win/);
+      const adminGuide = page.locator('[data-guidance-flow="core.administrator-first-win"]');
+      await expect(adminGuide.getByRole("heading", { name: "Run the workspace" })).toBeVisible();
+      await adminGuide.getByRole("button", { name: "Skip for now" }).click();
+      await expect(adminGuide.getByText("Skipped for now")).toBeVisible();
+      await adminGuide.getByRole("button", { name: "Resume guide" }).click();
+      await expect(adminGuide.getByRole("button", { name: "Skip for now" })).toBeVisible();
+      await adminGuide.getByRole("button", { name: "Reset guide" }).click();
+      await expect(adminGuide.getByRole("progressbar")).toHaveAttribute(
+        "aria-label",
+        "0 of 2 tasks complete",
+      );
+      await page.goto("/admin");
+    });
+
     await test.step("password and TOTP login take the real redirect path", async () => {
       await page.getByRole("button", { name: "Sign out", exact: true }).click();
       await expect(page).toHaveURL(/\/login$/);
@@ -167,6 +194,19 @@ test.describe("real-browser product journeys", () => {
       await expect(page).toHaveURL(/\/admin\/contacts\/[0-9a-f-]+$/);
       await expect(page.getByRole("heading", { name: "Ada Journey" })).toBeVisible();
       await expect(page.getByLabel("Email")).toHaveValue("ada-journey@example.test");
+      await page.locator("#lifecycleStage").selectOption("prospect");
+      await page.getByRole("button", { name: "Save changes" }).click();
+      await expect(page.getByText("Saved.")).toBeVisible();
+    });
+
+    await test.step("guidance completes only after the real business outcomes", async () => {
+      await page.goto("/admin");
+      const ownerGuide = page.locator('[data-guidance-flow="core.owner-first-win"]');
+      await expect(ownerGuide.locator("header").getByText("Completed")).toBeVisible();
+      await expect(ownerGuide.getByRole("progressbar")).toHaveAttribute(
+        "aria-label",
+        "3 of 3 tasks complete",
+      );
     });
 
     await test.step("reviewed translation replaces source words on the locale route", async () => {

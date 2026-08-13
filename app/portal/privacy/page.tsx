@@ -12,9 +12,12 @@ import { currentBusiness } from "@/core/settings/read";
 import { getLocale, getT } from "../../i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { portalSignOutAction } from "../actions";
+import { portalGuidanceAction } from "../actions";
 import { PortalPrivacyCentre } from "./PortalPrivacyCentre";
 import { PortalLocaleChooser } from "../PortalLocaleChooser";
 import { SkipLink } from "@/ui/SkipLink";
+import { listGuidance } from "@/core/guidance/service";
+import { GuidancePanel } from "@/ui/GuidancePanel";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -40,9 +43,10 @@ export default async function PortalPrivacyPage() {
     redirect(localizeCustomerHref("/portal/login", locale, policy));
   }
   if (actor.grants.length > 0) redirect("/admin");
-  const [profile, requests, t] = await Promise.all([
+  const [profile, requests, guidance, t] = await Promise.all([
     getMyPrivacyProfile.call({}, actor),
     listMyDataRequests.call({}, actor),
+    listGuidance.call({ flowKey: "core.customer-first-win" }, actor),
     getT(),
   ]);
   const timezone = profile.contact.timezone ?? business?.timezone ?? "UTC";
@@ -65,6 +69,9 @@ export default async function PortalPrivacyPage() {
           <form action={portalSignOutAction} className="ms-auto">
             <button type="submit" className="text-sm text-ink-muted underline">{t("auth.logout")}</button>
           </form>
+          <a href="#guidance" className="text-sm text-ink-muted underline">
+            {t("guidance.help")}
+          </a>
           <PortalLocaleChooser
             locale={locale}
             policy={policy}
@@ -74,6 +81,14 @@ export default async function PortalPrivacyPage() {
           />
         </header>
         <p className="mb-6 max-w-3xl text-sm text-ink-muted">{t("privacy.portal.intro")}</p>
+        <div className="mb-6">
+          <GuidancePanel
+            flows={guidance}
+            action={portalGuidanceAction}
+            returnTo={`${localizeCustomerHref("/portal/privacy", locale, policy)}#guidance`}
+            t={t}
+          />
+        </div>
         <PortalPrivacyCentre
           preferences={profile.effective.map((choice) => ({ channel: choice.channel, state: choice.state }))}
           profile={profile.contact}

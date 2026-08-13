@@ -796,6 +796,7 @@
   "guidance.completed": "Terminé",
   "guidance.dismissed": "Ignoré pour le moment",
   "guidance.doneHint": "Ce guide est terminé parce que le travail l'est. Réinitialisez-le pour vous exercer de nouveau.",
+  "guidance.empty": "Aucune tâche guidée ne correspond à vos accès actuels. La navigation disponible reste la référence.",
   "guidance.flow.administrator.description": "Configurez les personnes et les alertes personnelles qui assurent le bon fonctionnement de cette instance.",
   "guidance.flow.administrator.title": "Gérer l'espace de travail",
   "guidance.flow.bookkeeper.description": "Préparez une file d'attention calme et utile avant d'examiner l'activité de l'entreprise.",

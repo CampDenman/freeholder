@@ -16,6 +16,8 @@ import { currentBusiness } from "@/core/settings/read";
 import { unreadNotificationCount } from "@/core/notifications/service";
 import { Bell } from "@phosphor-icons/react/dist/ssr";
 import { SkipLink } from "@/ui/SkipLink";
+import { listGuidanceContexts } from "@/core/guidance/service";
+import { AdminGuidanceHelp } from "./AdminGuidanceHelp";
 
 export const dynamic = "force-dynamic";
 
@@ -38,11 +40,12 @@ export default async function AdminLayout({
   children: ReactNode;
 }) {
   const actor = await requireStaffActor();
-  const [business, theme, t, unread] = await Promise.all([
+  const [business, theme, t, unread, guidanceContexts] = await Promise.all([
     currentBusiness(),
     readThemePreference(),
     getT(),
     unreadNotificationCount.call({}, actor),
+    listGuidanceContexts.call({}, actor),
   ]);
 
   return (
@@ -57,6 +60,10 @@ export default async function AdminLayout({
             {actor.kind === "user" ? actor.role : ""}
           </span>
           <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3">
+            <AdminGuidanceHelp
+              contexts={guidanceContexts}
+              label={t("guidance.help")}
+            />
             <a
               href="/admin/notifications"
               aria-label={t("notifications.bell", { count: unread })}

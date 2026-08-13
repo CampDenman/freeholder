@@ -53,6 +53,13 @@ export interface GuidanceFlowView {
   steps: GuidanceStepView[];
 }
 
+export interface GuidanceContextView {
+  key: string;
+  titleKey: string;
+  audienceMatch: boolean;
+  hrefs: string[];
+}
+
 function capabilityParts(capability: string): [string, GrantAccess] {
   const split = capability.lastIndexOf(":");
   return [
@@ -340,6 +347,23 @@ export const listGuidance = defineService({
     guidanceViews(ctx.tx, requireUser(ctx.actor), _input.flowKey),
 });
 
+export const listGuidanceContexts = defineService({
+  name: "guidance.contexts",
+  summary: "List capability-safe contextual guidance targets without opening progress.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({}),
+  handler: async (_input, ctx): Promise<GuidanceContextView[]> => {
+    const actor = requireUser(ctx.actor);
+    return (await eligibleFlows(ctx.tx, actor)).map(({ definition, steps }) => ({
+      key: definition.key,
+      titleKey: definition.titleKey,
+      audienceMatch: definition.audienceRoles.includes(actor.role),
+      hrefs: steps.map((step) => step.href),
+    }));
+  },
+});
+
 export const startGuidance = defineService({
   name: "guidance.start",
   summary: "Start or resume one eligible guidance flow.",
@@ -457,4 +481,10 @@ export const resetGuidance = defineService({
   },
 });
 
-export default [listGuidance, startGuidance, dismissGuidance, resetGuidance];
+export default [
+  listGuidance,
+  listGuidanceContexts,
+  startGuidance,
+  dismissGuidance,
+  resetGuidance,
+];

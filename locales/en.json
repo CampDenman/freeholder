@@ -796,6 +796,7 @@
   "guidance.completed": "Completed",
   "guidance.dismissed": "Skipped for now",
   "guidance.doneHint": "This guide is complete because the work is complete. Reset it whenever you want to practise again.",
+  "guidance.empty": "No guided tasks match your current access. Your available navigation remains the source of truth.",
   "guidance.flow.administrator.description": "Set up the people and personal alerts that keep this instance running calmly.",
   "guidance.flow.administrator.title": "Run the workspace",
   "guidance.flow.bookkeeper.description": "Shape a quiet, useful attention queue before you begin reviewing business activity.",

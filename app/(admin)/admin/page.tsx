@@ -16,6 +16,9 @@ import {
   getJobSummary,
 } from "@/core/jobs/service";
 import { hasModuleAccess } from "@/core/service";
+import { listGuidance } from "@/core/guidance/service";
+import { GuidancePanel } from "@/ui/GuidancePanel";
+import { adminGuidanceAction } from "../guidance-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -33,12 +36,15 @@ export default async function AdminOverviewPage() {
   // this must not assume anybody has vetted the caller yet.
   const actor = await requireStaffActor("admin");
   const canViewPlatform = hasModuleAccess(actor, "platform", "view");
-  const [business, stats, activity, t, jobSummary] = await Promise.all([
+  const canViewContacts = hasModuleAccess(actor, "contacts", "view");
+  const canViewEvents = hasModuleAccess(actor, "events", "view");
+  const [business, stats, activity, t, jobSummary, guidance] = await Promise.all([
     currentBusiness(),
-    contactStats.call({}, actor),
-    recentActivity.call({ limit: 12 }, actor),
+    canViewContacts ? contactStats.call({}, actor) : Promise.resolve(null),
+    canViewEvents ? recentActivity.call({ limit: 12 }, actor) : Promise.resolve(null),
     getT(),
     canViewPlatform ? getJobSummary.call({}, actor) : Promise.resolve(null),
+    listGuidance.call({}, actor),
   ]);
   const jobsBriefing = jobSummary
     ? await backgroundJobsBriefingContribution(jobSummary)
@@ -46,6 +52,8 @@ export default async function AdminOverviewPage() {
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
+  const preferredGuidance =
+    guidance.find((flow) => flow.audienceMatch) ?? guidance[0];
 
   return (
     <div className="grid gap-6">
@@ -57,6 +65,15 @@ export default async function AdminOverviewPage() {
           {t("admin.overview.intro")}
         </p>
       </div>
+
+      {preferredGuidance ? (
+        <GuidancePanel
+          flows={[preferredGuidance]}
+          action={adminGuidanceAction}
+          returnTo="/admin#guidance"
+          t={t}
+        />
+      ) : null}
 
       {jobsBriefing ? (
         <Callout
@@ -75,7 +92,7 @@ export default async function AdminOverviewPage() {
         </Callout>
       ) : null}
 
-      <Card>
+      {stats ? <Card>
         <CardHeader
           icon={<Users size={17} weight="bold" />}
           title={t("admin.overview.contacts")}
@@ -103,9 +120,9 @@ export default async function AdminOverviewPage() {
             </dl>
           )}
         </CardBody>
-      </Card>
+      </Card> : null}
 
-      <Card>
+      {activity ? <Card>
         <CardHeader title={t("admin.overview.activity")} />
         <CardBody>
           {activity.length === 0 ? (
@@ -136,7 +153,7 @@ export default async function AdminOverviewPage() {
             </ul>
           )}
         </CardBody>
-      </Card>
+      </Card> : null}
     </div>
   );
 }
