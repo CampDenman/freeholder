@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Forms services (MASTER.md §4.6, §36, and CLAUDE.md's spine non-negotiable).
 //
 // This is the first module whose *public* surface writes. Everything the

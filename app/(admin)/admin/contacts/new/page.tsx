@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Deliberate entry by a human. Automated paths use contacts.resolve instead,
 // so a form submission never mints a second record for somebody already known.
 import { getT } from "../../../../i18n";

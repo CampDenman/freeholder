@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The overview. Real numbers from the spine and the real audit trail — a
 // dashboard of invented figures teaches an owner to distrust the screen.
 import { Users, WarningCircle } from "@phosphor-icons/react/dist/ssr";

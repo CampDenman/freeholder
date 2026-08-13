@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Sign-in for owners and staff (§9: email + password, OTP to follow).
 //
 // It sits in the (admin) group but *outside* /admin, so the guard on that

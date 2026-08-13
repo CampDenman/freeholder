@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The SEO gate (MASTER.md §5, §15.2).
 //
 // §5 is called "doctrine, enforced structurally" — the argument being that a

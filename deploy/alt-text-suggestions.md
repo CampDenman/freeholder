@@ -1,7 +1,7 @@
 # Generated image descriptions
 
 Copyright (C) 2026 Tony Aly
-SPDX-License-Identifier: AGPL-3.0-only
+SPDX-License-Identifier: Apache-2.0
 
 Freeholder can ask an optional vision provider for an image alt-text proposal.
 It never treats generated words as authored accessibility copy. Generation

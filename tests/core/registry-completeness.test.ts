@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Everything a module defines is everything a module registers.
 //
 // This exists because the opposite shipped. `core/agents` was written, tested

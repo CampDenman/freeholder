@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Provider-neutral generated alt-text boundary (MASTER.md C1.13).
 
 export interface AltTextSuggestionInput {

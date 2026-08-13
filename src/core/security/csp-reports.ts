@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Privacy-bounded CSP violation normalization, aggregation and retention.
 import { createHash } from "node:crypto";
 import { and, count, desc, eq, gte, lt, sql } from "drizzle-orm";

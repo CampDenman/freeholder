@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // What a fresh instance's site is made of before anyone has edited anything.
 //
 // §32: "Default templates ship per business preset as seed data, so day one

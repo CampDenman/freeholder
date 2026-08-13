@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 import { Check } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 import { getT } from "../i18n";

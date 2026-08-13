@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 "use client";
 import { useActionState, useState } from "react";
 import { ArrowCounterClockwise, Trash, WarningCircle } from "@phosphor-icons/react/dist/ssr";

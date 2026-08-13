@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // First-party analytics (MASTER.md §4.7, §36).
 //
 // The event ledger plus its campaign-attribution projection. §4.7 says the

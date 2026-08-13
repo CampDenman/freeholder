@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Typed controls generated from owner-defined field definitions.
 import { Field, Input, Select } from "@/ui/primitives";
 

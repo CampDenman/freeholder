@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The SEO layer (MASTER.md §5).
 //
 // §5 says CI should fail on violations "where checkable", and the full crawl

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Lint IS the architecture police (MASTER.md §2 principle 11, §15, §16):
 // every boundary rule agreed in the master doc that can be machine-checked
 // lives here, not in tribal knowledge.

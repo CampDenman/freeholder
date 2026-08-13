@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Mail routing and delivery evidence (MASTER.md §12, §43 C1.14).
 //
 // Bodies deliberately do not live here. A delivery ledger needs to answer

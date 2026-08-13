@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // llms.txt (MASTER.md §5, AEO).
 //
 // "Auto-generated /llms.txt describing the business, offerings, locations, and

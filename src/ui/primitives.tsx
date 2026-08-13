@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The interface vocabulary. Small, owned, and free of framework imports — the
 // §10 boundary applies here too, so these render the same under any React
 // host and a framework migration is a chore in app/ rather than a rewrite.

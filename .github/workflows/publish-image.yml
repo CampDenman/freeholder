@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Tony Aly
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: Apache-2.0
 # Publishing the container image is the one job CI genuinely owes this project:
 # it is what makes every *other* deploy CI-free. A self-hoster runs
 # `docker compose pull` and never needs a GitHub account, a runner, or a fork —

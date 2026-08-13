@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 "use client";
 // Authored alt text and generated proposals are deliberately separate forms.
 // Generation cannot submit the authored field; review cannot happen without a

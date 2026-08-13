@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // §13 step 1: the owner account. Public by necessity — nobody can be signed in
 // on a fresh install — and once-only by database constraint, not by obscurity.
 import { redirect } from "next/navigation";

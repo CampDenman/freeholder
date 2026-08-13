@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Media services (MASTER.md §3 core/media, §4.5, §18).
 //
 // The only door to the asset library. Uploading writes bytes to the storage

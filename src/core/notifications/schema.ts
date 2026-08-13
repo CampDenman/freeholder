@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Durable notification facts (MASTER.md §43 C1.15).
 //
 // A notification is the human-facing fact. Channel deliveries are separate:

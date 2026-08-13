@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The schema-compatibility gate (MASTER.md §15.9, §39.5).
 //
 // A gate is worth exactly as much as the proof that it can fail, and this one

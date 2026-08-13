@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Bounded provider responses: an upstream must not get an unbounded allocation.
 import { MailAdapterError } from "@/adapters/mail/types";
 

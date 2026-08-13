@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The design tokens (MASTER.md §32: "design tokens, not themes").
 //
 // This file is the single source of truth for the platform's look, and it is

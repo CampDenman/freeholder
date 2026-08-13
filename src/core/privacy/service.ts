@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Consent, preference, and privacy-rights services (MASTER.md C1.08, §30).
 import { createHash } from "node:crypto";
 import {

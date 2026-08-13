@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 "use server";
 // Forms actions for the admin. Thin, like every other caller (§11).
 import { cookies } from "next/headers";

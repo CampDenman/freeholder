@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Server-side sessions (MASTER.md §4.1, §9). The raw token exists only in
 // the caller's cookie; the database stores an HMAC of it keyed by
 // SESSION_SECRET, so neither a DB leak nor a secret leak alone forges a

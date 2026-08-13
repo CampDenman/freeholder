@@ -2,7 +2,7 @@
   "name": "@freeholder/templates",
   "version": "0.0.0",
   "description": "Theme starters and business-preset templates for Freeholder",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
     "type": "git",

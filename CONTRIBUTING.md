@@ -48,7 +48,7 @@ pnpm test          # vitest
 pnpm typecheck     # tsc --noEmit
 pnpm lint          # architecture, money (§15.4), service-layer (§15.5), i18n (§15.3)
 pnpm plan:check    # MASTER.md is the one complete, internally consistent plan
-pnpm license:check # the AGPL/MIT boundary and SPDX headers
+pnpm license:check # Apache-2.0 headers, manifests, and package license texts
 pnpm dependency:audit # advisories plus SECURITY.md's exception contract
 ```
 
@@ -58,10 +58,9 @@ review is about the code rather than the checks.
 
 ## Licensing of contributions
 
-Inbound = outbound: your contribution is accepted under the license of the
-component it touches — AGPL-3.0-only for the core, MIT for `packages/*`.
-See [`LICENSING.md`](LICENSING.md). New files carry the SPDX header shown
-there.
+Inbound = outbound: contributions are accepted under Apache-2.0, the same
+license as the Freeholder-authored repository and published packages. See
+[`LICENSING.md`](LICENSING.md). New files carry the SPDX header shown there.
 
 ## Code of conduct
 

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Sending a delivery, and deciding what to do when it fails.
 //
 // The delivery table is the queue. pg-boss schedules the sweep, but the work

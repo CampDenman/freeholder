@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Owner-defined typed fields over the Contact spine's deliberate JSONB seam.
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";

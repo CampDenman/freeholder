@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The read side the admin overview is built on: how many contacts there are,
 // and what has changed lately (§4.8 — "the owner can read a plain-English log
 // of everything their AI did").

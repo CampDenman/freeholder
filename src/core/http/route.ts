@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Routes are thin wrappers over services (MASTER.md §10, §15.5) — and "thin"
 // is only true if the wrapping is written once. serviceRoute is that once: it
 // resolves the actor, reads the input, calls the service, and maps failures to

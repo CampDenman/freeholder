@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Business identity (MASTER.md §4.8, §13). One deploy is one business, and the
 // database is what enforces that — not a convention anyone has to remember.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";

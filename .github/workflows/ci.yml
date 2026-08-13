@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Tony Aly
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: Apache-2.0
 # Quality gates (MASTER.md §15). The SEO, i18n, money, and a11y gates join
 # this file as the surfaces they check come into existence — each lands in
 # the same PR as its first checkable surface.
@@ -42,7 +42,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Product plan consistency (MASTER.md §43)
         run: pnpm plan:check
-      - name: License headers (LICENSING.md boundary)
+      - name: Apache-2.0 licensing consistency
         run: pnpm license:check
       # §36 lists dependency audit among the v1.0 security gates. High and
       # critical findings are absolute failures. A lower-severity finding is

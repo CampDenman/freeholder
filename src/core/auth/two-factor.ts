@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // TOTP, recovery codes, WebAuthn and fresh-authentication services for
 // MASTER.md §43 C1.03. All bearer challenge tokens are HMACed at rest.
 import {

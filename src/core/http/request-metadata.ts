@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The small, transient part of a request that authentication may retain.
 // Header parsing lives here so callers cannot submit their own session IP or
 // user agent in JSON. Deployment proxies remain responsible for replacing the

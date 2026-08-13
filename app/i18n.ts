@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Resolving *which* locale a render is in (MASTER.md §4.9).
 //
 // The string layer itself lives in src/core/i18n and knows nothing about

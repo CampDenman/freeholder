@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // A new page starts empty and unpublished — content is added in the editor,
 // and nothing reaches the public surface until it is deliberately published.
 import { getT } from "../../../../i18n";

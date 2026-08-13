@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Human-only inspection and recovery for event delivery dead letters (C1.11).
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // One locale's sitemap, assembled from every module that declared a source in
 // its manifest (§5, §11). Nothing here knows what a page or a gallery is.
 //

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The HTTP API (MASTER.md §11, §28).
 //
 // One route, every service. §11 already made the service registry "the single

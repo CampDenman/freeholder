@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Request-scoped reads of the business profile.
 //
 // One render pass asks for the business several times over: the layout wants

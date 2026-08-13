@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The HTTP API and its contract (MASTER.md §11, §28).
 //
 // §28's claim is strong enough to be worth testing directly: "it is

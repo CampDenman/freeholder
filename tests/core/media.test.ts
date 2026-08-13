@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The media pipeline (MASTER.md §4.5, §36, §18).
 //
 // §36 puts image optimization among the things Freeholder absorbs rather than

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // C1.18 additive analytics governance and attribution migration.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";

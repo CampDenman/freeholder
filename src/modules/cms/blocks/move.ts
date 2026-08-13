@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Moving a block within a tree (MASTER.md §32).
 //
 // Kept here, pure and framework-free, rather than inside the editor component

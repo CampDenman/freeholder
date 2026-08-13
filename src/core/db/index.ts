@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The one sacred database (MASTER.md §2, principle 12). Lazy singleton so
 // importing this module never connects — only use does.
 import { drizzle } from "drizzle-orm/postgres-js";

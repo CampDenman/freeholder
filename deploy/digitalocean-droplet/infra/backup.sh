@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (C) 2026 Tony Aly
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: Apache-2.0
 # Nightly database backup to a versioned Spaces bucket (§21b).
 #
 # Media is already in Spaces, so this covers the other half: the database. A

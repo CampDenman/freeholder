@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "description": "The open-source operating system for a one-person business — the deployable monolith: public site + CMS, admin, unified CRM spine, commerce, booking, galleries, mail, analytics, MCP server",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
     "type": "git",

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 import { notFound } from "next/navigation";
 import { getOrganization } from "@/core/contacts/organizations";
 import { listCustomFields } from "@/core/contacts/custom-fields";

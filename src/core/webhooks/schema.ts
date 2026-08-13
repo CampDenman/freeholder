@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Outbound webhooks (MASTER.md §11's event bus, §28's integration surface).
 //
 // The bus already fans committed events out to modules inside this process.

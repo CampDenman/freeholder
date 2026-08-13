@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Catalog pseudo-locale and RTL layout gates (MASTER.md C1.17, §4.9).
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";

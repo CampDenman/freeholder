@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Shared scaffolding for database-backed tests. Suites gate on `hasDatabase`
 // via describe.runIf so the unit suite still runs on a machine with no
 // Postgres, and truncate between tests so ordering never carries state.

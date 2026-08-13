@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The whole HTTP API, in one route (MASTER.md §11, §28).
 //
 // There is no list of endpoints here and there never will be: the segment is

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 "use client";
 // Capability-aware media upload. S3-compatible storage sends resumable parts
 // straight from the browser; local/Replit use the bounded application proxy.

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Aurora Coast Photography — the demo business (MASTER.md §3, §15.2, §25).
 //
 // This is data, not a fixture. Three things depend on it being *good* rather

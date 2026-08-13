@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Tony Aly
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: Apache-2.0
 # One droplet: Caddy terminates TLS, the app serves, Postgres persists.
 # Media is NOT here — §18 mandates object storage, so the archive lives in
 # Spaces and a destroyed droplet is a rebuild, not a data-loss event.

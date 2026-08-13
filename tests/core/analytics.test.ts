@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // First-party analytics (MASTER.md §4.7, §36).
 //
 // Two things are worth testing here and one of them is not a feature.

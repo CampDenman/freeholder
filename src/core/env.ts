@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The single Zod env schema (MASTER.md §14, §17). Every environment variable
 // the platform reads is declared here — nothing reads process.env directly.
 // Validation is lazy so `next build` succeeds without a database attached;

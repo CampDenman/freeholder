@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The Contact Spine (MASTER.md §2 principle 3, §4.1). Contact is the center
 // of gravity: every module references contact_id, and anything notable that
 // happens to a contact lands in timeline_events — the append-only integration

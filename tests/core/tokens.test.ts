@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The token layer (MASTER.md §32). These are the values the web app, the React
 // Native app and packages/templates all read, so the shape is a contract — a
 // renamed role is a breaking change for three consumers at once.

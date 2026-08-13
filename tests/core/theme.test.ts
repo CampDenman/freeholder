@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Light and dark as a platform standard. The subtlety worth pinning is that
 // "system" is the *absence* of a stored preference, not a third stored value.
 import { describe, expect, it } from "vitest";

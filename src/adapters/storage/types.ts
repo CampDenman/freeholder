@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The storage adapter contract (MASTER.md §12). Core never imports a vendor
 // SDK; it imports this interface, and the implementation is chosen by
 // freeholder.config.ts. Swapping DigitalOcean Spaces for Cloudflare R2, MinIO

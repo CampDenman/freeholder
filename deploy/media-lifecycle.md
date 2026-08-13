@@ -1,7 +1,7 @@
 # Media upload and lifecycle operations
 
 Copyright (C) 2026 Tony Aly
-SPDX-License-Identifier: AGPL-3.0-only
+SPDX-License-Identifier: Apache-2.0
 
 Freeholder treats an uploaded filename and browser MIME as claims. The server
 accepts an original only after matching its filename extension, declared type,

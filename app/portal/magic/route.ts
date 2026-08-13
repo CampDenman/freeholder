@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // A GET stores the credential and removes it from the URL; it does not consume
 // it. Mail scanners may follow links, but they do not submit the confirmation.
 import { CUSTOMER_MAGIC_COOKIE } from "@/core/auth/magic-links/service";

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // LocalBusiness structured data (MASTER.md §4.10, §5).
 //
 // §4.10: "Each location emits LocalBusiness (or subtype: Photographer,

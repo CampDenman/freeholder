@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The block contract (MASTER.md §32).
 //
 // "Typed blocks, never markup blobs": every block is a Zod-schema'd JSON node

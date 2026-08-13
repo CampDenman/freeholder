@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Durable idempotency claims for transactional background work (MASTER.md §43 C1.09).
 // pg-boss owns execution state in its own schema; this one small core table
 // remembers that a caller already requested a logical operation, even after

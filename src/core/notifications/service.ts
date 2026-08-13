@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Notification fanout, personal inbox, preferences and delivery machinery
 // (MASTER.md §43 C1.15).
 import { createHash } from "node:crypto";

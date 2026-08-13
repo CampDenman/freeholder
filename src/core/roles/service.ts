@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Named roles and stored per-module grants (MASTER.md §43 C1.01).
 import { and, asc, count, eq } from "drizzle-orm";
 import { z } from "zod";

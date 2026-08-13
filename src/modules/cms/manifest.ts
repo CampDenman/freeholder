@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The cms module (MASTER.md §11, §32).
 //
 // The first feature module in the codebase, which makes it the first real test

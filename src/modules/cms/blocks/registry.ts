@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The block registry — the single list of what the vocabulary contains.
 //
 // Everything else about blocks is derived from this: the validator that guards

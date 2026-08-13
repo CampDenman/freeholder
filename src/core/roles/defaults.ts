@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The initial role catalogue for MASTER.md §43 C1.01.
 //
 // These are seed records, not permission branches. Once written, the database

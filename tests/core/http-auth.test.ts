@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The auth routes end to end, through the real handlers against a real
 // database: first boot, sign in, carry the cookie, sign out. This is the first
 // test in the project that exercises the platform the way a browser will.

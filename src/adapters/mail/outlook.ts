@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Microsoft Graph delegated sender (Mail.Send only).
 import { boundedText, requestWithTimeout } from "@/adapters/mail/http";
 import { MailAdapterError, type MailAdapter } from "@/adapters/mail/types";

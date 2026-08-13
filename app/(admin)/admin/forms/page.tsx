@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Every form, and how much is waiting in each (MASTER.md §4.6, §36).
 import { Envelope, Plus, Warning } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";

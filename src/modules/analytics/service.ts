@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Analytics services (MASTER.md §4.7, §36).
 //
 // The claim in §4.7 is that a funnel is not a separate product: it is this

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Who a visitor is, to this site and to nobody else.
 //
 // A leaf module, imported by `proxy.ts`, so it may not import anything the

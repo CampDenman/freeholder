@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 import { clearedCsrfCookie } from "@/core/http/csrf";
 import { logout } from "@/core/auth/service";
 import { clearedSessionCookie, readSessionToken } from "@/core/http/cookies";

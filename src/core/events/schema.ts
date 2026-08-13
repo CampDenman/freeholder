@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The audit trail (MASTER.md §4.8, §11). Every admin/agent mutation through
 // the service layer lands here — it is written by the service registry
 // wrapper, inside the same transaction as the mutation, so an unaudited

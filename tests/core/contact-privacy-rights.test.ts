@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Consent evidence and privacy-rights proof (MASTER.md C1.08).
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The way back in when nobody can sign in (MASTER.md §9, §13).
 //
 // An owner who has lost their password cannot be helped by anything inside the

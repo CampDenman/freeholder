@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The forms module (MASTER.md §11, §4.6, §36).
 //
 // Two firsts, and both are contract tests rather than features:

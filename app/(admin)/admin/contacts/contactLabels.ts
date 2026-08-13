@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The contact form's strings, translated once and passed into the client
 // component that renders them (MASTER.md §4.9). Shared by the create and edit
 // screens, which are the same form with a different verb on the button.

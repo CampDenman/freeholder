@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Bringing the schema up to date at boot.
 //
 // §14 promises a one-command deploy. A recipe whose documented start command

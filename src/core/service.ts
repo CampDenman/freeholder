@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The service registry — the single choke point (MASTER.md §11). Admin UI,
 // REST API, and MCP all call services; nothing else touches business logic.
 // Every mutation, regardless of caller: validates with Zod, checks

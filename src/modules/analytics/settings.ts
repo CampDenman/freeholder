@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Analytics governance settings (MASTER.md C1.18, §4.7, §36).
 import { z } from "zod";
 import type { AnalyticsConsentState } from "./visitor";

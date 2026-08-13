@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Choosing the mail implementation (MASTER.md §12, §17): the id comes from
 // freeholder.config.ts, the credentials from env, and the environment wins —
 // one published image serves instances that send through different mailboxes.

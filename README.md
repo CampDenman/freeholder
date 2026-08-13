@@ -78,10 +78,10 @@ of toggleable modules, Postgres, S3-compatible media storage.
 
 ## Licensing
 
-Freeholder core is **AGPL-3.0-only**; the SDKs and templates under
-`packages/` are **MIT**. Plain-English map in [`LICENSING.md`](LICENSING.md).
-External apps talking to a Freeholder site via SDK/API/MCP can be licensed
-however you like.
+Freeholder-authored code and packages are licensed under **Apache-2.0**. See
+[`LICENSING.md`](LICENSING.md) for the plain-English policy and [`LICENSE`](LICENSE)
+for the authoritative terms. Bundled third-party assets retain their own
+license notices.
 
 ## Ownership and authorship
 
@@ -93,15 +93,15 @@ that is where the code lives, not a separate author or rights holder.
 
 Contributions are welcome under the DCO — see
 [`CONTRIBUTING.md`](CONTRIBUTING.md). The DCO rather than a CLA is deliberate:
-contributors keep their own copyright, which means the project cannot be
-relicensed out from under the people who built it.
+contributors keep their own copyright and contribute under Apache-2.0 without
+assigning it to the project.
 
 ## Repository layout
 
 ```
-app/            Next.js App Router — public site, portal, admin, API (AGPL-3.0-only)
-src/            core spine, feature modules, adapters, MCP server (AGPL-3.0-only)
-packages/       separately published MIT packages (@freeholder/sdk, …)
+app/            Next.js App Router — public site, portal, admin, API (Apache-2.0)
+src/            core spine, feature modules, adapters, MCP server (Apache-2.0)
+packages/       separately published Apache-2.0 packages (@freeholder/sdk, …)
 MASTER.md       sole product specification, status, and completion plan
 ```
 

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Signed-in OAuth return for delegated Gmail/Microsoft transactional senders.
 import { actorFromRequest } from "@/core/http/actor";
 import { env } from "@/core/env";

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Contact services (MASTER.md §2 principle 3, §4.1). The spine's write path:
 // every mutation emits a TimelineEvent (modules write events; the CRM reads
 // them) and lands in the audit log via the service wrapper. No module gets

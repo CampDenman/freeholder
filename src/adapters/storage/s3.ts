@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // S3-compatible storage: DigitalOcean Spaces, Cloudflare R2, MinIO, Backblaze
 // B2, AWS S3 itself. One implementation covers all of them because they share
 // the same signed HTTP protocol — which is exactly why §12 names the family

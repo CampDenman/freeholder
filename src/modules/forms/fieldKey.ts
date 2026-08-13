@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Turning a question into the key its answers are stored under.
 //
 // Lives beside `fields.ts` rather than in the builder that calls it, because

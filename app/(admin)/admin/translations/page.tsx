@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // What is translated, and what is not (MASTER.md §4.9).
 //
 // The screen answers one question — where are the gaps — because that is the

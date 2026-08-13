@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Deriving an edit form from a block's Zod schema (MASTER.md §24, §32).
 //
 // §24 promises that a plugin's new block "appears in the palette with zero

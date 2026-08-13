@@ -1,4 +1,4 @@
-# app/ — Next.js App Router (AGPL-3.0-only)
+# app/ — Next.js App Router (Apache-2.0)
 
 The thin routing layer over `src/`. Route groups per `MASTER.md` §10:
 

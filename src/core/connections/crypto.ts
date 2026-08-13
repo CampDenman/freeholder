@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Encrypting an owner's third-party credentials (MASTER.md §41, §17).
 //
 // §17 puts secrets in the environment and configuration in the database, and

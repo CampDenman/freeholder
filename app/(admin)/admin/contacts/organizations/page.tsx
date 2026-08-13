@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 import { Buildings, MagnifyingGlass, Plus } from "@phosphor-icons/react/dist/ssr";
 import { listOrganizations } from "@/core/contacts/organizations";
 import { Button, Card, Input } from "@/ui/primitives";

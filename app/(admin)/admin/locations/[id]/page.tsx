@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // One location: its NAP, its hours, and where it travels to (MASTER.md §4.10).
 //
 // `new` is handled by this same route rather than a separate one, because the

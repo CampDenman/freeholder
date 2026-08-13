@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Static accessibility and native-control contract for the notification inbox.
 import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

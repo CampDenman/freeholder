@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Edge-safe Content Security Policy construction (MASTER.md C1.19, §36).
 // Exact origins only: a wildcard quietly grants every tenant on a host.
 

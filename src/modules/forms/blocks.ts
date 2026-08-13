@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The block types this module adds to the CMS vocabulary (MASTER.md §11, §24).
 //
 // Its own module rather than an export from block.tsx, because the manifest's

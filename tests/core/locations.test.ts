@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Locations and NAP (MASTER.md §4.10).
 //
 // §4.10 rests on one claim — "the render helper is the only way to output NAP,

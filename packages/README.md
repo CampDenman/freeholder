@@ -1,9 +1,9 @@
-# packages/ — the MIT lane
+# packages/ — separately published packages
 
-Everything under this directory is MIT-licensed (each package carries its own
-`LICENSE`). These are the pieces meant to be embedded in *your* software —
-SDKs, client libraries, templates — so they are deliberately not copyleft.
-See the root `LICENSING.md` for the full map.
+Freeholder-authored packages use Apache-2.0 and each distributable package
+carries the same `LICENSE` as the repository root. These are the pieces meant
+to be embedded in *your* software — SDKs, client libraries, and templates.
+See the root `LICENSING.md` for the full policy.
 
 All three packages are currently pre-release scaffolds. Their authoritative
 completion work is in `MASTER.md`: generated SDK (C3.03), installer (C3.14),

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The NAP render helper (MASTER.md §4.10).
 //
 // §4.10's rule, in full: "Primary location's NAP renders identically

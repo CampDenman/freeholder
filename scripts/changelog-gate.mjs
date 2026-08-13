@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The changelog gate (MASTER.md §15.6): a PR that touches functionality must
 // carry a changeset entry. Release notes are religion — undocumented
 // functionality changes are treated as bugs.

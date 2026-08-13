@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Durable, listener-aware transactional outbox (MASTER.md §11, C1.11).
 //
 // An event row says that committed work must be announced. A delivery receipt

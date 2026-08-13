@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The boot sequence (MASTER.md §11): load manifests → topo-sort by requires →
 // register jobs → register services in the registry → subscribe listeners.
 //

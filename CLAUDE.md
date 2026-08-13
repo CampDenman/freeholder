@@ -39,9 +39,9 @@ or backlog.
   implements its own toggle or reads `prefers-color-scheme` directly. New
   colour pairings must clear WCAG AA in *both* schemes; `tests/core/tokens.test.ts`
   enforces it, so a token that fails is a failing build.
-- **Licensing boundary.** Core is `AGPL-3.0-only`; everything under
-  `packages/` is `MIT`. New files carry the SPDX headers shown in
-  `LICENSING.md`. Never move code across the boundary without flagging it.
+- **Licensing.** Freeholder-authored code, documentation, and packages use
+  `Apache-2.0`. New files carry the SPDX header shown in `LICENSING.md`;
+  third-party material retains its own license and notice.
 - **Replit-first deployability.** Changes must not break single-command
   deploy. Seed/demo mode must keep working.
 - **SEO as architecture**, first-party analytics, KISS auth

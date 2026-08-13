@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The boot sequence (MASTER.md §11). Until this existed the registry was built
 // but never populated: every service in core was unreachable through the
 // choke point that the API, admin UI and MCP server are all supposed to share.
