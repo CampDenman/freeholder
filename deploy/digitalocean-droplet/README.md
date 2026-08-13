@@ -99,6 +99,11 @@ echo '15 3 * * * root . /opt/freeholder/.env && /opt/freeholder/backup.sh' \
 Then work through [`verify.md`](verify.md) — including the restore rehearsal.
 A backup you have never restored is a hope, not a backup.
 
+The database archive and checksum do not contain `.env`, `CREDENTIAL_KEY`, or
+media bytes. Protect environment secrets separately and use the ownership
+export/media inventory procedure in [`../ownership-recovery.md`](../ownership-recovery.md)
+to prove all three recovery parts agree.
+
 ## Updating
 
 ```bash

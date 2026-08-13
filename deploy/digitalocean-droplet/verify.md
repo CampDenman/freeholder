@@ -35,12 +35,19 @@ restored is a hope.
 - [ ] Restore it into a scratch database and confirm it opens:
 
       docker compose exec -T db createdb -U freeholder restore_test
-      gunzip -c freeholder-TIMESTAMP.sql.gz \
-        | docker compose exec -T db psql -U freeholder -d restore_test
+      sha256sum -c freeholder-TIMESTAMP.dump.sha256
+      docker compose exec -T db pg_restore -U freeholder \
+        --no-owner --no-privileges -d restore_test \
+        < freeholder-TIMESTAMP.dump
       docker compose exec -T db psql -U freeholder -d restore_test \
         -c "select count(*) from contacts;"
 
 - [ ] Drop the scratch database afterwards.
+- [ ] Run the restored-database logical export and investigate every media
+      inventory discrepancy as described in `../ownership-recovery.md`.
+- [ ] Match the restored archive's `CREDENTIAL_KEY` fingerprint against the
+      separately protected secrets backup. Never upload `.env` beside the
+      database dump.
 - [ ] Confirm the cron entry exists: `cat /etc/cron.d/freeholder-backup`.
 - [ ] Come back tomorrow and confirm a new archive appeared on its own.
 

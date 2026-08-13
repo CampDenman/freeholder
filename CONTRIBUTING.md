@@ -51,6 +51,7 @@ pnpm lint          # architecture, money (§15.4), service-layer (§15.5), i18n 
 pnpm plan:check    # MASTER.md is the one complete, internally consistent plan
 pnpm license:check # Apache-2.0 headers, manifests, and package license texts
 pnpm dependency:audit # advisories plus SECURITY.md's exception contract
+pnpm ownership:drill  # guarded pg_dump/restore/export rehearsal (needs pg_dump)
 ```
 
 The browser gate truncates the throwaway database, never the development
@@ -59,6 +60,12 @@ database. Install its pinned Chromium once with
 [`deploy/accessibility-testing.md`](deploy/accessibility-testing.md) and
 [`deploy/browser-journeys.md`](deploy/browser-journeys.md) for the coverage
 matrices, artifacts and fixture boundaries.
+
+The ownership drill accepts only a database whose name contains `test` or
+`drill`, creates and removes its own random restore database, and never uses a
+normal local `DATABASE_URL` outside CI. See
+[`deploy/ownership-recovery.md`](deploy/ownership-recovery.md) before handling
+a real backup, logical export, media inventory or credential-key rotation.
 
 CI runs all of the above plus the build, a dependency audit, and a Docker image
 that has to answer a real HTTP request. Run them before opening a PR and the
