@@ -34,7 +34,7 @@ older local document outside this checkpoint.
 
 `origin/feat/role-onboarding` remains at `f08fb30`. The UI checkpoint,
 operations checkpoint and updated handoffs are local-only shutdown commits, so
-the branch will be seven commits ahead of its tracked remote after this document
+the branch will be eight commits ahead of its tracked remote after this document
 is committed.
 
 ## Verified baseline
@@ -185,11 +185,16 @@ Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
   its monitoring host was lost and shutdown was requested before a result. The
   exact new `pnpm`/Vitest process tree (PIDs 25808, 27504 and 21432) was
   explicitly stopped. This rerun is non-evidence and must be repeated.
+- A subsequent turn again confirmed there were no test workers before starting
+  one isolated `pnpm test`. The turn was deliberately aborted for shutdown
+  before Vitest returned a result; its exact process tree (PIDs 16820, 8028 and
+  22592) was explicitly stopped, and a follow-up process query found no
+  remaining Vitest or `pnpm test` worker. This attempt is also non-evidence.
 - The full Vitest suite has not produced a clean isolated result, and the
   remaining repository gates have not run against this checkpoint. Do not
   treat C1.25 as accepted.
 - Git signing was attempted, but the configured GPG identity has no private key
-  in this environment. The seven local commits after `f08fb30` are therefore
+  in this environment. The eight local commits after `f08fb30` are therefore
   unsigned checkpoints. Restore the signing key and re-sign/recreate them
   before the protected PR flow if required.
 
