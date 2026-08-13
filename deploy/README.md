@@ -78,6 +78,10 @@ whole story, which is the point.
   precedence, translated chrome authoring, contact-driven templates and
   notification evidence, migration behavior, and verification.
 
+- [`analytics-governance.md`](analytics-governance.md) — consent modes,
+  analytics cookies, retention/pruning, reversible bot corrections, Web
+  Vitals, campaign attribution, anonymized export, and verification.
+
 ## Known gaps
 
 - arm64 images. `linux/amd64` covers the current DigitalOcean recipe; ARM wants

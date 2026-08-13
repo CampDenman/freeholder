@@ -24,10 +24,15 @@
 export const ANON_COOKIE = "fh_v";
 /** One visit, expiring after 30 minutes of quiet. */
 export const SESSION_COOKIE_NAME = "fh_s";
+/** Persisted consent/policy choice; never an identity. */
+export const ANALYTICS_CONSENT_COOKIE = "fh_ac";
+/** Short-lived first-navigation handoff, promoted only when policy allows. */
+export const ANALYTICS_BOOTSTRAP_COOKIE = "fh_ab";
 
 /** Forwarded to server components, which cannot read a cookie being set. */
 export const ANON_HEADER = "x-freeholder-anon";
 export const SESSION_HEADER = "x-freeholder-session";
+export const ANALYTICS_BOOTSTRAP_HEADER = "x-freeholder-analytics-bootstrap";
 
 /**
  * Six months. Long enough for the funnel an owner cares about — an enquiry in
@@ -36,6 +41,38 @@ export const SESSION_HEADER = "x-freeholder-session";
  */
 export const ANON_MAX_AGE = 60 * 60 * 24 * 180;
 export const SESSION_MAX_AGE = 60 * 30;
+export const ANALYTICS_BOOTSTRAP_MAX_AGE = 60 * 5;
+export const ANALYTICS_CONSENT_MAX_AGE = 60 * 60 * 24 * 365;
+
+export type AnalyticsConsentState =
+  | "implicit"
+  | "granted"
+  | "pending"
+  | "denied"
+  | "disabled";
+
+const CONSENT_STATES = new Set<AnalyticsConsentState>([
+  "implicit",
+  "granted",
+  "pending",
+  "denied",
+  "disabled",
+]);
+
+export function parseAnalyticsConsentState(
+  value: string | null | undefined,
+): AnalyticsConsentState | null {
+  return value && CONSENT_STATES.has(value as AnalyticsConsentState)
+    ? (value as AnalyticsConsentState)
+    : null;
+}
+
+/** Only these durable choices permit long-lived visitor identifiers. */
+export function analyticsIdentifiersAllowed(
+  state: AnalyticsConsentState | null,
+): boolean {
+  return state === "implicit" || state === "granted";
+}
 
 /**
  * A random identifier.

@@ -57,8 +57,10 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
   email or scheduled digests, preference controls, replay-safe deduplication,
   and one-time escalation for unread critical work. SMS and push remain
   explicit disabled adapters until their carrier/compliance checkpoints.
-- **First-party analytics** — privacy-first pageviews plus the full funnel
-  (visit → lead → quote → paid), joined to the CRM
+- **First-party analytics** — configurable privacy-first, explicit-opt-in or
+  disabled collection; bounded retention, reversible traffic-quality review,
+  Core Web Vitals, campaign attribution and anonymized aggregate export, plus
+  the full funnel (visit → lead → quote → paid) joined to the CRM
 - **Full admin** — CRUD everything, toggle modules, seed/demo mode
 - **Operational control** — retained background-work history, sanitized run
   detail, dead-letter recovery, lease-overdue warnings, and audited controls

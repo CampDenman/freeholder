@@ -286,7 +286,11 @@ describe.runIf(hasDatabase)("a module's own settings (§11 settingsSchema)", () 
     // adding a setting later, and every existing instance getting its default
     // without a migration.
     const config = await getModuleConfig.call({ module: "analytics" }, ANONYMOUS);
-    expect(config).toEqual({ includeBots: false });
+    expect(config).toEqual({
+      includeBots: false,
+      consentPolicy: "privacy_first",
+      retentionDays: 180,
+    });
   });
 
   it("stores what the owner chose", async () => {
@@ -295,7 +299,11 @@ describe.runIf(hasDatabase)("a module's own settings (§11 settingsSchema)", () 
       OWNER,
     );
     expect(await getModuleConfig.call({ module: "analytics" }, ANONYMOUS)).toEqual(
-      { includeBots: true },
+      {
+        includeBots: true,
+        consentPolicy: "privacy_first",
+        retentionDays: 180,
+      },
     );
   });
 
@@ -309,6 +317,13 @@ describe.runIf(hasDatabase)("a module's own settings (§11 settingsSchema)", () 
       ),
     );
     expect(error.code).toBe("validation");
+    expect((await failure(setModuleConfig.call(
+      {
+        module: "analytics",
+        config: { consentPolicy: "sometimes", retentionDays: 29 },
+      },
+      OWNER,
+    ))).code).toBe("validation");
   });
 
   it("refuses a module that is not installed", async () => {

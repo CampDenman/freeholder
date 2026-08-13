@@ -202,11 +202,13 @@ describe("redact()", () => {
         email: "a@b.test",
         password: "hunter2",
         nested: { apiKey: "sk-live", otpSecret: "ABC", token: "t" },
+        classificationNote: "May contain visitor details",
         list: [{ passwordHash: "x" }, { name: "fine" }],
       }),
     ).toEqual({
       email: "a@b.test",
       password: "[redacted]",
+      classificationNote: "[redacted]",
       nested: {
         apiKey: "[redacted]",
         otpSecret: "[redacted]",

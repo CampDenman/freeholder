@@ -193,7 +193,7 @@ export default async function PublicPage({
   // script in the visitor's browser. Nothing to block, nothing to consent to
   // loading, and it works with JavaScript switched off — the numbers describe
   // the traffic that actually arrived rather than the subset that ran a tag.
-  await recordPageView(path === "" ? "/" : `/${path}`, locale);
+  await recordPageView(path === "" ? "/" : `/${path}`, locale, query);
 
   const blocks = page.blocks as BlockNode[];
   const rendered = await renderBlocks(blocks, {

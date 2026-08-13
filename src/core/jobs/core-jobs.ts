@@ -283,6 +283,17 @@ export const prunePrivacyArtifacts = defineJob({
   },
 });
 
+/** Analytics is an operational signal, not a permanent person-level ledger. */
+export const pruneAnalyticsEvents = defineJob({
+  name: "core.pruneAnalytics",
+  summary: "Prune analytics events and campaign projections at instance policy.",
+  schedule: "49 4 * * *",
+  handler: async () => {
+    const { pruneAnalytics } = await import("@/modules/analytics/service");
+    return pruneAnalytics();
+  },
+});
+
 /** Idempotency is bounded durable state, not an unbounded second job history. */
 export const pruneJobKeys = defineJob({
   name: "core.pruneJobKeys",
@@ -382,6 +393,7 @@ export default [
   pruneWebhookDeliveries,
   reapAgentLeases,
   prunePrivacyArtifacts,
+  pruneAnalyticsEvents,
   pruneJobKeys,
   sweepMediaOrphans,
   purgeExpiredMediaAssets,

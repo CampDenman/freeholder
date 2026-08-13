@@ -17,6 +17,8 @@
  * to call usePathname().
  */
 export const PATH_HEADER = "x-freeholder-path";
+/** Original public path plus query, before locale rewriting. */
+export const REQUEST_TARGET_HEADER = "x-freeholder-request-target";
 
 /**
  * The locale a URL prefix asked for, stripped before the route sees it.

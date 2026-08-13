@@ -253,6 +253,13 @@
       "when": 1786575604613,
       "tag": "0035_slim_wiccan",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1786580016281,
+      "tag": "0036_milky_radioactive_man",
+      "breakpoints": true
     }
   ]
 }
