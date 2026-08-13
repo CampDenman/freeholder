@@ -30,10 +30,17 @@ the seed is wrong or the service layer is.
 ## Installing it
 
 ```sh
-# A deploy that arrives populated. Read once at boot; refuses if the site
-# already has pages, and there is no route that can trigger it.
+# A production demo deploy that arrives populated. Read once at boot; refuses
+# if the site already has pages, and there is no route that can trigger it.
 FREEHOLDER_SEED_DEMO=1
 ```
+
+`pnpm dev` does the same by default on a pristine database, so a new
+contributor's first request to `/` is the complete site rather than setup
+scaffolding. `FREEHOLDER_SEED_DEMO=0` opts into a blank development instance
+when working on the first-boot journey. An implicitly seeded development
+database must have neither an owner nor a business profile, so this convenience
+cannot overwrite setup work that has not created its first page yet.
 
 …or call `demo.install` as the owner from the admin, the API, or MCP — one
 implementation, whichever door it is reached through (§2 principle 7).

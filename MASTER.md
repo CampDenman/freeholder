@@ -2918,11 +2918,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `e5e176b` (C1.22 and proxy-safe analytics consent merged); C1.23 functional head `ea426c0` passed full CI including Linux ownership restore drill `31686555058`, then rebased cleanly with the 1,080-test suite green; changeset `ownership-recovery.md` |
+| Evidence snapshot | `main` at `030a4ab` with C1.23 merged; post-merge CI `31713586633` and signed/provenance/SBOM image publication `31713586583` green; C1.24 local acceptance: 88-file/1,085-test suite and production build green; changeset `seeded-development-home.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.24 fresh development/demo seeded home; no public-launch work is required |
+| Current focus | C1.25 role/capability-derived onboarding; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3296,8 +3296,21 @@ reading chat logs.
   `scripts/ownership-drill.mjs`; `tests/core/ownership-export.test.ts`;
   operator guide `deploy/ownership-recovery.md`; changeset
   `ownership-recovery.md`)
-- [ ] **C1.24** Make a fresh development/demo install serve a complete seeded
+- [x] **C1.24** Make a fresh development/demo install serve a complete seeded
   home at `/`, with no route depending on manually repaired database content.
+  (pristine development databases now install Aurora Coast automatically while
+  production remains opt-in and `FREEHOLDER_SEED_DEMO=0` preserves an explicit
+  blank-setup mode; implicit seeding refuses any owner or business already in
+  progress; blank optional values from a copied `.env.example` normalize to
+  unconfigured instead of preventing boot; the seeded business remains
+  claimable through `/setup`; unexpected seed errors fail startup rather than
+  hiding behind the setup placeholder; the fresh-image gate creates its own
+  database and verifies `/` renders business identity, authored H1, header,
+  footer and generated media before creating any owner or repairing content,
+  then proves `/setup` renders the first-owner form; unit/database coverage for
+  default, opt-out, explicit production request, pristine guard and restart
+  idempotence; 88-file/1,085-test Vitest suite; production build; changeset
+  `seeded-development-home.md`)
 - [ ] **C1.25** Build resumable, role/capability-derived onboarding for owner,
   administrator, editor, bookkeeper, service provider and customer, with
   first-win tasks, contextual relaunch, skip/reset, progress and forbidden-

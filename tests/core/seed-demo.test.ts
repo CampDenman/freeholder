@@ -16,11 +16,20 @@
 // failure names the page, rather than in a crawler where it names a URL.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/core/db";
+import { resetEnvForTests } from "@/core/env";
 import { assets } from "@/core/media/schema";
 import { pages } from "@/modules/cms/schema";
+import {
+  demoSeedMode,
+  seedDemoIfRequested,
+} from "@/modules/seed/boot";
 import { installDemo } from "@/modules/seed/service";
 import { resolvePage, getSection, publishedPaths } from "@/modules/cms/service";
-import { getBusiness } from "@/core/settings/service";
+import {
+  getBusiness,
+  setupState,
+  updateBusiness,
+} from "@/core/settings/service";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
 import { PAGES, IMAGES, BUSINESS, LOCATION } from "../../seed/demo/content";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -43,6 +52,49 @@ function walk(nodes: BlockNode[], visit: (node: BlockNode) => void): void {
     if (node.children) walk(node.children, visit);
   }
 }
+
+async function withEnvironment<T>(
+  overrides: Record<string, string | undefined>,
+  body: () => Promise<T>,
+): Promise<T> {
+  const previous = Object.fromEntries(
+    Object.keys(overrides).map((key) => [key, process.env[key]]),
+  );
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  resetEnvForTests();
+  try {
+    return await body();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    resetEnvForTests();
+  }
+}
+
+describe("the demo boot policy", () => {
+  it("defaults on only in development and obeys both explicit overrides", () => {
+    expect(
+      demoSeedMode({ NODE_ENV: "development", FREEHOLDER_SEED_DEMO: undefined }),
+    ).toBe("development");
+    expect(
+      demoSeedMode({ NODE_ENV: "test", FREEHOLDER_SEED_DEMO: undefined }),
+    ).toBe("disabled");
+    expect(
+      demoSeedMode({ NODE_ENV: "production", FREEHOLDER_SEED_DEMO: undefined }),
+    ).toBe("disabled");
+    expect(
+      demoSeedMode({ NODE_ENV: "development", FREEHOLDER_SEED_DEMO: "0" }),
+    ).toBe("disabled");
+    expect(
+      demoSeedMode({ NODE_ENV: "production", FREEHOLDER_SEED_DEMO: "1" }),
+    ).toBe("requested");
+  });
+});
 
 describe("the demo content, before anything installs it", () => {
   // These hold whether or not a database is present: the content is data, and
@@ -127,6 +179,65 @@ describe.runIf(hasDatabase)("installing the demo", () => {
 
   afterAll(async () => {
     await closeDb();
+  });
+
+  it(
+    "boots a complete demo on a pristine development database",
+    async () => {
+      const outcome = await withEnvironment(
+        { NODE_ENV: "development", FREEHOLDER_SEED_DEMO: undefined },
+        () => seedDemoIfRequested(),
+      );
+
+      expect(outcome.status).toBe("installed");
+      expect(await resolvePage.call({ slug: "" }, ANONYMOUS)).toEqual(
+        expect.objectContaining({ title: BUSINESS.name, status: "published" }),
+      );
+      expect(await getSection.call({ key: HEADER_KEY }, ANONYMOUS)).not.toBeNull();
+      expect(await getSection.call({ key: FOOTER_KEY }, ANONYMOUS)).not.toBeNull();
+      expect(await setupState.call({}, ANONYMOUS)).toEqual({
+        hasOwner: false,
+        hasBusiness: true,
+        completed: true,
+      });
+
+      const restart = await withEnvironment(
+        { NODE_ENV: "development", FREEHOLDER_SEED_DEMO: "1" },
+        () => seedDemoIfRequested(),
+      );
+      expect(restart).toEqual({ status: "already-populated" });
+    },
+    30_000,
+  );
+
+  it("lets development opt out without writing any content", async () => {
+    const outcome = await withEnvironment(
+      { NODE_ENV: "development", FREEHOLDER_SEED_DEMO: "0" },
+      () => seedDemoIfRequested(),
+    );
+
+    expect(outcome).toEqual({ status: "skipped", reason: "disabled" });
+    expect(await resolvePage.call({ slug: "" }, ANONYMOUS)).toBeNull();
+    expect(await getBusiness.call({}, ANONYMOUS)).toBeNull();
+  });
+
+  it("does not overwrite development setup work that has no page yet", async () => {
+    await updateBusiness.call(
+      { ...BUSINESS, name: "Work in progress" },
+      OWNER,
+    );
+
+    const outcome = await withEnvironment(
+      { NODE_ENV: "development", FREEHOLDER_SEED_DEMO: undefined },
+      () => seedDemoIfRequested(),
+    );
+
+    expect(outcome).toEqual({
+      status: "skipped",
+      reason: "development-not-pristine",
+    });
+    expect((await getBusiness.call({}, ANONYMOUS))?.name).toBe("Work in progress");
+    expect(await resolvePage.call({ slug: "" }, ANONYMOUS)).toBeNull();
   });
 
   it("produces a whole site an owner could have made by hand", async () => {
