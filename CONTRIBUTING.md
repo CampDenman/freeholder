@@ -49,6 +49,7 @@ pnpm typecheck     # tsc --noEmit
 pnpm lint          # architecture, money (§15.4), service-layer (§15.5), i18n (§15.3)
 pnpm plan:check    # MASTER.md is the one complete, internally consistent plan
 pnpm license:check # the AGPL/MIT boundary and SPDX headers
+pnpm dependency:audit # advisories plus SECURITY.md's exception contract
 ```
 
 CI runs all of the above plus the build, a dependency audit, and a Docker image

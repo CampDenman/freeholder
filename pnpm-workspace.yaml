@@ -28,9 +28,16 @@ overrides:
   # range here (">=0.35.0" against a manifest saying "^0.35.3") makes the
   # lockfile disagree with package.json and fails --frozen-lockfile in CI.
   sharp: "^0.35.3"
-  # GHSA-r28c-9q8g-f849 and the sourceMappingURL path traversal: arbitrary file
-  # read via an attacker-controlled source map comment.
-  postcss: ">=8.5.18"
+  # GHSA-r28c-9q8g-f849 and GHSA-fxqj-rqcc-2cmp: sourceMappingURL path
+  # traversal/arbitrary map-file reads. 8.5.23 completes the earlier fix.
+  postcss: ">=8.5.23 <9"
+  # GHSA-67mh-4wv8-2f99: the old esbuild development server allowed any site
+  # to read its responses. drizzle-kit still reaches 0.18 through its retired
+  # @esbuild-kit loader even though its other esbuild slots are patched. Scope
+  # the forward override to that parent so current Vite/drizzle slots keep
+  # their own newer majors.
+  # GitHub's reviewed advisory names 0.25.0 as the patched release.
+  "@esbuild-kit/core-utils>esbuild": ">=0.25.0 <0.26"
   # DoS via unbounded brace expansion. Raised to 5.0.9 on 2026-08-03:
   # GHSA-rgw5-rvv9-x895 found a way around the 5.0.8 mitigation, so the floor
   # that was enough in July is not enough now. Only reachable through dev

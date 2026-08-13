@@ -44,11 +44,12 @@ jobs:
         run: pnpm plan:check
       - name: License headers (LICENSING.md boundary)
         run: pnpm license:check
-      # §36 lists dependency audit among the v1.0 security gates. Scoped to
-      # high and critical: a gate that fires on every low-severity transitive
-      # advisory gets muted within a month, and a muted gate protects nothing.
+      # §36 lists dependency audit among the v1.0 security gates. High and
+      # critical findings are absolute failures. A lower-severity finding is
+      # also a failure unless SECURITY.md's owned, expiring exception contract
+      # has been recorded path-for-path in the checked-in ledger.
       - name: Dependency audit (§36)
-        run: pnpm audit --audit-level high
+        run: pnpm dependency:audit
       - name: Lint (architecture boundaries, service-layer and money gates)
         run: pnpm lint
       - name: Typecheck
