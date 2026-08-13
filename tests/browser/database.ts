@@ -4,6 +4,7 @@
 import postgres from "postgres";
 import { db } from "@/core/db";
 import { seedDefaultRoles } from "@/core/roles/defaults";
+import { seedCoreGuidanceFlows } from "@/core/guidance/definitions";
 
 export async function resetBrowserDatabase(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -27,5 +28,8 @@ export async function resetBrowserDatabase(): Promise<void> {
   } finally {
     await client.end();
   }
-  await db().transaction(seedDefaultRoles);
+  await db().transaction(async (tx) => {
+    await seedDefaultRoles(tx);
+    await seedCoreGuidanceFlows(tx);
+  });
 }
