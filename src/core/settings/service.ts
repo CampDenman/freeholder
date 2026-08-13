@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Business identity and module toggles (MASTER.md §4.8, §13).
 //
 // The profile is readable by anyone because every public page needs it — the

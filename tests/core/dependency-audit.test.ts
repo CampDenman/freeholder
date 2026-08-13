@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The dependency gate proves both its hard boundary and exception discipline.
 import { describe, expect, it } from "vitest";
 import { evaluateDependencyAudit } from "../../scripts/dependency-audit.mjs";

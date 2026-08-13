@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The public surface — one route for every page on the site (MASTER.md §32).
 //
 // This file is the answer to a question the module contract left open: how does

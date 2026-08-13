@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The v1 block vocabulary (MASTER.md §32).
 //
 // §32 lists a longer palette than this. The blocks missing here are the ones

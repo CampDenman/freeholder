@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Every module installed in this instance (MASTER.md §11).
 //
 // A hand-written list rather than a directory scan, for the same reason

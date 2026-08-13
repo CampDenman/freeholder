@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Documents always leave through this controlled attachment response. That is
 // true even for public object storage, so a PDF/office file never becomes
 // executable same-origin content and trash revokes the link immediately.

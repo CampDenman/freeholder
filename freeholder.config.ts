@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // This instance, declaratively (MASTER.md §17). No secrets here — see .env.
 import { defineConfig } from "@/core/config";
 

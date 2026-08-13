@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Installing the demo at boot, when the deploy asked for it.
 //
 // §3 promises "a fresh deploy is instantly explorable", and §15.2's SEO gate

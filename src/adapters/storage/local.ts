@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Filesystem storage. **Development only** — §10 and §18 both say production
 // mandates managed object storage, because a droplet's disk is not backed up,
 // does not survive a rebuild, and cannot be shared by two app processes.

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The asset library (MASTER.md §4.5, §18, §36).
 //
 // One row per uploaded file. The bytes never live here and never live on the

@@ -1,7 +1,7 @@
 # FREEHOLDER — Product Specification and Completion Plan
 
 **The open-source operating system for a one-person business.**
-Living edition · reconciled 2026-08-10 · created, authored, and owned by Tony Aly · AGPL-3.0 core / MIT SDK & templates
+Living edition · reconciled 2026-08-12 · created, authored, and owned by Tony Aly · Apache-2.0
 
 This is the project's **only product and delivery source of truth**. It defines
 the product, architecture, complete scope, dependency order, current state, and
@@ -84,8 +84,8 @@ One button exports everything — database, media, and a human-readable archive 
 
 ### License
 
-- **Core**: AGPL-3.0. Use it, self-host it, modify it, host it for clients — but improvements to the platform stay open.
-- **SDK, deploy tooling, and templates** (`packages/`): MIT. Build businesses, themes, agencies, and tools on top of Freeholder without restriction.
+- **Freeholder-authored code, SDK, deploy tooling, and templates**: Apache-2.0. Use it, self-host it, modify it, host it for clients, and build commercial products on it subject to the license's notice and attribution conditions.
+- **Third-party material**: retains its own license and notices; the bundled fonts, for example, remain under the SIL Open Font License.
 
 ### Contributing
 
@@ -1122,8 +1122,8 @@ The money path (steps 2–3) follows immediately after, ahead of booking, quotes
 ## 10. Repository Layout
 
 ```
-freeholder/                          # AGPL-3.0
-├── LICENSE                          # AGPL-3.0
+freeholder/                          # Apache-2.0
+├── LICENSE                          # Apache License 2.0
 ├── README.md                        # excerpt of §1
 ├── MASTER.md                        # this document — ground truth
 ├── CLAUDE.md                        # agent ground rules
@@ -1194,14 +1194,14 @@ freeholder/                          # AGPL-3.0
 ├── scripts/                         # setup, seed, doctor (env checks), export
 ├── tests/
 │
-└── packages/                        # MIT-licensed, separately published
+└── packages/                        # Apache-2.0, separately published
     ├── sdk/                         # @freeholder/sdk — typed API client
     ├── create-freeholder/           # npx create-freeholder — deploy bootstrapper
     ├── templates/                   # @freeholder/templates — theme starters
     └── mobile-app/                  # white-label Expo/React Native app (§35)
 ```
 
-**License boundary:** everything under root = AGPL-3.0. Everything under `packages/` = MIT with its own LICENSE. The SDK and templates being MIT means agencies and tool-makers can build on Freeholder freely; the AGPL core means nobody closes the platform itself.
+**License policy:** all Freeholder-authored code and documentation, including `packages/`, use Apache-2.0. Every published package carries the same license text as the repository root. Third-party material keeps its own license and notice; the license gate verifies Freeholder SPDX headers, package manifests, and distributable license texts.
 
 ---
 
@@ -1596,7 +1596,7 @@ Tiers are printed in the recipe index and in `create-freeholder`'s target picker
 
 ---
 
-## 22. `create-freeholder` Flow (MIT package, ties it together)
+## 22. `create-freeholder` Flow (Apache-2.0 package, ties it together)
 
 ```
 npx create-freeholder my-business
@@ -1739,10 +1739,10 @@ Plugins run **in-process** — same trust level as core once installed. Sandboxi
 3. **Signed releases (§39.3).** Platform images and the update feed carry signatures and build provenance, and the updater verifies both before applying anything. An auto-updater is the most privileged component in a self-hosted system; unverified auto-update would hand every instance to whoever compromises the distribution path.
 4. **Kill switches:** per-plugin disable without uninstall; plugin errors are boundary-caught and degrade to a disabled widget, never a downed site; `AuditLog` records every plugin's service calls under `actor: plugin:<name>`.
 
-**Licensing lanes (stated up front to avoid the WordPress wars):**
-- **In-process plugins** import AGPL core APIs → must carry AGPL-compatible licenses. The registry checks the license field.
-- **Out-of-process apps** — anything that talks to a Freeholder via HTTP API, SDK, webhooks, or MCP — are independent works: **any license, any commercial model.** Sell your SaaS companion freely.
-This gives commercial developers a clean lane (external apps) while keeping the in-process ecosystem open — the exact ecosystem structure that kept WordPress plugins flourishing for two decades, minus the license ambiguity.
+**Licensing policy (stated up front to avoid ambiguity):**
+- **In-process plugins** may use any license compatible with their use of Apache-2.0 Freeholder APIs, including commercial terms. The registry requires a valid declared SPDX expression and preserves applicable Freeholder notices when code is copied or redistributed.
+- **Out-of-process apps** — anything that talks to a Freeholder via HTTP API, SDK, webhooks, or MCP — may likewise use any license and commercial model.
+This gives developers the same permissive commercial lane whether they extend Freeholder in-process or build beside it, while the registry keeps licensing visible before installation.
 
 ---
 
@@ -1755,7 +1755,7 @@ A plugin registry is **just a signed JSON index** — deliberately boring so tha
 { "registry": "Freeholder Official", "updated": "2026-07-22",
   "plugins": [{
     "name": "freeholder-plugin-gift-registry", "version": "0.4.2",
-    "tier": "verified", "license": "AGPL-3.0",
+    "tier": "verified", "license": "Apache-2.0",
     "permissions": ["invoicing:create","contacts:read"],
     "freeholder": ">=1.0.0", "integrity": "sha512-…",
     "repo": "github:someone/gift-registry", "description": "…", "screenshots": […]
@@ -1824,7 +1824,7 @@ SDK is generated from this.
 
 - A weekend contributor ships a plugin in an afternoon and it's discoverable the same day (Community tier, no gatekeeper).
 - An agency builds a private registry of client plugins and manages fleets of Freeholder instances declaratively.
-- A commercial developer sells an external companion app via the MIT SDK with zero license anxiety.
+- A commercial developer sells a plugin or external companion app via the Apache-2.0 SDK with clear, permissive terms.
 - An AI agent connected to any instance discovers its exact live capabilities — including plugins installed yesterday — through MCP introspection, and the docs it reads are generated from the code it's calling.
 - And the core team maintains **one** thing: the service registry. Everything else — API, SDK, MCP, reference docs, llms.txt — is a build artifact.
 
@@ -2065,9 +2065,9 @@ Nothing is bolted on to make this work. Tools are generated from the service reg
 
 This is also where the injection boundary earns its keep. An external assistant that reads a customer's email in one breath and holds build authority in the next is the precise hazard §37's envelope exists to prevent — so a key with `builder.*` should not be the same key an owner points at their inbox. The platform cannot enforce what an owner does with their own keys, but it can make the distinction visible, scope them separately, and record which key made every change.
 
-### The AGPL wrinkle
+### Source provenance
 
-An instance that modifies itself has modified the AGPL work it is serving over a network, which means its users are owed the corresponding source (§1, licence). This is a *feature*, not an obstacle: the instance can emit its own source — base version, applied plugins, and the diff its builder produced — from a `/source` route. Self-modification and copyleft turn out to fit together, provided the instance can always say exactly what it is running.
+An instance that modifies itself must still be able to say exactly what it is running. Its `/source` route emits the base version, applied plugins, license and notices, and the diff its builder produced. Apache-2.0 does not require operators to publish private modifications merely because they run them over a network; this route exists for owner control, reproducibility, audit, and correct attribution.
 
 ### Why this is the moat
 
@@ -2377,8 +2377,8 @@ business's timezone and skipped rather than forced.
 
 ### 39.7 The fork lane
 
-Some owners will fork, and they are not doing anything wrong — this is an AGPL
-project and §37 explicitly contemplates an instance that modifies itself. For
+Some owners will fork, and they are not doing anything wrong — this is an
+Apache-2.0 project and §37 explicitly contemplates an instance that modifies itself. For
 them `freeholder update` is a merge rather than a swap: fetch upstream into a
 worktree, merge, report conflicts by file, run the gates, and open a pull
 request **in their own fork** — the same lane §37's builder already uses for
@@ -3021,7 +3021,7 @@ one with unchecked dependency items.
 - [x] **C0.02** Retire the root roadmap and JSON session backlog; remove every
   instruction that treats either as live planning.
 - [x] **C0.03** Record Tony Aly as owner of the original Freeholder copyright
-  across core and MIT package notices.
+  across code, documentation, and package notices.
 - [x] **C0.04** Credit Tony Aly (`tony@paradisemodern.com`, `tonyaly.com`) as
   Freeholder's creator and original author in project and package metadata.
 - [x] **C0.05** Describe the `CampDenman` GitHub organization only as the
@@ -3037,6 +3037,11 @@ one with unchecked dependency items.
 - [x] **C0.09** Reconcile `README.md`, setup text, package descriptions, and
   deployment docs whenever a target capability becomes true; target language
   must never masquerade as current availability.
+- [x] **C0.10** License all Freeholder-authored code, documentation, deploy
+  tooling, and packages under Apache-2.0 while retaining third-party notices;
+  enforce the canonical license text, manifest fields, package copies, and
+  source SPDX headers. *(`LICENSE`, `LICENSING.md`,
+  `scripts/license-headers.mjs`, and changeset `apache-license.md`.)*
 
 **C0 exit:** there is exactly one live plan, ownership is legally documented,
 and every contributor or agent can identify the next valid work item without
@@ -3419,7 +3424,8 @@ deployments are portable, testable and incapable of silently forking the truth.
 - [ ] **C4.21** Keep `builder.*` separately granted from workforce scopes and
   prove content/customer input can never instruct either builder lane.
 - [ ] **C4.22** Expose the builder safely through admin, API and MCP and emit
-  complete source/audit provenance including `/source` AGPL compliance.
+  complete source/audit provenance through `/source`, including the running
+  version, applied plugins, builder diff, license, and notices.
 - [ ] **C4.23** Add a federated catalogue for shareable agent/playbook
   definitions with declared scopes, compatibility, provenance, preview and
   owner approval before installation; definitions remain data, never bundled

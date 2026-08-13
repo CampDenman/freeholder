@@ -2,7 +2,7 @@
   "name": "@freeholder/sdk",
   "version": "0.0.0",
   "description": "Client SDK for Freeholder sites — typed access to the API and MCP surface",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
     "type": "git",

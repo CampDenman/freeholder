@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Owner background-work ledger and recovery queue (MASTER.md §43 C1.10).
 import type { Metadata } from "next";
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";

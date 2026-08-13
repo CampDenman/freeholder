@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Copy for the form builder, resolved on the server (§15.3).
 import type { Translate } from "@/core/i18n";
 import { FIELD_KINDS } from "@/modules/forms/fields";

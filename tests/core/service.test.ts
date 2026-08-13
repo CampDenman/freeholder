@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The service wrapper's guarantees that need no database. Anything that gets
 // past the permission and validation gates opens a transaction, so the
 // behaviour of a *successful* call is tested in spine.test.ts instead; what

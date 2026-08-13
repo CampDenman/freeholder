@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Password reset (MASTER.md §9, §13 step 1) and the mail adapter (§12).
 //
 // A reset flow is a way in. Every test here is about one of the three

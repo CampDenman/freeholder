@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Authenticated delivery feedback for Resend, Postmark and Amazon SES.
 // Raw provider bodies are held only long enough to authenticate and normalize;
 // the database receives a SHA-256 digest and bounded, vocabulary-only detail.

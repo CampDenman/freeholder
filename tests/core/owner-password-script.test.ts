@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The locked-out-owner escape hatch (MASTER.md §9, §13).
 //
 // `scripts/owner-password.mjs` restates the scrypt parameters instead of

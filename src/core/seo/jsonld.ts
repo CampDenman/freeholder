@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Structured data (MASTER.md §5, "JSON-LD by page type").
 //
 // Plain builders over plain data — no framework, no side effects — so they can

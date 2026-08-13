@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 "use server";
 // Password reset, from the browser (MASTER.md §9, §13 step 1).
 //

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Translating the editor for the client component that renders it.
 //
 // The palette and its fields are *derived* from the block schemas, so the

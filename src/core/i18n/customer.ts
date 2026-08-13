@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Customer locale policy (MASTER.md §4.9, §43 C1.16).
 //
 // A locale is a customer fact, not a property of whichever delivery happens

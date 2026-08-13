@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The spine, made browsable (MASTER.md §2 principle 3, §4.1).
 //
 // Search and filtering are a GET form reading searchParams, not client state:

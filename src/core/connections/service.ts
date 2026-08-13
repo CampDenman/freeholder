@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Connected accounts (MASTER.md §41), stage 1: somewhere safe to put a token.
 //
 // No provider yet. What exists here is the model, the encryption, and the

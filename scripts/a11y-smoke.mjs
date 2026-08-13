@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The accessibility smoke test (MASTER.md §15.7).
 //
 // "Smoke" is the honest word for it. axe-core against a parsed document finds

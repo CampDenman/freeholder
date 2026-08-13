@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // §13: the wizard locks once this is confirmed, so it cannot be replayed
 // against a live site.
 import { redirect } from "next/navigation";

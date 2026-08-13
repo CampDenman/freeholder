@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The read side of the spine: browsing contacts, and the CRM timeline that
 // §4.1 calls "a view over the spine, not a separate store".
 import { afterAll, beforeEach, describe, expect, it } from "vitest";

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Spending a password reset link (MASTER.md §9, §13 step 1).
 //
 // The token is read here and handed to the form as a hidden field, because a

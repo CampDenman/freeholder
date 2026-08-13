@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Minting and recognising an API key (MASTER.md §26).
 //
 // Separate from the service so that verification — which runs on every single

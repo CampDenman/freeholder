@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // What a form field is, and how a submission is checked against one.
 //
 // The same idea as the block registry (§32): the *kinds* of field are code and

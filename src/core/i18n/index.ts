@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The string layer (MASTER.md §4.9, §7 step 1): exists before any feature is
 // built. UI strings live in ICU MessageFormat catalogs under /locales —
 // community-translatable JSON; content translations live in the

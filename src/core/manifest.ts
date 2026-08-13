@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Core's own manifest. Core is always on (MASTER.md §3) — it has no toggle and
 // no `requires` — but it declares itself the same way a feature module does,
 // so the boot sequence has exactly one shape to implement and modules have a

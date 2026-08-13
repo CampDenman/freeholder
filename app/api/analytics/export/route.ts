@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Authenticated, aggregate-only analytics export (MASTER.md C1.18).
 import { actorFromRequest } from "@/core/http/actor";
 import { errorResponse } from "@/core/http/respond";

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Password hashing (MASTER.md §9: hand-rolled thin, no auth SaaS). scrypt
 // from node:crypto — zero dependencies, memory-hard, boring. The stored
 // format is self-describing so parameters can be raised later and old

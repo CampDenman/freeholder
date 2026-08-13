@@ -1,7 +1,7 @@
 # Notification fanout and inbox operations
 
 Copyright (C) 2026 Tony Aly
-SPDX-License-Identifier: AGPL-3.0-only
+SPDX-License-Identifier: Apache-2.0
 
 Freeholder turns selected committed events into one durable notification per
 logical recipient. The personal inbox is the human-facing fact;

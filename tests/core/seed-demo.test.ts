@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The demo business (MASTER.md §3, §15.2, §25).
 //
 // Two different things are under test here, and the second is the reason this

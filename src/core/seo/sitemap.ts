@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The sitemap engine (MASTER.md §5, §11).
 //
 // This is what `seo: { sitemapSources: [...] }` in a module manifest has been

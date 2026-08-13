@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // One form's submissions, and its quarantine queue (MASTER.md §4.6, §36).
 //
 // The queue is the point. A spam filter that deletes is a filter an owner

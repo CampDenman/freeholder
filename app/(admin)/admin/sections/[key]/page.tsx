@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Editing the chrome. The same editor as a page, with the chrome palette —
 // which is the whole point of deriving the palette per context.
 import { notFound } from "next/navigation";

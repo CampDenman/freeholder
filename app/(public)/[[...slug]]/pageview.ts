@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Recording a page view (MASTER.md §4.7, §36).
 //
 // Server-side, during the render, from identifiers the proxy minted. That has

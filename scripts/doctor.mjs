@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Doctor, from a terminal (MASTER.md §17, §18).
 //
 // A thin client rather than a second implementation. The checks live in the

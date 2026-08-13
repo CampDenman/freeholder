@@ -1,4 +1,4 @@
-# src/ — the application (AGPL-3.0-only)
+# src/ — the application (Apache-2.0)
 
 Framework-agnostic application code, per `MASTER.md` §10:
 

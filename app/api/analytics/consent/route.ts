@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Reconcile one browser with the instance analytics policy (MASTER C1.18).
 import { NextResponse, type NextRequest } from "next/server";
 import { currentAnalyticsSettings } from "@/modules/analytics/read";

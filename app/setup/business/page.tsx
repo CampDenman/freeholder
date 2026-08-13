@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // §13 steps 2–3: who the business is, and where it operates.
 import { redirect } from "next/navigation";
 import { setupState } from "@/core/settings/service";

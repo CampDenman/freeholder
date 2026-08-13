@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 import { beginUpload, uploadStatus } from "@/core/media/service";
 import { serviceRoute } from "@/core/http/route";
 

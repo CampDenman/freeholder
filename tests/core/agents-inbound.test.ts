@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Inbound agent execution (MASTER.md §40, stage 2).
 //
 // The protocol is claim → report → complete, and what the tests are really

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Nonce-based browser containment and consent boundaries (MASTER.md C1.19).
 import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";

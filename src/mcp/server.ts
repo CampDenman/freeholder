@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The MCP endpoint (MASTER.md §11, §28.3, §28.4).
 //
 // MCP is JSON-RPC 2.0 over the Streamable HTTP transport. For a server that

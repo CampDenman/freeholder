@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The agent orchestration layer (MASTER.md §40), stage 1: the model.
 //
 // Configuration here is owner-only *and closed to agents entirely*, which is

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Signing a delivery, and deciding where one may be sent.
 //
 // These are together because they are the two halves of trusting an outbound

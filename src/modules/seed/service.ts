@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Installing the demo business (MASTER.md §3, §13, §15.2, §25).
 //
 // A service rather than a script, for the reason §11 gives: the admin, the

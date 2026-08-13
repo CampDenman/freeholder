@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The cms services against a real database (MASTER.md §11, §32).
 //
 // cms is the first feature module, so these cover two things at once: what the

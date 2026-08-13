@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 "use server";
 // First-boot actions (MASTER.md §13). These are the browser's door into the
 // same services the REST API and MCP server call — the choke point holds

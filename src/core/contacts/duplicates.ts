@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Human-reviewed duplicate detection and merge provenance (MASTER.md C1.07).
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";

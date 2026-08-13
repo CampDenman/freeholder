@@ -1,5 +1,5 @@
 /* Copyright (C) 2026 Tony Aly */
-/* SPDX-License-Identifier: AGPL-3.0-only */
+/* SPDX-License-Identifier: Apache-2.0 */
 /*
  * Deliberately thin. The values live in src/core/design/tokens.ts and are
  * emitted as --fh-* custom properties by the layout at request time (§32), so

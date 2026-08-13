@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The sitemap index (MASTER.md §5: "locale-split sitemaps under a sitemap
 // index"). One entry per enabled locale; a single-locale site gets an index of
 // one, so adding a language later changes nothing a crawler already knows.

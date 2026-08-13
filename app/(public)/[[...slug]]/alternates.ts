@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // hreflang (MASTER.md §5, §4.9).
 //
 // §5 asks for "full hreflang alternates + x-default" on every localized page.

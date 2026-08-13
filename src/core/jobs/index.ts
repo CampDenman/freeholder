@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Transactional background work (MASTER.md §9, §11 and §43 C1.09).
 //
 // pg-boss is the queue and Postgres is the only coordination service. A job

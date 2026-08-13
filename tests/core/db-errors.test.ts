@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Drizzle wraps driver errors, so a unique-violation check that only inspects
 // the caught error matches nothing — and a never-matching check looks exactly
 // like a missing constraint. These tests pin the unwrapping.

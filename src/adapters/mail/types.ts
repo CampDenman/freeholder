@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The mail adapter contract (MASTER.md §12).
 //
 // §12 splits mail in two and the split is load-bearing. **Transactional** mail

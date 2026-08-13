@@ -1,7 +1,7 @@
 # Background-job operations
 
 Copyright (C) 2026 Tony Aly
-SPDX-License-Identifier: AGPL-3.0-only
+SPDX-License-Identifier: Apache-2.0
 
 Freeholder runs background work through pg-boss in the same Postgres database
 as the application. It does not require Redis or a hosted queue. pg-boss owns

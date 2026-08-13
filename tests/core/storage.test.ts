@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The storage adapter contract (MASTER.md §12). One suite runs against every
 // implementation that can be exercised without a cloud account, because an
 // interface whose implementations are only tested individually drifts.

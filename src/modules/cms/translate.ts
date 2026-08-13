@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Turning a block tree into a list of sentences, and back (MASTER.md §4.9).
 //
 // §4.9 stores a translation as the *fields that differ*, and for a page those

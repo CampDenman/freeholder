@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Finish the two-phase browser/API login. The challenge is accepted only from
 // its HttpOnly cookie, never from caller-controlled JSON.
 import {

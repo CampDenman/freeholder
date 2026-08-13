@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Changing your own password (MASTER.md §9, §13 step 1).
 //
 // This exists because of a real problem on a real instance: freeholder.ai's

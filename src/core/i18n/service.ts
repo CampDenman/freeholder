@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Translation services (MASTER.md §4.9).
 //
 // Core owns the table because every module's content is translatable and none

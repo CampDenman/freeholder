@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The one translation from a ServiceError into an HTTP status. Doing this once,
 // here, is what stops each route inventing its own status codes and its own
 // idea of how much to tell the caller.

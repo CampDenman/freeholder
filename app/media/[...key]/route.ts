@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Controlled delivery for local and Replit storage. Every request re-checks
 // the durable object inventory so trash/quarantine revokes a previously-known
 // URL, and documents are always downloads rather than same-origin content.

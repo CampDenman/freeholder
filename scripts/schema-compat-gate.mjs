@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The schema-compatibility gate (MASTER.md §15.9, §39.5).
 //
 // Rollback is an image swap — no restore, no data loss — and that is true only

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Reading the audit trail (MASTER.md §4.8). The doc makes a promise —
 // "the owner can read a plain-English log of everything their AI did" — and a
 // log nobody can read does not keep it. This is the read side of the rows the

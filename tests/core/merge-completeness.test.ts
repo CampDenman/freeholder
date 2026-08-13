@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The merge completeness gate (CLAUDE.md non-negotiable, MASTER.md §2
 // principle 3).
 //

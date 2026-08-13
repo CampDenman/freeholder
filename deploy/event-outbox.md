@@ -1,7 +1,7 @@
 # Event-outbox operations
 
 Copyright (C) 2026 Tony Aly
-SPDX-License-Identifier: AGPL-3.0-only
+SPDX-License-Identifier: Apache-2.0
 
 Freeholder writes every service event to `outbox_events` inside the mutation's
 transaction. The event therefore commits with the business change or not at

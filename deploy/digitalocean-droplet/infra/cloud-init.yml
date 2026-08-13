@@ -1,6 +1,6 @@
 #cloud-config
 # Copyright (C) 2026 Tony Aly
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: Apache-2.0
 # One-command droplet bootstrap (MASTER.md 21b). Everything a fresh Ubuntu box
 # needs to run the compose stack -- nothing Freeholder-specific beyond the
 # directory, because the release itself arrives afterwards.

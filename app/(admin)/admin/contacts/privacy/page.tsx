@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Owner privacy desk: consent evidence and deadline-bearing rights requests.
 import type { Metadata } from "next";
 import { ShieldCheck, UserFocus } from "@phosphor-icons/react/dist/ssr";

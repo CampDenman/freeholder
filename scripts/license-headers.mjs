@@ -1,16 +1,19 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
-// The licensing gate (LICENSING.md, CLAUDE.md non-negotiables). Every source
-// file carries a copyright line and an SPDX identifier, and the identifier
-// must match which side of the AGPL/MIT boundary the file is on. Getting this
-// wrong is not a style slip: it is the licensing boundary the whole project
-// rests on, so it is checked rather than remembered.
+// SPDX-License-Identifier: Apache-2.0
+// The licensing gate (LICENSING.md, CLAUDE.md non-negotiables). Every
+// Freeholder-authored source file carries the same copyright line and Apache
+// SPDX identifier. Package manifests and their distributable license texts
+// are checked here too, so published packages cannot drift from the repository.
 //
 // Usage: node scripts/license-headers.mjs [--fix]
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const COPYRIGHT = "Copyright (C) 2026 Tony Aly";
+const LICENSE_ID = "Apache-2.0";
+const CANONICAL_LICENSE_SHA256 =
+  "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30";
 const fix = process.argv.includes("--fix");
 
 // Generated files carry no header, because whatever generates them will
@@ -56,8 +59,10 @@ const untracked = execFileSync(
   { encoding: "utf8" },
 );
 
-const files = [...tracked.split("\n"), ...untracked.split("\n")]
-  .filter(Boolean)
+const repositoryFiles = [...tracked.split("\n"), ...untracked.split("\n")]
+  .filter(Boolean);
+
+const files = repositoryFiles
   .filter((f) => !EXEMPT.some((rx) => rx.test(f)))
   .filter((f) => commentStyle(f));
 
@@ -65,9 +70,7 @@ const problems = [];
 
 for (const file of files) {
   const [prefix, suffix] = commentStyle(file);
-  // packages/* is MIT, everything else in the repo is AGPL (LICENSING.md).
-  const license = file.startsWith("packages/") ? "MIT" : "AGPL-3.0-only";
-  const spdx = `SPDX-License-Identifier: ${license}`;
+  const spdx = `SPDX-License-Identifier: ${LICENSE_ID}`;
 
   const original = readFileSync(file, "utf8");
   const body = original.replace(/^﻿/, "");
@@ -80,9 +83,9 @@ for (const file of files) {
   if (hasCopyright && hasSpdx) continue;
 
   if (hasWrongSpdx) {
-    // Never auto-rewrite a license: a mismatch here means code may have moved
-    // across the AGPL/MIT boundary, which is a decision, not a typo.
-    problems.push(`${file}: declares a different license; expected ${license}`);
+    // Never auto-relicense a file: an unexpected identifier may belong to
+    // third-party code and needs a human copyright/licensing decision.
+    problems.push(`${file}: declares a different license; expected ${LICENSE_ID}`);
     continue;
   }
 
@@ -104,12 +107,51 @@ for (const file of files) {
   console.log(`fixed ${file}`);
 }
 
+const manifests = repositoryFiles.filter(
+  (file) => file === "package.json" || /^packages\/[^/]+\/package\.json$/.test(file),
+);
+
+for (const file of manifests) {
+  const manifest = JSON.parse(readFileSync(file, "utf8"));
+  if (manifest.license !== LICENSE_ID) {
+    problems.push(
+      `${file}: declares ${String(manifest.license)}; expected ${LICENSE_ID}`,
+    );
+  }
+}
+
+const rootLicense = readFileSync("LICENSE", "utf8");
+const normalizedRootLicense = rootLicense.replaceAll("\r\n", "\n");
+const rootLicenseHash = createHash("sha256")
+  .update(normalizedRootLicense)
+  .digest("hex");
+if (rootLicenseHash !== CANONICAL_LICENSE_SHA256) {
+  problems.push("LICENSE: expected the complete Apache License 2.0 text");
+}
+
+const licenseFiles = manifests.map((manifest) =>
+  manifest.replace(/package\.json$/, "LICENSE"),
+);
+for (const file of licenseFiles) {
+  if (!repositoryFiles.includes(file)) {
+    problems.push(`${file}: every package must ship the repository license`);
+    continue;
+  }
+  if (readFileSync(file, "utf8") !== rootLicense) {
+    problems.push(`${file}: must be byte-identical to the root LICENSE`);
+  }
+}
+
 if (problems.length > 0) {
   console.error(
     `License headers (LICENSING.md): ${problems.length} file(s) need attention.\n` +
       problems.map((p) => `  ${p}`).join("\n") +
-      "\n\nRun `pnpm license:fix` to add the missing headers.",
+      "\n\nRun `pnpm license:fix` to add missing headers; review metadata or " +
+      "license-text mismatches manually.",
   );
   process.exit(1);
 }
-console.log(`License headers: ${files.length} files OK.`);
+console.log(
+  `Licensing: ${files.length} source files, ${manifests.length} manifests, ` +
+    `and ${licenseFiles.length} license texts OK.`,
+);

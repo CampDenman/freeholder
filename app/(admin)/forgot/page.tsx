@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Asking for a password reset (MASTER.md §9, §13 step 1).
 //
 // Public, like the sign-in it sits beside, and outside /admin so the guard on

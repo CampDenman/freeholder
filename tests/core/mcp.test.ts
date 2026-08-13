@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The MCP server (MASTER.md §11, §28.3).
 //
 // Two things are being held here. The first is the protocol: the envelopes a

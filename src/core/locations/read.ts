@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Request-scoped reads of the primary location, matching settings/read.ts.
 //
 // The footer wants the NAP, the home page's JSON-LD wants the same row, and a

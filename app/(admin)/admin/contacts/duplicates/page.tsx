@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Explainable, human-reviewed duplicate handling (MASTER.md C1.07).
 import {
   DUPLICATE_REASON_CODES,

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Enforce the dependency-risk contract (MASTER.md C1.20, §36).
 //
 // High and critical advisories have no bypass. Lower severities remain visible

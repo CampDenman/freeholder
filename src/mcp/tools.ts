@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // MCP tools, derived from the service registry (MASTER.md §11, §28.3).
 //
 // §28 is emphatic about why this is generated rather than authored: "New

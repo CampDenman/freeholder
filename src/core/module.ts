@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The module contract (MASTER.md §11). A module is a folder with a manifest;
 // modules register capabilities, core wires them. Modules communicate only
 // via the event bus and core services — never by importing each other's

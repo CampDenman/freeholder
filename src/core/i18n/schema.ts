@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Content translations (MASTER.md §4.9).
 //
 // §4.9 draws a line the whole i18n design rests on: **UI strings** live in

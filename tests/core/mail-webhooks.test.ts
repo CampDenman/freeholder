@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Provider feedback authentication and normalization (MASTER.md §12, C1.14).
 // Every provider call is mocked: this suite cannot send mail or incur cost.
 import {

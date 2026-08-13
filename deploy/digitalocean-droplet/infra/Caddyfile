@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Tony Aly
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: Apache-2.0
 # Automatic TLS from Let's Encrypt. Caddy needs the domain to already resolve
 # to this droplet before it can be issued a certificate.
 {$FREEHOLDER_DOMAIN} {

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Auth services (MASTER.md §3 core/auth, §13 step 1). registerOwner is the
 // first-boot primitive behind the setup wizard: it succeeds exactly once, on
 // an empty users table — after that the instance has an owner and the door

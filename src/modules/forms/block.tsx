@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The form block (MASTER.md §11, §32, §36).
 //
 // This is the module contract's central claim being tested for real: forms

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Types for the importable dependency-audit policy evaluator (MASTER.md C1.20).
 export interface DependencyAuditResult {
   ok: boolean;

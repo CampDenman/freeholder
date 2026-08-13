@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Doctor, in the admin (MASTER.md §17).
 //
 // The same report the CLI prints and the recipe matrix asserts on, because it

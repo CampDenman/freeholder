@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The admin shell (MASTER.md §10). One guard, one nav, one header — every
 // screen under /admin inherits all three, so no individual page can forget to
 // check who is asking.

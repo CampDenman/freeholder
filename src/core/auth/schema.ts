@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Identity & access tables (MASTER.md §4.1). A User is a login linked to one
 // named role; customers may be magic-link-only (null password_hash).
 // Sessions are server-side per §9: hand-rolled Lucia-style, token hashed at

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Doctor (MASTER.md §17, §18).
 //
 // §17 calls doctor "the contract that makes community recipes trustworthy",

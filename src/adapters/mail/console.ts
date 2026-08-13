@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Development-only mail sink. It is deliberately non-delivering and never
 // writes credentials, reset links, or message content to production logs.
 import { env } from "@/core/env";

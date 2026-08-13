@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Business identity and module toggles (MASTER.md §4.8, §13). One deploy is
 // one business (§2 principle 1), so the profile is a genuine singleton and the
 // database says so — a second row is not "unlikely", it is rejected.

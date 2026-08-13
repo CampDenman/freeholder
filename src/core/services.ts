@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Core's service list — the default export a manifest's `services` loader is
 // expected to provide (MASTER.md §11). Adding a service to core means adding
 // it to the array it already lives in; forgetting to register it is not a

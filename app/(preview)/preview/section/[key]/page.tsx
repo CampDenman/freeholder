@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // One chrome Section, rendered for the editor canvas. Same renderer, same
 // bridge, different subject — which is the point of the context split.
 import { notFound } from "next/navigation";

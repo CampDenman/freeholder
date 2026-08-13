@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Personal session/device controls and privacy-limited login safety (MASTER.md
 // §43 C1.04). Active sessions retain bounded metadata only while their sliding
 // session remains live; the longer security history contains HMACs/coarse hints

@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The first-boot shell (MASTER.md §13). Deliberately not the admin chrome:
 // there is no business yet, so there is nothing to navigate.
 import type { ReactNode } from "react";

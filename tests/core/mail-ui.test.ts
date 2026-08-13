@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Static accessibility/keyboard contract for Admin → Settings → Mail.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

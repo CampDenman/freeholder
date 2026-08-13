@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // One deliberately quiet chooser shared by anonymous and signed-in portal
 // chrome. Before sign-in it changes the URL; after sign-in it changes the
 // linked Contact fact, which is what makes templates and notifications follow.

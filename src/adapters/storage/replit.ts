@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Replit Object Storage (MASTER.md §12, §20 — Replit is the Tier-1 recipe).
 //
 // The client is imported *dynamically*, and `@replit/object-storage` is an

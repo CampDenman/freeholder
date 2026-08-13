@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // The editor canvas's shell (MASTER.md §32: "live responsive preview").
 //
 // Its own route group so the frame gets a bare document — no admin nav, no

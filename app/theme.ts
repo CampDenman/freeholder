@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Reading and writing the theme preference — the only place `next/headers`
 // touches theming, so src/ stays framework-free (§10).
 //

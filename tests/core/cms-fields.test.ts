@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Tony Aly
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: Apache-2.0
 // Deriving edit forms from block schemas (MASTER.md §24, §32).
 //
 // This is what makes "a plugin's block appears in the palette with zero editor
