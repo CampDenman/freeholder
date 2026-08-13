@@ -12,6 +12,7 @@ import type { BlockDefinition, BlockNode } from "./types";
 import {
   brand,
   button,
+  callCta,
   columns,
   divider,
   faq,
@@ -30,6 +31,7 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   text,
   image,
   button,
+  callCta,
   columns,
   divider,
   spacer,

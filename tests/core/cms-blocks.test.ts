@@ -21,7 +21,7 @@ import { t } from "@/core/i18n";
 describe("the registry", () => {
   it("registers the v1 vocabulary", () => {
     expect(blockTypes()).toEqual(
-      expect.arrayContaining(["heading", "text", "button", "columns", "faq", "nav", "brand"]),
+      expect.arrayContaining(["heading", "text", "button", "callCta", "columns", "faq", "nav", "brand"]),
     );
   });
 
@@ -80,6 +80,22 @@ describe("parseBlockTree()", () => {
     expect(() =>
       parseBlockTree([{ id: "a", type: "button", props: { label: "Go" } }], "page"),
     ).toThrow(/href/);
+    expect(() =>
+      parseBlockTree(
+        [{
+          id: "call",
+          type: "callCta",
+          props: {
+            eyebrow: "Direct line",
+            label: "Call us",
+            phone: "639 383 4662",
+            displayPhone: "(639) 383-4662",
+            supportText: "Tap to speak with us.",
+          },
+        }],
+        "chrome",
+      ),
+    ).toThrow(/E\.164/);
   });
 
   it("refuses children on a block that does not hold them", () => {

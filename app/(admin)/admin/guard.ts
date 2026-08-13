@@ -48,3 +48,12 @@ export async function requireStaffActor(
   }
   return actor;
 }
+
+/** The one bootstrap owner, used by screens whose authority is intentionally not delegable. */
+export async function requireOwnerActor(module?: string): Promise<Extract<Actor, { kind: "user" }>> {
+  const actor = await requireStaffActor(module);
+  if (actor.kind !== "user" || actor.role !== "owner") {
+    redirect(`/admin?denied=${encodeURIComponent(module ?? "owner")}`);
+  }
+  return actor;
+}

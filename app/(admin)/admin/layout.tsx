@@ -85,6 +85,7 @@ export default async function AdminLayout({
           <AdminNav
             multilingual={(business?.enabledLocales ?? []).length > 1}
             grants={actor.kind === "user" ? actor.grants : []}
+            owner={actor.kind === "user" && actor.role === "owner"}
             labels={{
               region: t("admin.nav.label"),
               overview: t("admin.nav.overview"),
@@ -101,6 +102,7 @@ export default async function AdminLayout({
               settings: t("admin.nav.settings"),
               roles: t("admin.nav.roles"),
               invitations: t("admin.nav.invitations"),
+              builder: t("admin.nav.builder"),
             }}
           />
         </div>

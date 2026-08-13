@@ -31,6 +31,8 @@ import {
 import { AnalyticsRuntime } from "./AnalyticsRuntime";
 import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
 import { SkipLink } from "@/ui/SkipLink";
+import { actorFromToken } from "@/core/http/actor";
+import { MagicWand } from "@phosphor-icons/react/dist/ssr";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,10 @@ export default async function PublicLayout({
   const consent = parseAnalyticsConsentState(
     cookieJar.get(ANALYTICS_CONSENT_COOKIE)?.value,
   );
+  const publicActor = await actorFromToken(
+    cookieJar.get(SESSION_COOKIE_NAME)?.value,
+  );
+  const showBuilder = publicActor.kind === "user" && publicActor.role === "owner";
 
   const [header, footer] = await Promise.all([
     publishedSection(HEADER_KEY, locale),
@@ -122,6 +128,15 @@ export default async function PublicLayout({
           cookieJar.get(SESSION_COOKIE_NAME)?.value
         )}
       />
+      {showBuilder ? (
+        <a
+          href="/admin/builder"
+          className="fixed bottom-5 end-5 z-40 inline-flex items-center gap-2 rounded-full border border-accent bg-accent px-4 py-2.5 text-sm font-bold text-on-accent shadow-[0_12px_32px_rgb(0_0_0/0.2)]"
+        >
+          <MagicWand size={17} weight="fill" />
+          {t("builder.publicAffordance")}
+        </a>
+      ) : null}
     </div>
   );
 }
