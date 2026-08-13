@@ -11,15 +11,26 @@ Resume `MASTER.md` §43 at **C1.25**:
 > first-win tasks, contextual relaunch, skip/reset, progress and forbidden-
 > control accessibility/permission tests.
 
-The working branch is `feat/role-onboarding`, created directly from current
-`main` at merge commit `dd34df798435c65d5f39e8dd60177fb655f65a5c`.
-C1.25 foundation work is committed at `0b3ccdb` (`feat: establish role guidance
-foundation`). It is intentionally incomplete: the schema, definitions and
-service exist, while human surfaces and acceptance coverage are the next
-checkpoint.
+The working branch is `feat/role-onboarding`, created directly from `main` at
+merge commit `dd34df798435c65d5f39e8dd60177fb655f65a5c`. C1.25 is split across
+two product commits:
+
+- `0b3ccdb` (`feat: establish role guidance foundation`) adds the schema,
+  definitions, migration and core services;
+- `eb3c9e7` (`feat: add role guidance surfaces`) adds the admin/portal UI,
+  focused service and markup tests, and browser acceptance specifications.
+
+The feature is intentionally incomplete. Focused service/UI tests and
+TypeScript pass, but the new browser specifications, production build and full
+gate set have not run. Do not update `MASTER.md` or open the PR until that
+evidence is green.
 
 Do not commit or modify the separate untracked `RESTART_HANDOFF.md`; it is an
 older local document outside this checkpoint.
+
+`origin/feat/role-onboarding` remains at `f08fb30`. The UI checkpoint and this
+updated handoff are local-only shutdown commits, so the branch will be two
+commits ahead of its tracked remote after this document is committed.
 
 ## Verified baseline
 
@@ -105,50 +116,75 @@ Commit `0b3ccdb` contains this foundation:
 - English, French and Spanish catalog entries for the six flows, their tasks,
   progress and controls are present and parse as valid JSON.
 
-The capability audit also found a pre-existing dashboard bug to fix in this
-checkpoint: `app/(admin)/admin/page.tsx` requires only `admin:view` but always
-calls contact and event queries. The default editor lacks those grants, so the
-overview must conditionally query and render those widgets.
+Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
+
+- `src/ui/GuidancePanel.tsx` renders a semantic shared panel with a native
+  progress element, ordered tasks, explicit state text and start/resume,
+  skip-for-now and reset forms. Links exist only for capability-authorized
+  steps and only while a flow is active or complete.
+- The admin overview embeds the preferred flow. `/admin/guidance` lists all
+  eligible flows, and the admin shell exposes a path-aware contextual
+  "Guided help" link derived from safe server-side contexts.
+- The authenticated portal privacy page embeds the customer flow and a
+  contextual relaunch anchor. Stable target IDs were added for portal privacy
+  preferences and the admin notification schedule.
+- Admin and portal server actions call the core lifecycle services and return
+  to validated internal paths.
+- `guidance.contexts` exposes only capability-filtered relaunch targets without
+  reconciling progress.
+- The pre-existing dashboard permission bug is fixed: contact and event data
+  are queried and rendered only when the actor holds the corresponding view
+  capability, so editor and other restricted roles can load the overview.
+- Focused tests cover all six roles, capability-derived custom roles,
+  migration/TypeScript seed parity, durable real-outcome completion,
+  per-user resume/skip/reset, newly granted steps, inaccessible flows, semantic
+  markup and the absence of forbidden links.
+- Browser specifications now cover the owner completion journey, contextual
+  help, administrator skip/resume/reset, staff-role permission matrices,
+  customer isolation and accessibility assertions. They are written but have
+  not yet been executed.
 
 ## Verification at shutdown
 
-- `pnpm typecheck` passed after the schema, definitions, service and core
-  registration were added.
-- All three modified locale catalogs pass PowerShell JSON parsing.
-- `git diff --check` passed before the foundation commit.
-- No focused guidance tests, migration execution, lint, production build or
-  full suite has run yet. Do not treat the foundation as C1.25 acceptance.
+- `pnpm exec vitest run tests/core/guidance-definitions.test.ts
+  tests/core/guidance.test.ts tests/core/guidance-ui.test.ts` passed: 3 files,
+  13 tests. The database-backed tests exercise the migration and lifecycle.
+- `pnpm typecheck` passed after all current UI, service and browser-spec edits.
+- All three locale catalogs parse as JSON.
+- `git diff --check` passed before both product checkpoint commits.
+- The Playwright specifications have not run. Neither `pnpm lint`,
+  `pnpm build`, the full test suite nor the remaining repository gates have
+  run against this checkpoint. Do not treat C1.25 as accepted.
+- Git signing was attempted for the shutdown commit, but the configured GPG
+  identity has no private key in this environment. `eb3c9e7` and the following
+  handoff commit are therefore local unsigned checkpoints. Restore the signing
+  key and re-sign/recreate them before the protected PR flow if required.
 
-One design detail deserves an explicit review during tests: `guidance.list` is
-declared as a query but reconciles derived `GuidanceProgress` evidence inside
-its transaction. It never creates a fake completion/audit event; nevertheless,
-prove retry/idempotence and decide whether this derived-state write remains the
-right service semantic before the PR.
+Two details deserve review before acceptance:
+
+- `guidance.list` is declared as a query but reconciles derived progress inside
+  its transaction. Focused tests now prove retry/idempotence, and it never
+  creates fake completion evidence, but confirm this read/write service
+  semantic is intentional before the PR.
+- Admin guidance actions redirect with an `error` query parameter on failure,
+  while `/admin/guidance` does not yet render that error. Either add an
+  accessible localized callout or simplify the stale-action failure behavior.
 
 ## Resume sequence
 
-1. Add focused definition/service/migration tests first. Prove all six default
-   roles receive a useful preferred flow, custom roles are capability-derived,
-   forbidden steps are absent, outcomes require post-start product evidence,
-   skip/resume/reset are isolated per user/version, and a newly granted step
-   reactivates progress. Include migration-vs-TypeScript seed parity.
-2. Build a semantic shared guidance panel (`<progress>`, ordered task list,
-   explicit status text and server-action controls), admin guidance actions and
-   an `/admin/guidance` surface. Embed the preferred guide on the admin
-   overview.
-3. Add capability-filtered contextual help in the admin shell. Integrate the
-   customer guide and a contextual relaunch anchor into the authenticated
-   portal privacy surface. Add stable IDs for the preferences and notification
-   schedule targets already named by the definitions.
-4. Fix the admin overview's unconditional contact/event reads while wiring its
-   guidance panel. Forbidden cards and guide links must be absent rather than
-   disabled.
-5. Add static accessibility/permission coverage and a real-browser journey for
-   owner/staff/customer start, real-outcome completion, resume, skip, reset and
-   contextual relaunch. Run axe and keyboard checks.
-6. Add the changeset/operator-facing documentation, run migrations and the
-   complete local gates, update `MASTER.md` only with acceptance evidence, then
-   use the signed PR/CI/merge/post-merge flow.
+1. Review the two details above and inspect `eb3c9e7` before extending it.
+2. Run `pnpm build`, then execute the focused real-browser matrix in
+   `tests/browser/guidance.spec.ts`. Fix any fixture, permission or strict
+   locator failures.
+3. Run the changed accessibility and owner journey specifications. Verify axe,
+   keyboard focus, real-outcome completion, contextual relaunch and
+   skip/resume/reset in an actual browser.
+4. Add the accessible action-error treatment if retained, then run lint, the
+   full suite and every repository gate in the normal C1 acceptance sequence.
+5. Add the required changeset and operator-facing documentation. Update
+   `MASTER.md` only after all acceptance evidence is green.
+6. Restore signing capability, prepare signed commits as required, push the
+   branch, and use the protected PR/CI/merge/post-merge verification flow.
 
 C1.26 still owns deterministic demo scenarios and general module/plugin
 manifest contributions/conformance. Do not pull that separate checklist item
