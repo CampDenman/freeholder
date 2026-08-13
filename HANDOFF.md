@@ -34,7 +34,7 @@ older local document outside this checkpoint.
 
 `origin/feat/role-onboarding` remains at `f08fb30`. The UI checkpoint,
 operations checkpoint and updated handoffs are local-only shutdown commits, so
-the branch will be six commits ahead of its tracked remote after this document
+the branch will be seven commits ahead of its tracked remote after this document
 is committed.
 
 ## Verified baseline
@@ -172,13 +172,24 @@ Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
   `unknown` through the executable guidance steps schema.
 - `git diff --check` passed after removing the two trailing blank lines from
   `.changeset/role-guidance.md` and `deploy/role-guidance.md`.
-- `pnpm test` was started but explicitly terminated during its buffered,
-  database-heavy run when shutdown was requested. It produced no final counts
-  or usable success result and must be rerun from the beginning.
-- The full Vitest suite and remaining repository gates have not run against
-  this checkpoint. Do not treat C1.25 as accepted.
+- A complete `pnpm test` attempt returned after 660.6 seconds: 90/91 files and
+  1,094/1,098 tests passed. All four failures were in
+  `tests/core/spine.test.ts` and showed another owner/user appearing between
+  that file's per-test truncations. This matched an overlapping Vitest process
+  left alive when an earlier buffered shell was terminated; do not interpret
+  the four assertions as product failures or as a green full-suite result.
+- `pnpm exec vitest run tests/core/spine.test.ts` then passed all 38 tests in
+  isolation in 26.9 seconds, confirming the failed assertions are not
+  reproducible within that file alone.
+- A fresh full-suite rerun was started after checking for stray workers, but
+  its monitoring host was lost and shutdown was requested before a result. The
+  exact new `pnpm`/Vitest process tree (PIDs 25808, 27504 and 21432) was
+  explicitly stopped. This rerun is non-evidence and must be repeated.
+- The full Vitest suite has not produced a clean isolated result, and the
+  remaining repository gates have not run against this checkpoint. Do not
+  treat C1.25 as accepted.
 - Git signing was attempted, but the configured GPG identity has no private key
-  in this environment. The six local commits after `f08fb30` are therefore
+  in this environment. The seven local commits after `f08fb30` are therefore
   unsigned checkpoints. Restore the signing key and re-sign/recreate them
   before the protected PR flow if required.
 
@@ -191,8 +202,9 @@ One design detail deserves review before acceptance:
 
 ## Resume sequence
 
-1. Rerun the complete `pnpm test` suite from the beginning and record its final
-   file/test counts; the interrupted run is not evidence.
+1. Confirm no Vitest/pnpm worker from 2026-08-13 is alive, then rerun the
+   complete `pnpm test` suite exactly once and record its final file/test
+   counts. The overlapping and interrupted runs are not acceptance evidence.
 2. Review the remaining `guidance.list` read/write semantic above.
 3. Run every remaining repository gate in the normal C1
    acceptance sequence.
