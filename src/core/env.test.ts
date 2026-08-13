@@ -46,6 +46,24 @@ describe("env", () => {
       },
     );
   });
+
+  it("treats blank optional placeholders from a copied .env.example as unset", () => {
+    withEnv(
+      {
+        SESSION_SECRET: "",
+        S3_ENDPOINT: "",
+        MAIL_ADAPTER: "",
+        FREEHOLDER_SEED_DEMO: "",
+      },
+      () => {
+        const parsed = env();
+        expect(parsed.SESSION_SECRET).toBeUndefined();
+        expect(parsed.S3_ENDPOINT).toBeUndefined();
+        expect(parsed.MAIL_ADAPTER).toBeUndefined();
+        expect(parsed.FREEHOLDER_SEED_DEMO).toBeUndefined();
+      },
+    );
+  });
 });
 
 describe("requireProductionEnv()", () => {

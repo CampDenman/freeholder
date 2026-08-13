@@ -131,8 +131,8 @@ const envSchema = z.object({
    * suggestion. The checked-in `adapters.ai` choice selects the provider;
    * credentials and the deliberately explicit model name stay in env.
    */
-  // Empty is accepted because `.env.example` is copyable as-is; the adapter
-  // treats it as missing and doctor names the exact variables to fill in.
+  // Blank values are normalized to absent by env(), so `.env.example` remains
+  // copyable as-is; the adapter and doctor then treat these as unconfigured.
   OPENAI_API_KEY: z.string().trim().optional(),
   OPENAI_ALT_TEXT_MODEL: z
     .string()
@@ -163,14 +163,16 @@ const envSchema = z.object({
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: z.enum(["1"]).optional(),
 
   /**
-   * Install the Aurora Coast demo business at boot, if the site is empty.
+   * Control Aurora Coast demo installation at boot.
    *
-   * For demo deploys, the plugin dev harness (§25) and the SEO gate (§15.2),
-   * which needs a site to crawl inside a container it did not build. Read once
-   * at startup and never in response to a request — a route that installs a
-   * demo business is a route somebody eventually hits on a real instance.
+   * Unset means on in development and off everywhere else. `1` asks for it
+   * explicitly (demo deploys, the plugin harness and CI); `0` gives a
+   * contributor a deliberately blank development instance for setup work.
+   * Read once at startup and never in response to a request — a route that
+   * installs a demo business is a route somebody eventually hits on a real
+   * instance.
    */
-  FREEHOLDER_SEED_DEMO: z.enum(["1"]).optional(),
+  FREEHOLDER_SEED_DEMO: z.enum(["0", "1"]).optional(),
 
   /**
    * Whether this process runs background jobs.
@@ -190,7 +192,16 @@ let cached: Env | undefined;
 
 export function env(): Env {
   if (!cached) {
-    const parsed = envSchema.safeParse(process.env);
+    // A copy of `.env.example` contains blank placeholders for optional
+    // credentials, URLs and enum switches. dotenv correctly represents those
+    // as empty strings, but an optional Zod field means `undefined`, not `""`.
+    // Normalize once at the boundary so every optional declaration shares the
+    // documented "leave blank to disable" behavior instead of each field
+    // inventing a slightly different empty-string workaround.
+    const source = Object.fromEntries(
+      Object.entries(process.env).filter(([, value]) => value !== ""),
+    );
+    const parsed = envSchema.safeParse(source);
     if (!parsed.success) {
       const details = parsed.error.issues
         .map((i) => `  ${i.path.join(".")}: ${i.message}`)

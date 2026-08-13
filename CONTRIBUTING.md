@@ -33,8 +33,13 @@ You need Node 20+, pnpm, and a PostgreSQL 15+ you don't mind writing to.
 pnpm install
 cp .env.example .env          # set DATABASE_URL and SESSION_SECRET
 pnpm db:migrate
-pnpm dev                      # first visit lands on /setup
+pnpm dev                      # first visit serves the complete demo at /
 ```
+
+Development seeds Aurora Coast Photography only when the database has no owner
+and no business profile. Visit `/setup` to claim that demo with the first owner
+account. Set `FREEHOLDER_SEED_DEMO=0` when you deliberately need the blank
+setup journey instead; production remains blank unless the switch is `1`.
 
 **Tests want a second, throwaway database.** Set `TEST_DATABASE_URL` in `.env`
 and the suite maps it onto `DATABASE_URL` for the run; migrations are applied

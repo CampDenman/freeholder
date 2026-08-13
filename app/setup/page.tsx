@@ -12,8 +12,14 @@ export const dynamic = "force-dynamic";
 
 export default async function SetupOwnerPage() {
   const state = await setupState.call({}, { kind: "anonymous" });
-  if (state.completed) redirect("/");
-  if (state.hasOwner) redirect("/setup/business");
+  // A seeded demo has a complete business but deliberately no owner. It must
+  // still be claimable through the ordinary first-owner screen; otherwise a
+  // fresh development instance serves a useful public site but leaves its
+  // admin reachable only through the raw API used by CI.
+  if (state.hasOwner) {
+    if (state.completed) redirect("/");
+    redirect("/setup/business");
+  }
 
   const t = await getT();
 

@@ -87,6 +87,50 @@ if [ -z "$installed" ]; then
 fi
 docker logs fh-demo 2>&1 | grep "demo installed"
 
+# C1.24, at the actual route boundary and before CI creates or repairs any
+# owner data: a database created above in this script must render the complete
+# authored home. The crawler below checks the wider SEO contract; these facts
+# make a regression say "the seeded home is incomplete" instead of reporting a
+# secondary crawl symptom.
+home_status=$(curl -sS -o /tmp/freeholder-home.html -w '%{http_code}' "${BASE}/")
+if [ "$home_status" != "200" ]; then
+  echo "::error title=Seeded home::fresh / returned HTTP ${home_status}"
+  exit 1
+fi
+node -e '
+  const html = require("fs").readFileSync("/tmp/freeholder-home.html", "utf8");
+  const required = [
+    ["business identity", "Aurora Coast Photography"],
+    ["authored home heading", "Coastal light, honestly made"],
+    ["site header", "<header"],
+    ["site footer", "<footer"],
+    ["generated demo image", "Low tide on a pebble shoreline at dusk"],
+  ];
+  const missing = required.filter(([, text]) => !html.includes(text));
+  if (missing.length > 0) {
+    console.error("::error title=Seeded home::missing " + missing.map(([name]) => name).join(", "));
+    process.exit(1);
+  }
+  if (html.includes("This instance is ready to set up")) {
+    console.error("::error title=Seeded home::fresh / rendered the setup placeholder");
+    process.exit(1);
+  }
+  console.log("Seeded home: fresh / rendered complete business, chrome, content and media.");
+'
+
+# The demo finishes the business profile but intentionally does not invent an
+# owner credential. A contributor must be able to claim it through the normal
+# setup route before CI exercises the equivalent JSON endpoint below.
+setup_status=$(curl -sS -o /tmp/freeholder-setup.html -w '%{http_code}' "${BASE}/setup")
+if [ "$setup_status" != "200" ]; then
+  echo "::error title=Seeded home::seeded /setup returned HTTP ${setup_status} instead of the first-owner form"
+  exit 1
+fi
+if ! grep -q "Create owner account" /tmp/freeholder-setup.html; then
+  echo "::error title=Seeded home::seeded /setup did not render the first-owner form"
+  exit 1
+fi
+
 # §18's recipe validation matrix wants doctor run against a booted image, and
 # doctor is owner-only — so CI becomes the owner. `registerOwner` succeeds
 # exactly once per instance, and this container is thrown away.

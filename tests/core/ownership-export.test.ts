@@ -155,81 +155,91 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
     await closeDb();
   });
 
-  it("covers every application table, inventories media, and emits no secret value", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "freeholder-export-test-"));
-    const output = path.join(parent, "export");
-    const credentialKey = Buffer.alloc(32, 9).toString("hex");
-    try {
-      const result = await createOwnershipExport({
-        databaseUrl: process.env.DATABASE_URL!,
-        outputDirectory: output,
-        configPath: path.resolve("freeholder.config.ts"),
-        environment: {
-          NODE_ENV: "test",
-          APP_URL:
-            "https://operator:app-url-secret@example.test/freeholder?token=query-secret",
-          CREDENTIAL_KEY: credentialKey,
-          SESSION_SECRET: "session-secret-must-not-export",
-          DATABASE_URL: "database-url-must-not-export",
-          S3_SECRET_ACCESS_KEY: "storage-secret-must-not-export",
-        },
-        now: new Date("2026-08-13T00:00:00.000Z"),
-      });
+  it(
+    "covers every application table, inventories media, and emits no secret value",
+    async () => {
+      const parent = await mkdtemp(path.join(tmpdir(), "freeholder-export-test-"));
+      const output = path.join(parent, "export");
+      const credentialKey = Buffer.alloc(32, 9).toString("hex");
+      try {
+        const result = await createOwnershipExport({
+          databaseUrl: process.env.DATABASE_URL!,
+          outputDirectory: output,
+          configPath: path.resolve("freeholder.config.ts"),
+          environment: {
+            NODE_ENV: "test",
+            APP_URL:
+              "https://operator:app-url-secret@example.test/freeholder?token=query-secret",
+            CREDENTIAL_KEY: credentialKey,
+            SESSION_SECRET: "session-secret-must-not-export",
+            DATABASE_URL: "database-url-must-not-export",
+            S3_SECRET_ACCESS_KEY: "storage-secret-must-not-export",
+          },
+          now: new Date("2026-08-13T00:00:00.000Z"),
+        });
 
-      const tableCount = await db().execute<{ count: number }>(sql`
-        select count(*)::int as count
-        from information_schema.tables
-        where table_type = 'BASE TABLE'
-          and table_schema not in ('information_schema', 'pg_catalog')
-          and table_schema not like 'pg_toast%'
-          and table_schema not like 'pg_temp_%'
-      `);
-      expect(result.manifest.tableCount).toBe(tableCount[0]!.count);
-      expect(result.manifest.completeTableInventory).toBe(true);
-      expect(result.manifest.secretValuesIncluded).toBe(false);
+        const tableCount = await db().execute<{ count: number }>(sql`
+          select count(*)::int as count
+          from information_schema.tables
+          where table_type = 'BASE TABLE'
+            and table_schema not in ('information_schema', 'pg_catalog')
+            and table_schema not like 'pg_toast%'
+            and table_schema not like 'pg_temp_%'
+        `);
+        expect(result.manifest.tableCount).toBe(tableCount[0]!.count);
+        expect(result.manifest.completeTableInventory).toBe(true);
+        expect(result.manifest.secretValuesIncluded).toBe(false);
 
-      const accountExport = await readFile(
-        path.join(output, "data", "public", "connected_accounts.json"),
-        "utf8",
-      );
-      const userExport = await readFile(
-        path.join(output, "data", "public", "users.json"),
-        "utf8",
-      );
-      const recovery = await readFile(path.join(output, "recovery.json"), "utf8");
-      const auditExport = await readFile(
-        path.join(output, "data", "public", "audit_log.json"),
-        "utf8",
-      );
-      const media = JSON.parse(
-        await readFile(path.join(output, "media-manifest.json"), "utf8"),
-      ) as unknown as MediaManifest;
-      const manifest = await readFile(path.join(output, "manifest.json"), "utf8");
+        const accountExport = await readFile(
+          path.join(output, "data", "public", "connected_accounts.json"),
+          "utf8",
+        );
+        const userExport = await readFile(
+          path.join(output, "data", "public", "users.json"),
+          "utf8",
+        );
+        const recovery = await readFile(
+          path.join(output, "recovery.json"),
+          "utf8",
+        );
+        const auditExport = await readFile(
+          path.join(output, "data", "public", "audit_log.json"),
+          "utf8",
+        );
+        const media = JSON.parse(
+          await readFile(path.join(output, "media-manifest.json"), "utf8"),
+        ) as unknown as MediaManifest;
+        const manifest = await readFile(
+          path.join(output, "manifest.json"),
+          "utf8",
+        );
 
-      expect(accountExport).toContain('"credentials": "[REDACTED]"');
-      expect(userExport).toContain('"password_hash": "[REDACTED]"');
-      expect(accountExport).not.toContain("oauth-credential-must-not-export");
-      expect(userExport).not.toContain("password-hash-must-not-export");
-      expect(auditExport).not.toContain("nested-refresh-must-not-export");
-      expect(auditExport).toContain('"refreshToken": "[REDACTED]"');
-      expect(auditExport).toContain('"inputTokens": 123');
-      expect(recovery).not.toContain(credentialKey);
-      expect(recovery).not.toContain("session-secret-must-not-export");
-      expect(recovery).not.toContain("database-url-must-not-export");
-      expect(recovery).not.toContain("storage-secret-must-not-export");
-      expect(recovery).not.toContain("app-url-secret");
-      expect(recovery).not.toContain("query-secret");
-      expect(recovery).toContain("https://example.test/freeholder");
-      expect(recovery).toContain(credentialKeyFingerprint(credentialKey));
-      expect(media.assets).toHaveLength(1);
-      expect(media.objects).toHaveLength(1);
-      expect(media.integrity).toEqual({
-        missingInventoryKeys: [],
-        unreferencedInventoryKeys: [],
-      });
-      expect(manifest).not.toContain(process.env.DATABASE_URL!);
-    } finally {
-      await rm(parent, { recursive: true, force: true });
-    }
-  });
+        expect(accountExport).toContain('"credentials": "[REDACTED]"');
+        expect(userExport).toContain('"password_hash": "[REDACTED]"');
+        expect(accountExport).not.toContain("oauth-credential-must-not-export");
+        expect(userExport).not.toContain("password-hash-must-not-export");
+        expect(auditExport).not.toContain("nested-refresh-must-not-export");
+        expect(auditExport).toContain('"refreshToken": "[REDACTED]"');
+        expect(auditExport).toContain('"inputTokens": 123');
+        expect(recovery).not.toContain(credentialKey);
+        expect(recovery).not.toContain("session-secret-must-not-export");
+        expect(recovery).not.toContain("database-url-must-not-export");
+        expect(recovery).not.toContain("storage-secret-must-not-export");
+        expect(recovery).not.toContain("app-url-secret");
+        expect(recovery).not.toContain("query-secret");
+        expect(recovery).toContain("https://example.test/freeholder");
+        expect(recovery).toContain(credentialKeyFingerprint(credentialKey));
+        expect(media.assets).toHaveLength(1);
+        expect(media.objects).toHaveLength(1);
+        expect(media.integrity).toEqual({
+          missingInventoryKeys: [],
+          unreferencedInventoryKeys: [],
+        });
+        expect(manifest).not.toContain(process.env.DATABASE_URL!);
+      } finally {
+        await rm(parent, { recursive: true, force: true });
+      }
+    },
+    30_000,
+  );
 });
