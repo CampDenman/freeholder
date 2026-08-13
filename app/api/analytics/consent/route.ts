@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Reconcile one browser with the instance analytics policy (MASTER C1.18).
 import { NextResponse, type NextRequest } from "next/server";
+import { env } from "@/core/env";
 import { currentAnalyticsSettings } from "@/modules/analytics/read";
 import {
   ANALYTICS_BOOTSTRAP_COOKIE,
@@ -90,9 +91,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // A cross-site form has no legitimate reason to change this browser choice.
   const fetchSite = request.headers.get("sec-fetch-site");
   const origin = request.headers.get("origin");
+  // Behind a reverse proxy, Next's request URL can carry the loopback
+  // container origin while the browser correctly sends the public HTTPS
+  // origin. APP_URL is the instance's canonical, operator-controlled origin;
+  // accepting it keeps same-origin reconciliation working without trusting a
+  // caller-supplied forwarded header.
+  const allowedOrigins = new Set([
+    request.nextUrl.origin,
+    new URL(env().APP_URL).origin,
+  ]);
   if (
     fetchSite === "cross-site" ||
-    (origin !== null && origin !== request.nextUrl.origin)
+    (origin !== null && !allowedOrigins.has(origin))
   ) {
     return NextResponse.json({ error: "Cross-site analytics choice refused." }, { status: 403 });
   }
