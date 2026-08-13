@@ -19,18 +19,21 @@ two product commits:
   definitions, migration and core services;
 - `eb3c9e7` (`feat: add role guidance surfaces`) adds the admin/portal UI,
   focused service and markup tests, and browser acceptance specifications.
+- `6454629` (`docs: prepare role guidance operations`) adds the localized
+  action-error callout, release changeset and operator runbook.
 
-The feature is intentionally incomplete. Focused service/UI tests and
-TypeScript pass, but the new browser specifications, production build and full
-gate set have not run. Do not update `MASTER.md` or open the PR until that
-evidence is green.
+The feature is intentionally incomplete. Focused service/UI tests, TypeScript,
+the production build and all changed browser specifications pass. Lint has one
+known test-typing failure, and the full suite/repository gates have not run. Do
+not update `MASTER.md` or open the PR until that evidence is green.
 
 Do not commit or modify the separate untracked `RESTART_HANDOFF.md`; it is an
 older local document outside this checkpoint.
 
-`origin/feat/role-onboarding` remains at `f08fb30`. The UI checkpoint and this
-updated handoff are local-only shutdown commits, so the branch will be two
-commits ahead of its tracked remote after this document is committed.
+`origin/feat/role-onboarding` remains at `f08fb30`. The UI checkpoint,
+operations checkpoint and updated handoffs are local-only shutdown commits, so
+the branch will be four commits ahead of its tracked remote after this document
+is committed.
 
 ## Verified baseline
 
@@ -141,8 +144,12 @@ Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
   markup and the absence of forbidden links.
 - Browser specifications now cover the owner completion journey, contextual
   help, administrator skip/resume/reset, staff-role permission matrices,
-  customer isolation and accessibility assertions. They are written but have
-  not yet been executed.
+  customer isolation and accessibility assertions.
+- `deploy/role-guidance.md` documents rollout, versioning, rollback, role
+  expectations and post-deploy checks. `.changeset/role-guidance.md` records
+  the release-facing feature.
+- Failed admin actions now render a localized accessible danger callout rather
+  than silently carrying an unused error query parameter.
 
 ## Verification at shutdown
 
@@ -150,40 +157,45 @@ Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
   tests/core/guidance.test.ts tests/core/guidance-ui.test.ts` passed: 3 files,
   13 tests. The database-backed tests exercise the migration and lifecycle.
 - `pnpm typecheck` passed after all current UI, service and browser-spec edits.
+- `pnpm build` passed in 89.9 seconds. The known optional
+  `@replit/object-storage` warning remains.
+- `tests/browser/guidance.spec.ts` passed: 2 tests in 10.0 seconds, covering
+  the staff-role permission matrix and customer/admin isolation.
+- The changed `tests/browser/accessibility.spec.ts` and
+  `tests/browser/journeys.spec.ts` passed: 2 tests in 48.6 seconds, including
+  axe coverage, portal progress, owner real-outcome completion and contextual
+  skip/resume/reset.
 - All three locale catalogs parse as JSON.
-- `git diff --check` passed before both product checkpoint commits.
-- The Playwright specifications have not run. Neither `pnpm lint`,
-  `pnpm build`, the full test suite nor the remaining repository gates have
-  run against this checkpoint. Do not treat C1.25 as accepted.
-- Git signing was attempted for the shutdown commit, but the configured GPG
-  identity has no private key in this environment. `eb3c9e7` and the following
-  handoff commit are therefore local unsigned checkpoints. Restore the signing
-  key and re-sign/recreate them before the protected PR flow if required.
+- `pnpm lint` was attempted and failed only at
+  `tests/core/guidance-definitions.test.ts:127` with
+  `@typescript-eslint/no-unsafe-assignment`. Fix that typed JSON parse before
+  rerunning lint.
+- The operations commit also contains one extra blank line at EOF in each of
+  `.changeset/role-guidance.md` and `deploy/role-guidance.md`; remove them so
+  `git diff --check` is clean in the next commit.
+- The full Vitest suite and remaining repository gates have not run against
+  this checkpoint. Do not treat C1.25 as accepted.
+- Git signing was attempted, but the configured GPG identity has no private key
+  in this environment. The four local commits after `f08fb30` are therefore
+  unsigned checkpoints. Restore the signing key and re-sign/recreate them
+  before the protected PR flow if required.
 
-Two details deserve review before acceptance:
+One design detail deserves review before acceptance:
 
 - `guidance.list` is declared as a query but reconciles derived progress inside
   its transaction. Focused tests now prove retry/idempotence, and it never
   creates fake completion evidence, but confirm this read/write service
   semantic is intentional before the PR.
-- Admin guidance actions redirect with an `error` query parameter on failure,
-  while `/admin/guidance` does not yet render that error. Either add an
-  accessible localized callout or simplify the stale-action failure behavior.
 
 ## Resume sequence
 
-1. Review the two details above and inspect `eb3c9e7` before extending it.
-2. Run `pnpm build`, then execute the focused real-browser matrix in
-   `tests/browser/guidance.spec.ts`. Fix any fixture, permission or strict
-   locator failures.
-3. Run the changed accessibility and owner journey specifications. Verify axe,
-   keyboard focus, real-outcome completion, contextual relaunch and
-   skip/resume/reset in an actual browser.
-4. Add the accessible action-error treatment if retained, then run lint, the
-   full suite and every repository gate in the normal C1 acceptance sequence.
-5. Add the required changeset and operator-facing documentation. Update
-   `MASTER.md` only after all acceptance evidence is green.
-6. Restore signing capability, prepare signed commits as required, push the
+1. Fix the lint error at `tests/core/guidance-definitions.test.ts:127` and the
+   two trailing blank lines noted above; rerun lint and `git diff --check`.
+2. Review the remaining `guidance.list` read/write semantic above.
+3. Run the full Vitest suite and every repository gate in the normal C1
+   acceptance sequence.
+4. Update `MASTER.md` only after all acceptance evidence is green.
+5. Restore signing capability, prepare signed commits as required, push the
    branch, and use the protected PR/CI/merge/post-merge verification flow.
 
 C1.26 still owns deterministic demo scenarios and general module/plugin
