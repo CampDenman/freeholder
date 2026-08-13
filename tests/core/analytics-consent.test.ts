@@ -7,6 +7,7 @@ import { JSDOM } from "jsdom";
 import { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { translator } from "@/core/i18n";
+import { resetEnvForTests } from "@/core/env";
 import {
   analyticsCollectionAllowed,
   analyticsConsentNeedsSync,
@@ -205,6 +206,47 @@ describe.runIf(hasDatabase)("the policy-aware consent endpoint", () => {
         headers: {
           "content-type": "application/json",
           "sec-fetch-site": "cross-site",
+        },
+        body: JSON.stringify({ decision: "grant" }),
+      },
+    ));
+    expect(response.status).toBe(403);
+  });
+
+  it("accepts the configured public origin when the app runs behind a loopback proxy", async () => {
+    const prior = process.env.APP_URL;
+    process.env.APP_URL = "https://public.example.test";
+    resetEnvForTests();
+    try {
+      const response = await chooseConsent(new NextRequest(
+        "http://127.0.0.1:3000/api/analytics/consent",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "https://public.example.test",
+            "sec-fetch-site": "same-origin",
+          },
+          body: JSON.stringify({ decision: "sync" }),
+        },
+      ));
+      expect(response.status).toBe(200);
+    } finally {
+      if (prior === undefined) delete process.env.APP_URL;
+      else process.env.APP_URL = prior;
+      resetEnvForTests();
+    }
+  });
+
+  it("still refuses an unconfigured origin behind the proxy", async () => {
+    const response = await chooseConsent(new NextRequest(
+      "http://127.0.0.1:3000/api/analytics/consent",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://attacker.example",
+          "sec-fetch-site": "same-origin",
         },
         body: JSON.stringify({ decision: "grant" }),
       },
