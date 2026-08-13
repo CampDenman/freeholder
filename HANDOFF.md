@@ -69,34 +69,84 @@ not an assertion or export-integrity failure.
 
 ## C1.25 audit status
 
-The branch was created, and a broad repository search was about to begin when
-shutdown was requested. No audit conclusion should be inferred yet. Start by
-inspecting, at minimum:
+Repository discovery is substantially complete; no C1.25 product code has been
+written. Resume at the schema/registry design rather than repeating the broad
+search.
 
-- `src/core/roles/` and the role/grant services and tests;
-- invitation acceptance and role assignment;
-- `app/(admin)/admin/` layout, guard, dashboard and settings surfaces;
-- setup completion and the new seeded-demo claim path;
-- portal/customer authentication and layout;
-- existing task/job/notification primitives that might support first-win
-  progress without creating a second task model;
-- locale catalogs and existing real-browser accessibility/journey fixtures;
-- module manifests and capability checks, because onboarding must be derived
-  from effective access rather than hardcoded role labels.
+The important findings are:
 
-Suggested first commands:
+- `MASTER.md` already specifies the durable entities. `GuidanceFlow` is a
+  versioned, role/capability-scoped definition with `key`, `version`,
+  `audience_roles[]`, `required_capabilities[]`, `steps` and `status`.
+  `GuidanceProgress` stores per-user `flow_key`, `flow_version`, completed
+  steps, state, start time and completion time.
+- The required behavior is task-based and permission-derived: flows resume,
+  dismiss/skip, reset, relaunch from contextual help and reappear when a user
+  gains a useful role/capability. Completion must reflect a real service
+  outcome, not a tooltip click.
+- Core role defaults live in `src/core/roles/defaults.ts`. They seed owner,
+  administrator, editor, bookkeeper, service-provider, customer and legacy
+  staff grants. Role names are explicitly not permission branches.
+- `src/core/roles/service.ts`, `src/core/service.ts` and
+  `src/core/http/actor.ts` make stored module grants the effective permission
+  source. A query maps to `view`; a mutation maps to `manage`. Role assignment
+  refreshes grants on existing sessions. Custom roles therefore need to
+  receive applicable flows based on their grants too.
+- Owner-only operations intentionally remain nondelegable through
+  `requireOwnerActor`; this is distinct from normal module access.
+- The admin shell already filters navigation by capabilities. Its overview
+  currently requires the `admin` grant but unconditionally reads contact stats
+  and recent activity. That likely breaks the default editor, which has admin
+  access but no contact/event grants. C1.25 should make overview widgets and
+  onboarding outcomes capability-safe instead of leaking or merely disabling
+  forbidden controls.
+- Auth schema has roles, grants, users, sessions, 2FA, password resets and
+  staff invitations, but no guidance tables. Customer users can have a null
+  password and role `customer`.
+- Invitation acceptance and session grant refresh already exist and are the
+  natural point at which newly granted onboarding becomes discoverable.
+- The customer portal currently has login, magic-link and privacy surfaces but
+  no shared portal home/layout equivalent to the admin dashboard. Customer
+  onboarding therefore needs a small authenticated entry surface or a careful
+  integration with the existing privacy page.
+- No generic task/checklist model was found. Notifications exist, but guidance
+  progress should remain a separate user-facing onboarding concern rather than
+  overloading operational notifications.
+- Existing browser journey and accessibility suites provide the right fixtures
+  for permission-derived visibility, forbidden-control absence, progress,
+  skip/reset, resume and contextual-relaunch coverage.
+- C1.26 explicitly owns deterministic demo scenarios plus module/plugin
+  manifest contribution and conformance tests. C1.25 should establish a core
+  registry that can be extended next, without pulling all C1.26 scope forward.
 
-```powershell
-git status --short --branch
-rg --files | rg 'onboard|tour|checklist|progress|role|grant|capabil|task|setup|invitation|portal'
-rg -n -C 8 'C1\.25|onboarding|first-win|contextual relaunch|skip/reset|progress|forbidden-control' MASTER.md src app tests deploy locales
-```
+## Recommended implementation sequence
 
-Before implementation, define an explicit capability-to-onboarding-step map,
-the durable progress/reset model, relaunch entry points for each shell, and the
-permission rule proving that inaccessible controls are absent rather than only
-disabled. Preserve the distinction between first-boot setup and ongoing,
-resumable onboarding.
+1. Read the remaining short contract files individually:
+   `src/core/module.ts`, `src/core/manifest.ts`, `src/modules/index.ts` and
+   `app/(admin)/admin/AdminNav.tsx`. Also inspect the latest migration/journal
+   conventions and customer magic-link/contact linkage.
+2. Add the guidance schema and service. Key progress by user, flow key and flow
+   version; keep flow definitions versioned and evaluate eligibility from the
+   actor's effective grants. Define outcome predicates that query real product
+   state and recompute completion safely.
+3. Define a capability-to-step registry for the six shipped roles while also
+   supporting custom roles with equivalent grants. Keep role audience as a
+   targeting hint, not an authorization decision.
+4. Add accessible admin and portal guidance surfaces with progress, explicit
+   skip/dismiss, reset and contextual relaunch. Inaccessible actions must be
+   absent, not disabled.
+5. Fix the admin overview's unconditional capability reads as part of the
+   permission-safe experience, then add service, permission, accessibility and
+   real-browser journey tests.
+6. Run the full local gates, update `MASTER.md`, and use the signed PR/CI/merge
+   flow only after the C1.25 acceptance statement is proven.
+
+Candidate first-win outcomes still need a final capability audit before being
+locked down. Likely anchors are published content for editors, contact work for
+service providers, read-only business insight for bookkeepers, a delegated
+administrative outcome for administrators, an owner setup/security outcome,
+and an actual privacy/profile outcome for customers. Do not force a role into
+an action its effective grants cannot perform.
 
 ## Constraints to preserve
 
