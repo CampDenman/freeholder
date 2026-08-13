@@ -21,18 +21,20 @@ two product commits:
   focused service and markup tests, and browser acceptance specifications.
 - `6454629` (`docs: prepare role guidance operations`) adds the localized
   action-error callout, release changeset and operator runbook.
+- `9482069` (`test: satisfy role guidance lint`) validates parsed migration
+  JSON through the guidance schema and removes the two whitespace failures.
 
 The feature is intentionally incomplete. Focused service/UI tests, TypeScript,
-the production build and all changed browser specifications pass. Lint has one
-known test-typing failure, and the full suite/repository gates have not run. Do
-not update `MASTER.md` or open the PR until that evidence is green.
+lint, the production build and all changed browser specifications pass. The
+full suite/repository gates have not completed. Do not update `MASTER.md` or
+open the PR until that evidence is green.
 
 Do not commit or modify the separate untracked `RESTART_HANDOFF.md`; it is an
 older local document outside this checkpoint.
 
 `origin/feat/role-onboarding` remains at `f08fb30`. The UI checkpoint,
 operations checkpoint and updated handoffs are local-only shutdown commits, so
-the branch will be four commits ahead of its tracked remote after this document
+the branch will be six commits ahead of its tracked remote after this document
 is committed.
 
 ## Verified baseline
@@ -166,17 +168,17 @@ Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
   axe coverage, portal progress, owner real-outcome completion and contextual
   skip/resume/reset.
 - All three locale catalogs parse as JSON.
-- `pnpm lint` was attempted and failed only at
-  `tests/core/guidance-definitions.test.ts:127` with
-  `@typescript-eslint/no-unsafe-assignment`. Fix that typed JSON parse before
-  rerunning lint.
-- The operations commit also contains one extra blank line at EOF in each of
-  `.changeset/role-guidance.md` and `deploy/role-guidance.md`; remove them so
-  `git diff --check` is clean in the next commit.
+- `pnpm lint` passed in 34.6 seconds after the migration JSON was parsed as
+  `unknown` through the executable guidance steps schema.
+- `git diff --check` passed after removing the two trailing blank lines from
+  `.changeset/role-guidance.md` and `deploy/role-guidance.md`.
+- `pnpm test` was started but explicitly terminated during its buffered,
+  database-heavy run when shutdown was requested. It produced no final counts
+  or usable success result and must be rerun from the beginning.
 - The full Vitest suite and remaining repository gates have not run against
   this checkpoint. Do not treat C1.25 as accepted.
 - Git signing was attempted, but the configured GPG identity has no private key
-  in this environment. The four local commits after `f08fb30` are therefore
+  in this environment. The six local commits after `f08fb30` are therefore
   unsigned checkpoints. Restore the signing key and re-sign/recreate them
   before the protected PR flow if required.
 
@@ -189,10 +191,10 @@ One design detail deserves review before acceptance:
 
 ## Resume sequence
 
-1. Fix the lint error at `tests/core/guidance-definitions.test.ts:127` and the
-   two trailing blank lines noted above; rerun lint and `git diff --check`.
+1. Rerun the complete `pnpm test` suite from the beginning and record its final
+   file/test counts; the interrupted run is not evidence.
 2. Review the remaining `guidance.list` read/write semantic above.
-3. Run the full Vitest suite and every repository gate in the normal C1
+3. Run every remaining repository gate in the normal C1
    acceptance sequence.
 4. Update `MASTER.md` only after all acceptance evidence is green.
 5. Restore signing capability, prepare signed commits as required, push the
