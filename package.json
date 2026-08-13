@@ -23,6 +23,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "plan:check": "node scripts/plan-gate.mjs",
+    "dependency:audit": "node scripts/dependency-audit.mjs",
     "changelog:gate": "node scripts/changelog-gate.mjs",
     "license:check": "node scripts/license-headers.mjs",
     "license:fix": "node scripts/license-headers.mjs --fix",

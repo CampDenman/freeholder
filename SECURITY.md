@@ -26,6 +26,44 @@ repository.
 Pre-alpha: only the `main` branch is supported. A versioned support policy
 will land with the first release.
 
+## Dependency vulnerability policy
+
+`pnpm dependency:audit` checks the complete workspace lockfile against the
+package registry advisory database. It runs on every pull request and every
+push to `main`. High and critical advisories are absolute failures: they cannot
+be waived. An actionable advisory at any severity is patched immediately,
+using a narrowly scoped transitive override when the direct maintainer has not
+yet moved its dependency floor.
+
+Info, low or moderate findings may remain only when no compatible fix exists
+and the affected path is not currently exploitable. Each such decision must be
+recorded in `security/dependency-audit-exceptions.json` with:
+
+- the GHSA identifier, package, severity and every dependency path reported by
+  pnpm;
+- a named owner, concrete reachability/impact reason and remediation plan;
+- review and expiry dates no more than 90 days apart.
+
+The gate rejects missing paths, expired or duplicate exceptions, severity or
+package drift, stale entries after an advisory disappears, and any attempt to
+except a high/critical finding. Renewing an exception is a fresh security
+review in a pull request, not a date-only edit. The ledger is currently empty:
+there are no accepted dependency advisories.
+
+Dependabot checks the pnpm workspace weekly. When an advisory appears, use
+`pnpm why <package> -r` to enumerate paths, prefer the smallest compatible
+direct update, and use a parent-scoped override only when that keeps unrelated
+dependency majors untouched. After updating the lockfile, run:
+
+```sh
+pnpm dependency:audit
+pnpm test
+pnpm build
+```
+
+Remove a security override once every parent naturally requires a patched
+release; the audit gate proves the lockfile remains safe without it.
+
 ## Account recovery and two-factor keys
 
 Roles that can manage roles, invitations, API keys, or connected credentials

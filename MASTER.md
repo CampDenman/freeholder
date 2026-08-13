@@ -2894,11 +2894,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-12 |
-| Evidence snapshot | `main` at `feae0f0` (C1.18 merged); C1.19 changeset `content-security-policy.md` |
+| Evidence snapshot | `main` at `f645e04` (C1.19 merged); C1.20 changeset `dependency-security-policy.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.20 dependency advisories and severity policy; no public-launch work is required |
+| Current focus | C1.21 real-browser accessibility coverage; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3195,8 +3195,17 @@ reading chat logs.
   `tests/core/csp-reports.test.ts`; `tests/core/csp-migration.test.ts`;
   1,058-test full suite; changeset `content-security-policy.md`; operator guide
   `deploy/content-security-policy.md`)
-- [ ] **C1.20** Patch all actionable dependency advisories and keep a zero
+- [x] **C1.20** Patch all actionable dependency advisories and keep a zero
   known-high/critical policy with documented exceptions for lower severities.
+  (PostCSS `8.5.26` and parent-scoped drizzle-kit esbuild `0.25.12` floors fix
+  GHSA-fxqj-rqcc-2cmp and GHSA-67mh-4wv8-2f99; zero known advisories in the
+  complete pnpm workspace lockfile and zero open GitHub Dependabot alerts;
+  high/critical findings are unwaivable; lower-severity exceptions require
+  exact paths, owner, impact reason, remediation and at-most-90-day expiry;
+  empty exception ledger; weekly Dependabot schedule;
+  `scripts/dependency-audit.mjs`; `tests/core/dependency-audit.test.ts`;
+  1,065-test full suite; changeset `dependency-security-policy.md`;
+  operator policy in `SECURITY.md`)
 - [ ] **C1.21** Replace simulated public accessibility checks with real-browser
   keyboard, focus, reflow, contrast, reduced-motion and screen-reader-oriented
   tests for setup, admin, editor, storefront and portal.

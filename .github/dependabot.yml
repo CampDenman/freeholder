@@ -1,0 +1,15 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: AGPL-3.0-only
+# Keep the lockfile moving so security floors can disappear rather than become
+# permanent archaeology. Vulnerability policy remains scripts/dependency-audit.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "America/Vancouver"
+    open-pull-requests-limit: 10
+    versioning-strategy: "increase-if-necessary"
