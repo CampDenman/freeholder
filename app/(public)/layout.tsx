@@ -30,6 +30,7 @@ import {
 } from "@/modules/analytics/visitor";
 import { AnalyticsRuntime } from "./AnalyticsRuntime";
 import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
+import { SkipLink } from "@/ui/SkipLink";
 
 export const dynamic = "force-dynamic";
 
@@ -84,13 +85,18 @@ export default async function PublicLayout({
 
   return (
     <div className="flex min-h-svh flex-col bg-paper">
+      <SkipLink>{t("a11y.skipToContent")}</SkipLink>
       {headerNodes.length > 0 ? (
         <header className="border-b border-rule bg-surface">
           <div className="mx-auto max-w-3xl px-6 py-4">{headerNodes}</div>
         </header>
       ) : null}
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-3xl flex-1 px-6 py-12"
+      >
         {children}
       </main>
 

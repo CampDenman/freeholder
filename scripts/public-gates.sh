@@ -2,10 +2,10 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
 #
-# The public-surface gates (MASTER.md §15.2, §15.7).
+# The public SEO gate (MASTER.md §15.2).
 #
 # Boots the built image with the demo business installed and points the SEO
-# crawler and the accessibility smoke test at it. Both run against a real
+# crawler at it. It runs against a real
 # server rendering real pages, because every interesting failure lives in the
 # gap between the source and what a browser is actually sent: a canonical built
 # from the wrong origin, alt text lost by the block that renders it, a title
@@ -125,7 +125,3 @@ node -e '
 echo
 
 node scripts/seo-gate.mjs "$BASE"
-echo
-# The French home too: a translated page is a different template as far as
-# `lang`, direction and the language switcher are concerned.
-node scripts/a11y-smoke.mjs "$BASE" / /services /services/weddings /contact /fr-CA

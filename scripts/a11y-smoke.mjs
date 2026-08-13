@@ -1,6 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// The accessibility smoke test (MASTER.md §15.7).
+// Supplementary parsed-HTML accessibility checks.
+//
+// C1.21 moved the acceptance gate to Chromium in
+// tests/browser/accessibility.spec.ts. This fast helper remains useful to
+// component/unit suites that already hold server-rendered HTML. It is not
+// evidence for focus, reflow, contrast, motion or the accessibility tree.
 //
 // "Smoke" is the honest word for it. axe-core against a parsed document finds
 // the structural failures — an unlabelled control, a broken heading order, a

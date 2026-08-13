@@ -58,6 +58,13 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      # C1.21 is deliberately separate from the jsdom unit helpers: Chromium
+      # supplies real layout, focus navigation, media preferences and an
+      # accessibility tree. The test itself resets only the disposable CI DB.
+      - name: Real-browser accessibility gate (§15.7, C1.21)
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:a11y
       # A recipe whose image does not build is a recipe nobody can use, and
       # this repo has no Docker on the development machine — so CI is where
       # that claim gets checked. First half of §18's recipe validation matrix.
@@ -99,9 +106,9 @@ jobs:
             console.log(`booted ${h.modules} modules, ${h.services} services, ${h.listeners} listeners`);
           ' "$health"
           docker rm -f freeholder-ci >/dev/null
-      # §15.2 and §15.7, against the seeded demo site inside the built image.
+      # §15.2, against the seeded demo site inside the built image.
       # The doctrine in §5 is "enforced structurally" — this is the structure.
-      - name: SEO gate and a11y smoke (§15.2, §15.7)
+      - name: SEO gate (§15.2)
         run: bash scripts/public-gates.sh
         env:
           CI_IMAGE: freeholder:ci

@@ -15,6 +15,7 @@ import { SignOutButton } from "./SignOutButton";
 import { currentBusiness } from "@/core/settings/read";
 import { unreadNotificationCount } from "@/core/notifications/service";
 import { Bell } from "@phosphor-icons/react/dist/ssr";
+import { SkipLink } from "@/ui/SkipLink";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,13 @@ export const dynamic = "force-dynamic";
  * §5: admin is noindexed. It is behind auth as well, but robots directives
  * cost nothing and a crawler that finds a link should not try.
  */
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const [business, t] = await Promise.all([currentBusiness(), getT()]);
+  return {
+    title: `${t("admin.nav.label")} — ${business?.name ?? t("common.appName")}`,
+    robots: { index: false, follow: false },
+  };
+}
 
 
 export default async function AdminLayout({
@@ -40,6 +47,7 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-svh bg-paper">
+      <SkipLink>{t("a11y.skipToContent")}</SkipLink>
       <header className="border-b border-rule bg-surface">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
           <a href="/admin" className="text-sm font-semibold">
@@ -48,7 +56,7 @@ export default async function AdminLayout({
           <span className="rounded-full bg-surface-muted px-2 py-0.5 font-mono text-xs text-ink-muted">
             {actor.kind === "user" ? actor.role : ""}
           </span>
-          <div className="ms-auto flex items-center gap-3">
+          <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3">
             <a
               href="/admin/notifications"
               aria-label={t("notifications.bell", { count: unread })}
@@ -97,7 +105,9 @@ export default async function AdminLayout({
           />
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-6 py-8">
+        {children}
+      </main>
     </div>
   );
 }
