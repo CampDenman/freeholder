@@ -13,8 +13,10 @@ Resume `MASTER.md` §43 at **C1.25**:
 
 The working branch is `feat/role-onboarding`, created directly from current
 `main` at merge commit `dd34df798435c65d5f39e8dd60177fb655f65a5c`.
-No C1.25 product implementation has started. This handoff is the branch's only
-intended change.
+C1.25 foundation work is committed at `0b3ccdb` (`feat: establish role guidance
+foundation`). It is intentionally incomplete: the schema, definitions and
+service exist, while human surfaces and acceptance coverage are the next
+checkpoint.
 
 Do not commit or modify the separate untracked `RESTART_HANDOFF.md`; it is an
 older local document outside this checkpoint.
@@ -67,86 +69,90 @@ Its every-table export and media inventory take roughly 5–9 seconds locally;
 the former five-second default caused a timeout after the operation completed,
 not an assertion or export-integrity failure.
 
-## C1.25 audit status
+## C1.25 implementation checkpoint
 
-Repository discovery is substantially complete; no C1.25 product code has been
-written. Resume at the schema/registry design rather than repeating the broad
-search.
+Repository discovery is complete. The remaining contract files, migration
+conventions, customer magic-link linkage, admin navigation and portal privacy
+surface were inspected before implementation.
 
-The important findings are:
+Commit `0b3ccdb` contains this foundation:
 
-- `MASTER.md` already specifies the durable entities. `GuidanceFlow` is a
-  versioned, role/capability-scoped definition with `key`, `version`,
-  `audience_roles[]`, `required_capabilities[]`, `steps` and `status`.
-  `GuidanceProgress` stores per-user `flow_key`, `flow_version`, completed
-  steps, state, start time and completion time.
-- The required behavior is task-based and permission-derived: flows resume,
-  dismiss/skip, reset, relaunch from contextual help and reappear when a user
-  gains a useful role/capability. Completion must reflect a real service
-  outcome, not a tooltip click.
-- Core role defaults live in `src/core/roles/defaults.ts`. They seed owner,
-  administrator, editor, bookkeeper, service-provider, customer and legacy
-  staff grants. Role names are explicitly not permission branches.
-- `src/core/roles/service.ts`, `src/core/service.ts` and
-  `src/core/http/actor.ts` make stored module grants the effective permission
-  source. A query maps to `view`; a mutation maps to `manage`. Role assignment
-  refreshes grants on existing sessions. Custom roles therefore need to
-  receive applicable flows based on their grants too.
-- Owner-only operations intentionally remain nondelegable through
-  `requireOwnerActor`; this is distinct from normal module access.
-- The admin shell already filters navigation by capabilities. Its overview
-  currently requires the `admin` grant but unconditionally reads contact stats
-  and recent activity. That likely breaks the default editor, which has admin
-  access but no contact/event grants. C1.25 should make overview widgets and
-  onboarding outcomes capability-safe instead of leaking or merely disabling
-  forbidden controls.
-- Auth schema has roles, grants, users, sessions, 2FA, password resets and
-  staff invitations, but no guidance tables. Customer users can have a null
-  password and role `customer`.
-- Invitation acceptance and session grant refresh already exist and are the
-  natural point at which newly granted onboarding becomes discoverable.
-- The customer portal currently has login, magic-link and privacy surfaces but
-  no shared portal home/layout equivalent to the admin dashboard. Customer
-  onboarding therefore needs a small authenticated entry surface or a careful
-  integration with the existing privacy page.
-- No generic task/checklist model was found. Notifications exist, but guidance
-  progress should remain a separate user-facing onboarding concern rather than
-  overloading operational notifications.
-- Existing browser journey and accessibility suites provide the right fixtures
-  for permission-derived visibility, forbidden-control absence, progress,
-  skip/reset, resume and contextual-relaunch coverage.
-- C1.26 explicitly owns deterministic demo scenarios plus module/plugin
-  manifest contribution and conformance tests. C1.25 should establish a core
-  registry that can be extended next, without pulling all C1.26 scope forward.
+- `src/core/guidance/schema.ts` defines versioned `guidance_flows` and
+  per-user `guidance_progress`. Progress stores completed and seen steps,
+  active/dismissed/completed state, start/completion/dismissal timestamps and
+  database invariants. `seen_steps` is deliberate: when a newly granted
+  capability exposes another step, a completed or skipped flow reactivates.
+- `db/migrations/0040_curved_purple_man.sql`, its snapshot and journal entry
+  create the tables and install all six core version-1 definitions. The SQL
+  seed was appended after Drizzle generation and must stay byte-for-behavior
+  consistent with the TypeScript definitions.
+- `src/core/guidance/definitions.ts` validates capabilities, steps, internal
+  targets and outcome predicates with Zod. It defines owner, administrator,
+  editor, bookkeeper, service-provider and customer first-win flows.
+- Roles rank the most relevant lesson; they do not authorize it. Any flow with
+  capability prerequisites is available to a custom role holding the same
+  effective grants. Every individual step is filtered again by its own grants.
+  The grant-free customer flow remains audience-scoped.
+- The shipped outcomes are real product facts: service audit actions, a form
+  submission after the flow began, or a linked customer portal account. There
+  is no mark-complete/next-click API.
+- `src/core/guidance/service.ts` implements list/reconcile, start/resume,
+  dismiss (the "skip for now" behavior), and reset. Reconciliation records
+  completed steps from durable evidence and reactivates a flow when a newly
+  visible capability step appears.
+- Guidance tables/services are registered in core. First-owner recovery and
+  both database reset helpers seed immutable core definitions.
+- English, French and Spanish catalog entries for the six flows, their tasks,
+  progress and controls are present and parse as valid JSON.
 
-## Recommended implementation sequence
+The capability audit also found a pre-existing dashboard bug to fix in this
+checkpoint: `app/(admin)/admin/page.tsx` requires only `admin:view` but always
+calls contact and event queries. The default editor lacks those grants, so the
+overview must conditionally query and render those widgets.
 
-1. Read the remaining short contract files individually:
-   `src/core/module.ts`, `src/core/manifest.ts`, `src/modules/index.ts` and
-   `app/(admin)/admin/AdminNav.tsx`. Also inspect the latest migration/journal
-   conventions and customer magic-link/contact linkage.
-2. Add the guidance schema and service. Key progress by user, flow key and flow
-   version; keep flow definitions versioned and evaluate eligibility from the
-   actor's effective grants. Define outcome predicates that query real product
-   state and recompute completion safely.
-3. Define a capability-to-step registry for the six shipped roles while also
-   supporting custom roles with equivalent grants. Keep role audience as a
-   targeting hint, not an authorization decision.
-4. Add accessible admin and portal guidance surfaces with progress, explicit
-   skip/dismiss, reset and contextual relaunch. Inaccessible actions must be
-   absent, not disabled.
-5. Fix the admin overview's unconditional capability reads as part of the
-   permission-safe experience, then add service, permission, accessibility and
-   real-browser journey tests.
-6. Run the full local gates, update `MASTER.md`, and use the signed PR/CI/merge
-   flow only after the C1.25 acceptance statement is proven.
+## Verification at shutdown
 
-Candidate first-win outcomes still need a final capability audit before being
-locked down. Likely anchors are published content for editors, contact work for
-service providers, read-only business insight for bookkeepers, a delegated
-administrative outcome for administrators, an owner setup/security outcome,
-and an actual privacy/profile outcome for customers. Do not force a role into
-an action its effective grants cannot perform.
+- `pnpm typecheck` passed after the schema, definitions, service and core
+  registration were added.
+- All three modified locale catalogs pass PowerShell JSON parsing.
+- `git diff --check` passed before the foundation commit.
+- No focused guidance tests, migration execution, lint, production build or
+  full suite has run yet. Do not treat the foundation as C1.25 acceptance.
+
+One design detail deserves an explicit review during tests: `guidance.list` is
+declared as a query but reconciles derived `GuidanceProgress` evidence inside
+its transaction. It never creates a fake completion/audit event; nevertheless,
+prove retry/idempotence and decide whether this derived-state write remains the
+right service semantic before the PR.
+
+## Resume sequence
+
+1. Add focused definition/service/migration tests first. Prove all six default
+   roles receive a useful preferred flow, custom roles are capability-derived,
+   forbidden steps are absent, outcomes require post-start product evidence,
+   skip/resume/reset are isolated per user/version, and a newly granted step
+   reactivates progress. Include migration-vs-TypeScript seed parity.
+2. Build a semantic shared guidance panel (`<progress>`, ordered task list,
+   explicit status text and server-action controls), admin guidance actions and
+   an `/admin/guidance` surface. Embed the preferred guide on the admin
+   overview.
+3. Add capability-filtered contextual help in the admin shell. Integrate the
+   customer guide and a contextual relaunch anchor into the authenticated
+   portal privacy surface. Add stable IDs for the preferences and notification
+   schedule targets already named by the definitions.
+4. Fix the admin overview's unconditional contact/event reads while wiring its
+   guidance panel. Forbidden cards and guide links must be absent rather than
+   disabled.
+5. Add static accessibility/permission coverage and a real-browser journey for
+   owner/staff/customer start, real-outcome completion, resume, skip, reset and
+   contextual relaunch. Run axe and keyboard checks.
+6. Add the changeset/operator-facing documentation, run migrations and the
+   complete local gates, update `MASTER.md` only with acceptance evidence, then
+   use the signed PR/CI/merge/post-merge flow.
+
+C1.26 still owns deterministic demo scenarios and general module/plugin
+manifest contributions/conformance. Do not pull that separate checklist item
+into C1.25, but preserve the current versioned registry seam for it.
 
 ## Constraints to preserve
 
