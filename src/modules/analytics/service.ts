@@ -5,9 +5,9 @@
 // The claim in §4.7 is that a funnel is not a separate product: it is this
 // table joined to the money tables through `contact_id`. That only works if
 // the join key gets filled in, which is what `identify` is for — and if the
-// events are recorded by the platform rather than by a script a visitor can
-// block, which is why a pageview is written during the server render and
-// there is no client bundle at all.
+// pageviews are recorded during the server render. The small consent/runtime
+// client exists only to apply the configured policy and report Web Vitals.
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   and,
@@ -19,14 +19,20 @@ import {
   isNotNull,
   isNull,
   inArray,
+  lt,
   ne,
+  or,
   sql,
   type SQL,
 } from "drizzle-orm";
-import { defineService, ServiceError } from "@/core/service";
+import { defineService, ServiceError, type Tx } from "@/core/service";
+import { db } from "@/core/db";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
-import { analyticsEvents } from "./schema";
+import { analyticsAttributions, analyticsEvents } from "./schema";
+import { currentAnalyticsSettings } from "./read";
+import type { VisitorKind } from "./classify";
+import type { AnalyticsConsentState } from "./visitor";
 
 // CLAUDE.md's non-negotiable: events point at contacts, so a merge has to
 // bring a visitor's history with them. Unconditional — one person may have
@@ -79,14 +85,36 @@ registerContactReference({
 
 registerContactPrivacySource({
   scope: "analytics.events",
-  tables: ["analytics_events"],
-  exportData: (tx, contactId) =>
-    tx
+  tables: ["analytics_events", "analytics_attributions"],
+  exportData: async (tx, contactId) => {
+    const events = await tx
       .select()
       .from(analyticsEvents)
       .where(eq(analyticsEvents.contactId, contactId))
-      .orderBy(analyticsEvents.at),
+      .orderBy(analyticsEvents.at);
+    const anonIds = [...new Set(events.map((event) => event.anonId))];
+    const attribution = anonIds.length > 0
+      ? await tx
+          .select()
+          .from(analyticsAttributions)
+          .where(inArray(analyticsAttributions.anonId, anonIds))
+      : [];
+    return { events, attribution };
+  },
   erase: async (tx, contactId) => {
+    const linked = await tx
+      .selectDistinct({ anonId: analyticsEvents.anonId })
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.contactId, contactId));
+    const attribution = linked.length > 0
+      ? await tx
+          .delete(analyticsAttributions)
+          .where(inArray(
+            analyticsAttributions.anonId,
+            linked.map((row) => row.anonId),
+          ))
+          .returning({ anonId: analyticsAttributions.anonId })
+      : [];
     const rows = await tx
       .update(analyticsEvents)
       .set({
@@ -96,10 +124,12 @@ registerContactPrivacySource({
         referrer: null,
         locale: null,
         props: {},
+        eventKey: null,
+        classificationNote: null,
       })
       .where(eq(analyticsEvents.contactId, contactId))
       .returning({ id: analyticsEvents.id });
-    return { affected: rows.length };
+    return { affected: rows.length + attribution.length };
   },
 });
 
@@ -120,10 +150,119 @@ export function referrerHost(referrer: string | null | undefined): string | null
   }
 }
 
+export interface CampaignTouch {
+  source: string;
+  medium: string | null;
+  campaign: string | null;
+  term: string | null;
+  content: string | null;
+}
+
+const campaignTouchSchema = z.object({
+  source: z.string().min(1).max(120),
+  medium: z.string().max(120).nullable(),
+  campaign: z.string().max(120).nullable(),
+  term: z.string().max(120).nullable(),
+  content: z.string().max(120).nullable(),
+});
+
+function campaignValue(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return null;
+  const clean = raw
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  return clean || null;
+}
+
+/** Normalize campaign parameters and discard unique advertising click ids. */
+export function campaignFromQuery(
+  query: Record<string, string | string[] | undefined>,
+): CampaignTouch | null {
+  let source = campaignValue(query.utm_source);
+  let medium = campaignValue(query.utm_medium);
+  const campaign = campaignValue(query.utm_campaign);
+  const term = campaignValue(query.utm_term);
+  const content = campaignValue(query.utm_content);
+  const clickSource = query.gclid
+    ? "google"
+    : query.msclkid
+      ? "bing"
+      : query.fbclid
+        ? "facebook"
+        : null;
+  if (clickSource) {
+    source ??= clickSource;
+    medium ??= "paid";
+  }
+  if (!source && !medium && !campaign && !term && !content) return null;
+  return {
+    source: source ?? "unknown",
+    medium,
+    campaign,
+    term,
+    content,
+  };
+}
+
 const visitor = {
   anonId: z.string().min(1).max(64),
   sessionId: z.string().min(1).max(64),
 };
+
+const effectiveVisitorKind = sql<VisitorKind>`coalesce(
+  ${analyticsEvents.classificationOverride},
+  ${analyticsEvents.visitorKind}
+)`;
+
+async function recordCampaignTouch(
+  tx: Tx,
+  input: {
+    anonId: string;
+    path: string;
+    referrer: string | null;
+    campaign: CampaignTouch;
+  },
+): Promise<void> {
+  const now = new Date();
+  await tx
+    .insert(analyticsAttributions)
+    .values({
+      anonId: input.anonId,
+      firstSource: input.campaign.source,
+      firstMedium: input.campaign.medium,
+      firstCampaign: input.campaign.campaign,
+      firstTerm: input.campaign.term,
+      firstContent: input.campaign.content,
+      firstPath: input.path,
+      firstReferrer: input.referrer,
+      firstAt: now,
+      lastSource: input.campaign.source,
+      lastMedium: input.campaign.medium,
+      lastCampaign: input.campaign.campaign,
+      lastTerm: input.campaign.term,
+      lastContent: input.campaign.content,
+      lastPath: input.path,
+      lastReferrer: input.referrer,
+      lastAt: now,
+    })
+    .onConflictDoUpdate({
+      target: analyticsAttributions.anonId,
+      set: {
+        lastSource: input.campaign.source,
+        lastMedium: input.campaign.medium,
+        lastCampaign: input.campaign.campaign,
+        lastTerm: input.campaign.term,
+        lastContent: input.campaign.content,
+        lastPath: input.path,
+        lastReferrer: input.referrer,
+        lastAt: now,
+      },
+    });
+}
 
 /**
  * Record something that happened.
@@ -140,6 +279,7 @@ export const track = defineService({
   input: z.object({
     ...visitor,
     name: z.string().min(1).max(60),
+    eventKey: z.string().min(1).max(160).nullish(),
     path: z.string().max(2000).default("/"),
     referrer: z.string().max(2000).nullish(),
     locale: z.string().max(20).nullish(),
@@ -147,21 +287,102 @@ export const track = defineService({
     contactId: z.string().uuid().nullish(),
     visitorKind: z.enum(["human", "bot", "suspected"]).default("human"),
     botReasons: z.array(z.string().max(200)).max(10).default([]),
+    campaign: campaignTouchSchema.nullish(),
   }),
   handler: async (input, ctx) => {
-    await ctx.tx.insert(analyticsEvents).values({
-      anonId: input.anonId,
-      sessionId: input.sessionId,
-      contactId: input.contactId ?? null,
-      name: input.name,
-      path: input.path,
-      referrer: referrerHost(input.referrer),
-      locale: input.locale,
-      props: input.props,
-      visitorKind: input.visitorKind,
-      botReasons: input.botReasons,
-    });
+    const referrer = referrerHost(input.referrer);
+    const inserted = await ctx.tx
+      .insert(analyticsEvents)
+      .values({
+        anonId: input.anonId,
+        sessionId: input.sessionId,
+        contactId: input.contactId ?? null,
+        eventKey: input.eventKey ?? null,
+        name: input.name,
+        path: input.path,
+        referrer,
+        locale: input.locale,
+        props: input.campaign
+          ? { ...input.props, campaign: input.campaign }
+          : input.props,
+        visitorKind: input.visitorKind,
+        botReasons: input.botReasons,
+      })
+      .onConflictDoNothing()
+      .returning({ id: analyticsEvents.id });
+    if (inserted.length > 0 && input.campaign) {
+      await recordCampaignTouch(ctx.tx, {
+        anonId: input.anonId,
+        path: input.path,
+        referrer,
+        campaign: input.campaign,
+      });
+    }
     return { ok: true };
+  },
+});
+
+export const recordWebVital = defineService({
+  name: "analytics.recordWebVital",
+  summary: "Record one consented Core Web Vital for a rendered public page.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    ...visitor,
+    id: z.string().min(1).max(120),
+    metric: z.enum(["CLS", "FCP", "INP", "LCP", "TTFB"]),
+    value: z.number().finite().min(0).max(1_000_000_000),
+    delta: z.number().finite().min(0).max(1_000_000_000),
+    rating: z.enum(["good", "needs-improvement", "poor"]),
+    navigationType: z.string().min(1).max(40),
+  }),
+  handler: async (input, ctx) => {
+    // A metric is accepted only when this browser/session already produced a
+    // server-observed page view. This both supplies the trusted bot verdict and
+    // prevents a standalone public POST becoming an arbitrary event writer.
+    const [page] = await ctx.tx
+      .select({
+        contactId: analyticsEvents.contactId,
+        visitorKind: analyticsEvents.visitorKind,
+        botReasons: analyticsEvents.botReasons,
+        classificationOverride: analyticsEvents.classificationOverride,
+        path: analyticsEvents.path,
+        locale: analyticsEvents.locale,
+      })
+      .from(analyticsEvents)
+      .where(and(
+        eq(analyticsEvents.anonId, input.anonId),
+        eq(analyticsEvents.sessionId, input.sessionId),
+        eq(analyticsEvents.name, "page.viewed"),
+      ))
+      .orderBy(desc(analyticsEvents.at))
+      .limit(1);
+    if (!page) return { recorded: false };
+
+    const inserted = await ctx.tx
+      .insert(analyticsEvents)
+      .values({
+        anonId: input.anonId,
+        sessionId: input.sessionId,
+        contactId: page.contactId,
+        eventKey: `web-vital:${input.id}`,
+        name: "web_vital.measured",
+        path: page.path,
+        locale: page.locale,
+        visitorKind: page.visitorKind,
+        botReasons: page.botReasons,
+        classificationOverride: page.classificationOverride,
+        props: {
+          metric: input.metric,
+          value: input.value,
+          delta: input.delta,
+          rating: input.rating,
+          navigationType: input.navigationType,
+        },
+      })
+      .onConflictDoNothing()
+      .returning({ id: analyticsEvents.id });
+    return { recorded: inserted.length > 0 };
   },
 });
 
@@ -213,7 +434,7 @@ const includeBots = z.boolean().default(false);
 
 /** "Only people", unless the caller said otherwise. */
 function humansOnly(include: boolean): SQL | undefined {
-  return include ? undefined : eq(analyticsEvents.visitorKind, "human");
+  return include ? undefined : eq(effectiveVisitorKind, "human");
 }
 
 /**
@@ -223,12 +444,7 @@ function humansOnly(include: boolean): SQL | undefined {
  * are validated by the schema its own manifest declares (§11).
  */
 export async function includeBotsSetting(): Promise<boolean> {
-  const { getModuleConfig } = await import("@/core/settings/service");
-  const config = await getModuleConfig.call(
-    { module: "analytics" },
-    { kind: "system" },
-  );
-  return (config as { includeBots?: boolean }).includeBots === true;
+  return (await currentAnalyticsSettings()).includeBots;
 }
 
 export const overview = defineService({
@@ -277,7 +493,7 @@ export const overview = defineService({
         and(
           eq(analyticsEvents.name, "page.viewed"),
           gte(analyticsEvents.at, from),
-          ne(analyticsEvents.visitorKind, "human"),
+          ne(effectiveVisitorKind, "human"),
         ),
       );
 
@@ -383,6 +599,422 @@ export const dailyViews = defineService({
   },
 });
 
+export const webVitalsSummary = defineService({
+  name: "analytics.webVitals",
+  summary: "Core Web Vitals p75 and rating distribution over a window.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ days: since, includeBots }),
+  handler: async (input, ctx) => {
+    const metric = sql<string>`${analyticsEvents.props}->>'metric'`;
+    const rows = await ctx.tx
+      .select({
+        metric,
+        samples: count(),
+        p75: sql<number>`percentile_cont(0.75) within group (
+          order by ((${analyticsEvents.props}->>'value')::double precision)
+        )`,
+        good: sql<number>`count(*) filter (where ${analyticsEvents.props}->>'rating' = 'good')`,
+        needsImprovement: sql<number>`count(*) filter (
+          where ${analyticsEvents.props}->>'rating' = 'needs-improvement'
+        )`,
+        poor: sql<number>`count(*) filter (where ${analyticsEvents.props}->>'rating' = 'poor')`,
+      })
+      .from(analyticsEvents)
+      .where(and(
+        eq(analyticsEvents.name, "web_vital.measured"),
+        gte(analyticsEvents.at, new Date(Date.now() - input.days * 86_400_000)),
+        humansOnly(input.includeBots),
+      ))
+      .groupBy(metric)
+      .orderBy(metric);
+    return rows.map((row) => ({
+      ...row,
+      samples: Number(row.samples),
+      p75: Number(row.p75),
+      good: Number(row.good),
+      needsImprovement: Number(row.needsImprovement),
+      poor: Number(row.poor),
+    }));
+  },
+});
+
+export const campaignAttribution = defineService({
+  name: "analytics.campaignAttribution",
+  summary: "First- or last-touch campaign visitors and conversions.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    days: since,
+    includeBots,
+    model: z.enum(["first_touch", "last_touch"]).default("first_touch"),
+    limit: z.number().int().min(1).max(50).default(20),
+  }),
+  handler: async (input, ctx) => {
+    const first = input.model === "first_touch";
+    const source = first
+      ? analyticsAttributions.firstSource
+      : analyticsAttributions.lastSource;
+    const medium = first
+      ? analyticsAttributions.firstMedium
+      : analyticsAttributions.lastMedium;
+    const campaign = first
+      ? analyticsAttributions.firstCampaign
+      : analyticsAttributions.lastCampaign;
+    const touchedAt = first
+      ? analyticsAttributions.firstAt
+      : analyticsAttributions.lastAt;
+    const human = sql`exists (
+      select 1 from ${analyticsEvents} "human_event"
+      where "human_event"."anon_id" = ${analyticsAttributions.anonId}
+        and coalesce(
+          "human_event"."classification_override",
+          "human_event"."visitor_kind"
+        ) = 'human'
+    )`;
+    const converted = sql`exists (
+      select 1 from ${analyticsEvents} "conversion_event"
+      where "conversion_event"."anon_id" = ${analyticsAttributions.anonId}
+        and "conversion_event"."name" = 'form.submitted'
+        and "conversion_event"."at" >= ${touchedAt}
+    )`;
+    const rows = await ctx.tx
+      .select({
+        source,
+        medium,
+        campaign,
+        visitors: count(),
+        conversions: sql<number>`count(*) filter (where ${converted})`,
+      })
+      .from(analyticsAttributions)
+      .where(and(
+        gte(touchedAt, new Date(Date.now() - input.days * 86_400_000)),
+        input.includeBots ? undefined : human,
+      ))
+      .groupBy(source, medium, campaign)
+      .orderBy(desc(count()))
+      .limit(input.limit);
+    return rows.map((row) => ({
+      ...row,
+      visitors: Number(row.visitors),
+      conversions: Number(row.conversions),
+    }));
+  },
+});
+
+export const classificationCandidates = defineService({
+  name: "analytics.classificationCandidates",
+  summary: "Recent automated traffic an owner may correct.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ limit: z.number().int().min(1).max(50).default(20) }),
+  handler: async (input, ctx) => {
+    const rows = await ctx.tx
+      .select({
+        id: analyticsEvents.id,
+        anonId: analyticsEvents.anonId,
+        originalKind: analyticsEvents.visitorKind,
+        override: analyticsEvents.classificationOverride,
+        reasons: analyticsEvents.botReasons,
+        path: analyticsEvents.path,
+        at: analyticsEvents.at,
+      })
+      .from(analyticsEvents)
+      .where(and(
+        eq(analyticsEvents.name, "page.viewed"),
+        or(
+          ne(analyticsEvents.visitorKind, "human"),
+          isNotNull(analyticsEvents.classificationOverride),
+        ),
+      ))
+      .orderBy(desc(analyticsEvents.at))
+      .limit(500);
+    const grouped = new Map<string, {
+      reviewId: string;
+      visitorLabel: string;
+      originalKind: VisitorKind;
+      effectiveKind: VisitorKind;
+      reasons: Set<string>;
+      lastPath: string;
+      lastAt: Date;
+      views: number;
+    }>();
+    for (const row of rows) {
+      const current = grouped.get(row.anonId) ?? {
+        reviewId: row.id,
+        visitorLabel: createHash("sha256")
+          .update(row.anonId, "utf8")
+          .digest("hex")
+          .slice(0, 8),
+        originalKind: row.originalKind,
+        effectiveKind: row.override ?? row.originalKind,
+        reasons: new Set<string>(),
+        lastPath: row.path,
+        lastAt: row.at,
+        views: 0,
+      };
+      current.views += 1;
+      for (const reason of row.reasons) current.reasons.add(reason);
+      grouped.set(row.anonId, current);
+    }
+    return [...grouped.values()].slice(0, input.limit).map((row) => ({
+      ...row,
+      reasons: [...row.reasons],
+    }));
+  },
+});
+
+export const correctClassification = defineService({
+  name: "analytics.correctClassification",
+  summary: "Override or restore the bot classification for one visitor.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    eventId: z.string().uuid(),
+    kind: z.enum(["human", "bot", "suspected", "automatic"]),
+    classificationNote: z.string().trim().max(500).default(""),
+  }),
+  handler: async (input, ctx) => {
+    const [reviewed] = await ctx.tx
+      .select({ anonId: analyticsEvents.anonId })
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.id, input.eventId))
+      .limit(1);
+    if (!reviewed) {
+      throw new ServiceError("not_found", "That analytics visitor is no longer retained.");
+    }
+    const automatic = input.kind === "automatic";
+    const updated = await ctx.tx
+      .update(analyticsEvents)
+      .set({
+        classificationOverride: input.kind === "automatic" ? null : input.kind,
+        classificationNote: automatic
+          ? null
+          : input.classificationNote || "Owner review.",
+      })
+      .where(eq(analyticsEvents.anonId, reviewed.anonId))
+      .returning({ id: analyticsEvents.id });
+    if (updated.length === 0) {
+      throw new ServiceError("not_found", "That analytics visitor is no longer retained.");
+    }
+    ctx.setSubject("analyticsClassification", input.eventId);
+    return { updated: updated.length, effectiveKind: automatic ? null : input.kind };
+  },
+});
+
+/** Delete event history and campaign projections at the configured boundary. */
+export async function pruneAnalytics(retentionDays?: number): Promise<{
+  events: number;
+  attributions: number;
+  attributionsRebased: number;
+  retentionDays: number;
+}> {
+  const days = z.number().int().min(30).max(730).parse(
+    retentionDays ?? (await currentAnalyticsSettings()).retentionDays,
+  );
+  const cutoff = new Date(Date.now() - days * 86_400_000);
+  const [events, attributions, attributionsRebased] = await db().transaction(async (tx) => {
+    const oldEvents = await tx
+      .delete(analyticsEvents)
+      .where(lt(analyticsEvents.at, cutoff))
+      .returning({ id: analyticsEvents.id });
+    // A recent latest touch must not keep a first-touch receipt beyond the
+    // configured boundary. Once the old event is gone, the latest retained
+    // touch becomes the earliest fact this projection may remember.
+    const rebasedAttributions = await tx
+      .update(analyticsAttributions)
+      .set({
+        firstSource: sql`${analyticsAttributions.lastSource}`,
+        firstMedium: sql`${analyticsAttributions.lastMedium}`,
+        firstCampaign: sql`${analyticsAttributions.lastCampaign}`,
+        firstTerm: sql`${analyticsAttributions.lastTerm}`,
+        firstContent: sql`${analyticsAttributions.lastContent}`,
+        firstPath: sql`${analyticsAttributions.lastPath}`,
+        firstReferrer: sql`${analyticsAttributions.lastReferrer}`,
+        firstAt: sql`${analyticsAttributions.lastAt}`,
+      })
+      .where(and(
+        lt(analyticsAttributions.firstAt, cutoff),
+        gte(analyticsAttributions.lastAt, cutoff),
+      ))
+      .returning({ anonId: analyticsAttributions.anonId });
+    const oldAttributions = await tx
+      .delete(analyticsAttributions)
+      .where(lt(analyticsAttributions.lastAt, cutoff))
+      .returning({ anonId: analyticsAttributions.anonId });
+    return [
+      oldEvents.length,
+      oldAttributions.length,
+      rebasedAttributions.length,
+    ] as const;
+  });
+  return { events, attributions, attributionsRebased, retentionDays: days };
+}
+
+export const exportAnonymizedAnalytics = defineService({
+  name: "analytics.exportAnonymized",
+  summary: "Download aggregate analytics with no visitor, session or contact ids.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    days: z.number().int().min(1).max(730).default(90),
+    timezone: z.string().min(1).max(100).default("UTC"),
+    includeBots,
+  }),
+  handler: async (input, ctx) => {
+    const from = new Date(Date.now() - input.days * 86_400_000);
+    const day = sql<string>`to_char(
+      date_trunc('day', ${analyticsEvents.at} at time zone ${input.timezone}),
+      'YYYY-MM-DD'
+    )`;
+    const pageVisitors = sql<number>`count(distinct ${analyticsEvents.anonId})
+      filter (where ${analyticsEvents.name} = 'page.viewed')`;
+    const effective = effectiveVisitorKind;
+    const dailyRows = await ctx.tx
+      .select({
+        day,
+        views: sql<number>`count(*) filter (where ${analyticsEvents.name} = 'page.viewed')`,
+        visitors: pageVisitors,
+        sessions: sql<number>`count(distinct ${analyticsEvents.sessionId})
+          filter (where ${analyticsEvents.name} = 'page.viewed')`,
+        conversions: sql<number>`count(*) filter (
+          where ${analyticsEvents.name} = 'form.submitted'
+        )`,
+        automated: sql<number>`count(*) filter (
+          where ${analyticsEvents.name} = 'page.viewed' and ${effective} <> 'human'
+        )`,
+      })
+      .from(analyticsEvents)
+      .where(and(
+        gte(analyticsEvents.at, from),
+        input.includeBots ? undefined : humansOnly(false),
+      ))
+      .groupBy(sql`1`)
+      // A date with fewer than three visitors is omitted rather than exporting
+      // a row that is effectively one person's browsing receipt.
+      .having(gte(pageVisitors, 3))
+      .orderBy(sql`1`);
+    const daily = dailyRows.map((row) => ({
+      ...row,
+      views: Number(row.views),
+      visitors: Number(row.visitors),
+      sessions: Number(row.sessions),
+      conversions: Number(row.conversions),
+      automated: Number(row.automated),
+    }));
+
+    const visitors = countDistinct(analyticsEvents.anonId);
+    const pages = await ctx.tx
+      .select({
+        path: analyticsEvents.path,
+        views: count(),
+        visitors,
+      })
+      .from(analyticsEvents)
+      .where(and(
+        eq(analyticsEvents.name, "page.viewed"),
+        gte(analyticsEvents.at, from),
+        humansOnly(input.includeBots),
+      ))
+      .groupBy(analyticsEvents.path)
+      .having(gte(visitors, 3))
+      .orderBy(desc(count()));
+
+    const campaignVisitors = count();
+    const campaignHuman = sql`exists (
+      select 1 from ${analyticsEvents} "human_event"
+      where "human_event"."anon_id" = ${analyticsAttributions.anonId}
+        and coalesce(
+          "human_event"."classification_override",
+          "human_event"."visitor_kind"
+        ) = 'human'
+    )`;
+    const campaignRows = await ctx.tx
+      .select({
+        source: analyticsAttributions.firstSource,
+        medium: analyticsAttributions.firstMedium,
+        campaign: analyticsAttributions.firstCampaign,
+        visitors: campaignVisitors,
+        conversions: sql<number>`count(*) filter (where exists (
+          select 1 from ${analyticsEvents} "conversion_event"
+          where "conversion_event"."anon_id" = ${analyticsAttributions.anonId}
+            and "conversion_event"."name" = 'form.submitted'
+            and "conversion_event"."at" >= ${analyticsAttributions.firstAt}
+        ))`,
+      })
+      .from(analyticsAttributions)
+      .where(and(
+        gte(analyticsAttributions.firstAt, from),
+        input.includeBots ? undefined : campaignHuman,
+      ))
+      .groupBy(
+        analyticsAttributions.firstSource,
+        analyticsAttributions.firstMedium,
+        analyticsAttributions.firstCampaign,
+      )
+      .having(gte(campaignVisitors, 3))
+      .orderBy(desc(campaignVisitors));
+    const campaigns = campaignRows.map((row) => ({
+      ...row,
+      visitors: Number(row.visitors),
+      conversions: Number(row.conversions),
+    }));
+
+    const metric = sql<string>`${analyticsEvents.props}->>'metric'`;
+    const vitalSamples = count();
+    const vitalVisitors = countDistinct(analyticsEvents.anonId);
+    const vitalRows = await ctx.tx
+      .select({
+        metric,
+        samples: vitalSamples,
+        p75: sql<number>`percentile_cont(0.75) within group (
+          order by ((${analyticsEvents.props}->>'value')::double precision)
+        )`,
+        poor: sql<number>`count(*) filter (
+          where ${analyticsEvents.props}->>'rating' = 'poor'
+        )`,
+      })
+      .from(analyticsEvents)
+      .where(and(
+        eq(analyticsEvents.name, "web_vital.measured"),
+        gte(analyticsEvents.at, from),
+        humansOnly(input.includeBots),
+      ))
+      .groupBy(metric)
+      .having(gte(vitalVisitors, 3))
+      .orderBy(metric);
+    const vitals = vitalRows.map((row) => ({
+      ...row,
+      samples: Number(row.samples),
+      p75: Number(row.p75),
+      poor: Number(row.poor),
+    }));
+
+    const settings = await currentAnalyticsSettings();
+    const content = JSON.stringify({
+      schema: "freeholder.analytics.anonymized.v1",
+      generatedAt: new Date().toISOString(),
+      window: { days: input.days, timezone: input.timezone },
+      privacy: {
+        rowLevelIdentifiers: false,
+        minimumVisitorsPerGroup: 3,
+        retentionDays: settings.retentionDays,
+        includesAutomatedTraffic: input.includeBots,
+      },
+      daily,
+      pages,
+      campaigns,
+      webVitals: vitals,
+    }, null, 2);
+    return {
+      filename: `freeholder-analytics-${new Date().toISOString().slice(0, 10)}.json`,
+      mime: "application/json",
+      content,
+      sha256: createHash("sha256").update(content, "utf8").digest("hex"),
+    };
+  },
+});
+
 /**
  * Recent events for one contact, for their timeline.
  *
@@ -426,17 +1058,33 @@ export async function onFormSubmitted(payload: unknown): Promise<void> {
 
   let anonId: string | undefined;
   let sessionId: string | undefined;
+  let consent: AnalyticsConsentState | null = null;
   try {
     const { cookies } = await import("next/headers");
     const jar = await cookies();
-    const { ANON_COOKIE, SESSION_COOKIE_NAME } = await import("./visitor");
-    anonId = jar.get(ANON_COOKIE)?.value;
-    sessionId = jar.get(SESSION_COOKIE_NAME)?.value;
+    const {
+      ANALYTICS_BOOTSTRAP_COOKIE,
+      ANALYTICS_CONSENT_COOKIE,
+      ANON_COOKIE,
+      SESSION_COOKIE_NAME,
+      parseAnalyticsConsentState,
+    } = await import("./visitor");
+    const bootstrap = jar.get(ANALYTICS_BOOTSTRAP_COOKIE)?.value;
+    anonId = jar.get(ANON_COOKIE)?.value ?? bootstrap;
+    sessionId = jar.get(SESSION_COOKIE_NAME)?.value ?? bootstrap;
+    consent = parseAnalyticsConsentState(
+      jar.get(ANALYTICS_CONSENT_COOKIE)?.value,
+    );
   } catch {
     // Outside a request. Nothing to link, and nothing to complain about.
   }
 
-  if (anonId && sessionId) {
+  if (!anonId || !sessionId) return;
+  const settings = await currentAnalyticsSettings();
+  const { analyticsCollectionAllowed } = await import("./settings");
+  if (
+    analyticsCollectionAllowed(settings.consentPolicy, consent)
+  ) {
     await track.call(
       {
         anonId,
@@ -456,10 +1104,16 @@ export async function onFormSubmitted(payload: unknown): Promise<void> {
 
 export default [
   track,
+  recordWebVital,
   identify,
   overview,
   topPages,
   topReferrers,
   dailyViews,
+  webVitalsSummary,
+  campaignAttribution,
+  classificationCandidates,
+  correctClassification,
+  exportAnonymizedAnalytics,
   contactActivity,
 ];

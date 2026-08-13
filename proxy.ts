@@ -3,11 +3,11 @@
 // Request preprocessing, at the edge (Next's `proxy` convention — the current
 // name for what used to be `middleware`).
 //
-// Two jobs: forward the request path so server components can read it (see
-// PATH_HEADER), and mint the first-party visitor and session identifiers that
-// analytics counts with. Cookies can only be *set* on a response, and a server
-// component renders without one — so the identifiers are minted here and
-// forwarded as headers to whatever renders next.
+// It forwards request context for server components, applies locale rewrites,
+// and supplies only the analytics identity state policy permits at the edge.
+// The short bootstrap bridges a first render until the database-backed policy
+// endpoint promotes it (or clears it); durable identifiers are forwarded as
+// headers because a server component cannot read a cookie being set.
 //
 // Deliberately tiny. This runs in the Edge runtime, which cannot load the
 // platform — core reaches node:crypto through auth — so nothing here imports
@@ -17,15 +17,24 @@
 // multilingual: non-default locales are path-prefixed, and stripping that
 // prefix before the route sees it is exactly this layer's job.
 import { NextResponse, type NextRequest } from "next/server";
-import { LOCALE_HEADER, PATH_HEADER } from "@/core/http/headers";
 import {
+  LOCALE_HEADER,
+  PATH_HEADER,
+  REQUEST_TARGET_HEADER,
+} from "@/core/http/headers";
+import {
+  ANALYTICS_BOOTSTRAP_COOKIE,
+  ANALYTICS_BOOTSTRAP_HEADER,
+  ANALYTICS_BOOTSTRAP_MAX_AGE,
+  ANALYTICS_CONSENT_COOKIE,
   ANON_COOKIE,
   ANON_HEADER,
-  ANON_MAX_AGE,
   newVisitorId,
   SESSION_COOKIE_NAME,
   SESSION_HEADER,
   SESSION_MAX_AGE,
+  analyticsIdentifiersAllowed,
+  parseAnalyticsConsentState,
 } from "@/modules/analytics/visitor";
 
 /** `/sitemap-fr-CA.xml` — the address crawlers expect for a per-locale map. */
@@ -59,6 +68,7 @@ export function proxy(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);
   const path = request.nextUrl.pathname;
   headers.set(PATH_HEADER, path);
+  headers.set(REQUEST_TARGET_HEADER, `${path}${request.nextUrl.search}`);
 
   // Next matches a dynamic segment, never a dynamic part of one, so the file
   // cannot be named `sitemap-[locale].xml`. The published URL is the one in
@@ -81,21 +91,24 @@ export function proxy(request: NextRequest): NextResponse {
     headers.set(PATH_HEADER, rest);
     const url = request.nextUrl.clone();
     url.pathname = rest;
-    const rewritten = NextResponse.rewrite(url, { request: { headers } });
     // A localized portal request is still account traffic, not analytics.
     return UNCOUNTED.test(rest)
-      ? rewritten
-      : withVisitorCookies(request, rewritten, headers);
+      ? NextResponse.rewrite(url, { request: { headers } })
+      : withAnalyticsIdentity(
+          request,
+          headers,
+          (forwarded) => NextResponse.rewrite(url, { request: { headers: forwarded } }),
+        );
   }
 
   if (UNCOUNTED.test(path)) {
     return NextResponse.next({ request: { headers } });
   }
 
-  return withVisitorCookies(
+  return withAnalyticsIdentity(
     request,
-    NextResponse.next({ request: { headers } }),
     headers,
+    (forwarded) => NextResponse.next({ request: { headers: forwarded } }),
   );
 }
 
@@ -105,30 +118,45 @@ export function proxy(request: NextRequest): NextResponse {
  * Shared because a locale-prefixed URL is rewritten rather than passed
  * through, and a visitor reading the French site is still a visitor.
  */
-function withVisitorCookies(
+function withAnalyticsIdentity(
   request: NextRequest,
-  response: NextResponse,
   headers: Headers,
+  respond: (headers: Headers) => NextResponse,
 ): NextResponse {
-  const anon = request.cookies.get(ANON_COOKIE)?.value ?? newVisitorId();
+  const consent = parseAnalyticsConsentState(
+    request.cookies.get(ANALYTICS_CONSENT_COOKIE)?.value,
+  );
+  const durableAnon = request.cookies.get(ANON_COOKIE)?.value;
+  if (!analyticsIdentifiersAllowed(consent) || !durableAnon) {
+    if (consent === "denied" || consent === "disabled") return respond(headers);
+    const bootstrap =
+      request.cookies.get(ANALYTICS_BOOTSTRAP_COOKIE)?.value ?? newVisitorId();
+    headers.set(ANALYTICS_BOOTSTRAP_HEADER, bootstrap);
+    const response = respond(headers);
+    response.cookies.set(ANALYTICS_BOOTSTRAP_COOKIE, bootstrap, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: request.nextUrl.protocol === "https:",
+      path: "/",
+      maxAge: ANALYTICS_BOOTSTRAP_MAX_AGE,
+    });
+    return response;
+  }
+
+  const anon = durableAnon;
   const session = request.cookies.get(SESSION_COOKIE_NAME)?.value ?? newVisitorId();
   headers.set(ANON_HEADER, anon);
   headers.set(SESSION_HEADER, session);
+  const response = respond(headers);
 
-  // Both are re-set on every request: the session cookie's expiry is what
-  // makes a visit end after thirty minutes of quiet, and it can only slide
-  // forward by being written again.
+  // The session is re-set on every request: its expiry is what makes a visit
+  // end after thirty minutes of quiet. The visitor cookie is deliberately
+  // refreshed only by the policy-aware consent endpoint, which knows the
+  // configured retention period that this edge layer cannot read.
   //
   // httpOnly because nothing in the browser needs to read these, and a value
   // scripts cannot reach is a value an injected script cannot exfiltrate.
   const secure = request.nextUrl.protocol === "https:";
-  response.cookies.set(ANON_COOKIE, anon, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure,
-    path: "/",
-    maxAge: ANON_MAX_AGE,
-  });
   response.cookies.set(SESSION_COOKIE_NAME, session, {
     httpOnly: true,
     sameSite: "lax",

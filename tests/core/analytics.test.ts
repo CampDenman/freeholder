@@ -14,20 +14,34 @@
 // be worse than the thing it replaced. So what is *not* stored is asserted as
 // carefully as what is.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
-import { analyticsEvents } from "@/modules/analytics/schema";
+import { auditLog } from "@/core/events/schema";
 import {
+  analyticsAttributions,
+  analyticsEvents,
+} from "@/modules/analytics/schema";
+import {
+  campaignAttribution,
+  campaignFromQuery,
+  classificationCandidates,
+  correctClassification,
   contactActivity,
+  exportAnonymizedAnalytics,
   identify,
   overview,
+  pruneAnalytics,
+  recordWebVital,
   referrerHost,
   topPages,
   topReferrers,
   track,
+  webVitalsSummary,
 } from "@/modules/analytics/service";
 import { classify, type RequestShape } from "@/modules/analytics/classify";
 import { createContact, mergeContacts } from "@/core/contacts/service";
+import { setModuleConfig } from "@/core/settings/service";
 import {
   ANONYMOUS,
   closeDb,
@@ -58,6 +72,34 @@ describe("what a referrer is reduced to", () => {
     expect(referrerHost(null)).toBeNull();
     expect(referrerHost("")).toBeNull();
     expect(referrerHost("not a url")).toBeNull();
+  });
+});
+
+describe("campaign parameters", () => {
+  it("normalizes UTM fields and bounds their values", () => {
+    expect(campaignFromQuery({
+      utm_source: "  Newsletter\u0000  ",
+      utm_medium: "email",
+      utm_campaign: "late summer",
+    })).toEqual({
+      source: "Newsletter",
+      medium: "email",
+      campaign: "late summer",
+      term: null,
+      content: null,
+    });
+  });
+
+  it("uses click ids only to infer a channel and never retains the identifier", () => {
+    const touch = campaignFromQuery({ gclid: "unique-ad-identifier" });
+    expect(touch).toEqual({
+      source: "google",
+      medium: "paid",
+      campaign: null,
+      term: null,
+      content: null,
+    });
+    expect(JSON.stringify(touch)).not.toContain("unique-ad-identifier");
   });
 });
 
@@ -163,7 +205,10 @@ describe.runIf(hasDatabase)("recording and reading", () => {
       "anonId",
       "at",
       "botReasons",
+      "classificationNote",
+      "classificationOverride",
       "contactId",
+      "eventKey",
       "id",
       "locale",
       "name",
@@ -384,5 +429,232 @@ describe.runIf(hasDatabase)("the funnel", () => {
     const [event] = await db().select().from(analyticsEvents);
     expect(event?.contactId).toBe(survivor.id);
     expect(await db().select().from(contacts)).toHaveLength(1);
+  });
+});
+
+describe.runIf(hasDatabase)("analytics governance and quality", () => {
+  beforeEach(async () => {
+    await truncateSpine();
+  });
+
+  it("keeps first and latest campaign touches and attributes conversions", async () => {
+    await track.call({
+      ...visitor("campaign-v1"),
+      name: "page.viewed",
+      path: "/landing",
+      campaign: campaignFromQuery({
+        utm_source: "google",
+        utm_medium: "paid",
+        utm_campaign: "summer",
+      }),
+    }, ANONYMOUS);
+    await track.call({
+      ...visitor("campaign-v1"),
+      name: "page.viewed",
+      path: "/offer",
+      campaign: campaignFromQuery({
+        utm_source: "newsletter",
+        utm_medium: "email",
+      }),
+    }, ANONYMOUS);
+    await track.call({
+      ...visitor("campaign-v1"),
+      name: "form.submitted",
+      path: "/contact",
+    }, ANONYMOUS);
+
+    const [attribution] = await db().select().from(analyticsAttributions);
+    expect(attribution).toMatchObject({
+      firstSource: "google",
+      firstCampaign: "summer",
+      firstPath: "/landing",
+      lastSource: "newsletter",
+      lastMedium: "email",
+      lastPath: "/offer",
+    });
+    expect(await campaignAttribution.call({
+      days: 30,
+      model: "first_touch",
+      limit: 10,
+    }, STAFF)).toEqual([expect.objectContaining({
+      source: "google",
+      visitors: 1,
+      conversions: 1,
+    })]);
+    expect(await campaignAttribution.call({
+      days: 30,
+      model: "last_touch",
+      limit: 10,
+    }, STAFF)).toEqual([expect.objectContaining({
+      source: "newsletter",
+      visitors: 1,
+      conversions: 1,
+    })]);
+  });
+
+  it("accepts a Web Vital only for an observed page and deduplicates retries", async () => {
+    const metric = {
+      ...visitor("vitals-v1"),
+      id: "metric-1",
+      metric: "LCP" as const,
+      value: 2100,
+      delta: 2100,
+      rating: "good" as const,
+      navigationType: "navigate",
+    };
+    expect(await recordWebVital.call(metric, ANONYMOUS)).toEqual({ recorded: false });
+    await track.call({
+      ...visitor("vitals-v1"),
+      name: "page.viewed",
+      path: "/services",
+    }, ANONYMOUS);
+    expect(await recordWebVital.call(metric, ANONYMOUS)).toEqual({ recorded: true });
+    expect(await recordWebVital.call(metric, ANONYMOUS)).toEqual({ recorded: false });
+
+    expect(await webVitalsSummary.call({ days: 30 }, STAFF)).toEqual([
+      expect.objectContaining({ metric: "LCP", samples: 1, p75: 2100, good: 1 }),
+    ]);
+  });
+
+  it("corrects a bot verdict reversibly without erasing the classifier evidence", async () => {
+    await track.call({
+      ...visitor("review-v1"),
+      name: "page.viewed",
+      path: "/",
+      visitorKind: "bot",
+      botReasons: ["identified itself as a crawler or tool"],
+    }, ANONYMOUS);
+    expect((await overview.call({ days: 30 }, STAFF)).views).toBe(0);
+    const [classified] = await db().select().from(analyticsEvents);
+
+    await correctClassification.call({
+      eventId: classified!.id,
+      kind: "human",
+      classificationNote: "Known accessibility monitor.",
+    }, OWNER);
+    expect((await overview.call({ days: 30 }, STAFF)).views).toBe(1);
+    const [corrected] = await db().select().from(analyticsEvents);
+    expect(corrected).toMatchObject({
+      visitorKind: "bot",
+      classificationOverride: "human",
+      classificationNote: "Known accessibility monitor.",
+    });
+    expect(await classificationCandidates.call({ limit: 10 }, STAFF))
+      .toEqual([expect.objectContaining({
+        reviewId: classified!.id,
+        originalKind: "bot",
+        effectiveKind: "human",
+      })]);
+    expect(JSON.stringify(await classificationCandidates.call({ limit: 10 }, STAFF)))
+      .not.toContain("review-v1");
+    const [correctionAudit] = await db().select().from(auditLog)
+      .where(eq(auditLog.action, "analytics.correctClassification"));
+    expect(correctionAudit).toMatchObject({
+      subjectType: "analyticsClassification",
+      subjectId: classified!.id,
+      diff: {
+        eventId: classified!.id,
+        kind: "human",
+        classificationNote: "[redacted]",
+      },
+    });
+    expect(JSON.stringify(correctionAudit)).not.toContain("review-v1");
+
+    await correctClassification.call({
+      eventId: classified!.id,
+      kind: "automatic",
+      classificationNote: "",
+    }, OWNER);
+    expect((await overview.call({ days: 30 }, STAFF)).views).toBe(0);
+    const [restored] = await db().select().from(analyticsEvents);
+    expect(restored?.visitorKind).toBe("bot");
+    expect(restored?.classificationOverride).toBeNull();
+    expect(restored?.classificationNote).toBeNull();
+  });
+
+  it("prunes events and attribution at the configured retention boundary", async () => {
+    await setModuleConfig.call({
+      module: "analytics",
+      config: { retentionDays: 30 },
+    }, OWNER);
+    for (const anonId of ["old-v1", "current-v1"]) {
+      await track.call({
+        ...visitor(anonId),
+        name: "page.viewed",
+        path: "/",
+        campaign: campaignFromQuery({ utm_source: anonId }),
+      }, ANONYMOUS);
+    }
+    const old = new Date(Date.now() - 31 * 86_400_000);
+    await db().update(analyticsEvents)
+      .set({ at: old })
+      .where(eq(analyticsEvents.anonId, "old-v1"));
+    await db().update(analyticsAttributions)
+      .set({ firstAt: old, lastAt: old })
+      .where(eq(analyticsAttributions.anonId, "old-v1"));
+    await db().update(analyticsAttributions)
+      .set({ firstAt: old, firstSource: "stale-source", firstPath: "/stale" })
+      .where(eq(analyticsAttributions.anonId, "current-v1"));
+
+    expect(await pruneAnalytics()).toEqual({
+      events: 1,
+      attributions: 1,
+      attributionsRebased: 1,
+      retentionDays: 30,
+    });
+    expect((await db().select().from(analyticsEvents)).map((row) => row.anonId))
+      .toEqual(["current-v1"]);
+    expect(await db().select().from(analyticsAttributions))
+      .toEqual([expect.objectContaining({
+        anonId: "current-v1",
+        firstSource: "current-v1",
+        firstPath: "/",
+      })]);
+  });
+
+  it("exports only aggregates and suppresses groups smaller than three visitors", async () => {
+    const addVisitor = async (n: number) => {
+      const anonId = `export-v${n}`;
+      await track.call({
+        ...visitor(anonId),
+        name: "page.viewed",
+        path: "/campaign",
+        campaign: campaignFromQuery({
+          utm_source: "newsletter",
+          utm_campaign: "launch",
+        }),
+      }, ANONYMOUS);
+    };
+    await addVisitor(1);
+    await addVisitor(2);
+    const suppressed = await exportAnonymizedAnalytics.call({
+      days: 30,
+      timezone: "UTC",
+    }, OWNER);
+    expect(JSON.parse(suppressed.content)).toMatchObject({
+      daily: [],
+      pages: [],
+      campaigns: [],
+    });
+
+    await addVisitor(3);
+    const artifact = await exportAnonymizedAnalytics.call({
+      days: 30,
+      timezone: "UTC",
+    }, OWNER);
+    const content = JSON.parse(artifact.content) as {
+      daily: unknown[];
+      pages: Array<{ path: string; visitors: number }>;
+      campaigns: Array<{ source: string; visitors: number }>;
+    };
+    expect(content.daily).toHaveLength(1);
+    expect(content.pages).toEqual([
+      expect.objectContaining({ path: "/campaign", visitors: 3 }),
+    ]);
+    expect(content.campaigns).toEqual([
+      expect.objectContaining({ source: "newsletter", visitors: 3 }),
+    ]);
+    expect(artifact.content).not.toMatch(/export-v[123]|anonId|sessionId|contactId/);
+    expect(artifact.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 });

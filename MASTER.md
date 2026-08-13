@@ -2894,11 +2894,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-12 |
-| Evidence snapshot | `main` at `329ccff` (C1.16 merged); C1.17 changeset `catalog-quality-rtl.md` |
+| Evidence snapshot | `main` at `5f50047` (C1.17 merged); C1.18 changeset `analytics-governance.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.18 analytics consent, retention, quality signals, attribution and export; no public-launch work is required |
+| Current focus | C1.19 Content Security Policy and violation reporting; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3171,8 +3171,19 @@ reading chat logs.
   catalogs; add pseudo-locale, RTL layout tests and locale-specific fixtures.
   (`tests/core/i18n-gate.test.ts`; `tests/core/locale-quality.test.ts`;
   `tests/fixtures/locales.ts`; changeset `catalog-quality-rtl.md`)
-- [ ] **C1.18** Add analytics consent policy, configurable retention/pruning,
+- [x] **C1.18** Add analytics consent policy, configurable retention/pruning,
   bot correction, Core Web Vitals, campaign attribution and anonymized export.
+  (`0036_milky_radioactive_man.sql`; privacy-first/opt-in/disabled policy with
+  JS-optional controls and policy-bounded first-party identity; daily
+  `core.pruneAnalytics` event/attribution pruning and old-touch rebasing;
+  immutable classifier evidence with reversible audited corrections; trusted,
+  idempotent Core Web Vitals; normalized first/latest campaign attribution
+  without advertising click IDs; three-visitor-threshold aggregate JSON
+  export; `tests/core/analytics.test.ts`;
+  `tests/core/analytics-consent.test.ts`;
+  `tests/core/analytics-governance-migration.test.ts`; 1,040-test full suite;
+  changeset `analytics-governance.md`; operator guide
+  `deploy/analytics-governance.md`)
 - [ ] **C1.19** Add a Content Security Policy compatible with editor preview,
   uploads and explicitly consented third-party creatives; report violations.
 - [ ] **C1.20** Patch all actionable dependency advisories and keep a zero

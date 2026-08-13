@@ -163,7 +163,8 @@ export function hasModuleAccess(
   return applicable.some((grant) => grant.access === "manage");
 }
 
-const REDACTED_KEY = /pass(word)?|secret|token|otp|key|credential|response/i;
+const REDACTED_KEY =
+  /pass(word)?|secret|token|otp|key|credential|response|classificationNote/i;
 
 /** Secrets never reach the audit trail, whatever shape the input takes. */
 export function redact(value: unknown): unknown {

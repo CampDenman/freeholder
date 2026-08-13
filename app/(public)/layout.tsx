@@ -12,8 +12,8 @@
 // header is an UPDATE, live on the next request, with a revision kept — and
 // nobody has to touch this file to do it.
 import type { ReactNode } from "react";
-import { headers } from "next/headers";
-import { PATH_HEADER } from "@/core/http/headers";
+import { cookies, headers } from "next/headers";
+import { PATH_HEADER, REQUEST_TARGET_HEADER } from "@/core/http/headers";
 import { renderBlocks } from "@/modules/cms/render";
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -21,6 +21,15 @@ import { getLocale, getT } from "../i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedSection } from "@/modules/cms/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
+import { currentAnalyticsSettings } from "@/modules/analytics/read";
+import {
+  ANALYTICS_CONSENT_COOKIE,
+  ANON_COOKIE,
+  SESSION_COOKIE_NAME,
+  parseAnalyticsConsentState,
+} from "@/modules/analytics/visitor";
+import { AnalyticsRuntime } from "./AnalyticsRuntime";
+import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
 
 export const dynamic = "force-dynamic";
 
@@ -30,12 +39,17 @@ export default async function PublicLayout({
 }: {
   children: ReactNode;
 }) {
-  const [locale, t, business, requestHeaders] = await Promise.all([
+  const [locale, t, business, requestHeaders, cookieJar, analytics] = await Promise.all([
     getLocale(),
     getT(),
     currentBusiness(),
     headers(),
+    cookies(),
+    currentAnalyticsSettings(),
   ]);
+  const consent = parseAnalyticsConsentState(
+    cookieJar.get(ANALYTICS_CONSENT_COOKIE)?.value,
+  );
 
   const [header, footer] = await Promise.all([
     publishedSection(HEADER_KEY, locale),
@@ -87,6 +101,21 @@ export default async function PublicLayout({
           </div>
         </footer>
       ) : null}
+      <AnalyticsConsentControl
+        policy={analytics.consentPolicy}
+        state={consent}
+        retentionDays={analytics.retentionDays}
+        returnTo={requestHeaders.get(REQUEST_TARGET_HEADER) ?? "/"}
+        t={t}
+      />
+      <AnalyticsRuntime
+        policy={analytics.consentPolicy}
+        state={consent}
+        hasIdentity={Boolean(
+          cookieJar.get(ANON_COOKIE)?.value &&
+          cookieJar.get(SESSION_COOKIE_NAME)?.value
+        )}
+      />
     </div>
   );
 }

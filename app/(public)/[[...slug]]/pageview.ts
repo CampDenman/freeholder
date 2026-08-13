@@ -8,28 +8,46 @@
 //
 //   - Nothing to block. An ad blocker cannot remove a number the server
 //     already wrote, so the traffic chart describes the traffic.
-//   - Nothing to load. No client bundle, no third-party host, no hydration —
-//     which keeps the promise §5 and the SEO gate rest on.
+//   - Nothing third-party to load. Consent reconciliation and Web Vitals use a
+//     small first-party client; page counting itself still works without it.
 //   - It works with JavaScript off.
 //
 // The cost is that this runs inside the request. One insert against a local
 // Postgres is not worth batching yet; when core/jobs lands it becomes an
 // obvious candidate, and that is written down rather than assumed.
-import { headers } from "next/headers";
-import { track } from "@/modules/analytics/service";
+import { cookies, headers } from "next/headers";
+import { campaignFromQuery, track } from "@/modules/analytics/service";
 import { classify, shapeOf } from "@/modules/analytics/classify";
-import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
+import {
+  ANALYTICS_BOOTSTRAP_HEADER,
+  ANALYTICS_CONSENT_COOKIE,
+  ANON_HEADER,
+  SESSION_HEADER,
+  parseAnalyticsConsentState,
+} from "@/modules/analytics/visitor";
+import { analyticsCollectionAllowed } from "@/modules/analytics/settings";
+import { currentAnalyticsSettings } from "@/modules/analytics/read";
 
 export async function recordPageView(
   path: string,
   locale: string,
+  query: Record<string, string | string[] | undefined> = {},
 ): Promise<void> {
   try {
-    const requestHeaders = await headers();
-    const anonId = requestHeaders.get(ANON_HEADER);
-    const sessionId = requestHeaders.get(SESSION_HEADER);
-    // No identifiers means the proxy decided this path is not a visit — the
-    // admin, an asset, a feed. Nothing to record.
+    const [requestHeaders, cookieJar, settings] = await Promise.all([
+      headers(),
+      cookies(),
+      currentAnalyticsSettings(),
+    ]);
+    const consent = parseAnalyticsConsentState(
+      cookieJar.get(ANALYTICS_CONSENT_COOKIE)?.value,
+    );
+    if (!analyticsCollectionAllowed(settings.consentPolicy, consent)) return;
+    const bootstrap = requestHeaders.get(ANALYTICS_BOOTSTRAP_HEADER);
+    const anonId = requestHeaders.get(ANON_HEADER) ?? bootstrap;
+    const sessionId = requestHeaders.get(SESSION_HEADER) ?? bootstrap;
+    // No identifiers means policy refused collection or the proxy decided
+    // this path is not a visit (admin, asset, feed). Nothing to record.
     if (!anonId || !sessionId) return;
 
     // Next prefetches links on hover. Counting those would report visits to
@@ -54,6 +72,7 @@ export async function recordPageView(
         props: {},
         visitorKind: verdict.kind,
         botReasons: verdict.reasons,
+        campaign: campaignFromQuery(query),
       },
       { kind: "anonymous" },
     );

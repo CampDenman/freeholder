@@ -367,6 +367,7 @@ describe("the job registry", () => {
       "core.sweepRateLimits",
       "core.dispatchOutbox",
       "core.pruneOutbox",
+      "core.pruneAnalytics",
     ]) {
       expect({ name, mounted: jobs.has(name) }).toEqual({ name, mounted: true });
     }
