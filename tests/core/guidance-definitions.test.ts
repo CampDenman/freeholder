@@ -124,7 +124,9 @@ describe("the guidance migration seed", () => {
       descriptionKey: match[4]!,
       audienceRoles: sqlArray(match[5]!),
       requiredCapabilities: sqlArray(match[6]!),
-      steps: JSON.parse(match[7]!),
+      steps: guidanceFlowDefinitionSchema.shape.steps.parse(
+        JSON.parse(match[7]!) as unknown,
+      ),
       status: match[8]!,
     }));
     expect(seeded).toEqual(CORE_GUIDANCE_FLOWS);

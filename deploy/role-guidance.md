@@ -75,4 +75,3 @@ user.
    preference completes its second task.
 6. Run the browser acceptance specifications documented in
    `deploy/browser-journeys.md` when validating a release candidate.
-
