@@ -14,13 +14,16 @@ set -euo pipefail
 : "${S3_SECRET_ACCESS_KEY:?}"
 
 stamp="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-archive="/tmp/freeholder-${stamp}.sql.gz"
+archive="/tmp/freeholder-${stamp}.dump"
+checksum="${archive}.sha256"
+cleanup() { rm -f "$archive" "$checksum"; }
+trap cleanup EXIT
 
 cd /opt/freeholder
-# --clean --if-exists so the dump restores over an existing database without
-# needing it dropped first.
-docker compose exec -T db pg_dump -U freeholder --clean --if-exists freeholder \
-  | gzip -9 > "$archive"
+# Custom format is checksummed and selectively inspectable. Restore into a new
+# database; never use --clean against the running instance.
+docker compose exec -T db pg_dump -U freeholder \
+  --format=custom --no-owner --no-privileges freeholder > "$archive"
 
 size=$(stat -c%s "$archive")
 if [ "$size" -lt 1024 ]; then
@@ -28,6 +31,8 @@ if [ "$size" -lt 1024 ]; then
   rm -f "$archive"
   exit 1
 fi
+cd /tmp
+sha256sum "$(basename "$archive")" > "$checksum"
 
 docker run --rm \
   -e AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY_ID" \
@@ -36,6 +41,12 @@ docker run --rm \
   amazon/aws-cli:latest \
   s3 cp "$archive" "s3://${BACKUP_BUCKET}/db/$(basename "$archive")" \
   --endpoint-url "$S3_ENDPOINT"
+docker run --rm \
+  -e AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY_ID" \
+  -e AWS_SECRET_ACCESS_KEY="$S3_SECRET_ACCESS_KEY" \
+  -v "$checksum:$checksum:ro" \
+  amazon/aws-cli:latest \
+  s3 cp "$checksum" "s3://${BACKUP_BUCKET}/db/$(basename "$checksum")" \
+  --endpoint-url "$S3_ENDPOINT"
 
-rm -f "$archive"
-echo "backup: uploaded $(basename "$archive") (${size} bytes)"
+echo "backup: uploaded $(basename "$archive") and checksum (${size} bytes)"

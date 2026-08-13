@@ -354,6 +354,48 @@ describe.runIf(hasDatabase)("rotating the key", () => {
     });
   });
 
+  it("decrypts with the backed-up previous key and makes the new key sufficient", async () => {
+    const oldKey = Buffer.alloc(32, 3).toString("hex");
+    const newKey = Buffer.alloc(32, 4).toString("hex");
+    try {
+      vi.stubEnv("CREDENTIAL_KEY", oldKey);
+      vi.stubEnv("CREDENTIAL_KEY_PREVIOUS", "");
+      resetEnvForTests();
+      const { id } = await recordConnection.call(
+        {
+          userId: OWNER.userId,
+          provider: "google",
+          providerAccountId: "rotation-proof",
+          credentials: TOKENS,
+        },
+        OWNER,
+      );
+
+      vi.stubEnv("CREDENTIAL_KEY", newKey);
+      vi.stubEnv("CREDENTIAL_KEY_PREVIOUS", oldKey);
+      resetEnvForTests();
+      expect(await rotateCredentials.call({}, OWNER)).toEqual({
+        examined: 1,
+        rotated: 1,
+        failed: 0,
+      });
+      expect(await readCredentials(db(), id)).toEqual(TOKENS);
+
+      vi.stubEnv("CREDENTIAL_KEY_PREVIOUS", "");
+      resetEnvForTests();
+      expect(await readCredentials(db(), id)).toEqual(TOKENS);
+      expect(
+        (await db()
+          .select({ credentials: connectedAccounts.credentials })
+          .from(connectedAccounts)
+          .where(eq(connectedAccounts.id, id)))[0]?.credentials,
+      ).not.toContain(oldKey);
+    } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    }
+  });
+
   it("flags a row it cannot read rather than destroying it", async () => {
     // A row whose key is gone still has to be visible: the owner needs to see
     // it in order to reconnect the account.

@@ -118,3 +118,17 @@ describe("the compose stack does not contradict the storage mandate", () => {
     });
   }
 });
+
+describe("the droplet backup is a verifiable restore artifact", () => {
+  const backup = readFileSync(
+    join(DEPLOY, "digitalocean-droplet", "infra", "backup.sh"),
+    "utf8",
+  );
+
+  it("uses portable custom format without ownership and uploads a checksum", () => {
+    expect(backup).toContain("--format=custom --no-owner --no-privileges");
+    expect(backup).toContain("sha256sum");
+    expect(backup).toContain(".sha256");
+    expect(backup).not.toMatch(/^\s*[^#\r\n]*--clean/m);
+  });
+});

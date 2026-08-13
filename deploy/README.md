@@ -60,6 +60,9 @@ whole story, which is the point.
 
 ## Operational runbooks
 
+- [`ownership-recovery.md`](ownership-recovery.md) — database backup and
+  scratch restore, complete logical export, media inventory, configuration and
+  credential-key recovery, rotation, retention and erasure evidence.
 - [`privacy-rights.md`](privacy-rights.md) — consent evidence, access/export,
   correction, erasure, legal-retention exceptions, artifact retention, backup
   guidance, module registration, and the threat model.

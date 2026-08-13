@@ -1494,6 +1494,23 @@ usable secret. `doctor` treats a missing or short `CREDENTIAL_KEY` on an
 instance with connected accounts as a failing check, because the first sync
 would otherwise be where an owner finds out.
 
+**Ownership requires two artifacts, not one misleading bundle.** Disaster
+recovery uses a complete PostgreSQL dump (including queue schemas) plus the
+separately protected environment-secret backup; it preserves encrypted
+connected-account credentials but is useless without `CREDENTIAL_KEY`. The
+logical ownership export is instead safe to inspect and transfer: every
+application-owned base table is inventoried, authentication-bearing columns
+are explicitly redacted, the checked-in configuration and reviewed non-secret
+environment configuration are copied, every file is checksummed, and a media
+manifest joins Assets to object-store keys and reports inventory gaps. Raw env
+values, database URLs and credential keys never enter that export. A valid key
+contributes only a SHA-256 fingerprint so an operator can match the separately
+protected key before restore. CI performs an actual guarded `pg_dump` into a
+random scratch database, restores it, compares every table digest and creates
+the logical export from the restored copy. Erasure cannot rewrite immutable
+historical backups, so backup access/expiry and reapplying completed erasures
+after an old restore are part of the retention procedure.
+
 ## 18. Recipe Anatomy (what contributors add)
 
 ```
@@ -2901,11 +2918,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `b3c8ee6` (C1.21 merged and post-merge CI/image publication green; C4.19 owner site-wide content builder merged); C1.22 changeset `browser-journeys.md` |
+| Evidence snapshot | `main` at `e5e176b` (C1.22 and proxy-safe analytics consent merged); C1.23 functional head `ea426c0` passed full CI including Linux ownership restore drill `31686555058`, then rebased cleanly with the 1,080-test suite green; changeset `ownership-recovery.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.23 backup, restore, export, media, credential-key, retention and erasure drills; no public-launch work is required |
+| Current focus | C1.24 fresh development/demo seeded home; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3258,8 +3275,27 @@ reading chat logs.
   product journey matrices in production Chromium;
   operator/developer guide `deploy/browser-journeys.md`; changeset
   `browser-journeys.md`)
-- [ ] **C1.23** Add database backup/restore drills, complete export, media
+- [x] **C1.23** Add database backup/restore drills, complete export, media
   manifest, configuration/credential-key handling, retention and erasure proof.
+  (two deliberately separate ownership artifacts: complete custom-format
+  PostgreSQL recovery dump plus secret-safe logical export; explicit recursive
+  authentication-field redaction across every non-system base table; copied
+  declarative config and allowlisted non-secret environment settings with URL
+  credentials/query/fragment stripped; configured-secret inventory and
+  SHA-256-only `CREDENTIAL_KEY` fingerprints; checksummed files and Asset/
+  storage-object media manifest with missing/unreferenced-key reports; guarded
+  database-name and libpq-routing refusal; CI run `31686555058` restored a real
+  `pg_dump` into a random scratch database, matched canonical digests for every
+  table and generated the logical export from the restore; old-plus-new key
+  rotation proved credentials readable before and after previous-key removal;
+  privacy registered-scope export/erasure, legal exceptions, artifact expiry,
+  media trash/restore/purge, orphan cleanup and bounded operational retention
+  suites; DigitalOcean custom-format archive and checksum upload with scratch-
+  only restore procedure; 88-file/1,080-test Vitest suite; `pnpm
+  ownership:export`; `pnpm ownership:drill`; `scripts/ownership-export.mjs`;
+  `scripts/ownership-drill.mjs`; `tests/core/ownership-export.test.ts`;
+  operator guide `deploy/ownership-recovery.md`; changeset
+  `ownership-recovery.md`)
 - [ ] **C1.24** Make a fresh development/demo install serve a complete seeded
   home at `/`, with no route depending on manually repaired database content.
 - [ ] **C1.25** Build resumable, role/capability-derived onboarding for owner,

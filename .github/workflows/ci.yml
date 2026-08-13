@@ -56,6 +56,12 @@ jobs:
         run: pnpm typecheck
       - name: Test
         run: pnpm test
+      # C1.23: a backup is not evidence until it restores. This uses the
+      # disposable CI database only, restores pg_dump into a random scratch
+      # database, compares every application-owned table and then generates
+      # the secret-safe logical export and media manifest from the restore.
+      - name: Ownership backup, restore and export drill (C1.23)
+        run: pnpm ownership:drill
       - name: Build
         run: pnpm build
       # C1.21/C1.22 are deliberately separate from the jsdom unit helpers:
