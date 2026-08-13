@@ -1409,7 +1409,14 @@ normal tested extension rather than bespoke UI work.
 4. **Money gate:** lint rule forbidding float arithmetic on money and any FX call inside charge paths.
 5. **Service-layer gate:** no route handler or MCP tool may import Drizzle tables directly — services only.
 6. **Changelog gate (the release-notes religion):** any PR that creates, updates, or removes user-facing functionality — a service method, route, MCP tool, setting, module capability — must include a changeset entry (`feat/fix/breaking` + one plain-English sentence a business owner can understand). CI detects functional diffs (service registry, route table, or MCP tool list changed) with no accompanying changeset and fails. Release notes are then auto-assembled per release from changesets — never written from memory the night before, never skipped. Undocumented functionality changes are treated as bugs.
-7. **A11y smoke** on key public templates.
+7. **Real-browser accessibility gate:** run Chromium against setup, admin,
+   editor (including its preview frame), storefront and portal; fail WCAG A/AA
+   axe rules and unresolved contrast in light or dark, broken keyboard bypass
+   or visible/unobscured focus, 320 CSS-pixel reflow or nested horizontal
+   scrolling, motion that survives reduced-motion preference, and missing
+   screen-reader-oriented roles, names, landmarks or accessibility-tree
+   structure. Parsed-HTML checks may supplement this gate but never replace
+   browser layout and interaction evidence.
 8. **Upgrade gate (§39.9):** boot the previous released image against a seeded database, apply the current build, assert health, data integrity and the smoke suite — then roll back and assert the old release still runs against the new schema. Auto-update is only as safe as the last time somebody proved an upgrade works, so it is proved on every PR.
 9. **Schema-compatibility gate (§39.5):** a migration that breaks readability by the previous release must declare it in its changeset. CI diffs the migration set against the last release and fails on an unlabelled breaking change — the expand-then-contract discipline is what makes rollback an image swap instead of a restore.
 
@@ -2894,11 +2901,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-12 |
-| Evidence snapshot | `main` at `f645e04` (C1.19 merged); C1.20 changeset `dependency-security-policy.md` |
+| Evidence snapshot | `main` at `81d9cdc` (Apache-2.0 licensing merged); C1.21 changeset `real-browser-accessibility.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.21 real-browser accessibility coverage; no public-launch work is required |
+| Current focus | C1.22 browser journeys; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3211,9 +3218,24 @@ reading chat logs.
   `scripts/dependency-audit.mjs`; `tests/core/dependency-audit.test.ts`;
   1,065-test full suite; changeset `dependency-security-policy.md`;
   operator policy in `SECURITY.md`)
-- [ ] **C1.21** Replace simulated public accessibility checks with real-browser
+- [x] **C1.21** Replace simulated public accessibility checks with real-browser
   keyboard, focus, reflow, contrast, reduced-motion and screen-reader-oriented
-  tests for setup, admin, editor, storefront and portal.
+  tests for setup, admin, editor, storefront and portal. (production Chromium
+  matrix over all five surfaces; WCAG 2.0/2.1/2.2 A/AA axe scans with
+  browser-computed contrast in explicit light and dark themes; real Tab/Enter
+  bypass, 2 px focus visibility and focus-in-view/not-obscured checks; page and
+  preview-frame reflow at 320 CSS px with nested horizontal-scroll refusal;
+  ARIA snapshots and named semantic locators; reduced-motion emulation that
+  proves ordinary editor motion exists before suppressing transitions,
+  animations, repetition and smooth scrolling; translated skip links, setup
+  and admin document titles, instant focus reveal, wrapping admin chrome;
+  safe disposable-database guard and factor-verified fixture without a
+  production bypass; CI-installed pinned Chromium; supplementary jsdom checks
+  explicitly non-authoritative; `playwright.a11y.config.ts`;
+  `tests/browser/accessibility.spec.ts`; 1,065-test Vitest suite plus the
+  five-step production-browser matrix; operator/developer guide
+  `deploy/accessibility-testing.md`; changeset
+  `real-browser-accessibility.md`)
 - [ ] **C1.22** Add Playwright-style browser journeys for setup, auth, editing,
   publishing, forms, contacts, translations, API keys, MCP and recovery.
 - [ ] **C1.23** Add database backup/restore drills, complete export, media

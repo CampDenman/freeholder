@@ -80,8 +80,8 @@ export function AdminNav({
     );
   });
   return (
-    <nav aria-label={labels.region} className="overflow-x-auto">
-      <ul className="-mb-px flex min-w-max list-none gap-1 p-0">
+    <nav aria-label={labels.region}>
+      <ul className="-mb-px flex list-none flex-wrap gap-1 p-0">
         {links.map(({ href, key, Icon }) => {
           const active =
             href === "/admin" ? pathname === href : pathname.startsWith(href);

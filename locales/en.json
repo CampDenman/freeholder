@@ -1,4 +1,5 @@
 {
+  "a11y.skipToContent": "Skip to content",
   "common.filter": "Filter",
   "privacy.artifactExpired": "This protected file has expired. Fulfil the request again only if a new copy is appropriate.",
   "privacy.back": "← All contacts",
