@@ -5,6 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { CreditCard, Warning } from "@phosphor-icons/react/dist/ssr";
 import { minorToDecimal } from "@/adapters/payments/currency";
+import { isHostedPaymentProvider } from "@/adapters/payments/providers";
 import { hasModuleAccess } from "@/core/service";
 import { listInvoices } from "@/modules/invoicing/invoice-service";
 import {
@@ -47,7 +48,10 @@ export default async function PaymentsPage({
   const canManage = hasModuleAccess(actor, "invoicing", "manage");
   const stepUpValid = actor.kind === "user" && actor.security?.stepUpValid !== false;
   const openInvoices = invoices.filter((invoice) => ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status));
-  const refundable = succeeded.filter(({ payment }) => payment.refundedMinor < payment.amountMinor && ["manual", "stripe", "paypal"].includes(payment.provider));
+  const refundable = succeeded.filter(({ payment }) =>
+    payment.refundedMinor < payment.amountMinor
+    && (payment.provider === "manual" || isHostedPaymentProvider(payment.provider)),
+  );
 
   return (
     <div className="grid gap-6">

@@ -112,6 +112,24 @@ const envSchema = z.object({
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_WEBHOOK_ID: z.string().optional(),
   PAYPAL_ENVIRONMENT: z.enum(["sandbox", "live"]).default("sandbox"),
+  SQUARE_ACCESS_TOKEN: z.string().optional(),
+  SQUARE_LOCATION_ID: z.string().optional(),
+  SQUARE_WEBHOOK_SIGNATURE_KEY: z.string().optional(),
+  /** Kept only while Square retries events signed before key rotation. */
+  SQUARE_WEBHOOK_SIGNATURE_KEY_PREVIOUS: z.string().optional(),
+  SQUARE_ENVIRONMENT: z.enum(["sandbox", "live"]).default("sandbox"),
+  MOLLIE_API_KEY: z.string().optional(),
+  /** Optional for next-generation events; classic payment callbacks are API-verified. */
+  MOLLIE_WEBHOOK_SECRET: z.string().optional(),
+  MOLLIE_WEBHOOK_SECRET_PREVIOUS: z.string().optional(),
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET_PREVIOUS: z.string().optional(),
+  PAYSTACK_SECRET_KEY: z.string().optional(),
+  FLUTTERWAVE_SECRET_KEY: z.string().optional(),
+  FLUTTERWAVE_WEBHOOK_SECRET: z.string().optional(),
+  FLUTTERWAVE_WEBHOOK_SECRET_PREVIOUS: z.string().optional(),
 
   /** Replit Object Storage (§20). Discovered from the environment on Replit. */
   REPLIT_BUCKET_ID: z.string().optional(),

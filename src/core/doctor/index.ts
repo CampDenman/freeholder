@@ -472,13 +472,21 @@ async function checkPayments(): Promise<Check> {
     );
   }
   if (!adapter.status.available) {
+    const base = env().APP_URL.replace(/\/+$/, "");
+    const remedies: Record<string, string> = {
+      stripe: `Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET, then point Stripe at ${base}/api/payments/webhooks/stripe.`,
+      paypal: `Set PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, and PAYPAL_WEBHOOK_ID, choose PAYPAL_ENVIRONMENT, then point PayPal at ${base}/api/payments/webhooks/paypal.`,
+      square: `Set SQUARE_ACCESS_TOKEN, SQUARE_LOCATION_ID, and SQUARE_WEBHOOK_SIGNATURE_KEY, choose SQUARE_ENVIRONMENT, then register exactly ${base}/api/payments/webhooks/square.`,
+      mollie: `Set MOLLIE_API_KEY, then use ${base}/api/payments/webhooks/mollie as the payment webhook URL. Set MOLLIE_WEBHOOK_SECRET as well if you enable next-generation events.`,
+      razorpay: `Set RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET, then point Razorpay at ${base}/api/payments/webhooks/razorpay.`,
+      paystack: `Set PAYSTACK_SECRET_KEY, then point Paystack at ${base}/api/payments/webhooks/paystack. The same secret authenticates API calls and SHA-512 feedback.`,
+      flutterwave: `Set FLUTTERWAVE_SECRET_KEY and FLUTTERWAVE_WEBHOOK_SECRET, then point Flutterwave at ${base}/api/payments/webhooks/flutterwave and enable retries.`,
+    };
     return fail(
       "payments.provider",
       "Payments",
       adapter.status.message,
-      adapter.id === "stripe"
-        ? `Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET, then point Stripe at ${env().APP_URL.replace(/\/+$/, "")}/api/payments/webhooks/stripe.`
-        : `Set PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, and PAYPAL_WEBHOOK_ID, choose PAYPAL_ENVIRONMENT, then point PayPal at ${env().APP_URL.replace(/\/+$/, "")}/api/payments/webhooks/paypal.`,
+      remedies[adapter.id] ?? "Configure the selected payment provider credentials and authenticated webhook endpoint, then restart Freeholder.",
     );
   }
   return ok(

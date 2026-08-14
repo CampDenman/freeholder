@@ -1,14 +1,21 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// C5.06 provider contract, wire format, and hostile signature proof.
+// C5.06-C5.07 provider contract, wire format, and hostile signature proof.
 
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { AdapterError } from "@/adapters/types";
 import { decimalToMinor, minorToDecimal } from "@/adapters/payments/currency";
+import { createFlutterwavePayments } from "@/adapters/payments/flutterwave";
 import { createManualPayments } from "@/adapters/payments/manual";
+import { createMolliePayments } from "@/adapters/payments/mollie";
 import { createPayPalPayments } from "@/adapters/payments/paypal";
+import { createPaystackPayments } from "@/adapters/payments/paystack";
+import { HOSTED_PAYMENT_PROVIDER_IDS } from "@/adapters/payments/providers";
+import { createRazorpayPayments } from "@/adapters/payments/razorpay";
+import { createSquarePayments } from "@/adapters/payments/square";
 import { createStripePayments } from "@/adapters/payments/stripe";
+import { paymentAdapters } from "@/adapters/payments";
 import { paymentWebhookRoute } from "@/modules/invoicing/payment-webhook-route";
 
 const invoice = {
@@ -217,6 +224,236 @@ describe("PayPal payment adapter", () => {
       fetch: async (input: string | URL | Request) => requestUrl(input).endsWith("/oauth2/token") ? Response.json({ access_token: "token" }) : Response.json({ verification_status: "FAILURE" }),
     });
     await expect(rejecting.verifyWebhook({ headers, body: bytes(JSON.stringify(payload)), receivedAt: "2026-08-14T12:00:02Z" })).rejects.toMatchObject({ code: "authentication" });
+  });
+});
+
+describe("C5.07 payment-provider contract", () => {
+  it("registers every hosted provider once and advertises no payout or in-person behavior", () => {
+    const ids = paymentAdapters.list().map((adapter) => adapter.id);
+    expect(ids).toEqual(["none", "manual", ...HOSTED_PAYMENT_PROVIDER_IDS].sort());
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of HOSTED_PAYMENT_PROVIDER_IDS) {
+      expect(paymentAdapters.get(id).capabilities()).toMatchObject({ payouts: false, inPerson: false });
+    }
+  });
+});
+
+describe("Square payment adapter", () => {
+  it("uses idempotent Payment Links, order rechecks, refunds, and exact URL-plus-body signatures", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
+      calls.push({ url, init });
+      if (url.endsWith("/v2/online-checkout/payment-links")) {
+        return Response.json({ payment_link: { id: "LINK-1", order_id: "ORDER-1", url: "https://square.test/link" } });
+      }
+      if (url.endsWith("/v2/orders/ORDER-1")) {
+        return Response.json({ order: { id: "ORDER-1", state: "COMPLETED", total_money: { amount: 12_345, currency: "CAD" }, tenders: [{ payment_id: "PAYMENT-1" }], updated_at: "2026-08-14T12:00:00Z" } });
+      }
+      if (url.endsWith("/v2/refunds")) return Response.json({ refund: { id: "REFUND-1", status: "PENDING" } });
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    const notificationUrl = "https://shop.example.test/api/payments/webhooks/square";
+    const adapter = createSquarePayments({
+      accessToken: "square-private",
+      locationId: "LOCATION-1",
+      webhookSignatureKeys: ["old-square", "new-square"],
+      apiBase: "https://square.example.test",
+      notificationUrl,
+      fetch: fetcher,
+    });
+
+    await expect(adapter.createCheckout(invoice)).resolves.toMatchObject({ providerRef: "ORDER-1", url: "https://square.test/link" });
+    const create = calls[0]!;
+    expect(create.init?.headers).toMatchObject({ "square-version": "2026-07-15" });
+    expect(JSON.parse(bodyText(create.init?.body))).toMatchObject({
+      idempotency_key: "checkout-1",
+      quick_pay: { price_money: { amount: 12_345, currency: "CAD" }, location_id: "LOCATION-1" },
+      payment_note: `freeholder:${invoice.invoiceId}:${invoice.contactId}`,
+    });
+    await expect(adapter.captureCheckout({ checkoutRef: "ORDER-1", idempotencyKey: "capture-1" })).resolves.toMatchObject({ providerRef: "PAYMENT-1", status: "succeeded", amountMinor: 12_345 });
+    await expect(adapter.refund({ paymentId: "local", providerRef: "PAYMENT-1", currency: "CAD", amountMinor: 345, reason: "Returned", idempotencyKey: "refund-1" })).resolves.toEqual({ providerRef: "REFUND-1", status: "pending" });
+
+    const payload = JSON.stringify({
+      event_id: "square-event-1",
+      type: "payment.updated",
+      created_at: "2026-08-14T12:00:00Z",
+      data: { object: { payment: { id: "PAYMENT-1", order_id: "ORDER-1", status: "COMPLETED", amount_money: { amount: 12_345, currency: "CAD" }, note: `freeholder:${invoice.invoiceId}:${invoice.contactId}`, updated_at: "2026-08-14T12:00:00Z" } } },
+    });
+    const signature = createHmac("sha256", "new-square").update(`${notificationUrl}${payload}`).digest("base64");
+    const request = { headers: { "x-square-hmacsha256-signature": signature }, body: bytes(payload), receivedAt: "2026-08-14T12:00:01Z" };
+    await expect(adapter.verifyWebhook(request)).resolves.toEqual([
+      expect.objectContaining({ id: "square-event-1", kind: "payment_succeeded", providerRef: "PAYMENT-1", checkoutRef: "ORDER-1", invoiceId: invoice.invoiceId }),
+    ]);
+    const refundPayload = JSON.stringify({
+      event_id: "square-refund-1",
+      type: "refund.updated",
+      created_at: "2026-08-14T12:01:00Z",
+      data: { object: { refund: { id: "REFUND-1", payment_id: "PAYMENT-1", status: "PENDING", amount_money: { amount: 345, currency: "CAD" }, updated_at: "2026-08-14T12:01:00Z" } } },
+    });
+    const refundSignature = createHmac("sha256", "new-square").update(`${notificationUrl}${refundPayload}`).digest("base64");
+    await expect(adapter.verifyWebhook({ headers: { "x-square-hmacsha256-signature": refundSignature }, body: bytes(refundPayload), receivedAt: "2026-08-14T12:01:01Z" })).resolves.toEqual([
+      expect.objectContaining({ id: "square-refund-1", kind: "refund_processing", providerRef: "REFUND-1", paymentProviderRef: "PAYMENT-1", amountMinor: 345 }),
+    ]);
+    await expect(adapter.verifyWebhook({ ...request, body: bytes(`${payload} `) })).rejects.toMatchObject({ code: "authentication" });
+  });
+});
+
+describe("Mollie payment adapter", () => {
+  it("creates decimal checkouts and authenticates classic callbacks by fetching private API state", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const paid = {
+      id: "tr_payment1",
+      status: "paid",
+      amount: { currency: "CAD", value: "123.45" },
+      paidAt: "2026-08-14T12:00:00Z",
+      metadata: { freeholder_invoice_id: invoice.invoiceId, freeholder_contact_id: invoice.contactId },
+      _embedded: { refunds: [{ id: "re_mollie1", status: "processing", amount: { currency: "CAD", value: "3.45" }, createdAt: "2026-08-14T12:01:00Z" }] },
+    };
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
+      calls.push({ url, init });
+      if (url.endsWith("/v2/payments") && init?.method === "POST") return Response.json({ id: "tr_payment1", _links: { checkout: { href: "https://mollie.test/checkout" } } });
+      if (url.includes("/v2/payments/tr_payment1?embed=refunds")) return Response.json(paid);
+      if (url.endsWith("/v2/payments/tr_payment1")) return Response.json(paid);
+      if (url.endsWith("/v2/payments/tr_payment1/refunds")) return Response.json({ id: "re_mollie1", status: "processing" });
+      return new Response("unknown payment", { status: 404 });
+    }) as typeof fetch;
+    const adapter = createMolliePayments({ apiKey: "test_private", webhookSecrets: ["mollie-hook"], apiBase: "https://mollie.example.test", webhookUrl: "https://shop.example.test/api/payments/webhooks/mollie", fetch: fetcher });
+
+    await expect(adapter.createCheckout(invoice)).resolves.toMatchObject({ providerRef: "tr_payment1", url: "https://mollie.test/checkout" });
+    const created: unknown = JSON.parse(bodyText(calls[0]?.init?.body));
+    expect(created).toMatchObject({ amount: { currency: "CAD", value: "123.45" }, webhookUrl: "https://shop.example.test/api/payments/webhooks/mollie" });
+    await expect(adapter.captureCheckout({ checkoutRef: "tr_payment1", idempotencyKey: "capture-1" })).resolves.toMatchObject({ status: "succeeded", amountMinor: 12_345 });
+    await expect(adapter.refund({ paymentId: "local", providerRef: "tr_payment1", currency: "CAD", amountMinor: 345, idempotencyKey: "refund-1" })).resolves.toEqual({ providerRef: "re_mollie1", status: "pending" });
+
+    const events = await adapter.verifyWebhook({ headers: { "content-type": "application/x-www-form-urlencoded" }, body: bytes("id=tr_payment1"), receivedAt: "2026-08-14T12:02:00Z" });
+    expect(events).toEqual([
+      expect.objectContaining({ kind: "payment_succeeded", providerRef: "tr_payment1", amountMinor: 12_345, invoiceId: invoice.invoiceId }),
+      expect.objectContaining({ kind: "refund_processing", providerRef: "re_mollie1", paymentProviderRef: "tr_payment1", amountMinor: 345 }),
+    ]);
+    const signedPayload = JSON.stringify({ resource: "payment", id: "tr_payment1" });
+    const signed = createHmac("sha256", "mollie-hook").update(signedPayload).digest("hex");
+    await expect(adapter.verifyWebhook({ headers: { "x-mollie-signature": `sha256=${signed}` }, body: bytes(signedPayload), receivedAt: "2026-08-14T12:02:00Z" })).resolves.toEqual(events);
+    await expect(adapter.verifyWebhook({ headers: {}, body: bytes("id=tr_forged"), receivedAt: "2026-08-14T12:02:00Z" })).rejects.toBeInstanceOf(AdapterError);
+    expect(calls.find((call) => call.url.includes("tr_payment1?embed=refunds"))?.init?.headers).toMatchObject({ authorization: "Bearer test_private" });
+  });
+});
+
+describe("Razorpay payment adapter", () => {
+  it("recovers unique-reference links and verifies payment/refund/dispute events", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
+      calls.push({ url, init });
+      if (url.includes("/v1/payment_links?reference_id=")) return Response.json({ payment_links: [] });
+      if (url.endsWith("/v1/payment_links") && init?.method === "POST") return Response.json({ id: "plink_1", short_url: "https://rzp.test/link", status: "created", created_at: 1_777_000_000 });
+      if (url.endsWith("/v1/payment_links/plink_1")) return Response.json({ id: "plink_1", status: "paid", amount: 12_345, amount_paid: 12_345, currency: "CAD", payments: [{ payment_id: "pay_1", status: "captured" }], updated_at: 1_777_000_100 });
+      if (url.endsWith("/v1/payments/pay_1/refund")) return Response.json({ id: "rfnd_1", status: "pending" });
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    const adapter = createRazorpayPayments({ keyId: "rzp-id", keySecret: "rzp-secret", webhookSecrets: ["rzp-hook"], apiBase: "https://razorpay.example.test", fetch: fetcher });
+    await expect(adapter.createCheckout(invoice)).resolves.toMatchObject({ providerRef: "plink_1", url: "https://rzp.test/link" });
+    expect(calls[0]?.url).toContain("reference_id=fh_");
+    await expect(adapter.captureCheckout({ checkoutRef: "plink_1", idempotencyKey: "capture-1" })).resolves.toMatchObject({ providerRef: "pay_1", status: "succeeded", amountMinor: 12_345 });
+    await expect(adapter.refund({ paymentId: "local", providerRef: "pay_1", currency: "CAD", amountMinor: 345, idempotencyKey: "refund-1" })).resolves.toEqual({ providerRef: "rfnd_1", status: "pending" });
+
+    const payload = JSON.stringify({
+      event: "payment_link.paid",
+      created_at: 1_777_000_100,
+      payload: {
+        payment: { entity: { id: "pay_1", status: "captured", amount: 12_345, currency: "CAD", created_at: 1_777_000_100 } },
+        payment_link: { entity: { id: "plink_1", status: "paid", amount_paid: 12_345, currency: "CAD", updated_at: 1_777_000_100, notes: { freeholder_invoice_id: invoice.invoiceId, freeholder_contact_id: invoice.contactId } } },
+      },
+    });
+    const signature = createHmac("sha256", "rzp-hook").update(payload).digest("hex");
+    const request = { headers: { "x-razorpay-signature": signature, "x-razorpay-event-id": "rzp-event-1" }, body: bytes(payload), receivedAt: "2026-08-14T12:00:00Z" };
+    await expect(adapter.verifyWebhook(request)).resolves.toEqual([
+      expect.objectContaining({ id: "rzp-event-1", kind: "payment_succeeded", providerRef: "pay_1", checkoutRef: "plink_1", invoiceId: invoice.invoiceId }),
+    ]);
+    const refundPayload = JSON.stringify({ event: "refund.processed", created_at: 1_777_000_200, payload: { refund: { entity: { id: "rfnd_1", payment_id: "pay_1", status: "processed", amount: 345, currency: "CAD", created_at: 1_777_000_200 } } } });
+    const refundSignature = createHmac("sha256", "rzp-hook").update(refundPayload).digest("hex");
+    await expect(adapter.verifyWebhook({ headers: { "x-razorpay-signature": refundSignature, "x-razorpay-event-id": "rzp-refund-event" }, body: bytes(refundPayload), receivedAt: "2026-08-14T12:00:00Z" })).resolves.toEqual([
+      expect.objectContaining({ kind: "refund_succeeded", providerRef: "rfnd_1", paymentProviderRef: "pay_1", amountMinor: 345 }),
+    ]);
+    const disputePayload = JSON.stringify({ event: "payment.dispute.created", created_at: 1_777_000_300, payload: { payment: { entity: { id: "pay_1" } }, dispute: { entity: { id: "disp_1", payment_id: "pay_1", status: "open", amount: 500, currency: "CAD", reason_code: "not_received", respond_by: 1_777_086_700, created_at: 1_777_000_300 } } } });
+    const disputeSignature = createHmac("sha256", "rzp-hook").update(disputePayload).digest("hex");
+    await expect(adapter.verifyWebhook({ headers: { "x-razorpay-signature": disputeSignature, "x-razorpay-event-id": "rzp-dispute-event" }, body: bytes(disputePayload), receivedAt: "2026-08-14T12:00:00Z" })).resolves.toEqual([
+      expect.objectContaining({ kind: "dispute_opened", providerRef: "disp_1", paymentProviderRef: "pay_1", reason: "not_received" }),
+    ]);
+    await expect(adapter.verifyWebhook({ ...request, body: bytes(`${payload}\n`) })).rejects.toMatchObject({ code: "authentication" });
+  });
+});
+
+describe("Paystack payment adapter", () => {
+  it("keeps transaction references exact and verifies SHA-512 settlement feedback", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let reference = "";
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
+      calls.push({ url, init });
+      if (url.endsWith("/transaction/initialize")) {
+        const body = JSON.parse(bodyText(init?.body)) as { reference: string };
+        reference = body.reference;
+        return Response.json({ status: true, data: { reference, authorization_url: "https://paystack.test/checkout" } });
+      }
+      if (url.includes("/transaction/verify/")) return Response.json({ status: true, data: { reference, status: "success", amount: 12_345, currency: "CAD", paid_at: "2026-08-14T12:00:00Z" } });
+      if (url.endsWith("/refund")) return Response.json({ status: true, data: { id: 81, status: "pending" } });
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    const adapter = createPaystackPayments({ secretKey: "paystack-private", apiBase: "https://paystack.example.test", fetch: fetcher });
+    await expect(adapter.createCheckout(invoice)).resolves.toMatchObject({ url: "https://paystack.test/checkout" });
+    expect(reference).toMatch(/^fh_[0-9a-f]+$/);
+    await expect(adapter.captureCheckout({ checkoutRef: reference, idempotencyKey: "capture-1" })).resolves.toMatchObject({ providerRef: reference, status: "succeeded", amountMinor: 12_345 });
+    await expect(adapter.refund({ paymentId: "local", providerRef: reference, currency: "CAD", amountMinor: 345, idempotencyKey: "refund-1" })).resolves.toEqual({ providerRef: "81", status: "pending" });
+
+    const payload = JSON.stringify({ event: "charge.success", data: { reference, status: "success", amount: 12_345, currency: "CAD", paid_at: "2026-08-14T12:00:00Z", metadata: { freeholder_invoice_id: invoice.invoiceId, freeholder_contact_id: invoice.contactId } } });
+    const signature = createHmac("sha512", "paystack-private").update(payload).digest("hex");
+    await expect(adapter.verifyWebhook({ headers: { "x-paystack-signature": signature }, body: bytes(payload), receivedAt: "2026-08-14T12:00:01Z" })).resolves.toEqual([
+      expect.objectContaining({ kind: "payment_succeeded", providerRef: reference, amountMinor: 12_345, invoiceId: invoice.invoiceId }),
+    ]);
+    const refundPayload = JSON.stringify({ event: "refund.processed", data: { refund_reference: "refund-81", transaction_reference: reference, status: "processed", amount: 345, currency: "CAD", updated_at: "2026-08-14T12:03:00Z" } });
+    const refundSignature = createHmac("sha512", "paystack-private").update(refundPayload).digest("hex");
+    await expect(adapter.verifyWebhook({ headers: { "x-paystack-signature": refundSignature }, body: bytes(refundPayload), receivedAt: "2026-08-14T12:03:01Z" })).resolves.toEqual([
+      expect.objectContaining({ kind: "refund_succeeded", providerRef: "refund-81", paymentProviderRef: reference, amountMinor: 345 }),
+    ]);
+  });
+});
+
+describe("Flutterwave payment adapter", () => {
+  it("re-fetches signed successful charges before settlement and requires verified IDs for refunds", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let reference = "";
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
+      calls.push({ url, init });
+      if (url.endsWith("/payments")) {
+        const body = JSON.parse(bodyText(init?.body)) as { tx_ref: string };
+        reference = body.tx_ref;
+        return Response.json({ status: "success", data: { link: "https://flutterwave.test/checkout" } });
+      }
+      if (url.includes("/transactions/verify_by_reference")) return Response.json({ status: "success", data: { id: 991, tx_ref: reference, status: "successful", amount: 123.45, currency: "CAD", created_at: "2026-08-14T12:00:00Z", meta: { freeholder_invoice_id: invoice.invoiceId, freeholder_contact_id: invoice.contactId } } });
+      if (url.endsWith("/transactions/991/refund")) return Response.json({ status: "success", data: { id: 71, status: "completed" } });
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    const adapter = createFlutterwavePayments({ secretKey: "flw-private", webhookSecrets: ["flw-hook"], apiBase: "https://flutterwave.example.test/v3", webhookUrl: "https://shop.example.test/api/payments/webhooks/flutterwave", fetch: fetcher });
+    await expect(adapter.createCheckout(invoice)).resolves.toMatchObject({ url: "https://flutterwave.test/checkout" });
+    await expect(adapter.captureCheckout({ checkoutRef: reference, idempotencyKey: "capture-1" })).resolves.toMatchObject({ providerRef: "991", status: "succeeded", amountMinor: 12_345 });
+    await expect(adapter.refund({ paymentId: "local", providerRef: "991", currency: "CAD", amountMinor: 345, idempotencyKey: "refund-1" })).resolves.toEqual({ providerRef: "71", status: "pending" });
+
+    const payload = JSON.stringify({ id: "flw-event-1", type: "charge.completed", data: { reference, status: "successful" } });
+    const signature = createHmac("sha256", "flw-hook").update(payload).digest("base64");
+    const before = calls.filter((call) => call.url.includes("verify_by_reference")).length;
+    await expect(adapter.verifyWebhook({ headers: { "flutterwave-signature": signature }, body: bytes(payload), receivedAt: "2026-08-14T12:00:01Z" })).resolves.toEqual([
+      expect.objectContaining({ id: "flw-event-1", kind: "payment_succeeded", providerRef: "991", checkoutRef: reference, amountMinor: 12_345, invoiceId: invoice.invoiceId }),
+    ]);
+    expect(calls.filter((call) => call.url.includes("verify_by_reference"))).toHaveLength(before + 1);
+    const refundPayload = JSON.stringify({ id: "flw-refund-event", type: "refund.completed", data: { id: 71, transaction_id: 991, status: "completed-bank-transfer", amount_refunded: 3.45, currency: "CAD", updated_at: "2026-08-14T12:04:00Z" } });
+    const refundSignature = createHmac("sha256", "flw-hook").update(refundPayload).digest("base64");
+    await expect(adapter.verifyWebhook({ headers: { "flutterwave-signature": refundSignature }, body: bytes(refundPayload), receivedAt: "2026-08-14T12:04:01Z" })).resolves.toEqual([
+      expect.objectContaining({ id: "flw-refund-event", kind: "refund_succeeded", providerRef: "71", paymentProviderRef: "991", amountMinor: 345 }),
+    ]);
+    await expect(adapter.refund({ paymentId: "local", providerRef: reference, currency: "CAD", amountMinor: 345, idempotencyKey: "refund-2" })).rejects.toMatchObject({ code: "invalid_request" });
   });
 });
 

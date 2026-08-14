@@ -3633,8 +3633,22 @@ skipped item is checked or weakened.
   suite, production build, real Chromium offline-payment/refund journey and
   WCAG A/AA scan; `deploy/commerce-payments.md` and changeset
   `commerce-payment-providers.md`.)*
-- [ ] **C5.07** Implement Square, Mollie, Razorpay and Paystack/Flutterwave
-  adapters behind the identical contract and contract test suite.
+- [x] **C5.07** Implement Square, Mollie, Razorpay and Paystack/Flutterwave
+  adapters behind the identical contract and contract test suite. *(Evidence:
+  Square Payment Links/order recheck/refunds with rotating exact URL-plus-body
+  signatures; Mollie hosted payments/refunds with private-API-authenticated
+  classic callbacks and rotating next-generation HMAC; Razorpay deterministic
+  reference recovery, Payment Links, refunds and disputes; Paystack unique
+  transaction references, verification, refunds and SHA-512 feedback;
+  Flutterwave Standard, reference verification before settlement, refunds and
+  rotating SHA-256 feedback; one shared provider vocabulary across declarative
+  config, registry, services, reconciliation, admin, doctor and seven raw-body
+  webhook routes; truthful saved-method/dispute/payout/in-person capabilities,
+  exact minor-unit convergence, bounded payloads and digest-only replay-safe
+  receipts; 14-test provider wire/signature suite and 35-test focused database/
+  config/doctor gate; 99 files/1,155 tests, typecheck, lint, licensing, plan,
+  dependency and production-build gates; `deploy/commerce-payments.md` and
+  changeset `commerce-provider-parity.md`.)*
 - [ ] **C5.08** Support deposits, balances, payment plans, tips, pay-what-you-
   want, late fees, partial/multi-payment invoices and provider payout tracking.
 
