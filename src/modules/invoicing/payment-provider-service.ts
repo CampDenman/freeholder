@@ -5,6 +5,11 @@
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, paymentAdapters } from "@/adapters/payments";
+import {
+  HOSTED_PAYMENT_PROVIDER_IDS,
+  LEDGER_PAYMENT_PROVIDER_IDS,
+  isHostedPaymentProvider,
+} from "@/adapters/payments/providers";
 import type { PaymentProviderEvent, SavedPaymentMethodEvidence } from "@/adapters/payments";
 import { AdapterError } from "@/adapters/types";
 import { contacts } from "@/core/contacts/schema";
@@ -35,7 +40,7 @@ import {
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
 const positiveMinor = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const idempotencyKey = z.string().trim().min(1).max(240);
-const provider = z.enum(["stripe", "paypal"]);
+const provider = z.enum(HOSTED_PAYMENT_PROVIDER_IDS);
 const methodKind = z.enum(["card", "wallet", "bank_debit", "bank_redirect", "buy_now_pay_later", "cash", "bank_transfer", "other"]);
 const methodEvidence = z.object({
   providerRef: z.string().trim().min(1).max(500),
@@ -441,6 +446,9 @@ export const beginPaymentCheckout = defineService({
     if (input.saveMethod && input.saveMethodConsent !== true) throw new ServiceError("validation", "Saving a payment method requires the customer's explicit consent.");
     const adapter = paymentAdapter(input.provider);
     if (!adapter.status.available) throw new ServiceError("conflict", adapter.status.message);
+    if (input.saveMethod && !adapter.capabilities().savedMethods) {
+      throw new ServiceError("conflict", `${input.provider} reusable payment methods are not implemented by this adapter.`);
+    }
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
     if (!invoice || !invoice.number) throw new ServiceError("not_found", "That issued invoice is not here.");
     const [contact] = await ctx.tx.select({ id: contacts.id, name: contacts.name, email: contacts.email }).from(contacts).where(eq(contacts.id, invoice.contactId)).limit(1);
@@ -492,7 +500,7 @@ export const completePaymentCheckout = defineService({
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
     if (payment.status === "succeeded") return payment;
-    if (!payment.providerCheckoutRef || !["stripe", "paypal"].includes(payment.provider)) throw new ServiceError("conflict", "That payment has no hosted checkout to complete.");
+    if (!payment.providerCheckoutRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment has no hosted checkout to complete.");
     try {
       const result = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: input.idempotencyKey });
       assertMovement(payment, result);
@@ -512,8 +520,10 @@ export const submitProviderRefund = defineService({
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), idempotencyKey }),
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
-    if (!payment?.providerRef || !["stripe", "paypal"].includes(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
+    if (!payment?.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
+    if (!paymentAdapter(payment.provider).capabilities().refunds) throw new ServiceError("conflict", `${payment.provider} refunds are not implemented by this adapter.`);
     const refund = await ctx.call(createRefund, input);
+    if (refund.status !== "created") return refund;
     try {
       const result = await paymentAdapter(payment.provider).refund({
         paymentId: payment.id,
@@ -597,7 +607,7 @@ export const listPayments = defineService({
   permission: "scoped",
   input: z.object({
     invoiceId: z.string().uuid().optional(),
-    provider: z.enum(["manual", "stripe", "paypal"]).optional(),
+    provider: z.enum(LEDGER_PAYMENT_PROVIDER_IDS).optional(),
     status: z.enum(["created", "processing", "succeeded", "failed", "cancelled"]).optional(),
     limit: z.number().int().min(1).max(5_000).default(200),
   }),
@@ -661,7 +671,7 @@ export const reconcilePaymentProviders = defineService({
   permission: "scoped",
   input: z.object({ provider: provider.optional(), limit: z.number().int().min(1).max(5_000).default(1_000) }),
   handler: async (input, ctx) => {
-    const providerFilter = input.provider ? eq(payments.provider, input.provider) : inArray(payments.provider, ["stripe", "paypal"]);
+    const providerFilter = input.provider ? eq(payments.provider, input.provider) : inArray(payments.provider, HOSTED_PAYMENT_PROVIDER_IDS);
     const unsettled = await ctx.tx.select().from(payments).where(and(providerFilter, inArray(payments.status, ["created", "processing"]))).orderBy(desc(payments.createdAt)).limit(input.limit);
     const openDisputes = await ctx.tx.select().from(paymentDisputes).where(and(input.provider ? eq(paymentDisputes.provider, input.provider) : undefined, eq(paymentDisputes.status, "open"))).orderBy(desc(paymentDisputes.createdAt)).limit(input.limit);
     const events = await ctx.tx.select().from(paymentProviderEvents).where(input.provider ? eq(paymentProviderEvents.provider, input.provider) : undefined).orderBy(desc(paymentProviderEvents.receivedAt)).limit(input.limit);

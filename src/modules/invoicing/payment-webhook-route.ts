@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { paymentAdapter } from "@/adapters/payments";
+import type { HostedPaymentProviderId } from "@/adapters/payments/providers";
 import { AdapterError } from "@/adapters/types";
 import { ServiceError } from "@/core/service";
 import { processPaymentProviderEvents } from "./payment-provider-service";
@@ -26,7 +27,7 @@ async function rawRequest(request: Request) {
   return new Uint8Array(buffer);
 }
 
-export function paymentWebhookRoute(provider: "stripe" | "paypal") {
+export function paymentWebhookRoute(provider: HostedPaymentProviderId) {
   return async (request: Request): Promise<Response> => {
     const receivedAt = new Date().toISOString();
     try {

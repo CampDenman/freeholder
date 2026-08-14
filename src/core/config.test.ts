@@ -13,9 +13,12 @@ describe("defineConfig", () => {
     expect(c.locales).toEqual(["en"]);
   });
 
-  it("rejects unknown adapters", () => {
+  it("accepts every installed payment adapter and rejects unknown ones", () => {
+    for (const payments of ["manual", "stripe", "paypal", "square", "mollie", "razorpay", "paystack", "flutterwave"] as const) {
+      expect(defineConfig({ adapters: { payments } }).adapters.payments).toBe(payments);
+    }
     expect(() =>
-      defineConfig({ adapters: { payments: "square" as never } }),
+      defineConfig({ adapters: { payments: "unknown" as never } }),
     ).toThrow();
   });
 

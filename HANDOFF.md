@@ -4,16 +4,16 @@ Last updated: 2026-08-14 (America/Vancouver)
 
 ## Resume point
 
-Resume `MASTER.md` section 43 at **C5.04 and C5.07**:
+Resume `MASTER.md` section 43 at **C5.04 and C5.08**:
 
 > Finish jurisdiction-correct tax templates beyond the safe standard-rate
-> starters, then extend the now-proven payment contract to Square, Mollie,
-> Razorpay and Paystack/Flutterwave without adding a second ledger.
+> starters, then extend the now-seven-provider payment ledger with deposits,
+> balances, plans, tips, flexible pricing, fees and payout reconciliation.
 
-C5.01, C5.02, C5.03, C5.05 and C5.06 are implemented.
+C5.01, C5.02, C5.03, C5.05, C5.06 and C5.07 are implemented.
 C5.04 remains open because the source-attributed catalog deliberately ships
 standard/base starters with activation interlocks, not a false claim of complete
-US address-level local tax or every reduced/exempt category. C5.07 and the rest
+US address-level local tax or every reduced/exempt category. C5.08 and the rest
 of commerce remain open; provider adapters are real, but public cart checkout
 does not exist until C5.21.
 
@@ -22,8 +22,8 @@ remain open and unchanged; the priority deviation is recorded beside C5 in
 `MASTER.md`. C1.27 remains deliberately dependency-blocked until the required
 C5–C9 domain modules exist.
 
-The working branch is `feat/commerce-payment-adapters`, created from the merged
-C5 money checkpoint `46e68ddd142bc6e8675c40daa28a1132a1321b6d`. The separate
+The working branch is `feat/commerce-provider-parity`, created from the merged
+C5.06 payment checkpoint `cc179b5210b9a2a58ffdf1d8c444e2f959a43d47`. The separate
 `feat/media-capture` branch preserves its clean C1.28 documentation checkpoint
 at `c90456d`; do not mix that checkpoint into commerce.
 
@@ -126,6 +126,53 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
   Stripe/PayPal call was made; the credentialed sandbox checklist is in the
   operator guide.
 
+## C5.07 provider-parity checkpoint delivered behavior
+
+- The identical payment contract now installs Square, Mollie, Razorpay,
+  Paystack and Flutterwave beside Stripe and PayPal. One shared provider tuple
+  drives config validation, service inputs, reconciliation, webhook routes and
+  admin behavior so those surfaces cannot silently drift.
+- Square uses idempotent Payment Links, order/tender rechecks, provider refunds
+  and its exact notification-URL-plus-raw-body HMAC with current/previous key
+  rotation. Payment events join by Square order before settlement changes the
+  local provider reference to the Square payment ID.
+- Mollie creates decimal-string hosted payments and refunds. Its recommended
+  classic callback is authenticated by fetching the named `tr_` resource
+  through the private API before any state is trusted; next-generation events
+  additionally support rotating exact-body SHA-256 signatures.
+- Razorpay recovers a Payment Link by a deterministic 40-character unique
+  reference before create, verifies rotating raw-body signatures, and
+  normalizes Payment Link, refund and open/won/lost dispute events.
+- Paystack keeps its deterministic transaction reference as the safe provider
+  identity, verifies it through the Transaction API, supports refunds and
+  authenticates exact webhook bytes with SHA-512. Unsafe large JSON numeric IDs
+  are never coerced into ledger references.
+- Flutterwave Standard uses a deterministic transaction reference and verifies
+  a signed successful webhook again through `verify_by_reference` before
+  settlement. Refunds require the verified provider transaction ID; plain
+  `completed` remains pending until a rail-specific terminal state.
+- Only adapters with implemented reusable-method behavior advertise saved
+  methods. All five new adapters explicitly keep subscriptions, payouts and
+  in-person behavior off; Razorpay alone advertises dispute convergence among
+  the five. Unsupported save requests are refused before provider checkout.
+- Every provider has a bounded raw-body route, readiness diagnostics, copyable
+  environment names and operator guidance. No C5.07 migration was needed
+  because C5.06 already stored generic provider text and normalized evidence.
+
+## C5.07 local evidence
+
+- Provider wire/signature suite: 14 tests passed, covering checkout, recheck,
+  refunds and settlement/refund feedback for every new provider plus Mollie
+  classic/next-gen authentication, Razorpay disputes, rotation and tampering.
+- Focused provider/service/config/doctor gate: 4 files and 35 tests passed.
+- Full `pnpm test`: 99 files and 1,155 tests passed in 853.78 seconds.
+- `pnpm typecheck`, `pnpm lint`, `pnpm license:check`, `pnpm plan:check`,
+  dependency audit and `git diff --check` passed.
+- `pnpm build` passed with all seven provider routes in the manifest; the known
+  optional `@replit/object-storage` warning remains.
+- Tests used deterministic mocked HTTPS only. No live, sandbox or billable
+  provider request was made. Protected CI remains the browser/Docker evidence.
+
 ## C1.26 delivered behavior
 
 - `demo_scenarios`, `demo_scenario_runs` and `demo_records` normalize immutable
@@ -187,8 +234,7 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 
 1. Finish C5.04's product/category and address-level jurisdiction rules without
    weakening the starter activation interlocks.
-2. Continue C5.07-C5.08 provider parity and advanced money behavior without a
-   second ledger.
+2. Continue C5.08 advanced money behavior without a second ledger.
 3. Build catalog/pricing, then inventory/shipping, then carts/checkout/orders;
    every mutation remains one service-layer transaction and every customer
    reference joins the existing Contact spine.
