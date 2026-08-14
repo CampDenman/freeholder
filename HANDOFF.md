@@ -4,26 +4,26 @@ Last updated: 2026-08-14 (America/Vancouver)
 
 ## Resume point
 
-Resume `MASTER.md` section 43 at **C5.04 and C5.06**:
+Resume `MASTER.md` section 43 at **C5.04 and C5.07**:
 
 > Finish jurisdiction-correct tax templates beyond the safe standard-rate
-> starters, then connect manual/offline, Stripe and PayPal to the normalized
-> money spine with signed/idempotent webhooks.
+> starters, then extend the now-proven payment contract to Square, Mollie,
+> Razorpay and Paystack/Flutterwave without adding a second ledger.
 
-C5.01, C5.02, C5.03 and C5.05 are implemented on the current feature branch.
+C5.01, C5.02, C5.03, C5.05 and C5.06 are implemented.
 C5.04 remains open because the source-attributed catalog deliberately ships
 standard/base starters with activation interlocks, not a false claim of complete
-US address-level local tax or every reduced/exempt category. C5.06 and the rest
-of commerce also remain open; do not mistake a real invoice/payment ledger for
-a functioning checkout.
+US address-level local tax or every reduced/exempt category. C5.07 and the rest
+of commerce remain open; provider adapters are real, but public cart checkout
+does not exist until C5.21.
 
 Commerce is now the active functional workstream by owner decision. C1.28–C4
 remain open and unchanged; the priority deviation is recorded beside C5 in
 `MASTER.md`. C1.27 remains deliberately dependency-blocked until the required
 C5–C9 domain modules exist.
 
-The working branch is `feat/commerce-money-foundation`, created from C1.26's
-merged main commit `bcb9dd1cda83972f82ea3f129ac981aea0823458`. The separate
+The working branch is `feat/commerce-payment-adapters`, created from the merged
+C5 money checkpoint `46e68ddd142bc6e8675c40daa28a1132a1321b6d`. The separate
 `feat/media-capture` branch preserves its clean C1.28 documentation checkpoint
 at `c90456d`; do not mix that checkpoint into commerce.
 
@@ -77,6 +77,54 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
   passed. The standalone Changesets status command still encounters the
   pre-existing legacy `admin-shell` package changeset; the repository's
   authoritative changelog gate passes.
+
+## C5.06 payment-provider checkpoint delivered behavior
+
+- One registry contract now owns manual/offline, Stripe Checkout and PayPal
+  Orders v2 checkout, capture/recheck, refunds, saved-method revocation and
+  normalized provider events. Currency conversion is exact for supported ISO
+  minor exponents and never uses floating-point money.
+- Stripe verifies the exact raw body against rotating webhook secrets, accepts
+  any valid `v1` signature and bounds timestamp age. PayPal delegates signature
+  proof to its official verification endpoint using the transmitted headers.
+- The HTTP boundary caps bodies at 1 MiB. The database stores only unique event
+  IDs, SHA-256 digests and normalized evidence: never raw bodies, signatures,
+  payer payloads or credentials. Early events receive a retryable response;
+  duplicates cannot move money twice.
+- Provider amount/currency disagreement and competing overpayment are refused.
+  Payment, refund and dispute transitions serialize through the existing
+  invoice ledger. Late events cannot roll saved methods or disputes backward.
+- Saved methods require provider-hosted consent and expose only masked
+  projections. Contact merge/undo and privacy export/erasure cover provider
+  customers and method evidence without exposing tokens.
+- `/admin/payments` gives authorized staff provider readiness, offline payment,
+  refund, unsettled-checkout recovery, dispute visibility and saved-method
+  revocation in English, French and Spanish. Money-moving actions use step-up
+  and explicit confirmation.
+- Additive migration `0046_right_swordsman.sql` adds provider customers,
+  methods, disputes and digest-only event receipts plus the nullable checkout
+  reference. Operator guidance is `deploy/commerce-payments.md`; release note
+  is `.changeset/commerce-payment-providers.md`.
+
+## C5.06 local evidence
+
+- Focused provider/invoicing/registry/merge/doctor gate: 7 files and 46
+  tests passed.
+- `pnpm typecheck` and `pnpm lint` passed.
+- `pnpm build` passed in 73.7 seconds; the known optional
+  `@replit/object-storage` warning remains.
+- All five production-build Chromium journeys passed serially in 52.1 seconds.
+  The main journey recorded a CAD 100.00 owner-attested payment, issued a CAD
+  5.00 partial refund, asserted both ledger rows and scanned the payment console
+  for WCAG A/AA.
+- The first complete Vitest pass reached 98/99 files and 1,147/1,148 tests; one
+  unrelated mail permission test exceeded its five-second timeout under the
+  19-minute concurrent database load. Its entire file then passed 9/9 in 12.8
+  seconds in isolation. Protected-branch CI remains the authoritative clean
+  full-suite rerun.
+- Provider tests use deterministic mocked HTTPS. No live, sandbox or billable
+  Stripe/PayPal call was made; the credentialed sandbox checklist is in the
+  operator guide.
 
 ## C1.26 delivered behavior
 
@@ -139,14 +187,12 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 
 1. Finish C5.04's product/category and address-level jurisdiction rules without
    weakening the starter activation interlocks.
-2. Implement C5.06 manual/offline, Stripe and PayPal adapters against the one
-   existing payment/refund state machine and reconciliation surface.
-3. Continue C5.07-C5.08 provider parity and advanced money behavior without a
+2. Continue C5.07-C5.08 provider parity and advanced money behavior without a
    second ledger.
-4. Build catalog/pricing, then inventory/shipping, then carts/checkout/orders;
+3. Build catalog/pricing, then inventory/shipping, then carts/checkout/orders;
    every mutation remains one service-layer transaction and every customer
    reference joins the existing Contact spine.
-5. Check a C5 item only after its migrations, services, user surface, hostile
+4. Check a C5 item only after its migrations, services, user surface, hostile
    and concurrency coverage, operator docs, changeset and full gates exist.
 
 ## Constraints to preserve

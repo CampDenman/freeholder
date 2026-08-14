@@ -42,12 +42,32 @@ export interface InvoiceForCharge {
   cancelUrl: string;
   idempotencyKey: string;
   methodIds?: readonly string[];
+  /** Explicit customer consent captured by the provider-hosted checkout. */
+  saveMethod?: boolean;
+  /** Provider customer reference, never a card or bank-account number. */
+  providerCustomerRef?: string;
 }
 
 export interface CheckoutSession {
+  /** Checkout/session/order reference used until settlement finishes. */
   providerRef: string;
+  /** Settlement reference when the provider creates it with the checkout. */
+  paymentRef?: string;
   url: string;
   expiresAt?: string;
+}
+
+export interface CheckoutCaptureRequest {
+  checkoutRef: string;
+  idempotencyKey: string;
+}
+
+export interface CheckoutCaptureResult {
+  providerRef: string;
+  status: "pending" | "succeeded" | "failed";
+  amountMinor?: number;
+  currency?: string;
+  occurredAt?: string;
 }
 
 export interface RefundRequest {
@@ -64,18 +84,39 @@ export interface RefundResult {
   status: "pending" | "succeeded" | "failed";
 }
 
+export interface SavedMethodRevocationRequest {
+  providerRef: string;
+  idempotencyKey: string;
+}
+
+export interface SavedPaymentMethodEvidence {
+  providerRef: string;
+  providerCustomerRef?: string;
+  kind: PaymentMethodOffer["kind"];
+  label: string;
+  brand?: string;
+  last4?: string;
+  expiryMonth?: number;
+  expiryYear?: number;
+}
+
 export type PaymentProviderEvent =
   | {
       id: string;
-      kind: "payment_succeeded" | "payment_failed" | "payment_cancelled";
+      kind: "payment_processing" | "payment_succeeded" | "payment_failed" | "payment_cancelled";
       providerRef: string;
+      checkoutRef?: string;
       amountMinor?: number;
       currency?: string;
       occurredAt: string;
+      invoiceId?: string;
+      contactId?: string;
+      providerCustomerRef?: string;
+      savedMethod?: SavedPaymentMethodEvidence;
     }
   | {
       id: string;
-      kind: "refund_succeeded" | "refund_failed";
+      kind: "refund_processing" | "refund_succeeded" | "refund_failed";
       providerRef: string;
       paymentProviderRef: string;
       amountMinor?: number;
@@ -90,6 +131,16 @@ export type PaymentProviderEvent =
       amountMinor?: number;
       currency?: string;
       occurredAt: string;
+      reason?: string;
+      evidenceDueAt?: string;
+    }
+  | {
+      id: string;
+      kind: "saved_method_added" | "saved_method_removed";
+      providerCustomerRef?: string;
+      contactId?: string;
+      method: SavedPaymentMethodEvidence;
+      occurredAt: string;
     };
 
 export interface PaymentAdapter {
@@ -103,6 +154,8 @@ export interface PaymentAdapter {
     recurring: boolean;
   }): Promise<readonly PaymentMethodOffer[]>;
   createCheckout(invoice: InvoiceForCharge): Promise<CheckoutSession>;
+  captureCheckout(request: CheckoutCaptureRequest): Promise<CheckoutCaptureResult>;
   refund(request: RefundRequest): Promise<RefundResult>;
+  revokeSavedMethod(request: SavedMethodRevocationRequest): Promise<void>;
   verifyWebhook(request: RawProviderRequest): Promise<readonly PaymentProviderEvent[]>;
 }

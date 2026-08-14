@@ -3617,8 +3617,22 @@ skipped item is checked or weakened.
   lifecycle/database coverage in `tests/core/invoicing.test.ts`; migrations
   `0043_worried_shaman.sql` through `0045_peaceful_puck.sql`; operator guide
   and full local gates.)*
-- [ ] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
-  signed/idempotent webhooks, saved methods, disputes and refunds.
+- [x] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
+  signed/idempotent webhooks, saved methods, disputes and refunds. *(Evidence:
+  one capability-discovered adapter contract for owner-attested offline money,
+  Stripe Checkout and PayPal Orders v2; exact-minor-unit conversion across
+  ISO zero/two/three/four-decimal currencies; authenticated raw-byte Stripe
+  signatures with rotation and timestamp bounds plus PayPal provider-side
+  signature verification; 1 MiB webhook bounds, digest-only unique receipts,
+  retry-safe out-of-order handling and amount/currency/overpay refusal; the
+  existing transaction-safe payment/refund ledger owns capture, async
+  settlement and provider refunds; consent-bound masked saved methods,
+  provider-order dispute convergence and revocation; readiness diagnostics,
+  translated `/admin/payments` recovery/record/refund console, contact merge/
+  privacy coverage, migration `0046_right_swordsman.sql`, 46-test focused
+  suite, production build, real Chromium offline-payment/refund journey and
+  WCAG A/AA scan; `deploy/commerce-payments.md` and changeset
+  `commerce-payment-providers.md`.)*
 - [ ] **C5.07** Implement Square, Mollie, Razorpay and Paystack/Flutterwave
   adapters behind the identical contract and contract test suite.
 - [ ] **C5.08** Support deposits, balances, payment plans, tips, pay-what-you-

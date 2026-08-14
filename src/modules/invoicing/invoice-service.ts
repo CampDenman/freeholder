@@ -24,6 +24,8 @@ import {
   invoiceSequences,
   invoices,
   moneyStateEvents,
+  paymentMethods,
+  paymentProviderCustomers,
   payments,
   refunds,
   taxExemptions,
@@ -111,7 +113,7 @@ async function lock(tx: Tx, kind: string, id: string): Promise<void> {
 
 async function stateEvent(
   ctx: ServiceContext,
-  subjectType: "invoice" | "payment" | "refund" | "credit_note",
+  subjectType: "invoice" | "payment" | "refund" | "credit_note" | "dispute",
   subjectId: string,
   fromState: string | null,
   toState: string,
@@ -170,7 +172,7 @@ interface PointerRow {
 }
 
 function registerPointer(
-  table: "invoices" | "tax_exemptions",
+  table: "invoices" | "tax_exemptions" | "payment_provider_customers" | "payment_methods",
   selectRows: (tx: Tx, ids: string[]) => Promise<PointerRow[]>,
   repointRows: (tx: Tx, from: string, to: string) => Promise<unknown>,
 ): void {
@@ -190,15 +192,19 @@ function registerPointer(
       if (current.length !== after.length || after.some((row) => currentById.get(row.id) !== row.contactId)) {
         throw new ServiceError(
           "conflict",
-          `${table === "invoices" ? "An invoice" : "A tax exemption"} changed after this merge. Leave the merge in place or restore that record first.`,
+          `A ${table.replaceAll("_", " ")} record changed after this merge. Leave the merge in place or restore that record first.`,
         );
       }
       const movedIds = before.filter((row) => row.contactId === duplicateId).map((row) => row.id);
       if (movedIds.length === 0) return;
       if (table === "invoices") {
         await tx.update(invoices).set({ contactId: duplicateId }).where(inArray(invoices.id, movedIds));
-      } else {
+      } else if (table === "tax_exemptions") {
         await tx.update(taxExemptions).set({ contactId: duplicateId }).where(inArray(taxExemptions.id, movedIds));
+      } else if (table === "payment_provider_customers") {
+        await tx.update(paymentProviderCustomers).set({ contactId: duplicateId }).where(inArray(paymentProviderCustomers.id, movedIds));
+      } else {
+        await tx.update(paymentMethods).set({ contactId: duplicateId }).where(inArray(paymentMethods.id, movedIds));
       }
     },
   });
@@ -214,16 +220,28 @@ registerPointer(
   (tx, ids) => tx.select({ id: taxExemptions.id, contactId: taxExemptions.contactId }).from(taxExemptions).where(inArray(taxExemptions.contactId, ids)),
   (tx, from, to) => tx.update(taxExemptions).set({ contactId: to }).where(eq(taxExemptions.contactId, from)),
 );
+registerPointer(
+  "payment_provider_customers",
+  (tx, ids) => tx.select({ id: paymentProviderCustomers.id, contactId: paymentProviderCustomers.contactId }).from(paymentProviderCustomers).where(inArray(paymentProviderCustomers.contactId, ids)),
+  (tx, from, to) => tx.update(paymentProviderCustomers).set({ contactId: to }).where(eq(paymentProviderCustomers.contactId, from)),
+);
+registerPointer(
+  "payment_methods",
+  (tx, ids) => tx.select({ id: paymentMethods.id, contactId: paymentMethods.contactId }).from(paymentMethods).where(inArray(paymentMethods.contactId, ids)),
+  (tx, from, to) => tx.update(paymentMethods).set({ contactId: to }).where(eq(paymentMethods.contactId, from)),
+);
 
 registerContactPrivacySource({
   scope: "commerce.money",
-  tables: ["invoices", "tax_exemptions"],
+  tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods"],
   exportData: async (tx, contactId) => {
     const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
     const ids = owned.map((row) => row.id);
     return {
       invoices: await Promise.all(ids.map((id) => invoiceBundle(tx, id))),
       taxExemptions: await tx.select().from(taxExemptions).where(eq(taxExemptions.contactId, contactId)),
+      paymentProviderCustomers: await tx.select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)),
+      paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),
     };
   },
   erase: async (tx, contactId) => {
@@ -247,6 +265,12 @@ registerContactPrivacySource({
         .set({ certificateRef: null, status: "revoked" })
         .where(eq(taxExemptions.contactId, contactId))
         .returning({ id: taxExemptions.id })
+    ).length;
+    affected += (
+      await tx.delete(paymentMethods).where(eq(paymentMethods.contactId, contactId)).returning({ id: paymentMethods.id })
+    ).length;
+    affected += (
+      await tx.delete(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)).returning({ id: paymentProviderCustomers.id })
     ).length;
     return { affected };
   },
@@ -818,14 +842,26 @@ export const startPayment = defineService({
   summary: "Move a created provider payment into processing.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: z.string().uuid(), providerRef: z.string().trim().min(1).max(500).optional() }),
+  input: z.object({
+    id: z.string().uuid(),
+    providerRef: z.string().trim().min(1).max(500).optional(),
+    providerCheckoutRef: z.string().trim().min(1).max(500).optional(),
+  }),
   handler: async (input, ctx) => {
     await lock(ctx.tx, "payment", input.id);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.id)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
-    if (payment.status === "processing") return payment;
+    if (payment.status === "processing") {
+      if (input.providerRef && payment.providerRef && input.providerRef !== payment.providerRef) throw new ServiceError("conflict", "That payment is already processing under a different provider reference.");
+      if (input.providerCheckoutRef && payment.providerCheckoutRef && input.providerCheckoutRef !== payment.providerCheckoutRef) throw new ServiceError("conflict", "That payment is already processing under a different checkout reference.");
+      return payment;
+    }
     if (payment.status !== "created") throw new ServiceError("conflict", "Only a created payment can start processing.");
-    const [updated] = await ctx.tx.update(payments).set({ status: "processing", providerRef: input.providerRef }).where(eq(payments.id, payment.id)).returning();
+    const [updated] = await ctx.tx.update(payments).set({
+      status: "processing",
+      providerRef: input.providerRef,
+      providerCheckoutRef: input.providerCheckoutRef,
+    }).where(eq(payments.id, payment.id)).returning();
     await stateEvent(ctx, "payment", payment.id, "created", "processing");
     ctx.queueEvent("payment.processing", { paymentId: payment.id, invoiceId: payment.invoiceId });
     ctx.setSubject("payment", payment.id);

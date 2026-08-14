@@ -460,6 +460,34 @@ async function checkNotificationChannels(): Promise<Check[]> {
   );
 }
 
+/** Configuration-only: a doctor run never creates a checkout or moves money. */
+async function checkPayments(): Promise<Check> {
+  const { paymentAdapter } = await import("@/adapters/payments");
+  const adapter = paymentAdapter();
+  if (adapter.id === "manual") {
+    return ok(
+      "payments.provider",
+      "Payments",
+      "Offline cash, cheque, bank-transfer, and external-card records are available through the shared invoice ledger.",
+    );
+  }
+  if (!adapter.status.available) {
+    return fail(
+      "payments.provider",
+      "Payments",
+      adapter.status.message,
+      adapter.id === "stripe"
+        ? `Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET, then point Stripe at ${env().APP_URL.replace(/\/+$/, "")}/api/payments/webhooks/stripe.`
+        : `Set PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, and PAYPAL_WEBHOOK_ID, choose PAYPAL_ENVIRONMENT, then point PayPal at ${env().APP_URL.replace(/\/+$/, "")}/api/payments/webhooks/paypal.`,
+    );
+  }
+  return ok(
+    "payments.provider",
+    "Payments",
+    `${adapter.id} API credentials and authenticated feedback are configured. Doctor did not create a checkout, refund, or other provider charge.`,
+  );
+}
+
 async function checkJobs(): Promise<Check> {
   const { listJobs } = await import("@/core/jobs");
   const jobs = [...listJobs().values()];
@@ -699,6 +727,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     await checkMalwareScanner(),
     await checkAltTextSuggester(),
     ...(await checkMail()),
+    await checkPayments(),
     ...(await checkNotificationChannels()),
     await checkJobs(),
     ...(await checkCredentialKey()),

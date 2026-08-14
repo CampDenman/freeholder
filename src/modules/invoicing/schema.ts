@@ -343,6 +343,7 @@ export const payments = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "restrict" }),
     provider: text("provider").notNull(),
+    providerCheckoutRef: text("provider_checkout_ref"),
     providerRef: text("provider_ref"),
     idempotencyKey: text("idempotency_key").notNull(),
     requestHash: text("request_hash").notNull(),
@@ -364,6 +365,7 @@ export const payments = pgTable(
   (t) => [
     uniqueIndex("payments_idempotency_idx").on(t.provider, t.idempotencyKey),
     uniqueIndex("payments_provider_ref_idx").on(t.provider, t.providerRef),
+    uniqueIndex("payments_provider_checkout_ref_idx").on(t.provider, t.providerCheckoutRef),
     index("payments_invoice_idx").on(t.invoiceId, t.createdAt),
     index("payments_status_idx").on(t.status, t.createdAt),
     check("payments_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
@@ -374,6 +376,61 @@ export const payments = pgTable(
     check("payments_metadata_object", sql`jsonb_typeof(${t.metadata}) = 'object'`),
     check("payments_success_consistent", sql`${t.status} <> 'succeeded' or (${t.providerRef} is not null and ${t.processedAt} is not null)`),
     check("payments_failure_consistent", sql`${t.status} <> 'failed' or ${t.failedAt} is not null`),
+  ],
+);
+
+export const paymentProviderCustomers = pgTable(
+  "payment_provider_customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
+    provider: text("provider").notNull(),
+    providerCustomerRef: text("provider_customer_ref").notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("payment_provider_customers_contact_idx").on(t.contactId, t.provider),
+    uniqueIndex("payment_provider_customers_ref_idx").on(t.provider, t.providerCustomerRef),
+    index("payment_provider_customers_contact_created_idx").on(t.contactId, t.createdAt),
+    check("payment_provider_customers_provider_valid", sql`length(trim(${t.provider})) between 1 and 100`),
+    check("payment_provider_customers_ref_valid", sql`length(trim(${t.providerCustomerRef})) between 1 and 500`),
+  ],
+);
+
+export const paymentMethods = pgTable(
+  "payment_methods",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
+    provider: text("provider").notNull(),
+    providerMethodRef: text("provider_method_ref").notNull(),
+    providerCustomerRef: text("provider_customer_ref"),
+    kind: text("kind", { enum: ["card", "wallet", "bank_debit", "bank_redirect", "buy_now_pay_later", "cash", "bank_transfer", "other"] }).notNull(),
+    label: text("label").notNull(),
+    brand: text("brand"),
+    last4: text("last4"),
+    expiryMonth: integer("expiry_month"),
+    expiryYear: integer("expiry_year"),
+    status: text("status", { enum: ["active", "revoked", "expired"] }).notNull().default("active"),
+    consentSource: text("consent_source").notNull(),
+    consentedAt: timestamp("consented_at", { withTimezone: true }).notNull(),
+    providerStatusAt: timestamp("provider_status_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("payment_methods_provider_ref_idx").on(t.provider, t.providerMethodRef),
+    index("payment_methods_contact_status_idx").on(t.contactId, t.status, t.createdAt),
+    index("payment_methods_customer_ref_idx").on(t.provider, t.providerCustomerRef),
+    check("payment_methods_provider_valid", sql`length(trim(${t.provider})) between 1 and 100`),
+    check("payment_methods_ref_valid", sql`length(trim(${t.providerMethodRef})) between 1 and 500`),
+    check("payment_methods_label_valid", sql`length(trim(${t.label})) between 1 and 200`),
+    check("payment_methods_last4_valid", sql`${t.last4} is null or ${t.last4} ~ '^[A-Za-z0-9]{2,4}$'`),
+    check("payment_methods_expiry_pair", sql`(${t.expiryMonth} is null and ${t.expiryYear} is null) or (${t.expiryMonth} between 1 and 12 and ${t.expiryYear} between 2000 and 9999)`),
+    check("payment_methods_status_valid", sql`${t.status} in ('active','revoked','expired')`),
+    check("payment_methods_revocation_consistent", sql`${t.status} <> 'revoked' or ${t.revokedAt} is not null`),
   ],
 );
 
@@ -411,6 +468,62 @@ export const refunds = pgTable(
     check("refunds_status_valid", sql`${t.status} in ('created','processing','succeeded','failed','cancelled')`),
     check("refunds_success_consistent", sql`${t.status} <> 'succeeded' or (${t.providerRef} is not null and ${t.processedAt} is not null)`),
     check("refunds_failure_consistent", sql`${t.status} <> 'failed' or ${t.failedAt} is not null`),
+  ],
+);
+
+export const paymentDisputes = pgTable(
+  "payment_disputes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paymentId: uuid("payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "restrict" }),
+    provider: text("provider").notNull(),
+    providerRef: text("provider_ref").notNull(),
+    providerPaymentRef: text("provider_payment_ref").notNull(),
+    status: text("status", { enum: ["open", "won", "lost"] }).notNull().default("open"),
+    currency: text("currency").notNull(),
+    amountMinor: amount("amount_minor"),
+    reason: text("reason"),
+    evidenceDueAt: timestamp("evidence_due_at", { withTimezone: true }),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+    providerStatusAt: timestamp("provider_status_at", { withTimezone: true }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("payment_disputes_provider_ref_idx").on(t.provider, t.providerRef),
+    index("payment_disputes_payment_idx").on(t.paymentId, t.createdAt),
+    index("payment_disputes_invoice_idx").on(t.invoiceId, t.createdAt),
+    index("payment_disputes_status_due_idx").on(t.status, t.evidenceDueAt),
+    check("payment_disputes_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("payment_disputes_amount_positive", sql`${t.amountMinor} > 0`),
+    check("payment_disputes_status_valid", sql`${t.status} in ('open','won','lost')`),
+    check("payment_disputes_closed_consistent", sql`(${t.status} = 'open' and ${t.closedAt} is null) or (${t.status} <> 'open' and ${t.closedAt} is not null)`),
+  ],
+);
+
+export const paymentProviderEvents = pgTable(
+  "payment_provider_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    providerEventId: text("provider_event_id").notNull(),
+    kind: text("kind").notNull(),
+    providerObjectRef: text("provider_object_ref"),
+    bodySha256: text("body_sha256").notNull(),
+    status: text("status", { enum: ["processed", "ignored"] }).notNull(),
+    detail: text("detail"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payment_provider_events_provider_id_idx").on(t.provider, t.providerEventId),
+    index("payment_provider_events_status_received_idx").on(t.status, t.receivedAt),
+    index("payment_provider_events_object_idx").on(t.provider, t.providerObjectRef),
+    check("payment_provider_events_hash_valid", sql`length(${t.bodySha256}) = 64`),
+    check("payment_provider_events_status_valid", sql`${t.status} in ('processed','ignored')`),
   ],
 );
 
@@ -476,7 +589,7 @@ export const moneyStateEvents = pgTable(
   "money_state_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    subjectType: text("subject_type", { enum: ["invoice", "payment", "refund", "credit_note"] }).notNull(),
+    subjectType: text("subject_type", { enum: ["invoice", "payment", "refund", "credit_note", "dispute"] }).notNull(),
     subjectId: uuid("subject_id").notNull(),
     fromState: text("from_state"),
     toState: text("to_state").notNull(),
@@ -487,7 +600,7 @@ export const moneyStateEvents = pgTable(
   },
   (t) => [
     index("money_state_events_subject_idx").on(t.subjectType, t.subjectId, t.occurredAt),
-    check("money_state_events_subject_valid", sql`${t.subjectType} in ('invoice','payment','refund','credit_note')`),
+    check("money_state_events_subject_valid", sql`${t.subjectType} in ('invoice','payment','refund','credit_note','dispute')`),
     check("money_state_events_transition_valid", sql`${t.fromState} is null or ${t.fromState} <> ${t.toState}`),
     check("money_state_events_metadata_object", sql`jsonb_typeof(${t.metadata}) = 'object'`),
   ],

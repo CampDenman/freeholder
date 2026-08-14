@@ -111,6 +111,7 @@ export default async function AdminLayout({
               invitations: t("admin.nav.invitations"),
               builder: t("admin.nav.builder"),
               demos: t("admin.nav.demos"),
+              payments: t("payments.title"),
             }}
           />
         </div>
