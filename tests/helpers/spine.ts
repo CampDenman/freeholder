@@ -9,6 +9,7 @@ import { db } from "@/core/db";
 import manifests from "@/modules";
 import type { Actor, ServiceError } from "@/core/service";
 import { seedDefaultRoles } from "@/core/roles/defaults";
+import { seedCoreGuidanceFlows } from "@/core/guidance/definitions";
 
 export const hasDatabase = Boolean(process.env.DATABASE_URL);
 
@@ -75,7 +76,10 @@ export async function truncateSpine(): Promise<void> {
   await db().execute(
     sql.raw(`truncate table ${names.join(", ")} restart identity cascade`),
   );
-  await db().transaction(seedDefaultRoles);
+  await db().transaction(async (tx) => {
+    await seedDefaultRoles(tx);
+    await seedCoreGuidanceFlows(tx);
+  });
 }
 
 export { closeDb } from "@/core/db";

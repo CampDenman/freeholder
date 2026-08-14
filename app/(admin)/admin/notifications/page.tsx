@@ -296,35 +296,37 @@ export default async function NotificationsPage({
         />
       </section>
 
-      <Card>
-        <CardHeader title={t("notifications.schedule")} />
-        <CardBody>
-          <p className="max-w-prose text-sm text-ink-muted">{t("notifications.scheduleIntro")}</p>
-          <div className="max-w-lg">
-            <DigestSettingsForm
-              values={{
-                digestCadence: settings.digestCadence,
-                digestMinute: settings.digestMinute,
-                digestWeekday: settings.digestWeekday,
-                timezone: settings.timezone ?? business?.timezone ?? "UTC",
-                escalationMinutes: settings.escalationMinutes,
-              }}
-              labels={labels}
-              fields={{
-                cadence: t("notifications.cadence"),
-                daily: t("notifications.cadence.daily"),
-                weekly: t("notifications.cadence.weekly"),
-                weekday: t("notifications.weekday"),
-                weekdays: Array.from({ length: 7 }, (_, index) => t(`notifications.weekday.${index + 1}`)),
-                time: t("notifications.time"),
-                timezone: t("business.timezone"),
-                escalation: t("notifications.escalationDelay"),
-                escalationHint: t("notifications.escalationHint"),
-              }}
-            />
-          </div>
-        </CardBody>
-      </Card>
+      <section id="notification-schedule" className="scroll-mt-6">
+        <Card>
+          <CardHeader title={t("notifications.schedule")} />
+          <CardBody>
+            <p className="max-w-prose text-sm text-ink-muted">{t("notifications.scheduleIntro")}</p>
+            <div className="max-w-lg">
+              <DigestSettingsForm
+                values={{
+                  digestCadence: settings.digestCadence,
+                  digestMinute: settings.digestMinute,
+                  digestWeekday: settings.digestWeekday,
+                  timezone: settings.timezone ?? business?.timezone ?? "UTC",
+                  escalationMinutes: settings.escalationMinutes,
+                }}
+                labels={labels}
+                fields={{
+                  cadence: t("notifications.cadence"),
+                  daily: t("notifications.cadence.daily"),
+                  weekly: t("notifications.cadence.weekly"),
+                  weekday: t("notifications.weekday"),
+                  weekdays: Array.from({ length: 7 }, (_, index) => t(`notifications.weekday.${index + 1}`)),
+                  time: t("notifications.time"),
+                  timezone: t("business.timezone"),
+                  escalation: t("notifications.escalationDelay"),
+                  escalationHint: t("notifications.escalationHint"),
+                }}
+              />
+            </div>
+          </CardBody>
+        </Card>
+      </section>
     </div>
   );
 }

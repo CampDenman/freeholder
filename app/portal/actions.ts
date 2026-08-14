@@ -24,6 +24,11 @@ import { getLocale, getT, requestedLocale } from "../i18n";
 import { setMyLocale } from "@/core/i18n/service";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
+import {
+  dismissGuidance,
+  resetGuidance,
+  startGuidance,
+} from "@/core/guidance/service";
 
 export interface MagicLinkState {
   sent?: boolean;
@@ -222,6 +227,24 @@ export async function portalPrivacyAction(
   revalidatePath("/portal/privacy");
   const t = await getT();
   return { saved: true, message: t(messageKey) };
+}
+
+export async function portalGuidanceAction(form: FormData): Promise<void> {
+  const flowKey = field(form, "flowKey");
+  const intent = field(form, "intent");
+  const rawReturnTo = field(form, "returnTo");
+  const returnTo = /^\/(?:[A-Za-z]{2}(?:-[A-Za-z]{2,4})?\/)?portal(?:[/?#]|$)/
+    .test(rawReturnTo) && !rawReturnTo.startsWith("//")
+    ? rawReturnTo
+    : "/portal/privacy#guidance";
+  const actor = await currentPortalActor();
+  if (intent === "start") await startGuidance.call({ flowKey }, actor);
+  else if (intent === "dismiss") await dismissGuidance.call({ flowKey }, actor);
+  else if (intent === "reset") await resetGuidance.call({ flowKey }, actor);
+  else throw new ServiceError("validation", "Choose a guidance action.");
+  revalidatePath("/portal", "layout");
+  revalidatePath("/portal/privacy");
+  redirect(returnTo);
 }
 
 export async function portalSignOutAction(): Promise<void> {

@@ -20,6 +20,7 @@ import {
 import { defineService, ServiceError } from "@/core/service";
 import { rateLimitKey, reset as resetRateLimit } from "@/core/security/rate-limit";
 import { seedDefaultRoles } from "@/core/roles/defaults";
+import { seedCoreGuidanceFlows } from "@/core/guidance/definitions";
 import { createLoginChallenge } from "@/core/auth/two-factor";
 import { recordSuccessfulLogin } from "@/core/auth/session-management/service";
 
@@ -71,6 +72,7 @@ export const registerOwner = defineService({
     // a test database or a restored pre-role database still gets the same
     // data-backed permission catalogue before the owner row refers to it.
     await seedDefaultRoles(ctx.tx);
+    await seedCoreGuidanceFlows(ctx.tx);
     const [row] = await ctx.tx.select({ n: count() }).from(users);
     if ((row?.n ?? 0) > 0) {
       throw new ServiceError(

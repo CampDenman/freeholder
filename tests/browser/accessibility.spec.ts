@@ -214,6 +214,9 @@ async function assertScreenReaderTree(page: Page, surface: Surface) {
   } else if (surface === "admin") {
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Admin sections" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Your first wins" })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: /tasks complete/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Guided help" })).toBeVisible();
     expect(tree).toContain("Admin sections");
   } else if (surface === "editor") {
     await expect(page.getByRole("heading", { level: 1, name: "Aurora Coast Photography" })).toBeVisible();
@@ -228,6 +231,9 @@ async function assertScreenReaderTree(page: Page, surface: Surface) {
   } else {
     await expect(page.getByRole("heading", { level: 1, name: "Privacy centre" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Your first wins" })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: /tasks complete/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Guided help" })).toBeVisible();
     expect(tree).toContain("Privacy centre");
   }
 }
@@ -402,6 +408,18 @@ test.describe("real-browser accessibility", () => {
     await test.step("portal", async () => {
       await page.goto("/portal/privacy");
       await assertSurface(page, "portal");
+      const guide = page.locator('[data-guidance-flow="core.customer-first-win"]');
+      await guide.getByRole("button", { name: "Start guide" }).click();
+      await expect(guide.getByRole("progressbar")).toHaveAttribute(
+        "aria-label",
+        "1 of 2 tasks complete",
+      );
+      await page.locator("#privacy-preferences").getByRole("button", { name: "Allow" }).first().click();
+      await expect(guide.getByRole("progressbar")).toHaveAttribute(
+        "aria-label",
+        "2 of 2 tasks complete",
+      );
+      await expect(guide.locator("header").getByText("Completed")).toBeVisible();
     });
   });
 });
