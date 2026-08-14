@@ -6,17 +6,22 @@ Last updated: 2026-08-13 (America/Vancouver)
 
 Resume `MASTER.md` §43 at **C1.26**:
 
-> Ship deterministic creator, service, shop and everything demo scenarios with
-> realistic cross-module states, locale variants, expected-outcome journeys,
-> visible isolation and idempotent one-action load/reset/purge; add module/
-> plugin manifest contributions and conformance tests so any feature can add or
-> revise demos and onboarding without framework changes.
+> Build the normalized, versioned `DemoScenario` definition/run/provenance
+> model and typed public manifest contract through which core, modules and
+> plugins contribute fixtures, guidance steps, locale variants, expected
+> outcomes and purge handlers; validate dependencies, capabilities, targets
+> and cleanup, add hostile fixture-plugin conformance, and prove deterministic
+> transactional load/reload/reset/purge with visibly isolated current-module
+> fixture data.
 
 The working branch is `feat/deterministic-demos`, created directly from C1.25's
 merge commit `3de729c0d8d7d6f4850050307cde167db5e843d1` on synchronized `main`.
-No C1.26 implementation exists yet. Complete repository discovery and split the
-checklist item in `MASTER.md` before coding if one reviewable change cannot
-honestly satisfy the full contract.
+No C1.26 implementation exists yet. Repository discovery proved the original
+item depended on the unimplemented C5–C9 booking, commerce, gallery,
+conversation and reporting domains. `MASTER.md` now keeps the reviewable
+registry/orchestration foundation in C1.26 and preserves the complete four-
+scenario product obligation as dependency-blocked C1.27; capture and phone
+ingest moved mechanically to C1.28 and C1.29.
 
 C1.25 is delivered in PR #96. PR CI `31762010303`, post-merge CI
 `31762514806`, and image publication `31762514808` all passed; the latter
@@ -180,15 +185,15 @@ Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
 1. Inspect the current seed/demo schema, services, boot path, reset/purge
    helpers, browser fixtures, module manifest, plugin seams and guidance
    definition registry before changing code.
-2. Map the exact creator, service, shop and everything scenario states and
-   expected-outcome journeys against existing modules and seed capabilities.
-3. Decide whether C1.26 is one reviewable change. If not, split it in
-   `MASTER.md` before implementation without weakening its acceptance contract.
+2. Specify the `DemoScenario`, run/provenance and contribution schemas plus
+   their dependency, capability, target, locale, outcome and cleanup rules.
+3. Design the transactional orchestrator and service/API/UI lifecycle for
+   deterministic load, safe reload/reset and exact purge of marked data.
 4. Design manifest contributions so a fixture plugin can add or revise demo
    and onboarding material without editing the core scenario loader.
-5. Implement only after that discovery, preserving deterministic load/reset/
-   purge, locale variants, visible isolation and the C1.25 guidance registry
-   seam.
+5. Implement the current-module fixture and hostile fixture-plugin conformance
+   proof without pretending the dependency-blocked full scenarios already
+   contain later domain data.
 
 ## Constraints to preserve
 
