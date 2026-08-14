@@ -13,7 +13,8 @@ export interface TaxAddress {
 
 export interface TaxQuoteItem {
   id: string;
-  quantity: number;
+  /** Six-decimal fixed-point quantity. 1 unit = 1_000_000 micros. */
+  quantityMicros: number;
   unitAmountMinor: number;
   discountMinor: number;
   category: string;
@@ -35,7 +36,8 @@ export interface QuotedTaxLine {
   itemId?: string;
   jurisdiction: string;
   name: string;
-  rateBasisPoints: number;
+  /** Integer parts per million: 99_750 = 9.975%. */
+  ratePartsPerMillion: number;
   taxableMinor: number;
   taxMinor: number;
   inclusive: boolean;

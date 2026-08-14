@@ -36,6 +36,7 @@ const ADMIN_MODULES = [
   "forms",
   "i18n",
   "invitations",
+  "invoicing",
   "locations",
   "mail",
   "media",
@@ -74,9 +75,12 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
   {
     key: "bookkeeper",
     name: "Bookkeeper",
-    description: "Reads business, contact, activity, and reporting information.",
+    description: "Manages invoicing and reads business, contact, activity, and reporting information.",
     assignable: true,
-    grants: view(["admin", "analytics", "contacts", "events", "settings"]),
+    grants: [
+      ...view(["admin", "analytics", "contacts", "events", "settings"]),
+      ...manage(["invoicing"]),
+    ],
   },
   {
     key: "service-provider",

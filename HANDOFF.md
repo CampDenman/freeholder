@@ -4,14 +4,18 @@ Last updated: 2026-08-14 (America/Vancouver)
 
 ## Resume point
 
-Resume `MASTER.md` section 43 at **C5.01**:
+Resume `MASTER.md` section 43 at **C5.04 and C5.06**:
 
-> Land `none` plus real adapter contracts for payments, tax, calendar, SMS,
-> bulk mail, AI, social, shipping/carrier and point-of-sale edges.
+> Finish jurisdiction-correct tax templates beyond the safe standard-rate
+> starters, then connect manual/offline, Stripe and PayPal to the normalized
+> money spine with signed/idempotent webhooks.
 
-C5.01 is implemented in the current worktree. After its full gates and signed
-checkpoint, advance the resume point to C5.02/C5.05's tax and normalized money
-spine; do not mistake adapter contracts for a functioning checkout.
+C5.01, C5.02, C5.03 and C5.05 are implemented on the current feature branch.
+C5.04 remains open because the source-attributed catalog deliberately ships
+standard/base starters with activation interlocks, not a false claim of complete
+US address-level local tax or every reduced/exempt category. C5.06 and the rest
+of commerce also remain open; do not mistake a real invoice/payment ledger for
+a functioning checkout.
 
 Commerce is now the active functional workstream by owner decision. C1.28–C4
 remain open and unchanged; the priority deviation is recorded beside C5 in
@@ -28,6 +32,51 @@ older local document outside this checkpoint.
 
 GitHub requires the `DCO` and `checks` statuses but does not require
 cryptographic commit signatures. Use `git commit -s` for every commit.
+
+## C5 money/tax checkpoint delivered behavior
+
+- The `invoicing` module owns 14 normalized tables for categories, zones,
+  rates, registrations, exemptions, invoice sequences, invoices/lines,
+  immutable tax lines, payments, refunds, credit notes/lines and state events.
+- Money uses integer minor units and six-decimal fixed quantities. Unsafe,
+  floating, negative, underflow and inconsistent totals are refused in services
+  and backed by PostgreSQL checks.
+- Draft, issue/view/overdue/void, partial/multi-payment, cancellation, refund
+  reservation/settlement/cancellation, credit note, receipt and reconciliation
+  services are idempotent, audited and projected through the normal API/MCP
+  registry. Number allocation and settlement are transaction/concurrency safe.
+- Taxes match the most-specific country/region/postal zone and support category
+  overrides, shipping, effective dates, inclusive/exclusive prices, compound
+  order, line/invoice scope, half-up/bankers rounding, exemptions and reverse
+  charge. Rates use integer PPM so 9.975% is exact.
+- Invoices retain the matched zone and immutable rate/registration/calculation
+  evidence. A matching zone without active collection records an explicit
+  explanation rather than silently showing zero.
+- Threshold reports never combine currencies and show gross, refunds, net,
+  transaction count, remaining amount and progress.
+- The catalog contains 94 dated/source-attributed starters: 13 Canada, 27 EU,
+  UK, Australia, New Zealand and 51 US state/DC bases. Installation is
+  idempotent and monitoring-only; activation requires explicit review.
+- Contact merge undo, privacy export/erasure, role grants, events, module-table
+  ownership, generated services and completeness registries include commerce.
+- Additive migrations are `0043_worried_shaman.sql`,
+  `0044_nervous_maelstrom.sql` and `0045_peaceful_puck.sql`. Operator guidance
+  is `deploy/commerce-money.md`; release note is
+  `.changeset/commerce-money-foundation.md`.
+
+## C5 money/tax local evidence
+
+- Focused commerce/concurrency/completeness gate: 4 files, 29 tests passed.
+- Isolated diagnosis gate after a machine-load timeout: agent, demo, locale and
+  commerce suites, 5 files/72 tests passed.
+- Final uncontended `pnpm test`: 97 files/1,137 tests passed in 990.41 seconds.
+- `pnpm build`: passed in 69.2 seconds; the known optional
+  `@replit/object-storage` warning remains.
+- `pnpm lint`, `pnpm typecheck`, `pnpm plan:check`, `pnpm license:check`,
+  dependency audit, changelog gate, schema compatibility and `git diff --check`
+  passed. The standalone Changesets status command still encounters the
+  pre-existing legacy `admin-shell` package changeset; the repository's
+  authoritative changelog gate passes.
 
 ## C1.26 delivered behavior
 
@@ -64,7 +113,7 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
   migrations, rollback and post-deploy verification. The release changeset is
   `.changeset/deterministic-demo-scenarios.md`.
 
-## Final local evidence
+## Last merged baseline evidence
 
 - `pnpm test`: 94/94 files and 1,108/1,108 tests passed in 614.82 seconds.
 - `pnpm test:browser`: 5/5 serial Chromium tests passed in 1.3 minutes,
@@ -88,12 +137,12 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 
 ## C5 commerce sequence
 
-1. Land C5.01 adapter contracts and safe `none` implementations without
-   fabricating provider behavior.
-2. Build C5.05's normalized invoice/payment/refund/credit-note money spine with
-   integer minor-unit invariants, explicit state transitions and idempotency.
-3. Add the tax engine and jurisdiction templates before checkout can quote a
-   final amount.
+1. Finish C5.04's product/category and address-level jurisdiction rules without
+   weakening the starter activation interlocks.
+2. Implement C5.06 manual/offline, Stripe and PayPal adapters against the one
+   existing payment/refund state machine and reconciliation surface.
+3. Continue C5.07-C5.08 provider parity and advanced money behavior without a
+   second ledger.
 4. Build catalog/pricing, then inventory/shipping, then carts/checkout/orders;
    every mutation remains one service-layer transaction and every customer
    reference joins the existing Contact spine.

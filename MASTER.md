@@ -3581,15 +3581,42 @@ skipped item is checked or weakened.
   money, delivery or provider references; existing bulk-mail non-delivery
   incorporated; six-test contract/hostile suite; operator/developer guide
   `deploy/edge-adapters.md`; changeset `commerce-edge-contracts.md`.)
-- [ ] **C5.02** Implement tax zones and most-specific matching, categories,
+- [x] **C5.02** Implement tax zones and most-specific matching, categories,
   registrations/thresholds, compound/sequential rates and inclusive/exclusive
-  presentation.
-- [ ] **C5.03** Implement exemptions, reverse charge, shipping tax, rounding,
+  presentation. *(Evidence: normalized tax schema in additive migrations
+  `0043_worried_shaman.sql` and `0044_nervous_maelstrom.sql`; deterministic
+  country/region/postal specificity; effective-dated category overrides;
+  exact parts-per-million rates; compound order; inclusive extraction;
+  explicit line/invoice and half-up/bankers rounding; registration collection
+  interlocks; currency-separated calendar/rolling threshold reports through
+  the generated `invoicing.*` API/MCP services; arithmetic, database and
+  location coverage in `tests/core/money-arithmetic.test.ts` and
+  `tests/core/invoicing.test.ts`; operator guide `deploy/commerce-money.md`.)*
+- [x] **C5.03** Implement exemptions, reverse charge, shipping tax, rounding,
   immutable `TaxLine` snapshots and owner-visible calculation explanations.
+  *(Evidence: validated/unexpired exemption enforcement in services and
+  `0045_peaceful_puck.sql`; explicit reverse-charge zero lines and invoice
+  legends; shipping subjects; deterministic allocation; every draft snapshots
+  the rate, registration, jurisdiction, basis and plain-language calculation,
+  proven unchanged after configured rates move; non-collection decisions never
+  appear as silent zero tax; generated quote/invoice surfaces, contact privacy/
+  merge-undo integration, hostile arithmetic coverage, 97-file/1,137-test
+  suite, production build and changeset `commerce-money-foundation.md`.)*
 - [ ] **C5.04** Ship and verify Canada, EU, UK, US, Australia and New Zealand
   tax templates, while allowing explicit owner-defined zones elsewhere.
-- [ ] **C5.05** Implement invoice/line/payment/refund/credit-note state machines,
+- [x] **C5.05** Implement invoice/line/payment/refund/credit-note state machines,
   integer-money invariants, numbering, receipts, reconciliation and audit.
+  *(Evidence: one normalized 14-table `invoicing` module; integer minor units
+  and six-decimal quantities with safe-range refusal; canonical request hashes
+  and advisory-lock idempotency; transaction-gapless invoice/credit numbering;
+  partial and multi-payment convergence; competing-settlement overpay refusal;
+  reserved, failed/cancelled and settled refunds; bounded immutable credit
+  notes; stable receipt records; independent internal-ledger reconciliation;
+  append-only state evidence, outbox events and contact timelines; 32 generated
+  scoped services; exact contact merge undo and privacy erasure; concurrency/
+  lifecycle/database coverage in `tests/core/invoicing.test.ts`; migrations
+  `0043_worried_shaman.sql` through `0045_peaceful_puck.sql`; operator guide
+  and full local gates.)*
 - [ ] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
   signed/idempotent webhooks, saved methods, disputes and refunds.
 - [ ] **C5.07** Implement Square, Mollie, Razorpay and Paystack/Flutterwave

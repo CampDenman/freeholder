@@ -1,0 +1,1 @@
+ALTER TABLE "tax_exemptions" ADD CONSTRAINT "tax_exemptions_validation_evidence" CHECK ("tax_exemptions"."status" <> 'valid' or "tax_exemptions"."validated_at" is not null);

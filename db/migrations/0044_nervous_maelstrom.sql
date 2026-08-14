@@ -1,0 +1,5 @@
+ALTER TABLE "invoices" ADD COLUMN "tax_zone_id" uuid;--> statement-breakpoint
+ALTER TABLE "tax_registrations" ADD COLUMN "threshold_currency" text;--> statement-breakpoint
+ALTER TABLE "invoices" ADD CONSTRAINT "invoices_tax_zone_id_tax_zones_id_fk" FOREIGN KEY ("tax_zone_id") REFERENCES "public"."tax_zones"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "invoices_tax_zone_idx" ON "invoices" USING btree ("tax_zone_id","issued_at");--> statement-breakpoint
+ALTER TABLE "tax_registrations" ADD CONSTRAINT "tax_registrations_threshold_currency_valid" CHECK (("tax_registrations"."threshold_minor" = 0 and ("tax_registrations"."threshold_currency" is null or "tax_registrations"."threshold_currency" ~ '^[A-Z]{3}$')) or ("tax_registrations"."threshold_minor" > 0 and "tax_registrations"."threshold_currency" ~ '^[A-Z]{3}$'));

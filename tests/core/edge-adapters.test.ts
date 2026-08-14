@@ -116,7 +116,7 @@ describe("C5.01 honest none adapters", () => {
         destination: { country: "CA", region: "BC" },
         items: [{
           id: "line-1",
-          quantity: 1,
+          quantityMicros: 1_000_000,
           unitAmountMinor: 1000,
           discountMinor: 0,
           category: "standard",
