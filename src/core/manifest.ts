@@ -12,6 +12,7 @@ export default defineModule({
   tables: () => import("@/core/tables"),
   services: () => import("@/core/services"),
   jobs: () => import("@/core/jobs/core-jobs"),
+  onboarding: () => import("@/core/onboarding"),
   events: {
     // Core listens to *everything*, once, to fan committed events out to
     // webhook subscriptions and personal notification inboxes. It goes through the ordinary manifest

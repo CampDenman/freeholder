@@ -34,6 +34,13 @@ export async function register(): Promise<void> {
   const { default: manifests } = await import("@/modules");
   await bootOnce(manifests);
 
+  // Persist immutable manifest definitions after every module/plugin has
+  // registered its contribution. This makes newly installed guidance and
+  // demo scenarios visible without a bespoke seed script or first user action.
+  const { db } = await import("@/core/db");
+  const { syncOnboardingDefinitions } = await import("@/core/demo/service");
+  await db().transaction((tx) => syncOnboardingDefinitions(tx));
+
   // After boot, because installing the demo calls services that boot has to
   // have registered, and because a manifest's own services load lazily.
   const { seedDemoIfRequested } = await import("@/modules/seed/boot");

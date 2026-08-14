@@ -19,5 +19,6 @@ export default defineModule({
   version: "0.1.0",
   requires: ["core", "cms"],
   services: () => import("./service"),
+  onboarding: () => import("./onboarding"),
   events: { emits: ["demo.installed"] },
 });

@@ -25,6 +25,7 @@ import outboxServices from "@/core/events/outbox-service";
 import i18nServices from "@/core/i18n/service";
 import jobServices from "@/core/jobs/service";
 import guidanceServices from "@/core/guidance/service";
+import demoServices from "@/core/demo/service";
 import invitationServices from "@/core/invitations/service";
 import locationServices from "@/core/locations/service";
 import mailServices from "@/core/mail/service";
@@ -61,6 +62,7 @@ const services: Service[] = [
   ...i18nServices,
   ...jobServices,
   ...guidanceServices,
+  ...demoServices,
   ...invitationServices,
   ...locationServices,
   ...mailServices,

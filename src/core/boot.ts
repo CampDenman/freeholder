@@ -10,6 +10,11 @@ import { requireProductionEnv } from "@/core/env";
 import { subscribe } from "@/core/events";
 import { sortModules, type ModuleManifest } from "@/core/module";
 import { registerService, type Service } from "@/core/service";
+import {
+  registerOnboardingModule,
+  resetOnboardingRegistryForTests,
+  validateOnboardingRegistry,
+} from "@/core/onboarding/registry";
 
 export interface BootReport {
   /** Modules in the order they were wired. */
@@ -20,6 +25,9 @@ export interface BootReport {
   blocks: string[];
   /** Background jobs mounted from every module (§11). */
   jobs: string[];
+  guidance: string[];
+  demoScenarios: string[];
+  demoFixtures: string[];
   listeners: Array<{ event: string; module: string; handler: string }>;
 }
 
@@ -48,6 +56,9 @@ export async function boot(
     listeners: [],
     blocks: [],
     jobs: [],
+    guidance: [],
+    demoScenarios: [],
+    demoFixtures: [],
   };
 
   for (const manifest of sortModules(manifests)) {
@@ -87,29 +98,30 @@ export async function boot(
       }
     }
 
-    if (!manifest.services) continue;
-
-    const loaded = await manifest.services();
-    const exported = loaded.default;
-    if (!Array.isArray(exported)) {
-      throw new Error(
-        `module "${manifest.name}" declares services, but its services module has no default export array. Export the services as \`export default [ ... ]\`.`,
-      );
-    }
-    for (const service of exported) {
-      if (!isService(service)) {
+    let loadedServices: Record<string, unknown> | undefined;
+    if (manifest.services) {
+      loadedServices = await manifest.services();
+      const exported = loadedServices.default;
+      if (!Array.isArray(exported)) {
         throw new Error(
-          `module "${manifest.name}" exports something that is not a service. Every entry must come from defineService().`,
+          `module "${manifest.name}" declares services, but its services module has no default export array. Export the services as \`export default [ ... ]\`.`,
         );
       }
-      registerService(service);
-      report.services.push(service.def.name);
+      for (const service of exported) {
+        if (!isService(service)) {
+          throw new Error(
+            `module "${manifest.name}" exports something that is not a service. Every entry must come from defineService().`,
+          );
+        }
+        registerService(service);
+        report.services.push(service.def.name);
+      }
     }
 
     for (const [event, handlerName] of Object.entries(
       manifest.events?.listens ?? {},
     )) {
-      const handler = loaded[handlerName];
+      const handler = loadedServices?.[handlerName];
       if (typeof handler !== "function") {
         throw new Error(
           `module "${manifest.name}" listens for "${event}" with "${handlerName}", but its services module exports no such function.`,
@@ -126,7 +138,26 @@ export async function boot(
         handler: handlerName,
       });
     }
+
+    if (manifest.onboarding) {
+      const loaded = await manifest.onboarding();
+      const contribution = registerOnboardingModule(manifest.name, loaded.default);
+      report.guidance.push(
+        ...contribution.guidance.map((flow) => `${flow.key}@${flow.version}`),
+      );
+      report.demoScenarios.push(
+        ...contribution.scenarios.map((scenario) => `${scenario.key}@${scenario.version}`),
+      );
+      report.demoFixtures.push(
+        ...contribution.fixtures.map((fixture) => `${fixture.key}@${fixture.version}`),
+      );
+    }
   }
+
+  validateOnboardingRegistry({
+    installedModules: report.modules,
+    registeredServices: report.services,
+  });
 
   return report;
 }
@@ -146,4 +177,5 @@ export function bootOnce(manifests: ModuleManifest[]): Promise<BootReport> {
 
 export function resetBootForTests(): void {
   booted = undefined;
+  resetOnboardingRegistryForTests();
 }
