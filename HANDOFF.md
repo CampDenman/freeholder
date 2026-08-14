@@ -1,50 +1,43 @@
-# Freeholder handoff — C1.25
+# Freeholder handoff — C1.26
 
 Last updated: 2026-08-13 (America/Vancouver)
 
 ## Resume point
 
-Complete the protected PR/CI flow for `MASTER.md` §43 **C1.25**:
+Resume `MASTER.md` §43 at **C1.26**:
 
-> Build resumable, role/capability-derived onboarding for owner,
-> administrator, editor, bookkeeper, service provider and customer, with
-> first-win tasks, contextual relaunch, skip/reset, progress and forbidden-
-> control accessibility/permission tests.
+> Ship deterministic creator, service, shop and everything demo scenarios with
+> realistic cross-module states, locale variants, expected-outcome journeys,
+> visible isolation and idempotent one-action load/reset/purge; add module/
+> plugin manifest contributions and conformance tests so any feature can add or
+> revise demos and onboarding without framework changes.
 
-The working branch is `feat/role-onboarding`, created directly from `main` at
-merge commit `dd34df798435c65d5f39e8dd60177fb655f65a5c`. C1.25 is split across
-two product commits:
+The working branch is `feat/deterministic-demos`, created directly from C1.25's
+merge commit `3de729c0d8d7d6f4850050307cde167db5e843d1` on synchronized `main`.
+No C1.26 implementation exists yet. Complete repository discovery and split the
+checklist item in `MASTER.md` before coding if one reviewable change cannot
+honestly satisfy the full contract.
 
-- `0b3ccdb` (`feat: establish role guidance foundation`) adds the schema,
-  definitions, migration and core services;
-- `eb3c9e7` (`feat: add role guidance surfaces`) adds the admin/portal UI,
-  focused service and markup tests, and browser acceptance specifications.
-- `6454629` (`docs: prepare role guidance operations`) adds the localized
-  action-error callout, release changeset and operator runbook.
-- `9482069` (`test: satisfy role guidance lint`) validates parsed migration
-  JSON through the guidance schema and removes the two whitespace failures.
-
-Local acceptance is complete and `MASTER.md` now records C1.25 as checked.
-The remaining work is delivery evidence: commit the acceptance/security-floor
-changes, add the missing DCO trailers to the eight local-only commits, push,
-open the protected PR, require green CI, merge, and verify the post-merge runs.
+C1.25 is delivered in PR #96. PR CI `31762010303`, post-merge CI
+`31762514806`, and image publication `31762514808` all passed; the latter
+includes keyless signing, provenance, SBOM and SBOM attestation.
 
 Do not commit or modify the separate untracked `RESTART_HANDOFF.md`; it is an
 older local document outside this checkpoint.
 
-`origin/feat/role-onboarding` remains at `f08fb30`. The branch is eight commits
-ahead before the pending acceptance commit. Do not push until those local-only
-commits have DCO sign-offs; GitHub requires the `DCO` and `checks` statuses but
-does not require cryptographic commit signatures.
+GitHub requires the `DCO` and `checks` statuses but does not require
+cryptographic commit signatures. Use `git commit -s` for every C1.26 commit.
 
 ## Verified baseline
 
 - Apache-2.0 relicensing is merged in PR #89.
 - C1.23 ownership recovery is merged in PR #94 at `030a4ab`.
 - C1.24 fresh seeded home is merged in PR #95 at `dd34df7`.
-- `main` and `origin/main` were synchronized before this branch was created.
-- `MASTER.md` marks C1.25 locally accepted and keeps its protected PR/CI flow
-  as the current focus; C1.26 starts only after merge.
+- C1.25 role guidance is merged in PR #96 at `3de729c` with green PR and
+  post-merge evidence.
+- `main` and `origin/main` were synchronized before the C1.26 branch was
+  created.
+- `MASTER.md` marks C1.25 complete and names C1.26 as the current focus.
 
 C1.24 now provides this contract:
 
@@ -184,21 +177,18 @@ Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
 
 ## Resume sequence
 
-1. Review and explicitly stage only `MASTER.md`, `HANDOFF.md`,
-   `pnpm-workspace.yaml` and `pnpm-lock.yaml`; never stage
-   `RESTART_HANDOFF.md`.
-2. Commit the local acceptance/security-floor update with `git commit -s`.
-3. Preserve a local backup ref, then add a DCO trailer to each of the eight
-   local-only commits after `f08fb30` without rewriting the tracked remote
-   checkpoint itself. Verify every `origin/feat/role-onboarding..HEAD` commit.
-4. Push the branch, open the PR, and wait for both required `DCO` and `checks`
-   statuses. Fix any failure and merge only when current with `main` and green.
-5. Verify post-merge CI and image publication, synchronize `main`, then begin
-   C1.26 on a fresh branch.
-
-C1.26 still owns deterministic demo scenarios and general module/plugin
-manifest contributions/conformance. Do not pull that separate checklist item
-into C1.25, but preserve the current versioned registry seam for it.
+1. Inspect the current seed/demo schema, services, boot path, reset/purge
+   helpers, browser fixtures, module manifest, plugin seams and guidance
+   definition registry before changing code.
+2. Map the exact creator, service, shop and everything scenario states and
+   expected-outcome journeys against existing modules and seed capabilities.
+3. Decide whether C1.26 is one reviewable change. If not, split it in
+   `MASTER.md` before implementation without weakening its acceptance contract.
+4. Design manifest contributions so a fixture plugin can add or revise demo
+   and onboarding material without editing the core scenario loader.
+5. Implement only after that discovery, preserving deterministic load/reset/
+   purge, locale variants, visible isolation and the C1.25 guidance registry
+   seam.
 
 ## Constraints to preserve
 

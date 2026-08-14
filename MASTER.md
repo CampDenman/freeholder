@@ -2918,11 +2918,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `dd34df7` with C1.24 merged; C1.25 local acceptance on `feat/role-onboarding`: 91-file/1,098-test suite, four-test real-browser gate, production build, ownership drill and all locally available repository gates green; protected PR/CI completion pending; changeset `role-guidance.md` |
+| Evidence snapshot | `main` at `3de729c` with C1.25 merged in PR #96; PR CI `31762010303`, post-merge CI `31762514806`, and signed/provenance/SBOM image publication `31762514808` green; 91-file/1,098-test local suite; changeset `role-guidance.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Complete the protected PR/CI flow for C1.25 role/capability-derived onboarding; C1.26 follows only after merge; no public-launch work is required |
+| Current focus | C1.26 deterministic demo scenarios and module/plugin demo-onboarding contributions; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
