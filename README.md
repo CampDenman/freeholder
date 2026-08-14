@@ -18,7 +18,10 @@ history all hang off one CRM timeline.
 > atomically with its caller and has durable idempotency, bounded retry/backoff,
 > global concurrency, cancellation, heartbeat leases, an owner-visible run
 > ledger, retained dead letters, stuck-work warnings, and audited recovery
-> controls. The complete scope,
+> controls. Commerce provider boundaries now cover payments, tax, calendars,
+> SMS, bulk mail, AI, social, carriers, and point of sale with explicit disabled
+> implementations; catalog, checkout, orders, tax calculation, and payment
+> providers remain active C5 work rather than shipped claims. The complete scope,
 > verified baseline and remaining checklist live only in
 > [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
 

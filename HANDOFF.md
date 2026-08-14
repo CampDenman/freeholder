@@ -1,25 +1,27 @@
-# Freeholder handoff - C1.28
+# Freeholder handoff - C5 commerce
 
-Last updated: 2026-08-13 (America/Vancouver)
+Last updated: 2026-08-14 (America/Vancouver)
 
 ## Resume point
 
-Resume `MASTER.md` section 43 at **C1.28**:
+Resume `MASTER.md` section 43 at **C5.01**:
 
-> Make screen/window/tab, camera and microphone recording a first-class media
-> workflow with explicit permission, persistent live/stop controls and safe
-> capture/upload behavior.
+> Land `none` plus real adapter contracts for payments, tax, calendar, SMS,
+> bulk mail, AI, social, shipping/carrier and point-of-sale edges.
 
-C1.27 remains deliberately dependency-blocked until the required C5-C9
-booking, commerce, gallery, conversation and reporting modules exist. Do not
-weaken or fabricate those complete creator/service/shop/everything scenarios;
-return to C1.27 after those domains land.
+C5.01 is implemented in the current worktree. After its full gates and signed
+checkpoint, advance the resume point to C5.02/C5.05's tax and normalized money
+spine; do not mistake adapter contracts for a functioning checkout.
 
-The working branch is `feat/deterministic-demos`, based on C1.25's merged main
-commit `3de729c0d8d7d6f4850050307cde167db5e843d1`. C1.26 is implemented at
-checkpoint `5483916`; the canonical completion/evidence update follows that
-checkpoint. Protected PR delivery is the remaining C1.26 release step at this
-handoff revision.
+Commerce is now the active functional workstream by owner decision. C1.28–C4
+remain open and unchanged; the priority deviation is recorded beside C5 in
+`MASTER.md`. C1.27 remains deliberately dependency-blocked until the required
+C5–C9 domain modules exist.
+
+The working branch is `feat/commerce-money-foundation`, created from C1.26's
+merged main commit `bcb9dd1cda83972f82ea3f129ac981aea0823458`. The separate
+`feat/media-capture` branch preserves its clean C1.28 documentation checkpoint
+at `c90456d`; do not mix that checkpoint into commerce.
 
 Do not commit or modify the separate untracked `RESTART_HANDOFF.md`; it is an
 older local document outside this checkpoint.
@@ -75,25 +77,28 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
   `git diff --check`: passed.
 - Ownership drill with PostgreSQL 16 client: dump/restore and secret-safe export
   matched 92 tables, 5,133 rows, zero assets and zero media objects.
-- The protected CI image/SEO/upgrade/rollback gates still need to run on the
-  C1.26 PR; Docker is unavailable on this development machine.
+- PR CI `31765933788` passed in 9m41s, including tests, ownership restore,
+  build, browser journeys, image build/serve, SEO, schema compatibility and
+  previous-image upgrade/rollback.
+- Post-merge CI `31766451361` passed on `bcb9dd1`. Image publication
+  `31766451453` passed in 2m9s with push, keyless signature, provenance, SBOM
+  and SBOM attestation.
+- Docker remains unavailable on this development machine; the protected CI
+  runs above are the Docker/image evidence.
 
-## C1.28 discovery sequence
+## C5 commerce sequence
 
-1. Re-read the exact C1.28 text and the media/capture requirements in
-   `MASTER.md` before changing code.
-2. Inspect the existing media upload lifecycle, multipart API, storage
-   adapters, permissions, trash/purge behavior, admin media UI and browser
-   coverage.
-3. Specify capture state and recovery for screen/window/tab, camera and
-   microphone permission denial, device loss, stop/cancel, upload failure,
-   reload and long recordings. Do not hold large recordings entirely in React
-   state or a single server request.
-4. Reuse the existing media service/upload pipeline so captured media has the
-   same validation, audit, storage, variants, accessibility metadata and
-   lifecycle as file uploads.
-5. Add real-browser permission/control tests and operator guidance before
-   marking C1.28 complete.
+1. Land C5.01 adapter contracts and safe `none` implementations without
+   fabricating provider behavior.
+2. Build C5.05's normalized invoice/payment/refund/credit-note money spine with
+   integer minor-unit invariants, explicit state transitions and idempotency.
+3. Add the tax engine and jurisdiction templates before checkout can quote a
+   final amount.
+4. Build catalog/pricing, then inventory/shipping, then carts/checkout/orders;
+   every mutation remains one service-layer transaction and every customer
+   reference joins the existing Contact spine.
+5. Check a C5 item only after its migrations, services, user surface, hostile
+   and concurrency coverage, operator docs, changeset and full gates exist.
 
 ## Constraints to preserve
 

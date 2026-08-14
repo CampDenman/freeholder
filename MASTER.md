@@ -2918,7 +2918,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `3de729c` with C1.25 merged in PR #96; C1.26 implementation checkpoint `5483916`; 94-file/1,108-test local suite, 5-test Chromium gate, production build, 92-table/5,133-row ownership drill; migrations `0041`/`0042`; changeset `deterministic-demo-scenarios.md` |
+| Evidence snapshot | `main` at `bcb9dd1` with C1.26 merged in PR #97; PR CI `31765933788`, post-merge CI `31766451361`, and signed/provenance/SBOM image publication `31766451453` green; 94-file/1,108-test local suite; changeset `deterministic-demo-scenarios.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
@@ -3564,10 +3564,23 @@ permissions, budgets, untrusted input, approvals and rollback remain enforceable
 
 ### 43.10 C5 — Complete money, catalog, inventory, and commerce path
 
+**Priority deviation in force (decided 2026-08-14): commerce is the active
+functional workstream.** `freeholder.ai` is already live on Freeholder, so the
+next product proof is the complete money and store path. Resume at C5.01 and
+continue through the C5 exit before returning to the still-open C1.28–C4
+items. This changes execution priority, not scope or completion status; no
+skipped item is checked or weakened.
+
 #### Money and tax foundations
 
-- [ ] **C5.01** Land `none` plus real adapter contracts for payments, tax,
+- [x] **C5.01** Land `none` plus real adapter contracts for payments, tax,
   calendar, SMS, bulk mail, AI, social, shipping/carrier and point-of-sale edges.
+  (family-isolated multi-provider registries; raw-byte verified-webhook seams;
+  integer-minor-unit/idempotency contracts; capability discovery; safe common
+  adapter errors; honest disabled implementations that cannot fabricate tax,
+  money, delivery or provider references; existing bulk-mail non-delivery
+  incorporated; six-test contract/hostile suite; operator/developer guide
+  `deploy/edge-adapters.md`; changeset `commerce-edge-contracts.md`.)
 - [ ] **C5.02** Implement tax zones and most-specific matching, categories,
   registrations/thresholds, compound/sequential rates and inclusive/exclusive
   presentation.
