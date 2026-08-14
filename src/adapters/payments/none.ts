@@ -25,7 +25,9 @@ export function createNoPayments(): PaymentAdapter {
     async supportedCurrencies() { return []; },
     async supportedMethods() { return []; },
     createCheckout: failure,
+    captureCheckout: failure,
     refund: failure,
+    revokeSavedMethod: failure,
     verifyWebhook: failure,
   };
 }

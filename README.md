@@ -20,9 +20,11 @@ history all hang off one CRM timeline.
 > ledger, retained dead letters, stuck-work warnings, and audited recovery
 > controls. Commerce now has a normalized, transaction-safe invoice/payment/
 > refund/credit-note spine, fixed-point tax calculation, currency-safe threshold
-> monitoring, and source-attributed tax starters, in addition to explicit
-> provider boundaries. Catalog, checkout, orders, receipts, reconciliation, and
-> online payment providers remain active C5 work rather than shipped claims.
+> monitoring, source-attributed tax starters, manual/offline settlement, and
+> Stripe/PayPal hosted-provider adapters with authenticated replay-safe
+> webhooks, refunds, masked saved methods, and disputes. Public cart checkout,
+> catalog, inventory, shipping, orders, and complete tax templates remain
+> active C5 work rather than shipped claims.
 > The complete scope,
 > verified baseline and remaining checklist live only in
 > [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).

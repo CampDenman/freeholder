@@ -43,6 +43,7 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
       "media.altTextSuggester",
       "mail.delivers",
       "mail.bulk",
+      "payments.provider",
       "notifications.sms",
       "notifications.push",
       "jobs.worker",

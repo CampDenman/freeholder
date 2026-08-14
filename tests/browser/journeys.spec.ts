@@ -3,12 +3,15 @@
 // Chromium acceptance journeys for MASTER.md §43 C1.22. These prove the
 // browser-facing seams together: Server Actions, redirects, session cookies,
 // autosave, public rendering, JSON-RPC and password recovery.
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 import { desc, eq } from "drizzle-orm";
 import { passwordResets } from "@/core/auth/schema";
 import { totpCode } from "@/core/auth/two-factor-crypto";
+import { contacts } from "@/core/contacts/schema";
 import { closeDb, db } from "@/core/db";
+import { invoices, payments, refunds } from "@/modules/invoicing/schema";
 import { resetBrowserDatabase } from "./database";
 
 const OWNER_EMAIL = "owner-journey@example.test";
@@ -130,6 +133,57 @@ test.describe("real-browser product journeys", () => {
       await page.getByLabel("Verification code").fill(nextCode);
       await page.getByRole("button", { name: "Continue" }).click();
       await expect(page).toHaveURL(/\/admin$/);
+    });
+
+    await test.step("offline payment and refund use the accessible shared money console", async () => {
+      // Seed only the issued-invoice prerequisite. The browser still drives the
+      // real Server Action and invoicing services for both money movements.
+      const contactId = randomUUID();
+      const invoiceId = randomUUID();
+      await db().insert(contacts).values({
+        id: contactId,
+        name: "Payment Journey",
+        email: "payment-journey@example.test",
+      });
+      await db().insert(invoices).values({
+        id: invoiceId,
+        contactId,
+        number: "INV-JOURNEY-001",
+        idempotencyKey: "browser-payment-invoice",
+        requestHash: createHash("sha256").update("browser-payment-invoice").digest("hex"),
+        status: "sent",
+        currency: "CAD",
+        subtotalMinor: 10_000,
+        discountMinor: 0,
+        shippingMinor: 0,
+        taxMinor: 0,
+        totalMinor: 10_000,
+        paidMinor: 0,
+        refundedMinor: 0,
+        issuedAt: new Date(),
+      });
+
+      await page.goto("/admin/payments");
+      await expect(page.getByRole("heading", { level: 1, name: "Payments" })).toBeVisible();
+      await expect(page.getByText("manual", { exact: true })).toBeVisible();
+      await page.getByLabel("Amount").first().fill("100.00");
+      await page.getByLabel("How this payment was verified").fill("Matched to the browser acceptance bank statement.");
+      await page.getByLabel("I confirm this money was received and the evidence is accurate.").check();
+      await page.getByRole("button", { name: "Record payment" }).click();
+      await expect(page).toHaveURL(/\/admin\/payments\?status=record/);
+      await expect(page.getByText("The payment ledger was updated.")).toBeVisible();
+      const [settled] = await db().select().from(payments).where(eq(payments.invoiceId, invoiceId));
+      expect(settled).toMatchObject({ provider: "manual", status: "succeeded", amountMinor: 10_000 });
+
+      await page.getByLabel("Amount", { exact: true }).fill("5.00");
+      await page.getByLabel("Refund reason").fill("Acceptance fixture partial refund");
+      await page.getByLabel("I confirm this refund amount and understand it moves real provider money when hosted.").check();
+      await page.getByRole("button", { name: "Submit refund" }).click();
+      await expect(page).toHaveURL(/\/admin\/payments\?status=refund/);
+      expect((await db().select().from(refunds).where(eq(refunds.paymentId, settled!.id)))[0]).toMatchObject({ provider: "manual", status: "succeeded", amountMinor: 500 });
+
+      const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+      expect(results.violations).toEqual([]);
     });
 
     await test.step("form builder creates a public form", async () => {

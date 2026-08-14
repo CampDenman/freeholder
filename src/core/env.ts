@@ -103,6 +103,16 @@ const envSchema = z.object({
   /** Exact SNS topic ARN accepted by the SES feedback endpoint. */
   SES_SNS_TOPIC_ARN: z.string().optional(),
 
+  /** Hosted payments. The checked-in adapter choice remains in config. */
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  /** Kept only during Stripe endpoint-secret rotation. */
+  STRIPE_WEBHOOK_SECRET_PREVIOUS: z.string().optional(),
+  PAYPAL_CLIENT_ID: z.string().optional(),
+  PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_WEBHOOK_ID: z.string().optional(),
+  PAYPAL_ENVIRONMENT: z.enum(["sandbox", "live"]).default("sandbox"),
+
   /** Replit Object Storage (§20). Discovered from the environment on Replit. */
   REPLIT_BUCKET_ID: z.string().optional(),
 

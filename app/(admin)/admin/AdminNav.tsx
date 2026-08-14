@@ -4,6 +4,7 @@
 import { usePathname } from "next/navigation";
 import {
   FileText,
+  CreditCard,
   Gauge,
   Image as ImageIcon,
   Layout,
@@ -40,6 +41,7 @@ export interface AdminNavLabels {
   invitations: string;
   builder: string;
   demos: string;
+  payments: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -52,6 +54,7 @@ const LINKS = [
   { href: "/admin/demos", key: "demos", module: "demo", Icon: Flask },
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },
   { href: "/admin/forms", key: "forms", module: "forms", Icon: Envelope },
+  { href: "/admin/payments", key: "payments", module: "invoicing", Icon: CreditCard },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
