@@ -9,6 +9,7 @@ import {
   Layout,
   ListChecks,
   MagicWand,
+  Flask,
   MapPin,
   ChartLine,
   Envelope,
@@ -38,6 +39,7 @@ export interface AdminNavLabels {
   roles: string;
   invitations: string;
   builder: string;
+  demos: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -47,6 +49,7 @@ const LINKS = [
   { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
   { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },
   { href: "/admin/builder", key: "builder", module: "builder", Icon: MagicWand },
+  { href: "/admin/demos", key: "demos", module: "demo", Icon: Flask },
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },
   { href: "/admin/forms", key: "forms", module: "forms", Icon: Envelope },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },

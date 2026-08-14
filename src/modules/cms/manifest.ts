@@ -25,6 +25,7 @@ export default defineModule({
   requires: ["core"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  onboarding: () => import("./onboarding"),
   events: {
     emits: [
       "cms.pageCreated",

@@ -288,6 +288,20 @@
       "when": 1786638986806,
       "tag": "0040_curved_purple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1786674436577,
+      "tag": "0041_red_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1786674450480,
+      "tag": "0042_worthless_naoko",
+      "breakpoints": true
     }
   ]
 }

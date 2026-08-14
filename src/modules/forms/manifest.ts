@@ -25,9 +25,10 @@ export default defineModule({
   requires: ["core", "cms"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  onboarding: () => import("./onboarding"),
   blocks: () => import("./blocks"),
   events: {
-    emits: ["forms.created", "forms.updated", "forms.submitted"],
+    emits: ["forms.created", "forms.updated", "forms.deleted", "forms.submitted"],
     // Its own event, handled by itself: the notification is a consequence of a
     // submission rather than part of it, and a visitor must never wait for
     // notification fanout to be told "thank you".

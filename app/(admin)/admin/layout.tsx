@@ -110,6 +110,7 @@ export default async function AdminLayout({
               roles: t("admin.nav.roles"),
               invitations: t("admin.nav.invitations"),
               builder: t("admin.nav.builder"),
+              demos: t("admin.nav.demos"),
             }}
           />
         </div>

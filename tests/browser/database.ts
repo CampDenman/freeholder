@@ -5,6 +5,10 @@ import postgres from "postgres";
 import { db } from "@/core/db";
 import { seedDefaultRoles } from "@/core/roles/defaults";
 import { seedCoreGuidanceFlows } from "@/core/guidance/definitions";
+import { demoScenarios } from "@/core/demo/schema";
+import cmsOnboarding from "@/modules/cms/onboarding";
+import formsOnboarding from "@/modules/forms/onboarding";
+import seedOnboarding from "@/modules/seed/onboarding";
 
 export async function resetBrowserDatabase(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -31,5 +35,26 @@ export async function resetBrowserDatabase(): Promise<void> {
   await db().transaction(async (tx) => {
     await seedDefaultRoles(tx);
     await seedCoreGuidanceFlows(tx);
+    const scenario = seedOnboarding.scenarios[0]!;
+    await tx
+      .insert(demoScenarios)
+      .values({
+        key: scenario.key,
+        version: scenario.version,
+        titleKey: scenario.titleKey,
+        descriptionKey: scenario.descriptionKey,
+        preset: scenario.preset,
+        requiredModules: scenario.requiredModules,
+        requiredCapabilities: scenario.requiredCapabilities,
+        fixtureManifest: [
+          cmsOnboarding.fixtures[0]!,
+          formsOnboarding.fixtures[0]!,
+        ],
+        defaultLocale: scenario.defaultLocale,
+        supportedLocales: scenario.supportedLocales,
+        tourFlowKey: scenario.tourFlowKey,
+        status: scenario.status,
+      })
+      .onConflictDoNothing();
   });
 }

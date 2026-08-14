@@ -32,6 +32,13 @@ import {
 import { HONEYPOT_FIELD, inspect, STAMP_FIELD } from "./antispam";
 import type { EventDeliveryContext } from "@/core/events";
 import { createNotification } from "@/core/notifications/service";
+import {
+  demoHandlerInputSchema,
+  demoLoadResultSchema,
+  demoPurgeResultSchema,
+  demoVerifyResultSchema,
+} from "@/core/onboarding/contract";
+import { requireDemoHandlerRun } from "@/core/demo/handler";
 
 // CLAUDE.md's non-negotiable, honoured by the module that creates the
 // obligation: a submission points at a contact, so merging two duplicates has
@@ -246,6 +253,154 @@ export const updateForm = defineService({
     ctx.setSubject("form", form.id);
     ctx.queueEvent("forms.updated", { formId: form.id, slug: form.slug });
     return form;
+  },
+});
+
+export const deleteForm = defineService({
+  name: "forms.delete",
+  summary: "Permanently remove a form and its submissions.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    const [form] = await ctx.tx
+      .delete(forms)
+      .where(eq(forms.id, input.id))
+      .returning({ id: forms.id, slug: forms.slug });
+    if (!form) throw new ServiceError("not_found", "That form is gone.");
+    ctx.setSubject("form", form.id);
+    ctx.queueEvent("forms.deleted", { formId: form.id, slug: form.slug });
+    return form;
+  },
+});
+
+const DEMO_FORM = {
+  en: {
+    name: "[Demo] Project enquiry",
+    submitLabel: "Send demo enquiry",
+    successMessage: "Demo enquiry received.",
+    nameLabel: "Your name",
+    emailLabel: "Email",
+  },
+  fr: {
+    name: "[Demo] Demande de projet",
+    submitLabel: "Envoyer la demande demo",
+    successMessage: "Demande demo recue.",
+    nameLabel: "Votre nom",
+    emailLabel: "Courriel",
+  },
+  es: {
+    name: "[Demo] Consulta de proyecto",
+    submitLabel: "Enviar consulta demo",
+    successMessage: "Consulta demo recibida.",
+    nameLabel: "Tu nombre",
+    emailLabel: "Correo electronico",
+  },
+} as const;
+
+export const loadDemoForms = defineService({
+  name: "forms.loadDemoFixture",
+  summary: "Load the forms contribution for a tracked demo run.",
+  kind: "mutation",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(
+      ctx.tx,
+      input,
+      { key: "forms.current-modules", version: 1 },
+      "load",
+    );
+    const copy = DEMO_FORM[input.locale as keyof typeof DEMO_FORM];
+    if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
+    const form = await ctx.callAsSystem(createForm, {
+      slug: "freeholder-demo-enquiry",
+      name: copy.name,
+      submitLabel: copy.submitLabel,
+      successMessage: copy.successMessage,
+      destination: "none",
+      fields: [
+        { key: "name", label: copy.nameLabel, kind: "text", required: true },
+        { key: "email", label: copy.emailLabel, kind: "email", required: true },
+      ],
+    });
+    return demoLoadResultSchema.parse({
+      records: [
+        {
+          fixtureKey: "enquiry-form",
+          subjectType: "form",
+          subjectId: form.id,
+          label: form.name,
+        },
+      ],
+    });
+  },
+});
+
+export const purgeDemoForms = defineService({
+  name: "forms.purgeDemoFixture",
+  summary: "Purge only forms proven to belong to a tracked demo run.",
+  kind: "mutation",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(
+      ctx.tx,
+      input,
+      { key: "forms.current-modules", version: 1 },
+      "purge",
+    );
+    const purged: Array<{ subjectType: string; subjectId: string }> = [];
+    for (const record of input.records) {
+      if (record.fixtureKey !== "enquiry-form" || record.subjectType !== "form") {
+        throw new ServiceError("validation", "Unexpected forms demo provenance.");
+      }
+      const [existing] = await ctx.tx
+        .select({ id: forms.id })
+        .from(forms)
+        .where(eq(forms.id, record.subjectId))
+        .limit(1);
+      if (existing) await ctx.callAsSystem(deleteForm, { id: existing.id });
+      purged.push({ subjectType: record.subjectType, subjectId: record.subjectId });
+    }
+    return demoPurgeResultSchema.parse({ purged });
+  },
+});
+
+export const verifyDemoForms = defineService({
+  name: "forms.verifyDemoFixture",
+  summary: "Verify the visible forms outcome for a tracked demo run.",
+  kind: "query",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(
+      ctx.tx,
+      input,
+      { key: "forms.current-modules", version: 1 },
+      "verify",
+    );
+    const ids = input.records
+      .filter((record) => record.subjectType === "form")
+      .map((record) => record.subjectId);
+    const [form] = ids.length
+      ? await ctx.tx
+          .select({ id: forms.id, slug: forms.slug, name: forms.name })
+          .from(forms)
+          .where(eq(forms.id, ids[0]!))
+          .limit(1)
+      : [];
+    return demoVerifyResultSchema.parse({
+      outcomes: [
+        {
+          key: "forms.current-modules.visible",
+          achieved:
+            form?.slug === "freeholder-demo-enquiry" &&
+            form.name.startsWith("[Demo]"),
+          detail: form?.name,
+        },
+      ],
+    });
   },
 });
 
@@ -550,6 +705,10 @@ export default [
   getFormById,
   createForm,
   updateForm,
+  deleteForm,
+  loadDemoForms,
+  purgeDemoForms,
+  verifyDemoForms,
   submitForm,
   listSubmissions,
   reviewSubmission,

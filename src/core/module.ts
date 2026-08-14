@@ -44,7 +44,11 @@ export interface ModuleManifest {
   mcpTools?: Lazy<Record<string, unknown>>;
   seo?: { sitemapSources: string[] };
   settingsSchema?: z.ZodType;
-  seed?: Lazy<Record<string, unknown>>;
+  /**
+   * Versioned guidance and deterministic demo contributions (sections 13, 24).
+   * The module's default export is parsed and cross-validated at boot.
+   */
+  onboarding?: Lazy<Record<string, unknown>>;
   navigation?: { admin?: unknown[]; portal?: unknown[] };
 }
 

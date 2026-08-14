@@ -71,10 +71,17 @@ ones still exercise everything that matters: sharp reads them, renditions are
 built at every width, `<picture>` gets real AVIF and WebP sources, and pages
 reserve intrinsic dimensions so nothing reflows when they land.
 
-## Still owed
+## Scenario contributions
 
-Modules do not yet contribute their own seed data through their manifests
-(§11). When commerce and booking exist, this becomes a registry of
-per-module seeds rather than one file — and the one-click purge from admin
-lands with it. `MASTER.md` C3.15 and the applicable module work items are the
-authoritative checklist.
+The complete Aurora Coast site above remains the pristine-development and
+public-gate fixture. Separately, modules and plugins now contribute versioned,
+localized, purgeable scenario fixtures through their `onboarding` manifest
+loader. **Admin -> Demo scenarios** assembles those contributions through the
+transactional `demo.load`, `demo.reload`, `demo.reset` and `demo.purge`
+services, with exact record provenance and verified cleanup.
+
+The current-module scenario intentionally proves that extension seam with CMS
+and Forms only. The complete creator, service-business, shop and everything
+journeys remain dependency-blocked until their C5-C9 domain modules exist;
+`MASTER.md` C1.27 is the authoritative obligation. See
+`deploy/demo-scenarios.md` for the contribution and operations contract.

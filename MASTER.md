@@ -2918,11 +2918,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `dd34df7` with C1.24 merged; C1.25 local acceptance on `feat/role-onboarding`: 91-file/1,098-test suite, four-test real-browser gate, production build, ownership drill and all locally available repository gates green; protected PR/CI completion pending; changeset `role-guidance.md` |
+| Evidence snapshot | `main` at `3de729c` with C1.25 merged in PR #96; C1.26 implementation checkpoint `5483916`; 94-file/1,108-test local suite, 5-test Chromium gate, production build, 92-table/5,133-row ownership drill; migrations `0041`/`0042`; changeset `deterministic-demo-scenarios.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Complete the protected PR/CI flow for C1.25 role/capability-derived onboarding; C1.26 follows only after merge; no public-launch work is required |
+| Current focus | C1.28 first-class screen/camera/microphone capture; C1.27 full domain scenarios remain dependency-blocked on C5–C9; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3323,16 +3323,42 @@ reading chat logs.
   customer isolation, forbidden-control and axe coverage in the four-test
   real-browser gate; 91-file/1,098-test Vitest suite; production build;
   operator guide `deploy/role-guidance.md`; changeset `role-guidance.md`)
-- [ ] **C1.26** Ship deterministic creator, service, shop and everything demo
-  scenarios with realistic cross-module states, locale variants, expected-
-  outcome journeys, visible isolation and idempotent one-action load/reset/
-  purge; add module/plugin manifest contributions and conformance tests so any
-  feature can add or revise demos and onboarding without framework changes.
-- [ ] **C1.27** Make screen/window/tab, camera and microphone recording a
+- [x] **C1.26** Build the normalized, versioned `DemoScenario` definition/run/
+  provenance model and typed public manifest contract through which core,
+  modules and plugins contribute fixtures, guidance steps, locale variants,
+  expected outcomes and purge handlers; validate dependencies, capabilities,
+  targets and cleanup, add hostile fixture-plugin conformance, and prove
+  deterministic transactional load/reload/reset/purge with visibly isolated
+  current-module fixture data. *(Evidence: additive `demo_scenarios`,
+  `demo_scenario_runs` and `demo_records` schema with immutable definition,
+  single-active-run, lifecycle and exact per-generation provenance invariants
+  in migrations `0041_red_zeigeist.sql` and `0042_worthless_naoko.sql`; typed
+  `onboarding` manifest loader for version-pinned targets, guidance, scenarios,
+  localized fixtures, expected outcomes and load/purge/verify services; boot-
+  time namespace/dependency/capability/target/selector/handler/locale/cleanup
+  conformance with hostile-plugin refusals; guarded module handlers that accept
+  only active matching run provenance; transactional idempotent load, same-run
+  generational reload, fresh-run localized reset and reverse-order exact purge
+  in `src/core/demo/service.ts`; CMS and Forms English/French/Spanish fixture
+  contributions visibly marked `[Demo]`; owner-only `/admin/demos` lifecycle
+  with registry-derived outcome links; rollback-on-late-conflict and untracked-
+  record preservation coverage in `tests/core/demo-scenarios.test.ts`; 5-test
+  real Chromium gate including the complete localized lifecycle; 94-file/
+  1,108-test suite; production build; 92-table/5,133-row ownership backup,
+  restore and export drill; operator guide `deploy/demo-scenarios.md`; changeset
+  `deterministic-demo-scenarios.md`.)*
+- [ ] **C1.27** After the required C5–C9 domain modules exist, ship complete
+  creator, service-business, shop and everything scenarios assembled only from
+  those contributions, with realistic contacts, media, content, locations,
+  conversations, bookings, commerce, reports and edge states; each must have
+  locale variants, an expected-outcome “day in the life,” visible demo marking
+  and idempotent one-action load/reset/purge that never ambiguously mixes with
+  production records.
+- [ ] **C1.28** Make screen/window/tab, camera and microphone recording a
   first-class media workflow with explicit permission, persistent live/stop
   affordances, chunked resume, preview, trim/crop/caption, confirmation,
   provenance, privacy/audit/retention handling and normal Asset processing.
-- [ ] **C1.28** Make phone ingest require no app: QR and expiring upload-link
+- [ ] **C1.29** Make phone ingest require no app: QR and expiring upload-link
   capture, camera roll/file picker and PWA/Web Share target feed resumable
   batches into any permitted media target, survive weak connections and
   converge on the same validation, scan, dedupe, metadata and recovery path.

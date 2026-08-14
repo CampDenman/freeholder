@@ -23,6 +23,13 @@ import {
   FOOTER_KEY,
   HEADER_KEY,
 } from "./defaults";
+import {
+  demoHandlerInputSchema,
+  demoLoadResultSchema,
+  demoPurgeResultSchema,
+  demoVerifyResultSchema,
+} from "@/core/onboarding/contract";
+import { requireDemoHandlerRun } from "@/core/demo/handler";
 
 /** No leading or trailing slash; the home page is the empty string. */
 const slug = z
@@ -280,6 +287,137 @@ export const deleteDraftPage = defineService({
     ctx.setSubject("page", page.id);
     ctx.queueEvent("cms.pageDeleted", { pageId: page.id, slug: page.slug });
     return { id: page.id, slug: page.slug };
+  },
+});
+
+const DEMO_PAGE = {
+  en: {
+    title: "[Demo] A clear first project",
+    body: "This isolated example page is safe to edit, reload, reset or purge from Demo scenarios.",
+  },
+  fr: {
+    title: "[Demo] Un premier projet clair",
+    body: "Cette page exemple isolee peut etre modifiee, rechargee, reinitialisee ou purgee.",
+  },
+  es: {
+    title: "[Demo] Un primer proyecto claro",
+    body: "Esta pagina de ejemplo aislada se puede editar, recargar, reiniciar o purgar.",
+  },
+} as const;
+
+export const loadDemoCms = defineService({
+  name: "cms.loadDemoFixture",
+  summary: "Load the CMS contribution for a tracked demo run.",
+  kind: "mutation",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(
+      ctx.tx,
+      input,
+      { key: "cms.current-modules", version: 1 },
+      "load",
+    );
+    const copy = DEMO_PAGE[input.locale as keyof typeof DEMO_PAGE];
+    if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
+    const page = await ctx.callAsSystem(createPage, {
+      slug: "freeholder-demo-project",
+      locale: input.locale,
+      title: copy.title,
+      blocks: [
+        {
+          id: "demo-project-heading",
+          type: "heading",
+          props: { text: copy.title, level: 1, align: "start" },
+        },
+        {
+          id: "demo-project-intro",
+          type: "text",
+          props: { body: copy.body, align: "start", measure: true },
+        },
+      ],
+      seo: {},
+    });
+    return demoLoadResultSchema.parse({
+      records: [
+        {
+          fixtureKey: "project-page",
+          subjectType: "page",
+          subjectId: page.id,
+          label: page.title,
+        },
+      ],
+    });
+  },
+});
+
+export const purgeDemoCms = defineService({
+  name: "cms.purgeDemoFixture",
+  summary: "Purge only pages proven to belong to a tracked demo run.",
+  kind: "mutation",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(
+      ctx.tx,
+      input,
+      { key: "cms.current-modules", version: 1 },
+      "purge",
+    );
+    const purged: Array<{ subjectType: string; subjectId: string }> = [];
+    for (const record of input.records) {
+      if (record.fixtureKey !== "project-page" || record.subjectType !== "page") {
+        throw new ServiceError("validation", "Unexpected CMS demo provenance.");
+      }
+      const [page] = await ctx.tx
+        .select({ id: pages.id, status: pages.status })
+        .from(pages)
+        .where(eq(pages.id, record.subjectId))
+        .limit(1);
+      if (page?.status === "published") {
+        await ctx.callAsSystem(publishPage, { id: page.id, published: false });
+      }
+      if (page) await ctx.callAsSystem(deleteDraftPage, { id: page.id });
+      purged.push({ subjectType: record.subjectType, subjectId: record.subjectId });
+    }
+    return demoPurgeResultSchema.parse({ purged });
+  },
+});
+
+export const verifyDemoCms = defineService({
+  name: "cms.verifyDemoFixture",
+  summary: "Verify the visible CMS outcome for a tracked demo run.",
+  kind: "query",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(
+      ctx.tx,
+      input,
+      { key: "cms.current-modules", version: 1 },
+      "verify",
+    );
+    const ids = input.records
+      .filter((record) => record.subjectType === "page")
+      .map((record) => record.subjectId);
+    const [page] = ids.length
+      ? await ctx.tx
+          .select({ id: pages.id, slug: pages.slug, title: pages.title })
+          .from(pages)
+          .where(eq(pages.id, ids[0]!))
+          .limit(1)
+      : [];
+    return demoVerifyResultSchema.parse({
+      outcomes: [
+        {
+          key: "cms.current-modules.visible",
+          achieved:
+            page?.slug === "freeholder-demo-project" &&
+            page.title.startsWith("[Demo]"),
+          detail: page?.title,
+        },
+      ],
+    });
   },
 });
 
@@ -764,6 +902,9 @@ export default [
   publishedPaths,
   createPage,
   deleteDraftPage,
+  loadDemoCms,
+  purgeDemoCms,
+  verifyDemoCms,
   updatePage,
   publishPage,
   getSection,
