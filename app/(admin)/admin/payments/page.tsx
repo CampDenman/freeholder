@@ -50,8 +50,9 @@ export default async function PaymentsPage({
   const openInvoices = invoices.filter((invoice) => ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status));
   const refundable = succeeded.filter(({ payment }) =>
     payment.refundedMinor < payment.amountMinor
-    && (payment.provider === "manual" || isHostedPaymentProvider(payment.provider)),
+    && (payment.provider === "manual" || payment.provider === "balance" || isHostedPaymentProvider(payment.provider)),
   );
+  const attentionCount = reconciliation.unsettled.length + reconciliation.openDisputes.length + reconciliation.payouts.length;
 
   return (
     <div className="grid gap-6">
@@ -144,9 +145,9 @@ export default async function PaymentsPage({
       ) : null}
 
       <Card>
-        <CardHeader title={t("payments.attention")} status={<Pill tone={reconciliation.openDisputes.length ? "warning" : "neutral"}>{reconciliation.unsettled.length + reconciliation.openDisputes.length}</Pill>} />
+        <CardHeader title={t("payments.attention")} status={<Pill tone={attentionCount ? "warning" : "neutral"}>{attentionCount}</Pill>} />
         <CardBody>
-          {reconciliation.unsettled.length === 0 && reconciliation.openDisputes.length === 0 ? <p className="text-sm text-ink-muted">{t("payments.attention.empty")}</p> : (
+          {attentionCount === 0 ? <p className="text-sm text-ink-muted">{t("payments.attention.empty")}</p> : (
             <div className="grid gap-4">
               {reconciliation.unsettled.map((payment) => (
                 <div key={payment.id} className="flex flex-wrap items-center gap-2 border-b border-rule pb-3">
@@ -155,8 +156,10 @@ export default async function PaymentsPage({
                 </div>
               ))}
               {reconciliation.openDisputes.map((dispute) => <div key={dispute.id} className="flex flex-wrap gap-2 text-sm"><Pill tone="danger">{t("payments.dispute")}</Pill><span>{dispute.provider} · {money(dispute.amountMinor, dispute.currency)}</span><span className="text-ink-muted">{dispute.reason ?? t("payments.noReason")}</span></div>)}
+              {reconciliation.payouts.map((payout) => <div key={payout.id} className="flex flex-wrap gap-2 text-sm"><Pill tone={payout.status === "failed" ? "danger" : "warning"}>{t("payments.payout")}</Pill><span>{payout.provider} · {money(payout.amountMinor, payout.currency)}</span><span className="text-ink-muted">{payout.status.replaceAll("_", " ")}</span></div>)}
             </div>
           )}
+          {reconciliation.balanceTransactions.length ? <p className="mt-4 text-xs text-ink-muted">{t("payments.unmatchedBalance", { count: reconciliation.balanceTransactions.length })}</p> : null}
         </CardBody>
       </Card>
 

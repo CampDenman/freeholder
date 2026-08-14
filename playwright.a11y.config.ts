@@ -89,7 +89,7 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   webServer: {
-    command: "pnpm start --hostname localhost --port 3100",
+    command: "node scripts/start-browser-server.mjs",
     url: `${baseURL}/api/health`,
     timeout: 120_000,
     reuseExistingServer: false,

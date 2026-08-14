@@ -141,8 +141,14 @@ money.
   deadline, and open/won/lost state. Older provider events cannot move a dispute
   backward.
 - `invoicing.reconcilePaymentProviders` reports unsettled attempts, open
-  disputes, and authenticated event receipts. Provider fees, balance
-  transactions, and payout deposits remain C5.08 work.
+  disputes, unreconciled payout deposits, unmatched provider balance lines,
+  and authenticated event receipts. Stripe and Square signed payout webhooks
+  converge automatically; every hosted provider can also ingest statement
+  observations and gross/fee/net lines through the identical service contract.
+- `invoicing.reconcileProviderPayout` refuses pending/failed deposits, mixed
+  provider or currency lines, reused provider transactions, and any line set
+  whose exact signed net does not equal the bank deposit. Reconciliation is
+  therefore evidence, not a checkbox.
 
 Hosted provider calls occur inside an idempotent service transaction. Stripe,
 PayPal, Square, and Mollie receive their documented request-idempotency value;
@@ -182,7 +188,8 @@ existing invoice advisory lock refuses a competing settlement.
 
 Before live credentials:
 
-1. Apply migration `0046_right_swordsman.sql` and run `platform.doctor`.
+1. Apply migrations through `0047_fantastic_miss_america.sql` and run
+   `platform.doctor`.
 2. Create and issue a small invoice through the generated invoicing API.
 3. Create a sandbox checkout with a unique idempotency key. Retry the same
    request and confirm the payment/session IDs do not change.
@@ -197,6 +204,9 @@ Before live credentials:
 7. Send a forged signature, stale Stripe timestamp, oversized body, mismatched
    amount/currency, and an event before its payment exists. Expect refusal and
    no ledger mutation.
+8. Import or receive one payout, record its charge/refund/fee lines, refuse an
+   intentionally mismatched selection, then reconcile the exact net. Confirm
+   the admin payment console surfaces unmatched lines and unreconciled payouts.
 
 Repeat the checklist for each provider an instance plans to enable. The
 repository tests use deterministic mocked provider HTTP only. They never make a
@@ -204,12 +214,10 @@ real, billable, sandbox, or live provider request.
 
 ## Rollback
 
-No C5.07 schema migration is needed: provider IDs and references were already
-generic text behind the C5.06 contract. The C5.06 migration is additive except
-for widening the existing
-`money_state_events_subject_valid` check to admit disputes. The previous image
-continues to read invoices, payments, and refunds; it ignores the four new
-tables and nullable checkout reference. Roll back the image normally. Do not
-drop provider evidence during an incident. Disable hosted checkout by selecting
-`manual`, retain the webhook endpoints until outstanding attempts settle, and
-reconcile before removing credentials.
+C5.08 migration `0047_fantastic_miss_america.sql` is additive except for safely
+widening `money_state_events_subject_valid` to admit plans and payouts. The
+previous image continues to read invoices, payments, and refunds and ignores
+the advanced tables. Roll back the image normally. Do not drop balance,
+allocation, fee, or payout evidence during an incident. Disable hosted checkout
+by selecting `manual`, retain webhook endpoints until outstanding attempts and
+payouts settle, and reconcile before removing credentials.

@@ -3,7 +3,7 @@
 // The declarative instance description (MASTER.md §17): deployment target ×
 // adapter profile × business preset. Checked in; secrets live in env only.
 import { z } from "zod";
-import { LEDGER_PAYMENT_PROVIDER_IDS } from "@/adapters/payments/providers";
+import { CONFIGURABLE_PAYMENT_PROVIDER_IDS } from "@/adapters/payments/providers";
 
 export const configSchema = z.object({
   target: z
@@ -20,7 +20,7 @@ export const configSchema = z.object({
     .default("local"),
   adapters: z
     .object({
-      payments: z.enum(LEDGER_PAYMENT_PROVIDER_IDS).default("manual"),
+      payments: z.enum(CONFIGURABLE_PAYMENT_PROVIDER_IDS).default("manual"),
       mailTransactional: z
         .enum(["gmail", "outlook", "smtp", "console"])
         .default("console"),

@@ -10,6 +10,7 @@ export interface PaymentAdapterCapabilities {
   savedMethods: boolean;
   subscriptions: boolean;
   disputes: boolean;
+  /** Can initiate outbound payouts; tracking inbound provider deposits is ledger-wide. */
   payouts: boolean;
   inPerson: boolean;
   strongCustomerAuthentication: boolean;
@@ -141,6 +142,17 @@ export type PaymentProviderEvent =
       contactId?: string;
       method: SavedPaymentMethodEvidence;
       occurredAt: string;
+    }
+  | {
+      id: string;
+      kind: "payout_pending" | "payout_in_transit" | "payout_paid" | "payout_failed" | "payout_cancelled";
+      providerRef: string;
+      amountMinor: number;
+      currency: string;
+      occurredAt: string;
+      expectedAt?: string;
+      statementRef?: string;
+      failureReason?: string;
     };
 
 export interface PaymentAdapter {

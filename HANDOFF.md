@@ -4,17 +4,17 @@ Last updated: 2026-08-14 (America/Vancouver)
 
 ## Resume point
 
-Resume `MASTER.md` section 43 at **C5.04 and C5.08**:
+Resume `MASTER.md` section 43 at **C5.04 and C5.09**:
 
 > Finish jurisdiction-correct tax templates beyond the safe standard-rate
-> starters, then extend the now-seven-provider payment ledger with deposits,
-> balances, plans, tips, flexible pricing, fees and payout reconciliation.
+> starters, then build product/catalog lifecycle on the completed advanced
+> money and seven-provider payment ledger.
 
-C5.01, C5.02, C5.03, C5.05, C5.06 and C5.07 are implemented.
+C5.01, C5.02, C5.03, C5.05, C5.06, C5.07 and C5.08 are implemented.
 C5.04 remains open because the source-attributed catalog deliberately ships
 standard/base starters with activation interlocks, not a false claim of complete
-US address-level local tax or every reduced/exempt category. C5.08 and the rest
-of commerce remain open; provider adapters are real, but public cart checkout
+US address-level local tax or every reduced/exempt category. C5.09 and the rest
+of commerce remain open; provider adapters and advanced money are real, but public cart checkout
 does not exist until C5.21.
 
 Commerce is now the active functional workstream by owner decision. C1.28–C4
@@ -22,8 +22,8 @@ remain open and unchanged; the priority deviation is recorded beside C5 in
 `MASTER.md`. C1.27 remains deliberately dependency-blocked until the required
 C5–C9 domain modules exist.
 
-The working branch is `feat/commerce-provider-parity`, created from the merged
-C5.06 payment checkpoint `cc179b5210b9a2a58ffdf1d8c444e2f959a43d47`. The separate
+The working branch is `feat/commerce-advanced-money`, created from the merged
+C5.07 provider checkpoint `c909c444d8a63dd6318febcb9e8c181113d1cebd`. The separate
 `feat/media-capture` branch preserves its clean C1.28 documentation checkpoint
 at `c90456d`; do not mix that checkpoint into commerce.
 
@@ -173,6 +173,56 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 - Tests used deterministic mocked HTTPS only. No live, sandbox or billable
   provider request was made. Protected CI remains the browser/Docker evidence.
 
+## C5.08 advanced-money checkpoint delivered behavior
+
+- Migration `0047_fantastic_miss_america.sql` adds ten normalized tables for
+  customer balance journals, plans/installments/allocations, voluntary-payment
+  terms, late-fee evidence, provider statement lines, payouts and payout-line
+  matching. Amount, status, uniqueness, total and foreign-key invariants are
+  database-backed.
+- Deposits and balances are two linked invoices with independent tax evidence,
+  due dates, immutable totals and numbering. Late fees likewise become linked
+  invoices only after due date plus grace; fixed/PPM calculation and caps are
+  snapshotted without editing the overdue invoice.
+- Payment plans must equal the current outstanding balance. Every successful
+  payment allocates oldest-due-first and can span installments; any number of
+  partial payments can settle one invoice without no-op state-event failures.
+- Tips and pay-what-you-want selections enforce snapshotted min/max terms and
+  become normal invoices/payments. Attached voluntary money must stay on the
+  same Contact and currency.
+- Customer credit is per Contact/currency with an append-only signed-delta
+  journal. Spend creates a provider `balance` Payment; refund creates a normal
+  Refund and restores credit in the same transaction. The internal provider
+  cannot be selected as an external checkout adapter.
+- Provider payout tracking accepts generic statement observations and immutable
+  signed gross/fee/net lines. Reconciliation requires a paid payout, the same
+  provider/currency, unused lines and an exact net equal to the bank deposit.
+  Stripe and Square signed payout webhooks converge automatically; late events
+  cannot roll state backward and a later provider failure clears reconciliation.
+- The translated payment console surfaces unreconciled payouts and unmatched
+  provider lines. Generated API/MCP services expose all advanced workflows.
+  Contact merge combines same-currency balances with exact safe undo; privacy
+  export covers terms/journals and erasure redacts free text while retaining
+  accounting evidence.
+- The browser gate now launches the actual standalone production artifact and
+  copies static assets plus migrations into its runtime, matching deployment
+  packaging instead of invoking unsupported `next start`.
+
+## C5.08 local evidence
+
+- Focused advanced-money/adapter/provider/merge gate: 4 files, 30 tests passed.
+- Full `pnpm test` reached 99/100 files and 1,162/1,163 tests; the sole failure
+  was the known database-load class, a 10-second `locale-routing` setup timeout.
+  That complete file passed 15/15 immediately in isolation in 19.71 seconds.
+- `pnpm build` passed in 84.7 seconds; the known optional
+  `@replit/object-storage` warning remains.
+- The real production-build Chromium journey passed in 33.0 seconds, including
+  the offline payment/refund server actions and WCAG A/AA scan.
+- Focused TypeScript, lint, licensing, plan and diff gates passed. Protected CI
+  remains the authoritative uncontended full-suite and Docker/image proof.
+- Provider tests use signed deterministic fixtures only. No live, sandbox,
+  billable or bank payout call was made.
+
 ## C1.26 delivered behavior
 
 - `demo_scenarios`, `demo_scenario_runs` and `demo_records` normalize immutable
@@ -234,8 +284,8 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 
 1. Finish C5.04's product/category and address-level jurisdiction rules without
    weakening the starter activation interlocks.
-2. Continue C5.08 advanced money behavior without a second ledger.
-3. Build catalog/pricing, then inventory/shipping, then carts/checkout/orders;
+2. Build C5.09 catalog/product lifecycle on the completed money spine.
+3. Continue pricing, inventory/shipping, then carts/checkout/orders;
    every mutation remains one service-layer transaction and every customer
    reference joins the existing Contact spine.
 4. Check a C5 item only after its migrations, services, user surface, hostile

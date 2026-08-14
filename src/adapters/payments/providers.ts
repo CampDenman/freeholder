@@ -14,6 +14,12 @@ export const HOSTED_PAYMENT_PROVIDER_IDS = [
 
 export const LEDGER_PAYMENT_PROVIDER_IDS = [
   "manual",
+  "balance",
+  ...HOSTED_PAYMENT_PROVIDER_IDS,
+] as const;
+
+export const CONFIGURABLE_PAYMENT_PROVIDER_IDS = [
+  "manual",
   ...HOSTED_PAYMENT_PROVIDER_IDS,
 ] as const;
 

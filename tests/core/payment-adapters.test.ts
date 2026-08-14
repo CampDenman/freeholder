@@ -146,6 +146,13 @@ describe("Stripe payment adapter", () => {
     if (methodEvents[0]?.kind === "saved_method_added") {
       expect(methodEvents[0].method).toMatchObject({ providerRef: "pm_1", last4: "4242" });
     }
+
+    const payoutPayload = { id: "evt_payout", type: "payout.paid", created: at, data: { object: { id: "po_1", amount: 9_200, currency: "cad", status: "paid", arrival_date: at + 86_400, statement_descriptor: "FREEHOLDER" } } };
+    const payoutRaw = JSON.stringify(payoutPayload);
+    const payoutSignature = createHmac("sha256", secret).update(`${at}.${payoutRaw}`).digest("hex");
+    await expect(adapter.verifyWebhook({ headers: { "stripe-signature": `t=${at},v1=${payoutSignature}` }, body: bytes(payoutRaw), receivedAt: new Date(at * 1_000).toISOString() })).resolves.toEqual([
+      expect.objectContaining({ kind: "payout_paid", providerRef: "po_1", amountMinor: 9_200, currency: "CAD", statementRef: "FREEHOLDER" }),
+    ]);
   });
 });
 
@@ -294,6 +301,16 @@ describe("Square payment adapter", () => {
     const refundSignature = createHmac("sha256", "new-square").update(`${notificationUrl}${refundPayload}`).digest("base64");
     await expect(adapter.verifyWebhook({ headers: { "x-square-hmacsha256-signature": refundSignature }, body: bytes(refundPayload), receivedAt: "2026-08-14T12:01:01Z" })).resolves.toEqual([
       expect.objectContaining({ id: "square-refund-1", kind: "refund_processing", providerRef: "REFUND-1", paymentProviderRef: "PAYMENT-1", amountMinor: 345 }),
+    ]);
+    const payoutPayload = JSON.stringify({
+      event_id: "square-payout-1",
+      type: "payout.paid",
+      created_at: "2026-08-15T12:00:00Z",
+      data: { object: { payout: { id: "PAYOUT-1", status: "PAID", amount_money: { amount: 12_000, currency: "CAD" }, arrival_date: "2026-08-16", updated_at: "2026-08-15T12:00:00Z" } } },
+    });
+    const payoutSignature = createHmac("sha256", "new-square").update(`${notificationUrl}${payoutPayload}`).digest("base64");
+    await expect(adapter.verifyWebhook({ headers: { "x-square-hmacsha256-signature": payoutSignature }, body: bytes(payoutPayload), receivedAt: "2026-08-15T12:00:01Z" })).resolves.toEqual([
+      expect.objectContaining({ id: "square-payout-1", kind: "payout_paid", providerRef: "PAYOUT-1", amountMinor: 12_000, currency: "CAD" }),
     ]);
     await expect(adapter.verifyWebhook({ ...request, body: bytes(`${payload} `) })).rejects.toMatchObject({ code: "authentication" });
   });

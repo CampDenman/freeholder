@@ -3649,8 +3649,22 @@ skipped item is checked or weakened.
   config/doctor gate; 99 files/1,155 tests, typecheck, lint, licensing, plan,
   dependency and production-build gates; `deploy/commerce-payments.md` and
   changeset `commerce-provider-parity.md`.)*
-- [ ] **C5.08** Support deposits, balances, payment plans, tips, pay-what-you-
+- [x] **C5.08** Support deposits, balances, payment plans, tips, pay-what-you-
   want, late fees, partial/multi-payment invoices and provider payout tracking.
+  *(Evidence: additive migration `0047_fantastic_miss_america.sql` with ten
+  normalized advanced-money tables and database constraints; linked immutable
+  deposit/balance and late-fee invoices; exact installment schedules with FIFO
+  allocations across any number of partial payments; per-contact/currency
+  append-only credit journals whose spend/refund movements converge through
+  the existing Payment/Refund state machines; bounded tip and pay-what-you-want
+  terms; signed Stripe/Square payout observations plus provider-neutral
+  gross/fee/net statement ingestion and exact bank-deposit matching; advanced
+  reconciliation and translated admin attention; replay/race/out-of-order,
+  contact merge/undo and privacy coverage in
+  `tests/core/advanced-money.test.ts`, provider service and adapter suites;
+  production build and real Chromium payment/refund/WCAG journey;
+  `deploy/commerce-money.md`, `deploy/commerce-payments.md` and changeset
+  `commerce-advanced-money.md`.)*
 
 #### Catalog and pricing
 
