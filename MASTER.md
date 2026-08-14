@@ -2918,11 +2918,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `3de729c` with C1.25 merged in PR #96; PR CI `31762010303`, post-merge CI `31762514806`, and signed/provenance/SBOM image publication `31762514808` green; 91-file/1,098-test local suite; changeset `role-guidance.md` |
+| Evidence snapshot | `main` at `3de729c` with C1.25 merged in PR #96; C1.26 implementation checkpoint `5483916`; 94-file/1,108-test local suite, 5-test Chromium gate, production build, 92-table/5,133-row ownership drill; migrations `0041`/`0042`; changeset `deterministic-demo-scenarios.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.26 versioned demo/onboarding contribution and scenario-orchestration foundation; no public-launch work is required |
+| Current focus | C1.28 first-class screen/camera/microphone capture; C1.27 full domain scenarios remain dependency-blocked on C5–C9; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3323,13 +3323,30 @@ reading chat logs.
   customer isolation, forbidden-control and axe coverage in the four-test
   real-browser gate; 91-file/1,098-test Vitest suite; production build;
   operator guide `deploy/role-guidance.md`; changeset `role-guidance.md`)
-- [ ] **C1.26** Build the normalized, versioned `DemoScenario` definition/run/
+- [x] **C1.26** Build the normalized, versioned `DemoScenario` definition/run/
   provenance model and typed public manifest contract through which core,
   modules and plugins contribute fixtures, guidance steps, locale variants,
   expected outcomes and purge handlers; validate dependencies, capabilities,
   targets and cleanup, add hostile fixture-plugin conformance, and prove
   deterministic transactional load/reload/reset/purge with visibly isolated
-  current-module fixture data.
+  current-module fixture data. *(Evidence: additive `demo_scenarios`,
+  `demo_scenario_runs` and `demo_records` schema with immutable definition,
+  single-active-run, lifecycle and exact per-generation provenance invariants
+  in migrations `0041_red_zeigeist.sql` and `0042_worthless_naoko.sql`; typed
+  `onboarding` manifest loader for version-pinned targets, guidance, scenarios,
+  localized fixtures, expected outcomes and load/purge/verify services; boot-
+  time namespace/dependency/capability/target/selector/handler/locale/cleanup
+  conformance with hostile-plugin refusals; guarded module handlers that accept
+  only active matching run provenance; transactional idempotent load, same-run
+  generational reload, fresh-run localized reset and reverse-order exact purge
+  in `src/core/demo/service.ts`; CMS and Forms English/French/Spanish fixture
+  contributions visibly marked `[Demo]`; owner-only `/admin/demos` lifecycle
+  with registry-derived outcome links; rollback-on-late-conflict and untracked-
+  record preservation coverage in `tests/core/demo-scenarios.test.ts`; 5-test
+  real Chromium gate including the complete localized lifecycle; 94-file/
+  1,108-test suite; production build; 92-table/5,133-row ownership backup,
+  restore and export drill; operator guide `deploy/demo-scenarios.md`; changeset
+  `deterministic-demo-scenarios.md`.)*
 - [ ] **C1.27** After the required C5–C9 domain modules exist, ship complete
   creator, service-business, shop and everything scenarios assembled only from
   those contributions, with realistic contacts, media, content, locations,
