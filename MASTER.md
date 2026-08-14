@@ -2918,11 +2918,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `030a4ab` with C1.23 merged; post-merge CI `31713586633` and signed/provenance/SBOM image publication `31713586583` green; C1.24 local acceptance: 88-file/1,085-test suite and production build green; changeset `seeded-development-home.md` |
+| Evidence snapshot | `main` at `dd34df7` with C1.24 merged; C1.25 local acceptance on `feat/role-onboarding`: 91-file/1,098-test suite, four-test real-browser gate, production build, ownership drill and all locally available repository gates green; protected PR/CI completion pending; changeset `role-guidance.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.25 role/capability-derived onboarding; no public-launch work is required |
+| Current focus | Complete the protected PR/CI flow for C1.25 role/capability-derived onboarding; C1.26 follows only after merge; no public-launch work is required |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3311,10 +3311,18 @@ reading chat logs.
   default, opt-out, explicit production request, pristine guard and restart
   idempotence; 88-file/1,085-test Vitest suite; production build; changeset
   `seeded-development-home.md`)
-- [ ] **C1.25** Build resumable, role/capability-derived onboarding for owner,
+- [x] **C1.25** Build resumable, role/capability-derived onboarding for owner,
   administrator, editor, bookkeeper, service provider and customer, with
   first-win tasks, contextual relaunch, skip/reset, progress and forbidden-
-  control accessibility/permission tests.
+  control accessibility/permission tests. (versioned `guidance_flows` and
+  per-user `guidance_progress` in `0040_curved_purple_man.sql`; real-outcome
+  reconciliation, capability-derived custom-role subsets and newly granted
+  task reactivation; shared admin/portal guidance surfaces with localized
+  start/resume, skip and reset controls; permission, semantic-markup and
+  durable-progress coverage in `tests/core/guidance*.test.ts`; owner/staff/
+  customer isolation, forbidden-control and axe coverage in the four-test
+  real-browser gate; 91-file/1,098-test Vitest suite; production build;
+  operator guide `deploy/role-guidance.md`; changeset `role-guidance.md`)
 - [ ] **C1.26** Ship deterministic creator, service, shop and everything demo
   scenarios with realistic cross-module states, locale variants, expected-
   outcome journeys, visible isolation and idempotent one-action load/reset/

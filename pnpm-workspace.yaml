@@ -61,4 +61,4 @@ overrides:
   # path rather than in dev tooling, which is why the floor goes in rather
   # than waiting for Next to bump its own dependency. Bounded at the next
   # major for the reason the js-yaml entry records.
-  nanoid@3: ">=3.3.17 <4"
+  nanoid@3: ">=3.3.18 <4"

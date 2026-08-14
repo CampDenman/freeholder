@@ -4,7 +4,7 @@ Last updated: 2026-08-13 (America/Vancouver)
 
 ## Resume point
 
-Resume `MASTER.md` §43 at **C1.25**:
+Complete the protected PR/CI flow for `MASTER.md` §43 **C1.25**:
 
 > Build resumable, role/capability-derived onboarding for owner,
 > administrator, editor, bookkeeper, service provider and customer, with
@@ -24,18 +24,18 @@ two product commits:
 - `9482069` (`test: satisfy role guidance lint`) validates parsed migration
   JSON through the guidance schema and removes the two whitespace failures.
 
-The feature is intentionally incomplete. Focused service/UI tests, TypeScript,
-lint, the production build and all changed browser specifications pass. The
-full suite/repository gates have not completed. Do not update `MASTER.md` or
-open the PR until that evidence is green.
+Local acceptance is complete and `MASTER.md` now records C1.25 as checked.
+The remaining work is delivery evidence: commit the acceptance/security-floor
+changes, add the missing DCO trailers to the eight local-only commits, push,
+open the protected PR, require green CI, merge, and verify the post-merge runs.
 
 Do not commit or modify the separate untracked `RESTART_HANDOFF.md`; it is an
 older local document outside this checkpoint.
 
-`origin/feat/role-onboarding` remains at `f08fb30`. The UI checkpoint,
-operations checkpoint and updated handoffs are local-only shutdown commits, so
-the branch will be eight commits ahead of its tracked remote after this document
-is committed.
+`origin/feat/role-onboarding` remains at `f08fb30`. The branch is eight commits
+ahead before the pending acceptance commit. Do not push until those local-only
+commits have DCO sign-offs; GitHub requires the `DCO` and `checks` statuses but
+does not require cryptographic commit signatures.
 
 ## Verified baseline
 
@@ -43,7 +43,8 @@ is committed.
 - C1.23 ownership recovery is merged in PR #94 at `030a4ab`.
 - C1.24 fresh seeded home is merged in PR #95 at `dd34df7`.
 - `main` and `origin/main` were synchronized before this branch was created.
-- `MASTER.md` marks C1.24 complete and names C1.25 as the current focus.
+- `MASTER.md` marks C1.25 locally accepted and keeps its protected PR/CI flow
+  as the current focus; C1.26 starts only after merge.
 
 C1.24 now provides this contract:
 
@@ -153,69 +154,47 @@ Commit `eb3c9e7` builds the human-facing checkpoint on that foundation:
 - Failed admin actions now render a localized accessible danger callout rather
   than silently carrying an unused error query parameter.
 
-## Verification at shutdown
+## Local acceptance evidence
 
-- `pnpm exec vitest run tests/core/guidance-definitions.test.ts
-  tests/core/guidance.test.ts tests/core/guidance-ui.test.ts` passed: 3 files,
-  13 tests. The database-backed tests exercise the migration and lifecycle.
-- `pnpm typecheck` passed after all current UI, service and browser-spec edits.
-- `pnpm build` passed in 89.9 seconds. The known optional
+- The final isolated `pnpm test` run against the dependency-patched checkpoint
+  passed 91/91 files and 1,098/1,098 tests in 506.96 seconds. A separate earlier
+  clean run passed the same counts in 551.76 seconds.
+- `pnpm test:browser` passed all four serial Chromium tests in 46.8 seconds:
+  real-browser accessibility, the full product journey, staff-role forbidden-
+  control matrices, and customer/admin isolation.
+- `pnpm build` passed in 64.7 seconds. The known optional
   `@replit/object-storage` warning remains.
-- `tests/browser/guidance.spec.ts` passed: 2 tests in 10.0 seconds, covering
-  the staff-role permission matrix and customer/admin isolation.
-- The changed `tests/browser/accessibility.spec.ts` and
-  `tests/browser/journeys.spec.ts` passed: 2 tests in 48.6 seconds, including
-  axe coverage, portal progress, owner real-outcome completion and contextual
-  skip/resume/reset.
-- All three locale catalogs parse as JSON.
-- `pnpm lint` passed in 34.6 seconds after the migration JSON was parsed as
-  `unknown` through the executable guidance steps schema.
-- `git diff --check` passed after removing the two trailing blank lines from
-  `.changeset/role-guidance.md` and `deploy/role-guidance.md`.
-- A complete `pnpm test` attempt returned after 660.6 seconds: 90/91 files and
-  1,094/1,098 tests passed. All four failures were in
-  `tests/core/spine.test.ts` and showed another owner/user appearing between
-  that file's per-test truncations. This matched an overlapping Vitest process
-  left alive when an earlier buffered shell was terminated; do not interpret
-  the four assertions as product failures or as a green full-suite result.
-- `pnpm exec vitest run tests/core/spine.test.ts` then passed all 38 tests in
-  isolation in 26.9 seconds, confirming the failed assertions are not
-  reproducible within that file alone.
-- A fresh full-suite rerun was started after checking for stray workers, but
-  its monitoring host was lost and shutdown was requested before a result. The
-  exact new `pnpm`/Vitest process tree (PIDs 25808, 27504 and 21432) was
-  explicitly stopped. This rerun is non-evidence and must be repeated.
-- A subsequent turn again confirmed there were no test workers before starting
-  one isolated `pnpm test`. The turn was deliberately aborted for shutdown
-  before Vitest returned a result; its exact process tree (PIDs 16820, 8028 and
-  22592) was explicitly stopped, and a follow-up process query found no
-  remaining Vitest or `pnpm test` worker. This attempt is also non-evidence.
-- The full Vitest suite has not produced a clean isolated result, and the
-  remaining repository gates have not run against this checkpoint. Do not
-  treat C1.25 as accepted.
-- Git signing was attempted, but the configured GPG identity has no private key
-  in this environment. The eight local commits after `f08fb30` are therefore
-  unsigned checkpoints. Restore the signing key and re-sign/recreate them
-  before the protected PR flow if required.
-
-One design detail deserves review before acceptance:
-
-- `guidance.list` is declared as a query but reconciles derived progress inside
-  its transaction. Focused tests now prove retry/idempotence, and it never
-  creates fake completion evidence, but confirm this read/write service
-  semantic is intentional before the PR.
+- `pnpm ownership:drill` passed with the PostgreSQL 16 client: backup, restore
+  and secret-safe export matched 89 tables, 4,865 rows, zero assets and zero
+  media objects.
+- `pnpm plan:check`, `pnpm typecheck`, `pnpm lint`, `pnpm license:check`,
+  `pnpm dependency:audit`, `git diff --check`, the changelog gate, the schema-
+  compatibility gate, and shell syntax checks passed on the final worktree.
+- The dependency audit discovered that GHSA-2v37-7h3g-55p8 was updated to mark
+  Nano ID 3.3.17 vulnerable. The bounded `nanoid@3` override and lockfile now
+  resolve 3.3.18; the audit and frozen install pass.
+- Docker is intentionally unavailable on this development machine. The image,
+  seeded public-site/SEO, and previous-image upgrade/rollback gates remain the
+  protected CI evidence, as documented directly in `.github/workflows/ci.yml`.
+- `guidance.list` remains a query intentionally. Its physical write refreshes
+  only an idempotent projection from durable evidence; it creates no completion
+  evidence or audit claim. Classifying each dashboard view as a mutation would
+  produce false audit entries. Focused tests prove real-evidence completion,
+  retry idempotence and capability-change reactivation.
 
 ## Resume sequence
 
-1. Confirm no Vitest/pnpm worker from 2026-08-13 is alive, then rerun the
-   complete `pnpm test` suite exactly once and record its final file/test
-   counts. The overlapping and interrupted runs are not acceptance evidence.
-2. Review the remaining `guidance.list` read/write semantic above.
-3. Run every remaining repository gate in the normal C1
-   acceptance sequence.
-4. Update `MASTER.md` only after all acceptance evidence is green.
-5. Restore signing capability, prepare signed commits as required, push the
-   branch, and use the protected PR/CI/merge/post-merge verification flow.
+1. Review and explicitly stage only `MASTER.md`, `HANDOFF.md`,
+   `pnpm-workspace.yaml` and `pnpm-lock.yaml`; never stage
+   `RESTART_HANDOFF.md`.
+2. Commit the local acceptance/security-floor update with `git commit -s`.
+3. Preserve a local backup ref, then add a DCO trailer to each of the eight
+   local-only commits after `f08fb30` without rewriting the tracked remote
+   checkpoint itself. Verify every `origin/feat/role-onboarding..HEAD` commit.
+4. Push the branch, open the PR, and wait for both required `DCO` and `checks`
+   statuses. Fix any failure and merge only when current with `main` and green.
+5. Verify post-merge CI and image publication, synchronize `main`, then begin
+   C1.26 on a fresh branch.
 
 C1.26 still owns deterministic demo scenarios and general module/plugin
 manifest contributions/conformance. Do not pull that separate checklist item
