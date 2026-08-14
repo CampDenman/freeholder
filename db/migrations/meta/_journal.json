@@ -330,6 +330,13 @@
       "when": 1786729945820,
       "tag": "0046_right_swordsman",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786748380827,
+      "tag": "0047_fantastic_miss_america",
+      "breakpoints": true
     }
   ]
 }

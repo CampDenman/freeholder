@@ -11,6 +11,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { ServiceError } from "@/core/service";
 import { getInvoice } from "@/modules/invoicing/invoice-service";
+import { refundCustomerBalancePayment } from "@/modules/invoicing/advanced-money-service";
 import {
   completePaymentCheckout,
   getPayment,
@@ -62,6 +63,8 @@ export async function paymentAction(form: FormData): Promise<void> {
       };
       if (row.payment.provider === "manual") {
         await recordOfflineRefund.call({ ...input, reference: field(form, "reference") || undefined }, actor);
+      } else if (row.payment.provider === "balance") {
+        await refundCustomerBalancePayment.call(input, actor);
       } else {
         await submitProviderRefund.call(input, actor);
       }

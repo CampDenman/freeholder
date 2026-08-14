@@ -21,6 +21,7 @@ import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 const amount = (name: string) => bigint(name, { mode: "number" }).notNull().default(0);
+const signedAmount = (name: string) => bigint(name, { mode: "number" }).notNull();
 
 export const taxCategories = pgTable(
   "tax_categories",
@@ -197,7 +198,7 @@ export const invoices = pgTable(
     contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
     number: text("number"),
     sequenceKey: text("sequence_key").notNull().default("invoice"),
-    sourceType: text("source_type", { enum: ["order", "quote", "booking", "subscription", "manual", "tip", "unlock"] })
+    sourceType: text("source_type", { enum: ["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock"] })
       .notNull()
       .default("manual"),
     sourceId: text("source_id"),
@@ -585,11 +586,260 @@ export const creditNoteLines = pgTable(
   ],
 );
 
+export const paymentPlans = pgTable(
+  "payment_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "restrict" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    status: text("status", { enum: ["active", "completed", "defaulted", "cancelled"] }).notNull().default("active"),
+    currency: text("currency").notNull(),
+    principalMinor: amount("principal_minor"),
+    paidMinor: amount("paid_minor"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("payment_plans_invoice_idx").on(t.invoiceId),
+    uniqueIndex("payment_plans_idempotency_idx").on(t.idempotencyKey),
+    index("payment_plans_status_idx").on(t.status, t.createdAt),
+    check("payment_plans_request_hash_valid", sql`length(${t.requestHash}) = 64`),
+    check("payment_plans_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("payment_plans_principal_positive", sql`${t.principalMinor} > 0`),
+    check("payment_plans_paid_bounded", sql`${t.paidMinor} between 0 and ${t.principalMinor}`),
+    check("payment_plans_status_valid", sql`${t.status} in ('active','completed','defaulted','cancelled')`),
+    check("payment_plans_complete_consistent", sql`${t.status} <> 'completed' or ${t.paidMinor} = ${t.principalMinor}`),
+    check("payment_plans_cancelled_consistent", sql`${t.status} <> 'cancelled' or ${t.cancelledAt} is not null`),
+  ],
+);
+
+export const paymentPlanInstallments = pgTable(
+  "payment_plan_installments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id").notNull().references(() => paymentPlans.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    amountMinor: amount("amount_minor"),
+    paidMinor: amount("paid_minor"),
+    status: text("status", { enum: ["scheduled", "due", "partially_paid", "paid", "waived", "defaulted"] }).notNull().default("scheduled"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("payment_plan_installments_position_idx").on(t.planId, t.position),
+    index("payment_plan_installments_due_idx").on(t.status, t.dueAt),
+    check("payment_plan_installments_position_valid", sql`${t.position} >= 0`),
+    check("payment_plan_installments_amount_positive", sql`${t.amountMinor} > 0`),
+    check("payment_plan_installments_paid_bounded", sql`${t.paidMinor} between 0 and ${t.amountMinor}`),
+    check("payment_plan_installments_status_valid", sql`${t.status} in ('scheduled','due','partially_paid','paid','waived','defaulted')`),
+    check("payment_plan_installments_paid_consistent", sql`${t.status} <> 'paid' or ${t.paidMinor} = ${t.amountMinor}`),
+  ],
+);
+
+export const paymentAllocations = pgTable(
+  "payment_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paymentId: uuid("payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
+    installmentId: uuid("installment_id").notNull().references(() => paymentPlanInstallments.id, { onDelete: "restrict" }),
+    amountMinor: amount("amount_minor"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("payment_allocations_payment_installment_idx").on(t.paymentId, t.installmentId),
+    index("payment_allocations_installment_idx").on(t.installmentId),
+    check("payment_allocations_amount_positive", sql`${t.amountMinor} > 0`),
+  ],
+);
+
+export const customerBalanceAccounts = pgTable(
+  "customer_balance_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
+    currency: text("currency").notNull(),
+    balanceMinor: amount("balance_minor"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("customer_balance_accounts_contact_currency_idx").on(t.contactId, t.currency),
+    index("customer_balance_accounts_contact_idx").on(t.contactId, t.createdAt),
+    check("customer_balance_accounts_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("customer_balance_accounts_nonnegative", sql`${t.balanceMinor} >= 0`),
+  ],
+);
+
+export const customerBalanceEntries = pgTable(
+  "customer_balance_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id").notNull().references(() => customerBalanceAccounts.id, { onDelete: "restrict" }),
+    kind: text("kind", { enum: ["credit", "debit", "refund", "adjustment"] }).notNull(),
+    deltaMinor: signedAmount("delta_minor"),
+    balanceAfterMinor: amount("balance_after_minor"),
+    sourceType: text("source_type").notNull(),
+    sourceId: text("source_id"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    reason: text("reason").notNull(),
+    actor: text("actor").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("customer_balance_entries_idempotency_idx").on(t.accountId, t.idempotencyKey),
+    index("customer_balance_entries_account_idx").on(t.accountId, t.createdAt),
+    index("customer_balance_entries_source_idx").on(t.sourceType, t.sourceId),
+    check("customer_balance_entries_delta_nonzero", sql`${t.deltaMinor} <> 0`),
+    check("customer_balance_entries_request_hash_valid", sql`length(${t.requestHash}) = 64`),
+  ],
+);
+
+export const flexiblePayments = pgTable(
+  "flexible_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "restrict" }),
+    attachedInvoiceId: uuid("attached_invoice_id").references(() => invoices.id, { onDelete: "restrict" }),
+    kind: text("kind", { enum: ["tip", "pay_what_you_want"] }).notNull(),
+    context: text("context", { enum: ["checkout", "invoice", "gallery", "booking", "store", "other"] }).notNull(),
+    chosenMinor: amount("chosen_minor"),
+    minimumMinor: amount("minimum_minor"),
+    maximumMinor: bigint("maximum_minor", { mode: "number" }),
+    message: text("message"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("flexible_payments_invoice_idx").on(t.invoiceId),
+    uniqueIndex("flexible_payments_idempotency_idx").on(t.idempotencyKey),
+    index("flexible_payments_attached_idx").on(t.attachedInvoiceId),
+    check("flexible_payments_kind_valid", sql`${t.kind} in ('tip','pay_what_you_want')`),
+    check("flexible_payments_context_valid", sql`${t.context} in ('checkout','invoice','gallery','booking','store','other')`),
+    check("flexible_payments_chosen_positive", sql`${t.chosenMinor} > 0`),
+    check("flexible_payments_minimum_valid", sql`${t.minimumMinor} >= 0 and ${t.chosenMinor} >= ${t.minimumMinor}`),
+    check("flexible_payments_maximum_valid", sql`${t.maximumMinor} is null or (${t.maximumMinor} >= ${t.minimumMinor} and ${t.chosenMinor} <= ${t.maximumMinor})`),
+    check("flexible_payments_request_hash_valid", sql`length(${t.requestHash}) = 64`),
+  ],
+);
+
+export const lateFeeAssessments = pgTable(
+  "late_fee_assessments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceInvoiceId: uuid("source_invoice_id").notNull().references(() => invoices.id, { onDelete: "restrict" }),
+    feeInvoiceId: uuid("fee_invoice_id").notNull().references(() => invoices.id, { onDelete: "restrict" }),
+    basis: text("basis", { enum: ["fixed", "percentage"] }).notNull(),
+    outstandingMinor: amount("outstanding_minor"),
+    fixedMinor: bigint("fixed_minor", { mode: "number" }),
+    ratePpm: integer("rate_ppm"),
+    capMinor: bigint("cap_minor", { mode: "number" }),
+    graceDays: integer("grace_days").notNull().default(0),
+    assessedMinor: amount("assessed_minor"),
+    assessedAt: timestamp("assessed_at", { withTimezone: true }).notNull(),
+    reason: text("reason").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("late_fee_assessments_fee_invoice_idx").on(t.feeInvoiceId),
+    uniqueIndex("late_fee_assessments_idempotency_idx").on(t.idempotencyKey),
+    index("late_fee_assessments_source_idx").on(t.sourceInvoiceId, t.assessedAt),
+    check("late_fee_assessments_basis_valid", sql`${t.basis} in ('fixed','percentage')`),
+    check("late_fee_assessments_outstanding_positive", sql`${t.outstandingMinor} > 0`),
+    check("late_fee_assessments_value_valid", sql`(${t.basis} = 'fixed' and ${t.fixedMinor} > 0 and ${t.ratePpm} is null) or (${t.basis} = 'percentage' and ${t.fixedMinor} is null and ${t.ratePpm} between 1 and 10000000)`),
+    check("late_fee_assessments_cap_valid", sql`${t.capMinor} is null or ${t.capMinor} > 0`),
+    check("late_fee_assessments_grace_valid", sql`${t.graceDays} between 0 and 3650`),
+    check("late_fee_assessments_amount_positive", sql`${t.assessedMinor} > 0`),
+    check("late_fee_assessments_request_hash_valid", sql`length(${t.requestHash}) = 64`),
+  ],
+);
+
+export const providerBalanceTransactions = pgTable(
+  "provider_balance_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    providerRef: text("provider_ref").notNull(),
+    kind: text("kind", { enum: ["charge", "refund", "dispute", "fee", "adjustment", "reserve", "release"] }).notNull(),
+    sourceType: text("source_type"),
+    sourceId: uuid("source_id"),
+    currency: text("currency").notNull(),
+    grossMinor: signedAmount("gross_minor"),
+    feeMinor: amount("fee_minor"),
+    netMinor: signedAmount("net_minor"),
+    availableAt: timestamp("available_at", { withTimezone: true }),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    requestHash: text("request_hash").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("provider_balance_transactions_ref_idx").on(t.provider, t.providerRef),
+    index("provider_balance_transactions_source_idx").on(t.sourceType, t.sourceId),
+    index("provider_balance_transactions_available_idx").on(t.provider, t.currency, t.availableAt),
+    check("provider_balance_transactions_kind_valid", sql`${t.kind} in ('charge','refund','dispute','fee','adjustment','reserve','release')`),
+    check("provider_balance_transactions_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("provider_balance_transactions_net_consistent", sql`${t.netMinor} = ${t.grossMinor} - ${t.feeMinor}`),
+    check("provider_balance_transactions_nonzero", sql`${t.grossMinor} <> 0 or ${t.feeMinor} <> 0`),
+    check("provider_balance_transactions_metadata_object", sql`jsonb_typeof(${t.metadata}) = 'object'`),
+    check("provider_balance_transactions_request_hash_valid", sql`length(${t.requestHash}) = 64`),
+  ],
+);
+
+export const providerPayouts = pgTable(
+  "provider_payouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    providerRef: text("provider_ref").notNull(),
+    status: text("status", { enum: ["pending", "in_transit", "paid", "failed", "cancelled"] }).notNull(),
+    currency: text("currency").notNull(),
+    amountMinor: amount("amount_minor"),
+    statementRef: text("statement_ref"),
+    failureReason: text("failure_reason"),
+    expectedAt: timestamp("expected_at", { withTimezone: true }),
+    providerStatusAt: timestamp("provider_status_at", { withTimezone: true }).notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("provider_payouts_ref_idx").on(t.provider, t.providerRef),
+    index("provider_payouts_status_idx").on(t.status, t.expectedAt),
+    check("provider_payouts_status_valid", sql`${t.status} in ('pending','in_transit','paid','failed','cancelled')`),
+    check("provider_payouts_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("provider_payouts_amount_positive", sql`${t.amountMinor} > 0`),
+    check("provider_payouts_paid_consistent", sql`${t.status} <> 'paid' or ${t.paidAt} is not null`),
+  ],
+);
+
+export const providerPayoutItems = pgTable(
+  "provider_payout_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    payoutId: uuid("payout_id").notNull().references(() => providerPayouts.id, { onDelete: "restrict" }),
+    balanceTransactionId: uuid("balance_transaction_id").notNull().references(() => providerBalanceTransactions.id, { onDelete: "restrict" }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("provider_payout_items_transaction_idx").on(t.balanceTransactionId),
+    uniqueIndex("provider_payout_items_pair_idx").on(t.payoutId, t.balanceTransactionId),
+    index("provider_payout_items_payout_idx").on(t.payoutId),
+  ],
+);
+
 export const moneyStateEvents = pgTable(
   "money_state_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    subjectType: text("subject_type", { enum: ["invoice", "payment", "refund", "credit_note", "dispute"] }).notNull(),
+    subjectType: text("subject_type", { enum: ["invoice", "payment", "refund", "credit_note", "dispute", "payment_plan", "payout"] }).notNull(),
     subjectId: uuid("subject_id").notNull(),
     fromState: text("from_state"),
     toState: text("to_state").notNull(),
@@ -600,7 +850,7 @@ export const moneyStateEvents = pgTable(
   },
   (t) => [
     index("money_state_events_subject_idx").on(t.subjectType, t.subjectId, t.occurredAt),
-    check("money_state_events_subject_valid", sql`${t.subjectType} in ('invoice','payment','refund','credit_note','dispute')`),
+    check("money_state_events_subject_valid", sql`${t.subjectType} in ('invoice','payment','refund','credit_note','dispute','payment_plan','payout')`),
     check("money_state_events_transition_valid", sql`${t.fromState} is null or ${t.fromState} <> ${t.toState}`),
     check("money_state_events_metadata_object", sql`jsonb_typeof(${t.metadata}) = 'object'`),
   ],

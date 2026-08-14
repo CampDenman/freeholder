@@ -37,6 +37,7 @@ import {
   sumMinor,
 } from "./money";
 import { quoteTax } from "./tax-service";
+import { allocateSettledPayment } from "./payment-plan-ledger";
 
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
 const minor = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -113,7 +114,7 @@ async function lock(tx: Tx, kind: string, id: string): Promise<void> {
 
 async function stateEvent(
   ctx: ServiceContext,
-  subjectType: "invoice" | "payment" | "refund" | "credit_note" | "dispute",
+  subjectType: "invoice" | "payment" | "refund" | "credit_note" | "dispute" | "payment_plan" | "payout",
   subjectId: string,
   fromState: string | null,
   toState: string,
@@ -444,8 +445,6 @@ export const reconcileMoney = defineService({
         refunds: refundRows.length,
       },
       discrepancies,
-      limitation:
-        "This reconciles Freeholder's internal ledger. Provider payouts, fees, disputes, and webhook delivery reconcile at the payment-adapter checkpoint.",
     };
   },
 });
@@ -453,7 +452,7 @@ export const reconcileMoney = defineService({
 const createDraftInput = z.object({
   contactId: z.string().uuid(),
   currency,
-  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "tip", "unlock"]).default("manual"),
+  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock"]).default("manual"),
   sourceId: z.string().trim().max(240).optional(),
   idempotencyKey,
   lines: z.array(lineInput).min(1).max(1_000),
@@ -486,6 +485,24 @@ export const createDraftInvoice = defineService({
         throw new ServiceError("conflict", "That invoice idempotency key was already used for different contents.");
       }
       return invoiceBundle(ctx.tx, existing.id);
+    }
+
+    if (input.depositOfInvoiceId) {
+      if (input.sourceType !== "balance") {
+        throw new ServiceError("validation", "Only a balance invoice can point to its deposit invoice.");
+      }
+      const [deposit] = await ctx.tx
+        .select()
+        .from(invoices)
+        .where(eq(invoices.id, input.depositOfInvoiceId))
+        .limit(1);
+      if (!deposit) throw new ServiceError("not_found", "That deposit invoice is not here.");
+      if (deposit.sourceType !== "deposit") {
+        throw new ServiceError("validation", "A balance invoice must point to an invoice created as a deposit.");
+      }
+      if (deposit.contactId !== input.contactId || deposit.currency !== input.currency) {
+        throw new ServiceError("validation", "A deposit and its balance must belong to the same contact and currency.");
+      }
     }
 
     const itemKeys = input.lines.map((_, index) => `line:${index}`);
@@ -948,8 +965,11 @@ export const settlePayment = defineService({
     const invoiceStatus = paidMinor === invoice.totalMinor ? "paid" as const : "partially_paid" as const;
     const [updatedPayment] = await ctx.tx.update(payments).set({ status: "succeeded", providerRef: input.providerRef, processedAt: input.processedAt, failureCode: null, failureMessage: null }).where(eq(payments.id, payment.id)).returning();
     await ctx.tx.update(invoices).set({ status: invoiceStatus, paidMinor, ...(invoiceStatus === "paid" ? { paidAt: input.processedAt } : {}) }).where(eq(invoices.id, invoice.id));
+    await allocateSettledPayment(ctx, updatedPayment!, input.processedAt);
     await stateEvent(ctx, "payment", payment.id, payment.status, "succeeded");
-    await stateEvent(ctx, "invoice", invoice.id, invoice.status, invoiceStatus, "payment_settled", { paymentId: payment.id, amountMinor: payment.amountMinor });
+    if (invoice.status !== invoiceStatus) {
+      await stateEvent(ctx, "invoice", invoice.id, invoice.status, invoiceStatus, "payment_settled", { paymentId: payment.id, amountMinor: payment.amountMinor });
+    }
     await ctx.emitTimeline({
       contactId: invoice.contactId,
       eventType: invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid",

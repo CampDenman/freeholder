@@ -25,6 +25,7 @@ import {
   paymentMethods,
   paymentProviderEvents,
   payments,
+  providerPayouts,
 } from "@/modules/invoicing/schema";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
@@ -169,6 +170,23 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     expect(disputes[0]?.closedAt).toEqual(new Date("2026-08-20T12:00:00.000Z"));
     expect(await db().select().from(paymentProviderEvents).where(and(eq(paymentProviderEvents.provider, "stripe"), eq(paymentProviderEvents.providerObjectRef, "dp_1")))).toHaveLength(3);
     expect((await db().select().from(paymentDisputes))[0]?.providerStatusAt).toEqual(new Date("2026-08-20T12:00:00.000Z"));
+  });
+
+  it("converges authenticated payout events and ignores older provider state", async () => {
+    const paid = {
+      id: "evt_payout_paid",
+      kind: "payout_paid" as const,
+      providerRef: "po_event_1",
+      amountMinor: 9_200,
+      currency: "CAD",
+      occurredAt: "2026-08-16T12:00:00.000Z",
+      expectedAt: "2026-08-16T12:00:00.000Z",
+      statementRef: "FREEHOLDER",
+    };
+    await expect(processPaymentProviderEvents.call({ provider: "stripe", bodySha256: digest, receivedAt, events: [paid] }, { kind: "system" })).resolves.toEqual({ processed: 1, duplicates: 0 });
+    await processPaymentProviderEvents.call({ provider: "stripe", bodySha256: "b".repeat(64), receivedAt, events: [{ ...paid, id: "evt_payout_old", kind: "payout_pending", occurredAt: "2026-08-15T12:00:00.000Z" }] }, { kind: "system" });
+    expect((await db().select().from(providerPayouts))[0]).toMatchObject({ providerRef: "po_event_1", status: "paid", amountMinor: 9_200, statementRef: "FREEHOLDER" });
+    expect((await db().select().from(paymentProviderEvents).where(eq(paymentProviderEvents.providerEventId, "evt_payout_old")))[0]).toMatchObject({ status: "ignored", detail: "payout_older_event_ignored" });
   });
 
   it("refuses a saved method reassignment across contacts", async () => {

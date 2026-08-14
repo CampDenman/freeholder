@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.06: provider orchestration and authenticated event convergence.
 
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, paymentAdapters } from "@/adapters/payments";
 import {
@@ -26,6 +26,7 @@ import {
   startPayment,
   startRefund,
 } from "./invoice-service";
+import { observeProviderPayout } from "./advanced-money-service";
 import {
   invoices,
   moneyStateEvents,
@@ -34,6 +35,9 @@ import {
   paymentProviderCustomers,
   paymentProviderEvents,
   payments,
+  providerBalanceTransactions,
+  providerPayoutItems,
+  providerPayouts,
   refunds,
 } from "./schema";
 
@@ -93,7 +97,18 @@ const savedMethodEvent = z.object({
   method: methodEvidence,
   occurredAt: z.string().datetime(),
 });
-const providerEvent = z.union([paymentEvent, refundEvent, disputeEvent, savedMethodEvent]);
+const payoutEvent = z.object({
+  id: z.string().trim().min(1).max(500),
+  kind: z.enum(["payout_pending", "payout_in_transit", "payout_paid", "payout_failed", "payout_cancelled"]),
+  providerRef: z.string().trim().min(1).max(500),
+  amountMinor: positiveMinor,
+  currency,
+  occurredAt: z.string().datetime(),
+  expectedAt: z.string().datetime().optional(),
+  statementRef: z.string().trim().min(1).max(500).optional(),
+  failureReason: z.string().trim().min(1).max(1_000).optional(),
+});
+const providerEvent = z.union([paymentEvent, refundEvent, disputeEvent, savedMethodEvent, payoutEvent]);
 
 function adapterFailure(error: unknown): never {
   if (error instanceof ServiceError) throw error;
@@ -362,10 +377,29 @@ async function processMethodEvent(providerId: string, event: z.infer<typeof save
   return event.kind;
 }
 
+async function processPayoutEvent(providerId: string, event: z.infer<typeof payoutEvent>, ctx: ServiceContext): Promise<string> {
+  const status = event.kind.slice("payout_".length) as "pending" | "in_transit" | "paid" | "failed" | "cancelled";
+  const result = await observeProviderPayout(ctx, providerId, {
+    providerRef: event.providerRef,
+    status,
+    amountMinor: event.amountMinor,
+    currency: event.currency,
+    occurredAt: new Date(event.occurredAt),
+    expectedAt: event.expectedAt ? new Date(event.expectedAt) : undefined,
+    statementRef: event.statementRef,
+    failureReason: event.failureReason,
+  });
+  if (result.applied) {
+    ctx.queueEvent(`providerPayout.${status}`, { payoutId: result.payout.id, provider: providerId, providerRef: event.providerRef, amountMinor: event.amountMinor, currency: event.currency });
+  }
+  return result.applied ? event.kind : "payout_older_event_ignored";
+}
+
 async function applyEvent(providerId: string, event: PaymentProviderEvent, ctx: ServiceContext): Promise<string> {
   if (event.kind.startsWith("payment_")) return processPaymentEvent(providerId, event as z.infer<typeof paymentEvent>, ctx);
   if (event.kind.startsWith("refund_")) return processRefundEvent(providerId, event as z.infer<typeof refundEvent>, ctx);
   if (event.kind.startsWith("dispute_")) return processDisputeEvent(providerId, event as z.infer<typeof disputeEvent>, ctx);
+  if (event.kind.startsWith("payout_")) return processPayoutEvent(providerId, event as z.infer<typeof payoutEvent>, ctx);
   return processMethodEvent(providerId, event as z.infer<typeof savedMethodEvent>, ctx);
 }
 
@@ -666,7 +700,7 @@ export const listPaymentDisputes = defineService({
 
 export const reconcilePaymentProviders = defineService({
   name: "invoicing.reconcilePaymentProviders",
-  summary: "Surface unsettled hosted payments, open disputes, and authenticated event evidence.",
+  summary: "Surface unsettled payments, disputes, payout deposits, fees, and authenticated event evidence.",
   kind: "query",
   permission: "scoped",
   input: z.object({ provider: provider.optional(), limit: z.number().int().min(1).max(5_000).default(1_000) }),
@@ -675,7 +709,10 @@ export const reconcilePaymentProviders = defineService({
     const unsettled = await ctx.tx.select().from(payments).where(and(providerFilter, inArray(payments.status, ["created", "processing"]))).orderBy(desc(payments.createdAt)).limit(input.limit);
     const openDisputes = await ctx.tx.select().from(paymentDisputes).where(and(input.provider ? eq(paymentDisputes.provider, input.provider) : undefined, eq(paymentDisputes.status, "open"))).orderBy(desc(paymentDisputes.createdAt)).limit(input.limit);
     const events = await ctx.tx.select().from(paymentProviderEvents).where(input.provider ? eq(paymentProviderEvents.provider, input.provider) : undefined).orderBy(desc(paymentProviderEvents.receivedAt)).limit(input.limit);
-    return { unsettled, openDisputes, events, limitation: "Provider balance transactions, fees, and payout deposits join this surface in C5.08; this checkpoint reconciles authenticated payment, refund, saved-method, and dispute events." };
+    const payouts = await ctx.tx.select().from(providerPayouts).where(and(input.provider ? eq(providerPayouts.provider, input.provider) : undefined, sql`${providerPayouts.reconciledAt} is null`)).orderBy(desc(providerPayouts.providerStatusAt)).limit(input.limit);
+    const balanceRows = await ctx.tx.select({ transaction: providerBalanceTransactions }).from(providerBalanceTransactions).leftJoin(providerPayoutItems, eq(providerPayoutItems.balanceTransactionId, providerBalanceTransactions.id)).where(and(input.provider ? eq(providerBalanceTransactions.provider, input.provider) : undefined, isNull(providerPayoutItems.id))).orderBy(desc(providerBalanceTransactions.occurredAt)).limit(input.limit);
+    const balanceTransactions = balanceRows.map((row) => row.transaction);
+    return { unsettled, openDisputes, payouts, balanceTransactions, events };
   },
 });
 

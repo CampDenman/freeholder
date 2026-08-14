@@ -60,6 +60,28 @@ function squareEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
     throw new AdapterError("payments", "square", "invalid_request", "Square sent a malformed event.");
   }
 
+  const payout = object(value.payout);
+  if (payout && type.startsWith("payout.")) {
+    const providerRef = text(payout.id);
+    const money = squareMoney(payout.amount_money);
+    const status = text(payout.status);
+    if (!providerRef || money.amountMinor === undefined || !money.currency || !status) return [];
+    const arrival = text(payout.arrival_date);
+    const common = {
+      id,
+      providerRef,
+      amountMinor: money.amountMinor,
+      currency: money.currency,
+      occurredAt: providerTime("Square", payout.updated_at ?? payout.created_at, occurredAt),
+      expectedAt: arrival ? new Date(`${arrival}T00:00:00.000Z`).toISOString() : undefined,
+    };
+    if (status === "PAID") return [{ ...common, kind: "payout_paid" }];
+    if (status === "SENT") return [{ ...common, kind: "payout_in_transit" }];
+    if (status === "FAILED") return [{ ...common, kind: "payout_failed", failureReason: "Square reported that the payout failed." }];
+    if (status === "CANCELED") return [{ ...common, kind: "payout_cancelled" }];
+    return [{ ...common, kind: "payout_pending" }];
+  }
+
   const payment = object(value.payment);
   if (payment && type.startsWith("payment.")) {
     const providerRef = text(payment.id);
@@ -137,7 +159,7 @@ export function createSquarePayments(options: SquarePaymentOptions = {}): Paymen
       id: "square",
       available: missing.length === 0,
       message: missing.length === 0
-        ? "Square Payment Links, refunds, and authenticated payment feedback are configured."
+        ? "Square Payment Links, refunds, payout tracking, and authenticated feedback are configured."
         : `Square is missing ${missing.join(" and ")}.`,
     },
     capabilities: () => ({ ...capabilities }),

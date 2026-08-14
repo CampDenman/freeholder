@@ -98,6 +98,29 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
   const currency = text(value.currency)?.toUpperCase();
   const amount = number(value.amount_received) ?? number(value.amount) ?? number(value.amount_total);
 
+  if (type.startsWith("payout.")) {
+    const providerRef = text(value.id);
+    const payoutAmount = number(value.amount);
+    const status = text(value.status);
+    if (!providerRef || payoutAmount === undefined || !currency || !status) return [];
+    const common = {
+      id,
+      providerRef,
+      amountMinor: payoutAmount,
+      currency,
+      occurredAt: created,
+      expectedAt: stripeOptionalTime(value.arrival_date),
+      statementRef: text(value.statement_descriptor),
+      failureReason: text(value.failure_message) ?? text(value.failure_code),
+    };
+    if (status === "paid") return [{ ...common, kind: "payout_paid" }];
+    if (status === "in_transit") return [{ ...common, kind: "payout_in_transit" }];
+    if (status === "failed") return [{ ...common, kind: "payout_failed" }];
+    if (status === "canceled") return [{ ...common, kind: "payout_cancelled" }];
+    if (status === "pending") return [{ ...common, kind: "payout_pending" }];
+    return [];
+  }
+
   if (type.startsWith("payment_intent.")) {
     const providerRef = text(value.id);
     if (!providerRef) return [];
@@ -194,7 +217,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       family: "payments",
       id: "stripe",
       available: missing.length === 0,
-      message: missing.length === 0 ? "Stripe checkout, refunds, saved methods, disputes, and authenticated feedback are configured." : `Stripe is missing ${missing.join(" and ")}.`,
+      message: missing.length === 0 ? "Stripe checkout, refunds, saved methods, disputes, payout tracking, and authenticated feedback are configured." : `Stripe is missing ${missing.join(" and ")}.`,
     },
     capabilities: () => ({ ...capabilities }),
     async supportedCurrencies() { return []; },

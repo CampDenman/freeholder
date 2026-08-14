@@ -1,12 +1,13 @@
 # Commerce money and tax foundation
 
 Freeholder's `invoicing` module is the single accounting spine for invoices,
-payments, refunds, credit notes, and the tax evidence attached to them. Catalog,
-checkout, booking, tips, subscriptions, and future plugins must call these
+payments, refunds, credit notes, customer balances, payment plans, provider
+payouts, and the tax evidence attached to them. Catalog, checkout, booking,
+tips, subscriptions, and future plugins must call these
 services instead of creating parallel money records.
 
-This checkpoint does not claim a complete storefront or an online payment
-provider. It establishes the transaction-safe money path those surfaces use.
+This checkpoint does not claim a complete public storefront. It establishes
+the transaction-safe money path those surfaces use.
 
 ## Money rules
 
@@ -37,7 +38,36 @@ payment:     created -> processing -> succeeded
 refund:      created -> processing -> succeeded
                      \-> failed/cancelled
 credit note: draft -> issued -> void
+payment plan: active <-> defaulted -> completed/cancelled
+payout:      pending -> in_transit -> paid
+                    \-> failed/cancelled
 ```
+
+## Advanced terms and voluntary money
+
+- `invoicing.createDepositAndBalance` creates two normal invoices and links the
+  balance to its deposit. Each retains its own due date, tax evidence, number,
+  payments, and immutable issued total.
+- `invoicing.createPaymentPlan` requires installments to add up exactly to the
+  invoice's current outstanding balance. Successful partial payments allocate
+  oldest-due-first and may span installments. Refreshing a plan derives due and
+  default state from an explicit time; cancelling terms retains every prior
+  allocation.
+- `invoicing.createFlexiblePayment` validates a chosen amount against snapshotted
+  minimum/maximum terms, then creates a normal tip or pay-what-you-want invoice.
+  An attached invoice must have the same contact and currency.
+- `invoicing.assessLateFee` waits until the due date plus grace period, applies
+  fixed or integer-PPM percentage terms to the outstanding principal, honors a
+  cap, and creates a linked fee invoice. It never edits the overdue invoice.
+- Customer credit is held per contact and currency in an append-only balance
+  journal. Applying credit creates provider `balance` money in the normal
+  `Payment` table; refunding it uses the normal `Refund` table and restores the
+  credit atomically. The internal provider is not selectable as an external
+  checkout adapter.
+- Contact merge combines same-currency credit without losing entries, and exact
+  undo restores both accounts if neither changed after the merge. Privacy export
+  includes advanced terms and movements; erasure redacts free text while
+  retaining required accounting amounts and links.
 
 ## Tax setup
 
@@ -100,9 +130,11 @@ separately because legal threshold definitions vary.
 `invoicing.receipt` returns a stable receipt number, customer, successful
 payment reference, invoice lines, immutable tax lines, and settled refunds.
 `invoicing.reconciliation` independently sums successful payments and refunds
-against the stored invoice/payment balances and names every discrepancy. The
-current report covers Freeholder's internal ledger; provider payouts, fees,
-disputes, and webhook delivery join it with the payment adapters.
+against the stored invoice/payment balances and names every discrepancy.
+`invoicing.reconcileAdvancedMoney` independently checks customer journal sums,
+payment allocations, and reconciled payout nets. Provider operations expose
+unsettled checkouts, disputes, unmatched statement lines, payout deposits, and
+authenticated webhook receipts together.
 
 ## Access and provider boundaries
 
@@ -128,11 +160,15 @@ The additive migrations are:
   currency-safe registration thresholds.
 - `0045_peaceful_puck.sql`: database enforcement that a valid exemption has
   validation evidence.
+- `0046_right_swordsman.sql`: provider customers, methods, disputes, and
+  authenticated event receipts.
+- `0047_fantastic_miss_america.sql`: balances, plans/allocations, voluntary
+  payment terms, late-fee evidence, and provider payout reconciliation.
 
 After deployment, migrate normally and verify with:
 
 ```sh
-pnpm exec vitest run tests/core/money-arithmetic.test.ts tests/core/invoicing.test.ts
+pnpm exec vitest run tests/core/money-arithmetic.test.ts tests/core/invoicing.test.ts tests/core/advanced-money.test.ts
 pnpm typecheck
 pnpm lint
 ```
