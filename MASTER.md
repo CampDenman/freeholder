@@ -2918,7 +2918,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `3de729c` with C1.25 merged in PR #96; C1.26 implementation checkpoint `5483916`; 94-file/1,108-test local suite, 5-test Chromium gate, production build, 92-table/5,133-row ownership drill; migrations `0041`/`0042`; changeset `deterministic-demo-scenarios.md` |
+| Evidence snapshot | `main` at `bcb9dd1` with C1.26 merged in PR #97; PR CI `31765933788`, post-merge CI `31766451361`, and signed/provenance/SBOM image publication `31766451453` green; 94-file/1,108-test local suite; changeset `deterministic-demo-scenarios.md` |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
@@ -3564,19 +3564,59 @@ permissions, budgets, untrusted input, approvals and rollback remain enforceable
 
 ### 43.10 C5 — Complete money, catalog, inventory, and commerce path
 
+**Priority deviation in force (decided 2026-08-14): commerce is the active
+functional workstream.** `freeholder.ai` is already live on Freeholder, so the
+next product proof is the complete money and store path. Resume at C5.01 and
+continue through the C5 exit before returning to the still-open C1.28–C4
+items. This changes execution priority, not scope or completion status; no
+skipped item is checked or weakened.
+
 #### Money and tax foundations
 
-- [ ] **C5.01** Land `none` plus real adapter contracts for payments, tax,
+- [x] **C5.01** Land `none` plus real adapter contracts for payments, tax,
   calendar, SMS, bulk mail, AI, social, shipping/carrier and point-of-sale edges.
-- [ ] **C5.02** Implement tax zones and most-specific matching, categories,
+  (family-isolated multi-provider registries; raw-byte verified-webhook seams;
+  integer-minor-unit/idempotency contracts; capability discovery; safe common
+  adapter errors; honest disabled implementations that cannot fabricate tax,
+  money, delivery or provider references; existing bulk-mail non-delivery
+  incorporated; six-test contract/hostile suite; operator/developer guide
+  `deploy/edge-adapters.md`; changeset `commerce-edge-contracts.md`.)
+- [x] **C5.02** Implement tax zones and most-specific matching, categories,
   registrations/thresholds, compound/sequential rates and inclusive/exclusive
-  presentation.
-- [ ] **C5.03** Implement exemptions, reverse charge, shipping tax, rounding,
+  presentation. *(Evidence: normalized tax schema in additive migrations
+  `0043_worried_shaman.sql` and `0044_nervous_maelstrom.sql`; deterministic
+  country/region/postal specificity; effective-dated category overrides;
+  exact parts-per-million rates; compound order; inclusive extraction;
+  explicit line/invoice and half-up/bankers rounding; registration collection
+  interlocks; currency-separated calendar/rolling threshold reports through
+  the generated `invoicing.*` API/MCP services; arithmetic, database and
+  location coverage in `tests/core/money-arithmetic.test.ts` and
+  `tests/core/invoicing.test.ts`; operator guide `deploy/commerce-money.md`.)*
+- [x] **C5.03** Implement exemptions, reverse charge, shipping tax, rounding,
   immutable `TaxLine` snapshots and owner-visible calculation explanations.
+  *(Evidence: validated/unexpired exemption enforcement in services and
+  `0045_peaceful_puck.sql`; explicit reverse-charge zero lines and invoice
+  legends; shipping subjects; deterministic allocation; every draft snapshots
+  the rate, registration, jurisdiction, basis and plain-language calculation,
+  proven unchanged after configured rates move; non-collection decisions never
+  appear as silent zero tax; generated quote/invoice surfaces, contact privacy/
+  merge-undo integration, hostile arithmetic coverage, 97-file/1,137-test
+  suite, production build and changeset `commerce-money-foundation.md`.)*
 - [ ] **C5.04** Ship and verify Canada, EU, UK, US, Australia and New Zealand
   tax templates, while allowing explicit owner-defined zones elsewhere.
-- [ ] **C5.05** Implement invoice/line/payment/refund/credit-note state machines,
+- [x] **C5.05** Implement invoice/line/payment/refund/credit-note state machines,
   integer-money invariants, numbering, receipts, reconciliation and audit.
+  *(Evidence: one normalized 14-table `invoicing` module; integer minor units
+  and six-decimal quantities with safe-range refusal; canonical request hashes
+  and advisory-lock idempotency; transaction-gapless invoice/credit numbering;
+  partial and multi-payment convergence; competing-settlement overpay refusal;
+  reserved, failed/cancelled and settled refunds; bounded immutable credit
+  notes; stable receipt records; independent internal-ledger reconciliation;
+  append-only state evidence, outbox events and contact timelines; 32 generated
+  scoped services; exact contact merge undo and privacy erasure; concurrency/
+  lifecycle/database coverage in `tests/core/invoicing.test.ts`; migrations
+  `0043_worried_shaman.sql` through `0045_peaceful_puck.sql`; operator guide
+  and full local gates.)*
 - [ ] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
   signed/idempotent webhooks, saved methods, disputes and refunds.
 - [ ] **C5.07** Implement Square, Mollie, Razorpay and Paystack/Flutterwave
