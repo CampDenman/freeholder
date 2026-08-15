@@ -4,17 +4,17 @@ Last updated: 2026-08-14 (America/Vancouver)
 
 ## Resume point
 
-Resume `MASTER.md` section 43 at **C5.04 and C5.09**:
+Resume `MASTER.md` section 43 at **C5.04 and C5.10**:
 
 > Finish jurisdiction-correct tax templates beyond the safe standard-rate
-> starters, then build product/catalog lifecycle on the completed advanced
-> money and seven-provider payment ledger.
+> starters, then build option dimensions, generated variant matrices and safe
+> reconciliation on the completed product lifecycle and money ledger.
 
-C5.01, C5.02, C5.03, C5.05, C5.06, C5.07 and C5.08 are implemented.
+C5.01, C5.02, C5.03 and C5.05-C5.09 are implemented.
 C5.04 remains open because the source-attributed catalog deliberately ships
 standard/base starters with activation interlocks, not a false claim of complete
-US address-level local tax or every reduced/exempt category. C5.09 and the rest
-of commerce remain open; provider adapters and advanced money are real, but public cart checkout
+US address-level local tax or every reduced/exempt category. C5.10 and the rest
+of commerce remain open; products, provider adapters and advanced money are real, but public cart checkout
 does not exist until C5.21.
 
 Commerce is now the active functional workstream by owner decision. C1.28–C4
@@ -22,8 +22,8 @@ remain open and unchanged; the priority deviation is recorded beside C5 in
 `MASTER.md`. C1.27 remains deliberately dependency-blocked until the required
 C5–C9 domain modules exist.
 
-The working branch is `feat/commerce-advanced-money`, created from the merged
-C5.07 provider checkpoint `c909c444d8a63dd6318febcb9e8c181113d1cebd`. The separate
+The working branch is `feat/commerce-product-lifecycle`, created from the merged
+C5.08 checkpoint `b6b8665c8a6cb0a9336e20fbb10ef295cad51ec1`. The separate
 `feat/media-capture` branch preserves its clean C1.28 documentation checkpoint
 at `c90456d`; do not mix that checkpoint into commerce.
 
@@ -223,6 +223,56 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 - Provider tests use signed deterministic fixtures only. No live, sandbox,
   billable or bank payout call was made.
 
+## C5.09 product-lifecycle checkpoint delivered behavior
+
+- The installed `catalog` module owns one Product identity for physical,
+  digital, service, rental, bundle and pass kinds. Options, variants, pricing,
+  inventory, booking and orders must attach to it in later C5/C6 work rather
+  than create kind-specific catalogs.
+- Migration `0048_marvelous_morg.sql` adds normalized `products` and append-only
+  `product_lifecycle_events` with unique addresses, indexed lifecycle/kind/
+  visibility/tax query paths and database checks for vocabulary, timestamps and
+  positive optimistic versions.
+- Draft activation requires an active tax category. Archive retains the row and
+  requires a reason; restore returns only to draft. Kind locks after first
+  activation, publication evidence survives archive/restore, and a changed
+  published address creates a permanent normal SEO redirect.
+- Public lists contain active/public products only. Exact resolution admits
+  active unlisted products and admits member-only products only to authenticated
+  actors; drafts and archived products never leak through public projections.
+- Every write compares a version. Concurrent writers cannot overwrite each
+  other, product-description autosaves serialize, and an editor preserved over
+  a lifecycle refresh accepts a newer server token without rolling backward.
+- Product descriptions are validated CMS block trees rendered by the real
+  responsive preview. Unknown block vocabulary is refused before storage.
+- `/admin/products`, `/admin/products/new`, `/admin/products/[id]` and
+  `/preview/product/[id]` provide translated list/filter, create, edit, preview,
+  activate, archive, restore and lifecycle-history operations in English,
+  French and Spanish. Catalog grants govern the UI and the identical generated
+  HTTP/MCP services.
+- `MASTER.md` now explicitly requires admin workspaces for products/pricing,
+  orders, inventory/purchasing, fulfillment/returns, payments/refunds,
+  calendars/availability and appointments/waitlists before their milestones
+  may be checked.
+
+## C5.09 local evidence
+
+- Focused catalog/i18n/registry/role gate: 4 files and 32 tests passed; the
+  catalog suite's 5 database tests cover all six kinds, visibility, activation,
+  invalid blocks, database constraints, permissions, redirects, concurrent
+  writes and archive/restore history.
+- Uncontested `pnpm test`: 101 files and 1,171 tests passed in 957.46 seconds.
+  An earlier run exceeded its 20-minute shell ceiling and left its child worker
+  alive; those exact test processes were stopped before this clean rerun.
+- `pnpm build` passed with the new admin and preview routes; the known optional
+  `@replit/object-storage` warning remains.
+- The complete production-build Chromium journey passed in 36.5 seconds after
+  creating and activating a service product, exercising rapid description
+  autosaves, and scanning the product workspace for WCAG A/AA.
+- TypeScript, lint, licensing, dependency, localization, plan and diff gates
+  passed. Operator guidance is `deploy/commerce-catalog.md`; release note is
+  `.changeset/commerce-product-lifecycle.md`.
+
 ## C1.26 delivered behavior
 
 - `demo_scenarios`, `demo_scenario_runs` and `demo_records` normalize immutable
@@ -284,8 +334,10 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 
 1. Finish C5.04's product/category and address-level jurisdiction rules without
    weakening the starter activation interlocks.
-2. Build C5.09 catalog/product lifecycle on the completed money spine.
-3. Continue pricing, inventory/shipping, then carts/checkout/orders;
+2. Build C5.10 option dimensions and safe generated variant matrices on the
+   completed C5.09 product lifecycle.
+3. Continue attributes, relations and pricing, then inventory/shipping and
+   carts/checkout/orders;
    every mutation remains one service-layer transaction and every customer
    reference joins the existing Contact spine.
 4. Check a C5 item only after its migrations, services, user surface, hostile

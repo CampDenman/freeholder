@@ -33,6 +33,11 @@ import { availableLocales, catalogKeys, DEFAULT_LOCALE } from "@/core/i18n";
 import { BUSINESS_TYPES } from "@/core/settings/defaults";
 import { THEME_PREFERENCES } from "@/core/design/theme";
 import { CONTACT_STAGES } from "../../app/(admin)/admin/contacts/contactLabels";
+import {
+  PRODUCT_KINDS,
+  PRODUCT_STATUSES,
+  PRODUCT_VISIBILITIES,
+} from "@/modules/catalog/contract";
 import en from "../../locales/en.json";
 import es from "../../locales/es.json";
 import fr from "../../locales/fr.json";
@@ -209,6 +214,9 @@ describe("the families built from a template key", () => {
     ["contacts.stagePlural", CONTACT_STAGES],
     ["business.type", BUSINESS_TYPES],
     ["theme", THEME_PREFERENCES],
+    ["catalog.kind", PRODUCT_KINDS],
+    ["catalog.status", PRODUCT_STATUSES],
+    ["catalog.visibility", PRODUCT_VISIBILITIES],
   ])("names every member of %s", (prefix, values) => {
     const missing = values
       .map((value) => `${prefix}.${value}`)

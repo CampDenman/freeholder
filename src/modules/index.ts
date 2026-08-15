@@ -21,6 +21,7 @@ import formsManifest from "@/modules/forms/manifest";
 import seedManifest from "@/modules/seed/manifest";
 import builderManifest from "@/modules/builder/manifest";
 import invoicingManifest from "@/modules/invoicing/manifest";
+import catalogManifest from "@/modules/catalog/manifest";
 import type { ModuleManifest } from "@/core/module";
 
 const manifests: ModuleManifest[] = [
@@ -31,6 +32,7 @@ const manifests: ModuleManifest[] = [
   seedManifest,
   builderManifest,
   invoicingManifest,
+  catalogManifest,
 ];
 
 export default manifests;

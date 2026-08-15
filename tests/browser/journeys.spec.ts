@@ -11,7 +11,7 @@ import { passwordResets } from "@/core/auth/schema";
 import { totpCode } from "@/core/auth/two-factor-crypto";
 import { contacts } from "@/core/contacts/schema";
 import { closeDb, db } from "@/core/db";
-import { invoices, payments, refunds } from "@/modules/invoicing/schema";
+import { invoices, payments, refunds, taxCategories } from "@/modules/invoicing/schema";
 import { resetBrowserDatabase } from "./database";
 
 const OWNER_EMAIL = "owner-journey@example.test";
@@ -183,6 +183,39 @@ test.describe("real-browser product journeys", () => {
       expect((await db().select().from(refunds).where(eq(refunds.paymentId, settled!.id)))[0]).toMatchObject({ provider: "manual", status: "succeeded", amountMinor: 500 });
 
       const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+      expect(results.violations).toEqual([]);
+    });
+
+    await test.step("admin catalog creates, activates and describes a real service product", async () => {
+      const [taxCategory] = await db()
+        .insert(taxCategories)
+        .values({ code: "journey_standard", name: "Journey standard taxable" })
+        .returning();
+      if (!taxCategory) throw new Error("The catalog journey tax category was not created.");
+
+      await page.goto("/admin/products/new");
+      await expect(page.getByRole("heading", { name: "New product" })).toBeVisible();
+      await page.getByLabel("Name").fill("Portrait session");
+      await page.getByLabel("Product address").fill("portrait-session");
+      await page.getByLabel("Product kind").selectOption("service");
+      await page.getByLabel("Tax category").selectOption(taxCategory.id);
+      await page.getByRole("button", { name: "Create draft product" }).click();
+      await expect(page).toHaveURL(/\/admin\/products\/[0-9a-f-]+\?saved=created$/);
+      await expect(page.getByRole("heading", { name: "Portrait session" })).toBeVisible();
+      await expect(page.getByText("The draft product was created.")).toBeVisible();
+
+      await page.getByRole("button", { name: "Activate product" }).click();
+      await expect(page).toHaveURL(/\?saved=activate$/);
+      await expect(page.getByText("The product is active.")).toBeVisible();
+
+      await page.getByRole("button", { name: "Add a block" }).click();
+      await page.getByRole("button", { name: "Heading", exact: true }).click();
+      await page.getByLabel("Text").fill("A thoughtful portrait experience");
+      await expect(page.getByRole("status")).toHaveText("Saved", { timeout: 15_000 });
+
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
       expect(results.violations).toEqual([]);
     });
 

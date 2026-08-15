@@ -112,6 +112,7 @@ export default async function AdminLayout({
               builder: t("admin.nav.builder"),
               demos: t("admin.nav.demos"),
               payments: t("payments.title"),
+              products: t("catalog.title"),
             }}
           />
         </div>
