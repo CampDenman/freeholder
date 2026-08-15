@@ -1,6 +1,6 @@
 # Freeholder handoff - C5 commerce
 
-Last updated: 2026-08-14 (America/Vancouver)
+Last updated: 2026-08-14 session closeout (America/Vancouver)
 
 ## Resume point
 
@@ -10,28 +10,50 @@ Resume `MASTER.md` section 43 at **C5.04 and C5.10**:
 > starters, then build option dimensions, generated variant matrices and safe
 > reconciliation on the completed product lifecycle and money ledger.
 
-C5.01, C5.02, C5.03 and C5.05-C5.09 are implemented.
+C5.01, C5.02, C5.03 and C5.05-C5.09 are implemented and landed on `main`.
 C5.04 remains open because the source-attributed catalog deliberately ships
 standard/base starters with activation interlocks, not a false claim of complete
 US address-level local tax or every reduced/exempt category. C5.10 and the rest
-of commerce remain open; products, provider adapters and advanced money are real, but public cart checkout
-does not exist until C5.21.
+of commerce remain open. Products, provider adapters and advanced money are
+real, but products do not yet have option matrices or pricing and public cart
+checkout does not exist until C5.21.
 
 Commerce is now the active functional workstream by owner decision. C1.28–C4
 remain open and unchanged; the priority deviation is recorded beside C5 in
 `MASTER.md`. C1.27 remains deliberately dependency-blocked until the required
 C5–C9 domain modules exist.
 
-The working branch is `feat/commerce-product-lifecycle`, created from the merged
-C5.08 checkpoint `b6b8665c8a6cb0a9336e20fbb10ef295cad51ec1`. The separate
-`feat/media-capture` branch preserves its clean C1.28 documentation checkpoint
-at `c90456d`; do not mix that checkpoint into commerce.
+The implementation baseline is protected `main` at C5.09 merge commit
+`340aa8e886cdfa8639619013c33609faf4798875`. There is no active commerce
+implementation branch. This closeout is being prepared on
+`docs/commerce-session-handoff`; after it lands, branch from fresh `main` as
+`feat/commerce-variant-matrices` for C5.10. The separate `feat/media-capture`
+branch preserves its clean C1.28 documentation checkpoint at `c90456d`; do not
+mix that checkpoint into commerce.
 
 Do not commit or modify the separate untracked `RESTART_HANDOFF.md`; it is an
 older local document outside this checkpoint.
 
 GitHub requires the `DCO` and `checks` statuses but does not require
 cryptographic commit signatures. Use `git commit -s` for every commit.
+
+## Landed session checkpoints
+
+- C5.08 advanced money landed in PR #101 at merge commit
+  `b6b8665c8a6cb0a9336e20fbb10ef295cad51ec1`. Protected PR CI
+  `31851161650`, post-merge CI `31851819756` and image publication
+  `31851819702` passed.
+- C5.09 product lifecycle landed in PR #102 at merge commit
+  `340aa8e886cdfa8639619013c33609faf4798875`. Protected PR CI
+  `31856074057` passed in 10m48s; post-merge CI `31856575007` passed in
+  11m44s; production image publication `31856574998` passed.
+- The latest release notes remain the unconsumed Changesets
+  `.changeset/commerce-advanced-money.md` and
+  `.changeset/commerce-product-lifecycle.md`. Do not add a second changelog;
+  Changesets is this repository's release-note source.
+- No production migration, credential change, live provider call or public
+  storefront deployment was performed manually in this session. The normal
+  protected workflow built and published the production image after each merge.
 
 ## C5 money/tax checkpoint delivered behavior
 
@@ -222,6 +244,8 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
   remains the authoritative uncontended full-suite and Docker/image proof.
 - Provider tests use signed deterministic fixtures only. No live, sandbox,
   billable or bank payout call was made.
+- PR #101 protected CI `31851161650`, post-merge CI `31851819756` and image
+  publication `31851819702` passed; the landed merge is `b6b8665`.
 
 ## C5.09 product-lifecycle checkpoint delivered behavior
 
@@ -272,6 +296,9 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 - TypeScript, lint, licensing, dependency, localization, plan and diff gates
   passed. Operator guidance is `deploy/commerce-catalog.md`; release note is
   `.changeset/commerce-product-lifecycle.md`.
+- PR #102 protected CI `31856074057` passed in 10m48s. Post-merge CI
+  `31856575007` passed in 11m44s and image publication `31856574998` passed;
+  the landed merge is `340aa8e`.
 
 ## C1.26 delivered behavior
 
@@ -308,7 +335,7 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
   migrations, rollback and post-deploy verification. The release changeset is
   `.changeset/deterministic-demo-scenarios.md`.
 
-## Last merged baseline evidence
+## Earlier C1.26 baseline evidence
 
 - `pnpm test`: 94/94 files and 1,108/1,108 tests passed in 614.82 seconds.
 - `pnpm test:browser`: 5/5 serial Chromium tests passed in 1.3 minutes,
@@ -342,6 +369,50 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
    reference joins the existing Contact spine.
 4. Check a C5 item only after its migrations, services, user surface, hostile
    and concurrency coverage, operator docs, changeset and full gates exist.
+
+## Exact C5.10 restart packet
+
+1. Start from updated protected `main`, verify the C5.09 baseline is present,
+   and create `feat/commerce-variant-matrices`. Keep C5.04 separately visible;
+   do not mark it complete without jurisdiction-correct template coverage.
+2. Extend the installed `catalog` module and its existing Product identity.
+   Do not create a second catalog or kind-specific product/variant tables.
+3. Add normalized option types, option values, reusable dimensions, product
+   assignments and variants through the next additive migration (`0049_*`).
+   Preserve stable identities across regeneration and enforce SKU-fragment and
+   default invariants in both services and PostgreSQL where practical.
+4. Make matrix generation a previewable, deterministic reconciliation: clearly
+   distinguish additions, retained combinations and removals; never silently
+   destroy a variant that later commerce records could reference. Every write
+   must use the C5.09 optimistic product version and one transaction.
+5. Put the complete translated, permission-scoped operator flow in the existing
+   `/admin/products` workspace. Admin, generated HTTP and MCP operations must
+   call the same catalog services. Include empty, invalid, collision, stale-
+   writer, concurrent regeneration and archive/restore cases.
+6. Update `deploy/commerce-catalog.md`, add one C5.10 Changeset, record precise
+   evidence in `MASTER.md`, and run focused database/concurrency tests followed
+   by typecheck, lint, licensing, dependency, plan, changeset/schema gates,
+   production build, Chromium/WCAG journey and the full test suite.
+
+## Admin work still required
+
+The admin requirement is explicit in `MASTER.md`, not an informal intention.
+The completed surfaces are the translated `/admin/products` product lifecycle
+workspace and `/admin/payments` payment, refund, recovery, dispute, saved-method
+and payout-attention workspace. Upcoming milestones remain incomplete until the
+same service-layer operations also have translated, permission-scoped admin
+workspaces for:
+
+- option matrices and pricing inside the catalog;
+- customer orders and order-state operations;
+- inventory, purchasing, counts, adjustments, transfers and receiving;
+- fulfillment, shipments, returns/RMAs, restocking and refund convergence;
+- calendars, availability, capacity and blackout management; and
+- appointments, rescheduling, cancellations and waitlists.
+
+The public storefront is not a substitute for these operator surfaces. Public
+catalog, cart and checkout work arrives later in C5 and must consume the same
+services rather than introduce parallel mutations.
 
 ## Constraints to preserve
 
