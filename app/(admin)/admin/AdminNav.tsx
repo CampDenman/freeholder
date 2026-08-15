@@ -9,6 +9,7 @@ import {
   Image as ImageIcon,
   Layout,
   ListChecks,
+  Package,
   MagicWand,
   Flask,
   MapPin,
@@ -42,6 +43,7 @@ export interface AdminNavLabels {
   builder: string;
   demos: string;
   payments: string;
+  products: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -55,6 +57,7 @@ const LINKS = [
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },
   { href: "/admin/forms", key: "forms", module: "forms", Icon: Envelope },
   { href: "/admin/payments", key: "payments", module: "invoicing", Icon: CreditCard },
+  { href: "/admin/products", key: "products", module: "catalog", Icon: Package },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },

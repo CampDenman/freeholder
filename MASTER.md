@@ -3571,6 +3571,15 @@ continue through the C5 exit before returning to the still-open C1.28–C4
 items. This changes execution priority, not scope or completion status; no
 skipped item is checked or weakened.
 
+**Admin operations acceptance contract.** Commerce and scheduling milestones
+are not complete when only a table, API or public/customer flow exists. The
+same service-layer operations must have translated, permission-scoped admin
+workspaces for products and pricing, customer orders, inventory and purchasing,
+fulfillment and returns, payments and refunds, calendars and availability, and
+appointments/waitlists. Admin, HTTP and MCP remain projections of one service
+layer (principle 7); none may gain a parallel mutation path. A later customer
+surface may depend on these owner operations, never substitute for them.
+
 #### Money and tax foundations
 
 - [x] **C5.01** Land `none` plus real adapter contracts for payments, tax,
@@ -3668,8 +3677,22 @@ skipped item is checked or weakened.
 
 #### Catalog and pricing
 
-- [ ] **C5.09** Build product lifecycle for physical, digital, service,
-  rental, bundle and pass kinds with draft/active/archive and visibility states.
+- [x] **C5.09** Build product lifecycle for physical, digital, service,
+  rental, bundle and pass kinds with draft/active/archive and visibility states,
+  including the translated admin catalog workspace and lifecycle history.
+  *(Evidence: installed `catalog` module and additive migration
+  `0048_marvelous_morg.sql`; normalized Product and append-only lifecycle
+  event tables with database checks/indexed foreign keys; one audited service
+  contract for all six kinds; optimistic versions and serialized autosaves;
+  tax-category activation interlock, first-publication kind lock, safe
+  archive/restore-to-draft transitions and redirect-preserving slug changes;
+  public/unlisted/member-only projections; validated CMS-block descriptions;
+  translated permission-scoped `/admin/products` list, create, edit, preview,
+  filter, activate, archive, restore and history surfaces; API/MCP registry and
+  administrator role integration; five-test hostile/database/concurrency suite,
+  32-test focused registry/i18n/role gate, 101 files/1,171 tests, production
+  build and real Chromium create/activate/autosave/WCAG journey; operator guide
+  `deploy/commerce-catalog.md` and changeset `commerce-product-lifecycle.md`.)*
 - [ ] **C5.10** Build option types/values, reusable dimensions, generated
   variant matrices, SKU fragments, defaults and safe matrix reconciliation.
 - [ ] **C5.11** Build attributes/filtering/comparison, unlimited ordered media,
@@ -3686,19 +3709,23 @@ skipped item is checked or weakened.
 #### Inventory, shipping, checkout, and orders
 
 - [ ] **C5.16** Implement append-only stock movements, multi-location balances,
-  reservations/expiry, counts, adjustments, transfers, damage and audit.
+  reservations/expiry, counts, adjustments, transfers, damage and audit, with
+  an admin inventory ledger, count, adjustment and transfer workspace.
 - [ ] **C5.17** Implement safety/reorder levels, incoming stock, backorders,
-  back-in-stock subscriptions, suppliers, purchase orders and receiving.
+  back-in-stock subscriptions, suppliers, purchase orders and receiving,
+  including admin procurement, reorder and receiving queues.
 - [ ] **C5.18** Implement shipping zones, deterministic rate engine, packaging,
   dimensional weight, carrier seam, pickup and local-delivery windows.
 - [ ] **C5.19** Implement shipments, split fulfillment, tracking, digital
-  delivery, returns/RMA, restock/refund convergence and customer notices.
+  delivery, returns/RMA, restock/refund convergence and customer notices, with
+  admin fulfillment, return and exception workspaces.
 - [ ] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
   cross-device restore, price/stock refresh and abandonment events.
 - [ ] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
   consent, payment, idempotency, failure recovery and accessible confirmation.
 - [ ] **C5.22** Build order lifecycle, mixed physical/digital/service lines,
-  fulfillment state, owner/customer views and complete timeline events.
+  fulfillment state, translated admin order/customer views, portal views and
+  complete timeline events.
 - [ ] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
   post-add offers and abandoned-cart recovery without parallel money paths.
 - [ ] **C5.24** Add in-person payment through capable adapters, including
@@ -3712,9 +3739,9 @@ payment, tax, inventory and reporting path, with no floating-point money.
 #### Scheduling engine
 
 - [ ] **C6.01** Build calendars for business, users and resources with timezone,
-  capacity, ownership and sharing semantics.
+  capacity, ownership and sharing semantics plus an admin calendar workspace.
 - [ ] **C6.02** Build normalized availability rules, opening hours, exceptions,
-  buffers, lead time, horizon and recurrence.
+  buffers, lead time, horizon and recurrence with an admin availability editor.
 - [ ] **C6.03** Implement the availability resolver for compound resources,
   assignment pools/round-robin, capacity, travel time and daily/period caps.
 - [ ] **C6.04** Enforce no-overlap/exclusion constraints in Postgres and prove
@@ -3727,9 +3754,11 @@ payment, tax, inventory and reporting path, with no floating-point money.
 #### Bookings, rentals, and events
 
 - [ ] **C6.07** Build booking create/hold/confirm/complete/cancel/no-show state,
-  contact resolution, capacity, deposits and invoice convergence.
+  contact resolution, capacity, deposits and invoice convergence, including
+  the admin appointment list, calendar, detail and lifecycle workspace.
 - [ ] **C6.08** Add group bookings, waitlists/promotion, reschedule tokens,
-  policy/deadline enforcement and cancellation/refund outcomes.
+  policy/deadline enforcement and cancellation/refund outcomes with admin
+  waitlist, reschedule and refund controls.
 - [ ] **C6.09** Add intake forms, e-sign waivers/documents, reminders over
   consented channels and completion preconditions.
 - [ ] **C6.10** Build rentals as resources plus catalog/inventory, availability,
