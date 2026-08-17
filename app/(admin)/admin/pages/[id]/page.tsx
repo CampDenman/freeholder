@@ -15,7 +15,10 @@ import {
   listPreviewLinks,
   touchEditLease,
 } from "@/modules/cms/lifecycle";
+import { listComments } from "@/modules/cms/collaboration";
 import { listAssets } from "@/core/media/service";
+import { listRoleUsers } from "@/core/roles/service";
+import { actorString } from "@/core/service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { Card, CardBody, CardHeader } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
@@ -25,6 +28,8 @@ import { PageEditor } from "./PageEditor";
 import { RevisionList } from "./RevisionList";
 import { PublishToggle } from "./PublishToggle";
 import { PageLifecycle } from "./PageLifecycle";
+import { PagePresence } from "./PagePresence";
+import { PageComments } from "./PageComments";
 import { currentBusiness } from "@/core/settings/read";
 
 export const dynamic = "force-dynamic";
@@ -46,20 +51,23 @@ export default async function EditPagePage({
     throw error;
   });
 
-  const [business, revisions, library, t, links, lease, diff] = await Promise.all([
-    currentBusiness(),
-    listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
-    listAssets.call({ kind: "image" }, actor),
-    getT(),
-    listPreviewLinks.call({ pageId: page.id }, actor),
-    touchEditLease.call({ id: page.id }, actor),
-    query.compare
-      ? compareRevisions.call(
-          { pageId: page.id, fromRevisionId: query.compare },
-          actor,
-        )
-      : Promise.resolve(null),
-  ]);
+  const [business, revisions, library, t, links, lease, diff, comments, staff] =
+    await Promise.all([
+      currentBusiness(),
+      listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
+      listAssets.call({ kind: "image" }, actor),
+      getT(),
+      listPreviewLinks.call({ pageId: page.id }, actor),
+      touchEditLease.call({ id: page.id }, actor),
+      query.compare
+        ? compareRevisions.call(
+            { pageId: page.id, fromRevisionId: query.compare },
+            actor,
+          )
+        : Promise.resolve(null),
+      listComments.call({ pageId: page.id, includeResolved: true }, actor),
+      listRoleUsers.call({}, actor).catch(() => [] as { id: string; email: string }[]),
+    ]);
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
@@ -92,6 +100,17 @@ export default async function EditPagePage({
               label={published ? t("cms.pages.unpublish") : t("cms.pages.publish")}
             />
           </div>
+        </div>
+        <div className="mt-2">
+          <PagePresence
+            pageId={page.id}
+            self={actorString(actor)}
+            labels={{
+              alone: t("cms.presence.alone"),
+              others: t("cms.presence.others"),
+              editing: t("cms.presence.editing"),
+            }}
+          />
         </div>
       </div>
 
@@ -142,6 +161,28 @@ export default async function EditPagePage({
           approvalApproved: t("cms.pages.approved"),
           approvalRejected: t("cms.pages.approvalRejected"),
           leaseHeld: t("cms.pages.editLeaseHeld"),
+        }}
+      />
+
+      <PageComments
+        pageId={page.id}
+        comments={comments}
+        staff={staff.map((person) => ({ id: person.id, email: person.email }))}
+        labels={{
+          title: t("cms.comments.title"),
+          empty: t("cms.comments.empty"),
+          placeholder: t("cms.comments.placeholder"),
+          submit: t("cms.comments.submit"),
+          reply: t("cms.comments.reply"),
+          resolve: t("cms.comments.resolve"),
+          reopen: t("cms.comments.reopen"),
+          resolved: t("cms.comments.resolved"),
+          block: t("cms.comments.block"),
+          reviewRequest: t("cms.comments.reviewRequest"),
+          reviewer: t("cms.comments.reviewer"),
+          approve: t("cms.comments.approve"),
+          requestChanges: t("cms.comments.requestChanges"),
+          mentionsHint: t("cms.comments.mentionsHint"),
         }}
       />
 

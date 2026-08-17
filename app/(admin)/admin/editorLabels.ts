@@ -105,5 +105,6 @@ export function editorLabels(t: Translate): EditorLabels {
     retry: t("cms.editor.retry"),
     conflict: t("cms.editor.conflict"),
     reload: t("cms.editor.reload"),
+    keepMine: t("cms.editor.keepMine"),
   };
 }

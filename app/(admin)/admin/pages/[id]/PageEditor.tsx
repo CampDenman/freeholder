@@ -13,7 +13,11 @@ import {
   type EditorLabels,
   type EditorNode,
 } from "../../BlockEditor";
-import { savePageBlocksAction } from "../../../cms-actions";
+import {
+  mergePageBlocksAction,
+  reloadWorkingDraftAction,
+  savePageBlocksAction,
+} from "../../../cms-actions";
 
 export function PageEditor({
   id,
@@ -39,6 +43,20 @@ export function PageEditor({
         const result = await savePageBlocksAction(id, blocks, versionRef.current);
         if (result.version) versionRef.current = result.version;
         return result;
+      }}
+      onKeepMine={async (blocks, serverVersion) => {
+        const result = await mergePageBlocksAction(id, blocks, serverVersion);
+        if (result.version) versionRef.current = result.version;
+        return result;
+      }}
+      onReloadDraft={async () => {
+        const result = await reloadWorkingDraftAction(id);
+        if (result.version) versionRef.current = result.version;
+        return {
+          error: result.error,
+          version: result.version,
+          blocks: result.blocks as EditorNode[] | undefined,
+        };
       }}
     />
   );

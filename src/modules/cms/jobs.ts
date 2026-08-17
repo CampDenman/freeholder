@@ -14,4 +14,15 @@ export const applyDueSchedules = defineJob({
   },
 });
 
-export default [applyDueSchedules];
+export const expireStalePresence = defineJob({
+  name: "cms.expireStalePresence",
+  summary: "Forget editors who have not heartbeated recently.",
+  schedule: "* * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { expireStalePresence: expire } = await import("./collaboration");
+    return expire.call({}, { kind: "system" });
+  },
+});
+
+export default [applyDueSchedules, expireStalePresence];

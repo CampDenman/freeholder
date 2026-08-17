@@ -21,9 +21,11 @@ import {
   compareRevisions,
   createPreviewLink,
   decideApproval,
+  describeConflict,
   listPreviewLinks,
   nameRevision,
   releaseEditLease,
+  reloadWorkingDraft,
   requestApproval,
   resolvePreviewLink,
   revokePreviewLink,
@@ -31,6 +33,18 @@ import {
   snapshotRevision,
   touchEditLease,
 } from "./lifecycle";
+import {
+  addComment,
+  decideReview,
+  expireStalePresence,
+  heartbeatPresence,
+  leavePresence,
+  listComments,
+  listPresence,
+  reopenThread,
+  requestReview,
+  resolveThread,
+} from "./collaboration";
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -568,6 +582,28 @@ export const updatePage = defineService({
   },
 });
 
+/**
+ * Apply a reviewed merge of a stale edit (C2.03).
+ *
+ * The editor has already seen `cms.describeConflict`. This write is the same
+ * working-copy update as `cms.updatePage`, but only after the caller names the
+ * current server version — "keep mine" is explicit, not a silent overwrite.
+ */
+export const mergePage = defineService({
+  name: "cms.mergePage",
+  summary: "Write a reviewed merge onto the working draft at the current version.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id: z.string().uuid(),
+    expectedVersion: z.number().int().positive(),
+    title: z.string().min(1).optional(),
+    blocks: blockTreeSchema("page").optional(),
+    seo: seo.optional(),
+  }),
+  handler: async (input, ctx) => ctx.call(updatePage, input),
+});
+
 export const publishPage = defineService({
   name: "cms.publishPage",
   summary: "Make a page live, or take it back to draft.",
@@ -1053,7 +1089,20 @@ export default [
   snapshotRevision,
   nameRevision,
   compareRevisions,
+  describeConflict,
+  reloadWorkingDraft,
+  mergePage,
   touchEditLease,
   releaseEditLease,
+  heartbeatPresence,
+  listPresence,
+  leavePresence,
+  expireStalePresence,
+  addComment,
+  listComments,
+  resolveThread,
+  reopenThread,
+  requestReview,
+  decideReview,
   ensureDefaults,
 ];
