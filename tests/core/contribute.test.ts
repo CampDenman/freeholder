@@ -56,8 +56,8 @@ describe("contribute helpers", () => {
   });
 });
 
-describe.runIf(hasDatabase)("contribute channel", { timeout: 30_000, hookTimeout: 30_000 }, () => {
-  beforeEach(truncateSpine);
+describe.runIf(hasDatabase)("contribute channel", { timeout: 30_000 }, () => {
+  beforeEach(truncateSpine, 30_000);
   afterAll(closeDb);
 
   it("files locally when the hub URL is empty and never calls ingest", async () => {
