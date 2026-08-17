@@ -111,7 +111,11 @@ function resumeKey(file: File): string {
 
 export function UploadForm({
   labels,
+  captureToken,
+  captureSessionId,
 }: {
+  captureToken?: string;
+  captureSessionId?: string;
   labels: {
     file: string;
     fileHint: string;
@@ -166,6 +170,8 @@ export function UploadForm({
             file.lastModified > 0
               ? new Date(file.lastModified).toISOString()
               : undefined,
+          captureToken,
+          captureSessionId,
         },
       }),
     });
@@ -292,6 +298,19 @@ export function UploadForm({
                 metadata,
                 controller.current!.signal,
               );
+            }
+            if (captureToken || captureSessionId) {
+              const status = await apiJson<{ assetId?: string | null }>(
+                `/api/media/uploads?id=${encodeURIComponent(reservation.id)}`,
+              );
+              if (status.assetId) {
+                const bind = new FormData();
+                if (captureToken) bind.set("token", captureToken);
+                if (captureSessionId) bind.set("id", captureSessionId);
+                bind.set("assetId", status.assetId);
+                const { bindCaptureAction } = await import("../../capture-actions");
+                await bindCaptureAction(bind);
+              }
             }
             window.localStorage.removeItem(resumeKey(file));
             form.reset();

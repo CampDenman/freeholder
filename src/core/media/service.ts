@@ -44,6 +44,7 @@ import {
   validateMediaFile,
   type MediaKind,
 } from "@/core/media/validation";
+import captureServices from "./capture";
 import {
   buildRenditions,
   readImageFacts,
@@ -60,13 +61,15 @@ const MAX_MULTIPART_PARTS = 10_000;
 const LEGACY_MAX_BYTES = 2_147_483_647;
 const ALT_TEXT_PROMPT_VERSION = "accessible-image-v1";
 
-const sourceSchema = z.enum(["upload", "import", "generated", "migration"]);
+const sourceSchema = z.enum(["upload", "import", "generated", "migration", "capture"]);
 const provenanceSchema = z
   .object({
     sourceUrl: z.string().url().max(2_048).optional(),
     capturedAt: z.string().datetime().optional(),
     lastModifiedAt: z.string().datetime().optional(),
     note: z.string().trim().max(500).optional(),
+    captureToken: z.string().trim().min(16).max(128).optional(),
+    captureSessionId: z.string().uuid().optional(),
   })
   .default({});
 const mediaMetadataSchema = z
@@ -93,6 +96,7 @@ function userOwnsUpload(actor: Actor, uploadedBy: string | null): boolean {
 }
 
 function requireUploadAccess(actor: Actor, uploadedBy: string | null): void {
+  if (actor.kind === "anonymous" && uploadedBy?.startsWith("capture:")) return;
   if (!userOwnsUpload(actor, uploadedBy)) {
     throw new ServiceError("not_found", "That upload is not here.");
   }
@@ -406,7 +410,7 @@ export const uploadAsset = defineService({
   name: "media.upload",
   summary: "Validate and store a bounded proxied upload.",
   kind: "mutation",
-  permission: "scoped",
+  permission: "public",
   input: z.object({
     filename: z.string().min(1).max(255),
     contentType: z.string().min(1).max(255),
@@ -418,6 +422,14 @@ export const uploadAsset = defineService({
     metadata: mediaMetadataSchema,
   }),
   handler: async (input, ctx) => {
+    if (
+      ctx.actor.kind === "anonymous" &&
+      !input.uploadId &&
+      !input.provenance.captureToken &&
+      !input.provenance.captureSessionId
+    ) {
+      throw new ServiceError("permission", "Sign in or use an upload link.");
+    }
     const body = input.bytes;
     if (body.byteLength > PROXY_UPLOAD_LIMIT) {
       throw new ServiceError(
@@ -541,9 +553,12 @@ export const beginUpload = defineService({
   name: "media.beginUpload",
   summary: "Reserve a resumable direct upload or bounded proxy fallback.",
   kind: "mutation",
-  permission: "scoped",
+  permission: "public",
   input: uploadIntent,
   handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous" && !input.provenance.captureToken) {
+      throw new ServiceError("permission", "Sign in or use an upload link.");
+    }
     let kind: MediaKind;
     try {
       kind = expectedKind(input.filename, input.contentType);
@@ -588,8 +603,10 @@ export const beginUpload = defineService({
           declaredMime: input.contentType,
           expectedBytes: input.bytes,
           providerUploadId,
-          uploadedBy: actorString(ctx.actor),
-          source: input.source,
+          uploadedBy: input.provenance.captureToken
+            ? `capture:${input.provenance.captureToken}`
+            : actorString(ctx.actor),
+          source: input.provenance.captureToken ? "capture" : input.source,
           provenance: input.provenance,
           mediaMetadata: input.metadata,
           expiresAt: new Date(Date.now() + UPLOAD_TTL_MS),
@@ -658,7 +675,7 @@ export const uploadStatus = defineService({
   name: "media.uploadStatus",
   summary: "Report durable progress for an interrupted upload.",
   kind: "query",
-  permission: "scoped",
+  permission: "public",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const session = await uploadSession(ctx.tx, input.id);
@@ -703,7 +720,7 @@ export const signUploadParts = defineService({
   name: "media.signUploadParts",
   summary: "Sign a bounded set of direct multipart upload requests.",
   kind: "mutation",
-  permission: "scoped",
+  permission: "public",
   input: z.object({
     id: z.string().uuid(),
     partNumbers: z.array(z.number().int().min(1).max(MAX_MULTIPART_PARTS)).min(1).max(25),
@@ -772,7 +789,7 @@ export const completeUpload = defineService({
   name: "media.completeUpload",
   summary: "Assemble, validate, scan, and register a direct upload.",
   kind: "mutation",
-  permission: "scoped",
+  permission: "public",
   input: z.object({
     id: z.string().uuid(),
     parts: z.array(multipartPartSchema).min(1).max(MAX_MULTIPART_PARTS),
@@ -906,7 +923,7 @@ export const abortUpload = defineService({
   name: "media.abortUpload",
   summary: "Abort an unfinished upload and remove its staged bytes.",
   kind: "mutation",
-  permission: "scoped",
+  permission: "public",
   input: z.object({ id: z.string().uuid() }),
   handler: async (input, ctx) => {
     const session = await lockedUploadSession(ctx.tx, input.id);
@@ -2010,4 +2027,5 @@ export default [
   purgeAsset,
   purgeExpiredAsset,
   rescanAsset,
+  ...captureServices,
 ];

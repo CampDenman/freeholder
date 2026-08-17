@@ -42,7 +42,7 @@ export default async function PagePreview({
 
   return (
     <>
-      {await renderBlocks(page.blocks as BlockNode[], {
+      {await renderBlocks((page.workingBlocks ?? page.blocks) as BlockNode[], {
         locale,
         t,
         business: business

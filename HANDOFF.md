@@ -4,11 +4,9 @@ Last updated: 2026-08-17 C5.04 / C2.21 / events / newsletters (America/Vancouver
 
 ## Resume point
 
-Resume `MASTER.md` section 43 after **C5.04**, **C2.21**, **C6.11** and
-**C9.04**. C5 commerce through C5.24 is implemented on this workspace. The
-next open commerce-adjacent items are later C6 booking work (C6.07+) and
-remaining C9 automations. C1.28–C4 stay deferred by the 2026-08-14 commerce
-deviation.
+Resume after landing **PR #105** (`feat/commerce-exit-events-seo`) then
+continue **C1.28–C1.29** on `feat/c1.28-media-capture`. C5 through C5.24,
+C2.21, C6.11 and C9.04 are in that PR. C2–C4 remain open.
 
 ## C5.04 tax templates delivered
 

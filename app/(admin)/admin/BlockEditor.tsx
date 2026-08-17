@@ -70,6 +70,8 @@ export interface EditorLabels {
   unsaved: string;
   saveFailed: string;
   retry: string;
+  conflict: string;
+  reload: string;
 }
 
 /** Distinct enough per session; ids only need to be stable within a tree. */
@@ -90,7 +92,11 @@ export function BlockEditor({
   /** The preview page for this subject. */
   previewSrc: string;
   /** Persists the whole tree. Throws with a readable message on refusal. */
-  save: (blocks: EditorNode[]) => Promise<{ error?: string }>;
+  save: (blocks: EditorNode[]) => Promise<{
+    error?: string;
+    version?: number;
+    conflict?: boolean;
+  }>;
 }) {
   const [blocks, setBlocks] = useState<EditorNode[]>(initialBlocks);
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -100,6 +106,7 @@ export function BlockEditor({
     "clean" | "dirty" | "saving" | "saved" | "failed"
   >("clean");
   const [error, setError] = useState<string | undefined>();
+  const [conflict, setConflict] = useState(false);
 
   const byType = useMemo(
     () => new Map(blockTypes.map((b) => [b.type, b])),
@@ -118,11 +125,13 @@ export function BlockEditor({
     const result = await save(blocksRef.current);
     if (result.error) {
       setError(result.error);
+      setConflict(Boolean(result.conflict));
       setStatus("failed");
       return;
     }
     savedRef.current = snapshot;
     setError(undefined);
+    setConflict(false);
     setStatus("saved");
     setSavedVersion((n) => n + 1);
   }, [save]);
@@ -208,6 +217,7 @@ export function BlockEditor({
         <SaveStatus
           status={status}
           error={error}
+          conflict={conflict}
           labels={labels}
           onRetry={() => void persist()}
         />
@@ -235,11 +245,13 @@ export function BlockEditor({
 function SaveStatus({
   status,
   error,
+  conflict,
   labels,
   onRetry,
 }: {
   status: "clean" | "dirty" | "saving" | "saved" | "failed";
   error?: string;
+  conflict: boolean;
   labels: EditorLabels;
   onRetry: () => void;
 }) {
@@ -250,14 +262,24 @@ function SaveStatus({
         role="status"
         className="flex flex-wrap items-center gap-3 text-sm text-danger"
       >
-        {error ?? labels.saveFailed}
-        <button
-          type="button"
-          onClick={onRetry}
-          className="rounded-md border border-rule px-2.5 py-1 text-xs font-medium text-ink"
-        >
-          {labels.retry}
-        </button>
+        {conflict ? labels.conflict : (error ?? labels.saveFailed)}
+        {conflict ? (
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-md border border-rule px-2.5 py-1 text-xs font-medium text-ink"
+          >
+            {labels.reload}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-md border border-rule px-2.5 py-1 text-xs font-medium text-ink"
+          >
+            {labels.retry}
+          </button>
+        )}
       </p>
     );
   }

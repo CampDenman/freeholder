@@ -16,6 +16,21 @@ import { recordRedirect } from "@/core/seo/service";
 import { queueIndexNow } from "@/core/seo/indexnow";
 import { kindFromSlug, priorityFromSlug } from "@/core/seo/classify";
 import { contentRevisions, pages, sections } from "./schema";
+import {
+  applyDueSchedules,
+  compareRevisions,
+  createPreviewLink,
+  decideApproval,
+  listPreviewLinks,
+  nameRevision,
+  releaseEditLease,
+  requestApproval,
+  resolvePreviewLink,
+  revokePreviewLink,
+  schedulePage,
+  snapshotRevision,
+  touchEditLease,
+} from "./lifecycle";
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -456,13 +471,14 @@ export const updatePage = defineService({
   permission: "scoped",
   input: z.object({
     id: z.string().uuid(),
+    expectedVersion: z.number().int().positive().optional(),
     slug: slug.optional(),
     title: z.string().min(1).optional(),
     blocks: blockTreeSchema("page").optional(),
     seo: seo.optional(),
   }),
   handler: async (input, ctx) => {
-    const { id, ...changes } = input;
+    const { id, expectedVersion, ...changes } = input;
     if (Object.keys(changes).length === 0) {
       throw new ServiceError("validation", "cms.updatePage: nothing to change");
     }
@@ -473,18 +489,46 @@ export const updatePage = defineService({
       .where(eq(pages.id, id))
       .limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${id}`);
+    if (expectedVersion !== undefined && before.version !== expectedVersion) {
+      throw new ServiceError(
+        "conflict",
+        "This page changed after you opened it. Reload before saving again.",
+      );
+    }
 
     await ctx.tx.insert(contentRevisions).values({
       subjectType: "page",
       subjectId: before.id,
-      title: before.title,
-      blocks: before.blocks,
+      title: before.workingTitle ?? before.title,
+      blocks: before.workingBlocks ?? before.blocks,
+      seo: before.workingSeo ?? before.seo,
+      kind: "autosave",
       actor: actorString(ctx.actor),
     });
 
+    const nextWorkingTitle = changes.title ?? before.workingTitle ?? before.title;
+    const nextWorkingBlocks = changes.blocks ?? before.workingBlocks ?? before.blocks;
+    const nextWorkingSeo = changes.seo ?? before.workingSeo ?? before.seo;
+    const publishedContentEdit =
+      before.status === "published" &&
+      (changes.title !== undefined || changes.blocks !== undefined || changes.seo !== undefined);
+
     const [page] = await ctx.tx
       .update(pages)
-      .set(changes)
+      .set({
+        ...(changes.slug !== undefined ? { slug: changes.slug } : {}),
+        ...(publishedContentEdit
+          ? {}
+          : {
+              ...(changes.title !== undefined ? { title: changes.title } : {}),
+              ...(changes.blocks !== undefined ? { blocks: changes.blocks } : {}),
+              ...(changes.seo !== undefined ? { seo: changes.seo } : {}),
+            }),
+        workingTitle: nextWorkingTitle,
+        workingBlocks: nextWorkingBlocks,
+        workingSeo: nextWorkingSeo,
+        version: before.version + 1,
+      })
       .where(eq(pages.id, id))
       .returning()
       .catch((error: unknown) => {
@@ -531,11 +575,50 @@ export const publishPage = defineService({
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), published: z.boolean() }),
   handler: async (input, ctx) => {
+    const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
+    if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
+    if (input.published && before.approvalState === "pending") {
+      throw new ServiceError(
+        "conflict",
+        "This page is waiting for approval. Approve it before publishing.",
+      );
+    }
+    const title = before.workingTitle ?? before.title;
+    const blocks = before.workingBlocks ?? before.blocks;
+    const seo = before.workingSeo ?? before.seo;
+    if (input.published) {
+      await ctx.tx.insert(contentRevisions).values({
+        subjectType: "page",
+        subjectId: before.id,
+        title,
+        blocks,
+        seo,
+        kind: "publish",
+        name: "Published",
+        actor: actorString(ctx.actor),
+      });
+    }
     const [page] = await ctx.tx
       .update(pages)
       .set({
         status: input.published ? "published" : "draft",
         publishedAt: input.published ? sql`now()` : null,
+        ...(input.published
+          ? {
+              title,
+              blocks,
+              seo,
+              workingTitle: title,
+              workingBlocks: blocks,
+              workingSeo: seo,
+              scheduledPublishAt: null,
+              approvalState: "none",
+              approvalNote: null,
+              approvedBy: null,
+              approvedAt: null,
+            }
+          : { scheduledUnpublishAt: null }),
+        version: before.version + 1,
       })
       .where(eq(pages.id, input.id))
       .returning();
@@ -800,20 +883,33 @@ export const restoreRevision = defineService({
       await ctx.tx.insert(contentRevisions).values({
         subjectType: "page",
         subjectId: before.id,
-        title: before.title,
-        blocks: before.blocks,
+        title: before.workingTitle ?? before.title,
+        blocks: before.workingBlocks ?? before.blocks,
+        seo: before.workingSeo ?? before.seo,
+        kind: "autosave",
         actor,
       });
+      const restoredTitle = revision.title ?? before.title;
+      const restoredBlocks = parseBlockTree(revision.blocks, "page");
+      const restoredSeo = revision.seo ?? before.seo;
+      // Restore always writes the working copy. A published page's live row
+      // stays put until someone publishes again (C2.01, C2.02 restore-as-draft).
+      const published = before.status === "published";
       const [page] = await ctx.tx
         .update(pages)
         .set({
-          blocks: parseBlockTree(revision.blocks, "page"),
-          ...(revision.title ? { title: revision.title } : {}),
+          workingTitle: restoredTitle,
+          workingBlocks: restoredBlocks,
+          workingSeo: restoredSeo,
+          ...(published
+            ? {}
+            : { title: restoredTitle, blocks: restoredBlocks, seo: restoredSeo }),
+          version: before.version + 1,
         })
         .where(eq(pages.id, before.id))
         .returning();
       ctx.setSubject("page", page!.id);
-      return { subjectType: "page" as const, id: page!.id };
+      return { subjectType: "page" as const, id: page!.id, version: page!.version };
     }
 
     const [before] = await ctx.tx
@@ -946,5 +1042,18 @@ export default [
   createSectionLocale,
   listRevisions,
   restoreRevision,
+  createPreviewLink,
+  listPreviewLinks,
+  revokePreviewLink,
+  resolvePreviewLink,
+  schedulePage,
+  applyDueSchedules,
+  requestApproval,
+  decideApproval,
+  snapshotRevision,
+  nameRevision,
+  compareRevisions,
+  touchEditLease,
+  releaseEditLease,
   ensureDefaults,
 ];

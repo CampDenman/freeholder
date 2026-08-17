@@ -14,7 +14,7 @@
 // Zod-validated against a registered block type before it is written (see
 // blocks/registry.ts), so this is a typed tree that happens to be stored as
 // JSON, not a bag anyone can put anything in.
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 /**
@@ -41,6 +41,26 @@ export const pages = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     /** Per-page SEO overrides; the builder fills the gaps (§5). */
     seo: jsonb("seo").notNull().default({}),
+    /**
+     * Working copy (C2.01). Autosave writes here so a published page's live
+     * title/blocks/seo never change until publish copies them across.
+     */
+    workingTitle: text("working_title"),
+    workingBlocks: jsonb("working_blocks"),
+    workingSeo: jsonb("working_seo"),
+    version: integer("version").notNull().default(1),
+    scheduledPublishAt: timestamp("scheduled_publish_at", { withTimezone: true }),
+    scheduledUnpublishAt: timestamp("scheduled_unpublish_at", { withTimezone: true }),
+    approvalState: text("approval_state", {
+      enum: ["none", "pending", "approved", "rejected"],
+    })
+      .notNull()
+      .default("none"),
+    approvalNote: text("approval_note"),
+    approvedBy: text("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    editLeaseActor: text("edit_lease_actor"),
+    editLeaseUntil: timestamp("edit_lease_until", { withTimezone: true }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -99,6 +119,12 @@ export const contentRevisions = pgTable(
     subjectId: uuid("subject_id").notNull(),
     title: text("title"),
     blocks: jsonb("blocks").notNull().default([]),
+    seo: jsonb("seo").notNull().default({}),
+    /** Owner-given name for a snapshot they may want again (C2.02). */
+    name: text("name"),
+    kind: text("kind", { enum: ["autosave", "named", "publish"] })
+      .notNull()
+      .default("autosave"),
     /** "user:<id>", "agent:<key-name>", "system" — as everywhere else. */
     actor: text("actor").notNull(),
     createdAt: createdAtColumn(),
@@ -109,5 +135,28 @@ export const contentRevisions = pgTable(
       t.subjectId,
       t.createdAt,
     ),
+  ],
+);
+
+/**
+ * Shareable, expiring look at a page's working draft (C2.02).
+ *
+ * The token is stored hashed. Resolving one never requires a staff session —
+ * the link *is* the permission, and only until it expires or is revoked.
+ */
+export const contentPreviewLinks = pgTable(
+  "content_preview_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdBy: text("created_by").notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("content_preview_links_token_idx").on(t.tokenHash),
+    index("content_preview_links_page_idx").on(t.pageId),
   ],
 );

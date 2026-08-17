@@ -139,6 +139,11 @@ export default async function MediaPage({
         <div>
           <h1 className="text-xl font-bold tracking-tight">{t("media.title")}</h1>
           <p className="mt-1 text-sm text-ink-muted">{t("media.intro")}</p>
+          {canManage && !trashed ? (
+            <a href="/admin/media/record" className="mt-2 inline-block text-sm font-semibold text-accent">
+              {t("media.capture.title")}
+            </a>
+          ) : null}
         </div>
         <nav aria-label={t("media.views")} className="flex rounded-md border border-rule p-1">
           <Link
