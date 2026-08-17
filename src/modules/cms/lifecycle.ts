@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Preview links, schedule, approval, named revisions and leases (C2.02, C2.03).
+// Preview links, schedule, approval, named revisions, leases and merge (C2.02, C2.03).
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, isNull, lte, or } from "drizzle-orm";
 import { z } from "zod";
@@ -51,6 +51,34 @@ function flattenBlocks(
   };
   walk(nodes);
   return out;
+}
+
+export function diffBlockTrees(earlier: unknown, later: unknown) {
+  const earlierMap = flattenBlocks(earlier);
+  const laterMap = flattenBlocks(later);
+  const added: { id: string; type: string }[] = [];
+  const removed: { id: string; type: string }[] = [];
+  const changed: { id: string; type: string }[] = [];
+  let unchanged = 0;
+  for (const [id, node] of laterMap) {
+    const prior = earlierMap.get(id);
+    if (!prior) {
+      added.push({ id, type: node.type });
+      continue;
+    }
+    if (
+      prior.type !== node.type ||
+      JSON.stringify(prior.props) !== JSON.stringify(node.props)
+    ) {
+      changed.push({ id, type: node.type });
+    } else {
+      unchanged += 1;
+    }
+  }
+  for (const [id, node] of earlierMap) {
+    if (!laterMap.has(id)) removed.push({ id, type: node.type });
+  }
+  return { added, removed, changed, unchanged };
 }
 
 export const createPreviewLink = defineService({
@@ -425,30 +453,7 @@ export const compareRevisions = defineService({
       laterLabel = "working";
     }
 
-    const earlierMap = flattenBlocks(earlier.blocks);
-    const laterMap = flattenBlocks(laterBlocks);
-    const added: { id: string; type: string }[] = [];
-    const removed: { id: string; type: string }[] = [];
-    const changed: { id: string; type: string }[] = [];
-    let unchanged = 0;
-    for (const [id, node] of laterMap) {
-      const prior = earlierMap.get(id);
-      if (!prior) {
-        added.push({ id, type: node.type });
-        continue;
-      }
-      if (
-        prior.type !== node.type ||
-        JSON.stringify(prior.props) !== JSON.stringify(node.props)
-      ) {
-        changed.push({ id, type: node.type });
-      } else {
-        unchanged += 1;
-      }
-    }
-    for (const [id, node] of earlierMap) {
-      if (!laterMap.has(id)) removed.push({ id, type: node.type });
-    }
+    const blocks = diffBlockTrees(earlier.blocks, laterBlocks);
 
     return {
       earlier: { id: earlier.id, label: earlier.name ?? earlier.id, title: earlier.title ?? "" },
@@ -458,7 +463,66 @@ export const compareRevisions = defineService({
         title: laterTitle,
       },
       titleChanged: (earlier.title ?? "") !== laterTitle,
-      blocks: { added, removed, changed, unchanged },
+      blocks,
+    };
+  },
+});
+
+export const describeConflict = defineService({
+  name: "cms.describeConflict",
+  summary: "Show the working draft versus a stale save the editor still holds.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    pageId,
+    expectedVersion: z.number().int().positive(),
+    title: z.string().min(1).optional(),
+    blocks: z.unknown().optional(),
+    seo: z.unknown().optional(),
+  }),
+  handler: async (input, ctx) => {
+    const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
+    if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
+    const serverTitle = page.workingTitle ?? page.title;
+    const serverBlocks = page.workingBlocks ?? page.blocks;
+    const serverSeo = page.workingSeo ?? page.seo;
+    const incomingTitle = input.title ?? serverTitle;
+    const incomingBlocks = input.blocks ?? serverBlocks;
+    const incomingSeo = input.seo ?? serverSeo;
+    return {
+      stale: page.version !== input.expectedVersion,
+      server: {
+        version: page.version,
+        title: serverTitle,
+        blocks: serverBlocks,
+        seo: serverSeo,
+      },
+      incoming: {
+        title: incomingTitle,
+        blocks: incomingBlocks,
+        seo: incomingSeo,
+      },
+      titleChanged: serverTitle !== incomingTitle,
+      blocks: diffBlockTrees(serverBlocks, incomingBlocks),
+    };
+  },
+});
+
+export const reloadWorkingDraft = defineService({
+  name: "cms.reloadWorkingDraft",
+  summary: "The current working title, blocks and version — take the server copy.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ pageId }),
+  handler: async (input, ctx) => {
+    const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
+    if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
+    return {
+      id: page.id,
+      version: page.version,
+      title: page.workingTitle ?? page.title,
+      blocks: page.workingBlocks ?? page.blocks,
+      seo: page.workingSeo ?? page.seo,
     };
   },
 });

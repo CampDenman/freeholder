@@ -72,6 +72,7 @@ export interface EditorLabels {
   retry: string;
   conflict: string;
   reload: string;
+  keepMine: string;
 }
 
 /** Distinct enough per session; ids only need to be stable within a tree. */
@@ -85,6 +86,8 @@ export function BlockEditor({
   labels,
   previewSrc,
   save,
+  onKeepMine,
+  onReloadDraft,
 }: {
   initialBlocks: EditorNode[];
   blockTypes: EditorBlockType[];
@@ -96,6 +99,20 @@ export function BlockEditor({
     error?: string;
     version?: number;
     conflict?: boolean;
+    serverVersion?: number;
+    added?: number;
+    removed?: number;
+    changed?: number;
+  }>;
+  onKeepMine?: (blocks: EditorNode[], serverVersion: number) => Promise<{
+    error?: string;
+    version?: number;
+    conflict?: boolean;
+  }>;
+  onReloadDraft?: () => Promise<{
+    error?: string;
+    version?: number;
+    blocks?: EditorNode[];
   }>;
 }) {
   const [blocks, setBlocks] = useState<EditorNode[]>(initialBlocks);
@@ -107,6 +124,8 @@ export function BlockEditor({
   >("clean");
   const [error, setError] = useState<string | undefined>();
   const [conflict, setConflict] = useState(false);
+  const [serverVersion, setServerVersion] = useState<number | undefined>();
+  const [conflictCounts, setConflictCounts] = useState<string | undefined>();
 
   const byType = useMemo(
     () => new Map(blockTypes.map((b) => [b.type, b])),
@@ -126,12 +145,20 @@ export function BlockEditor({
     if (result.error) {
       setError(result.error);
       setConflict(Boolean(result.conflict));
+      setServerVersion(result.serverVersion);
+      setConflictCounts(
+        result.conflict
+          ? `+${result.added ?? 0} / −${result.removed ?? 0} / ~${result.changed ?? 0}`
+          : undefined,
+      );
       setStatus("failed");
       return;
     }
     savedRef.current = snapshot;
     setError(undefined);
     setConflict(false);
+    setServerVersion(undefined);
+    setConflictCounts(undefined);
     setStatus("saved");
     setSavedVersion((n) => n + 1);
   }, [save]);
@@ -218,8 +245,44 @@ export function BlockEditor({
           status={status}
           error={error}
           conflict={conflict}
+          conflictCounts={conflictCounts}
           labels={labels}
           onRetry={() => void persist()}
+          onReload={
+            onReloadDraft
+              ? async () => {
+                  const result = await onReloadDraft();
+                  if (result.error || !result.blocks) {
+                    setError(result.error ?? labels.saveFailed);
+                    return;
+                  }
+                  setBlocks(result.blocks);
+                  savedRef.current = JSON.stringify(result.blocks);
+                  setConflict(false);
+                  setError(undefined);
+                  setStatus("saved");
+                  setSavedVersion((n) => n + 1);
+                }
+              : undefined
+          }
+          onKeepMine={
+            onKeepMine && serverVersion !== undefined
+              ? async () => {
+                  const result = await onKeepMine(blocksRef.current, serverVersion);
+                  if (result.error) {
+                    setError(result.error);
+                    setConflict(Boolean(result.conflict));
+                    setStatus("failed");
+                    return;
+                  }
+                  savedRef.current = JSON.stringify(blocksRef.current);
+                  setConflict(false);
+                  setError(undefined);
+                  setStatus("saved");
+                  setSavedVersion((n) => n + 1);
+                }
+              : undefined
+          }
         />
       </div>
 
@@ -246,14 +309,20 @@ function SaveStatus({
   status,
   error,
   conflict,
+  conflictCounts,
   labels,
   onRetry,
+  onReload,
+  onKeepMine,
 }: {
   status: "clean" | "dirty" | "saving" | "saved" | "failed";
   error?: string;
   conflict: boolean;
+  conflictCounts?: string;
   labels: EditorLabels;
   onRetry: () => void;
+  onReload?: () => void | Promise<void>;
+  onKeepMine?: () => void | Promise<void>;
 }) {
   if (status === "clean") return null;
   if (status === "failed") {
@@ -263,14 +332,30 @@ function SaveStatus({
         className="flex flex-wrap items-center gap-3 text-sm text-danger"
       >
         {conflict ? labels.conflict : (error ?? labels.saveFailed)}
+        {conflict && conflictCounts ? (
+          <span className="text-ink-muted">{conflictCounts}</span>
+        ) : null}
         {conflict ? (
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="rounded-md border border-rule px-2.5 py-1 text-xs font-medium text-ink"
-          >
-            {labels.reload}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() =>
+                onReload ? void onReload() : window.location.reload()
+              }
+              className="rounded-md border border-rule px-2.5 py-1 text-xs font-medium text-ink"
+            >
+              {labels.reload}
+            </button>
+            {onKeepMine ? (
+              <button
+                type="button"
+                onClick={() => void onKeepMine()}
+                className="rounded-md border border-rule px-2.5 py-1 text-xs font-medium text-ink"
+              >
+                {labels.keepMine}
+              </button>
+            ) : null}
+          </>
         ) : (
           <button
             type="button"

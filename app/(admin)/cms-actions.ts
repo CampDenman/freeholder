@@ -17,6 +17,7 @@ import {
   createPage,
   createSectionLocale,
   ensureDefaults,
+  mergePage,
   publishPage,
   restoreRevision,
   updatePage,
@@ -25,18 +26,35 @@ import {
 import {
   createPreviewLink,
   decideApproval,
+  describeConflict,
   nameRevision,
+  reloadWorkingDraft,
   requestApproval,
   revokePreviewLink,
   schedulePage,
   snapshotRevision,
 } from "@/modules/cms/lifecycle";
+import {
+  addComment,
+  decideReview,
+  heartbeatPresence,
+  leavePresence,
+  listPresence,
+  reopenThread,
+  requestReview,
+  resolveThread,
+} from "@/modules/cms/collaboration";
 
 export interface SaveResult {
   error?: string;
   version?: number;
   conflict?: boolean;
+  serverVersion?: number;
+  added?: number;
+  removed?: number;
+  changed?: number;
   path?: string;
+  actors?: { actor: string; editing: boolean }[];
 }
 
 /**
@@ -85,8 +103,121 @@ export async function savePageBlocksAction(
     revalidatePath("/", "layout");
     return { version: page.version };
   } catch (error) {
+    const shown = present(error);
+    if (!shown.conflict || expectedVersion === undefined) return shown;
+    try {
+      const conflict = await describeConflict.call(
+        { pageId: id, expectedVersion, blocks },
+        await currentActor(),
+      );
+      return {
+        ...shown,
+        serverVersion: conflict.server.version,
+        added: conflict.blocks.added.length,
+        removed: conflict.blocks.removed.length,
+        changed: conflict.blocks.changed.length,
+      };
+    } catch {
+      return shown;
+    }
+  }
+}
+
+export async function mergePageBlocksAction(
+  id: string,
+  blocks: unknown,
+  expectedVersion: number,
+): Promise<SaveResult> {
+  try {
+    const page = await mergePage.call(
+      { id, blocks, expectedVersion },
+      await currentActor(),
+    );
+    revalidatePath("/", "layout");
+    return { version: page.version };
+  } catch (error) {
     return present(error);
   }
+}
+
+export async function reloadWorkingDraftAction(id: string): Promise<SaveResult & { blocks?: unknown }> {
+  try {
+    const draft = await reloadWorkingDraft.call({ pageId: id }, await currentActor());
+    return { version: draft.version, blocks: draft.blocks };
+  } catch (error) {
+    return present(error);
+  }
+}
+
+export async function heartbeatPresenceAction(
+  pageId: string,
+  editing: boolean,
+): Promise<SaveResult> {
+  try {
+    const actor = await currentActor();
+    await heartbeatPresence.call({ pageId, editing }, actor);
+    const actors = await listPresence.call({ pageId }, actor);
+    return { actors };
+  } catch (error) {
+    return present(error);
+  }
+}
+
+export async function leavePresenceAction(pageId: string): Promise<void> {
+  await leavePresence.call({ pageId }, await currentActor()).catch(() => undefined);
+}
+
+export async function addCommentAction(form: FormData): Promise<void> {
+  const mentions = text(form, "mentions")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  await addComment.call(
+    {
+      pageId: text(form, "pageId"),
+      body: text(form, "body"),
+      blockId: text(form, "blockId") || undefined,
+      parentId: text(form, "parentId") || undefined,
+      mentions,
+    },
+    await currentActor(),
+  );
+  revalidatePath("/", "layout");
+}
+
+export async function resolveThreadAction(form: FormData): Promise<void> {
+  await resolveThread.call({ id: text(form, "id") }, await currentActor());
+  revalidatePath("/", "layout");
+}
+
+export async function reopenThreadAction(form: FormData): Promise<void> {
+  await reopenThread.call({ id: text(form, "id") }, await currentActor());
+  revalidatePath("/", "layout");
+}
+
+export async function requestReviewAction(form: FormData): Promise<void> {
+  await requestReview.call(
+    {
+      pageId: text(form, "pageId"),
+      reviewer: text(form, "reviewer"),
+      body: text(form, "body"),
+      blockId: text(form, "blockId") || undefined,
+    },
+    await currentActor(),
+  );
+  revalidatePath("/", "layout");
+}
+
+export async function decideReviewAction(form: FormData): Promise<void> {
+  await decideReview.call(
+    {
+      id: text(form, "id"),
+      approved: text(form, "approved") === "true",
+      note: text(form, "note") || undefined,
+    },
+    await currentActor(),
+  );
+  revalidatePath("/", "layout");
 }
 
 export async function saveSectionBlocksAction(

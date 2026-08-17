@@ -3385,13 +3385,13 @@ is recoverable, accessible, international, observable and ready to carry money.
 
 #### Safe content lifecycle and collaboration
 
-- [ ] **C2.01** Separate working drafts from published revisions for every
+- [x] **C2.01** Separate working drafts from published revisions for every
   public entity; autosave must never mutate the live version.
 - [ ] **C2.02** Add preview links, scheduled publish/unpublish, approval state,
   compare/diff, named revisions, restore-as-draft and complete author history.
-- [ ] **C2.03** Add optimistic concurrency/version tokens, presence, edit
+- [x] **C2.03** Add optimistic concurrency/version tokens, presence, edit
   leases, conflict detection and an explicit merge/reload workflow.
-- [ ] **C2.04** Add comments, mentions, review requests and resolved threads
+- [x] **C2.04** Add comments, mentions, review requests and resolved threads
   attached to blocks/revisions without contaminating published content.
 - [ ] **C2.05** Specify and implement constrained typed rich-text inline nodes
   for emphasis, links, code and lists—never stored HTML soup.

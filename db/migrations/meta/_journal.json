@@ -470,6 +470,13 @@
       "when": 1786993943169,
       "tag": "0066_skinny_trish_tilby",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1786998994672,
+      "tag": "0067_swift_cobalt_man",
+      "breakpoints": true
     }
   ]
 }

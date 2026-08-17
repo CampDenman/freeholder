@@ -39,6 +39,11 @@ export default defineModule({
       "cms.previewLinkCreated",
       "cms.revisionNamed",
       "cms.sectionUpdated",
+      "cms.commentCreated",
+      "cms.commentResolved",
+      "cms.commentReopened",
+      "cms.reviewRequested",
+      "cms.reviewDecided",
     ],
     listens: {
       "settings.setupCompleted": "onSetupCompleted",

@@ -14,7 +14,17 @@
 // Zod-validated against a registered block type before it is written (see
 // blocks/registry.ts), so this is a typed tree that happens to be stored as
 // JSON, not a bag anyone can put anything in.
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 /**
@@ -158,5 +168,66 @@ export const contentPreviewLinks = pgTable(
   (t) => [
     uniqueIndex("content_preview_links_token_idx").on(t.tokenHash),
     index("content_preview_links_page_idx").on(t.pageId),
+  ],
+);
+
+/**
+ * Who is currently looking at or editing a page (C2.03).
+ *
+ * A heartbeat upserts one row per actor per page. Listing drops anyone whose
+ * last beat is older than the presence window, so a closed tab does not look
+ * like a second editor forever.
+ */
+export const contentPresence = pgTable(
+  "content_presence",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id").notNull(),
+    actor: text("actor").notNull(),
+    editing: boolean("editing").notNull().default(false),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("content_presence_page_actor_idx").on(t.pageId, t.actor),
+    index("content_presence_page_seen_idx").on(t.pageId, t.lastSeenAt),
+  ],
+);
+
+/**
+ * Editorial comments and review threads (C2.04).
+ *
+ * These live beside the page, never inside `pages.blocks` or the live title.
+ * A published visitor never sees them; they attach to a block id and/or a
+ * revision so a note about a draft does not become public copy.
+ */
+export const contentComments = pgTable(
+  "content_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id").notNull(),
+    revisionId: uuid("revision_id"),
+    blockId: text("block_id"),
+    parentId: uuid("parent_id"),
+    body: text("body").notNull(),
+    mentions: jsonb("mentions").notNull().default([]),
+    kind: text("kind", { enum: ["comment", "review_request"] })
+      .notNull()
+      .default("comment"),
+    reviewer: text("reviewer"),
+    reviewState: text("review_state", {
+      enum: ["none", "requested", "approved", "changes_requested"],
+    })
+      .notNull()
+      .default("none"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolvedBy: text("resolved_by"),
+    createdBy: text("created_by").notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("content_comments_page_idx").on(t.pageId, t.createdAt),
+    index("content_comments_parent_idx").on(t.parentId),
+    index("content_comments_review_idx").on(t.pageId, t.reviewState),
   ],
 );
