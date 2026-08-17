@@ -82,7 +82,7 @@ export const assets = pgTable(
     /** Where this file came from and who introduced it. */
     provenance: jsonb("provenance").notNull().default({}),
     source: text("source", {
-      enum: ["upload", "import", "generated", "migration"],
+      enum: ["upload", "import", "generated", "migration", "capture"],
     })
       .notNull()
       .default("upload"),
@@ -200,7 +200,7 @@ export const mediaUploads = pgTable(
     }),
     uploadedBy: text("uploaded_by"),
     source: text("source", {
-      enum: ["upload", "import", "generated", "migration"],
+      enum: ["upload", "import", "generated", "migration", "capture"],
     })
       .notNull()
       .default("upload"),
@@ -252,6 +252,76 @@ export const mediaObjects = pgTable(
     check(
       "media_objects_attachment_consistent",
       sql`(${t.state} = 'attached' and ${t.assetId} is not null) or ${t.state} = 'pending'`,
+    ),
+  ],
+);
+
+export const CAPTURE_SOURCES = [
+  "camera",
+  "microphone",
+  "screen",
+  "share_sheet",
+  "camera_roll",
+  "upload_link",
+  "import",
+  "social",
+] as const;
+
+export const CAPTURE_STATUSES = [
+  "pending",
+  "live",
+  "preview",
+  "confirmed",
+  "discarded",
+  "expired",
+] as const;
+
+/**
+ * One explicit capture or phone-ingest session (MASTER.md §4.5, C1.28, C1.29).
+ *
+ * Browser recordings, QR upload links and share-target batches all become
+ * ordinary Assets through this row. The platform never records in the
+ * background: live is a status an owner can see and stop.
+ */
+export const mediaCaptureSessions = pgTable(
+  "media_capture_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdBy: text("created_by").notNull(),
+    source: text("source", { enum: CAPTURE_SOURCES }).notNull(),
+    status: text("status", { enum: CAPTURE_STATUSES }).notNull().default("pending"),
+    targetType: text("target_type"),
+    targetId: text("target_id"),
+    uploadCount: integer("upload_count").notNull().default(0),
+    token: text("token"),
+    permissionGrantedAt: timestamp("permission_granted_at", { withTimezone: true }),
+    displaySurface: text("display_surface"),
+    trimStartMs: integer("trim_start_ms").notNull().default(0),
+    trimEndMs: integer("trim_end_ms"),
+    caption: text("caption"),
+    uploadId: uuid("upload_id").references(() => mediaUploads.id, { onDelete: "set null" }),
+    assetId: uuid("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("media_capture_sessions_token_idx").on(t.token),
+    index("media_capture_sessions_status_expiry_idx").on(t.status, t.expiresAt),
+    index("media_capture_sessions_created_by_idx").on(t.createdBy, t.createdAt),
+    check(
+      "media_capture_sessions_source_valid",
+      sql`${t.source} in ('camera','microphone','screen','share_sheet','camera_roll','upload_link','import','social')`,
+    ),
+    check(
+      "media_capture_sessions_status_valid",
+      sql`${t.status} in ('pending','live','preview','confirmed','discarded','expired')`,
+    ),
+    check("media_capture_sessions_trim_start_nonneg", sql`${t.trimStartMs} >= 0`),
+    check(
+      "media_capture_sessions_trim_window",
+      sql`${t.trimEndMs} is null or ${t.trimEndMs} >= ${t.trimStartMs}`,
     ),
   ],
 );

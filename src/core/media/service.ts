@@ -44,6 +44,7 @@ import {
   validateMediaFile,
   type MediaKind,
 } from "@/core/media/validation";
+import captureServices from "./capture";
 import {
   buildRenditions,
   readImageFacts,
@@ -60,7 +61,7 @@ const MAX_MULTIPART_PARTS = 10_000;
 const LEGACY_MAX_BYTES = 2_147_483_647;
 const ALT_TEXT_PROMPT_VERSION = "accessible-image-v1";
 
-const sourceSchema = z.enum(["upload", "import", "generated", "migration"]);
+const sourceSchema = z.enum(["upload", "import", "generated", "migration", "capture"]);
 const provenanceSchema = z
   .object({
     sourceUrl: z.string().url().max(2_048).optional(),
@@ -2010,4 +2011,5 @@ export default [
   purgeAsset,
   purgeExpiredAsset,
   rescanAsset,
+  ...captureServices,
 ];

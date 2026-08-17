@@ -66,6 +66,7 @@ export { auditLog } from "@/core/events/schema";
 export {
   assets,
   mediaAltTextSuggestions,
+  mediaCaptureSessions,
   mediaObjects,
   mediaUploads,
 } from "@/core/media/schema";
