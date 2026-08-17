@@ -44,6 +44,9 @@ export default defineModule({
       "cms.commentReopened",
       "cms.reviewRequested",
       "cms.reviewDecided",
+      "cms.quoteRequested",
+      "cms.siteChatStarted",
+      "cms.tipIntended",
     ],
     listens: {
       "settings.setupCompleted": "onSetupCompleted",

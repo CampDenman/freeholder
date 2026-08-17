@@ -3402,11 +3402,11 @@ is recoverable, accessible, international, observable and ready to carry money.
 
 - [x] **C2.07** Finish foundational blocks: rich text, heading, image, video,
   button, columns/container, divider/spacer and admin-only custom HTML.
-- [ ] **C2.08** Finish trust/content blocks: FAQ with schema, testimonial/
+- [x] **C2.08** Finish trust/content blocks: FAQ with schema, testimonial/
   review, gallery, map/location, social embed, share and knowledge-base blocks.
-- [ ] **C2.09** Finish conversion blocks: live product/service card, booking,
+- [x] **C2.09** Finish conversion blocks: live product/service card, booking,
   form, quote request, newsletter signup, tip/support and site-chat assistant.
-- [ ] **C2.10** Finish controlled-access/revenue blocks: paywall gate and ad
+- [x] **C2.10** Finish controlled-access/revenue blocks: paywall gate and ad
   slot with server-side content exclusion and layout-shift-safe sizing.
 - [ ] **C2.11** Make headers, footers, navigation, announcement bars and menus
   first-class synced Sections with accessible responsive behavior.

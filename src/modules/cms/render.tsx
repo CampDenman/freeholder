@@ -63,9 +63,13 @@ async function renderBlock(
       })
     : () => undefined;
 
-  const children = node.children
-    ? await renderBlocks(node.children, ctx)
-    : undefined;
+  const allowChildren = definition.includeChildren
+    ? await definition.includeChildren({ props: node.props, ctx })
+    : true;
+  const children =
+    allowChildren && node.children
+      ? await renderBlocks(node.children, ctx)
+      : undefined;
 
   const rendered = definition.render({
     props: node.props,

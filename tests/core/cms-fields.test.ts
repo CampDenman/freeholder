@@ -94,7 +94,7 @@ describe("deriveFields()", () => {
       z.object({
         fine: z.string(),
         exotic: z.record(z.string(), z.unknown()),
-        alsoExotic: z.number(),
+        alsoExotic: z.date(),
       }),
     );
     expect(fields.map((f) => f.name)).toEqual(["fine"]);
