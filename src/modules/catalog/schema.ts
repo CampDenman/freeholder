@@ -81,6 +81,14 @@ export const products = pgTable(
       onDelete: "restrict",
     }),
     seo: jsonb("seo").$type<ProductSeo>().notNull().default({}),
+    /**
+     * Working copy (C2.01). Autosave of an active product writes here so the
+     * live name/description/seo stay put until publish copies them across.
+     */
+    workingName: text("working_name"),
+    workingSubtitle: text("working_subtitle"),
+    workingDescription: jsonb("working_description").$type<BlockNode[]>(),
+    workingSeo: jsonb("working_seo").$type<ProductSeo>(),
     schemaType: text("schema_type").notNull().default("Product"),
     /** First activation. Retained after archive/restore as lifecycle evidence. */
     publishedAt: timestamp("published_at", { withTimezone: true }),

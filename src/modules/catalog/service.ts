@@ -565,10 +565,35 @@ export const updateProduct = defineService({
 
     const { id: _id, expectedVersion: _version, ...patch } = input;
     const nextKind = input.kind ?? existing.kind;
+    const liveContent =
+      existing.status !== "active" ||
+      (input.name === undefined && input.subtitle === undefined && input.seo === undefined);
     const [updated] = await ctx.tx
       .update(products)
       .set({
         ...patch,
+        ...(liveContent
+          ? {}
+          : {
+              name: existing.name,
+              subtitle: existing.subtitle,
+              seo: existing.seo,
+              workingName: input.name ?? existing.workingName ?? existing.name,
+              workingSubtitle:
+                input.subtitle !== undefined
+                  ? input.subtitle
+                  : (existing.workingSubtitle ?? existing.subtitle),
+              workingSeo: input.seo ?? existing.workingSeo ?? existing.seo,
+            }),
+        ...(liveContent && input.name !== undefined
+          ? { workingName: input.name }
+          : {}),
+        ...(liveContent && input.subtitle !== undefined
+          ? { workingSubtitle: input.subtitle }
+          : {}),
+        ...(liveContent && input.seo !== undefined
+          ? { workingSeo: input.seo }
+          : {}),
         ...(input.kind ? { schemaType: schemaTypeFor(nextKind) } : {}),
         version: existing.version + 1,
       })
@@ -605,7 +630,9 @@ export const updateProduct = defineService({
     }
     ctx.setSubject("product", updated.id);
     ctx.queueEvent("catalog.productUpdated", { productId: updated.id, version: updated.version });
-    await syncProductPublicPage(ctx, updated.id);
+    if (input.slug !== undefined || input.visibility !== undefined) {
+      await syncProductPublicPage(ctx, updated.id);
+    }
     return updated;
   },
 });
@@ -626,9 +653,14 @@ export const updateProductDescription = defineService({
     if (existing.status === "archived") {
       throw new ServiceError("conflict", "Restore this product to draft before editing it.");
     }
+    const published = existing.status === "active";
     const [updated] = await ctx.tx
       .update(products)
-      .set({ description: input.description, version: existing.version + 1 })
+      .set({
+        ...(published ? {} : { description: input.description }),
+        workingDescription: input.description,
+        version: existing.version + 1,
+      })
       .where(and(eq(products.id, existing.id), eq(products.version, existing.version)))
       .returning();
     if (!updated) throw new ServiceError("conflict", "This product changed while it was being saved.");
@@ -664,6 +696,10 @@ async function transition(
       throw new ServiceError("validation", "Choose an active tax category before activating this product.");
     }
   }
+  const liveName = existing.workingName ?? existing.name;
+  const liveSubtitle = existing.workingSubtitle ?? existing.subtitle;
+  const liveDescription = existing.workingDescription ?? existing.description;
+  const liveSeo = existing.workingSeo ?? existing.seo;
   const [updated] = await ctx.tx
     .update(products)
     .set({
@@ -671,6 +707,18 @@ async function transition(
       publishedAt:
         target === "active" ? existing.publishedAt ?? sql`now()` : existing.publishedAt,
       archivedAt: target === "archived" ? sql`now()` : null,
+      ...(target === "active"
+        ? {
+            name: liveName,
+            subtitle: liveSubtitle,
+            description: liveDescription,
+            seo: liveSeo,
+            workingName: liveName,
+            workingSubtitle: liveSubtitle,
+            workingDescription: liveDescription,
+            workingSeo: liveSeo,
+          }
+        : {}),
       version: existing.version + 1,
     })
     .where(and(eq(products.id, existing.id), eq(products.version, existing.version)))
@@ -697,6 +745,45 @@ export const activateProduct = defineService({
     ctx.queueEvent("catalog.productActivated", { productId: product.id });
     await syncProductPublicPage(ctx, product.id);
     return product;
+  },
+});
+
+export const publishProduct = defineService({
+  name: "catalog.publishProduct",
+  summary: "Copy an active product's working draft onto the live public row.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: productId, expectedVersion }),
+  handler: async (input, ctx) => {
+    const existing = await rowForUpdate(ctx, input.id);
+    assertVersion(existing.version, input.expectedVersion);
+    if (existing.status !== "active") {
+      throw new ServiceError("conflict", "Activate this product before publishing a working draft.");
+    }
+    const name = existing.workingName ?? existing.name;
+    const subtitle = existing.workingSubtitle ?? existing.subtitle;
+    const description = existing.workingDescription ?? existing.description;
+    const seo = existing.workingSeo ?? existing.seo;
+    const [updated] = await ctx.tx
+      .update(products)
+      .set({
+        name,
+        subtitle,
+        description,
+        seo,
+        workingName: name,
+        workingSubtitle: subtitle,
+        workingDescription: description,
+        workingSeo: seo,
+        version: existing.version + 1,
+      })
+      .where(and(eq(products.id, existing.id), eq(products.version, existing.version)))
+      .returning();
+    if (!updated) throw new ServiceError("conflict", "This product changed while it was being published.");
+    ctx.setSubject("product", updated.id);
+    ctx.queueEvent("catalog.productUpdated", { productId: updated.id, version: updated.version });
+    await syncProductPublicPage(ctx, updated.id);
+    return updated;
   },
 });
 
@@ -746,6 +833,7 @@ export default [
   updateProduct,
   updateProductDescription,
   activateProduct,
+  publishProduct,
   archiveProduct,
   restoreProduct,
   ...variantServices,

@@ -288,6 +288,62 @@ export const createIssue = defineService({
   },
 });
 
+export const updateIssue = defineService({
+  name: "newsletters.updateIssue",
+  summary: "Edit an issue. A published issue's live copy does not change until publish.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id,
+    expectedVersion,
+    title: z.string().trim().min(1).max(240).optional(),
+    excerpt: z.string().trim().max(500).nullable().optional(),
+    body: z.string().max(100_000).optional(),
+    seo: z.object({ title: z.string().max(60).optional(), description: z.string().max(155).optional() }).optional(),
+  }),
+  handler: async (input, ctx) => {
+    const [existing] = await ctx.tx
+      .select()
+      .from(newsletterIssues)
+      .where(eq(newsletterIssues.id, input.id))
+      .limit(1);
+    if (!existing) throw new ServiceError("not_found", "That issue is not here.");
+    if (existing.version !== input.expectedVersion) {
+      throw new ServiceError("conflict", "This issue changed after you opened it.");
+    }
+    const published = existing.status === "published";
+    const [updated] = await ctx.tx
+      .update(newsletterIssues)
+      .set({
+        ...(published
+          ? {
+              workingTitle: input.title ?? existing.workingTitle ?? existing.title,
+              workingExcerpt:
+                input.excerpt !== undefined
+                  ? input.excerpt
+                  : (existing.workingExcerpt ?? existing.excerpt),
+              workingBody: input.body ?? existing.workingBody ?? existing.body,
+              workingSeo: input.seo ?? existing.workingSeo ?? existing.seo,
+            }
+          : {
+              ...(input.title !== undefined ? { title: input.title, workingTitle: input.title } : {}),
+              ...(input.excerpt !== undefined
+                ? { excerpt: input.excerpt, workingExcerpt: input.excerpt }
+                : {}),
+              ...(input.body !== undefined ? { body: input.body, workingBody: input.body } : {}),
+              ...(input.seo !== undefined ? { seo: input.seo, workingSeo: input.seo } : {}),
+            }),
+        version: existing.version + 1,
+      })
+      .where(and(eq(newsletterIssues.id, existing.id), eq(newsletterIssues.version, existing.version)))
+      .returning();
+    if (!updated) throw new ServiceError("conflict", "This issue changed while it was being saved.");
+    ctx.setSubject("newsletterIssue", updated.id);
+    ctx.queueEvent("newsletters.issueUpdated", { issueId: updated.id });
+    return updated;
+  },
+});
+
 export const publishIssue = defineService({
   name: "newsletters.publishIssue",
   summary: "Publish an issue to the public archive.",
@@ -304,11 +360,23 @@ export const publishIssue = defineService({
     if (existing.version !== input.expectedVersion) {
       throw new ServiceError("conflict", "This issue changed after you opened it.");
     }
+    const title = existing.workingTitle ?? existing.title;
+    const excerpt = existing.workingExcerpt ?? existing.excerpt;
+    const body = existing.workingBody ?? existing.body;
+    const seo = existing.workingSeo ?? existing.seo;
     const [updated] = await ctx.tx
       .update(newsletterIssues)
       .set({
         status: "published",
         publishedAt: existing.publishedAt ?? sql`now()`,
+        title,
+        excerpt,
+        body,
+        seo,
+        workingTitle: title,
+        workingExcerpt: excerpt,
+        workingBody: body,
+        workingSeo: seo,
         version: existing.version + 1,
       })
       .where(and(eq(newsletterIssues.id, existing.id), eq(newsletterIssues.version, existing.version)))
@@ -486,6 +554,7 @@ export default [
   listPublicIssues,
   resolvePublicIssue,
   createIssue,
+  updateIssue,
   publishIssue,
   subscribeToNewsletter,
   confirmSubscription,
