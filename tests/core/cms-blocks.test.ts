@@ -30,6 +30,8 @@ describe("the registry", () => {
         "button",
         "callCta",
         "columns",
+        "chromeBar",
+        "announcement",
         "faq",
         "testimonial",
         "gallery",

@@ -80,7 +80,13 @@ describe.runIf(hasDatabase)("the cms module", () => {
     it("gives a fresh instance a header, a footer and a home page", async () => {
       await updateBusiness.call(BUSINESS, OWNER);
       const first = await ensureDefaults.call({}, OWNER);
-      expect(first.created).toEqual(["section:header", "section:footer", "page:home"]);
+      expect(first.created).toEqual([
+        "section:announcement",
+        "section:header",
+        "section:nav",
+        "section:footer",
+        "page:home",
+      ]);
 
       const home = await resolvePage.call({ slug: "" }, ANONYMOUS);
       expect(home?.title).toBe(BUSINESS.name);

@@ -16,7 +16,7 @@ import {
   getSection,
   publishedPaths,
 } from "@/modules/cms/service";
-import { HEADER_KEY } from "@/modules/cms/defaults";
+import { NAV_KEY } from "@/modules/cms/defaults";
 import {
   onLocationCreated,
   onLocationDeleted,
@@ -107,8 +107,8 @@ describe.runIf(hasDatabase)("a location's page", () => {
     const location = await createLocationService.call(CANADIAN, OWNER);
     await onLocationCreated({ id: location.id, slug: location.slug });
 
-    const header = await getSection.call({ key: HEADER_KEY }, ANONYMOUS);
-    expect(JSON.stringify(header?.blocks)).toContain('"/locations"');
+    const navigation = await getSection.call({ key: NAV_KEY }, ANONYMOUS);
+    expect(JSON.stringify(navigation?.blocks)).toContain('"/locations"');
   });
 
   it("does not add the menu link twice", async () => {
@@ -121,8 +121,8 @@ describe.runIf(hasDatabase)("a location's page", () => {
     );
     await onLocationCreated({ id: second.id, slug: second.slug });
 
-    const header = await getSection.call({ key: HEADER_KEY }, ANONYMOUS);
-    const found = JSON.stringify(header?.blocks).split('"/locations"').length - 1;
+    const navigation = await getSection.call({ key: NAV_KEY }, ANONYMOUS);
+    const found = JSON.stringify(navigation?.blocks).split('"/locations"').length - 1;
     expect(found).toBe(1);
   });
 
