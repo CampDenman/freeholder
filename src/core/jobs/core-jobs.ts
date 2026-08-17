@@ -325,6 +325,18 @@ export const sweepMediaOrphans = defineJob({
   },
 });
 
+/** Unconfirmed recordings and leftover chunks must not outlive the session. */
+export const expireCaptureSessions = defineJob({
+  name: "core.expireCaptureSessions",
+  summary: "Expire unconfirmed capture sessions and delete staged recordings.",
+  schedule: "*/15 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { expireCaptureSessions: expire } = await import("@/core/media/capture");
+    return expire.call({}, { kind: "system" });
+  },
+});
+
 /** Trash is reversible for thirty days, then storage is reclaimed in batches. */
 export const purgeExpiredMediaAssets = defineJob({
   name: "core.purgeExpiredMedia",
@@ -425,6 +437,7 @@ export default [
   pruneContentSecurityPolicyViolations,
   pruneJobKeys,
   sweepMediaOrphans,
+  expireCaptureSessions,
   purgeExpiredMediaAssets,
   deliverNotifications,
   deliverNotificationDigests,

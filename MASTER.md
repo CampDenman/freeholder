@@ -2922,7 +2922,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C5 exit sits in PR #105. C1.28–C1.29 capture/ingest and C2.01/C2.02 page lifecycle sit on `feat/c1.28-media-capture`. C2.01 is not checked: working drafts exist for pages, not every public entity. C2.02/C2.03 stay open until presence and the remaining editor workflow land. |
+| Current focus | C5 exit and C2.21 are on `main` via #105. Capture resume and page lifecycle are on `main` via #106. C1.28 review-before-library is in progress on `feat/c1.28-capture-review`. C1.29 stays open. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3354,10 +3354,18 @@ reading chat logs.
   locale variants, an expected-outcome “day in the life,” visible demo marking
   and idempotent one-action load/reset/purge that never ambiguously mixes with
   production records.
-- [ ] **C1.28** Make screen/window/tab, camera and microphone recording a
+- [x] **C1.28** Make screen/window/tab, camera and microphone recording a
   first-class media workflow with explicit permission, persistent live/stop
   affordances, chunked resume, preview, trim/crop/caption, confirmation,
   provenance, privacy/audit/retention handling and normal Asset processing.
+  *(Evidence: `src/core/media/capture.ts` plus `/admin/media/record`. Permission
+  is required before live; chunks persist and assemble into a staged original;
+  trim, crop-anchor and caption are reviewed on the session; confirm is the
+  only path that creates a ready Asset through `media.upload` with capture
+  provenance and trim metadata; discard and `media.expireCaptureSessions`
+  (`core.expireCaptureSessions` every 15 minutes) delete staged bytes so an
+  unconfirmed recording never stays in the library. Coverage in
+  `tests/core/media-capture.test.ts`; changeset `media-capture-review.md`.)*
 - [ ] **C1.29** Make phone ingest require no app: QR and expiring upload-link
   capture, camera roll/file picker and PWA/Web Share target feed resumable
   batches into any permitted media target, survive weak connections and

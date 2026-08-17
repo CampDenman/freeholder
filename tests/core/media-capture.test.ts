@@ -10,13 +10,14 @@ import {
   createCaptureSession,
   createUploadLink,
   discardCapture,
+  expireCaptureSessions,
   getCaptureSession,
   grantCapturePermission,
   reviewCapture,
   startCapture,
   stopCapture,
 } from "@/core/media/capture";
-import { getAsset } from "@/core/media/service";
+import { getAsset, listAssets } from "@/core/media/service";
 import {
   ANONYMOUS,
   closeDb,
@@ -61,16 +62,30 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
       OWNER,
     );
     expect(attached.session.status).toBe("preview");
-    expect(attached.asset.source).toBe("capture");
+    expect(attached.session.staged).toBe(true);
+    expect(attached.asset).toBeNull();
+    expect((await listAssets.call({}, OWNER)).total).toBe(0);
     await reviewCapture.call(
-      { id: session.id, caption: "The studio desk", trimStartMs: 0, trimEndMs: 1_000 },
+      {
+        id: session.id,
+        caption: "The studio desk",
+        trimStartMs: 0,
+        trimEndMs: 1_000,
+        focalX: 2_500,
+        focalY: 7_500,
+      },
       OWNER,
     );
     const confirmed = await confirmCapture.call({ id: session.id }, OWNER);
     expect(confirmed.status).toBe("confirmed");
-    const asset = await getAsset.call({ id: attached.asset.id }, OWNER);
+    expect(confirmed.assetId).toBeTruthy();
+    const asset = await getAsset.call({ id: confirmed.assetId! }, OWNER);
     expect(asset.altText).toBe("The studio desk");
     expect(asset.source).toBe("capture");
+    expect(asset.focalX).toBe(2_500);
+    expect(asset.focalY).toBe(7_500);
+    expect(asset.metadata).toMatchObject({ trimStartMs: 0, trimEndMs: 1_000 });
+    expect(asset.provenance).toMatchObject({ captureSessionId: session.id });
   });
 
   it("discards a preview so the staged file does not stay in the library", async () => {
@@ -85,9 +100,13 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
       },
       OWNER,
     );
+    expect(attached.asset).toBeNull();
+    expect(attached.session.staged).toBe(true);
     await discardCapture.call({ id: session.id }, OWNER);
-    const asset = await getAsset.call({ id: attached.asset.id }, OWNER);
-    expect(asset.status).toBe("trashed");
+    expect((await listAssets.call({ includeTrashed: true }, OWNER)).total).toBe(0);
+    const gone = await getCaptureSession.call({ id: session.id }, OWNER);
+    expect(gone?.status).toBe("discarded");
+    expect(gone?.staged).toBe(false);
   });
 
   it("lets a phone finish an expiring upload link without a staff session", async () => {
@@ -104,8 +123,11 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
       ANONYMOUS,
     );
     expect(attached.session.status).toBe("preview");
+    expect(attached.session.staged).toBe(true);
+    expect((await listAssets.call({}, OWNER)).total).toBe(0);
     const confirmed = await confirmCapture.call({ token: link.token }, ANONYMOUS);
     expect(confirmed.status).toBe("confirmed");
+    expect(confirmed.assetId).toBeTruthy();
     expect(await getCaptureSession.call({ token: link.token }, ANONYMOUS)).toMatchObject({
       status: "confirmed",
       uploadCount: 1,
@@ -131,26 +153,32 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
       OWNER,
     );
     expect(assembled.session.status).toBe("preview");
-    expect(assembled.asset.bytes).toBe(original.byteLength);
+    expect(assembled.session.staged).toBe(true);
+    expect(assembled.asset).toBeNull();
+    const confirmed = await confirmCapture.call({ id: session.id }, OWNER);
+    const asset = await getAsset.call({ id: confirmed.assetId! }, OWNER);
+    expect(asset.bytes).toBe(original.byteLength);
   });
 
   it("binds a resumable upload started with a capture token", async () => {
     const link = await createUploadLink.call({ source: "upload_link" }, OWNER);
-    const attached = await attachCaptureUpload.call(
+    const { uploadAsset } = await import("@/core/media/service");
+    const uploaded = await uploadAsset.call(
       {
-        token: link.token,
         filename: "phone.png",
         contentType: "image/png",
         bytes: await png(),
+        source: "capture",
+        provenance: { captureToken: link.token, captureSessionId: link.id },
       },
       ANONYMOUS,
     );
     const { bindCaptureAsset } = await import("@/core/media/capture");
     const bound = await bindCaptureAsset.call(
-      { token: link.token, assetId: attached.asset.id },
+      { token: link.token, assetId: uploaded.id },
       ANONYMOUS,
     );
-    expect(bound.assetId).toBe(attached.asset.id);
+    expect(bound.assetId).toBe(uploaded.id);
     expect(bound.status).toBe("preview");
   });
 
@@ -168,5 +196,32 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
       ),
     );
     expect(blocked.code).toBe("permission");
+  });
+
+  it("expires an unconfirmed session and forgets the staged recording", async () => {
+    const session = await createCaptureSession.call({ source: "screen" }, OWNER);
+    await attachCaptureUpload.call(
+      {
+        id: session.id,
+        filename: "desk.png",
+        contentType: "image/png",
+        bytes: await png(),
+      },
+      OWNER,
+    );
+    const { mediaCaptureSessions } = await import("@/core/media/schema");
+    const { db } = await import("@/core/db");
+    const { eq } = await import("drizzle-orm");
+    await db()
+      .update(mediaCaptureSessions)
+      .set({ expiresAt: new Date(Date.now() - 1_000) })
+      .where(eq(mediaCaptureSessions.id, session.id));
+    const swept = await expireCaptureSessions.call({}, OWNER);
+    expect(swept.expired).toContain(session.id);
+    expect((await listAssets.call({ includeTrashed: true }, OWNER)).total).toBe(0);
+    expect(await getCaptureSession.call({ id: session.id }, OWNER)).toMatchObject({
+      status: "expired",
+      staged: false,
+    });
   });
 });

@@ -137,6 +137,8 @@ export async function reviewCaptureAction(form: FormData): Promise<void> {
       trimStartMs: field(form, "trimStartMs") ? Number(field(form, "trimStartMs")) : undefined,
       trimEndMs: field(form, "trimEndMs") ? Number(field(form, "trimEndMs")) : undefined,
       caption: field(form, "caption") || null,
+      focalX: field(form, "focalX") ? Number(field(form, "focalX")) : undefined,
+      focalY: field(form, "focalY") ? Number(field(form, "focalY")) : undefined,
     },
     await actor(),
   );
@@ -144,6 +146,20 @@ export async function reviewCaptureAction(form: FormData): Promise<void> {
 }
 
 export async function confirmCaptureAction(form: FormData): Promise<void> {
+  const id = field(form, "id");
+  if (id && (field(form, "caption") || field(form, "trimStartMs") || field(form, "focalX"))) {
+    await reviewCapture.call(
+      {
+        id,
+        trimStartMs: field(form, "trimStartMs") ? Number(field(form, "trimStartMs")) : undefined,
+        trimEndMs: field(form, "trimEndMs") ? Number(field(form, "trimEndMs")) : undefined,
+        caption: field(form, "caption") || null,
+        focalX: field(form, "focalX") ? Number(field(form, "focalX")) : undefined,
+        focalY: field(form, "focalY") ? Number(field(form, "focalY")) : undefined,
+      },
+      await actor(),
+    );
+  }
   await confirmCapture.call(
     {
       id: field(form, "id") || undefined,

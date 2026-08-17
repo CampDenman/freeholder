@@ -299,6 +299,13 @@ export const mediaCaptureSessions = pgTable(
     trimStartMs: integer("trim_start_ms").notNull().default(0),
     trimEndMs: integer("trim_end_ms"),
     caption: text("caption"),
+    focalX: integer("focal_x").notNull().default(5000),
+    focalY: integer("focal_y").notNull().default(5000),
+    /** Staged original. Becomes an Asset only on confirm (C1.28). */
+    stagedKey: text("staged_key"),
+    stagedBytes: bigint("staged_bytes", { mode: "number" }),
+    stagedMime: text("staged_mime"),
+    stagedFilename: text("staged_filename"),
     uploadId: uuid("upload_id").references(() => mediaUploads.id, { onDelete: "set null" }),
     assetId: uuid("asset_id").references(() => assets.id, { onDelete: "set null" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -323,6 +330,8 @@ export const mediaCaptureSessions = pgTable(
       "media_capture_sessions_trim_window",
       sql`${t.trimEndMs} is null or ${t.trimEndMs} >= ${t.trimStartMs}`,
     ),
+    check("media_capture_sessions_focal_x_range", sql`${t.focalX} between 0 and 10000`),
+    check("media_capture_sessions_focal_y_range", sql`${t.focalY} between 0 and 10000`),
   ],
 );
 
