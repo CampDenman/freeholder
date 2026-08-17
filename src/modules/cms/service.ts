@@ -456,13 +456,14 @@ export const updatePage = defineService({
   permission: "scoped",
   input: z.object({
     id: z.string().uuid(),
+    expectedVersion: z.number().int().positive().optional(),
     slug: slug.optional(),
     title: z.string().min(1).optional(),
     blocks: blockTreeSchema("page").optional(),
     seo: seo.optional(),
   }),
   handler: async (input, ctx) => {
-    const { id, ...changes } = input;
+    const { id, expectedVersion, ...changes } = input;
     if (Object.keys(changes).length === 0) {
       throw new ServiceError("validation", "cms.updatePage: nothing to change");
     }
@@ -473,18 +474,44 @@ export const updatePage = defineService({
       .where(eq(pages.id, id))
       .limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${id}`);
+    if (expectedVersion !== undefined && before.version !== expectedVersion) {
+      throw new ServiceError(
+        "conflict",
+        "This page changed after you opened it. Reload before saving again.",
+      );
+    }
 
     await ctx.tx.insert(contentRevisions).values({
       subjectType: "page",
       subjectId: before.id,
-      title: before.title,
-      blocks: before.blocks,
+      title: before.workingTitle ?? before.title,
+      blocks: (before.workingBlocks ?? before.blocks) as typeof before.blocks,
       actor: actorString(ctx.actor),
     });
 
+    const nextWorkingTitle = changes.title ?? before.workingTitle ?? before.title;
+    const nextWorkingBlocks = changes.blocks ?? before.workingBlocks ?? before.blocks;
+    const nextWorkingSeo = changes.seo ?? before.workingSeo ?? before.seo;
+    const publishedContentEdit =
+      before.status === "published" &&
+      (changes.title !== undefined || changes.blocks !== undefined || changes.seo !== undefined);
+
     const [page] = await ctx.tx
       .update(pages)
-      .set(changes)
+      .set({
+        ...(changes.slug !== undefined ? { slug: changes.slug } : {}),
+        ...(publishedContentEdit
+          ? {}
+          : {
+              ...(changes.title !== undefined ? { title: changes.title } : {}),
+              ...(changes.blocks !== undefined ? { blocks: changes.blocks } : {}),
+              ...(changes.seo !== undefined ? { seo: changes.seo } : {}),
+            }),
+        workingTitle: nextWorkingTitle,
+        workingBlocks: nextWorkingBlocks,
+        workingSeo: nextWorkingSeo,
+        version: before.version + 1,
+      })
       .where(eq(pages.id, id))
       .returning()
       .catch((error: unknown) => {
@@ -531,11 +558,27 @@ export const publishPage = defineService({
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), published: z.boolean() }),
   handler: async (input, ctx) => {
+    const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
+    if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
+    const title = before.workingTitle ?? before.title;
+    const blocks = (before.workingBlocks ?? before.blocks) as typeof before.blocks;
+    const seo = before.workingSeo ?? before.seo;
     const [page] = await ctx.tx
       .update(pages)
       .set({
         status: input.published ? "published" : "draft",
         publishedAt: input.published ? sql`now()` : null,
+        ...(input.published
+          ? {
+              title,
+              blocks,
+              seo,
+              workingTitle: title,
+              workingBlocks: blocks,
+              workingSeo: seo,
+            }
+          : {}),
+        version: before.version + 1,
       })
       .where(eq(pages.id, input.id))
       .returning();

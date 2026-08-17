@@ -14,7 +14,7 @@
 // Zod-validated against a registered block type before it is written (see
 // blocks/registry.ts), so this is a typed tree that happens to be stored as
 // JSON, not a bag anyone can put anything in.
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 /**
@@ -41,6 +41,14 @@ export const pages = pgTable(
     publishedAt: timestamp("published_at", { withTimezone: true }),
     /** Per-page SEO overrides; the builder fills the gaps (§5). */
     seo: jsonb("seo").notNull().default({}),
+    /**
+     * Working copy (C2.01). Autosave writes here so a published page's live
+     * title/blocks/seo never change until publish copies them across.
+     */
+    workingTitle: text("working_title"),
+    workingBlocks: jsonb("working_blocks"),
+    workingSeo: jsonb("working_seo"),
+    version: integer("version").notNull().default(1),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

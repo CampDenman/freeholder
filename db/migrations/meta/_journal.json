@@ -435,6 +435,13 @@
       "when": 1786955612829,
       "tag": "0061_wandering_argent",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1786956215628,
+      "tag": "0062_peaceful_christian_walker",
+      "breakpoints": true
     }
   ]
 }

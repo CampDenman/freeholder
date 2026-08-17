@@ -55,7 +55,9 @@ export default async function EditPagePage({
           {t("cms.pages.back")}
         </a>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-bold tracking-tight">{page.title}</h1>
+          <h1 className="text-xl font-bold tracking-tight">
+            {page.workingTitle ?? page.title}
+          </h1>
           <span className="font-mono text-xs text-ink-muted">/{page.slug}</span>
           {published ? (
             <a
@@ -78,7 +80,7 @@ export default async function EditPagePage({
 
       <PageEditor
         id={page.id}
-        initialBlocks={page.blocks as BlockNode[]}
+        initialBlocks={(page.workingBlocks ?? page.blocks) as BlockNode[]}
         blockTypes={editorBlockTypes(
           t,
           "page",
