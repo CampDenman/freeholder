@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       },
       actor ?? { kind: "anonymous" },
     );
-    uploaded.push(result.asset.id);
+    uploaded.push(result.session.id);
   }
   return NextResponse.redirect(new URL(`/capture/${sessionToken}`, request.url), 303);
 }

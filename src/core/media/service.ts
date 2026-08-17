@@ -79,6 +79,8 @@ const mediaMetadataSchema = z
     durationSeconds: z.number().int().nonnegative().max(31_536_000).optional(),
     pageCount: z.number().int().positive().max(1_000_000).optional(),
     codec: z.string().trim().max(100).optional(),
+    trimStartMs: z.number().int().min(0).max(31_536_000_000).optional(),
+    trimEndMs: z.number().int().min(0).max(31_536_000_000).optional(),
   })
   .default({});
 

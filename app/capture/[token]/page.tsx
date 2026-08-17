@@ -46,7 +46,7 @@ export default async function CaptureLinkPage({
               cancel: t("common.cancel"),
             }}
           />
-          {session.assetId ? (
+          {session.staged || session.assetId ? (
             <form action={confirmCaptureAction}>
               <input type="hidden" name="token" value={token} />
               <Button type="submit">{t("media.capture.confirm")}</Button>

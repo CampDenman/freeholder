@@ -3,7 +3,7 @@
 // Capture and phone ingest sessions (MASTER.md §4.5, C1.28, C1.29).
 
 import { randomBytes } from "node:crypto";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import encodeQR from "qr";
 import { defineService, ServiceError, actorString, type ServiceContext } from "@/core/service";
@@ -38,6 +38,11 @@ function publicSession(row: typeof mediaCaptureSessions.$inferSelect) {
     trimStartMs: row.trimStartMs,
     trimEndMs: row.trimEndMs,
     caption: row.caption,
+    focalX: row.focalX,
+    focalY: row.focalY,
+    staged: Boolean(row.stagedKey),
+    stagedMime: row.stagedMime,
+    stagedFilename: row.stagedFilename,
     uploadId: row.uploadId,
     assetId: row.assetId,
     expiresAt: row.expiresAt,
@@ -63,6 +68,49 @@ async function load(ctx: ServiceContext, sessionId: string) {
     throw new ServiceError("conflict", "That capture session has expired.");
   }
   return row;
+}
+
+async function clearChunks(ctx: ServiceContext, sessionId: string) {
+  const chunks = await ctx.tx
+    .select()
+    .from(mediaCaptureChunks)
+    .where(eq(mediaCaptureChunks.sessionId, sessionId));
+  for (const chunk of chunks) {
+    await storage().delete(chunk.storageKey).catch(() => undefined);
+  }
+  if (chunks.length > 0) {
+    await ctx.tx.delete(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId, sessionId));
+  }
+}
+
+async function stageOriginal(
+  ctx: ServiceContext,
+  existing: typeof mediaCaptureSessions.$inferSelect,
+  input: { filename: string; contentType: string; bytes: Uint8Array },
+) {
+  if (input.bytes.byteLength === 0) {
+    throw new ServiceError("validation", "An empty recording cannot be stored.");
+  }
+  if (existing.stagedKey) {
+    await storage().delete(existing.stagedKey).catch(() => undefined);
+  }
+  const key = `capture/${existing.id}/original`;
+  const body = new Uint8Array(input.bytes.byteLength);
+  body.set(input.bytes);
+  await storage().put(key, body, input.contentType);
+  const [updated] = await ctx.tx
+    .update(mediaCaptureSessions)
+    .set({
+      status: "preview",
+      stagedKey: key,
+      stagedBytes: input.bytes.byteLength,
+      stagedMime: input.contentType,
+      stagedFilename: input.filename,
+      uploadCount: existing.uploadCount + 1,
+    })
+    .where(eq(mediaCaptureSessions.id, existing.id))
+    .returning();
+  return updated!;
 }
 
 export const createCaptureSession = defineService({
@@ -258,17 +306,11 @@ export const reviewCapture = defineService({
         trimStartMs,
         trimEndMs,
         caption: input.caption === undefined ? existing.caption : input.caption,
+        focalX: input.focalX ?? existing.focalX,
+        focalY: input.focalY ?? existing.focalY,
       })
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
-    if (existing.assetId && (input.focalX !== undefined || input.focalY !== undefined)) {
-      const { setFocalPoint } = await import("./service");
-      await ctx.call(setFocalPoint, {
-        id: existing.assetId,
-        x: input.focalX ?? 5_000,
-        y: input.focalY ?? 5_000,
-      });
-    }
     ctx.setSubject("mediaCaptureSession", existing.id);
     return publicSession(updated!);
   },
@@ -311,34 +353,14 @@ export const attachCaptureUpload = defineService({
     if (["confirmed", "discarded", "expired"].includes(existing.status)) {
       throw new ServiceError("conflict", "That capture session is closed.");
     }
-    const { uploadAsset } = await import("./service");
-    const asset = await ctx.callAsSystem(uploadAsset, {
+    const updated = await stageOriginal(ctx, existing, {
       filename: input.filename,
       contentType: input.contentType,
       bytes: input.bytes,
-      source: "capture",
-      provenance: {
-        capturedAt: new Date().toISOString(),
-        note: `capture:${existing.source}:${existing.id}`,
-      },
-      metadata: {
-        width: input.width,
-        height: input.height,
-        durationSeconds: input.durationSeconds,
-      },
     });
-    const [updated] = await ctx.tx
-      .update(mediaCaptureSessions)
-      .set({
-        status: "preview",
-        assetId: asset.id,
-        uploadCount: existing.uploadCount + 1,
-      })
-      .where(eq(mediaCaptureSessions.id, existing.id))
-      .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
-    ctx.queueEvent("media.captureAttached", { sessionId: existing.id, assetId: asset.id });
-    return { session: publicSession(updated!), asset };
+    ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
+    return { session: publicSession(updated), asset: null };
   },
 });
 
@@ -370,23 +392,77 @@ export const confirmCapture = defineService({
           .limit(1);
     if (!row) throw new ServiceError("not_found", "That capture session is not here.");
     const existing = await load(ctx, row.id);
-    if (!existing.assetId) {
+    if (!existing.stagedKey && !existing.assetId) {
       throw new ServiceError("validation", "Attach and preview the recording before confirming it.");
     }
     if (existing.status !== "preview" && existing.status !== "pending") {
       throw new ServiceError("conflict", "Confirm the capture from preview.");
     }
-    if (existing.caption) {
-      const { setAltText } = await import("./service");
-      await ctx.call(setAltText, { id: existing.assetId, altText: existing.caption });
+    const { setAltText, setFocalPoint, updateAssetDetails, uploadAsset } = await import("./service");
+    let assetId = existing.assetId;
+    let kind: string | undefined;
+    if (existing.stagedKey) {
+      const body = await storage().get(existing.stagedKey);
+      if (!body) {
+        throw new ServiceError("conflict", "The previewed recording disappeared from storage.");
+      }
+      const asset = await ctx.callAsSystem(uploadAsset, {
+        filename: existing.stagedFilename ?? "capture.webm",
+        contentType: existing.stagedMime ?? "application/octet-stream",
+        bytes: body,
+        altText: existing.caption ?? undefined,
+        source: "capture",
+        provenance: {
+          capturedAt: new Date().toISOString(),
+          captureSessionId: existing.id,
+          note: `capture:${existing.source}:${existing.id}`,
+        },
+        metadata: {
+          trimStartMs: existing.trimStartMs,
+          trimEndMs: existing.trimEndMs ?? undefined,
+        },
+      });
+      assetId = asset.id;
+      kind = asset.kind;
+      await storage().delete(existing.stagedKey).catch(() => undefined);
+    } else if (assetId) {
+      if (existing.caption) {
+        await ctx.callAsSystem(setAltText, { id: assetId, altText: existing.caption });
+      }
+      await ctx.callAsSystem(updateAssetDetails, {
+        id: assetId,
+        provenance: {
+          captureSessionId: existing.id,
+          note: `capture:${existing.source}:${existing.id}`,
+        },
+        metadata: {
+          trimStartMs: existing.trimStartMs,
+          trimEndMs: existing.trimEndMs ?? undefined,
+        },
+      });
+    }
+    if (assetId && kind === "image") {
+      await ctx.callAsSystem(setFocalPoint, {
+        id: assetId,
+        x: existing.focalX,
+        y: existing.focalY,
+      });
     }
     const [updated] = await ctx.tx
       .update(mediaCaptureSessions)
-      .set({ status: "confirmed", completedAt: sql`now()` })
+      .set({
+        status: "confirmed",
+        completedAt: sql`now()`,
+        assetId,
+        stagedKey: null,
+        stagedBytes: null,
+        stagedMime: null,
+        stagedFilename: null,
+      })
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
-    ctx.queueEvent("media.captureConfirmed", { sessionId: existing.id, assetId: existing.assetId });
+    ctx.queueEvent("media.captureConfirmed", { sessionId: existing.id, assetId });
     return publicSession(updated!);
   },
 });
@@ -402,13 +478,24 @@ export const discardCapture = defineService({
     if (existing.status === "confirmed") {
       throw new ServiceError("conflict", "A confirmed capture cannot be discarded.");
     }
+    await clearChunks(ctx, existing.id);
+    if (existing.stagedKey) {
+      await storage().delete(existing.stagedKey).catch(() => undefined);
+    }
     if (existing.assetId) {
       const { trashAsset } = await import("./service");
       await ctx.call(trashAsset, { id: existing.assetId }).catch(() => undefined);
     }
     const [updated] = await ctx.tx
       .update(mediaCaptureSessions)
-      .set({ status: "discarded", completedAt: sql`now()` })
+      .set({
+        status: "discarded",
+        completedAt: sql`now()`,
+        stagedKey: null,
+        stagedBytes: null,
+        stagedMime: null,
+        stagedFilename: null,
+      })
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
@@ -596,29 +683,61 @@ export const assembleCapture = defineService({
       assembled.set(part, offset);
       offset += part.byteLength;
     }
-    const { uploadAsset } = await import("./service");
-    const asset = await ctx.callAsSystem(uploadAsset, {
-      filename: input.filename,
-      contentType: chunks[0]!.contentType,
-      bytes: assembled,
-      source: "capture",
-      provenance: {
-        capturedAt: new Date().toISOString(),
-        note: `capture:${existing.source}:${existing.id}`,
-      },
-    });
     for (const chunk of chunks) {
       await storage().delete(chunk.storageKey);
     }
     await ctx.tx.delete(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId, existing.id));
-    const [updated] = await ctx.tx
-      .update(mediaCaptureSessions)
-      .set({ status: "preview", assetId: asset.id, uploadCount: existing.uploadCount + 1 })
-      .where(eq(mediaCaptureSessions.id, existing.id))
-      .returning();
+    const updated = await stageOriginal(ctx, existing, {
+      filename: input.filename,
+      contentType: chunks[0]!.contentType,
+      bytes: assembled,
+    });
     ctx.setSubject("mediaCaptureSession", existing.id);
-    ctx.queueEvent("media.captureAttached", { sessionId: existing.id, assetId: asset.id });
-    return { session: publicSession(updated!), asset };
+    ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
+    return { session: publicSession(updated), asset: null };
+  },
+});
+
+export const expireCaptureSessions = defineService({
+  name: "media.expireCaptureSessions",
+  summary: "Expire unconfirmed captures and delete leftover staged bytes.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({}),
+  handler: async (_input, ctx) => {
+    const due = await ctx.tx
+      .select()
+      .from(mediaCaptureSessions)
+      .where(
+        and(
+          inArray(mediaCaptureSessions.status, ["pending", "live", "preview"]),
+          lte(mediaCaptureSessions.expiresAt, new Date()),
+        ),
+      );
+    const expired: string[] = [];
+    for (const row of due) {
+      await clearChunks(ctx, row.id);
+      if (row.stagedKey) {
+        await storage().delete(row.stagedKey).catch(() => undefined);
+      }
+      if (row.assetId) {
+        const { trashAsset } = await import("./service");
+        await ctx.callAsSystem(trashAsset, { id: row.assetId }).catch(() => undefined);
+      }
+      await ctx.tx
+        .update(mediaCaptureSessions)
+        .set({
+          status: "expired",
+          completedAt: sql`now()`,
+          stagedKey: null,
+          stagedBytes: null,
+          stagedMime: null,
+          stagedFilename: null,
+        })
+        .where(eq(mediaCaptureSessions.id, row.id));
+      expired.push(row.id);
+    }
+    return { expired };
   },
 });
 
@@ -639,4 +758,5 @@ export default [
   confirmCapture,
   discardCapture,
   listCaptureSessions,
+  expireCaptureSessions,
 ];
