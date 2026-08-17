@@ -1107,7 +1107,7 @@
   "cms.pages.view": "Voir",
   "cms.preview.draftBanner": "Ceci est un aperçu de modifications non publiées. Ce n'est pas la page en ligne.",
   "cms.revisions.compare": "Comparer",
-  "cms.revisions.compareResult": "Comparaison de {left} avec {right}",
+  "cms.revisions.compareResult": "Comparaison de {earlier} avec {later}",
   "cms.revisions.empty": "Aucune version antérieure. Une est conservée à chaque enregistrement.",
   "cms.revisions.name": "Nommer cette version",
   "cms.revisions.namePlaceholder": "Avant réécriture",

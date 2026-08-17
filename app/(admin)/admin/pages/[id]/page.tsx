@@ -55,7 +55,7 @@ export default async function EditPagePage({
     touchEditLease.call({ id: page.id }, actor),
     query.compare
       ? compareRevisions.call(
-          { pageId: page.id, leftRevisionId: query.compare },
+          { pageId: page.id, fromRevisionId: query.compare },
           actor,
         )
       : Promise.resolve(null),
@@ -155,8 +155,8 @@ export default async function EditPagePage({
             <div className="mb-4 grid gap-1 text-sm text-ink">
               <p>
                 {t("cms.revisions.compareResult", {
-                  left: diff.left.label,
-                  right: diff.right.label,
+                  earlier: diff.earlier.label,
+                  later: diff.later.label,
                 })}
               </p>
               <p className="text-ink-muted">

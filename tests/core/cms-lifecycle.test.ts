@@ -159,7 +159,7 @@ describe.runIf(hasDatabase)("cms content lifecycle", { timeout: 30_000 }, () => 
     );
     await nameRevision.call({ revisionId: named.id, name: "Go-live" }, OWNER);
     const diff = await compareRevisions.call(
-      { pageId: page.id, leftRevisionId: named.id },
+      { pageId: page.id, fromRevisionId: named.id },
       OWNER,
     );
     expect(diff.titleChanged).toBe(true);

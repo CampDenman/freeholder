@@ -1107,7 +1107,7 @@
   "cms.pages.view": "View",
   "cms.preview.draftBanner": "This is a preview of unpublished changes. It is not the live page.",
   "cms.revisions.compare": "Compare",
-  "cms.revisions.compareResult": "Comparing {left} with {right}",
+  "cms.revisions.compareResult": "Comparing {earlier} with {later}",
   "cms.revisions.empty": "No earlier versions yet. One is kept every time you save.",
   "cms.revisions.name": "Name this version",
   "cms.revisions.namePlaceholder": "Before rewrite",

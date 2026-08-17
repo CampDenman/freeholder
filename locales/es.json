@@ -1107,7 +1107,7 @@
   "cms.pages.view": "Ver",
   "cms.preview.draftBanner": "Esto es una vista previa de cambios sin publicar. No es la página en vivo.",
   "cms.revisions.compare": "Comparar",
-  "cms.revisions.compareResult": "Comparando {left} con {right}",
+  "cms.revisions.compareResult": "Comparando {earlier} con {later}",
   "cms.revisions.empty": "Aún no hay versiones anteriores. Se guarda una cada vez que guardas.",
   "cms.revisions.name": "Nombrar esta versión",
   "cms.revisions.namePlaceholder": "Antes de reescribir",

@@ -383,36 +383,36 @@ export const compareRevisions = defineService({
   input: z
     .object({
       pageId: pageId.optional(),
-      leftRevisionId: revisionId.optional(),
-      rightRevisionId: revisionId.optional(),
+      fromRevisionId: revisionId.optional(),
+      toRevisionId: revisionId.optional(),
     })
     .refine(
       (value) =>
-        Boolean(value.leftRevisionId) &&
-        (Boolean(value.rightRevisionId) || Boolean(value.pageId)),
+        Boolean(value.fromRevisionId) &&
+        (Boolean(value.toRevisionId) || Boolean(value.pageId)),
       "compare two revisions, or one revision against the current draft",
     ),
   handler: async (input, ctx) => {
-    const [left] = await ctx.tx
+    const [earlier] = await ctx.tx
       .select()
       .from(contentRevisions)
-      .where(eq(contentRevisions.id, input.leftRevisionId!))
+      .where(eq(contentRevisions.id, input.fromRevisionId!))
       .limit(1);
-    if (!left) throw new ServiceError("not_found", "the earlier version is gone");
+    if (!earlier) throw new ServiceError("not_found", "the earlier version is gone");
 
-    let rightTitle = left.title ?? "";
-    let rightBlocks: unknown = left.blocks;
-    let rightLabel = left.name ?? left.id;
-    if (input.rightRevisionId) {
-      const [right] = await ctx.tx
+    let laterTitle = earlier.title ?? "";
+    let laterBlocks: unknown = earlier.blocks;
+    let laterLabel = earlier.name ?? earlier.id;
+    if (input.toRevisionId) {
+      const [later] = await ctx.tx
         .select()
         .from(contentRevisions)
-        .where(eq(contentRevisions.id, input.rightRevisionId))
+        .where(eq(contentRevisions.id, input.toRevisionId))
         .limit(1);
-      if (!right) throw new ServiceError("not_found", "the later version is gone");
-      rightTitle = right.title ?? "";
-      rightBlocks = right.blocks;
-      rightLabel = right.name ?? right.id;
+      if (!later) throw new ServiceError("not_found", "the later version is gone");
+      laterTitle = later.title ?? "";
+      laterBlocks = later.blocks;
+      laterLabel = later.name ?? later.id;
     } else {
       const [page] = await ctx.tx
         .select()
@@ -420,19 +420,19 @@ export const compareRevisions = defineService({
         .where(eq(pages.id, input.pageId!))
         .limit(1);
       if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
-      rightTitle = page.workingTitle ?? page.title;
-      rightBlocks = page.workingBlocks ?? page.blocks;
-      rightLabel = "working";
+      laterTitle = page.workingTitle ?? page.title;
+      laterBlocks = page.workingBlocks ?? page.blocks;
+      laterLabel = "working";
     }
 
-    const leftMap = flattenBlocks(left.blocks);
-    const rightMap = flattenBlocks(rightBlocks);
+    const earlierMap = flattenBlocks(earlier.blocks);
+    const laterMap = flattenBlocks(laterBlocks);
     const added: { id: string; type: string }[] = [];
     const removed: { id: string; type: string }[] = [];
     const changed: { id: string; type: string }[] = [];
     let unchanged = 0;
-    for (const [id, node] of rightMap) {
-      const prior = leftMap.get(id);
+    for (const [id, node] of laterMap) {
+      const prior = earlierMap.get(id);
       if (!prior) {
         added.push({ id, type: node.type });
         continue;
@@ -446,14 +446,18 @@ export const compareRevisions = defineService({
         unchanged += 1;
       }
     }
-    for (const [id, node] of leftMap) {
-      if (!rightMap.has(id)) removed.push({ id, type: node.type });
+    for (const [id, node] of earlierMap) {
+      if (!laterMap.has(id)) removed.push({ id, type: node.type });
     }
 
     return {
-      left: { id: left.id, label: left.name ?? left.id, title: left.title ?? "" },
-      right: { id: input.rightRevisionId ?? input.pageId ?? "working", label: rightLabel, title: rightTitle },
-      titleChanged: (left.title ?? "") !== rightTitle,
+      earlier: { id: earlier.id, label: earlier.name ?? earlier.id, title: earlier.title ?? "" },
+      later: {
+        id: input.toRevisionId ?? input.pageId ?? "working",
+        label: laterLabel,
+        title: laterTitle,
+      },
+      titleChanged: (earlier.title ?? "") !== laterTitle,
       blocks: { added, removed, changed, unchanged },
     };
   },
