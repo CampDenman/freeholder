@@ -15,6 +15,7 @@ export default defineModule({
       "newsletters.created",
       "newsletters.updated",
       "newsletters.issueCreated",
+      "newsletters.issueUpdated",
       "newsletters.issuePublished",
       "newsletters.subscribed",
       "newsletters.confirmed",

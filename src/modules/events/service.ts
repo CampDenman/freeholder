@@ -265,6 +265,7 @@ export const updateEvent = defineService({
     summary: z.string().trim().max(500).nullable().optional(),
     venueName: z.string().trim().max(200).nullable().optional(),
     venueAddress: z.string().trim().max(500).nullable().optional(),
+    seo: z.object({ title: z.string().max(60).optional(), description: z.string().max(155).optional() }).optional(),
   }),
   handler: async (input, ctx) => {
     const existing = await loadEvent(ctx, input.id);
@@ -272,9 +273,42 @@ export const updateEvent = defineService({
       throw new ServiceError("conflict", "This event changed after you opened it.");
     }
     const { id: _id, expectedVersion: _version, ...patch } = input;
+    const published = existing.status === "published";
+    const contentEdit =
+      input.name !== undefined ||
+      input.summary !== undefined ||
+      input.venueName !== undefined ||
+      input.venueAddress !== undefined ||
+      input.seo !== undefined;
     const [updated] = await ctx.tx
       .update(events)
-      .set({ ...patch, version: existing.version + 1 })
+      .set({
+        ...patch,
+        ...(published && contentEdit
+          ? {
+              name: existing.name,
+              summary: existing.summary,
+              venueName: existing.venueName,
+              venueAddress: existing.venueAddress,
+              seo: existing.seo,
+              workingName: input.name ?? existing.workingName ?? existing.name,
+              workingSummary:
+                input.summary !== undefined
+                  ? input.summary
+                  : (existing.workingSummary ?? existing.summary),
+              workingVenueName:
+                input.venueName !== undefined
+                  ? input.venueName
+                  : (existing.workingVenueName ?? existing.venueName),
+              workingVenueAddress:
+                input.venueAddress !== undefined
+                  ? input.venueAddress
+                  : (existing.workingVenueAddress ?? existing.venueAddress),
+              workingSeo: input.seo ?? existing.workingSeo ?? existing.seo,
+            }
+          : {}),
+        version: existing.version + 1,
+      })
       .where(and(eq(events.id, existing.id), eq(events.version, existing.version)))
       .returning()
       .catch((error: unknown) => {
@@ -292,7 +326,9 @@ export const updateEvent = defineService({
     }
     ctx.setSubject("event", updated.id);
     ctx.queueEvent("events.updated", { eventId: updated.id });
-    await syncEventPublicPage(ctx, updated.id);
+    if (input.slug !== undefined) {
+      await syncEventPublicPage(ctx, updated.id);
+    }
     return updated;
   },
 });
@@ -311,11 +347,26 @@ export const publishEvent = defineService({
     if (existing.status === "cancelled") {
       throw new ServiceError("conflict", "A cancelled event cannot be published.");
     }
+    const name = existing.workingName ?? existing.name;
+    const summary = existing.workingSummary ?? existing.summary;
+    const venueName = existing.workingVenueName ?? existing.venueName;
+    const venueAddress = existing.workingVenueAddress ?? existing.venueAddress;
+    const seo = existing.workingSeo ?? existing.seo;
     const [updated] = await ctx.tx
       .update(events)
       .set({
         status: "published",
         publishedAt: existing.publishedAt ?? sql`now()`,
+        name,
+        summary,
+        venueName,
+        venueAddress,
+        seo,
+        workingName: name,
+        workingSummary: summary,
+        workingVenueName: venueName,
+        workingVenueAddress: venueAddress,
+        workingSeo: seo,
         version: existing.version + 1,
       })
       .where(and(eq(events.id, existing.id), eq(events.version, existing.version)))
