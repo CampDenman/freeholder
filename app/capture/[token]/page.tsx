@@ -37,7 +37,7 @@ export default async function CaptureLinkPage({
             captureToken={token}
             labels={{
               file: t("media.capture.file"),
-              fileHint: t("media.fileHint"),
+              fileHint: t("media.capture.fileHint"),
               submit: t("media.capture.upload"),
               pending: t("media.uploading"),
               failed: t("media.uploadFailed"),
@@ -46,7 +46,17 @@ export default async function CaptureLinkPage({
               cancel: t("common.cancel"),
             }}
           />
-          {session.staged || session.assetId ? (
+          {session.items.length > 0 ? (
+            <ul className="grid list-none gap-2 p-0 text-sm">
+              {session.items.map((item) => (
+                <li key={item.id} className="text-ink">
+                  {item.filename}
+                  <span className="text-ink-muted"> · {item.mime}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {session.staged || session.assetId || session.items.length > 0 ? (
             <form action={confirmCaptureAction}>
               <input type="hidden" name="token" value={token} />
               <Button type="submit">{t("media.capture.confirm")}</Button>

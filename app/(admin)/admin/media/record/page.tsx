@@ -3,7 +3,9 @@
 // Screen, camera and microphone capture plus phone ingest (C1.28, C1.29).
 
 import { getCaptureSession, listCaptureSessions } from "@/core/media/capture";
-import { Button, Card, CardBody, CardHeader } from "@/ui/primitives";
+import { listProducts } from "@/modules/catalog/service";
+import { listPages } from "@/modules/cms/service";
+import { Button, Card, CardBody, CardHeader, Field } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import {
@@ -21,11 +23,13 @@ export default async function MediaRecordPage({
 }) {
   const actor = await requireStaffActor("media", "manage");
   const query = await searchParams;
-  const [sessions, t, current, link] = await Promise.all([
+  const [sessions, t, current, link, products, pages] = await Promise.all([
     listCaptureSessions.call({}, actor),
     getT(),
     query.session ? getCaptureSession.call({ id: query.session }, actor) : null,
     query.link ? getCaptureSession.call({ id: query.link }, actor) : null,
+    listProducts.call({ limit: 100 }, actor).catch(() => []),
+    listPages.call({}, actor).catch(() => []),
   ]);
 
   return (
@@ -46,7 +50,40 @@ export default async function MediaRecordPage({
                 <Button type="submit">{t(`media.capture.source.${source}`)}</Button>
               </form>
             ))}
-            <form action={createPhoneLinkAction}>
+            <form action={createPhoneLinkAction} className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("media.capture.target")} htmlFor="targetType">
+                <select
+                  id="targetType"
+                  name="targetType"
+                  className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                  defaultValue="library"
+                >
+                  <option value="library">{t("media.capture.target.library")}</option>
+                  <option value="product">{t("media.capture.target.product")}</option>
+                  <option value="page">{t("media.capture.target.page")}</option>
+                </select>
+              </Field>
+              <Field label={t("media.capture.targetId")} htmlFor="targetId">
+                <select
+                  id="targetId"
+                  name="targetId"
+                  className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                  defaultValue=""
+                >
+                  <option value="">{t("media.capture.target.none")}</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {t("media.capture.target.product")}: {product.name}
+                    </option>
+                  ))}
+                  {pages.map((page) => (
+                    <option key={page.id} value={page.id}>
+                      {t("media.capture.target.page")}: {page.workingTitle ?? page.title}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <input type="hidden" name="source" value="upload_link" />
               <Button type="submit">{t("media.capture.phoneLink")}</Button>
             </form>
           </div>

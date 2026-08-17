@@ -42,8 +42,19 @@ export async function startRecordingAction(form: FormData): Promise<void> {
   redirect(`/admin/media/record?session=${session.id}`);
 }
 
-export async function createPhoneLinkAction(): Promise<void> {
-  const link = await createUploadLink.call({ source: "upload_link" }, await actor());
+export async function createPhoneLinkAction(form?: FormData): Promise<void> {
+  const targetType = form ? field(form, "targetType") : "";
+  const targetId = form ? field(form, "targetId") : "";
+  const source = form ? field(form, "source") : "";
+  const link = await createUploadLink.call(
+    {
+      source:
+        source === "camera_roll" || source === "share_sheet" ? source : "upload_link",
+      targetType: targetType || undefined,
+      targetId: targetId || undefined,
+    },
+    await actor(),
+  );
   revalidatePath("/admin/media/record");
   redirect(`/admin/media/record?link=${link.id}`);
 }
