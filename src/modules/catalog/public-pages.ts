@@ -9,7 +9,7 @@
 import { and, eq } from "drizzle-orm";
 import type { ServiceContext } from "@/core/service";
 import { pages } from "@/modules/cms/schema";
-import { HEADER_KEY } from "@/modules/cms/defaults";
+import { addNavLink, NAV_SECTION_KEYS } from "@/modules/cms/chrome-nav";
 import {
   createPage,
   getSection,
@@ -79,27 +79,14 @@ async function businessName(ctx: ServiceContext): Promise<string> {
 }
 
 async function linkFromNav(ctx: ServiceContext, locale: string): Promise<void> {
-  const header = await ctx.callAsSystem(getSection, { key: HEADER_KEY, locale });
-  if (!header) return;
-
-  const blocks = structuredClone(header.blocks) as BlockNode[];
-  let linked = false;
-  const walk = (nodes: BlockNode[]): void => {
-    for (const node of nodes) {
-      if (node.type === "nav") {
-        const links = (node.props.links ?? []) as Array<{ label: string; href: string }>;
-        if (!links.some((link) => link.href === `/${PRODUCTS_INDEX_SLUG}`)) {
-          node.props.links = [...links, { label: "Products", href: `/${PRODUCTS_INDEX_SLUG}` }];
-          linked = true;
-        }
-        return;
-      }
-      if (node.children) walk(node.children);
+  for (const key of NAV_SECTION_KEYS) {
+    const section = await ctx.callAsSystem(getSection, { key, locale });
+    if (!section) continue;
+    const blocks = structuredClone(section.blocks) as BlockNode[];
+    if (addNavLink(blocks, "Products", `/${PRODUCTS_INDEX_SLUG}`)) {
+      await ctx.callAsSystem(updateSection, { key, locale, blocks });
+      return;
     }
-  };
-  walk(blocks);
-  if (linked) {
-    await ctx.callAsSystem(updateSection, { key: HEADER_KEY, locale, blocks });
   }
 }
 

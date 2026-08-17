@@ -53,12 +53,17 @@ import {
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
+  defaultAnnouncement,
   defaultFooter,
   defaultHeader,
   defaultHome,
+  defaultNav,
+  ANNOUNCEMENT_KEY,
   FOOTER_KEY,
   HEADER_KEY,
+  NAV_KEY,
 } from "./defaults";
+import { extractNavBlocks, navHasLinks } from "./chrome-nav";
 import {
   demoHandlerInputSchema,
   demoLoadResultSchema,
@@ -995,7 +1000,7 @@ export const restoreRevision = defineService({
  */
 export const ensureDefaults = defineService({
   name: "cms.ensureDefaults",
-  summary: "Create the starting header, footer and home page if absent.",
+  summary: "Create the starting chrome sections and home page if absent.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({ locale: z.string().default("en") }),
@@ -1009,7 +1014,9 @@ export const ensureDefaults = defineService({
     const created: string[] = [];
 
     const chrome: Array<{ key: string; name: string; blocks: BlockNode[] }> = [
+      { key: ANNOUNCEMENT_KEY, name: "Announcement", blocks: defaultAnnouncement() },
       { key: HEADER_KEY, name: "Header", blocks: defaultHeader() },
+      { key: NAV_KEY, name: "Navigation", blocks: defaultNav() },
       { key: FOOTER_KEY, name: "Footer", blocks: defaultFooter(name) },
     ];
     for (const piece of chrome) {
@@ -1025,6 +1032,33 @@ export const ensureDefaults = defineService({
         .onConflictDoNothing({ target: [sections.key, sections.locale] })
         .returning({ key: sections.key });
       if (inserted.length > 0) created.push(`section:${piece.key}`);
+    }
+
+    const [headerRow] = await ctx.tx
+      .select()
+      .from(sections)
+      .where(and(eq(sections.key, HEADER_KEY), eq(sections.locale, input.locale)))
+      .limit(1);
+    const [navRow] = await ctx.tx
+      .select()
+      .from(sections)
+      .where(and(eq(sections.key, NAV_KEY), eq(sections.locale, input.locale)))
+      .limit(1);
+    if (headerRow && navRow) {
+      const pulled = extractNavBlocks(headerRow.blocks as BlockNode[]);
+      if (pulled.nav.length > 0) {
+        await ctx.tx
+          .update(sections)
+          .set({ blocks: parseBlockTree(pulled.rest, "chrome") })
+          .where(eq(sections.id, headerRow.id));
+        if (!navHasLinks(navRow.blocks as BlockNode[])) {
+          await ctx.tx
+            .update(sections)
+            .set({ blocks: parseBlockTree(pulled.nav, "chrome") })
+            .where(eq(sections.id, navRow.id));
+        }
+        created.push("section:nav-migrated");
+      }
     }
 
     const home = defaultHome({ name, tagline: business?.tagline ?? null });

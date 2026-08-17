@@ -22,7 +22,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { pages } from "./schema";
-import { HEADER_KEY } from "./defaults";
+import { addNavLink, NAV_SECTION_KEYS } from "./chrome-nav";
 import { createPage, updatePage } from "./service";
 import type { BlockNode } from "./blocks/types";
 import { renderNAP, type LocationRow } from "@/core/locations/nap";
@@ -156,29 +156,14 @@ async function ensureIndex(locale: string, businessName: string): Promise<void> 
  */
 async function linkFromNav(locale: string): Promise<void> {
   const { getSection, updateSection } = await import("./service");
-  const header = await getSection.call({ key: HEADER_KEY, locale }, SYSTEM);
-  if (!header) return;
-
-  const blocks = structuredClone(header.blocks) as BlockNode[];
-  let linked = false;
-
-  const walk = (nodes: BlockNode[]): void => {
-    for (const node of nodes) {
-      if (node.type === "nav") {
-        const links = (node.props.links ?? []) as Array<{ label: string; href: string }>;
-        if (!links.some((link) => link.href === `/${INDEX_SLUG}`)) {
-          node.props.links = [...links, { label: "Locations", href: `/${INDEX_SLUG}` }];
-          linked = true;
-        }
-        return;
-      }
-      if (node.children) walk(node.children);
+  for (const key of NAV_SECTION_KEYS) {
+    const section = await getSection.call({ key, locale }, SYSTEM);
+    if (!section) continue;
+    const blocks = structuredClone(section.blocks) as BlockNode[];
+    if (addNavLink(blocks, "Locations", `/${INDEX_SLUG}`)) {
+      await updateSection.call({ key, locale, blocks }, SYSTEM);
+      return;
     }
-  };
-  walk(blocks);
-
-  if (linked) {
-    await updateSection.call({ key: HEADER_KEY, locale, blocks }, SYSTEM);
   }
 }
 

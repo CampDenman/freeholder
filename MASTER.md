@@ -3408,7 +3408,7 @@ is recoverable, accessible, international, observable and ready to carry money.
   form, quote request, newsletter signup, tip/support and site-chat assistant.
 - [x] **C2.10** Finish controlled-access/revenue blocks: paywall gate and ad
   slot with server-side content exclusion and layout-shift-safe sizing.
-- [ ] **C2.11** Make headers, footers, navigation, announcement bars and menus
+- [x] **C2.11** Make headers, footers, navigation, announcement bars and menus
   first-class synced Sections with accessible responsive behavior.
 - [ ] **C2.12** Support save-as-Section, synced instances, detach-to-copy,
   dependency-aware deletion, and searchable palettes.

@@ -15,7 +15,12 @@ import type { ReactNode } from "react";
 import { cookies, headers } from "next/headers";
 import { PATH_HEADER, REQUEST_TARGET_HEADER } from "@/core/http/headers";
 import { renderBlocks } from "@/modules/cms/render";
-import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
+import {
+  ANNOUNCEMENT_KEY,
+  FOOTER_KEY,
+  HEADER_KEY,
+  NAV_KEY,
+} from "@/modules/cms/defaults";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { getLocale, getT } from "../i18n";
 import { currentBusiness } from "@/core/settings/read";
@@ -58,8 +63,10 @@ export default async function PublicLayout({
   );
   const showBuilder = publicActor.kind === "user" && publicActor.role === "owner";
 
-  const [header, footer] = await Promise.all([
+  const [announcement, header, navigation, footer] = await Promise.all([
+    publishedSection(ANNOUNCEMENT_KEY, locale),
     publishedSection(HEADER_KEY, locale),
+    publishedSection(NAV_KEY, locale),
     publishedSection(FOOTER_KEY, locale),
   ]);
 
@@ -84,17 +91,31 @@ export default async function PublicLayout({
       : undefined,
   };
 
-  const [headerNodes, footerNodes] = await Promise.all([
+  const [announcementNodes, headerNodes, navNodes, footerNodes] = await Promise.all([
+    announcement ? renderBlocks(announcement.blocks as BlockNode[], ctx) : [],
     header ? renderBlocks(header.blocks as BlockNode[], ctx) : [],
+    navigation ? renderBlocks(navigation.blocks as BlockNode[], ctx) : [],
     footer ? renderBlocks(footer.blocks as BlockNode[], ctx) : [],
   ]);
 
   return (
     <div className="flex min-h-svh flex-col bg-paper">
       <SkipLink>{t("a11y.skipToContent")}</SkipLink>
-      {headerNodes.length > 0 ? (
+      {announcementNodes.some(Boolean) ? (
+        <div
+          role="region"
+          aria-label={t("cms.announcement.region")}
+          className="bg-accent text-on-accent"
+        >
+          <div className="mx-auto max-w-3xl px-6 py-2">{announcementNodes}</div>
+        </div>
+      ) : null}
+      {headerNodes.length > 0 || navNodes.length > 0 ? (
         <header className="border-b border-rule bg-surface">
-          <div className="mx-auto max-w-3xl px-6 py-4">{headerNodes}</div>
+          <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-4">
+            {headerNodes}
+            {navNodes}
+          </div>
         </header>
       ) : null}
 

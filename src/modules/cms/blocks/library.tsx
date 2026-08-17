@@ -174,6 +174,63 @@ export const callCta = defineBlock({
 
 /* ----------------------------------------------------------------- layout */
 
+/**
+ * A responsive chrome row (C2.11).
+ *
+ * Header items stack on a narrow screen and sit on one line from `sm` up,
+ * so brand, locales and any extras stay reachable without a three-column
+ * grid that collapses into an unreadable pile.
+ */
+export const chromeBar = defineBlock({
+  type: "chromeBar",
+  labelKey: "cms.block.chromeBar",
+  contexts: ["chrome"],
+  container: true,
+  schema: z.object({
+    align: z.enum(["start", "between"]).default("between"),
+  }),
+  starter: () => ({ align: "between" as const }),
+  render: ({ props, children }) => (
+    <div
+      className={cx(
+        "flex flex-col gap-3 sm:flex-row sm:items-center",
+        props.align === "between" ? "sm:justify-between" : "sm:justify-start sm:gap-6",
+      )}
+    >
+      {children}
+    </div>
+  ),
+});
+
+/**
+ * Site-wide announcement bar (C2.11). Empty text renders nothing.
+ */
+export const announcement = defineBlock({
+  type: "announcement",
+  labelKey: "cms.block.announcement",
+  contexts: ["chrome"],
+  schema: z.object({
+    text: z.string().max(240).default(""),
+    href: z.string().max(2048).optional(),
+  }),
+  starter: () => ({ text: "" }),
+  render: ({ props, ctx }) => {
+    const text = props.text.trim();
+    if (!text) return null;
+    const body = props.href ? (
+      <a
+        href={ctx.localizeHref?.(props.href) ?? props.href}
+        className="font-semibold underline decoration-current underline-offset-2"
+      >
+        {text}
+      </a>
+    ) : (
+      <span>{text}</span>
+    );
+    return <p className="text-center text-sm">{body}</p>;
+  },
+});
+
 export const columns = defineBlock({
   type: "columns",
   labelKey: "cms.block.columns",
@@ -371,28 +428,36 @@ export const nav = defineBlock({
   fieldHints: { ariaLabelKey: { hidden: true } },
   render: ({ props, ctx }) => {
     if (props.links.length === 0) return null;
+    const linkItems = (suffix: string) =>
+      props.links.map((link) => {
+        const current =
+          link.href === ctx.path ||
+          (link.href !== "/" && ctx.path.startsWith(link.href));
+        return (
+          <li key={`${suffix}-${link.href}`}>
+            <a
+              href={ctx.localizeHref?.(link.href) ?? link.href}
+              aria-current={current ? "page" : undefined}
+              className={cx(
+                "text-sm",
+                current ? "font-semibold text-ink" : "text-ink-muted",
+              )}
+            >
+              {link.label}
+            </a>
+          </li>
+        );
+      });
     return (
       <nav aria-label={ctx.t(props.ariaLabelKey)}>
-        <ul className="flex list-none flex-wrap items-center gap-x-5 gap-y-1 p-0">
-          {props.links.map((link) => {
-            const current =
-              link.href === ctx.path ||
-              (link.href !== "/" && ctx.path.startsWith(link.href));
-            return (
-              <li key={link.href}>
-                <a
-                  href={ctx.localizeHref?.(link.href) ?? link.href}
-                  aria-current={current ? "page" : undefined}
-                  className={cx(
-                    "text-sm",
-                    current ? "font-semibold text-ink" : "text-ink-muted",
-                  )}
-                >
-                  {link.label}
-                </a>
-              </li>
-            );
-          })}
+        <details className="sm:hidden">
+          <summary className="cursor-pointer text-sm font-semibold text-ink">
+            {ctx.t("cms.nav.menu")}
+          </summary>
+          <ul className="mt-2 grid list-none gap-2 p-0">{linkItems("mobile")}</ul>
+        </details>
+        <ul className="hidden list-none flex-wrap items-center gap-x-5 gap-y-1 p-0 sm:flex">
+          {linkItems("desktop")}
         </ul>
       </nav>
     );

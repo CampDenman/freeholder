@@ -15,18 +15,39 @@ import type { BlockNode } from "./blocks/types";
 
 export const HEADER_KEY = "header";
 export const FOOTER_KEY = "footer";
+export const NAV_KEY = "nav";
+export const ANNOUNCEMENT_KEY = "announcement";
 
 export function defaultHeader(): BlockNode[] {
   return [
     {
-      id: "header-row",
-      type: "columns",
-      props: { count: 3, gap: "normal" },
+      id: "header-bar",
+      type: "chromeBar",
+      props: { align: "between" },
       children: [
         { id: "header-brand", type: "brand", props: { href: "/", showTagline: false } },
-        { id: "header-nav", type: "nav", props: { links: [], ariaLabelKey: "cms.nav.primary" } },
         { id: "header-locales", type: "locales", props: { separator: "·" } },
       ],
+    },
+  ];
+}
+
+export function defaultNav(): BlockNode[] {
+  return [
+    {
+      id: "chrome-nav",
+      type: "nav",
+      props: { links: [], ariaLabelKey: "cms.nav.primary" },
+    },
+  ];
+}
+
+export function defaultAnnouncement(): BlockNode[] {
+  return [
+    {
+      id: "chrome-announcement",
+      type: "announcement",
+      props: { text: "" },
     },
   ];
 }

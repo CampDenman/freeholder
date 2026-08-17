@@ -10,9 +10,11 @@ import { z } from "zod";
 import { deriveFields, type FieldDescriptor } from "./fields";
 import type { BlockDefinition, BlockNode } from "./types";
 import {
+  announcement,
   brand,
   button,
   callCta,
+  chromeBar,
   columns,
   divider,
   faq,
@@ -54,6 +56,8 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   button,
   callCta,
   columns,
+  chromeBar,
+  announcement,
   divider,
   spacer,
   faq,
