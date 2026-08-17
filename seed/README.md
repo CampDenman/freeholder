@@ -17,8 +17,11 @@ merely present:
 
 ```
 seed/
-└── demo/
-    └── content.ts     # the business, the pages, the copy, the images
+├── demo/
+│   └── content.ts     # Aurora Coast Photography — default first-run / SEO gate
+├── law-firm/
+│   └── content.ts     # Law Firm Edition — placeholder counsel, no NVC fiction
+└── select.ts          # FREEHOLDER_EDITION=law-firm selects the law pack
 ```
 
 Content only. The installer is a service — `demo.install`, in
@@ -33,6 +36,8 @@ the seed is wrong or the service layer is.
 # A production demo deploy that arrives populated. Read once at boot; refuses
 # if the site already has pages, and there is no route that can trigger it.
 FREEHOLDER_SEED_DEMO=1
+# Optional. Default is photography. law-firm is the WeVibeSites edition pack.
+FREEHOLDER_EDITION=law-firm
 ```
 
 `pnpm dev` does the same by default on a pristine database, so a new
