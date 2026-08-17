@@ -52,6 +52,7 @@ export const NOTIFICATION_TOPICS = [
   "connections.attention",
   "agents.failed",
   "mail.delivery",
+  "contribute.ingested",
 ] as const;
 
 export type NotificationTopic = (typeof NOTIFICATION_TOPICS)[number];
@@ -1434,6 +1435,21 @@ function eventTemplate(eventName: string, payload: Record<string, unknown>): Eve
         : { bodyKey: "notifications.event.agent.body" }),
       href: "/admin/jobs",
       dedupeKey: `agent-task:${payload.id}`,
+    };
+  }
+  if (eventName === "contribute.ingested" && typeof payload.id === "string") {
+    return {
+      module: "contribute",
+      topic: "contribute.ingested",
+      priority: "information",
+      titleKey: "notifications.event.contribute.title",
+      bodyKey: "notifications.event.contribute.body",
+      messageParams: {
+        kind: typeof payload.kind === "string" ? payload.kind : "report",
+        title: typeof payload.title === "string" ? payload.title.slice(0, 120) : "",
+      },
+      href: "/admin/contribute",
+      dedupeKey: `contribute:${payload.id}`,
     };
   }
   if (

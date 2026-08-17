@@ -37,6 +37,7 @@ import cspServices from "@/core/security/csp-reports";
 import seoServices from "@/core/seo/service";
 import settingsServices from "@/core/settings/service";
 import webhookServices from "@/core/webhooks/service";
+import contributeServices from "@/core/contribute/service";
 import type { Service } from "@/core/service";
 import type { EventDeliveryContext } from "@/core/events";
 
@@ -74,6 +75,7 @@ const services: Service[] = [
   ...seoServices,
   ...settingsServices,
   ...webhookServices,
+  ...contributeServices,
 ];
 
 export default services;

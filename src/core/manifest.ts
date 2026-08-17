@@ -98,6 +98,10 @@ export default defineModule({
       "media.altTextSuggested",
       "media.altTextAccepted",
       "media.altTextDismissed",
+      "contribute.submitted",
+      "contribute.delivered",
+      "contribute.ingested",
+      "contribute.determined",
     ],
   },
 });

@@ -16,7 +16,12 @@ create a parallel roadmap or backlog in another document.
 
 1. **Choose the work** from `MASTER.md` §43. Discuss anything non-trivial in a
    GitHub Discussion or issue, but keep scope and acceptance criteria in the
-   master checklist so an issue never becomes a second product plan.
+   master checklist so an issue never becomes a second product plan. A running
+   instance can also file a bug, feature request or patch through
+   `contribute.submit` (admin, HTTP or MCP). `freeholder.ai` is the default
+   hub. That inbox is not a second product plan: accepted work that changes
+   the product lands as a §43 item here. Security reports stay on
+   [`SECURITY.md`](SECURITY.md).
 2. **Fork and branch** from `main`. Branch names: `feat/...`, `fix/...`,
    `docs/...`.
 3. **Sign off every commit** (`git commit -s`). This certifies the
