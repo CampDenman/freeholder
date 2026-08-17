@@ -3,7 +3,7 @@
 // Newsletters, double-opt-in, RFC 8058 unsubscribe, public archive (C9.04).
 
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type Tx } from "@/core/service";
@@ -71,7 +71,20 @@ registerContactReference({
       }
     }
   },
-  captureForUndo: async () => ({ state: [], undoable: false }),
+  captureForUndo: async (tx, duplicateId, survivingId) => {
+    const rows = await tx
+      .select({ id: newsletterSubscriptions.id })
+      .from(newsletterSubscriptions)
+      .where(inArray(newsletterSubscriptions.contactId, [duplicateId, survivingId]));
+    return {
+      state: rows,
+      undoable: rows.length === 0,
+      blocker:
+        rows.length > 0
+          ? "Newsletter subscriptions were merged and cannot be split back apart safely."
+          : undefined,
+    };
+  },
   restoreAfterUndo: async () => undefined,
 });
 

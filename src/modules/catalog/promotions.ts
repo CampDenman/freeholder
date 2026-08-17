@@ -6,7 +6,7 @@
 // credit, then a normal balance payment. Nothing here invents a second
 // money path.
 
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createNotification } from "@/core/notifications/service";
 import { registerContactReference } from "@/core/contacts/service";
@@ -43,27 +43,95 @@ const giftCode = z
   .toUpperCase()
   .regex(/^[A-Z0-9][A-Z0-9-]{7,31}$/, "Gift-card codes are at least eight characters.");
 
+async function pointerUndo(
+  table: typeof giftCards | typeof couponRedemptions | typeof giftCardRedemptions,
+  contactColumn: typeof giftCards.contactId,
+  tx: Tx,
+  beforeState: unknown,
+  afterState: unknown,
+  duplicateId: string,
+  label: string,
+) {
+  const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid() }));
+  const before = schema.parse(beforeState);
+  const after = schema.parse(afterState);
+  const current = after.length
+    ? await tx
+        .select({ id: table.id, contactId: contactColumn })
+        .from(table)
+        .where(inArray(table.id, after.map((row) => row.id)))
+    : [];
+  const byId = new Map(current.map((row) => [row.id, row.contactId]));
+  if (current.length !== after.length || after.some((row) => byId.get(row.id) !== row.contactId)) {
+    throw new ServiceError(
+      "conflict",
+      `${label} changed after this merge. Leave the merge in place or restore that record first.`,
+    );
+  }
+  const moved = before.filter((row) => row.contactId === duplicateId).map((row) => row.id);
+  if (moved.length) {
+    await tx.update(table).set({ contactId: duplicateId }).where(inArray(table.id, moved));
+  }
+}
+
 registerContactReference({
   table: "gift_cards",
   repoint: (tx, from, to) => tx.update(giftCards).set({ contactId: to }).where(eq(giftCards.contactId, from)),
-  captureForUndo: async () => ({ state: [], undoable: false }),
-  restoreAfterUndo: async () => undefined,
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({ id: giftCards.id, contactId: giftCards.contactId })
+      .from(giftCards)
+      .where(inArray(giftCards.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: (tx, before, after, duplicateId) =>
+    pointerUndo(giftCards, giftCards.contactId, tx, before, after, duplicateId, "A gift card"),
 });
 
 registerContactReference({
   table: "coupon_redemptions",
   repoint: (tx, from, to) =>
     tx.update(couponRedemptions).set({ contactId: to }).where(eq(couponRedemptions.contactId, from)),
-  captureForUndo: async () => ({ state: [], undoable: false }),
-  restoreAfterUndo: async () => undefined,
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({ id: couponRedemptions.id, contactId: couponRedemptions.contactId })
+      .from(couponRedemptions)
+      .where(inArray(couponRedemptions.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: (tx, before, after, duplicateId) =>
+    pointerUndo(
+      couponRedemptions,
+      couponRedemptions.contactId,
+      tx,
+      before,
+      after,
+      duplicateId,
+      "A coupon redemption",
+    ),
 });
 
 registerContactReference({
   table: "gift_card_redemptions",
   repoint: (tx, from, to) =>
     tx.update(giftCardRedemptions).set({ contactId: to }).where(eq(giftCardRedemptions.contactId, from)),
-  captureForUndo: async () => ({ state: [], undoable: false }),
-  restoreAfterUndo: async () => undefined,
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({ id: giftCardRedemptions.id, contactId: giftCardRedemptions.contactId })
+      .from(giftCardRedemptions)
+      .where(inArray(giftCardRedemptions.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: (tx, before, after, duplicateId) =>
+    pointerUndo(
+      giftCardRedemptions,
+      giftCardRedemptions.contactId,
+      tx,
+      before,
+      after,
+      duplicateId,
+      "A gift-card redemption",
+    ),
 });
 
 registerContactPrivacySource({

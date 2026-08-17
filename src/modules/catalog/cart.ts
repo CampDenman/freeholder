@@ -6,7 +6,7 @@
 // contact's open cart so a phone and a laptop become one basket. Prices and
 // stock are refreshed on every read; they are never stored as truth.
 
-import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
@@ -66,7 +66,20 @@ registerContactReference({
       }
     }
   },
-  captureForUndo: async () => ({ state: [], undoable: false }),
+  captureForUndo: async (tx, duplicateId, survivingId) => {
+    const rows = await tx
+      .select({ id: carts.id })
+      .from(carts)
+      .where(inArray(carts.contactId, [duplicateId, survivingId]));
+    return {
+      state: rows,
+      undoable: rows.length === 0,
+      blocker:
+        rows.length > 0
+          ? "Open carts were merged and cannot be split back apart safely."
+          : undefined,
+    };
+  },
   restoreAfterUndo: async () => undefined,
 });
 
@@ -90,7 +103,20 @@ registerContactReference({
       await tx.update(wishlists).set({ contactId: to }).where(eq(wishlists.id, duplicate.id));
     }
   },
-  captureForUndo: async () => ({ state: [], undoable: false }),
+  captureForUndo: async (tx, duplicateId, survivingId) => {
+    const rows = await tx
+      .select({ id: wishlists.id })
+      .from(wishlists)
+      .where(inArray(wishlists.contactId, [duplicateId, survivingId]));
+    return {
+      state: rows,
+      undoable: rows.length === 0,
+      blocker:
+        rows.length > 0
+          ? "Wishlists were merged and cannot be split back apart safely."
+          : undefined,
+    };
+  },
   restoreAfterUndo: async () => undefined,
 });
 
