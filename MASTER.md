@@ -2922,7 +2922,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C5 exit and C2.21 are on `main` via #105. Capture resume and page lifecycle are on `main` via #106. C1.28 review-before-library is in progress on `feat/c1.28-capture-review`. C1.29 stays open. |
+| Current focus | C1.28 is on `main` via #107 and live on freeholder.ai. C1.29 phone ingest is in progress on `feat/c1.29-phone-ingest`. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3366,10 +3366,17 @@ reading chat logs.
   (`core.expireCaptureSessions` every 15 minutes) delete staged bytes so an
   unconfirmed recording never stays in the library. Coverage in
   `tests/core/media-capture.test.ts`; changeset `media-capture-review.md`.)*
-- [ ] **C1.29** Make phone ingest require no app: QR and expiring upload-link
+- [x] **C1.29** Make phone ingest require no app: QR and expiring upload-link
   capture, camera roll/file picker and PWA/Web Share target feed resumable
   batches into any permitted media target, survive weak connections and
   converge on the same validation, scan, dedupe, metadata and recovery path.
+  *(Evidence: `/capture/{token}`, `/share` and `app/manifest.ts` share_target;
+  `UploadForm` resumes multipart reservations from localStorage and accepts a
+  batch; `media.completeUpload` with a capture token stages
+  `media_capture_items` instead of a ready Asset; confirm runs
+  `media.registerStoredOriginal` (same validate/scan/hash path) and can attach
+  to a product (`catalog.attachProductMedia`) or page working tree. Coverage in
+  `tests/core/media-capture.test.ts`; changeset `media-phone-ingest.md`.)*
 
 **C1 exit:** several humans can safely administer one business; the foundation
 is recoverable, accessible, international, observable and ready to carry money.

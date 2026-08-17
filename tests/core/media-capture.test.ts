@@ -224,4 +224,64 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
       staged: false,
     });
   });
+
+  it("stages a phone batch and only creates library assets on confirm", async () => {
+    const link = await createUploadLink.call({ source: "camera_roll" }, OWNER);
+    await attachCaptureUpload.call(
+      {
+        token: link.token,
+        filename: "one.png",
+        contentType: "image/png",
+        bytes: await png(),
+      },
+      ANONYMOUS,
+    );
+    const second = await attachCaptureUpload.call(
+      {
+        token: link.token,
+        filename: "two.png",
+        contentType: "image/png",
+        bytes: await png(),
+      },
+      ANONYMOUS,
+    );
+    expect(second.session.items).toHaveLength(2);
+    expect((await listAssets.call({}, OWNER)).total).toBe(0);
+    const confirmed = await confirmCapture.call({ token: link.token }, ANONYMOUS);
+    expect(confirmed.status).toBe("confirmed");
+    expect((await listAssets.call({}, OWNER)).total).toBe(2);
+  });
+
+  it("confirms a phone batch onto a product media target", async () => {
+    const { createProduct } = await import("@/modules/catalog/service");
+    const { createTaxCategory } = await import("@/modules/invoicing/tax-service");
+    const { listProductMedia } = await import("@/modules/catalog/merchandising");
+    const { updateBusiness } = await import("@/core/settings/service");
+    await updateBusiness.call(
+      { name: "Studio", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver" },
+      OWNER,
+    );
+    const tax = await createTaxCategory.call({ code: "standard", name: "Standard" }, OWNER);
+    const product = await createProduct.call(
+      { name: "Print set", slug: "print-set", kind: "physical", taxCategoryId: tax.id },
+      OWNER,
+    );
+    const link = await createUploadLink.call(
+      { source: "upload_link", targetType: "product", targetId: product.id },
+      OWNER,
+    );
+    await attachCaptureUpload.call(
+      {
+        token: link.token,
+        filename: "hero.png",
+        contentType: "image/png",
+        bytes: await png(),
+      },
+      ANONYMOUS,
+    );
+    await confirmCapture.call({ token: link.token }, ANONYMOUS);
+    const media = await listProductMedia.call({ productId: product.id }, OWNER);
+    expect(media).toHaveLength(1);
+    expect(media[0]?.asset.source).toBe("capture");
+  });
 });

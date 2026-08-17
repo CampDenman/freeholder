@@ -67,6 +67,7 @@ export {
   assets,
   mediaAltTextSuggestions,
   mediaCaptureChunks,
+  mediaCaptureItems,
   mediaCaptureSessions,
   mediaObjects,
   mediaUploads,

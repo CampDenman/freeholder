@@ -355,3 +355,32 @@ export const mediaCaptureChunks = pgTable(
     check("media_capture_chunks_bytes_positive", sql`${t.bytes} > 0`),
   ],
 );
+
+/**
+ * One file in a phone/share batch (C1.29). Confirm turns each row into an
+ * Asset; until then the library does not list it.
+ */
+export const mediaCaptureItems = pgTable(
+  "media_capture_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => mediaCaptureSessions.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    stagedKey: text("staged_key").notNull(),
+    stagedBytes: bigint("staged_bytes", { mode: "number" }).notNull(),
+    stagedMime: text("staged_mime").notNull(),
+    uploadId: uuid("upload_id").references(() => mediaUploads.id, {
+      onDelete: "set null",
+    }),
+    assetId: uuid("asset_id").references(() => assets.id, { onDelete: "set null" }),
+    checksumSha256: text("checksum_sha256"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    index("media_capture_items_session_idx").on(t.sessionId, t.createdAt),
+    uniqueIndex("media_capture_items_staged_key_idx").on(t.stagedKey),
+    check("media_capture_items_bytes_positive", sql`${t.stagedBytes} > 0`),
+  ],
+);

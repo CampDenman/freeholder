@@ -806,6 +806,10 @@ export const completeUpload = defineService({
     if (session.state === "complete") {
       const asset = await assetForCompletedUpload(ctx.tx, session);
       if (asset) return { ok: true as const, asset };
+      const provenance = session.provenance as { captureToken?: string; captureSessionId?: string };
+      if (provenance.captureToken || provenance.captureSessionId) {
+        return { ok: true as const, asset: null };
+      }
       throw new ServiceError(
         "conflict",
         "That upload completed without a recoverable asset record.",
@@ -889,6 +893,30 @@ export const completeUpload = defineService({
         validated.mime,
         completed.bytes,
       );
+      const provenance = session.provenance as z.output<typeof provenanceSchema>;
+      if (provenance.captureToken || provenance.captureSessionId) {
+        const { stageCompletedUpload } = await import("./capture");
+        await ctx.callAsSystem(stageCompletedUpload, {
+          uploadId: session.id,
+          token: provenance.captureToken,
+          sessionId: provenance.captureSessionId,
+          filename: session.filename,
+          contentType: validated.mime,
+          key: session.storageKey,
+          bytes: completed.bytes,
+          checksumSha256: verified.checksumSha256,
+        });
+        await ctx.tx
+          .update(mediaUploads)
+          .set({
+            state: "complete",
+            detectedMime: validated.mime,
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(mediaUploads.id, session.id));
+        return { ok: true as const, asset: null };
+      }
       const asset = await createAssetFromStoredOriginal(
         {
           filename: session.filename,
@@ -901,7 +929,7 @@ export const completeUpload = defineService({
           provenance: safeProvenance(
             ctx,
             session.source,
-            session.provenance as z.output<typeof provenanceSchema>,
+            provenance,
             "direct_multipart",
           ),
           metadata: session.mediaMetadata as z.output<typeof mediaMetadataSchema>,
@@ -917,6 +945,61 @@ export const completeUpload = defineService({
         return failCompletedUpload(session, error.message, ctx);
       }
       throw error;
+    }
+  },
+});
+
+export const registerStoredOriginal = defineService({
+  name: "media.registerStoredOriginal",
+  summary: "Turn an already-stored original into a library Asset.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    key: z.string().min(1).max(500),
+    filename: z.string().min(1).max(255),
+    contentType: z.string().min(1).max(255),
+    bytes: z.number().int().positive(),
+    altText: z.string().max(500).optional(),
+    source: sourceSchema.default("capture"),
+    provenance: provenanceSchema,
+    metadata: mediaMetadataSchema,
+    checksumSha256: z.string().length(64).optional(),
+  }),
+  handler: async (input, ctx) => {
+    const head = await storage().head(input.key);
+    if (!head) throw new ServiceError("not_found", "The staged file is gone.");
+    const prefix = await storage().readRange(input.key, 0, SIGNATURE_BYTES - 1);
+    const suffixStart = Math.max(0, input.bytes - SIGNATURE_BYTES);
+    const suffix =
+      suffixStart > 0
+        ? await storage().readRange(input.key, suffixStart, input.bytes - 1)
+        : undefined;
+    try {
+      const validated = validateMediaFile({
+        filename: input.filename,
+        declaredMime: input.contentType,
+        bytes: input.bytes,
+        prefix: mediaSignatureSample(prefix ?? new Uint8Array(), suffix ?? new Uint8Array()),
+      });
+      const verified = await scanStoredAndHash(input.key, input.filename, validated.mime, input.bytes);
+      return createAssetFromStoredOriginal(
+        {
+          filename: input.filename,
+          mime: validated.mime,
+          kind: validated.kind,
+          bytes: input.bytes,
+          key: input.key,
+          altText: input.altText,
+          source: input.source,
+          provenance: safeProvenance(ctx, input.source, input.provenance, "proxy"),
+          metadata: input.metadata,
+          scan: verified.scan,
+          checksumSha256: input.checksumSha256 ?? verified.checksumSha256,
+        },
+        ctx,
+      );
+    } catch (error) {
+      return serviceValidation(error);
     }
   },
 });
@@ -2008,6 +2091,7 @@ export default [
   uploadStatus,
   signUploadParts,
   completeUpload,
+  registerStoredOriginal,
   abortUpload,
   listAssets,
   getAsset,

@@ -1042,7 +1042,7 @@ describe.runIf(hasDatabase)("the asset library", () => {
       );
       expect(retried).toMatchObject({
         ok: true,
-        asset: { id: completed.ok ? completed.asset.id : "unreachable" },
+        asset: { id: completed.ok && completed.asset ? completed.asset.id : "unreachable" },
       });
       const [session] = await db()
         .select()

@@ -13,7 +13,9 @@ import {
   CAPTURE_SOURCES,
   CAPTURE_STATUSES,
   mediaCaptureChunks,
+  mediaCaptureItems,
   mediaCaptureSessions,
+  mediaObjects,
 } from "./schema";
 
 const CAPTURE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -25,7 +27,16 @@ function newToken(): string {
   return randomBytes(32).toString("hex");
 }
 
-function publicSession(row: typeof mediaCaptureSessions.$inferSelect) {
+function publicSession(
+  row: typeof mediaCaptureSessions.$inferSelect,
+  items: Array<{
+    id: string;
+    filename: string;
+    stagedBytes: number;
+    stagedMime: string;
+    assetId: string | null;
+  }> = [],
+) {
   return {
     id: row.id,
     source: row.source,
@@ -40,15 +51,40 @@ function publicSession(row: typeof mediaCaptureSessions.$inferSelect) {
     caption: row.caption,
     focalX: row.focalX,
     focalY: row.focalY,
-    staged: Boolean(row.stagedKey),
+    staged: Boolean(row.stagedKey) || items.some((item) => !item.assetId),
     stagedMime: row.stagedMime,
     stagedFilename: row.stagedFilename,
+    items: items.map((item) => ({
+      id: item.id,
+      filename: item.filename,
+      bytes: item.stagedBytes,
+      mime: item.stagedMime,
+      assetId: item.assetId,
+    })),
     uploadId: row.uploadId,
     assetId: row.assetId,
     expiresAt: row.expiresAt,
     completedAt: row.completedAt,
     captureUrl: row.token ? `${siteOrigin()}/capture/${row.token}` : null,
   };
+}
+
+async function present(
+  ctx: ServiceContext,
+  row: typeof mediaCaptureSessions.$inferSelect,
+) {
+  const items = await ctx.tx
+    .select({
+      id: mediaCaptureItems.id,
+      filename: mediaCaptureItems.filename,
+      stagedBytes: mediaCaptureItems.stagedBytes,
+      stagedMime: mediaCaptureItems.stagedMime,
+      assetId: mediaCaptureItems.assetId,
+    })
+    .from(mediaCaptureItems)
+    .where(eq(mediaCaptureItems.sessionId, row.id))
+    .orderBy(asc(mediaCaptureItems.createdAt));
+  return publicSession(row, items);
 }
 
 async function load(ctx: ServiceContext, sessionId: string) {
@@ -83,6 +119,169 @@ async function clearChunks(ctx: ServiceContext, sessionId: string) {
   }
 }
 
+async function clearItems(ctx: ServiceContext, sessionId: string, onlyUnconfirmed = false) {
+  const items = await ctx.tx
+    .select()
+    .from(mediaCaptureItems)
+    .where(eq(mediaCaptureItems.sessionId, sessionId));
+  for (const item of items) {
+    if (onlyUnconfirmed && item.assetId) continue;
+    if (!item.assetId) {
+      await storage().delete(item.stagedKey).catch(() => undefined);
+    }
+  }
+  await ctx.tx.delete(mediaCaptureItems).where(
+    onlyUnconfirmed
+      ? and(eq(mediaCaptureItems.sessionId, sessionId), sql`${mediaCaptureItems.assetId} is null`)
+      : eq(mediaCaptureItems.sessionId, sessionId),
+  );
+}
+
+async function appendItem(
+  ctx: ServiceContext,
+  existing: typeof mediaCaptureSessions.$inferSelect,
+  input: {
+    filename: string;
+    contentType: string;
+    key: string;
+    bytes: number;
+    uploadId?: string;
+    checksumSha256?: string;
+  },
+) {
+  if (!input.uploadId) {
+    await ctx.tx
+      .insert(mediaObjects)
+      .values({
+        key: input.key,
+        role: "original",
+        state: "pending",
+        bytes: input.bytes,
+        contentType: input.contentType,
+      })
+      .onConflictDoNothing();
+  }
+  await ctx.tx.insert(mediaCaptureItems).values({
+    sessionId: existing.id,
+    filename: input.filename,
+    stagedKey: input.key,
+    stagedBytes: input.bytes,
+    stagedMime: input.contentType,
+    uploadId: input.uploadId,
+    checksumSha256: input.checksumSha256,
+  });
+  const [updated] = await ctx.tx
+    .update(mediaCaptureSessions)
+    .set({
+      status: "preview",
+      stagedKey: input.key,
+      stagedBytes: input.bytes,
+      stagedMime: input.contentType,
+      stagedFilename: input.filename,
+      uploadCount: existing.uploadCount + 1,
+    })
+    .where(eq(mediaCaptureSessions.id, existing.id))
+    .returning();
+  return updated!;
+}
+
+async function applyCaptureTarget(
+  ctx: ServiceContext,
+  session: typeof mediaCaptureSessions.$inferSelect,
+  assetIds: string[],
+) {
+  if (assetIds.length === 0) return;
+  const kind = session.targetType;
+  const targetId = session.targetId;
+  if (!kind || kind === "library" || !targetId) return;
+
+  if (kind === "product") {
+    const { attachProductMedia, getProduct } = await import("@/modules/catalog/service");
+    let version = (await ctx.callAsSystem(getProduct, { id: targetId })).product.version;
+    for (const assetId of assetIds) {
+      const updated = await ctx.callAsSystem(attachProductMedia, {
+        productId: targetId,
+        assetId,
+        expectedVersion: version,
+      });
+      version = updated.version;
+    }
+    return;
+  }
+
+  if (kind === "page") {
+    const { getPage, updatePage } = await import("@/modules/cms/service");
+    const page = await ctx.callAsSystem(getPage, { id: targetId });
+    const current = (page.workingBlocks ?? page.blocks) as Array<{
+      id: string;
+      type: string;
+      props: Record<string, unknown>;
+    }>;
+    const added = assetIds.map((assetId, index) => ({
+      id: `capture-${assetId.slice(0, 8)}-${index}`,
+      type: "image",
+      props: { assetId, width: "column", rounded: true },
+    }));
+    await ctx.callAsSystem(updatePage, {
+      id: page.id,
+      expectedVersion: page.version,
+      blocks: [...current, ...added],
+    });
+  }
+}
+
+export const stageCompletedUpload = defineService({
+  name: "media.stageCompletedUpload",
+  summary: "Hold a finished resumable upload on a capture session until confirm.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    uploadId: id,
+    token: token.optional(),
+    sessionId: id.optional(),
+    filename: z.string().min(1).max(255),
+    contentType: z.string().min(1).max(255),
+    key: z.string().min(1).max(500),
+    bytes: z.number().int().positive(),
+    checksumSha256: z.string().length(64).optional(),
+  }),
+  handler: async (input, ctx) => {
+    if (!input.token && !input.sessionId) {
+      throw new ServiceError("validation", "Identify the capture session.");
+    }
+    if (ctx.actor.kind === "anonymous" && !input.token) {
+      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    }
+    const [row] = input.token
+      ? await ctx.tx
+          .select()
+          .from(mediaCaptureSessions)
+          .where(eq(mediaCaptureSessions.token, input.token))
+          .limit(1)
+      : await ctx.tx
+          .select()
+          .from(mediaCaptureSessions)
+          .where(eq(mediaCaptureSessions.id, input.sessionId!))
+          .limit(1);
+    if (!row) throw new ServiceError("not_found", "That capture session is not here.");
+    const existing = await load(ctx, row.id);
+    if (["confirmed", "discarded", "expired"].includes(existing.status)) {
+      throw new ServiceError("conflict", "That capture session is closed.");
+    }
+    const updated = await appendItem(ctx, existing, {
+      filename: input.filename,
+      contentType: input.contentType,
+      key: input.key,
+      bytes: input.bytes,
+      uploadId: input.uploadId,
+      checksumSha256: input.checksumSha256,
+    });
+    ctx.setSubject("mediaCaptureSession", existing.id);
+    ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
+    return present(ctx, updated);
+  },
+});
+
 async function stageOriginal(
   ctx: ServiceContext,
   existing: typeof mediaCaptureSessions.$inferSelect,
@@ -91,26 +290,16 @@ async function stageOriginal(
   if (input.bytes.byteLength === 0) {
     throw new ServiceError("validation", "An empty recording cannot be stored.");
   }
-  if (existing.stagedKey) {
-    await storage().delete(existing.stagedKey).catch(() => undefined);
-  }
-  const key = `capture/${existing.id}/original`;
+  const key = `capture/${existing.id}/item/${randomBytes(8).toString("hex")}`;
   const body = new Uint8Array(input.bytes.byteLength);
   body.set(input.bytes);
   await storage().put(key, body, input.contentType);
-  const [updated] = await ctx.tx
-    .update(mediaCaptureSessions)
-    .set({
-      status: "preview",
-      stagedKey: key,
-      stagedBytes: input.bytes.byteLength,
-      stagedMime: input.contentType,
-      stagedFilename: input.filename,
-      uploadCount: existing.uploadCount + 1,
-    })
-    .where(eq(mediaCaptureSessions.id, existing.id))
-    .returning();
-  return updated!;
+  return appendItem(ctx, existing, {
+    filename: input.filename,
+    contentType: input.contentType,
+    key,
+    bytes: input.bytes.byteLength,
+  });
 }
 
 export const createCaptureSession = defineService({
@@ -136,7 +325,7 @@ export const createCaptureSession = defineService({
       .returning();
     ctx.setSubject("mediaCaptureSession", created!.id);
     ctx.queueEvent("media.captureStarted", { sessionId: created!.id, source: created!.source });
-    return publicSession(created!);
+    return present(ctx, created!);
   },
 });
 
@@ -167,7 +356,7 @@ export const createUploadLink = defineService({
     ctx.setSubject("mediaCaptureSession", created!.id);
     ctx.queueEvent("media.captureLinkCreated", { sessionId: created!.id });
     return {
-      ...publicSession(created!),
+      ...(await present(ctx, created!)),
       token: value,
       qrSvg: encodeQR(url, "svg"),
     };
@@ -199,9 +388,9 @@ export const getCaptureSession = defineService({
           .limit(1);
     if (!row) return null;
     if (row.expiresAt.getTime() <= Date.now() && row.status !== "confirmed") {
-      return { ...publicSession({ ...row, status: "expired" }), status: "expired" as const };
+      return { ...(await present(ctx, { ...row, status: "expired" })), status: "expired" as const };
     }
-    return publicSession(row);
+    return present(ctx, row);
   },
 });
 
@@ -228,7 +417,7 @@ export const grantCapturePermission = defineService({
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
-    return publicSession(updated!);
+    return present(ctx, updated!);
   },
 });
 
@@ -252,7 +441,7 @@ export const startCapture = defineService({
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
-    return publicSession(updated!);
+    return present(ctx, updated!);
   },
 });
 
@@ -273,7 +462,7 @@ export const stopCapture = defineService({
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
-    return publicSession(updated!);
+    return present(ctx, updated!);
   },
 });
 
@@ -312,7 +501,7 @@ export const reviewCapture = defineService({
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
-    return publicSession(updated!);
+    return present(ctx, updated!);
   },
 });
 
@@ -360,7 +549,7 @@ export const attachCaptureUpload = defineService({
     });
     ctx.setSubject("mediaCaptureSession", existing.id);
     ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
-    return { session: publicSession(updated), asset: null };
+    return { session: await present(ctx, updated), asset: null };
   },
 });
 
@@ -392,24 +581,40 @@ export const confirmCapture = defineService({
           .limit(1);
     if (!row) throw new ServiceError("not_found", "That capture session is not here.");
     const existing = await load(ctx, row.id);
-    if (!existing.stagedKey && !existing.assetId) {
+    const pending = await ctx.tx
+      .select()
+      .from(mediaCaptureItems)
+      .where(eq(mediaCaptureItems.sessionId, existing.id));
+    if (pending.length === 0 && !existing.stagedKey && !existing.assetId) {
       throw new ServiceError("validation", "Attach and preview the recording before confirming it.");
     }
     if (existing.status !== "preview" && existing.status !== "pending") {
       throw new ServiceError("conflict", "Confirm the capture from preview.");
     }
-    const { setAltText, setFocalPoint, updateAssetDetails, uploadAsset } = await import("./service");
-    let assetId = existing.assetId;
-    let kind: string | undefined;
-    if (existing.stagedKey) {
-      const body = await storage().get(existing.stagedKey);
-      if (!body) {
-        throw new ServiceError("conflict", "The previewed recording disappeared from storage.");
-      }
-      const asset = await ctx.callAsSystem(uploadAsset, {
-        filename: existing.stagedFilename ?? "capture.webm",
-        contentType: existing.stagedMime ?? "application/octet-stream",
-        bytes: body,
+    const { registerStoredOriginal, setAltText, setFocalPoint, updateAssetDetails } =
+      await import("./service");
+    const assetIds: string[] = [];
+    const toPromote =
+      pending.length > 0
+        ? pending.filter((item) => !item.assetId)
+        : existing.stagedKey
+          ? [
+              {
+                id: null as string | null,
+                filename: existing.stagedFilename ?? "capture.webm",
+                stagedKey: existing.stagedKey,
+                stagedBytes: existing.stagedBytes ?? 0,
+                stagedMime: existing.stagedMime ?? "application/octet-stream",
+                checksumSha256: null as string | null,
+              },
+            ]
+          : [];
+    for (const item of toPromote) {
+      const asset = await ctx.callAsSystem(registerStoredOriginal, {
+        key: item.stagedKey,
+        filename: item.filename,
+        contentType: item.stagedMime,
+        bytes: item.stagedBytes,
         altText: existing.caption ?? undefined,
         source: "capture",
         provenance: {
@@ -421,16 +626,30 @@ export const confirmCapture = defineService({
           trimStartMs: existing.trimStartMs,
           trimEndMs: existing.trimEndMs ?? undefined,
         },
+        checksumSha256: item.checksumSha256 ?? undefined,
       });
-      assetId = asset.id;
-      kind = asset.kind;
-      await storage().delete(existing.stagedKey).catch(() => undefined);
-    } else if (assetId) {
+      assetIds.push(asset.id);
+      if (item.id) {
+        await ctx.tx
+          .update(mediaCaptureItems)
+          .set({ assetId: asset.id })
+          .where(eq(mediaCaptureItems.id, item.id));
+      }
+      if (asset.kind === "image") {
+        await ctx.callAsSystem(setFocalPoint, {
+          id: asset.id,
+          x: existing.focalX,
+          y: existing.focalY,
+        });
+      }
+    }
+    if (existing.assetId && assetIds.length === 0) {
+      assetIds.push(existing.assetId);
       if (existing.caption) {
-        await ctx.callAsSystem(setAltText, { id: assetId, altText: existing.caption });
+        await ctx.callAsSystem(setAltText, { id: existing.assetId, altText: existing.caption });
       }
       await ctx.callAsSystem(updateAssetDetails, {
-        id: assetId,
+        id: existing.assetId,
         provenance: {
           captureSessionId: existing.id,
           note: `capture:${existing.source}:${existing.id}`,
@@ -441,19 +660,13 @@ export const confirmCapture = defineService({
         },
       });
     }
-    if (assetId && kind === "image") {
-      await ctx.callAsSystem(setFocalPoint, {
-        id: assetId,
-        x: existing.focalX,
-        y: existing.focalY,
-      });
-    }
+    await applyCaptureTarget(ctx, existing, assetIds);
     const [updated] = await ctx.tx
       .update(mediaCaptureSessions)
       .set({
         status: "confirmed",
         completedAt: sql`now()`,
-        assetId,
+        assetId: assetIds[0] ?? existing.assetId,
         stagedKey: null,
         stagedBytes: null,
         stagedMime: null,
@@ -462,8 +675,12 @@ export const confirmCapture = defineService({
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
-    ctx.queueEvent("media.captureConfirmed", { sessionId: existing.id, assetId });
-    return publicSession(updated!);
+    ctx.queueEvent("media.captureConfirmed", {
+      sessionId: existing.id,
+      assetId: assetIds[0],
+      assetIds,
+    });
+    return present(ctx, updated!);
   },
 });
 
@@ -479,6 +696,7 @@ export const discardCapture = defineService({
       throw new ServiceError("conflict", "A confirmed capture cannot be discarded.");
     }
     await clearChunks(ctx, existing.id);
+    await clearItems(ctx, existing.id);
     if (existing.stagedKey) {
       await storage().delete(existing.stagedKey).catch(() => undefined);
     }
@@ -500,7 +718,7 @@ export const discardCapture = defineService({
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
     ctx.queueEvent("media.captureDiscarded", { sessionId: existing.id });
-    return publicSession(updated!);
+    return present(ctx, updated!);
   },
 });
 
@@ -518,7 +736,7 @@ export const listCaptureSessions = defineService({
       .from(mediaCaptureSessions)
       .where(input.status ? eq(mediaCaptureSessions.status, input.status) : undefined)
       .orderBy(desc(mediaCaptureSessions.createdAt));
-    return rows.map(publicSession);
+    return Promise.all(rows.map((row) => present(ctx, row)));
   },
 });
 
@@ -564,7 +782,7 @@ export const bindCaptureAsset = defineService({
       .where(eq(mediaCaptureSessions.id, existing.id))
       .returning();
     ctx.setSubject("mediaCaptureSession", existing.id);
-    return publicSession(updated!);
+    return present(ctx, updated!);
   },
 });
 
@@ -694,7 +912,7 @@ export const assembleCapture = defineService({
     });
     ctx.setSubject("mediaCaptureSession", existing.id);
     ctx.queueEvent("media.captureAttached", { sessionId: existing.id });
-    return { session: publicSession(updated), asset: null };
+    return { session: await present(ctx, updated), asset: null };
   },
 });
 
@@ -717,6 +935,7 @@ export const expireCaptureSessions = defineService({
     const expired: string[] = [];
     for (const row of due) {
       await clearChunks(ctx, row.id);
+      await clearItems(ctx, row.id);
       if (row.stagedKey) {
         await storage().delete(row.stagedKey).catch(() => undefined);
       }
@@ -752,6 +971,7 @@ export default [
   stopCapture,
   reviewCapture,
   bindCaptureAsset,
+  stageCompletedUpload,
   appendCaptureChunk,
   assembleCapture,
   attachCaptureUpload,

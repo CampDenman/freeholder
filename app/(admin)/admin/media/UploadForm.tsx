@@ -276,8 +276,10 @@ export function UploadForm({
         event.preventDefault();
         const form = event.currentTarget;
         const data = new FormData(form);
-        const file = data.get("file");
-        if (!(file instanceof File) || file.size === 0) return;
+        const files = [...data.getAll("file")].filter(
+          (value): value is File => value instanceof File && value.size > 0,
+        );
+        if (files.length === 0) return;
 
         setPending(true);
         setError(undefined);
@@ -286,33 +288,38 @@ export function UploadForm({
         controller.current = new AbortController();
         void (async () => {
           try {
-            const metadata = await mediaFacts(file);
-            const reservation = await reservationFor(file, metadata);
-            activeUploadId.current = reservation.id;
-            if (reservation.strategy === "direct_multipart") {
-              await directUpload(file, reservation, controller.current!.signal);
-            } else {
-              await proxyUpload(
-                file,
-                reservation,
-                metadata,
-                controller.current!.signal,
-              );
-            }
-            if (captureToken || captureSessionId) {
-              const status = await apiJson<{ assetId?: string | null }>(
-                `/api/media/uploads?id=${encodeURIComponent(reservation.id)}`,
-              );
-              if (status.assetId) {
-                const bind = new FormData();
-                if (captureToken) bind.set("token", captureToken);
-                if (captureSessionId) bind.set("id", captureSessionId);
-                bind.set("assetId", status.assetId);
-                const { bindCaptureAction } = await import("../../capture-actions");
-                await bindCaptureAction(bind);
+            let done = 0;
+            for (const file of files) {
+              const metadata = await mediaFacts(file);
+              const reservation = await reservationFor(file, metadata);
+              activeUploadId.current = reservation.id;
+              if (reservation.strategy === "direct_multipart") {
+                await directUpload(file, reservation, controller.current!.signal);
+              } else {
+                await proxyUpload(
+                  file,
+                  reservation,
+                  metadata,
+                  controller.current!.signal,
+                );
               }
+              if (captureToken || captureSessionId) {
+                const status = await apiJson<{ assetId?: string | null }>(
+                  `/api/media/uploads?id=${encodeURIComponent(reservation.id)}`,
+                );
+                if (status.assetId) {
+                  const bind = new FormData();
+                  if (captureToken) bind.set("token", captureToken);
+                  if (captureSessionId) bind.set("id", captureSessionId);
+                  bind.set("assetId", status.assetId);
+                  const { bindCaptureAction } = await import("../../capture-actions");
+                  await bindCaptureAction(bind);
+                }
+              }
+              window.localStorage.removeItem(resumeKey(file));
+              done += 1;
+              setProgress(Math.floor((done / files.length) * 100));
             }
-            window.localStorage.removeItem(resumeKey(file));
             form.reset();
             window.location.reload();
           } catch (caught) {
@@ -346,6 +353,7 @@ export function UploadForm({
           name="file"
           type="file"
           required
+          multiple
           accept="image/jpeg,image/png,image/gif,image/webp,image/avif,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/mp4,application/pdf,text/plain,text/csv,application/json,.docx,.xlsx,.pptx"
           className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
         />
