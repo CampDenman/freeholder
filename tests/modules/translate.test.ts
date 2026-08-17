@@ -101,7 +101,9 @@ describe("applyTranslations", () => {
   it("keeps the source words where a translation is missing", () => {
     const translated = applyTranslations(tree(), { "0.props.text": "Nos services" });
     expect(translated[0]!.props.text).toBe("Nos services");
-    expect(translated[1]!.props.body).toBe("We photograph weddings.");
+    expect(translated[1]!.props.body).toEqual([
+      { type: "paragraph", children: [{ type: "text", text: "We photograph weddings." }] },
+    ]);
   });
 
   it("ignores a path the tree has outgrown", () => {

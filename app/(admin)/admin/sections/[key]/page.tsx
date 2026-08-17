@@ -36,7 +36,7 @@ export default async function EditSectionPage({
   });
   const [section, library, t] = await Promise.all([
     getSection.call({ key, locale, fallback: false }, ANONYMOUS),
-    listAssets.call({ kind: "image" }, actor),
+    listAssets.call({}, actor),
     getT(),
   ]);
   if (!section) notFound();
@@ -59,7 +59,11 @@ export default async function EditSectionPage({
         blockTypes={editorBlockTypes(
           t,
           "chrome",
-          library.rows.map((a) => ({ id: a.id, filename: a.filename })),
+          library.rows.map((a) => ({
+            id: a.id,
+            filename: a.filename,
+            kind: a.kind,
+          })),
         )}
         labels={editorLabels(t)}
       />

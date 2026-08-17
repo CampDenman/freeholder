@@ -22,17 +22,30 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Copy,
   DotsSixVertical,
   Plus,
   Trash,
 } from "@phosphor-icons/react/dist/ssr";
 import { Button, cx } from "@/ui/primitives";
 import { moveBlock, type DropPosition } from "@/modules/cms/blocks/move";
+import {
+  collectById,
+  duplicateNodes,
+  EditorHistory,
+  filterPalette,
+  insertAfter,
+  moveSiblings,
+  readClipboard,
+  removeNodes,
+  writeClipboard,
+} from "@/modules/cms/blocks/edit";
 import { PreviewCanvas, type PreviewLabels } from "./PreviewCanvas";
+import { RichField } from "./RichField";
 
 export interface EditorField {
   name: string;
-  kind: "text" | "multiline" | "boolean" | "choice" | "list" | "asset";
+  kind: "text" | "multiline" | "rich" | "boolean" | "choice" | "list" | "asset";
   required: boolean;
   label: string;
   choices?: { value: string; label: string }[];
@@ -73,6 +86,19 @@ export interface EditorLabels {
   conflict: string;
   reload: string;
   keepMine: string;
+  slash: string;
+  undo: string;
+  redo: string;
+  duplicate: string;
+  copy: string;
+  paste: string;
+  bold: string;
+  italic: string;
+  code: string;
+  link: string;
+  bullet: string;
+  numbered: string;
+  richHint: string;
 }
 
 /** Distinct enough per session; ids only need to be stable within a tree. */
@@ -117,6 +143,8 @@ export function BlockEditor({
 }) {
   const [blocks, setBlocks] = useState<EditorNode[]>(initialBlocks);
   const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const history = useRef(new EditorHistory());
   /** Bumped on every successful save; reloads the canvas. */
   const [savedVersion, setSavedVersion] = useState(0);
   const [status, setStatus] = useState<
@@ -173,9 +201,81 @@ export function BlockEditor({
   }, [blocks, status, persist]);
 
   const mutate = (next: EditorNode[]) => {
+    history.current.push(blocksRef.current);
     setBlocks(next);
     setStatus("dirty");
   };
+
+  const selectedSet = () => new Set(selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : []);
+
+  const applyHistory = (next: EditorNode[] | undefined) => {
+    if (!next) return;
+    setBlocks(next);
+    setStatus("dirty");
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        applyHistory(
+          event.shiftKey
+            ? history.current.redo(blocksRef.current)
+            : history.current.undo(blocksRef.current),
+        );
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        applyHistory(history.current.redo(blocksRef.current));
+        return;
+      }
+      if (typing) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        mutate(duplicateNodes(blocksRef.current, selectedSet()));
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+        const taken = collectById(blocksRef.current, selectedSet());
+        if (taken.length === 0) return;
+        event.preventDefault();
+        void navigator.clipboard.writeText(writeClipboard(taken));
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        void navigator.clipboard.readText().then((raw) => {
+          const nodes = readClipboard(raw);
+          if (!nodes) return;
+          mutate(insertAfter(blocksRef.current, selectedId, nodes));
+        });
+        return;
+      }
+      if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        mutate(
+          moveSiblings(
+            blocksRef.current,
+            selectedSet(),
+            event.key === "ArrowUp" ? -1 : 1,
+          ),
+        );
+        return;
+      }
+      if (event.key === "/") {
+        event.preventDefault();
+        window.dispatchEvent(new Event("freeholder-slash"));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId, selectedIds]);
 
   /**
    * Apply a block dragged somewhere else on the canvas.
@@ -239,7 +339,20 @@ export function BlockEditor({
           blockTypes={blockTypes}
           labels={labels}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          selectedIds={selectedIds}
+          onSelect={(id, additive) => {
+            setSelectedId(id);
+            if (!id) {
+              setSelectedIds([]);
+              return;
+            }
+            setSelectedIds((current) => {
+              if (!additive) return [id];
+              return current.includes(id)
+                ? current.filter((item) => item !== id)
+                : [...current, id];
+            });
+          }}
         />
         <SaveStatus
           status={status}
@@ -390,6 +503,7 @@ function BlockList({
   blockTypes,
   labels,
   selectedId,
+  selectedIds,
   onSelect,
 }: {
   nodes: EditorNode[];
@@ -398,7 +512,8 @@ function BlockList({
   blockTypes: EditorBlockType[];
   labels: EditorLabels;
   selectedId?: string;
-  onSelect: (id: string | undefined) => void;
+  selectedIds: string[];
+  onSelect: (id: string | undefined, additive?: boolean) => void;
 }) {
   const [dragging, setDragging] = useState<number | undefined>();
 
@@ -447,13 +562,16 @@ function BlockList({
               onFocusCapture={() => onSelect(node.id)}
               className={cx(
                 "rounded-lg border bg-surface transition-colors",
-                selectedId === node.id ? "border-accent" : "border-rule",
+                selectedId === node.id || selectedIds.includes(node.id)
+                  ? "border-accent"
+                  : "border-rule",
                 dragging === index && "opacity-50",
               )}
             >
               <BlockCard
                 node={node}
                 selectedId={selectedId}
+                selectedIds={selectedIds}
                 onSelect={onSelect}
                 definition={byType.get(node.type)}
                 labels={labels}
@@ -463,8 +581,11 @@ function BlockList({
                 isLast={index === nodes.length - 1}
                 onMoveUp={() => move(index, index - 1)}
                 onMoveDown={() => move(index, index + 1)}
+                onDuplicate={() =>
+                  onChange(duplicateNodes(nodes, new Set([node.id])))
+                }
                 onRemove={() =>
-                  onChange(nodes.filter((_, i) => i !== index))
+                  onChange(removeNodes(nodes, new Set([node.id])))
                 }
                 onChange={(next) =>
                   onChange(nodes.map((n, i) => (i === index ? next : n)))
@@ -487,11 +608,13 @@ function BlockCard({
   blockTypes,
   byType,
   selectedId,
+  selectedIds,
   onSelect,
   isFirst,
   isLast,
   onMoveUp,
   onMoveDown,
+  onDuplicate,
   onRemove,
   onChange,
 }: {
@@ -501,11 +624,13 @@ function BlockCard({
   blockTypes: EditorBlockType[];
   byType: Map<string, EditorBlockType>;
   selectedId?: string;
-  onSelect: (id: string | undefined) => void;
+  selectedIds: string[];
+  onSelect: (id: string | undefined, additive?: boolean) => void;
   isFirst: boolean;
   isLast: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onDuplicate: () => void;
   onRemove: () => void;
   onChange: (next: EditorNode) => void;
 }) {
@@ -516,7 +641,7 @@ function BlockCard({
     <div>
       <div
         className="flex items-center gap-2 border-b border-rule bg-surface-muted px-3 py-2"
-        onClick={() => onSelect(node.id)}
+        onClick={(event) => onSelect(node.id, event.shiftKey)}
       >
         <span
           aria-hidden="true"
@@ -534,6 +659,9 @@ function BlockCard({
           </IconButton>
           <IconButton label={labels.moveDown} onClick={onMoveDown} disabled={isLast}>
             <ArrowDown size={14} weight="bold" />
+          </IconButton>
+          <IconButton label={labels.duplicate} onClick={onDuplicate}>
+            <Copy size={14} weight="bold" />
           </IconButton>
           <IconButton label={labels.remove} onClick={onRemove}>
             <Trash size={14} weight="bold" />
@@ -562,6 +690,7 @@ function BlockCard({
               blockTypes={blockTypes}
               labels={labels}
               selectedId={selectedId}
+              selectedIds={selectedIds}
               onSelect={onSelect}
             />
           </div>
@@ -748,7 +877,23 @@ function Field({
       <label htmlFor={id} className="font-mono text-xs font-medium text-ink-muted">
         {field.label}
       </label>
-      {field.kind === "multiline" ? (
+      {field.kind === "rich" ? (
+        <RichField
+          id={id}
+          label={field.label}
+          value={value}
+          onChange={onChange}
+          labels={{
+            bold: labels.bold,
+            italic: labels.italic,
+            code: labels.code,
+            link: labels.link,
+            bullet: labels.bullet,
+            numbered: labels.numbered,
+            hint: labels.richHint,
+          }}
+        />
+      ) : field.kind === "multiline" ? (
         <textarea
           id={id}
           rows={4}
@@ -781,6 +926,16 @@ function AddBlock({
   onAdd: (type: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const openSlash = () => setOpen(true);
+    window.addEventListener("freeholder-slash", openSlash);
+    return () => window.removeEventListener("freeholder-slash", openSlash);
+  }, []);
+  const matches = filterPalette(
+    blockTypes.map((block) => ({ type: block.type, label: block.label })),
+    query,
+  );
 
   if (!open) {
     return (
@@ -795,14 +950,37 @@ function AddBlock({
 
   return (
     <div className="grid gap-2 rounded-lg border border-rule bg-surface p-3">
+      <label className="grid gap-1">
+        <span className="font-mono text-xs text-ink-muted">{labels.slash}</span>
+        <input
+          autoFocus
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && matches[0]) {
+              event.preventDefault();
+              onAdd(matches[0].type);
+              setOpen(false);
+              setQuery("");
+            }
+            if (event.key === "Escape") {
+              setOpen(false);
+              setQuery("");
+            }
+          }}
+          placeholder="/"
+          className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+        />
+      </label>
       <ul className="grid list-none grid-cols-2 gap-2 p-0 sm:grid-cols-3">
-        {blockTypes.map((block) => (
+        {matches.map((block) => (
           <li key={block.type}>
             <button
               type="button"
               onClick={() => {
                 onAdd(block.type);
                 setOpen(false);
+                setQuery("");
               }}
               className="w-full rounded-md border border-rule px-3 py-2 text-start text-sm text-ink"
             >
@@ -814,7 +992,10 @@ function AddBlock({
       <div>
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            setQuery("");
+          }}
           className="text-xs text-ink-muted underline decoration-rule underline-offset-2"
         >
           {labels.cancel}

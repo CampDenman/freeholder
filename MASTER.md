@@ -3393,14 +3393,14 @@ is recoverable, accessible, international, observable and ready to carry money.
   leases, conflict detection and an explicit merge/reload workflow.
 - [x] **C2.04** Add comments, mentions, review requests and resolved threads
   attached to blocks/revisions without contaminating published content.
-- [ ] **C2.05** Specify and implement constrained typed rich-text inline nodes
+- [x] **C2.05** Specify and implement constrained typed rich-text inline nodes
   for emphasis, links, code and lists—never stored HTML soup.
-- [ ] **C2.06** Add slash-command insertion, keyboard block movement, undo/
+- [x] **C2.06** Add slash-command insertion, keyboard block movement, undo/
   redo, duplicate/copy/paste, multi-select and reliable nested drag semantics.
 
 #### Complete block and design vocabulary
 
-- [ ] **C2.07** Finish foundational blocks: rich text, heading, image, video,
+- [x] **C2.07** Finish foundational blocks: rich text, heading, image, video,
   button, columns/container, divider/spacer and admin-only custom HTML.
 - [ ] **C2.08** Finish trust/content blocks: FAQ with schema, testimonial/
   review, gallery, map/location, social embed, share and knowledge-base blocks.
