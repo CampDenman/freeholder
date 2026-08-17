@@ -103,3 +103,124 @@ export function humanizeSegment(segment: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
+
+export interface ProductOfferFacts {
+  name: string;
+  description?: string | null;
+  url: string;
+  sku?: string | null;
+  brand?: string | null;
+  image?: string | null;
+  price?: string;
+  priceCurrency?: string;
+  availability?: "InStock" | "OutOfStock" | "PreOrder";
+}
+
+/**
+ * A sellable thing (§5: Product + Offer on product pages).
+ *
+ * Price is already a decimal string from the money layer — this file does
+ * not convert minor units, so it cannot invent a floating-point amount.
+ * An offer is omitted when the catalog has not published a list price yet.
+ */
+export function productJsonLd(facts: ProductOfferFacts): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "Product",
+    name: facts.name,
+    url: facts.url,
+    ...(facts.description ? { description: facts.description } : {}),
+    ...(facts.sku ? { sku: facts.sku } : {}),
+    ...(facts.brand ? { brand: { "@type": "Brand", name: facts.brand } } : {}),
+    ...(facts.image ? { image: facts.image } : {}),
+    ...(facts.price && facts.priceCurrency
+      ? {
+          offers: {
+            "@type": "Offer",
+            url: facts.url,
+            price: facts.price,
+            priceCurrency: facts.priceCurrency,
+            availability: `https://schema.org/${facts.availability ?? "InStock"}`,
+          },
+        }
+      : {}),
+  };
+}
+
+export function eventJsonLd(input: {
+  name: string;
+  url: string;
+  description?: string | null;
+  startDate?: string;
+  endDate?: string;
+  eventStatus?: "EventScheduled" | "EventCancelled" | "EventPostponed";
+  venueName?: string | null;
+  venueAddress?: string | null;
+  remainingAttendeeCapacity?: number;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "Event",
+    name: input.name,
+    url: input.url,
+    eventStatus: `https://schema.org/${input.eventStatus ?? "EventScheduled"}`,
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.startDate ? { startDate: input.startDate } : {}),
+    ...(input.endDate ? { endDate: input.endDate } : {}),
+    ...(input.remainingAttendeeCapacity !== undefined
+      ? { remainingAttendeeCapacity: input.remainingAttendeeCapacity }
+      : {}),
+    ...(input.venueName || input.venueAddress
+      ? {
+          location: {
+            "@type": "Place",
+            ...(input.venueName ? { name: input.venueName } : {}),
+            ...(input.venueAddress
+              ? { address: { "@type": "PostalAddress", streetAddress: input.venueAddress } }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+export function serviceJsonLd(input: {
+  name: string;
+  url: string;
+  description?: string | null;
+  providerName?: string | null;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "Service",
+    name: input.name,
+    url: input.url,
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.providerName
+      ? { provider: { "@type": "Organization", name: input.providerName } }
+      : {}),
+  };
+}
+
+export function articleJsonLd(input: {
+  headline: string;
+  url: string;
+  description?: string | null;
+  dateModified?: Date;
+  authorName?: string | null;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "Article",
+    headline: input.headline,
+    url: input.url,
+    mainEntityOfPage: input.url,
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.dateModified
+      ? { dateModified: input.dateModified.toISOString() }
+      : {}),
+    ...(input.authorName
+      ? { author: { "@type": "Person", name: input.authorName } }
+      : {}),
+  };
+}

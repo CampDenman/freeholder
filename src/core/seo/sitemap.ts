@@ -15,7 +15,24 @@ export interface SitemapEntry {
   /** Path with no leading slash; "" is the home page. */
   slug: string;
   updatedAt?: Date;
+  title?: string;
+  description?: string;
+  imageUrl?: string | null;
+  kind?:
+    | "page"
+    | "section"
+    | "product"
+    | "location"
+    | "event"
+    | "newsletter"
+    | "article"
+    | "service";
+  /** 0–1. Browse pages outrank leaves when set. */
+  priority?: number;
 }
+
+/** Google's hard cap. A child sitemap that crosses it is a defect, not a suggestion. */
+export const SITEMAP_URL_LIMIT = 50_000;
 
 /**
  * Every public URL this instance serves, from every enabled module.
@@ -63,6 +80,26 @@ function escapeXml(value: string): string {
   );
 }
 
+export function chunkSitemapEntries(
+  entries: SitemapEntry[],
+  limit = SITEMAP_URL_LIMIT,
+): SitemapEntry[][] {
+  if (limit < 1) throw new Error("Sitemap chunk size must be at least 1.");
+  if (entries.length === 0) return [[]];
+  const chunks: SitemapEntry[][] = [];
+  for (let index = 0; index < entries.length; index += limit) {
+    chunks.push(entries.slice(index, index + limit));
+  }
+  return chunks;
+}
+
+function sitemapPriority(entry: SitemapEntry): string | undefined {
+  const value = entry.priority;
+  if (value === undefined) return undefined;
+  const tenths = Math.min(10, Math.max(0, Math.round(value * 10)));
+  return `${Math.trunc(tenths / 10)}.${tenths % 10}`;
+}
+
 export function renderSitemap(
   origin: string,
   entries: SitemapEntry[],
@@ -73,7 +110,9 @@ export function renderSitemap(
       const lastmod = entry.updatedAt
         ? `<lastmod>${entry.updatedAt.toISOString().slice(0, 10)}</lastmod>`
         : "";
-      return `<url><loc>${loc}</loc>${lastmod}</url>`;
+      const priority = sitemapPriority(entry);
+      const priorityTag = priority ? `<priority>${priority}</priority>` : "";
+      return `<url><loc>${loc}</loc>${lastmod}${priorityTag}</url>`;
     })
     .join("");
   return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
@@ -86,14 +125,31 @@ export function renderSitemap(
  * a second language later then changes nothing a crawler has already fetched,
  * because the address it knows keeps working and simply lists more.
  */
-export function renderSitemapIndex(origin: string, locales: string[]): string {
-  const maps = locales
-    .map(
-      (locale) =>
-        `<sitemap><loc>${escapeXml(`${origin}/sitemap-${locale}.xml`)}</loc></sitemap>`,
-    )
+export function renderSitemapIndexFromHrefs(hrefs: string[]): string {
+  const maps = hrefs
+    .map((href) => `<sitemap><loc>${escapeXml(href)}</loc></sitemap>`)
     .join("");
   return `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${maps}</sitemapindex>`;
+}
+
+export function localeSitemapHrefs(
+  origin: string,
+  locale: string,
+  entryCount: number,
+  limit = SITEMAP_URL_LIMIT,
+): string[] {
+  const chunks = Math.max(1, Math.ceil(entryCount / limit));
+  if (chunks === 1) return [`${origin}/sitemap-${locale}.xml`];
+  return Array.from(
+    { length: chunks },
+    (_, index) => `${origin}/sitemap-${locale}-${index + 1}.xml`,
+  );
+}
+
+export function renderSitemapIndex(origin: string, locales: string[]): string {
+  return renderSitemapIndexFromHrefs(
+    locales.map((locale) => `${origin}/sitemap-${locale}.xml`),
+  );
 }
 
 /**
@@ -113,6 +169,12 @@ export function renderRobots(origin: string): string {
     "Disallow: /preview",
     "Disallow: /portal",
     "Disallow: /api/",
+    "Disallow: /checkout",
+    "Disallow: /cart",
+    "Disallow: /*?*filter=",
+    "Disallow: /*?*filters=",
+    "Disallow: /*?*sort=",
+    "Disallow: /*?*facet=",
     "",
     `Sitemap: ${origin}/sitemap.xml`,
     "",

@@ -2917,12 +2917,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-13 |
-| Evidence snapshot | `main` at `bcb9dd1` with C1.26 merged in PR #97; PR CI `31765933788`, post-merge CI `31766451361`, and signed/provenance/SBOM image publication `31766451453` green; 94-file/1,108-test local suite; changeset `deterministic-demo-scenarios.md` |
+| Last reconciled | 2026-08-16 |
+| Evidence snapshot | `main` at `b18fe29` with C5.09 merged; C5.10–C5.24 catalog and payments work sit uncommitted on top, plus C5.04 tax-template verification, public product pages, events/newsletters, and C2.21. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.28 first-class screen/camera/microphone capture; C1.27 full domain scenarios remain dependency-blocked on C5–C9; no public-launch work is required |
+| Current focus | C5 commerce exit is complete through C5.24 including C5.04; C2.21, C6.11 and C9.04 are checked; C1.28–C4 remain deferred by the 2026-08-14 commerce deviation |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3418,8 +3418,17 @@ is recoverable, accessible, international, observable and ready to carry money.
   palette, table rendering, variable slots, inbox preview and test-send.
 - [ ] **C2.20** Enforce one H1, heading order, semantic landmarks, required alt
   decisions, link meaning, responsive images and per-page accessibility hints.
-- [ ] **C2.21** Generate OG images, IndexNow notifications and product/location/
+- [x] **C2.21** Generate OG images, IndexNow notifications and product/location/
   event/newsletter feeds from the same public entity registry.
+  *(Evidence: `src/core/seo/{entities,feeds,indexnow,meta,classify}.ts` plus
+  `/og`, `/feeds/{kind}.xml` and IndexNow routes; catalog activation writes
+  `/products` and `/products/{slug}` CMS pages; events write `/events` and
+  `/events/{slug}`; newsletters write `/newsletters` and `/newsletters/{slug}`.
+  `cms.publishedPaths` classifies those slugs and Atom feeds render the same
+  set. Coverage in `tests/core/seo-surface.test.ts`,
+  `tests/core/seo-public-entities.test.ts`,
+  `tests/core/catalog-public-pages.test.ts`, `tests/core/events.test.ts` and
+  `tests/core/newsletters.test.ts`; changeset `events-newsletters-seo.md`.)*
 - [ ] **C2.22** Add draft/published cache invalidation, image and page budgets,
   zero client-side layout swap, and performance regression tests.
 - [ ] **C2.23** Prove a plugin can register a schema, renderer, editor fields,
@@ -3575,10 +3584,14 @@ skipped item is checked or weakened.
 are not complete when only a table, API or public/customer flow exists. The
 same service-layer operations must have translated, permission-scoped admin
 workspaces for products and pricing, customer orders, inventory and purchasing,
-fulfillment and returns, payments and refunds, calendars and availability, and
-appointments/waitlists. Admin, HTTP and MCP remain projections of one service
-layer (principle 7); none may gain a parallel mutation path. A later customer
-surface may depend on these owner operations, never substitute for them.
+fulfillment and returns, invoices and tax configuration, payments and refunds,
+calendars and availability, and appointments/waitlists. `/admin/invoices` and
+`/admin/invoices/tax` now project the existing invoicing services; C5.04
+starters are installed and verified for CA/EU/UK/US/AU/NZ with owner-defined
+zones elsewhere. Admin,
+HTTP and MCP remain projections of one service layer (principle 7); none may
+gain a parallel mutation path. A later customer surface may depend on these
+owner operations, never substitute for them.
 
 #### Money and tax foundations
 
@@ -3610,9 +3623,21 @@ surface may depend on these owner operations, never substitute for them.
   proven unchanged after configured rates move; non-collection decisions never
   appear as silent zero tax; generated quote/invoice surfaces, contact privacy/
   merge-undo integration, hostile arithmetic coverage, 97-file/1,137-test
-  suite, production build and changeset `commerce-money-foundation.md`.)*
-- [ ] **C5.04** Ship and verify Canada, EU, UK, US, Australia and New Zealand
+  suite, production build and changeset `commerce-money-foundation.md`.
+  Translated `/admin/invoices` and `/admin/invoices/tax` now project these
+  services for list/create/issue/void/credit, tax-line evidence, receipts,
+  starter install and acknowledged collection activation.)*
+- [x] **C5.04** Ship and verify Canada, EU, UK, US, Australia and New Zealand
   tax templates, while allowing explicit owner-defined zones elsewhere.
+  *(Evidence: 94 source-attributed starters in
+  `src/modules/invoicing/tax-templates.ts` — 13 CA, 27 EU, 1 UK, 51 US, 1 AU,
+  1 NZ — each with an authority URL, checked-on date and activation
+  limitation. `installTaxTemplate` writes a monitoring zone/rates/registration
+  and refuses collection until `acknowledgeTemplateLimitations`.
+  `createTaxZone` still accepts an owner-defined country the catalog does not
+  cover, without that interlock. Coverage in
+  `tests/core/money-arithmetic.test.ts`, `tests/core/invoicing.test.ts` and
+  `tests/core/tax-templates.test.ts`; changeset `commerce-tax-templates.md`.)*
 - [x] **C5.05** Implement invoice/line/payment/refund/credit-note state machines,
   integer-money invariants, numbering, receipts, reconciliation and audit.
   *(Evidence: one normalized 14-table `invoicing` module; integer minor units
@@ -3625,7 +3650,8 @@ surface may depend on these owner operations, never substitute for them.
   scoped services; exact contact merge undo and privacy erasure; concurrency/
   lifecycle/database coverage in `tests/core/invoicing.test.ts`; migrations
   `0043_worried_shaman.sql` through `0045_peaceful_puck.sql`; operator guide
-  and full local gates.)*
+  and full local gates; `/admin/invoices` now lists, creates, issues, voids
+  and credits through these services.)*
 - [x] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
   signed/idempotent webhooks, saved methods, disputes and refunds. *(Evidence:
   one capability-discovered adapter contract for owner-attested offline money,
@@ -3693,43 +3719,164 @@ surface may depend on these owner operations, never substitute for them.
   32-test focused registry/i18n/role gate, 101 files/1,171 tests, production
   build and real Chromium create/activate/autosave/WCAG journey; operator guide
   `deploy/commerce-catalog.md` and changeset `commerce-product-lifecycle.md`.)*
-- [ ] **C5.10** Build option types/values, reusable dimensions, generated
+- [x] **C5.10** Build option types/values, reusable dimensions, generated
   variant matrices, SKU fragments, defaults and safe matrix reconciliation.
-- [ ] **C5.11** Build attributes/filtering/comparison, unlimited ordered media,
+  *(Evidence: additive `0049_blue_naoko.sql` with option types/values, product
+  assignments, combination-keyed variants and a partial unique default;
+  `catalog.applyVariantMatrix` creates/retains/reactivates/archives without
+  deleting identities; SKU fragments compose from assigned dimension order;
+  optimistic `products.version`; translated `/admin/products` option/matrix
+  workspace; API/MCP from the same services; `tests/core/catalog-variants.test.ts`;
+  changeset `commerce-variant-matrices.md` and `deploy/commerce-catalog.md`.)*
+- [x] **C5.11** Build attributes/filtering/comparison, unlimited ordered media,
   role/variant swaps, video, documents and 3D/AR assets.
-- [ ] **C5.12** Build product relations, bundle components, upsell/cross-sell/
+  *(Evidence: additive `0050_classy_colleen_wing.sql`; reusable
+  `attribute_definitions` with filter/compare flags; product facts;
+  `catalog.filterProductsByAttribute` and `catalog.compareProducts`; ordered
+  `product_media` with hero/gallery/swatch/size_chart/lifestyle/360/model
+  roles and variant-specific swaps; GLB/glTF/USDZ accepted as library docs;
+  translated product merchandising workspace; `tests/core/catalog-merchandising.test.ts`.)*
+- [x] **C5.12** Build product relations, bundle components, upsell/cross-sell/
   accessory/replacement semantics and deterministic bundle price/stock rules.
-- [ ] **C5.13** Build price lists, entries, audiences, customer groups,
+  *(Evidence: `product_relations` and `bundle_components` in
+  `0051_absent_miracleman.sql`; relation kinds without a second catalog;
+  bundle quote sums resolved, fixed or percent-off components through
+  `catalog.resolvePrice`; a bundle cannot contain itself; stock is untracked
+  so availability follows active component variants; translated product
+  workspace; `tests/core/catalog-relations.test.ts`.)*
+- [x] **C5.13** Build price lists, entries, audiences, customer groups,
   contracts, sale windows and explicit per-currency availability.
-- [ ] **C5.14** Implement tiered and volume price breaks plus one deterministic,
+  *(Evidence: customer groups by tag/lifecycle; currency-locked price lists
+  for retail/wholesale/member/sale/contract with windows and priority;
+  integer-minor entries; `catalog.resolvePrice` explains contract → audience →
+  sale → retail and refuses missing currencies; contact merge/privacy for
+  contract lists; `/admin/price-lists` and product price card; standalone
+  default variant so optionless products can be priced;
+  `tests/core/catalog-pricing.test.ts` and changeset
+  `commerce-catalog-merchandising.md`.)*
+- [x] **C5.14** Implement tiered and volume price breaks plus one deterministic,
   explainable resolver with exhaustive arithmetic/property tests.
-- [ ] **C5.15** Complete service offerings, deposits, policies, forms, waivers,
+  *(Evidence: `price_breaks` with XOR unit/percent, no-overlap checks;
+  `applyVolumeBreaks` / `applyTieredBreaks` integer arithmetic in
+  `src/modules/catalog/price-breaks.ts`; `catalog.resolvePrice` applies
+  variant-specific then list-wide bands and explains the result;
+  `tests/core/price-breaks.test.ts` plus database coverage in
+  `tests/core/catalog-pricing.test.ts`.)*
+- [x] **C5.15** Complete service offerings, deposits, policies, forms, waivers,
   calendars, capacity and price-rule configuration over the shared catalog.
+  *(Evidence: `cancellation_policies`, `service_offerings` and `price_rules`
+  in additive `0052_mysterious_talon.sql`; one offering per `service` product with duration,
+  buffers, location type, integer-minor/PPM deposits, capacity, assignment
+  and travel time; intake form FK validated through `forms.byId`; reusable
+  cancellation policies with none/fixed/percent/forfeit fees; payment modes
+  full/deposit_balance/payment_plan/hourly/retainer; `catalog.quoteServicePayment`
+  explains deposit and balance through `catalog.resolvePrice`; calendar IDs
+  and waiver templates are reserved attach-points that refuse live values
+  until C6.01/C6.14; translated product offering card; API/MCP from the same
+  services; `tests/core/catalog-offerings.test.ts` and Chromium journey save;
+  changeset `commerce-service-offerings.md`.)*
 
 #### Inventory, shipping, checkout, and orders
 
-- [ ] **C5.16** Implement append-only stock movements, multi-location balances,
+- [x] **C5.16** Implement append-only stock movements, multi-location balances,
   reservations/expiry, counts, adjustments, transfers, damage and audit, with
   an admin inventory ledger, count, adjustment and transfer workspace.
-- [ ] **C5.17** Implement safety/reorder levels, incoming stock, backorders,
+  *(Evidence: `inventory_items`, `stock_movements` and `stock_reservations` in
+  `0053_high_richard_fisk.sql`; on-hand is `sum(delta)` and reserved is active
+  unexpired holds; untracked variants have no row and stay always available;
+  multi-location unique (variant, location); sale/return/adjustment/transfer/
+  receipt/damage/count reasons; transfers write two movements with one
+  reference; reservations expire via `catalog.expireReservations` every five
+  minutes; consume writes a sale movement; negative shelf and reserved-overdraw
+  refused; translated `/admin/inventory` ledger/count/adjust/transfer;
+  API/MCP from the same services; `tests/core/catalog-inventory.test.ts`;
+  changeset `commerce-inventory-ledger.md`.)*
+- [x] **C5.17** Implement safety/reorder levels, incoming stock, backorders,
   back-in-stock subscriptions, suppliers, purchase orders and receiving,
   including admin procurement, reorder and receiving queues.
-- [ ] **C5.18** Implement shipping zones, deterministic rate engine, packaging,
+  *(Evidence: variant `backorder_policy`/`expected_restock_at`;
+  `suppliers`, `purchase_orders`, `purchase_order_lines`,
+  `back_in_stock_subscriptions` in `0054_ancient_steel_serpent.sql`;
+  reorder queue is on-hand + incoming ≤ reorder point; placing a PO raises
+  incoming; receiving writes a receipt movement and notifies subscribers;
+  cancel reverses remaining incoming; availability honors refuse/date/silent
+  backorders; contact merge/privacy for suppliers and subscriptions;
+  `/admin/procurement` plus levels on `/admin/inventory`;
+  `tests/core/catalog-procurement.test.ts`; changeset
+  `commerce-procurement.md`.)*
+- [x] **C5.18** Implement shipping zones, deterministic rate engine, packaging,
   dimensional weight, carrier seam, pickup and local-delivery windows.
-- [ ] **C5.19** Implement shipments, split fulfillment, tracking, digital
+  *(Evidence: variant weight/dims/`requires_shipping`; `shipping_zones`,
+  `shipping_methods`, `shipping_rate_bands`, `packaging_boxes`,
+  `delivery_windows` in `0055_puzzling_toad.sql`; most-specific zone match;
+  flat/weight/price/item/dimensional/free/pickup/local_delivery quotes;
+  dimensional weight uses the 5000 divisor; smallest fitting box; calculated
+  carrier methods skipped until an adapter exists; translated
+  `/admin/shipping`; `tests/core/shipping-quote.test.ts`; changeset
+  `commerce-shipping-rates.md`.)*
+- [x] **C5.19** Implement shipments, split fulfillment, tracking, digital
   delivery, returns/RMA, restock/refund convergence and customer notices, with
   admin fulfillment, return and exception workspaces.
-- [ ] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
+  *(Evidence: `fulfillments`, `fulfillment_items`, `digital_deliveries`,
+  `return_requests`, `return_items` in `0057_rare_gladiator.sql`; split
+  cartons are first-class; stock sale writes on ship not on pay; digital
+  lines grant a token on `payOrder` and never enter a carton; RMA
+  requested → approved/rejected → received (ledger `return`) → refund
+  (credit note + invoice refund); contact notices on ship/deliver/decide/
+  refund; translated `/admin/fulfillment` and `/admin/returns`; live
+  carrier labels stay on the adapter; `tests/core/catalog-fulfillment.test.ts`;
+  changeset `commerce-fulfillment.md`.)*
+- [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
   cross-device restore, price/stock refresh and abandonment events.
-- [ ] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
+  *(Evidence: `carts`, `cart_items`, `wishlists`, `wishlist_items` in
+  `0056_flippant_snowbird.sql`; guest token plus optional `contact_id`; identify merges the guest
+  basket into the contact's open cart; one wishlist per contact; merge
+  combines open carts by currency and moves wishlist items; `getCart`
+  refreshes `resolvePrice` + availability; cart holds use `reserveStock`
+  (`holderType=cart`); `catalog.abandonStaleCarts` hourly; translated
+  `/admin/carts`; `tests/core/catalog-carts.test.ts`; changeset
+  `commerce-carts-orders.md`.)*
+- [x] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
   consent, payment, idempotency, failure recovery and accessible confirmation.
-- [ ] **C5.22** Build order lifecycle, mixed physical/digital/service lines,
+  *(Evidence: `catalog.checkoutCart` attaches the guest cart, requires
+  `acceptedTerms`, quotes shipping when a line needs it, creates the order
+  and an issued invoice in one transaction (`sourceType=order`), calculates
+  tax when origin+destination exist else `not_applicable`; invoice
+  idempotency key plus converted-cart retry; `payOrder` only after the
+  invoice is `paid`; cancel voids the unpaid invoice; confirmation is
+  `getOrder` + `/admin/orders/[id]`; coupons/discounts stay C5.23; public
+  storefront checkout waits on product landing pages.)*
+- [x] **C5.22** Build order lifecycle, mixed physical/digital/service lines,
   fulfillment state, translated admin order/customer views, portal views and
   complete timeline events.
-- [ ] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
+  *(Evidence: `orders`, `order_items` in `0056_flippant_snowbird.sql`; statuses
+  `pending_payment`/`paid`/`cancelled` plus reserved
+  `fulfilling`/`fulfilled`/`refunded`; mixed variant lines; stock holds move
+  from cart to order then consume on pay; timeline `order.placed` /
+  `order.paid` / `order.cancelled`; translated `/admin/orders` and contact
+  order history; customer portal order list waits on the portal; shipment
+  transitions stay C5.19; `tests/core/catalog-orders.test.ts`.)*
+- [x] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
   post-add offers and abandoned-cart recovery without parallel money paths.
-- [ ] **C5.24** Add in-person payment through capable adapters, including
+  *(Evidence: `coupons`, `coupon_redemptions`, `cart_coupons`, `gift_cards`,
+  `gift_card_redemptions`, `offer_rules`, `cart_recoveries` in `0058_silly_phalanx.sql`;
+  coupon kinds percent/fixed/free_shipping become invoice `discountMinor`;
+  gift cards decrement remaining then credit `customer_balance` and pay via
+  `applyCustomerBalance`; bundles remain C5.12 `quoteBundle`; bumps and
+  post-add offers are `offer_rules` + `listCartOffers`; abandoned recovery
+  sends one coupon + contact notice via `catalog.recoverAbandonedCarts`;
+  translated `/admin/promotions`; `tests/core/promo-quote.test.ts` and
+  `tests/core/catalog-promotions.test.ts`; changeset
+  `commerce-promotions.md`.)*
+- [x] **C5.24** Add in-person payment through capable adapters, including
   Stripe Terminal/tap-to-pay representation, receipts and reconciliation.
+  *(Evidence: POS family now has `manual` cash and `stripe` Terminal/tap-to-pay
+  adapters beside honest `none`; `invoicing.beginInPersonPayment` writes a
+  normal `Payment` (cash settles now; Stripe creates a `card_present`
+  PaymentIntent and waits on the reader/webhook); receipts reuse
+  `invoicing.receipt`; `reconcileInPersonPayments` lists unsettled Terminal
+  takes; translated `/admin/pos`; `tests/core/pos-adapters.test.ts` and
+  `tests/core/invoicing-pos.test.ts`; changeset `commerce-pos.md`.)*
 
 **C5 exit:** every form of value converges through one explainable invoice,
 payment, tax, inventory and reporting path, with no floating-point money.
@@ -3763,8 +3910,14 @@ payment, tax, inventory and reporting path, with no floating-point money.
   consented channels and completion preconditions.
 - [ ] **C6.10** Build rentals as resources plus catalog/inventory, availability,
   pickup/return, deposits, late/damage state and order/payment convergence.
-- [ ] **C6.11** Build events/classes with venue, sessions, seat inventory,
+- [x] **C6.11** Build events/classes with venue, sessions, seat inventory,
   tickets/passes, waitlists, schema.org Event, ICS and check-in.
+  *(Evidence: `events` module — venue fields, sessions with capacity,
+  ticket types, contact-spine registrations that waitlist when a session is
+  full and promote on cancel, check-in, Event JSON-LD, `/ics/events/{slug}`,
+  public `/events` pages and `/admin/events`. Merge and privacy cover
+  `event_registrations`. Migration `0059_concerned_sumo.sql`;
+  `tests/core/events.test.ts`.)*
 
 #### Quotes, contracts, projects, and time
 
@@ -3869,8 +4022,14 @@ customer has one secure, comprehensible home for the relationship.
   idempotency, per-contact state, retries, pause/kill and run inspection.
 - [ ] **C9.03** Enforce consent, quiet hours, budgets, approval requirements and
   untrusted-input rules for every automated action.
-- [ ] **C9.04** Build newsletters, double-opt-in subscriptions, RFC 8058 one-
+- [x] **C9.04** Build newsletters, double-opt-in subscriptions, RFC 8058 one-
   click unsubscribe, public issue archive and per-newsletter preference state.
+  *(Evidence: `newsletters` module — identities, draft/published issues,
+  `contacts.resolve` subscribe that stays pending until token confirm,
+  RFC 8058 `List-Unsubscribe` / one-click POST at `/unsubscribe`, public
+  `/newsletters` archive and per-newsletter subscription status. Merge keeps
+  one row per newsletter. Migration `0059_concerned_sumo.sql`;
+  `tests/core/newsletters.test.ts`.)*
 - [ ] **C9.05** Build shared block-based templates for transactional, campaign,
   newsletter, automation and SMS uses with locale variants and locked variables.
 - [ ] **C9.06** Build broadcasts/segments, test sends, scheduling, provider

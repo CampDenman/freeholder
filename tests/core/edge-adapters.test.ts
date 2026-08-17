@@ -195,6 +195,7 @@ describe("C5.01 honest none adapters", () => {
       }),
       "point_of_sale",
     );
+    expect(pointOfSaleAdapters.get("manual").status.available).toBe(true);
   });
 
   it("records SMS and bulk-mail non-delivery without claiming a send", async () => {

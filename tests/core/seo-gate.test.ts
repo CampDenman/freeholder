@@ -16,6 +16,7 @@ const page = (body: string, head = "") => `<!doctype html>
 <title>A page · Aurora Coast</title>
 <meta name="description" content="Something true about this page.">
 <link rel="canonical" href="https://example.test/services">
+<meta property="og:image" content="https://example.test/og/services">
 ${head}
 </head><body>${body}</body></html>`;
 
@@ -56,6 +57,22 @@ describe("what it refuses", () => {
       <body><h1>Services</h1></body></html>`;
     expect(messages(html)).toContain("has no <title>");
     expect(messages(html)).toContain("has no meta description");
+  });
+
+  it("a missing or relative og:image", () => {
+    const html = page(`<h1>S</h1>`).replace(
+      '<meta property="og:image" content="https://example.test/og/services">',
+      "",
+    );
+    expect(messages(html)).toContain("has no og:image");
+
+    const relative = page(`<h1>S</h1>`).replace(
+      "https://example.test/og/services",
+      "/og/services",
+    );
+    expect(messages(relative)).toContain(
+      "has a relative og:image (/og/services); social crawlers need an absolute URL",
+    );
   });
 
   it("a canonical that is relative, absent, or points elsewhere", () => {
@@ -123,6 +140,15 @@ describe("what it refuses", () => {
     expect(
       bad('{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"name":"Home"}]}'),
     ).toContain("has a BreadcrumbList whose items lack position or item");
+    expect(
+      bad('{"@context":"https://schema.org","@type":"Product","name":"Print"}'),
+    ).toContain('has Product JSON-LD without "offers"');
+    expect(
+      bad('{"@context":"https://schema.org","@type":"Service","name":"Weddings"}'),
+    ).toContain('has Service JSON-LD without "url"');
+    expect(
+      bad('{"@context":"https://schema.org","@type":"Product","name":"Print","offers":{"@type":"Offer","price":"50.00","priceCurrency":"CAD"}}'),
+    ).toEqual([]);
   });
 
   it("accepts whatever business type the owner chose", () => {

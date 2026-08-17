@@ -69,10 +69,22 @@ payout:      pending -> in_transit -> paid
   includes advanced terms and movements; erasure redacts free text while
   retaining required accounting amounts and links.
 
+## Operator workspace
+
+`/admin/invoices` lists, filters and reconciles invoices. `/admin/invoices/new`
+creates a draft through `invoicing.createDraft`. The invoice detail issues,
+voids, credits and shows immutable tax lines, payments and receipts. Tax
+configuration lives at `/admin/invoices/tax`: dated starters, categories,
+zones, rates, registrations (collection stays off until the starter limitation
+is acknowledged), exemptions and threshold progress. Contact records with
+invoicing access show that contact's invoices. These screens call the same
+services as HTTP and MCP.
+
 ## Tax setup
 
 1. Call `invoicing.listTaxTemplates` and show the source, verification date, and
-   activation limitation to the owner.
+   activation limitation to the owner. The tax studio at `/admin/invoices/tax`
+   does this.
 2. Call `invoicing.installTaxTemplate`. Installation is idempotent and creates
    its zone, rates, and registration in `monitoring`; it never starts collecting
    tax.

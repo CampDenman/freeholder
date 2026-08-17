@@ -376,6 +376,23 @@ export const escalateNotifications = defineJob({
   },
 });
 
+/**
+ * IndexNow delta (MASTER.md §5). Enqueued by publish/rename; the handler
+ * skips localhost and only posts URLs that changed.
+ */
+export const submitIndexNow = defineJob({
+  name: "seo.submitIndexNow",
+  summary: "Tell participating search engines that public URLs changed.",
+  concurrency: 1,
+  handler: async (data) => {
+    const urls = Array.isArray(data.urls)
+      ? data.urls.filter((url): url is string => typeof url === "string")
+      : [];
+    const { submitIndexNow: submit } = await import("@/core/seo/indexnow");
+    return submit(urls);
+  },
+});
+
 /** Archived inbox material is operational history, not permanent storage. */
 export const pruneOldNotifications = defineJob({
   name: "core.pruneNotifications",
@@ -413,4 +430,5 @@ export default [
   deliverNotificationDigests,
   escalateNotifications,
   pruneOldNotifications,
+  submitIndexNow,
 ];

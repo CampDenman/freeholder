@@ -20,6 +20,7 @@ import {
   revokeSavedPaymentMethod,
   submitProviderRefund,
 } from "@/modules/invoicing/payment-provider-service";
+import { beginInPersonPayment, refundInPersonPayment } from "@/modules/invoicing/pos-service";
 
 function field(form: FormData, key: string): string {
   const value = form.get(key);
@@ -70,6 +71,32 @@ export async function paymentAction(form: FormData): Promise<void> {
       }
     } else if (intent === "complete") {
       await completePaymentCheckout.call({ paymentId: field(form, "paymentId"), idempotencyKey: field(form, "idempotencyKey") }, actor);
+    } else if (intent === "inPerson") {
+      confirmed(form);
+      const invoiceId = field(form, "invoiceId");
+      const bundle = await getInvoice.call({ id: invoiceId }, actor);
+      await beginInPersonPayment.call(
+        {
+          invoiceId,
+          locationId: field(form, "locationId"),
+          method: field(form, "method") as "cash" | "card_present" | "tap_to_pay",
+          amountMinor: decimalToMinor(field(form, "amount"), bundle.invoice.currency),
+          ...(field(form, "readerRef") ? { readerRef: field(form, "readerRef") } : {}),
+          idempotencyKey: field(form, "idempotencyKey"),
+        },
+        actor,
+      );
+    } else if (intent === "inPersonRefund") {
+      confirmed(form);
+      await refundInPersonPayment.call(
+        {
+          paymentId: field(form, "paymentId"),
+          amountMinor: decimalToMinor(field(form, "amount"), field(form, "currency") || "CAD"),
+          reason: field(form, "reason"),
+          idempotencyKey: field(form, "idempotencyKey"),
+        },
+        actor,
+      );
     } else if (intent === "revoke") {
       confirmed(form);
       await revokeSavedPaymentMethod.call({ id: field(form, "methodId"), idempotencyKey: field(form, "idempotencyKey") }, actor);
@@ -77,12 +104,15 @@ export async function paymentAction(form: FormData): Promise<void> {
       throw new ServiceError("validation", "Choose a payment action.");
     }
   } catch (error) {
+    const back = field(form, "returnTo") || "/admin/payments";
     if (error instanceof ServiceError && error.code === "step_up_required") {
-      redirect("/security/verify?returnTo=/admin/payments");
+      redirect(`/security/verify?returnTo=${encodeURIComponent(back)}`);
     }
     const code = error instanceof ServiceError ? error.code : "failed";
-    redirect(`/admin/payments?error=${encodeURIComponent(code)}`);
+    redirect(`${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(code)}`);
   }
   revalidatePath("/admin/payments");
-  redirect(`/admin/payments?status=${encodeURIComponent(intent)}`);
+  revalidatePath("/admin/pos");
+  const back = field(form, "returnTo") || "/admin/payments";
+  redirect(`${back}${back.includes("?") ? "&" : "?"}status=${encodeURIComponent(intent)}`);
 }

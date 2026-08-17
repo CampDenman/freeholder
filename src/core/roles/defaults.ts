@@ -35,6 +35,7 @@ const ADMIN_MODULES = [
   "demo",
   "events",
   "forms",
+  "newsletters",
   "i18n",
   "invitations",
   "invoicing",

@@ -13,6 +13,8 @@ import { isUniqueViolation } from "@/core/db";
 import { businessProfile } from "@/core/settings/schema";
 import { getTranslation, translatedIds } from "@/core/i18n/service";
 import { recordRedirect } from "@/core/seo/service";
+import { queueIndexNow } from "@/core/seo/indexnow";
+import { kindFromSlug, priorityFromSlug } from "@/core/seo/classify";
 import { contentRevisions, pages, sections } from "./schema";
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
@@ -59,6 +61,7 @@ const seo = z
   .object({
     title: z.string().max(60).optional(),
     description: z.string().max(155).optional(),
+    ogImage: z.string().url().optional(),
   })
   .default({});
 
@@ -171,6 +174,7 @@ export const publishedPaths = defineService({
         id: pages.id,
         slug: pages.slug,
         title: pages.title,
+        seo: pages.seo,
         updatedAt: pages.updatedAt,
       })
       .from(pages)
@@ -182,12 +186,28 @@ export const publishedPaths = defineService({
       .from(businessProfile)
       .limit(1);
 
-    if (!business || input.locale === business.defaultLocale) {
-      return published.map(({ slug, title, updatedAt }) => ({
+    const toEntry = (
+      slug: string,
+      page: (typeof published)[number],
+    ) => {
+      const fields = (page.seo ?? {}) as {
+        title?: string;
+        description?: string;
+        ogImage?: string;
+      };
+      return {
         slug,
-        title,
-        updatedAt,
-      }));
+        title: fields.title ?? page.title,
+        description: fields.description,
+        imageUrl: fields.ogImage ?? null,
+        kind: kindFromSlug(page.slug),
+        priority: priorityFromSlug(page.slug),
+        updatedAt: page.updatedAt,
+      };
+    };
+
+    if (!business || input.locale === business.defaultLocale) {
+      return published.map((page) => toEntry(page.slug, page));
     }
 
     // A locale's sitemap lists what that locale actually has (§5). A page with
@@ -203,13 +223,14 @@ export const publishedPaths = defineService({
 
     return published
       .filter((page) => translated.has(page.id))
-      .map(({ slug, title, updatedAt }) => ({
-        // The prefix belongs in the sitemap because it is the address a
-        // crawler should fetch.
-        slug: slug === "" ? input.locale : `${input.locale}/${slug}`,
-        title,
-        updatedAt,
-      }));
+      .map((page) =>
+        toEntry(
+          // The prefix belongs in the sitemap because it is the address a
+          // crawler should fetch.
+          page.slug === "" ? input.locale : `${input.locale}/${page.slug}`,
+          page,
+        ),
+      );
   },
 });
 
@@ -488,6 +509,13 @@ export const updatePage = defineService({
         locale: before.locale,
         source: "slug-change",
       });
+      if (page!.status === "published") {
+        await queueIndexNow(
+          ctx,
+          [before.slug, page!.slug],
+          `indexnow:${page!.id}:rename:${before.slug}:${page!.slug}`,
+        );
+      }
     }
 
     ctx.setSubject("page", page!.id);
@@ -517,6 +545,11 @@ export const publishPage = defineService({
       pageId: page.id,
       slug: page.slug,
     });
+    await queueIndexNow(
+      ctx,
+      [page.slug],
+      `indexnow:${page.id}:${input.published ? "published" : "unpublished"}`,
+    );
     return page;
   },
 });

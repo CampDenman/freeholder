@@ -12,7 +12,10 @@ import {
 } from "@/core/contacts/service";
 import { formatDateTime, type Translate } from "@/core/i18n";
 import { hasModuleAccess, ServiceError } from "@/core/service";
-import { Card, CardBody, CardHeader } from "@/ui/primitives";
+import { listOrders, listWishlist } from "@/modules/catalog/service";
+import { listInvoices } from "@/modules/invoicing/invoice-service";
+import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { invoiceTone, money } from "../../invoices/format";
 import { getT } from "../../../../i18n";
 import { contactFormLabels, mergePanelLabels } from "../contactLabels";
 import { ContactForm } from "../ContactForm";
@@ -87,6 +90,8 @@ export default async function ContactDetailPage({
     throw error;
   });
 
+  const canSeeInvoices = hasModuleAccess(actor, "invoicing");
+  const canSeeCatalog = hasModuleAccess(actor, "catalog");
   const [
     business,
     timeline,
@@ -94,6 +99,9 @@ export default async function ContactDetailPage({
     organizationResult,
     customFields,
     relationships,
+    invoices,
+    orders,
+    wishlist,
   ] = await Promise.all([
     currentBusiness(),
     contactTimeline.call({ contactId: contact.id }, actor),
@@ -101,6 +109,13 @@ export default async function ContactDetailPage({
     listOrganizations.call({ limit: 100 }, actor),
     listCustomFields.call({ entity: "contact" }, actor),
     listRelationships.call({ contactId: contact.id }, actor),
+    canSeeInvoices
+      ? listInvoices.call({ contactId: contact.id, limit: 25 }, actor)
+      : Promise.resolve([]),
+    canSeeCatalog ? listOrders.call({ contactId: contact.id }, actor) : Promise.resolve([]),
+    canSeeCatalog
+      ? listWishlist.call({ contactId: contact.id }, actor)
+      : Promise.resolve({ wishlist: null, items: [] }),
   ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -191,6 +206,68 @@ export default async function ContactDetailPage({
           ownerNotes: contact.ownerNotes ?? "",
         }}
       />
+
+      {canSeeCatalog ? (
+        <Card>
+          <CardHeader title={t("catalog.orders.contactHistory")} />
+          <CardBody>
+            {orders.length === 0 ? (
+              <p className="text-sm text-ink-muted">{t("catalog.orders.contactHistory.empty")}</p>
+            ) : (
+              <ul className="grid list-none gap-3 p-0">
+                {orders.map((order) => (
+                  <li key={order.id}>
+                    <a href={`/admin/orders/${order.id}`} className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-semibold">{order.id.slice(0, 8)}</span>
+                      <Pill>{t(`catalog.orders.status.${order.status}`)}</Pill>
+                      <span className="ms-auto font-mono">{money(order.totalMinor, order.currency)}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {wishlist.items.length ? (
+              <p className="mt-4 text-sm text-ink-muted">
+                {t("catalog.carts.wishlist")}: {wishlist.items.map((item) => item.sku).join(", ")}
+              </p>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {canSeeInvoices ? (
+        <Card>
+          <CardHeader title={t("invoices.contactHistory")} />
+          <CardBody>
+            {invoices.length === 0 ? (
+              <p className="text-sm text-ink-muted">{t("invoices.contactHistory.empty")}</p>
+            ) : (
+              <ul className="grid list-none gap-3 p-0">
+                {invoices.map((invoice) => (
+                  <li key={invoice.id}>
+                    <a
+                      href={`/admin/invoices/${invoice.id}`}
+                      className="flex flex-wrap items-center gap-2 text-sm"
+                    >
+                      <span className="font-semibold">{invoice.number ?? t("invoices.draftNumber")}</span>
+                      <Pill tone={invoiceTone(invoice.status)}>{t(`invoices.status.${invoice.status}`)}</Pill>
+                      <span className="ms-auto font-mono">{money(invoice.totalMinor, invoice.currency)}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {hasModuleAccess(actor, "invoicing", "manage") ? (
+              <a
+                href={`/admin/invoices/new?contactId=${contact.id}`}
+                className="mt-3 inline-block text-sm font-semibold text-accent"
+              >
+                {t("invoices.contactHistory.create")}
+              </a>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
 
       <RelationshipPanel
         contactId={contact.id}

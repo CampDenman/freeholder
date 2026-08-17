@@ -344,6 +344,83 @@
       "when": 1786753324561,
       "tag": "0048_marvelous_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1786917125015,
+      "tag": "0049_blue_naoko",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1786921486650,
+      "tag": "0050_classy_colleen_wing",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1786922584303,
+      "tag": "0051_absent_miracleman",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1786925287900,
+      "tag": "0052_mysterious_talon",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1786926406116,
+      "tag": "0053_high_richard_fisk",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1786927082064,
+      "tag": "0054_ancient_steel_serpent",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1786927472055,
+      "tag": "0055_puzzling_toad",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1786934121109,
+      "tag": "0056_flippant_snowbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1786938073299,
+      "tag": "0057_rare_gladiator",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1786938803775,
+      "tag": "0058_silly_phalanx",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1786952347693,
+      "tag": "0059_concerned_sumo",
+      "breakpoints": true
     }
   ]
 }

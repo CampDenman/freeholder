@@ -605,6 +605,64 @@ function weekdayName(weekday: number, locale: string): string {
  * pages: publishing anything automatically links it from its section index" is
  * a promise a hand-maintained list cannot keep.
  */
+export const productsIndex = defineBlock({
+  type: "productsIndex",
+  labelKey: "cms.block.productsIndex",
+  contexts: ["page"],
+  schema: z.object({
+    showSubtitle: z.boolean().default(true),
+  }),
+  starter: () => ({}),
+  resolve: async () => {
+    const { listVisibleProducts } = await import("@/modules/catalog/service");
+    return listVisibleProducts.call({ limit: 200 }, { kind: "anonymous" });
+  },
+  render: ({ props, resolved, ctx }) => {
+    if (!resolved || resolved.length === 0) return null;
+    return (
+      <ul className="grid list-none gap-4 p-0">
+        {resolved.map((product) => (
+          <li key={product.id} className="border-b border-rule pb-4 last:border-0">
+            <a
+              href={ctx.localizeHref?.(`/products/${product.slug}`) ?? `/products/${product.slug}`}
+              className="font-semibold text-ink"
+            >
+              {product.name}
+            </a>
+            {props.showSubtitle && product.subtitle ? (
+              <p className="mt-1 text-sm text-ink-muted">{product.subtitle}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    );
+  },
+});
+
+export const productDetail = defineBlock({
+  type: "productDetail",
+  labelKey: "cms.block.productDetail",
+  contexts: ["page"],
+  schema: z.object({
+    productId: z.string().uuid(),
+    slug: z.string().min(1),
+  }),
+  starter: () => ({ productId: "00000000-0000-4000-8000-000000000000", slug: "product" }),
+  resolve: async (props) => {
+    const { resolveVisibleProduct } = await import("@/modules/catalog/service");
+    return resolveVisibleProduct.call({ slug: props.slug }, { kind: "anonymous" });
+  },
+  render: ({ resolved }) => {
+    if (!resolved) return null;
+    return (
+      <div className="grid gap-3">
+        {resolved.subtitle ? <p className="text-lg text-ink-muted">{resolved.subtitle}</p> : null}
+        {resolved.brand ? <p className="text-sm text-ink-muted">{resolved.brand}</p> : null}
+      </div>
+    );
+  },
+});
+
 export const locationsIndex = defineBlock({
   type: "locationsIndex",
   labelKey: "cms.block.locationsIndex",

@@ -186,6 +186,33 @@ test.describe("real-browser product journeys", () => {
       expect(results.violations).toEqual([]);
     });
 
+    await test.step("admin invoices create and issue a draft, then install a tax starter", async () => {
+      await page.goto("/admin/invoices/new");
+      await expect(page.getByRole("heading", { name: "New invoice" })).toBeVisible();
+      await page.getByLabel("Contact").selectOption({ label: "Payment Journey · payment-journey@example.test" });
+      await page.getByLabel("Line 1 description").fill("Discovery session");
+      await page.getByLabel("Line 1 unit amount").fill("50.00");
+      await page.getByRole("button", { name: "Create draft invoice" }).click();
+      await expect(page).toHaveURL(/\/admin\/invoices\/[0-9a-f-]+\?saved=created$/);
+      await expect(page.getByText("The draft invoice was created.")).toBeVisible();
+      await page.getByRole("button", { name: "Issue invoice" }).click();
+      await expect(page).toHaveURL(/\?saved=issue$/);
+      await expect(page.getByText("The invoice was issued.")).toBeVisible();
+      await expect(page.getByText(/^INV-/)).toBeVisible();
+
+      await page.goto("/admin/invoices/tax");
+      await expect(page.getByRole("heading", { name: "Tax setup" })).toBeVisible();
+      await page.getByRole("button", { name: "Install Alberta GST/HST" }).click();
+      await expect(page).toHaveURL(/\/admin\/invoices\/tax\?saved=install$/);
+      await expect(page.getByText("The tax starter was installed in monitoring mode.")).toBeVisible();
+      await expect(page.getByText("Installed").first()).toBeVisible();
+
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+      expect(results.violations).toEqual([]);
+    });
+
     await test.step("admin catalog creates, activates and describes a real service product", async () => {
       const [taxCategory] = await db()
         .insert(taxCategories)
@@ -207,6 +234,28 @@ test.describe("real-browser product journeys", () => {
       await page.getByRole("button", { name: "Activate product" }).click();
       await expect(page).toHaveURL(/\?saved=activate$/);
       await expect(page.getByText("The product is active.")).toBeVisible();
+
+      await page.getByLabel("Duration in minutes").fill("90");
+      await page.getByLabel("Where it happens").selectOption("in_person");
+      await page.getByRole("button", { name: "Save service offering" }).click();
+      await expect(page.getByText("The service offering was saved.")).toBeVisible();
+
+      await page.getByLabel("Option type name").fill("Size");
+      await page.getByLabel("Option type code").fill("size");
+      await page.getByRole("button", { name: "Create option type" }).click();
+      await expect(page.getByText("The option type was created.")).toBeVisible();
+      await page.getByLabel("Value name").fill("Small");
+      await page.getByLabel("SKU fragment").fill("s");
+      await page.getByRole("button", { name: "Add value" }).click();
+      await expect(page.getByText("The option value was added.")).toBeVisible();
+      await page.getByRole("button", { name: "Use on this product" }).click();
+      await expect(page.getByText("The option type was assigned to this product.")).toBeVisible();
+      await page.getByRole("checkbox", { name: /Small/ }).check();
+      await page.getByRole("button", { name: "Save selected values" }).click();
+      await expect(page.getByText("The selected option values were saved.")).toBeVisible();
+      await page.getByRole("button", { name: "Apply variant matrix" }).click();
+      await expect(page.getByText("The variant matrix was reconciled.")).toBeVisible();
+      await expect(page.getByText("portrait-session-s")).toBeVisible();
 
       await page.getByRole("button", { name: "Add a block" }).click();
       await page.getByRole("button", { name: "Heading", exact: true }).click();

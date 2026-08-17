@@ -25,11 +25,22 @@ import { renderBlocks } from "@/modules/cms/render";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { resolveRedirect } from "@/core/seo/service";
 import {
+  articleJsonLd,
   breadcrumbJsonLd,
+  eventJsonLd,
   humanizeSegment,
   organizationJsonLd,
+  productJsonLd,
+  serviceJsonLd,
   websiteJsonLd,
 } from "@/core/seo/jsonld";
+import { kindFromSlug } from "@/core/seo/classify";
+import {
+  composeDescription,
+  composeDocumentTitle,
+  isFilterQuery,
+  ogImagePath,
+} from "@/core/seo/meta";
 import { siteOrigin } from "@/core/seo/origin";
 import { localBusinessJsonLd } from "@/core/locations/jsonld";
 import { currentLocation } from "@/core/locations/read";
@@ -84,10 +95,13 @@ function canonicalFor(
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<Params>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const query = await searchParams;
   const locale = await getLocale();
   const [page, business] = await Promise.all([
     publishedPage(await pathFor(slug), locale),
@@ -98,15 +112,24 @@ export async function generateMetadata({
   // §5 per-page requirements: a unique title and description on every page,
   // "with sane auto-generated defaults" — the stored override wins, and the
   // fallback is built from what the page already knows rather than left blank.
-  const seo = (page.seo ?? {}) as { title?: string; description?: string };
+  const seo = (page.seo ?? {}) as {
+    title?: string;
+    description?: string;
+    ogImage?: string;
+  };
   const siteName = business?.name;
-  const title = seo.title ?? page.title;
-  const description = seo.description ?? business?.tagline ?? undefined;
+  const title = composeDocumentTitle(
+    seo.title ?? page.title,
+    siteName,
+    page.slug === "",
+  );
+  const description = composeDescription(
+    seo.description ?? business?.tagline ?? undefined,
+  );
 
   // §5 wants the canonical *absolute*, and absolute means configured rather
   // than taken from the request — see core/seo/origin.ts.
   const origin = siteOrigin();
-  const url = page.slug === "" ? `${origin}/` : `${origin}/${page.slug}`;
 
   // §5: "every localized page emits full hreflang alternates + x-default".
   // Only the locales that actually have a reviewed translation are advertised
@@ -124,21 +147,32 @@ export async function generateMetadata({
       ? locale
       : (business?.defaultLocale ?? locale);
 
+  const canonical = canonicalFor(origin, page.slug, servedLocale, business);
+  const ogImage = seo.ogImage ?? `${origin}${ogImagePath(page.slug)}`;
+  const filtered = isFilterQuery(query);
+
   return {
-    title: siteName && page.slug !== "" ? `${title} · ${siteName}` : title,
+    title,
     description,
+    robots: filtered ? { index: false, follow: true } : undefined,
     alternates: {
-      canonical: canonicalFor(origin, page.slug, servedLocale, business),
+      canonical,
       ...(alternates ? { languages: alternates } : {}),
     },
     openGraph: {
       title,
       description,
       type: "website",
-      url,
+      url: canonical,
       siteName: siteName ?? undefined,
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
     },
-    twitter: { card: "summary_large_image", title, description },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
   };
 }
 
@@ -269,6 +303,16 @@ export default async function PublicPage({
           ),
         ].filter((entry) => entry !== undefined)
       : []),
+    ...(await entityJsonLd({
+      origin,
+      path,
+      title: page.title,
+      description: (page.seo as { description?: string } | null)?.description
+        ?? facts?.tagline
+        ?? null,
+      providerName: facts?.name ?? null,
+      updatedAt: page.updatedAt,
+    })),
     ...collectJsonLd(blocks),
   ];
 
@@ -285,6 +329,80 @@ export default async function PublicPage({
       <article className="grid gap-8">{rendered}</article>
     </>
   );
+}
+
+/**
+ * Page-type structured data beyond the site/business/breadcrumb.
+ *
+ * Service, article, product and event pages emit the matching schema.org type
+ * so a crawler does not have to guess from the URL.
+ */
+async function entityJsonLd(input: {
+  origin: string;
+  path: string;
+  title: string;
+  description: string | null;
+  providerName: string | null;
+  updatedAt?: Date;
+}): Promise<ReturnType<typeof serviceJsonLd>[]> {
+  const kind = kindFromSlug(input.path);
+  const url = input.path === "" ? `${input.origin}/` : `${input.origin}/${input.path}`;
+  const leaf = input.path.split("/").filter(Boolean)[1];
+  if (kind === "service") {
+    return [
+      serviceJsonLd({
+        name: input.title,
+        url,
+        description: input.description,
+        providerName: input.providerName,
+      }),
+    ];
+  }
+  if (kind === "article" || kind === "newsletter") {
+    return [
+      articleJsonLd({
+        headline: input.title,
+        url,
+        description: input.description,
+        dateModified: input.updatedAt,
+        authorName: input.providerName,
+      }),
+    ];
+  }
+  if (kind === "product" && leaf) {
+    const { resolveVisibleProduct } = await import("@/modules/catalog/service");
+    const product = await resolveVisibleProduct.call({ slug: leaf }, ANONYMOUS);
+    if (!product) return [];
+    return [
+      productJsonLd({
+        name: product.name,
+        url,
+        description: product.seo.description ?? product.subtitle ?? input.description,
+        sku: product.slug,
+        brand: product.brand,
+      }),
+    ];
+  }
+  if (kind === "event" && leaf) {
+    const { resolvePublicEvent } = await import("@/modules/events/service");
+    const event = await resolvePublicEvent.call({ slug: leaf }, ANONYMOUS);
+    if (!event) return [];
+    const first = event.sessions[0];
+    return [
+      eventJsonLd({
+        name: event.name,
+        url,
+        description: event.summary ?? input.description,
+        startDate: first?.startsAt.toISOString(),
+        endDate: first?.endsAt.toISOString(),
+        eventStatus: event.status === "cancelled" ? "EventCancelled" : "EventScheduled",
+        venueName: event.venueName,
+        venueAddress: event.venueAddress,
+        remainingAttendeeCapacity: first?.remaining,
+      }),
+    ];
+  }
+  return [];
 }
 
 /**

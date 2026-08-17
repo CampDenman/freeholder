@@ -15,6 +15,9 @@ Set `adapters.payments` in `freeholder.config.ts` to `manual`, `stripe`,
 `paypal`, `square`, `mollie`, `razorpay`, `paystack`, or `flutterwave`. A fresh
 instance selects `manual`; it can record cash, cheque, bank transfer, or a card
 processed in a separate terminal without any credential or network call.
+In-person collection at a location is `/admin/pos`: cash settles immediately;
+Stripe Terminal and tap-to-pay create a `card_present` PaymentIntent and wait
+on the reader or the existing Stripe webhook.
 Offline settlement and refund services require an authorized invoicing manager
 and step-up authentication where the actor has a step-up policy.
 

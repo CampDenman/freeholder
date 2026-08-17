@@ -5,13 +5,28 @@ thing a business sells. Physical goods, downloads, services, rentals, bundles
 and passes are kinds of one Product; later option, price, inventory, booking and
 order records attach to that row instead of creating parallel catalogs.
 
-C5.09 establishes product lifecycle and the owner workspace. It does not yet
-claim variant matrices, prices, stock, public product pages, cart or checkout;
-those arrive in C5.10-C5.21 and must use these product IDs.
+C5.09 established product lifecycle and the owner workspace. C5.10 adds reusable option dimensions and generated variant matrices. C5.11
+adds attributes, comparison and unlimited ordered media with variant swaps.
+C5.13 adds customer groups and currency-locked price lists. C5.12 adds
+relations and bundle quotes. C5.14 adds volume and tiered quantity breaks on
+the same resolver. C5.15 adds service offerings, cancellation policies,
+intake-form attachment and payment-mode rules on `service` products.
+Calendars, waiver templates and public product pages still arrive in C6 and
+C5.04/C2.21. C5.16 is the ledger at `/admin/inventory`. C5.17 is
+procurement at `/admin/procurement`. C5.18 is shipping quotes at
+`/admin/shipping`. C5.20 carts live at `/admin/carts`. C5.21 checkout and
+C5.22 orders live at `/admin/orders`; payment stays on the invoice.
+Shipments and returns are C5.19 at `/admin/fulfillment` and `/admin/returns`.
+Coupons, gift cards and cart offers are C5.23 at `/admin/promotions`.
 
 ## Admin workspace
 
-Authorized staff use `/admin/products` to:
+Authorized staff use `/admin/products` to create reusable option types and
+values, assign dimensions to a product, preview the generated matrix, apply a
+reconciliation that archives unused combinations instead of deleting them, and
+choose a default variant.
+
+Authorized staff also use `/admin/products` to:
 
 - filter products by lifecycle, kind and visibility;
 - create drafts for all six product kinds;
