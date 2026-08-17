@@ -5,7 +5,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, CardBody, CardHeader, Field, Input } from "@/ui/primitives";
 import {
-  attachCaptureAction,
+  appendChunkAction,
+  assembleCaptureAction,
   confirmCaptureAction,
   discardCaptureAction,
   grantCaptureAction,
@@ -95,8 +96,16 @@ export function RecordStudio({
       ? "video/webm;codecs=vp9,opus"
       : "video/webm";
     const instance = new MediaRecorder(stream.current, { mimeType: mime });
+    let sequence = 0;
     instance.ondataavailable = (event) => {
-      if (event.data.size > 0) chunks.current.push(event.data);
+      if (event.data.size === 0) return;
+      chunks.current.push(event.data);
+      const form = new FormData();
+      form.set("id", session.id);
+      form.set("sequence", String(sequence));
+      form.set("file", new File([event.data], `chunk-${sequence}.webm`, { type: mime }));
+      sequence += 1;
+      void appendChunkAction(form);
     };
     instance.start(2_000);
     recorder.current = instance;
@@ -116,12 +125,10 @@ export function RecordStudio({
     const stop = new FormData();
     stop.set("id", session.id);
     await markStoppedAction(stop);
-    const blob = new Blob(chunks.current, { type: "video/webm" });
-    const file = new File([blob], `${session.source}.webm`, { type: "video/webm" });
-    const attach = new FormData();
-    attach.set("id", session.id);
-    attach.set("file", file);
-    await attachCaptureAction(attach);
+    const assemble = new FormData();
+    assemble.set("id", session.id);
+    assemble.set("filename", `${session.source}.webm`);
+    await assembleCaptureAction(assemble);
   }
 
   return (

@@ -428,6 +428,13 @@
       "when": 1786954444617,
       "tag": "0060_productive_piledriver",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1786955612829,
+      "tag": "0061_wandering_argent",
+      "breakpoints": true
     }
   ]
 }

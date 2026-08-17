@@ -3,14 +3,16 @@
 // Capture and phone ingest sessions (MASTER.md §4.5, C1.28, C1.29).
 
 import { randomBytes } from "node:crypto";
-import { desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import encodeQR from "qr";
 import { defineService, ServiceError, actorString, type ServiceContext } from "@/core/service";
 import { siteOrigin } from "@/core/seo/origin";
+import { storage } from "@/adapters/storage";
 import {
   CAPTURE_SOURCES,
   CAPTURE_STATUSES,
+  mediaCaptureChunks,
   mediaCaptureSessions,
 } from "./schema";
 
@@ -433,6 +435,193 @@ export const listCaptureSessions = defineService({
   },
 });
 
+export const bindCaptureAsset = defineService({
+  name: "media.bindCaptureAsset",
+  summary: "Attach a completed upload to a capture session for review.",
+  kind: "mutation",
+  permission: "public",
+  input: z
+    .object({
+      id: id.optional(),
+      token: token.optional(),
+      assetId: id,
+    })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous" && !input.token) {
+      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    }
+    const [row] = input.token
+      ? await ctx.tx
+          .select()
+          .from(mediaCaptureSessions)
+          .where(eq(mediaCaptureSessions.token, input.token))
+          .limit(1)
+      : await ctx.tx
+          .select()
+          .from(mediaCaptureSessions)
+          .where(eq(mediaCaptureSessions.id, input.id!))
+          .limit(1);
+    if (!row) throw new ServiceError("not_found", "That capture session is not here.");
+    const existing = await load(ctx, row.id);
+    if (["confirmed", "discarded", "expired"].includes(existing.status)) {
+      throw new ServiceError("conflict", "That capture session is closed.");
+    }
+    const [updated] = await ctx.tx
+      .update(mediaCaptureSessions)
+      .set({
+        status: "preview",
+        assetId: input.assetId,
+        uploadCount: existing.uploadCount + 1,
+      })
+      .where(eq(mediaCaptureSessions.id, existing.id))
+      .returning();
+    ctx.setSubject("mediaCaptureSession", existing.id);
+    return publicSession(updated!);
+  },
+});
+
+export const appendCaptureChunk = defineService({
+  name: "media.appendCaptureChunk",
+  summary: "Persist one recording timeslice so a dropped tab can resume.",
+  kind: "mutation",
+  permission: "public",
+  input: z
+    .object({
+      id: id.optional(),
+      token: token.optional(),
+      sequence: z.number().int().min(0).max(100_000),
+      contentType: z.string().min(1).max(255).default("video/webm"),
+      bytes: z.instanceof(Uint8Array),
+    })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous" && !input.token) {
+      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    }
+    const [row] = input.token
+      ? await ctx.tx
+          .select()
+          .from(mediaCaptureSessions)
+          .where(eq(mediaCaptureSessions.token, input.token))
+          .limit(1)
+      : await ctx.tx
+          .select()
+          .from(mediaCaptureSessions)
+          .where(eq(mediaCaptureSessions.id, input.id!))
+          .limit(1);
+    if (!row) throw new ServiceError("not_found", "That capture session is not here.");
+    const existing = await load(ctx, row.id);
+    if (["confirmed", "discarded", "expired"].includes(existing.status)) {
+      throw new ServiceError("conflict", "That capture session is closed.");
+    }
+    const body = input.bytes as Uint8Array<ArrayBuffer>;
+    if (body.byteLength === 0) {
+      throw new ServiceError("validation", "An empty recording chunk cannot be stored.");
+    }
+    const key = `capture/${existing.id}/${String(input.sequence).padStart(6, "0")}`;
+    await storage().put(key, body, input.contentType);
+    await ctx.tx
+      .insert(mediaCaptureChunks)
+      .values({
+        sessionId: existing.id,
+        sequence: input.sequence,
+        storageKey: key,
+        bytes: body.byteLength,
+        contentType: input.contentType,
+      })
+      .onConflictDoUpdate({
+        target: [mediaCaptureChunks.sessionId, mediaCaptureChunks.sequence],
+        set: { storageKey: key, bytes: body.byteLength, contentType: input.contentType },
+      });
+    if (existing.status !== "live") {
+      await ctx.tx
+        .update(mediaCaptureSessions)
+        .set({ status: "live" })
+        .where(eq(mediaCaptureSessions.id, existing.id));
+    }
+    ctx.setSubject("mediaCaptureSession", existing.id);
+    return { sessionId: existing.id, sequence: input.sequence, bytes: body.byteLength };
+  },
+});
+
+export const assembleCapture = defineService({
+  name: "media.assembleCapture",
+  summary: "Concatenate persisted recording chunks into one Asset.",
+  kind: "mutation",
+  permission: "public",
+  input: z
+    .object({
+      id: id.optional(),
+      token: token.optional(),
+      filename: z.string().min(1).max(255).default("capture.webm"),
+    })
+    .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous" && !input.token) {
+      throw new ServiceError("permission", "A phone ingest needs its upload link.");
+    }
+    const [row] = input.token
+      ? await ctx.tx
+          .select()
+          .from(mediaCaptureSessions)
+          .where(eq(mediaCaptureSessions.token, input.token))
+          .limit(1)
+      : await ctx.tx
+          .select()
+          .from(mediaCaptureSessions)
+          .where(eq(mediaCaptureSessions.id, input.id!))
+          .limit(1);
+    if (!row) throw new ServiceError("not_found", "That capture session is not here.");
+    const existing = await load(ctx, row.id);
+    const chunks = await ctx.tx
+      .select()
+      .from(mediaCaptureChunks)
+      .where(eq(mediaCaptureChunks.sessionId, existing.id))
+      .orderBy(asc(mediaCaptureChunks.sequence));
+    if (chunks.length === 0) {
+      throw new ServiceError("validation", "This capture has no recorded chunks yet.");
+    }
+    const parts: Uint8Array<ArrayBuffer>[] = [];
+    let total = 0;
+    for (const chunk of chunks) {
+      const body = await storage().get(chunk.storageKey);
+      if (!body) throw new ServiceError("conflict", "A recorded chunk disappeared from storage.");
+      parts.push(body);
+      total += body.byteLength;
+    }
+    const assembled = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      assembled.set(part, offset);
+      offset += part.byteLength;
+    }
+    const { uploadAsset } = await import("./service");
+    const asset = await ctx.callAsSystem(uploadAsset, {
+      filename: input.filename,
+      contentType: chunks[0]!.contentType,
+      bytes: assembled,
+      source: "capture",
+      provenance: {
+        capturedAt: new Date().toISOString(),
+        note: `capture:${existing.source}:${existing.id}`,
+      },
+    });
+    for (const chunk of chunks) {
+      await storage().delete(chunk.storageKey);
+    }
+    await ctx.tx.delete(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId, existing.id));
+    const [updated] = await ctx.tx
+      .update(mediaCaptureSessions)
+      .set({ status: "preview", assetId: asset.id, uploadCount: existing.uploadCount + 1 })
+      .where(eq(mediaCaptureSessions.id, existing.id))
+      .returning();
+    ctx.setSubject("mediaCaptureSession", existing.id);
+    ctx.queueEvent("media.captureAttached", { sessionId: existing.id, assetId: asset.id });
+    return { session: publicSession(updated!), asset };
+  },
+});
+
 void source;
 
 export default [
@@ -443,6 +632,9 @@ export default [
   startCapture,
   stopCapture,
   reviewCapture,
+  bindCaptureAsset,
+  appendCaptureChunk,
+  assembleCapture,
   attachCaptureUpload,
   confirmCapture,
   discardCapture,

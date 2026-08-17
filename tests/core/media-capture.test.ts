@@ -112,6 +112,48 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
     });
   });
 
+  it("persists recording chunks and assembles them after an interruption", async () => {
+    const session = await createCaptureSession.call({ source: "screen" }, OWNER);
+    await grantCapturePermission.call({ id: session.id }, OWNER);
+    const original = await png();
+    const split = Math.max(1, Math.floor(original.byteLength / 2));
+    const { appendCaptureChunk, assembleCapture } = await import("@/core/media/capture");
+    await appendCaptureChunk.call(
+      { id: session.id, sequence: 0, contentType: "image/png", bytes: original.subarray(0, split) },
+      OWNER,
+    );
+    await appendCaptureChunk.call(
+      { id: session.id, sequence: 1, contentType: "image/png", bytes: original.subarray(split) },
+      OWNER,
+    );
+    const assembled = await assembleCapture.call(
+      { id: session.id, filename: "assembled.png" },
+      OWNER,
+    );
+    expect(assembled.session.status).toBe("preview");
+    expect(assembled.asset.bytes).toBe(original.byteLength);
+  });
+
+  it("binds a resumable upload started with a capture token", async () => {
+    const link = await createUploadLink.call({ source: "upload_link" }, OWNER);
+    const attached = await attachCaptureUpload.call(
+      {
+        token: link.token,
+        filename: "phone.png",
+        contentType: "image/png",
+        bytes: await png(),
+      },
+      ANONYMOUS,
+    );
+    const { bindCaptureAsset } = await import("@/core/media/capture");
+    const bound = await bindCaptureAsset.call(
+      { token: link.token, assetId: attached.asset.id },
+      ANONYMOUS,
+    );
+    expect(bound.assetId).toBe(attached.asset.id);
+    expect(bound.status).toBe("preview");
+  });
+
   it("does not let an anonymous caller attach by id alone", async () => {
     const session = await createCaptureSession.call({ source: "camera" }, OWNER);
     const blocked = await failure(

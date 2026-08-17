@@ -4,9 +4,10 @@
 
 import { notFound } from "next/navigation";
 import { getCaptureSession } from "@/core/media/capture";
-import { Button, Field, Input } from "@/ui/primitives";
+import { Button } from "@/ui/primitives";
 import { getT } from "../../i18n";
-import { attachCaptureAction, confirmCaptureAction } from "../../(admin)/capture-actions";
+import { confirmCaptureAction } from "../../(admin)/capture-actions";
+import { UploadForm } from "../../(admin)/admin/media/UploadForm";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +33,19 @@ export default async function CaptureLinkPage({
         <p className="text-sm text-success">{t("media.capture.confirmed")}</p>
       ) : (
         <>
-          <form action={attachCaptureAction} className="grid gap-4">
-            <input type="hidden" name="token" value={token} />
-            <Field label={t("media.capture.file")} htmlFor="file">
-              <Input id="file" name="file" type="file" accept="image/*,video/*,audio/*" required />
-            </Field>
-            <Button type="submit">{t("media.capture.upload")}</Button>
-          </form>
+          <UploadForm
+            captureToken={token}
+            labels={{
+              file: t("media.capture.file"),
+              fileHint: t("media.fileHint"),
+              submit: t("media.capture.upload"),
+              pending: t("media.uploading"),
+              failed: t("media.uploadFailed"),
+              progress: t("media.uploadProgress"),
+              resumable: t("media.uploadResuming"),
+              cancel: t("common.cancel"),
+            }}
+          />
           {session.assetId ? (
             <form action={confirmCaptureAction}>
               <input type="hidden" name="token" value={token} />

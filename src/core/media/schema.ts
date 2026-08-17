@@ -325,3 +325,24 @@ export const mediaCaptureSessions = pgTable(
     ),
   ],
 );
+
+export const mediaCaptureChunks = pgTable(
+  "media_capture_chunks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => mediaCaptureSessions.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    storageKey: text("storage_key").notNull(),
+    bytes: bigint("byte_size", { mode: "number" }).notNull(),
+    contentType: text("content_type").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("media_capture_chunks_session_seq_idx").on(t.sessionId, t.sequence),
+    index("media_capture_chunks_session_idx").on(t.sessionId),
+    check("media_capture_chunks_sequence_nonneg", sql`${t.sequence} >= 0`),
+    check("media_capture_chunks_bytes_positive", sql`${t.bytes} > 0`),
+  ],
+);

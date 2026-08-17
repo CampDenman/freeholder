@@ -9,7 +9,10 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
+  appendCaptureChunk,
+  assembleCapture,
   attachCaptureUpload,
+  bindCaptureAsset,
   confirmCapture,
   createCaptureSession,
   createUploadLink,
@@ -63,6 +66,46 @@ export async function markLiveAction(form: FormData): Promise<void> {
 
 export async function markStoppedAction(form: FormData): Promise<void> {
   await stopCapture.call({ id: field(form, "id") }, await actor());
+}
+
+export async function appendChunkAction(form: FormData): Promise<void> {
+  const file = form.get("file");
+  if (!(file instanceof File) || file.size === 0) return;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  await appendCaptureChunk.call(
+    {
+      id: field(form, "id") || undefined,
+      token: field(form, "token") || undefined,
+      sequence: Number(field(form, "sequence") || 0),
+      contentType: file.type || "video/webm",
+      bytes,
+    },
+    (await actor()) ?? { kind: "anonymous" },
+  );
+}
+
+export async function assembleCaptureAction(form: FormData): Promise<void> {
+  await assembleCapture.call(
+    {
+      id: field(form, "id") || undefined,
+      token: field(form, "token") || undefined,
+      filename: field(form, "filename") || "capture.webm",
+    },
+    (await actor()) ?? { kind: "anonymous" },
+  );
+  revalidatePath("/admin/media/record");
+}
+
+export async function bindCaptureAction(form: FormData): Promise<void> {
+  await bindCaptureAsset.call(
+    {
+      id: field(form, "id") || undefined,
+      token: field(form, "token") || undefined,
+      assetId: field(form, "assetId"),
+    },
+    (await actor()) ?? { kind: "anonymous" },
+  );
+  revalidatePath("/admin/media/record");
 }
 
 export async function attachCaptureAction(form: FormData): Promise<void> {
