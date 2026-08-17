@@ -2922,7 +2922,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C5 exit is checked and sitting in PR #105. C1.28–C1.29 capture/ingest is in progress on `feat/c1.28-media-capture`. Remaining C2–C4 stay open. |
+| Current focus | C5 exit sits in PR #105. C1.28–C1.29 capture/ingest and C2.01/C2.02 page lifecycle sit on `feat/c1.28-media-capture`. C2.01 is not checked: working drafts exist for pages, not every public entity. C2.02/C2.03 stay open until presence and the remaining editor workflow land. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in

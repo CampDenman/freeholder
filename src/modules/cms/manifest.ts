@@ -25,6 +25,7 @@ export default defineModule({
   requires: ["core"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
   onboarding: () => import("./onboarding"),
   events: {
     emits: [
@@ -33,6 +34,10 @@ export default defineModule({
       "cms.pageUpdated",
       "cms.pagePublished",
       "cms.pageUnpublished",
+      "cms.pageScheduled",
+      "cms.pageApprovalChanged",
+      "cms.previewLinkCreated",
+      "cms.revisionNamed",
       "cms.sectionUpdated",
     ],
     listens: {

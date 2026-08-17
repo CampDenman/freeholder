@@ -103,5 +103,7 @@ export function editorLabels(t: Translate): EditorLabels {
     unsaved: t("cms.editor.unsaved"),
     saveFailed: t("cms.editor.saveFailed"),
     retry: t("cms.editor.retry"),
+    conflict: t("cms.editor.conflict"),
+    reload: t("cms.editor.reload"),
   };
 }

@@ -22,9 +22,21 @@ import {
   updatePage,
   updateSection,
 } from "@/modules/cms/service";
+import {
+  createPreviewLink,
+  decideApproval,
+  nameRevision,
+  requestApproval,
+  revokePreviewLink,
+  schedulePage,
+  snapshotRevision,
+} from "@/modules/cms/lifecycle";
 
 export interface SaveResult {
   error?: string;
+  version?: number;
+  conflict?: boolean;
+  path?: string;
 }
 
 /**
@@ -51,7 +63,9 @@ async function currentActor() {
  * the block that caused it.
  */
 function present(error: unknown): SaveResult {
-  if (error instanceof ServiceError) return { error: error.message };
+  if (error instanceof ServiceError) {
+    return { error: error.message, conflict: error.code === "conflict" };
+  }
   console.error("cms action failed", error);
   return { error: "Something went wrong. Try again." };
 }
@@ -59,13 +73,17 @@ function present(error: unknown): SaveResult {
 export async function savePageBlocksAction(
   id: string,
   blocks: unknown,
+  expectedVersion?: number,
 ): Promise<SaveResult> {
   try {
-    await updatePage.call({ id, blocks }, await currentActor());
+    const page = await updatePage.call(
+      { id, blocks, expectedVersion },
+      await currentActor(),
+    );
     // The public page renders from the database on every request, so the only
     // thing to invalidate is Next's own route cache.
     revalidatePath("/", "layout");
-    return {};
+    return { version: page.version };
   } catch (error) {
     return present(error);
   }
@@ -138,6 +156,75 @@ export async function setPagePublishedAction(form: FormData): Promise<void> {
 export async function restoreRevisionAction(form: FormData): Promise<void> {
   const revisionId = text(form, "revisionId");
   await restoreRevision.call({ revisionId }, await currentActor());
+  revalidatePath("/", "layout");
+}
+
+export async function schedulePageAction(form: FormData): Promise<void> {
+  const id = text(form, "id");
+  const publishAt = text(form, "publishAt");
+  const unpublishAt = text(form, "unpublishAt");
+  await schedulePage.call(
+    {
+      id,
+      publishAt: publishAt === "" ? null : publishAt,
+      unpublishAt: unpublishAt === "" ? null : unpublishAt,
+    },
+    await currentActor(),
+  );
+  revalidatePath("/", "layout");
+}
+
+export async function requestApprovalAction(form: FormData): Promise<void> {
+  await requestApproval.call(
+    { id: text(form, "id"), note: text(form, "note") || undefined },
+    await currentActor(),
+  );
+  revalidatePath("/", "layout");
+}
+
+export async function decideApprovalAction(form: FormData): Promise<void> {
+  await decideApproval.call(
+    {
+      id: text(form, "id"),
+      approved: text(form, "approved") === "true",
+      note: text(form, "note") || undefined,
+    },
+    await currentActor(),
+  );
+  revalidatePath("/", "layout");
+}
+
+export async function createPreviewLinkAction(form: FormData): Promise<SaveResult> {
+  try {
+    const link = await createPreviewLink.call(
+      { pageId: text(form, "id") },
+      await currentActor(),
+    );
+    revalidatePath("/", "layout");
+    return { path: link.path };
+  } catch (error) {
+    return present(error);
+  }
+}
+
+export async function revokePreviewLinkAction(form: FormData): Promise<void> {
+  await revokePreviewLink.call({ id: text(form, "linkId") }, await currentActor());
+  revalidatePath("/", "layout");
+}
+
+export async function snapshotRevisionAction(form: FormData): Promise<void> {
+  await snapshotRevision.call(
+    { pageId: text(form, "id"), name: text(form, "name") },
+    await currentActor(),
+  );
+  revalidatePath("/", "layout");
+}
+
+export async function nameRevisionAction(form: FormData): Promise<void> {
+  await nameRevision.call(
+    { revisionId: text(form, "revisionId"), name: text(form, "name") },
+    await currentActor(),
+  );
   revalidatePath("/", "layout");
 }
 
