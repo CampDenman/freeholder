@@ -43,95 +43,67 @@ const giftCode = z
   .toUpperCase()
   .regex(/^[A-Z0-9][A-Z0-9-]{7,31}$/, "Gift-card codes are at least eight characters.");
 
-async function pointerUndo(
-  table: typeof giftCards | typeof couponRedemptions | typeof giftCardRedemptions,
-  contactColumn: typeof giftCards.contactId,
+async function emptySafeUndo(
   tx: Tx,
-  beforeState: unknown,
-  afterState: unknown,
-  duplicateId: string,
-  label: string,
+  countRows: () => Promise<{ id: string }[]>,
+  blocker: string,
 ) {
-  const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid() }));
-  const before = schema.parse(beforeState);
-  const after = schema.parse(afterState);
-  const current = after.length
-    ? await tx
-        .select({ id: table.id, contactId: contactColumn })
-        .from(table)
-        .where(inArray(table.id, after.map((row) => row.id)))
-    : [];
-  const byId = new Map(current.map((row) => [row.id, row.contactId]));
-  if (current.length !== after.length || after.some((row) => byId.get(row.id) !== row.contactId)) {
-    throw new ServiceError(
-      "conflict",
-      `${label} changed after this merge. Leave the merge in place or restore that record first.`,
-    );
-  }
-  const moved = before.filter((row) => row.contactId === duplicateId).map((row) => row.id);
-  if (moved.length) {
-    await tx.update(table).set({ contactId: duplicateId }).where(inArray(table.id, moved));
-  }
+  const rows = await countRows();
+  return {
+    state: rows,
+    undoable: rows.length === 0,
+    blocker: rows.length === 0 ? undefined : blocker,
+  };
 }
 
 registerContactReference({
   table: "gift_cards",
   repoint: (tx, from, to) => tx.update(giftCards).set({ contactId: to }).where(eq(giftCards.contactId, from)),
-  captureForUndo: async (tx, duplicateId, survivingId) => ({
-    state: await tx
-      .select({ id: giftCards.id, contactId: giftCards.contactId })
-      .from(giftCards)
-      .where(inArray(giftCards.contactId, [duplicateId, survivingId])),
-    undoable: true,
-  }),
-  restoreAfterUndo: (tx, before, after, duplicateId) =>
-    pointerUndo(giftCards, giftCards.contactId, tx, before, after, duplicateId, "A gift card"),
+  captureForUndo: (tx, duplicateId, survivingId) =>
+    emptySafeUndo(
+      tx,
+      () =>
+        tx
+          .select({ id: giftCards.id })
+          .from(giftCards)
+          .where(inArray(giftCards.contactId, [duplicateId, survivingId])),
+      "Gift cards were moved and cannot be split back apart safely.",
+    ),
+  restoreAfterUndo: async () => undefined,
 });
 
 registerContactReference({
   table: "coupon_redemptions",
   repoint: (tx, from, to) =>
     tx.update(couponRedemptions).set({ contactId: to }).where(eq(couponRedemptions.contactId, from)),
-  captureForUndo: async (tx, duplicateId, survivingId) => ({
-    state: await tx
-      .select({ id: couponRedemptions.id, contactId: couponRedemptions.contactId })
-      .from(couponRedemptions)
-      .where(inArray(couponRedemptions.contactId, [duplicateId, survivingId])),
-    undoable: true,
-  }),
-  restoreAfterUndo: (tx, before, after, duplicateId) =>
-    pointerUndo(
-      couponRedemptions,
-      couponRedemptions.contactId,
+  captureForUndo: (tx, duplicateId, survivingId) =>
+    emptySafeUndo(
       tx,
-      before,
-      after,
-      duplicateId,
-      "A coupon redemption",
+      () =>
+        tx
+          .select({ id: couponRedemptions.id })
+          .from(couponRedemptions)
+          .where(inArray(couponRedemptions.contactId, [duplicateId, survivingId])),
+      "Coupon redemptions were moved and cannot be split back apart safely.",
     ),
+  restoreAfterUndo: async () => undefined,
 });
 
 registerContactReference({
   table: "gift_card_redemptions",
   repoint: (tx, from, to) =>
     tx.update(giftCardRedemptions).set({ contactId: to }).where(eq(giftCardRedemptions.contactId, from)),
-  captureForUndo: async (tx, duplicateId, survivingId) => ({
-    state: await tx
-      .select({ id: giftCardRedemptions.id, contactId: giftCardRedemptions.contactId })
-      .from(giftCardRedemptions)
-      .where(inArray(giftCardRedemptions.contactId, [duplicateId, survivingId])),
-    undoable: true,
-  }),
-  restoreAfterUndo: (tx, before, after, duplicateId) =>
-    pointerUndo(
-      giftCardRedemptions,
-      giftCardRedemptions.contactId,
+  captureForUndo: (tx, duplicateId, survivingId) =>
+    emptySafeUndo(
       tx,
-      before,
-      after,
-      duplicateId,
-      "A gift-card redemption",
+      () =>
+        tx
+          .select({ id: giftCardRedemptions.id })
+          .from(giftCardRedemptions)
+          .where(inArray(giftCardRedemptions.contactId, [duplicateId, survivingId])),
+      "Gift-card redemptions were moved and cannot be split back apart safely.",
     ),
+  restoreAfterUndo: async () => undefined,
 });
 
 registerContactPrivacySource({
