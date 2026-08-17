@@ -48,8 +48,15 @@ import {
   parseAnalyticsConsentState,
 } from "@/modules/analytics/visitor";
 
-/** `/sitemap-fr-CA.xml` — the address crawlers expect for a per-locale map. */
-const LOCALE_SITEMAP = /^\/sitemap-([A-Za-z0-9-]+)\.xml$/;
+/** `/sitemap-fr-CA.xml` or `/sitemap-en-2.xml` when a locale map is split. */
+const LOCALE_SITEMAP =
+  /^\/sitemap-([A-Za-z]{2}(?:-[A-Za-z]{2,4})?)(?:-([1-9]\d*))?\.xml$/;
+
+/** IndexNow key file: `/{32-hex}.txt`. */
+const INDEXNOW_KEY_FILE = /^\/[a-f0-9]{32}\.txt$/i;
+
+/** `/feeds/products.xml` — Atom feeds over the public entity registry. */
+const ENTITY_FEED = /^\/feeds\/([a-z]+)\.xml$/;
 
 /**
  * A leading path segment shaped like a language tag: `/fr`, `/fr-CA`.
@@ -70,7 +77,7 @@ const LOCALE_PREFIX = /^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(\/.*)?$/;
  * cookie whose events are filtered out later — the cheapest way to be sure a
  * number is honest is to never record it.
  */
-const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media)(\/|$)|\.(xml|txt|ico|png|jpg|svg|webp|avif)$/;
+const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media|og|feeds)(\/|$)|\.(xml|txt|ico|png|jpg|svg|webp|avif)$/;
 
 /** Owner/internal routes may look like locale-prefixed public paths, but are not. */
 const NEVER_LOCALIZED = /^\/(admin|login|setup|preview|api|media)(\/|$)/;
@@ -103,6 +110,20 @@ export function proxy(request: NextRequest): NextResponse {
   if (sitemap) {
     const url = request.nextUrl.clone();
     url.pathname = `/sitemaps/${sitemap[1]}`;
+    if (sitemap[2]) url.searchParams.set("chunk", sitemap[2]);
+    return finalize(NextResponse.rewrite(url, { request: { headers } }));
+  }
+
+  if (INDEXNOW_KEY_FILE.test(path)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/indexnow-key";
+    return finalize(NextResponse.rewrite(url, { request: { headers } }));
+  }
+
+  const feed = ENTITY_FEED.exec(path);
+  if (feed) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/feeds/${feed[1]}`;
     return finalize(NextResponse.rewrite(url, { request: { headers } }));
   }
 

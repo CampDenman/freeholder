@@ -111,8 +111,21 @@ export default async function AdminLayout({
               invitations: t("admin.nav.invitations"),
               builder: t("admin.nav.builder"),
               demos: t("admin.nav.demos"),
+              invoices: t("invoices.title"),
               payments: t("payments.title"),
+              pos: t("pos.title"),
               products: t("catalog.title"),
+              prices: t("catalog.prices.listsTitle"),
+              inventory: t("catalog.inventory.title"),
+              procurement: t("catalog.procure.title"),
+              shipping: t("catalog.shipping.title"),
+              carts: t("catalog.carts.title"),
+              orders: t("catalog.orders.title"),
+              fulfillment: t("catalog.fulfill.title"),
+              returns: t("catalog.returns.title"),
+              promotions: t("catalog.promo.title"),
+              events: t("events.title"),
+              newsletters: t("newsletters.title"),
             }}
           />
         </div>

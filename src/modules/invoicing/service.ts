@@ -5,8 +5,15 @@
 import invoiceServices from "./invoice-service";
 import advancedMoneyServices from "./advanced-money-service";
 import paymentProviderServices from "./payment-provider-service";
+import posServices from "./pos-service";
 import taxServices from "./tax-service";
 
 export { quoteTax } from "./tax-service";
 
-export default [...taxServices, ...invoiceServices, ...advancedMoneyServices, ...paymentProviderServices];
+export default [
+  ...taxServices,
+  ...invoiceServices,
+  ...advancedMoneyServices,
+  ...paymentProviderServices,
+  ...posServices,
+];

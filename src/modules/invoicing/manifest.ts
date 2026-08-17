@@ -50,6 +50,7 @@ export default defineModule({
       "creditNote.created",
       "creditNote.issued",
       "creditNote.voided",
+      "payment.inPerson",
     ],
   },
 });

@@ -1,22 +1,176 @@
 # Freeholder handoff - C5 commerce
 
-Last updated: 2026-08-14 session closeout (America/Vancouver)
+Last updated: 2026-08-17 C5.04 / C2.21 / events / newsletters (America/Vancouver)
 
 ## Resume point
 
-Resume `MASTER.md` section 43 at **C5.04 and C5.10**:
+Resume `MASTER.md` section 43 after **C5.04**, **C2.21**, **C6.11** and
+**C9.04**. C5 commerce through C5.24 is implemented on this workspace. The
+next open commerce-adjacent items are later C6 booking work (C6.07+) and
+remaining C9 automations. C1.28–C4 stay deferred by the 2026-08-14 commerce
+deviation.
 
-> Finish jurisdiction-correct tax templates beyond the safe standard-rate
-> starters, then build option dimensions, generated variant matrices and safe
-> reconciliation on the completed product lifecycle and money ledger.
+## C5.04 tax templates delivered
+
+- 94 source-attributed starters: 13 CA, 27 EU, UK, 51 US, AU, NZ
+- Install stays in monitoring; collection needs an explicit limitation ack
+- Owner-defined zones (e.g. JP) activate without that interlock
+- `tests/core/tax-templates.test.ts`, changeset `commerce-tax-templates.md`
+
+## C2.21 / C6.11 / C9.04 delivered
+
+- Activating a public product writes `/products` + `/products/{slug}` CMS pages
+- Events: venue, sessions, seat capacity, tickets, waitlists, check-in, Event
+  JSON-LD, ICS at `/ics/events/{slug}`, `/admin/events`
+- Newsletters: double-opt-in, RFC 8058 `/unsubscribe`, public issue archive,
+  `/admin/newsletters`
+- Product, event and newsletter URLs share sitemap / OG / IndexNow / Atom feeds
+- Migration `0059_concerned_sumo.sql`
+- Tests: `catalog-public-pages`, `events`, `newsletters`, `seo-public-entities`
+- Changeset `events-newsletters-seo.md`
+
+## C5.24 in-person payments delivered
+
+- Cash at a location settles immediately onto the invoice
+- Stripe Terminal / tap-to-pay creates a `card_present` PaymentIntent; the
+  reader or existing Stripe webhook finishes settlement
+- Receipts reuse `invoicing.receipt`
+- `/admin/pos` is the owner workspace
+- `tests/core/pos-adapters.test.ts`, `tests/core/invoicing-pos.test.ts`,
+  changeset `commerce-pos.md`
+
+## C5.23 promotions delivered
+
+- Coupons (percent / fixed / free shipping) become invoice line discounts
+- Gift cards decrement remaining, credit customer balance, then pay the
+  invoice through `applyCustomerBalance`
+- Bundles stay C5.12
+- Bumps and post-add offers are `offer_rules` + `listCartOffers`
+- Abandoned-cart recovery sends one coupon and a contact notice
+- `/admin/promotions`
+- `0058_silly_phalanx.sql`, `tests/core/promo-quote.test.ts`,
+  `tests/core/catalog-promotions.test.ts`, changeset `commerce-promotions.md`
+
+## C5.19 fulfillment delivered
+
+- Split physical shipments against one paid order
+- Sale movement writes when a carton ships, not when the invoice is paid
+- Digital lines grant a download token on pay and never enter a carton
+- RMA: request → approve/reject → receive (restock ledger) → refund
+  (credit note + invoice refund)
+- Contact notices on ship, deliver, decide and refund
+- `/admin/fulfillment` queue + exceptions, `/admin/returns`
+- Live carrier labels still wait on an adapter
+- `0057_rare_gladiator.sql`, `tests/core/catalog-fulfillment.test.ts`,
+  changeset `commerce-fulfillment.md`
+
+## C5.20–C5.22 carts, checkout and orders delivered
+
+- Guest cart is a UUID token; identifying a contact merges it into that
+  contact's open cart for the same currency
+- One wishlist per contact; merge moves items then deletes the duplicate
+- `getCart` refreshes `resolvePrice` and availability; prices are never stored
+  as truth
+- Cart stock holds use `reserveStock` (`holderType=cart`, 30 minutes);
+  `catalog.abandonStaleCarts` runs hourly
+- Checkout requires consent, attaches the guest cart, quotes shipping when a
+  line needs it, and creates an order + issued invoice in one transaction
+- `payOrder` marks the order paid after the invoice settles; stock leaves on
+  shipment. Cancel voids the unpaid invoice
+- `/admin/carts`, `/admin/orders`, contact order history
+- `0056_flippant_snowbird.sql`, `tests/core/catalog-carts.test.ts`,
+  `tests/core/catalog-orders.test.ts`, changeset `commerce-carts-orders.md`
+- Coupons stay C5.23. Public storefront checkout waits on product landing pages.
+
+## C5.18 shipping rates delivered
+
+Deterministic quotes, no carrier adapter yet:
+
+- Zones match postal > region > country > catch-all
+- Methods: flat, weight, price, item, dimensional, free-over-threshold,
+  pickup, local delivery
+- Boxes pick the smallest volume that fits
+- `/admin/shipping` workspace
+- `0055_puzzling_toad.sql`, `tests/core/shipping-quote.test.ts`,
+  changeset `commerce-shipping-rates.md`
+
+## C5.17 procurement delivered
+
+- Reorder queue, safety/reorder levels, backorder policies
+- Suppliers, POs, place/receive/cancel
+- Incoming counter + receipt movements + back-in-stock subscriptions
+- `/admin/procurement`, `0054_ancient_steel_serpent.sql`,
+  `tests/core/catalog-procurement.test.ts`
+
+## C5.16 inventory ledger delivered
+
+Append-only stock on the catalog, not an edited on-hand number:
+
+- `inventory_items`, `stock_movements`, `stock_reservations` in
+  `0053_high_richard_fisk.sql`
+- Untracked variants (no row) are always available
+- On-hand is `sum(delta)`; reserved is active unexpired holds
+- Receipt, count, adjustment, damage, transfer, sale, return
+- Transfers write two movements with one reference in one transaction
+- Reservations expire via `catalog.expireReservations` every five minutes
+- Translated `/admin/inventory` balances, enable, ledger, count, adjust,
+  damage and transfer
+- Tests in `tests/core/catalog-inventory.test.ts`
+- Changeset `commerce-inventory-ledger.md`
+
+C5.17 still owns reorder queues, incoming, backorders, suppliers and POs.
+Safety/reorder/incoming columns exist on the item so that work does not
+rewrite the ledger.
+
+## C5.15 service offerings delivered
+
+Catalog configuration on `service` products, not a booking engine:
+
+- `cancellation_policies`, `service_offerings`, `price_rules` in
+  `0052_mysterious_talon.sql`
+- Duration, buffers, location type, capacity, assignment, travel time
+- Fixed-minor or PPM deposits; `catalog.quoteServicePayment` uses
+  `catalog.resolvePrice`
+- Reusable cancellation policies; optional intake form via `forms.byId`
+- Payment modes: full, deposit/balance, plan, hourly, retainer
+- Calendar IDs and waiver templates are reserved and refused until C6
+- Translated offering card on `/admin/products/[id]`
+- Tests in `tests/core/catalog-offerings.test.ts`; Chromium journey saves
+  an offering on the portrait-session product
+- Changeset `commerce-service-offerings.md`
+
+## SEO surface delivered (owner request, not a C2.21 check)
+
+BigDataSEO.com / MASTER.md §5 on the existing public CMS surface:
+
+- Branded OG images at `/og/{slug}` with per-page `seo.ogImage` override
+- IndexNow key file + `seo.submitIndexNow` job on publish/unpublish/rename
+  (localhost is never submitted)
+- robots.txt also blocks `/checkout`, `/cart` and filter query strings
+- Faceted query strings are `noindex, follow` with a clean canonical
+- Locale sitemaps split at 50,000 URLs and emit browse-weighted `<priority>`
+- `/llms.txt` lists locations, catalog offerings, then pages by priority
+- Atom feeds at `/feeds/{products,locations,events,newsletters}.xml` from the
+  same public-entity registry as the sitemap
+- `Product`/`Offer`/`Service`/`Article` JSON-LD builders; service pages emit
+  Service JSON-LD. Public `/shop/{slug}` pages were **not** minted — that
+  would create RIBA orphans until C2.01 draft isolation and a `/shop/` index
+  exist.
+
+C2.21 stays open: event/newsletter modules and public product landing pages
+are still missing, so the feeds for those kinds are valid and empty.
+
+Resume `MASTER.md` section 43 at **C5.19** (fulfillment) or **C5.20** (carts)
+if shipments should not be invented without orders.
 
 C5.01, C5.02, C5.03 and C5.05-C5.09 are implemented and landed on `main`.
-C5.04 remains open because the source-attributed catalog deliberately ships
-standard/base starters with activation interlocks, not a false claim of complete
-US address-level local tax or every reduced/exempt category. C5.10 and the rest
-of commerce remain open. Products, provider adapters and advanced money are
-real, but products do not yet have option matrices or pricing and public cart
-checkout does not exist until C5.21.
+Invoice and tax operator workspaces now exist at `/admin/invoices` and
+`/admin/invoices/tax`. C5.04 remains open because the source-attributed catalog
+deliberately ships standard/base starters with activation interlocks, not a
+false claim of complete US address-level local tax or every reduced/exempt
+category. C5.10 variant matrices are implemented. The rest of commerce remains open. Products, provider
+adapters and advanced money are real, but products do not yet have option
+matrices or pricing and public cart checkout does not exist until C5.21.
 
 Commerce is now the active functional workstream by owner decision. C1.28–C4
 remain open and unchanged; the priority deviation is recorded beside C5 in
@@ -398,10 +552,10 @@ cryptographic commit signatures. Use `git commit -s` for every commit.
 
 The admin requirement is explicit in `MASTER.md`, not an informal intention.
 The completed surfaces are the translated `/admin/products` product lifecycle
-workspace and `/admin/payments` payment, refund, recovery, dispute, saved-method
-and payout-attention workspace. Upcoming milestones remain incomplete until the
-same service-layer operations also have translated, permission-scoped admin
-workspaces for:
+workspace, `/admin/invoices` invoice and tax studio, and `/admin/payments`
+payment, refund, recovery, dispute, saved-method and payout-attention
+workspace. Upcoming milestones remain incomplete until the same service-layer
+operations also have translated, permission-scoped admin workspaces for:
 
 - option matrices and pricing inside the catalog;
 - customer orders and order-state operations;

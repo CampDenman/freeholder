@@ -6,7 +6,11 @@
 // Reached as `/sitemap-en.xml` — the address the index and robots.txt publish,
 // and the one crawlers expect. A dynamic *part* of a segment is not a route
 // Next will match, so the pretty name is rewritten onto this one in `proxy.ts`.
-import { collectSitemapEntries, renderSitemap } from "@/core/seo/sitemap";
+import {
+  chunkSitemapEntries,
+  collectSitemapEntries,
+  renderSitemap,
+} from "@/core/seo/sitemap";
 import { originFor } from "@/core/seo/origin";
 import { getBusiness } from "@/core/settings/service";
 import { ready } from "@/core/runtime";
@@ -33,7 +37,17 @@ export async function GET(
   }
 
   const entries = await collectSitemapEntries(locale);
-  return new Response(renderSitemap(originFor(request), entries), {
+  const chunkParam = new URL(request.url).searchParams.get("chunk");
+  const chunks = chunkSitemapEntries(entries);
+  const selected = chunkParam
+    ? chunks[Number(chunkParam) - 1]
+    : chunks.length === 1
+      ? chunks[0]
+      : undefined;
+  if (!selected) {
+    return new Response("Not found", { status: 404 });
+  }
+  return new Response(renderSitemap(originFor(request), selected), {
     headers: {
       "content-type": "application/xml; charset=utf-8",
       "cache-control": "public, max-age=300",

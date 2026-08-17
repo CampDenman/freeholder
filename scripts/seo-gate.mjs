@@ -17,7 +17,17 @@
 import { JSDOM } from "jsdom";
 
 /** Surfaces that are deliberately not for crawlers (robots.txt agrees). */
-const PRIVATE = [/^\/admin/, /^\/login/, /^\/preview/, /^\/portal/, /^\/api\//];
+const PRIVATE = [
+  /^\/admin/,
+  /^\/login/,
+  /^\/preview/,
+  /^\/portal/,
+  /^\/api\//,
+  /^\/checkout/,
+  /^\/cart/,
+  /^\/og(\/|$)/,
+  /^\/feeds\//,
+];
 
 /** Things a link may point at that are not pages to crawl. */
 const NOT_A_PAGE = [/^\/media\//, /^\/_next\//, /\.(xml|txt|json|jpg|png|webp|avif|svg|ico)$/];
@@ -39,6 +49,10 @@ const REQUIRED_PROPERTIES = {
   BreadcrumbList: ["itemListElement"],
   FAQPage: ["mainEntity"],
   Organization: ["name", "url"],
+  Product: ["name", "offers"],
+  Offer: ["price", "priceCurrency"],
+  Service: ["name", "url"],
+  Article: ["headline"],
 };
 
 /** schema.org business types an owner may pick in setup (§13). Open-ended. */
@@ -80,6 +94,15 @@ export function auditPage({ url, html, status, locales = 1 }) {
     at("has no canonical link");
   } else if (!/^https?:\/\//.test(canonical)) {
     at(`has a relative canonical (${canonical}); §5 requires an absolute URL`);
+  }
+
+  // §5: "Full OG + Twitter card set; auto-generated OG images".
+  const ogImage = document
+    .querySelector('meta[property="og:image"]')
+    ?.getAttribute("content");
+  if (!ogImage) at("has no og:image");
+  else if (!/^https?:\/\//.test(ogImage)) {
+    at(`has a relative og:image (${ogImage}); social crawlers need an absolute URL`);
   }
 
   // The document's declared language against the one its URL claims. A French

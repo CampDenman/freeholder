@@ -34,6 +34,13 @@ import { BUSINESS_TYPES } from "@/core/settings/defaults";
 import { THEME_PREFERENCES } from "@/core/design/theme";
 import { CONTACT_STAGES } from "../../app/(admin)/admin/contacts/contactLabels";
 import {
+  CART_STATUSES,
+  COUPON_KINDS,
+  FULFILLMENT_STATUSES,
+  GIFT_CARD_STATUSES,
+  OFFER_RULE_KINDS,
+  ORDER_STATUSES,
+  RETURN_STATUSES,
   PRODUCT_KINDS,
   PRODUCT_STATUSES,
   PRODUCT_VISIBILITIES,
@@ -217,6 +224,13 @@ describe("the families built from a template key", () => {
     ["catalog.kind", PRODUCT_KINDS],
     ["catalog.status", PRODUCT_STATUSES],
     ["catalog.visibility", PRODUCT_VISIBILITIES],
+    ["catalog.carts.status", CART_STATUSES],
+    ["catalog.orders.status", ORDER_STATUSES],
+    ["catalog.fulfill.status", FULFILLMENT_STATUSES],
+    ["catalog.returns.status", RETURN_STATUSES],
+    ["catalog.promo.couponKind", COUPON_KINDS],
+    ["catalog.promo.giftStatus", GIFT_CARD_STATUSES],
+    ["catalog.promo.offerKind", OFFER_RULE_KINDS],
   ])("names every member of %s", (prefix, values) => {
     const missing = values
       .map((value) => `${prefix}.${value}`)

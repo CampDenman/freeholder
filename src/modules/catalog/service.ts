@@ -22,6 +22,274 @@ import {
   type ProductStatus,
 } from "./contract";
 import { productLifecycleEvents, products } from "./schema";
+import { syncProductPublicPage } from "./public-pages";
+import merchandisingServices, {
+  attachProductMedia,
+  compareProducts,
+  createAttributeDefinition,
+  detachProductMedia,
+  filterProductsByAttribute,
+  listAttributeDefinitions,
+  listProductAttributes,
+  listProductMedia,
+  setProductAttribute,
+} from "./merchandising";
+import pricingServices, {
+  createCustomerGroup,
+  createPriceList,
+  listCustomerGroups,
+  listPriceLists,
+  resolvePrice,
+  setPriceBreak,
+  setPriceListEntry,
+} from "./pricing";
+import relationServices, {
+  addBundleComponent,
+  addProductRelation,
+  listBundleComponents,
+  listProductRelations,
+  quoteBundle,
+  removeBundleComponent,
+  removeProductRelation,
+} from "./relations";
+import inventoryServices, {
+  adjustStock,
+  availability,
+  consumeReservation,
+  countStock,
+  enableInventory,
+  expireReservations,
+  listInventory,
+  listReservations,
+  listStockMovements,
+  listTrackedVariantChoices,
+  recordDamage,
+  recordStockMovement,
+  releaseReservation,
+  reserveStock,
+  transferStock,
+} from "./inventory";
+import procurementServices, {
+  addPurchaseOrderLine,
+  cancelPurchaseOrder,
+  createPurchaseOrder,
+  createSupplier,
+  listPurchaseOrders,
+  listReorderQueue,
+  listSuppliers,
+  placePurchaseOrder,
+  receivePurchaseOrderLine,
+  setInventoryLevels,
+  setVariantStockPolicy,
+  subscribeBackInStock,
+} from "./procurement";
+import shippingServices, {
+  addShippingRateBand,
+  createDeliveryWindow,
+  createPackagingBox,
+  createShippingMethod,
+  createShippingZone,
+  listShippingCatalog,
+  quoteShipping,
+} from "./shipping";
+import offeringServices, {
+  createCancellationPolicy,
+  deleteCancellationPolicy,
+  getServiceOffering,
+  listCancellationPolicies,
+  listPriceRules,
+  quoteServicePayment,
+  removePriceRule,
+  setPriceRule,
+  upsertServiceOffering,
+} from "./offerings";
+import variantServices, {
+  addOptionValue,
+  applyVariantMatrix,
+  assignProductOption,
+  createOptionType,
+  getProductVariants,
+  listOptionTypes,
+  setDefaultVariant,
+  setProductOptionValues,
+} from "./variants";
+import cartServices, {
+  abandonStaleCarts,
+  addCartItem,
+  addWishlistItem,
+  attachCartToContact,
+  getCart,
+  getOrCreateCart,
+  listCarts,
+  listSavedCarts,
+  listSellableVariants,
+  listWishlist,
+  removeCartItem,
+  removeWishlistItem,
+  saveCart,
+  setCartItemQuantity,
+} from "./cart";
+import orderServices, {
+  cancelOrder,
+  checkoutCart,
+  getOrder,
+  listOrders,
+  payOrder,
+} from "./orders";
+import fulfillmentServices, {
+  createFulfillment,
+  decideReturn,
+  deliverFulfillment,
+  failFulfillment,
+  getFulfillment,
+  getReturn,
+  grantDigitalFulfillment,
+  listDigitalDeliveries,
+  listFulfillmentQueue,
+  listFulfillments,
+  listReturns,
+  packFulfillment,
+  receiveReturn,
+  refundReturn,
+  requestReturn,
+  shipFulfillment,
+} from "./fulfillment";
+import promotionServices, {
+  applyCouponToCart,
+  applyGiftCardToInvoice,
+  createCoupon,
+  createOfferRule,
+  issueGiftCard,
+  listCartOffers,
+  listCoupons,
+  listGiftCards,
+  listOfferRules,
+  quoteCartPromotions,
+  recoverAbandonedCarts,
+} from "./promotions";
+
+export {
+  abandonStaleCarts,
+  addCartItem,
+  addWishlistItem,
+  attachCartToContact,
+  cancelOrder,
+  checkoutCart,
+  getCart,
+  getOrCreateCart,
+  getOrder,
+  listCarts,
+  listOrders,
+  listSavedCarts,
+  listSellableVariants,
+  listWishlist,
+  payOrder,
+  createFulfillment,
+  decideReturn,
+  deliverFulfillment,
+  failFulfillment,
+  getFulfillment,
+  getReturn,
+  grantDigitalFulfillment,
+  listDigitalDeliveries,
+  listFulfillmentQueue,
+  listFulfillments,
+  listReturns,
+  packFulfillment,
+  receiveReturn,
+  refundReturn,
+  requestReturn,
+  shipFulfillment,
+  applyCouponToCart,
+  applyGiftCardToInvoice,
+  createCoupon,
+  createOfferRule,
+  issueGiftCard,
+  listCartOffers,
+  listCoupons,
+  listGiftCards,
+  listOfferRules,
+  quoteCartPromotions,
+  recoverAbandonedCarts,
+  removeCartItem,
+  removeWishlistItem,
+  saveCart,
+  setCartItemQuantity,
+  adjustStock,
+  addPurchaseOrderLine,
+  addShippingRateBand,
+  availability,
+  addBundleComponent,
+  addOptionValue,
+  addProductRelation,
+  applyVariantMatrix,
+  assignProductOption,
+  attachProductMedia,
+  cancelPurchaseOrder,
+  compareProducts,
+  consumeReservation,
+  countStock,
+  createAttributeDefinition,
+  createCustomerGroup,
+  createOptionType,
+  createCancellationPolicy,
+  createPurchaseOrder,
+  createSupplier,
+  createDeliveryWindow,
+  createPackagingBox,
+  createShippingMethod,
+  createShippingZone,
+  createPriceList,
+  deleteCancellationPolicy,
+  detachProductMedia,
+  enableInventory,
+  expireReservations,
+  filterProductsByAttribute,
+  getProductVariants,
+  getServiceOffering,
+  listAttributeDefinitions,
+  listBundleComponents,
+  listCancellationPolicies,
+  listCustomerGroups,
+  listInventory,
+  listOptionTypes,
+  listPurchaseOrders,
+  listReorderQueue,
+  listSuppliers,
+  listShippingCatalog,
+  listPriceLists,
+  listPriceRules,
+  listProductAttributes,
+  listProductMedia,
+  listProductRelations,
+  listReservations,
+  listStockMovements,
+  listTrackedVariantChoices,
+  placePurchaseOrder,
+  quoteBundle,
+  quoteShipping,
+  quoteServicePayment,
+  removeBundleComponent,
+  removePriceRule,
+  receivePurchaseOrderLine,
+  recordDamage,
+  recordStockMovement,
+  releaseReservation,
+  removeProductRelation,
+  reserveStock,
+  resolvePrice,
+  setInventoryLevels,
+  setVariantStockPolicy,
+  setDefaultVariant,
+  setPriceBreak,
+  setPriceListEntry,
+  setPriceRule,
+  setProductAttribute,
+  setProductOptionValues,
+  subscribeBackInStock,
+  transferStock,
+  upsertServiceOffering,
+};
 
 const productId = z.string().uuid();
 const expectedVersion = z.number().int().positive().max(2_147_483_647);
@@ -337,6 +605,7 @@ export const updateProduct = defineService({
     }
     ctx.setSubject("product", updated.id);
     ctx.queueEvent("catalog.productUpdated", { productId: updated.id, version: updated.version });
+    await syncProductPublicPage(ctx, updated.id);
     return updated;
   },
 });
@@ -426,6 +695,7 @@ export const activateProduct = defineService({
   handler: async (input, ctx) => {
     const product = await transition(input, ctx, "active");
     ctx.queueEvent("catalog.productActivated", { productId: product.id });
+    await syncProductPublicPage(ctx, product.id);
     return product;
   },
 });
@@ -443,6 +713,7 @@ export const archiveProduct = defineService({
   handler: async (input, ctx) => {
     const product = await transition(input, ctx, "archived");
     ctx.queueEvent("catalog.productArchived", { productId: product.id, reason: input.reason });
+    await syncProductPublicPage(ctx, product.id);
     return product;
   },
 });
@@ -460,6 +731,7 @@ export const restoreProduct = defineService({
   handler: async (input, ctx) => {
     const product = await transition(input, ctx, "draft");
     ctx.queueEvent("catalog.productRestored", { productId: product.id, reason: input.reason });
+    await syncProductPublicPage(ctx, product.id);
     return product;
   },
 });
@@ -476,4 +748,16 @@ export default [
   activateProduct,
   archiveProduct,
   restoreProduct,
+  ...variantServices,
+  ...merchandisingServices,
+  ...pricingServices,
+  ...relationServices,
+  ...offeringServices,
+  ...inventoryServices,
+  ...procurementServices,
+  ...shippingServices,
+  ...cartServices,
+  ...orderServices,
+  ...fulfillmentServices,
+  ...promotionServices,
 ];

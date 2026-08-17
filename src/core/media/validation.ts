@@ -75,6 +75,9 @@ const TYPES: readonly FileType[] = [
     kind: "doc",
     extensions: [".pptx"],
   },
+  { mime: "model/gltf-binary", kind: "doc", extensions: [".glb"] },
+  { mime: "model/gltf+json", kind: "doc", extensions: [".gltf"] },
+  { mime: "model/vnd.usdz+zip", kind: "doc", extensions: [".usdz"] },
 ] as const;
 
 const TYPE_BY_MIME = new Map(TYPES.map((type) => [type.mime, type]));
@@ -138,6 +141,7 @@ export function detectMediaMime(
     return "audio/mpeg";
   }
   if (ascii(prefix, 0, 5) === "%PDF-") return "application/pdf";
+  if (ascii(prefix, 0, 4) === "glTF") return "model/gltf-binary";
   if (starts(prefix, [0x1a, 0x45, 0xdf, 0xa3])) return "video/webm";
 
   if (ascii(prefix, 4, 4) === "ftyp") {
@@ -156,6 +160,9 @@ export function detectMediaMime(
     starts(prefix, [0x50, 0x4b, 0x05, 0x06])
   ) {
     const extensionType = TYPE_BY_EXTENSION.get(extname(filename).toLowerCase());
+    if (extensionType?.mime === "model/vnd.usdz+zip") {
+      return "model/vnd.usdz+zip";
+    }
     if (extensionType?.mime.includes("openxmlformats")) {
       const inventory = Buffer.from(prefix).toString("latin1");
       const root = extensionType.mime.includes("wordprocessingml")
@@ -172,7 +179,7 @@ export function detectMediaMime(
   const declared = canonicalMime(declaredMime);
   const extension = extname(filename).toLowerCase();
   if (
-    ["text/plain", "text/csv", "application/json"].includes(declared) &&
+    ["text/plain", "text/csv", "application/json", "model/gltf+json"].includes(declared) &&
     TYPE_BY_EXTENSION.get(extension)?.mime === declared &&
     looksLikeText(prefix)
   ) {

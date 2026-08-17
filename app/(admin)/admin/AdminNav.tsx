@@ -10,6 +10,17 @@ import {
   Layout,
   ListChecks,
   Package,
+  Stack,
+  Truck,
+  Boat,
+  ShoppingCart,
+  ClipboardText,
+  AirplaneTakeoff,
+  ArrowUUpLeft,
+  Ticket,
+  DeviceMobile,
+  Receipt,
+  CurrencyDollar,
   MagicWand,
   Flask,
   MapPin,
@@ -21,6 +32,8 @@ import {
   Translate as TranslateIcon,
   UserPlus,
   UsersThree,
+  CalendarBlank,
+  Newspaper,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -42,8 +55,21 @@ export interface AdminNavLabels {
   invitations: string;
   builder: string;
   demos: string;
+  invoices: string;
   payments: string;
+  pos: string;
   products: string;
+  prices: string;
+  inventory: string;
+  procurement: string;
+  shipping: string;
+  carts: string;
+  orders: string;
+  fulfillment: string;
+  returns: string;
+  promotions: string;
+  events: string;
+  newsletters: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -56,8 +82,21 @@ const LINKS = [
   { href: "/admin/demos", key: "demos", module: "demo", Icon: Flask },
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },
   { href: "/admin/forms", key: "forms", module: "forms", Icon: Envelope },
+  { href: "/admin/invoices", key: "invoices", module: "invoicing", Icon: Receipt },
   { href: "/admin/payments", key: "payments", module: "invoicing", Icon: CreditCard },
+  { href: "/admin/pos", key: "pos", module: "invoicing", Icon: DeviceMobile },
   { href: "/admin/products", key: "products", module: "catalog", Icon: Package },
+  { href: "/admin/price-lists", key: "prices", module: "catalog", Icon: CurrencyDollar },
+  { href: "/admin/inventory", key: "inventory", module: "catalog", Icon: Stack },
+  { href: "/admin/procurement", key: "procurement", module: "catalog", Icon: Truck },
+  { href: "/admin/shipping", key: "shipping", module: "catalog", Icon: Boat },
+  { href: "/admin/carts", key: "carts", module: "catalog", Icon: ShoppingCart },
+  { href: "/admin/orders", key: "orders", module: "catalog", Icon: ClipboardText },
+  { href: "/admin/fulfillment", key: "fulfillment", module: "catalog", Icon: AirplaneTakeoff },
+  { href: "/admin/returns", key: "returns", module: "catalog", Icon: ArrowUUpLeft },
+  { href: "/admin/promotions", key: "promotions", module: "catalog", Icon: Ticket },
+  { href: "/admin/events", key: "events", module: "events", Icon: CalendarBlank },
+  { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },

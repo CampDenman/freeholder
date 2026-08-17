@@ -17,7 +17,9 @@ import {
   websiteJsonLd,
 } from "@/core/seo/jsonld";
 import {
+  chunkSitemapEntries,
   collectSitemapEntries,
+  localeSitemapHrefs,
   renderRobots,
   renderSitemap,
   renderSitemapIndex,
@@ -94,20 +96,31 @@ describe("structured data", () => {
 describe("robots and sitemaps", () => {
   it("keeps crawlers out of the owner's private surfaces", () => {
     const robots = renderRobots("https://example.test");
-    for (const path of ["/admin", "/login", "/preview", "/portal", "/api/"]) {
+    for (const path of [
+      "/admin",
+      "/login",
+      "/preview",
+      "/portal",
+      "/api/",
+      "/checkout",
+      "/cart",
+    ]) {
       expect(robots).toContain(`Disallow: ${path}`);
     }
+    expect(robots).toContain("Disallow: /*?*filter=");
     expect(robots).toContain("Sitemap: https://example.test/sitemap.xml");
   });
 
   it("renders the home page as a bare origin, not a doubled slash", () => {
     const xml = renderSitemap("https://example.test", [
-      { slug: "", updatedAt: new Date("2026-08-02T10:00:00Z") },
-      { slug: "about" },
+      { slug: "", updatedAt: new Date("2026-08-02T10:00:00Z"), priority: 1 },
+      { slug: "about", priority: 0.5 },
     ]);
     expect(xml).toContain("<loc>https://example.test/</loc>");
     expect(xml).toContain("<loc>https://example.test/about</loc>");
     expect(xml).toContain("<lastmod>2026-08-02</lastmod>");
+    expect(xml).toContain("<priority>1.0</priority>");
+    expect(xml).toContain("<priority>0.5</priority>");
     expect(xml).not.toContain("//about");
   });
 
@@ -121,6 +134,23 @@ describe("robots and sitemaps", () => {
     expect(xml).toContain("https://example.test/sitemap-en.xml");
     expect(xml).toContain("https://example.test/sitemap-fr.xml");
   });
+
+  it("splits a locale map at 50,000 URLs and keeps a small site on one file", () => {
+    const one = localeSitemapHrefs("https://example.test", "en", 12);
+    expect(one).toEqual(["https://example.test/sitemap-en.xml"]);
+
+    const many = localeSitemapHrefs("https://example.test", "en", 50_001);
+    expect(many).toEqual([
+      "https://example.test/sitemap-en-1.xml",
+      "https://example.test/sitemap-en-2.xml",
+    ]);
+
+    const chunks = chunkSitemapEntries(
+      [{ slug: "a" }, { slug: "b" }, { slug: "c" }],
+      2,
+    );
+    expect(chunks).toEqual([[{ slug: "a" }, { slug: "b" }], [{ slug: "c" }]]);
+  });
 });
 
 describe("the address a crawler asks for", () => {
@@ -133,7 +163,9 @@ describe("the address a crawler asks for", () => {
       new NextRequest(new URL(`https://example.test${path}`)),
     );
     const destination = response.headers.get("x-middleware-rewrite");
-    return destination ? new URL(destination).pathname : null;
+    if (!destination) return null;
+    const url = new URL(destination);
+    return `${url.pathname}${url.search}`;
   };
 
   it("routes the name in robots.txt to the route that answers it", () => {
@@ -141,9 +173,21 @@ describe("the address a crawler asks for", () => {
     expect(rewriteOf("/sitemap-fr-CA.xml")).toBe("/sitemaps/fr-CA");
   });
 
+  it("splits a locale sitemap that has crossed 50,000 URLs", () => {
+    expect(rewriteOf("/sitemap-en-2.xml")).toBe("/sitemaps/en?chunk=2");
+    expect(rewriteOf("/sitemap-fr-CA-2.xml")).toBe("/sitemaps/fr-CA?chunk=2");
+  });
+
+  it("rewrites the IndexNow key file and entity feeds to their routes", () => {
+    expect(rewriteOf("/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt")).toBe("/indexnow-key");
+    expect(rewriteOf("/feeds/products.xml")).toBe("/feeds/products");
+    expect(rewriteOf("/feeds/locations.xml")).toBe("/feeds/locations");
+  });
+
   it("leaves everything else alone", () => {
     expect(rewriteOf("/sitemap.xml")).toBeNull();
     expect(rewriteOf("/about")).toBeNull();
+    expect(rewriteOf("/llms.txt")).toBeNull();
     expect(rewriteOf("/sitemap-en.xml/../admin")).toBeNull();
   });
 });
