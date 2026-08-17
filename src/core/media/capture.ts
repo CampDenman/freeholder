@@ -515,7 +515,7 @@ export const appendCaptureChunk = defineService({
     if (["confirmed", "discarded", "expired"].includes(existing.status)) {
       throw new ServiceError("conflict", "That capture session is closed.");
     }
-    const body = input.bytes as Uint8Array<ArrayBuffer>;
+    const body = input.bytes;
     if (body.byteLength === 0) {
       throw new ServiceError("validation", "An empty recording chunk cannot be stored.");
     }

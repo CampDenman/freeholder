@@ -500,8 +500,8 @@ export const updatePage = defineService({
       subjectType: "page",
       subjectId: before.id,
       title: before.workingTitle ?? before.title,
-      blocks: (before.workingBlocks ?? before.blocks) as typeof before.blocks,
-      seo: (before.workingSeo ?? before.seo) as typeof before.seo,
+      blocks: before.workingBlocks ?? before.blocks,
+      seo: before.workingSeo ?? before.seo,
       kind: "autosave",
       actor: actorString(ctx.actor),
     });
@@ -584,7 +584,7 @@ export const publishPage = defineService({
       );
     }
     const title = before.workingTitle ?? before.title;
-    const blocks = (before.workingBlocks ?? before.blocks) as typeof before.blocks;
+    const blocks = before.workingBlocks ?? before.blocks;
     const seo = before.workingSeo ?? before.seo;
     if (input.published) {
       await ctx.tx.insert(contentRevisions).values({
@@ -884,14 +884,14 @@ export const restoreRevision = defineService({
         subjectType: "page",
         subjectId: before.id,
         title: before.workingTitle ?? before.title,
-        blocks: (before.workingBlocks ?? before.blocks) as typeof before.blocks,
-        seo: (before.workingSeo ?? before.seo) as typeof before.seo,
+        blocks: before.workingBlocks ?? before.blocks,
+        seo: before.workingSeo ?? before.seo,
         kind: "autosave",
         actor,
       });
       const restoredTitle = revision.title ?? before.title;
       const restoredBlocks = parseBlockTree(revision.blocks, "page");
-      const restoredSeo = (revision.seo ?? before.seo) as typeof before.seo;
+      const restoredSeo = revision.seo ?? before.seo;
       // Restore always writes the working copy. A published page's live row
       // stays put until someone publishes again (C2.01, C2.02 restore-as-draft).
       const published = before.status === "published";
