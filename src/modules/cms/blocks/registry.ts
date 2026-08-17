@@ -17,6 +17,7 @@ import {
   divider,
   faq,
   heading,
+  html,
   image,
   locales,
   locationsIndex,
@@ -26,12 +27,15 @@ import {
   productsIndex,
   spacer,
   text,
+  video,
 } from "./library";
 
 const definitions: BlockDefinition<z.ZodType, never>[] = [
   heading,
   text,
   image,
+  video,
+  html,
   button,
   callCta,
   columns,

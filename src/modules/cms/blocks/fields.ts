@@ -17,6 +17,7 @@ import type { z } from "zod";
 export type FieldKind =
   | "text"
   | "multiline"
+  | "rich"
   | "boolean"
   | "choice"
   | "list"
@@ -36,6 +37,8 @@ export interface FieldDescriptor {
   choices?: FieldChoice[];
   /** For `list`: the shape of one item. */
   itemFields?: FieldDescriptor[];
+  /** For `asset`. */
+  assetKind?: "image" | "video";
 }
 
 /**
@@ -53,7 +56,9 @@ export interface FieldHint {
    * names something the editor should offer a chooser for, which is why a
    * plugin can ask for one without touching the editor (§24).
    */
-  control?: "multiline" | "asset";
+  control?: "multiline" | "asset" | "rich";
+  /** When `control` is `asset`, limit the picker to one media kind. */
+  assetKind?: "image" | "video";
   hidden?: boolean;
 }
 
@@ -120,6 +125,9 @@ function describeField(
   blockType: string,
 ): FieldDescriptor | undefined {
   if (hint?.hidden) return undefined;
+  if (hint?.control === "rich") {
+    return { name, kind: "rich", required: false };
+  }
 
   const { inner, optional } = unwrap(schema);
   const def = internals(inner);
@@ -128,7 +136,9 @@ function describeField(
   const base = { name, required: !optional };
 
   if (def.type === "string") {
-    if (hint?.control === "asset") return { ...base, kind: "asset" };
+    if (hint?.control === "asset") {
+      return { ...base, kind: "asset", assetKind: hint.assetKind };
+    }
     return { ...base, kind: hint?.control === "multiline" ? "multiline" : "text" };
   }
   if (def.type === "boolean") {

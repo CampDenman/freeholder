@@ -60,6 +60,11 @@ function collectFromProps(
   for (const field of fields) {
     const value = props[field.name];
 
+    if (field.kind === "rich") {
+      collectRichStrings(value, [...base, field.name], blockType, field.name, out);
+      continue;
+    }
+
     if (field.kind === "text" || field.kind === "multiline") {
       // An empty string is not offered: there is nothing to translate, and a
       // row of blank boxes is how a screen stops being read.
@@ -90,6 +95,50 @@ function collectFromProps(
     }
     // asset, boolean, choice: not words.
   }
+}
+
+function collectRichStrings(
+  value: unknown,
+  base: (string | number)[],
+  blockType: string,
+  field: string,
+  out: TranslatableString[],
+): void {
+  if (!Array.isArray(value)) return;
+  const walkInlines = (nodes: unknown[], path: (string | number)[]) => {
+    nodes.forEach((node, index) => {
+      if (!node || typeof node !== "object") return;
+      const record = node as { type?: string; text?: string; children?: unknown };
+      if (record.type === "text" && typeof record.text === "string" && record.text.trim()) {
+        out.push({
+          path: [...path, index, "text"],
+          value: record.text,
+          blockType,
+          field,
+          multiline: true,
+        });
+      }
+      if (record.type === "link" && Array.isArray(record.children)) {
+        walkInlines(record.children, [...path, index, "children"]);
+      }
+    });
+  };
+  value.forEach((block, index) => {
+    if (!block || typeof block !== "object") return;
+    const record = block as { type?: string; children?: unknown };
+    if (!Array.isArray(record.children)) return;
+    if (record.type === "paragraph") {
+      walkInlines(record.children, [...base, index, "children"]);
+      return;
+    }
+    record.children.forEach((item, itemIndex) => {
+      if (!item || typeof item !== "object") return;
+      const listItem = item as { children?: unknown };
+      if (Array.isArray(listItem.children)) {
+        walkInlines(listItem.children, [...base, index, "children", itemIndex, "children"]);
+      }
+    });
+  });
 }
 
 /**

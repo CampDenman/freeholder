@@ -19,6 +19,9 @@ import { renderNAP } from "@/core/locations/nap";
 import { languageName, localePath } from "@/core/i18n/customer";
 import { cx } from "@/ui/primitives";
 import { defineBlock } from "./types";
+import { fromPlainString, richBodySchema } from "./rich";
+import { renderRichDoc } from "./rich-render";
+import { sanitizeOwnerHtml } from "./html";
 
 /* ------------------------------------------------------------------ text */
 
@@ -59,40 +62,26 @@ export const text = defineBlock({
   labelKey: "cms.block.text",
   contexts: ["page", "chrome"],
   schema: z.object({
-    // Paragraphs rather than HTML: §32 keeps the custom-HTML escape hatch
-    // "admin-only, scoped, and deliberately inconvenient", so ordinary body
-    // copy is plain text split on blank lines and rendered as <p>.
-    body: z.string().min(1),
+    // Typed rich text (C2.05). A leftover plain string still writes, and is
+    // coerced to paragraphs. HTML soup is refused — the html block is the
+    // escape hatch, and it is deliberately a different type.
+    body: richBodySchema,
     align: z.enum(["start", "center"]).default("start"),
     measure: z.boolean().default(true),
   }),
-  starter: () => ({ body: "Write something here." }),
-  fieldHints: { body: { control: "multiline" } },
-  render: ({ props, ctx }) => {
-    const editing = ctx.editable?.("body");
-    return (
-      <div
-        {...editing}
-        className={cx(
-          "grid gap-4 text-ink-muted",
-          props.measure && "max-w-prose",
-          props.align === "center" && "text-center justify-items-center",
-        )}
-      >
-        {/* Paragraphs when rendering for real; one editable region while
-            typing, because a caret cannot cross sibling elements sensibly and
-            splitting on blank lines mid-sentence would fight the typist. The
-            stored value is the same string either way. */}
-        {editing
-          ? props.body
-          : props.body
-              .split(/\n{2,}/)
-              .map((paragraph) => paragraph.trim())
-              .filter(Boolean)
-              .map((paragraph, i) => <p key={i}>{paragraph}</p>)}
-      </div>
-    );
-  },
+  starter: () => ({ body: fromPlainString("Write something here.") }),
+  fieldHints: { body: { control: "rich" } },
+  render: ({ props }) => (
+    <div
+      className={cx(
+        "grid gap-4 text-ink-muted",
+        props.measure && "max-w-prose",
+        props.align === "center" && "text-center justify-items-center",
+      )}
+    >
+      {renderRichDoc(props.body)}
+    </div>
+  ),
 });
 
 /* --------------------------------------------------------------- actions */
@@ -476,6 +465,78 @@ export const image = defineBlock({
       </picture>
     );
   },
+});
+
+/**
+ * A video from the asset library (C2.07).
+ *
+ * Same resolve pattern as image: the block names an asset, core/media
+ * supplies the URL and intrinsic size, and the page reserves space so the
+ * player cannot shove the layout when it loads.
+ */
+export const video = defineBlock({
+  type: "video",
+  labelKey: "cms.block.video",
+  contexts: ["page", "chrome"],
+  schema: z.object({
+    assetId: z.string().uuid().optional(),
+    caption: z.string().max(200).optional(),
+    width: z.enum(["column", "wide", "full"]).default("column"),
+  }),
+  starter: () => ({}),
+  fieldHints: { assetId: { control: "asset", assetKind: "video" } },
+  resolve: async (props) => {
+    if (!props.assetId) return null;
+    const { resolveAsset } = await import("@/core/media/service");
+    const asset = await resolveAsset.call({ id: props.assetId }, { kind: "anonymous" });
+    if (!asset || asset.kind !== "video") return null;
+    return asset;
+  },
+  render: ({ props, resolved }) => {
+    if (!resolved) return null;
+    return (
+      <figure className={cx(props.width !== "column" && "w-full")}>
+        <video
+          controls
+          preload="metadata"
+          src={resolved.src}
+          width={resolved.width ?? undefined}
+          height={resolved.height ?? undefined}
+          className="h-auto max-w-full"
+        >
+          {resolved.filename}
+        </video>
+        {props.caption ? (
+          <figcaption className="mt-2 text-sm text-ink-muted">{props.caption}</figcaption>
+        ) : null}
+      </figure>
+    );
+  },
+});
+
+/**
+ * Admin-only custom HTML (C2.07).
+ *
+ * Deliberately a textarea, not the rich-text editor. Ordinary copy belongs
+ * in typed nodes. This is the escape hatch §32 keeps "scoped and
+ * inconvenient", and the renderer strips script before it ever reaches
+ * the page.
+ */
+export const html = defineBlock({
+  type: "html",
+  labelKey: "cms.block.html",
+  contexts: ["page"],
+  schema: z.object({
+    markup: z.string().min(1).max(20_000),
+  }),
+  starter: () => ({ markup: "<p></p>" }),
+  fieldHints: { markup: { control: "multiline" } },
+  render: ({ props }) => (
+    <div
+      className="max-w-prose text-ink-muted"
+      dangerouslySetInnerHTML={{ __html: sanitizeOwnerHtml(props.markup) }}
+    />
+  ),
 });
 
 /* -------------------------------------------------------------- locations */

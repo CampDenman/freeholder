@@ -55,7 +55,7 @@ export default async function EditPagePage({
     await Promise.all([
       currentBusiness(),
       listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
-      listAssets.call({ kind: "image" }, actor),
+      listAssets.call({}, actor),
       getT(),
       listPreviewLinks.call({ pageId: page.id }, actor),
       touchEditLease.call({ id: page.id }, actor),
@@ -121,7 +121,11 @@ export default async function EditPagePage({
         blockTypes={editorBlockTypes(
           t,
           "page",
-          library.rows.map((a) => ({ id: a.id, filename: a.filename })),
+          library.rows.map((a) => ({
+            id: a.id,
+            filename: a.filename,
+            kind: a.kind,
+          })),
         )}
         labels={editorLabels(t)}
       />

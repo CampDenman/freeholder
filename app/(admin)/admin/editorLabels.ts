@@ -37,6 +37,7 @@ export function label(t: Translate, key: string, fallback: string): string {
 export interface AssetChoice {
   id: string;
   filename: string;
+  kind?: "image" | "video" | "doc" | "audio";
 }
 
 function translateField(
@@ -55,10 +56,12 @@ function translateField(
           // has no files, and the block simply renders nothing until it does.
           [
             { value: "", label: t("cms.field.noAsset") },
-            ...assets.map((asset) => ({
-              value: asset.id,
-              label: asset.filename,
-            })),
+            ...assets
+              .filter((asset) => !field.assetKind || asset.kind === field.assetKind)
+              .map((asset) => ({
+                value: asset.id,
+                label: asset.filename,
+              })),
           ]
         : field.choices?.map((choice) => ({
             value: choice.value,
@@ -106,5 +109,18 @@ export function editorLabels(t: Translate): EditorLabels {
     conflict: t("cms.editor.conflict"),
     reload: t("cms.editor.reload"),
     keepMine: t("cms.editor.keepMine"),
+    slash: t("cms.editor.slash"),
+    undo: t("cms.editor.undo"),
+    redo: t("cms.editor.redo"),
+    duplicate: t("cms.editor.duplicate"),
+    copy: t("cms.editor.copy"),
+    paste: t("cms.editor.paste"),
+    bold: t("cms.editor.bold"),
+    italic: t("cms.editor.italic"),
+    code: t("cms.editor.code"),
+    link: t("cms.editor.link"),
+    bullet: t("cms.editor.bullet"),
+    numbered: t("cms.editor.numbered"),
+    richHint: t("cms.editor.richHint"),
   };
 }

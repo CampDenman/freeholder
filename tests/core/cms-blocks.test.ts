@@ -21,7 +21,19 @@ import { t } from "@/core/i18n";
 describe("the registry", () => {
   it("registers the v1 vocabulary", () => {
     expect(blockTypes()).toEqual(
-      expect.arrayContaining(["heading", "text", "button", "callCta", "columns", "faq", "nav", "brand"]),
+      expect.arrayContaining([
+        "heading",
+        "text",
+        "image",
+        "video",
+        "html",
+        "button",
+        "callCta",
+        "columns",
+        "faq",
+        "nav",
+        "brand",
+      ]),
     );
   });
 
@@ -128,7 +140,9 @@ describe("parseBlockTree()", () => {
       "page",
     );
     expect(tree[0]!.children).toHaveLength(2);
-    expect(tree[0]!.children![1]!.children![0]!.props).toMatchObject({ body: "Deep" });
+    expect(tree[0]!.children![1]!.children![0]!.props).toMatchObject({
+      body: [{ type: "paragraph", children: [{ type: "text", text: "Deep" }] }],
+    });
 
     expect(() =>
       parseBlockTree(
