@@ -110,6 +110,14 @@ export interface BlockDefinition<
   fieldHints?: Record<string, FieldHint>;
   /** True when this block holds other blocks, so the tree walker recurses. */
   container?: boolean;
+  /**
+   * When this returns false, children are not rendered at all (C2.10).
+   * The paywall uses it so gated copy is never present in the HTML.
+   */
+  includeChildren?: (args: {
+    props: z.output<Props>;
+    ctx: BlockRenderContext;
+  }) => boolean | Promise<boolean>;
   resolve?: (
     props: z.output<Props>,
     ctx: BlockRenderContext,

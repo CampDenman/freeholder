@@ -29,6 +29,21 @@ import {
   text,
   video,
 } from "./library";
+import {
+  adSlot,
+  booking,
+  gallery,
+  knowledge,
+  map,
+  paywall,
+  productCard,
+  quoteRequest,
+  share,
+  siteChat,
+  social,
+  testimonial,
+  tip,
+} from "./surfaces";
 
 const definitions: BlockDefinition<z.ZodType, never>[] = [
   heading,
@@ -49,6 +64,19 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   locationsIndex,
   productsIndex,
   productDetail,
+  testimonial,
+  gallery,
+  map,
+  social,
+  share,
+  knowledge,
+  productCard,
+  booking,
+  quoteRequest,
+  tip,
+  siteChat,
+  paywall,
+  adSlot,
 ] as unknown as BlockDefinition<z.ZodType, never>[];
 
 const byType = new Map(definitions.map((d) => [d.type, d]));
@@ -215,7 +243,8 @@ export function collectJsonLd(nodes: BlockNode[]): Record<string, unknown>[] {
       const definition = byType.get(node.type);
       const emitted = definition?.jsonLd?.(node.props);
       if (emitted) found.push(emitted);
-      if (node.children) walk(node.children);
+      // Gated children must not leak into the document head (C2.10).
+      if (node.children && node.type !== "paywall") walk(node.children);
     }
   };
   walk(nodes);

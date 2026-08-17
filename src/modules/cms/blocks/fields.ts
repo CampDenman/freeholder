@@ -144,6 +144,9 @@ function describeField(
   if (def.type === "boolean") {
     return { ...base, kind: "boolean" };
   }
+  if (def.type === "number" || def.type === "int") {
+    return { ...base, kind: "text" };
+  }
   if (def.type === "enum" && def.entries) {
     return {
       ...base,

@@ -45,6 +45,11 @@ import {
   requestReview,
   resolveThread,
 } from "./collaboration";
+import {
+  submitQuoteRequest,
+  submitSiteChat,
+  submitTipIntent,
+} from "./inbound";
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -1104,5 +1109,8 @@ export default [
   reopenThread,
   requestReview,
   decideReview,
+  submitQuoteRequest,
+  submitSiteChat,
+  submitTipIntent,
   ensureDefaults,
 ];
