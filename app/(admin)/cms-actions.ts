@@ -16,7 +16,10 @@ import { ServiceError } from "@/core/service";
 import {
   createPage,
   createSectionLocale,
+  deleteSection,
+  detachSection,
   ensureDefaults,
+  saveAsSection,
   mergePage,
   publishPage,
   restoreRevision,
@@ -86,6 +89,49 @@ function present(error: unknown): SaveResult {
   }
   console.error("cms action failed", error);
   return { error: "Something went wrong. Try again." };
+}
+
+export async function saveAsSectionAction(
+  name: string,
+  nodes: unknown,
+  locale = "en",
+): Promise<SaveResult & { instance?: { id: string; type: string; props: Record<string, unknown> } }> {
+  try {
+    const result = await saveAsSection.call(
+      { name, nodes: nodes as never, locale },
+      await currentActor(),
+    );
+    revalidatePath("/admin/sections");
+    return { instance: result.instance };
+  } catch (error) {
+    return present(error);
+  }
+}
+
+export async function detachSectionAction(
+  sectionKey: string,
+  locale = "en",
+): Promise<SaveResult & { nodes?: unknown[] }> {
+  try {
+    const result = await detachSection.call({ sectionKey, locale }, await currentActor());
+    return { nodes: result.nodes };
+  } catch (error) {
+    return present(error);
+  }
+}
+
+export async function deleteSectionAction(form: FormData): Promise<void> {
+  const key = text(form, "key");
+  try {
+    await deleteSection.call({ key }, await currentActor());
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      redirect(`/admin/sections?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+  revalidatePath("/admin/sections");
+  redirect("/admin/sections");
 }
 
 export async function savePageBlocksAction(

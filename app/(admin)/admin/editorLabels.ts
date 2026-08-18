@@ -122,5 +122,24 @@ export function editorLabels(t: Translate): EditorLabels {
     bullet: t("cms.editor.bullet"),
     numbered: t("cms.editor.numbered"),
     richHint: t("cms.editor.richHint"),
+    saveAsSection: t("cms.editor.saveAsSection"),
+    detachSection: t("cms.editor.detachSection"),
+    sectionName: t("cms.editor.sectionName"),
   };
+}
+
+export function sectionPaletteEntries(
+  t: Translate,
+  reusable: Array<{ key: string; name: string }>,
+): EditorBlockType[] {
+  const base = paletteFor("page").find((entry) => entry.type === "sectionInstance");
+  if (!base) return [];
+  return reusable.map((section) => ({
+    type: "sectionInstance",
+    paletteId: `section:${section.key}`,
+    label: t("cms.editor.sectionEntry", { name: section.name }),
+    container: false,
+    starter: { ...base.starter, sectionKey: section.key },
+    fields: base.fields.map((field) => translateField(t, field, [])),
+  }));
 }

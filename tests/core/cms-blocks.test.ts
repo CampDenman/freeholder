@@ -46,6 +46,7 @@ describe("the registry", () => {
         "siteChat",
         "paywall",
         "adSlot",
+        "sectionInstance",
         "nav",
         "brand",
       ]),
@@ -67,7 +68,9 @@ describe("the registry", () => {
     expect(chrome).toContain("nav");
     expect(chrome).not.toContain("faq");
     expect(page).toContain("faq");
+    expect(page).toContain("sectionInstance");
     expect(page).not.toContain("nav");
+    expect(chrome).not.toContain("sectionInstance");
   });
 });
 

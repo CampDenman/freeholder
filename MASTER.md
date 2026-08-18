@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-17 |
-| Evidence snapshot | `main` at `b18fe29` with C5.09 merged; C5.10–C5.24 catalog and payments work sit uncommitted on top, plus C5.04 tax-template verification, public product pages, events/newsletters, and C2.21. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` at `fadd737` with C1.34 landed via #118. C2.12 save-as-Section / synced instances is on this branch. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.30–C1.33 are on `main` via #117. C1.34 replies status to the speaking instance; C2.12 remains the next editor item. |
+| Current focus | C2.12 section instances. Next editor items are C2.13 templates through C2.23 (skip C2.21). |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3453,8 +3453,12 @@ project without silent telemetry, and ready to carry money.
   slot with server-side content exclusion and layout-shift-safe sizing.
 - [x] **C2.11** Make headers, footers, navigation, announcement bars and menus
   first-class synced Sections with accessible responsive behavior.
-- [ ] **C2.12** Support save-as-Section, synced instances, detach-to-copy,
+- [x] **C2.12** Support save-as-Section, synced instances, detach-to-copy,
   dependency-aware deletion, and searchable palettes.
+  (`sectionInstance` block; `cms.saveAsSection` / `detachSection` /
+  `deleteSection` / `listSectionUsages`; palette search includes saved
+  Sections; chrome delete refused; `tests/core/cms-sections.test.ts`;
+  changeset `cms-section-instances.md`)
 - [ ] **C2.13** Build page/post/product/service/email templates and per-business
   presets with reset-to-default, create-from-template and preview.
 - [ ] **C2.14** Add per-entity layout overrides and clean detach/rejoin behavior

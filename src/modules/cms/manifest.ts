@@ -39,6 +39,8 @@ export default defineModule({
       "cms.previewLinkCreated",
       "cms.revisionNamed",
       "cms.sectionUpdated",
+      "cms.sectionCreated",
+      "cms.sectionDeleted",
       "cms.commentCreated",
       "cms.commentResolved",
       "cms.commentReopened",

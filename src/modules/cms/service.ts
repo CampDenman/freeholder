@@ -50,7 +50,21 @@ import {
   submitSiteChat,
   submitTipIntent,
 } from "./inbound";
-import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
+export {
+  createSection,
+  deleteSection,
+  detachSection,
+  listSectionUsages,
+  saveAsSection,
+} from "./section-service";
+import {
+  createSection,
+  deleteSection,
+  detachSection,
+  listSectionUsages,
+  saveAsSection,
+} from "./section-service";
+import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
   defaultAnnouncement,
@@ -758,7 +772,7 @@ export const updateSection = defineService({
     key: z.string().min(1),
     locale: z.string().default("en"),
     name: z.string().min(1).optional(),
-    blocks: blockTreeSchema("chrome"),
+    blocks: z.unknown(),
   }),
   handler: async (input, ctx) => {
     const [before] = await ctx.tx
@@ -768,6 +782,16 @@ export const updateSection = defineService({
       .limit(1);
     if (!before) {
       throw new ServiceError("not_found", `no section named "${input.key}"`);
+    }
+    const context = before.kind === "chrome" ? "chrome" : "page";
+    let blocks: BlockNode[];
+    try {
+      blocks = parseBlockTree(input.blocks, context);
+    } catch (error) {
+      if (error instanceof BlockValidationError) {
+        throw new ServiceError("validation", error.message);
+      }
+      throw error;
     }
 
     await ctx.tx.insert(contentRevisions).values({
@@ -780,7 +804,7 @@ export const updateSection = defineService({
 
     const [section] = await ctx.tx
       .update(sections)
-      .set({ blocks: input.blocks, ...(input.name ? { name: input.name } : {}) })
+      .set({ blocks, ...(input.name ? { name: input.name } : {}) })
       .where(eq(sections.id, before.id))
       .returning();
 
@@ -1114,7 +1138,12 @@ export default [
   getSection,
   listSections,
   updateSection,
+  createSection,
   createSectionLocale,
+  saveAsSection,
+  detachSection,
+  listSectionUsages,
+  deleteSection,
   listRevisions,
   restoreRevision,
   createPreviewLink,
