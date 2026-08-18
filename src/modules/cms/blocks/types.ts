@@ -71,6 +71,13 @@ export interface BlockRenderContext {
    * prop; the decision to allow it at all is the editor's.
    */
   editable?: (prop: string) => Record<string, string> | undefined;
+  /**
+   * Sticky experiment assignments for this visitor (C2.17). Server-side only;
+   * the public HTML contains the chosen variant, never a client swap.
+   */
+  experimentAssignments?: Readonly<Record<string, string>>;
+  /** First-party visitor id used to assign variants when no assignment exists. */
+  visitorId?: string | null;
 }
 
 /**
@@ -118,6 +125,15 @@ export interface BlockDefinition<
     props: z.output<Props>;
     ctx: BlockRenderContext;
   }) => boolean | Promise<boolean>;
+  /**
+   * Pick which child nodes to render (C2.17). The public surface returns one
+   * variant; the editor preview returns all of them.
+   */
+  selectChildren?: (args: {
+    props: z.output<Props>;
+    children: BlockNode[];
+    ctx: BlockRenderContext;
+  }) => BlockNode[];
   resolve?: (
     props: z.output<Props>,
     ctx: BlockRenderContext,

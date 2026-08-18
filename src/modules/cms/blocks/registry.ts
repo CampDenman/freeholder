@@ -7,6 +7,7 @@
 // where a plugin's block types join without the editor changing. One source,
 // several projections — the same shape as the service registry in §28.
 import { z } from "zod";
+import { selectAssignedVariants } from "../experiments";
 import { deriveFields, type FieldDescriptor } from "./fields";
 import type { BlockDefinition, BlockNode } from "./types";
 import {
@@ -28,6 +29,8 @@ import {
   productDetail,
   productsIndex,
   sectionInstance,
+  experiment,
+  variant,
   spacer,
   text,
   video,
@@ -70,6 +73,8 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   productsIndex,
   productDetail,
   sectionInstance,
+  experiment,
+  variant,
   testimonial,
   gallery,
   map,
@@ -249,8 +254,16 @@ export function collectJsonLd(nodes: BlockNode[]): Record<string, unknown>[] {
       const definition = byType.get(node.type);
       const emitted = definition?.jsonLd?.(node.props);
       if (emitted) found.push(emitted);
+      if (!node.children) continue;
       // Gated children must not leak into the document head (C2.10).
-      if (node.children && node.type !== "paywall") walk(node.children);
+      if (node.type === "paywall") continue;
+      if (node.type === "experiment") {
+        const key =
+          typeof node.props.experimentKey === "string" ? node.props.experimentKey : "";
+        walk(selectAssignedVariants(key, node.children, undefined, null, false));
+        continue;
+      }
+      walk(node.children);
     }
   };
   walk(nodes);
