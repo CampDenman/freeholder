@@ -21,7 +21,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   analyzeAccessibility,
-  type A11yCode,
   type A11yContext,
 } from "@/modules/cms/a11y-hints";
 import {
@@ -487,7 +486,7 @@ function A11yHints({
               key={`${hint.code}-${hint.blockId ?? index}`}
               className={hint.severity === "error" ? "text-danger" : "text-ink-muted"}
             >
-              {labels[hint.code as A11yCode]}
+              {labels[hint.code]}
             </li>
           ))}
         </ul>
