@@ -7,7 +7,6 @@ import { paletteFor, parseBlockTree } from "@/modules/cms/blocks/registry";
 import { ensureTemplates, previewEmail } from "@/modules/cms/service";
 import { updateBusiness } from "@/core/settings/service";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
-import type { BlockNode } from "@/modules/cms/blocks/types";
 
 describe("email palette and renderer", () => {
   it("offers only email-safe blocks", () => {
@@ -26,12 +25,13 @@ describe("email palette and renderer", () => {
         { id: "v", type: "variable", props: { slot: "invoice.total" } },
       ],
       "email",
-    ) as BlockNode[];
+    );
     const vars = {
       "contact.first_name": "Alex",
       "invoice.total": "$40.00",
     };
-    expect(fillSlots(String(tree[0]?.props.text ?? ""), vars)).toBe("Hello Alex");
+    const headingText = tree[0]?.props.text;
+    expect(typeof headingText === "string" ? fillSlots(headingText, vars) : "").toBe("Hello Alex");
     const html = renderEmailHtml(tree, vars);
     expect(html).toContain("<table role=\"presentation\"");
     expect(html).toContain("Hello Alex");

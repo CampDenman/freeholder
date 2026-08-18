@@ -28,6 +28,10 @@ export function fillSlots(value: string, vars: EmailVariables): string {
   });
 }
 
+function propString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -109,7 +113,7 @@ export function renderEmailHtml(nodes: BlockNode[], vars: EmailVariables = {}): 
 
 function renderNodeHtml(node: BlockNode, vars: EmailVariables): string {
   if (node.type === "heading") {
-    const text = escapeHtml(fillSlots(String(node.props.text ?? ""), vars));
+    const text = escapeHtml(fillSlots(propString(node.props.text), vars));
     const level = [1, 2, 3, 4].includes(Number(node.props.level))
       ? Number(node.props.level)
       : 1;
@@ -118,8 +122,8 @@ function renderNodeHtml(node: BlockNode, vars: EmailVariables): string {
   }
   if (node.type === "text") return cell(richToHtml(node.props.body, vars));
   if (node.type === "button") {
-    const label = escapeHtml(fillSlots(String(node.props.label ?? ""), vars));
-    const href = escapeHtml(fillSlots(String(node.props.href ?? "#"), vars));
+    const label = escapeHtml(fillSlots(propString(node.props.label), vars));
+    const href = escapeHtml(fillSlots(propString(node.props.href, "#"), vars));
     return cell(
       `<a href="${href}" style="display:inline-block;background:${accent};color:${onAccent};padding:10px 16px;text-decoration:none;border-radius:6px;">${label}</a>`,
     );
@@ -130,7 +134,7 @@ function renderNodeHtml(node: BlockNode, vars: EmailVariables): string {
     return `<table role="presentation" width="100%"><tr><td style="height:${height}px;line-height:${height}px;">&nbsp;</td></tr></table>`;
   }
   if (node.type === "variable") {
-    const slot = String(node.props.slot ?? "");
+    const slot = propString(node.props.slot);
     return cell(escapeHtml(fillSlots(`{{${slot}}}`, vars)));
   }
   if (node.type === "image") return cell("");
@@ -143,12 +147,12 @@ function renderNodeHtml(node: BlockNode, vars: EmailVariables): string {
 export function renderEmailText(nodes: BlockNode[], vars: EmailVariables = {}): string {
   return nodes
     .map((node) => {
-      if (node.type === "heading") return fillSlots(String(node.props.text ?? ""), vars);
+      if (node.type === "heading") return fillSlots(propString(node.props.text), vars);
       if (node.type === "text") return richToText(node.props.body, vars);
       if (node.type === "button") {
-        return `${fillSlots(String(node.props.label ?? ""), vars)} ${fillSlots(String(node.props.href ?? ""), vars)}`;
+        return `${fillSlots(propString(node.props.label), vars)} ${fillSlots(propString(node.props.href), vars)}`;
       }
-      if (node.type === "variable") return fillSlots(`{{${String(node.props.slot ?? "")}}}`, vars);
+      if (node.type === "variable") return fillSlots(`{{${propString(node.props.slot)}}}`, vars);
       if (node.children?.length) return renderEmailText(node.children, vars);
       return "";
     })

@@ -1000,6 +1000,8 @@
   "cms.block.sectionInstance": "Section enregistrée",
   "cms.block.variable": "Emplacement de variable",
   "cms.email.from": "De",
+  "cms.email.fromSample": "studio@example.com",
+  "cms.email.toSample": "alex@example.com",
   "cms.email.inbox": "Aperçu de boîte de réception",
   "cms.email.subject": "Objet",
   "cms.email.testSend": "S'envoyer un test",

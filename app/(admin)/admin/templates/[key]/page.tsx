@@ -70,6 +70,8 @@ export default async function EditTemplatePage({
             to: t("cms.email.to"),
             subject: t("cms.email.subject"),
             testSend: t("cms.email.testSend"),
+            fromSample: t("cms.email.fromSample"),
+            toSample: t("cms.email.toSample"),
           }}
         />
       ) : null}

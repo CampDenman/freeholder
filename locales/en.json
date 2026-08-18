@@ -1000,6 +1000,8 @@
   "cms.block.sectionInstance": "Saved Section",
   "cms.block.variable": "Variable slot",
   "cms.email.from": "From",
+  "cms.email.fromSample": "studio@example.com",
+  "cms.email.toSample": "alex@example.com",
   "cms.email.inbox": "Inbox preview",
   "cms.email.subject": "Subject",
   "cms.email.testSend": "Send a test to yourself",

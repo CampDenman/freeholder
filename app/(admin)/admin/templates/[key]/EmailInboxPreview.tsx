@@ -22,6 +22,8 @@ export function EmailInboxPreview({
     to: string;
     subject: string;
     testSend: string;
+    fromSample: string;
+    toSample: string;
   };
 }) {
   return (
@@ -40,11 +42,11 @@ export function EmailInboxPreview({
       <dl className="grid gap-1 text-sm">
         <div className="flex gap-2">
           <dt className="text-ink-muted">{labels.from}</dt>
-          <dd>studio@example.com</dd>
+          <dd>{labels.fromSample}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="text-ink-muted">{labels.to}</dt>
-          <dd>alex@example.com</dd>
+          <dd>{labels.toSample}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="text-ink-muted">{labels.subject}</dt>
