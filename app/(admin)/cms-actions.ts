@@ -18,8 +18,10 @@ import {
   createPage,
   createSectionLocale,
   deleteSection,
+  detachLayout,
   detachSection,
   ensureDefaults,
+  rejoinLayout,
   resetTemplate,
   saveAsSection,
   mergePage,
@@ -387,6 +389,22 @@ export async function createFromTemplateAction(
     return present(error);
   }
   redirect(`/admin/pages/${id}`);
+}
+
+export async function detachLayoutAction(form: FormData): Promise<void> {
+  const pageId = text(form, "pageId");
+  await detachLayout.call({ pageId }, await currentActor());
+  revalidatePath(`/admin/pages/${pageId}`);
+}
+
+export async function rejoinLayoutAction(form: FormData): Promise<void> {
+  const pageId = text(form, "pageId");
+  await rejoinLayout.call(
+    { pageId, bindings: { title: text(form, "title") || undefined } },
+    await currentActor(),
+  );
+  revalidatePath(`/admin/pages/${pageId}`);
+  redirect(`/admin/pages/${pageId}`);
 }
 
 export async function setPagePublishedAction(form: FormData): Promise<void> {

@@ -9,4 +9,5 @@ export {
   contentPresence,
   contentComments,
   contentTemplates,
+  contentLayouts,
 } from "./schema";

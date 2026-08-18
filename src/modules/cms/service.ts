@@ -82,6 +82,18 @@ import {
   resetTemplate,
   updateTemplate,
 } from "./template-service";
+export {
+  attachLayout,
+  detachLayout,
+  getLayout,
+  rejoinLayout,
+} from "./layout-service";
+import {
+  attachLayout,
+  detachLayout,
+  getLayout,
+  rejoinLayout,
+} from "./layout-service";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -616,6 +628,13 @@ export const updatePage = defineService({
           `indexnow:${page!.id}:rename:${before.slug}:${page!.slug}`,
         );
       }
+    }
+
+    if (changes.blocks !== undefined) {
+      await ctx.call(detachLayout, { pageId: page!.id }).catch((error: unknown) => {
+        if (error instanceof ServiceError && error.code === "not_found") return;
+        throw error;
+      });
     }
 
     ctx.setSubject("page", page!.id);
@@ -1172,6 +1191,10 @@ export default [
   createFromTemplate,
   previewTemplate,
   ensureTemplates,
+  getLayout,
+  attachLayout,
+  detachLayout,
+  rejoinLayout,
   listRevisions,
   restoreRevision,
   createPreviewLink,
