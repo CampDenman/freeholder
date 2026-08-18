@@ -9,7 +9,7 @@
 import { z } from "zod";
 import { selectAssignedVariants } from "../experiments";
 import { deriveFields, type FieldDescriptor } from "./fields";
-import type { BlockDefinition, BlockNode } from "./types";
+import type { BlockContext, BlockDefinition, BlockNode } from "./types";
 import {
   announcement,
   brand,
@@ -30,6 +30,7 @@ import {
   productsIndex,
   sectionInstance,
   experiment,
+  variable,
   variant,
   spacer,
   text,
@@ -74,6 +75,7 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   productDetail,
   sectionInstance,
   experiment,
+  variable,
   variant,
   testimonial,
   gallery,
@@ -136,7 +138,7 @@ export interface PaletteEntry {
  * listed (§24: a plugin's block "appears in the palette with zero editor
  * changes"). The editor knows about *fields*, never about headings or FAQs.
  */
-export function paletteFor(context: "page" | "chrome"): PaletteEntry[] {
+export function paletteFor(context: BlockContext): PaletteEntry[] {
   return definitions
     .filter((d) => d.contexts.includes(context))
     .map((d) => ({
@@ -168,7 +170,7 @@ export class BlockValidationError extends Error {}
  */
 export function parseBlockTree(
   input: unknown,
-  context: "page" | "chrome",
+  context: BlockContext,
   path = "blocks",
 ): BlockNode[] {
   if (!Array.isArray(input)) {
@@ -227,7 +229,7 @@ export function parseBlockTree(
 }
 
 /** Zod wrapper, so a service's input schema can carry a whole tree. */
-export const blockTreeSchema = (context: "page" | "chrome") =>
+export const blockTreeSchema = (context: BlockContext) =>
   z.unknown().transform((value, ctx) => {
     try {
       return parseBlockTree(value, context);

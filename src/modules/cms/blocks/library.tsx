@@ -29,7 +29,7 @@ import { selectAssignedVariants } from "../experiments";
 export const heading = defineBlock({
   type: "heading",
   labelKey: "cms.block.heading",
-  contexts: ["page", "chrome"],
+  contexts: ["page", "chrome", "email"],
   schema: z.object({
     text: z.string().min(1),
     // The editor enforces one H1 per page (§32: "the drag-and-drop layer
@@ -61,7 +61,7 @@ export const heading = defineBlock({
 export const text = defineBlock({
   type: "text",
   labelKey: "cms.block.text",
-  contexts: ["page", "chrome"],
+  contexts: ["page", "chrome", "email"],
   schema: z.object({
     // Typed rich text (C2.05). A leftover plain string still writes, and is
     // coerced to paragraphs. HTML soup is refused — the html block is the
@@ -90,7 +90,7 @@ export const text = defineBlock({
 export const button = defineBlock({
   type: "button",
   labelKey: "cms.block.button",
-  contexts: ["page", "chrome"],
+  contexts: ["page", "chrome", "email"],
   schema: z.object({
     label: z.string().min(1),
     href: z.string().min(1),
@@ -258,7 +258,7 @@ export const columns = defineBlock({
 export const divider = defineBlock({
   type: "divider",
   labelKey: "cms.block.divider",
-  contexts: ["page", "chrome"],
+  contexts: ["page", "chrome", "email"],
   schema: z.object({}),
   starter: () => ({}),
   render: () => <hr className="border-0 border-t border-rule" />,
@@ -267,7 +267,7 @@ export const divider = defineBlock({
 export const spacer = defineBlock({
   type: "spacer",
   labelKey: "cms.block.spacer",
-  contexts: ["page"],
+  contexts: ["page", "email"],
   schema: z.object({ size: z.enum(["s", "m", "l"]).default("m") }),
   starter: () => ({ size: "m" as const }),
   render: ({ props }) => (
@@ -506,7 +506,7 @@ export const nav = defineBlock({
 export const image = defineBlock({
   type: "image",
   labelKey: "cms.block.image",
-  contexts: ["page", "chrome"],
+  contexts: ["page", "chrome", "email"],
   schema: z.object({
     assetId: z.string().uuid().optional(),
     /** Overrides the asset's own description where the context needs it to. */
@@ -913,6 +913,25 @@ export const experiment = defineBlock({
     ) : (
       <>{children}</>
     ),
+});
+
+export const EMAIL_VARIABLE_SLOTS = [
+  "contact.first_name",
+  "contact.email",
+  "business.name",
+  "invoice.total",
+  "booking.starts_at_local",
+] as const;
+
+export const variable = defineBlock({
+  type: "variable",
+  labelKey: "cms.block.variable",
+  contexts: ["email"],
+  schema: z.object({
+    slot: z.enum(EMAIL_VARIABLE_SLOTS),
+  }),
+  starter: () => ({ slot: "contact.first_name" as const }),
+  render: ({ props }) => <span>{`{{${props.slot}}}`}</span>,
 });
 
 export const variant = defineBlock({

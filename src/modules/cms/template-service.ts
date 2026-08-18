@@ -5,7 +5,7 @@ import { z } from "zod";
 import { and, asc, eq } from "drizzle-orm";
 import { defineService, ServiceError } from "@/core/service";
 import instanceConfig from "../../../freeholder.config";
-import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
+import { BlockValidationError, parseBlockTree } from "./blocks/registry";
 import { cloneTree } from "./section-instances";
 import {
   contentTemplates,
@@ -109,7 +109,7 @@ export const updateTemplate = defineService({
     preset: presetSchema.optional(),
     locale: z.string().default("en"),
     name: z.string().trim().min(1).max(80).optional(),
-    blocks: blockTreeSchema("page"),
+    blocks: z.unknown(),
   }),
   handler: async (input, ctx) => {
     const preset = input.preset ?? instancePreset();
@@ -131,7 +131,19 @@ export const updateTemplate = defineService({
       .update(contentTemplates)
       .set({
         name: input.name ?? existing.name,
-        blocks: parseBlockTree(input.blocks, "page"),
+        blocks: (() => {
+          try {
+            return parseBlockTree(
+              input.blocks,
+              existing.kind === "email" ? "email" : "page",
+            );
+          } catch (error) {
+            if (error instanceof BlockValidationError) {
+              throw new ServiceError("validation", error.message);
+            }
+            throw error;
+          }
+        })(),
         origin: "owner",
       })
       .where(eq(contentTemplates.id, existing.id))

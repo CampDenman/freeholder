@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Edit a template in the same editor as a page (C2.13).
 import { notFound } from "next/navigation";
-import { getTemplate } from "@/modules/cms/service";
+import { getTemplate, previewEmail } from "@/modules/cms/service";
 import { listAssets } from "@/core/media/service";
 import { currentBusiness } from "@/core/settings/read";
 import { languageName, resolveEnabledLocale } from "@/core/i18n/customer";
@@ -14,6 +14,7 @@ import { editorBlockTypes, editorLabels } from "../../editorLabels";
 import { resetTemplateAction } from "../../../cms-actions";
 import { TemplateEditor } from "./TemplateEditor";
 import { CreateFromTemplateForm } from "./CreateFromTemplateForm";
+import { EmailInboxPreview } from "./EmailInboxPreview";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,10 @@ export default async function EditTemplatePage({
     getT(),
   ]);
   if (!template) notFound();
+  const inbox =
+    template.kind === "email"
+      ? await previewEmail.call({ key: template.key, locale }, actor)
+      : null;
 
   return (
     <div className="grid gap-6">
@@ -52,6 +57,22 @@ export default async function EditTemplatePage({
           {t("cms.templates.editIntro")} · {languageName(locale)}
         </p>
       </div>
+      {inbox ? (
+        <EmailInboxPreview
+          subject={inbox.subject}
+          html={inbox.html}
+          text={inbox.text}
+          templateKey={template.key}
+          locale={locale}
+          labels={{
+            inbox: t("cms.email.inbox"),
+            from: t("cms.email.from"),
+            to: t("cms.email.to"),
+            subject: t("cms.email.subject"),
+            testSend: t("cms.email.testSend"),
+          }}
+        />
+      ) : null}
       {template.kind !== "email" ? (
         <CreateFromTemplateForm
           templateKey={template.key}
@@ -79,7 +100,7 @@ export default async function EditTemplatePage({
         initialBlocks={template.blocks as BlockNode[]}
         blockTypes={editorBlockTypes(
           t,
-          "page",
+          template.kind === "email" ? "email" : "page",
           library.rows.map((a) => ({
             id: a.id,
             filename: a.filename,

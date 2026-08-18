@@ -46,6 +46,7 @@ export default defineModule({
       "cms.layoutAttached",
       "cms.layoutDetached",
       "cms.layoutRejoined",
+      "cms.emailTestSent",
       "cms.commentCreated",
       "cms.commentResolved",
       "cms.commentReopened",

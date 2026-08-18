@@ -18,6 +18,8 @@ import type { z } from "zod";
 import type { Translate } from "@/core/i18n";
 import type { FieldHint } from "./fields";
 
+export type BlockContext = "page" | "chrome" | "email";
+
 /**
  * What a block can see while rendering.
  *
@@ -97,7 +99,7 @@ export interface BlockDefinition<
   /** Catalog key for the editor palette — copy, so it is not a literal. */
   labelKey: string;
   /** Where this block may be used. Email excludes interactive blocks (§32). */
-  contexts: ReadonlyArray<"page" | "chrome">;
+  contexts: ReadonlyArray<BlockContext>;
   schema: Props;
   /**
    * The props a freshly added block starts with.

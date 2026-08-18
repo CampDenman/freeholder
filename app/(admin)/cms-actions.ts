@@ -29,6 +29,7 @@ import {
   restoreRevision,
   updatePage,
   updateSection,
+  testSendEmail,
   updateTemplate,
 } from "@/modules/cms/service";
 import {
@@ -349,10 +350,22 @@ export async function saveTemplateBlocksAction(
   try {
     await updateTemplate.call({ key, locale, blocks }, await currentActor());
     revalidatePath("/admin/templates");
+    revalidatePath(`/admin/templates/${encodeURIComponent(key)}`);
     return {};
   } catch (error) {
     return present(error);
   }
+}
+
+export async function testSendEmailAction(form: FormData): Promise<void> {
+  const key = text(form, "key");
+  const locale = text(form, "locale") || "en";
+  const subject = text(form, "subject");
+  await testSendEmail.call(
+    { key, locale, subject: subject || undefined },
+    await currentActor(),
+  );
+  revalidatePath(`/admin/templates/${encodeURIComponent(key)}`);
 }
 
 export async function resetTemplateAction(form: FormData): Promise<void> {
