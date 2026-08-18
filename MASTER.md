@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.16 locale workflow. Next: C2.17–C2.23 (skip C2.21). |
+| Current focus | C2.17 experiments. Next: C2.18–C2.23 (skip C2.21). |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3487,8 +3487,12 @@ project without silent telemetry, and ready to carry money.
 
 #### Experiments, email, SEO, and performance
 
-- [ ] **C2.17** Add variants to blocks, Sections, pages and entity layouts;
+- [x] **C2.17** Add variants to blocks, Sections, pages and entity layouts;
   server-side sticky assignment, traffic allocation and cache variation.
+  (`experiment` / `variant` blocks; hash of visitor id + key; crawlers get
+  control; `experimentCacheKey` for the cache Vary surface; editor preview
+  shows every variant; `tests/core/cms-experiments.test.ts`; changeset
+  `cms-experiments.md`)
 - [ ] **C2.18** Record experiment impressions/conversions and join outcomes to
   contacts, bookings, invoices and revenue with statistically honest reporting.
 - [ ] **C2.19** Reuse the block editor for email-safe output with restricted

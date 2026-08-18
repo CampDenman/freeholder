@@ -50,6 +50,8 @@ import { alternatesFor, localePath, translatedLocales } from "./alternates";
 import { recordPageView } from "./pageview";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
+import { assignmentsFor } from "@/modules/cms/experiments";
+import { ANON_HEADER } from "@/modules/analytics/visitor";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { CSP_NONCE_HEADER } from "@/core/http/csp";
 
@@ -237,6 +239,8 @@ export default async function PublicPage({
   await recordPageView(path === "" ? "/" : `/${path}`, locale, query);
 
   const blocks = page.blocks as BlockNode[];
+  const visitorId = requestHeaders.get(ANON_HEADER);
+  const experimentAssignments = assignmentsFor(blocks, visitorId);
   const rendered = await renderBlocks(blocks, {
     locale,
     t,
@@ -247,6 +251,8 @@ export default async function PublicPage({
           enabledLocales: business.enabledLocales,
         } : null,
     path: path === "" ? "/" : `/${path}`,
+    visitorId,
+    experimentAssignments,
     localizeHref: business
       ? (href: string) => localizeCustomerHref(href, locale, business)
       : undefined,

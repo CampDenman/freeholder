@@ -22,6 +22,7 @@ import { defineBlock } from "./types";
 import { fromPlainString, richBodySchema } from "./rich";
 import { renderRichDoc } from "./rich-render";
 import { sanitizeOwnerHtml } from "./html";
+import { selectAssignedVariants } from "../experiments";
 
 /* ------------------------------------------------------------------ text */
 
@@ -881,4 +882,58 @@ export const sectionInstance = defineBlock({
     }
     return <div className="grid gap-6">{resolved.nodes}</div>;
   },
+});
+
+/**
+ * A/B (and n-way) experiment (C2.17). Children are `variant` blocks. The
+ * public renderer keeps only the assigned variant in the HTML.
+ */
+export const experiment = defineBlock({
+  type: "experiment",
+  labelKey: "cms.block.experiment",
+  contexts: ["page", "chrome"],
+  container: true,
+  schema: z.object({
+    experimentKey: z.string().trim().min(1).max(80),
+  }),
+  starter: () => ({ experimentKey: "experiment" }),
+  selectChildren: ({ props, children, ctx }) =>
+    selectAssignedVariants(
+      props.experimentKey,
+      children,
+      ctx.experimentAssignments,
+      ctx.visitorId,
+      ctx.identifyBlocks === true,
+    ),
+  render: ({ props, children, ctx }) =>
+    ctx.identifyBlocks ? (
+      <div data-experiment={props.experimentKey} className="grid gap-4">
+        {children}
+      </div>
+    ) : (
+      <>{children}</>
+    ),
+});
+
+export const variant = defineBlock({
+  type: "variant",
+  labelKey: "cms.block.variant",
+  contexts: ["page", "chrome"],
+  container: true,
+  schema: z.object({
+    name: z.string().trim().min(1).max(40),
+    weight: z.number().int().min(1).max(100).default(50),
+  }),
+  starter: () => ({ name: "control", weight: 50 }),
+  render: ({ props, children, ctx }) =>
+    ctx.identifyBlocks ? (
+      <div data-variant={props.name} className="grid gap-3 border border-dashed border-rule p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          {ctx.t("cms.experiment.variant", { name: props.name, weight: props.weight })}
+        </p>
+        {children}
+      </div>
+    ) : (
+      <>{children}</>
+    ),
 });

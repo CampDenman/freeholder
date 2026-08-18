@@ -37,6 +37,8 @@ import { AnalyticsRuntime } from "./AnalyticsRuntime";
 import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
 import { SkipLink } from "@/ui/SkipLink";
 import { actorFromToken } from "@/core/http/actor";
+import { assignmentsFor } from "@/modules/cms/experiments";
+import { ANON_HEADER } from "@/modules/analytics/visitor";
 import { MagicWand } from "@phosphor-icons/react/dist/ssr";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +76,16 @@ export default async function PublicLayout({
   // page is rendering inside it, so middleware.ts puts the pathname on a
   // request header and the chrome reads it here — which keeps the nav a server
   // component instead of a client one that exists only to call usePathname().
+  const visitorId = requestHeaders.get(ANON_HEADER);
+  const experimentAssignments = assignmentsFor(
+    [
+      ...((announcement?.blocks as BlockNode[] | undefined) ?? []),
+      ...((header?.blocks as BlockNode[] | undefined) ?? []),
+      ...((navigation?.blocks as BlockNode[] | undefined) ?? []),
+      ...((footer?.blocks as BlockNode[] | undefined) ?? []),
+    ],
+    visitorId,
+  );
   const ctx = {
     locale,
     t,
@@ -86,6 +98,8 @@ export default async function PublicLayout({
         }
       : null,
     path: requestHeaders.get(PATH_HEADER) ?? "/",
+    visitorId,
+    experimentAssignments,
     localizeHref: business
       ? (href: string) => localizeCustomerHref(href, locale, business)
       : undefined,
