@@ -1099,8 +1099,79 @@ export async function onFormSubmitted(payload: unknown): Promise<void> {
     if (contactId) {
       await identify.call({ anonId, contactId }, { kind: "system" });
     }
+    const { recordExperimentConversion } = await import("./experiments");
+    await recordExperimentConversion.call(
+      { anonId, sessionId, contactId: contactId ?? undefined, kind: "form" },
+      { kind: "system" },
+    );
   }
 }
+
+async function convertFromEvent(
+  kind: string,
+  payload: unknown,
+  amountMinor?: number,
+  currency?: string,
+): Promise<void> {
+  const { contactId } = (payload ?? {}) as { contactId?: string };
+  let anonId: string | undefined;
+  let sessionId: string | undefined;
+  try {
+    const { cookies } = await import("next/headers");
+    const jar = await cookies();
+    const { ANON_COOKIE, SESSION_COOKIE_NAME, ANALYTICS_BOOTSTRAP_COOKIE } = await import("./visitor");
+    const bootstrap = jar.get(ANALYTICS_BOOTSTRAP_COOKIE)?.value;
+    anonId = jar.get(ANON_COOKIE)?.value ?? bootstrap;
+    sessionId = jar.get(SESSION_COOKIE_NAME)?.value ?? bootstrap;
+  } catch {
+    return;
+  }
+  if (!anonId || !sessionId) return;
+  const { recordExperimentConversion } = await import("./experiments");
+  await recordExperimentConversion.call(
+    {
+      anonId,
+      sessionId,
+      contactId,
+      kind,
+      amountMinor,
+      currency,
+    },
+    { kind: "system" },
+  );
+}
+
+export async function onQuoteRequested(payload: unknown): Promise<void> {
+  await convertFromEvent("quote", payload);
+}
+
+export async function onSiteChatStarted(payload: unknown): Promise<void> {
+  await convertFromEvent("chat", payload);
+}
+
+export async function onTipIntended(payload: unknown): Promise<void> {
+  const body = (payload ?? {}) as { amountMinor?: number; currency?: string };
+  await convertFromEvent("tip", payload, body.amountMinor, body.currency);
+}
+
+export async function onEventRegistered(payload: unknown): Promise<void> {
+  await convertFromEvent("booking", payload);
+}
+
+export async function onOrderPlaced(payload: unknown): Promise<void> {
+  await convertFromEvent("order", payload);
+}
+
+export {
+  experimentReport,
+  recordExperimentConversion,
+  recordExperimentImpressions,
+} from "./experiments";
+import {
+  experimentReport,
+  recordExperimentConversion,
+  recordExperimentImpressions,
+} from "./experiments";
 
 export default [
   track,
@@ -1116,4 +1187,7 @@ export default [
   correctClassification,
   exportAnonymizedAnalytics,
   contactActivity,
+  recordExperimentImpressions,
+  recordExperimentConversion,
+  experimentReport,
 ];

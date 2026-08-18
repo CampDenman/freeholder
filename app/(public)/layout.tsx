@@ -38,7 +38,8 @@ import { AnalyticsConsentControl } from "./AnalyticsConsentControl";
 import { SkipLink } from "@/ui/SkipLink";
 import { actorFromToken } from "@/core/http/actor";
 import { assignmentsFor } from "@/modules/cms/experiments";
-import { ANON_HEADER } from "@/modules/analytics/visitor";
+import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
+import { recordExperimentImpressions } from "@/modules/analytics/service";
 import { MagicWand } from "@phosphor-icons/react/dist/ssr";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +87,18 @@ export default async function PublicLayout({
     ],
     visitorId,
   );
+  if (visitorId && Object.keys(experimentAssignments).length > 0) {
+    await recordExperimentImpressions.call(
+      {
+        anonId: visitorId,
+        sessionId: requestHeaders.get(SESSION_HEADER) ?? visitorId,
+        path: requestHeaders.get(PATH_HEADER) ?? "/",
+        locale,
+        assignments: experimentAssignments,
+      },
+      { kind: "anonymous" },
+    ).catch(() => undefined);
+  }
   const ctx = {
     locale,
     t,

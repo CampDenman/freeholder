@@ -15,7 +15,16 @@ export default defineModule({
   requires: ["core"],
   tables: () => import("./tables"),
   services: () => import("./service"),
-  events: { listens: { "forms.submitted": "onFormSubmitted" } },
+  events: {
+    listens: {
+      "forms.submitted": "onFormSubmitted",
+      "cms.quoteRequested": "onQuoteRequested",
+      "cms.siteChatStarted": "onSiteChatStarted",
+      "cms.tipIntended": "onTipIntended",
+      "events.registered": "onEventRegistered",
+      "catalog.orderPlaced": "onOrderPlaced",
+    },
+  },
   /**
    * §11's settingsSchema, used for the first time.
    *

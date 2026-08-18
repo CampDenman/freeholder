@@ -27,6 +27,7 @@ import {
   Flask,
   MapPin,
   ChartLine,
+  Shuffle,
   Envelope,
   Stethoscope,
   SlidersHorizontal,
@@ -53,6 +54,7 @@ export interface AdminNavLabels {
   locations: string;
   translations: string;
   traffic: string;
+  experiments: string;
   health: string;
   jobs: string;
   settings: string;
@@ -109,6 +111,7 @@ const LINKS = [
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
   { href: "/admin/traffic", key: "traffic", module: "analytics", Icon: ChartLine },
+  { href: "/admin/experiments", key: "experiments", module: "analytics", Icon: Shuffle },
   { href: "/admin/roles", key: "roles", module: "roles", Icon: ShieldCheck },
   { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
   { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
