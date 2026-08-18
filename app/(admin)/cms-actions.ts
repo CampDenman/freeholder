@@ -10,6 +10,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { invalidationPlan, type InvalidationTarget } from "@/modules/cms/cache";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
@@ -97,6 +98,13 @@ function present(error: unknown): SaveResult {
   return { error: "Something went wrong. Try again." };
 }
 
+function applyInvalidation(targets: InvalidationTarget[]): void {
+  for (const target of targets) {
+    if (target.type) revalidatePath(target.path, target.type);
+    else revalidatePath(target.path);
+  }
+}
+
 export async function saveAsSectionAction(
   name: string,
   nodes: unknown,
@@ -150,9 +158,7 @@ export async function savePageBlocksAction(
       { id, blocks, expectedVersion },
       await currentActor(),
     );
-    // The public page renders from the database on every request, so the only
-    // thing to invalidate is Next's own route cache.
-    revalidatePath("/", "layout");
+    applyInvalidation(invalidationPlan({ kind: "draft", pageId: id }));
     return { version: page.version };
   } catch (error) {
     const shown = present(error);
@@ -185,7 +191,7 @@ export async function mergePageBlocksAction(
       { id, blocks, expectedVersion },
       await currentActor(),
     );
-    revalidatePath("/", "layout");
+    applyInvalidation(invalidationPlan({ kind: "draft", pageId: id }));
     return { version: page.version };
   } catch (error) {
     return present(error);
@@ -234,17 +240,17 @@ export async function addCommentAction(form: FormData): Promise<void> {
     },
     await currentActor(),
   );
-  revalidatePath("/", "layout");
+  applyInvalidation(invalidationPlan({ kind: "adminOnly", pageId: text(form, "pageId") }));
 }
 
 export async function resolveThreadAction(form: FormData): Promise<void> {
   await resolveThread.call({ id: text(form, "id") }, await currentActor());
-  revalidatePath("/", "layout");
+  applyInvalidation(invalidationPlan({ kind: "adminOnly", pageId: text(form, "pageId") }));
 }
 
 export async function reopenThreadAction(form: FormData): Promise<void> {
   await reopenThread.call({ id: text(form, "id") }, await currentActor());
-  revalidatePath("/", "layout");
+  applyInvalidation(invalidationPlan({ kind: "adminOnly", pageId: text(form, "pageId") }));
 }
 
 export async function requestReviewAction(form: FormData): Promise<void> {
@@ -279,7 +285,7 @@ export async function saveSectionBlocksAction(
 ): Promise<SaveResult> {
   try {
     await updateSection.call({ key, locale, blocks }, await currentActor());
-    revalidatePath("/", "layout");
+    applyInvalidation(invalidationPlan({ kind: "chrome" }));
     return {};
   } catch (error) {
     return present(error);
@@ -291,7 +297,7 @@ export async function createSectionLocaleAction(
   locale: string,
 ): Promise<void> {
   await createSectionLocale.call({ key, locale }, await currentActor());
-  revalidatePath("/", "layout");
+  applyInvalidation(invalidationPlan({ kind: "chrome" }));
   redirect(`/admin/sections/${encodeURIComponent(key)}?locale=${encodeURIComponent(locale)}`);
 }
 
@@ -304,7 +310,7 @@ export async function savePageDetailsAction(
   const slug = text(form, "slug");
   try {
     await updatePage.call({ id, title, slug }, await currentActor());
-    revalidatePath("/", "layout");
+    applyInvalidation(invalidationPlan({ kind: "draft", pageId: id, slug }));
     return {};
   } catch (error) {
     return present(error);
@@ -423,14 +429,14 @@ export async function rejoinLayoutAction(form: FormData): Promise<void> {
 export async function setPagePublishedAction(form: FormData): Promise<void> {
   const id = text(form, "id");
   const published = text(form, "published") === "true";
-  await publishPage.call({ id, published }, await currentActor());
-  revalidatePath("/", "layout");
+  const page = await publishPage.call({ id, published }, await currentActor());
+  applyInvalidation(invalidationPlan({ kind: "published", pageId: id, slug: page.slug }));
 }
 
 export async function restoreRevisionAction(form: FormData): Promise<void> {
   const revisionId = text(form, "revisionId");
   await restoreRevision.call({ revisionId }, await currentActor());
-  revalidatePath("/", "layout");
+  applyInvalidation(invalidationPlan({ kind: "draft" }));
 }
 
 export async function schedulePageAction(form: FormData): Promise<void> {

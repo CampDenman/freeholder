@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.22 cache and performance. Next: C2.23. |
+| Current focus | C2.23 plugin block proof. Next: C3. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3521,8 +3521,12 @@ project without silent telemetry, and ready to carry money.
   `tests/core/seo-public-entities.test.ts`,
   `tests/core/catalog-public-pages.test.ts`, `tests/core/events.test.ts` and
   `tests/core/newsletters.test.ts`; changeset `events-newsletters-seo.md`.)*
-- [ ] **C2.22** Add draft/published cache invalidation, image and page budgets,
+- [x] **C2.22** Add draft/published cache invalidation, image and page budgets,
   zero client-side layout swap, and performance regression tests.
+  (`invalidationPlan` — draft saves skip the public slug; publish busts it;
+  chrome busts layout; `experimentCacheKey` is the Vary surface; page/image/HTML
+  budgets on create/update/publish; public experiments still return one variant;
+  `tests/core/cms-cache.test.ts`; changeset `cms-cache-budgets.md`)
 - [ ] **C2.23** Prove a plugin can register a schema, renderer, editor fields,
   migration, sitemap source and seed block with zero core-editor changes.
 

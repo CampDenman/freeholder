@@ -99,6 +99,7 @@ import { draftPageTranslation, pageTranslationReport } from "./translation-workf
 export { previewEmail, testSendEmail } from "./email-service";
 import { previewEmail, testSendEmail } from "./email-service";
 import { analyzeAccessibility, publishA11yMessage } from "./a11y-hints";
+import { budgetMessage } from "./budgets";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -343,6 +344,8 @@ export const createPage = defineService({
     seo,
   }),
   handler: async (input, ctx) => {
+    const over = budgetMessage(input.blocks);
+    if (over) throw new ServiceError("validation", over);
     const [page] = await ctx.tx
       .insert(pages)
       .values(input)
@@ -582,6 +585,10 @@ export const updatePage = defineService({
     const nextWorkingTitle = changes.title ?? before.workingTitle ?? before.title;
     const nextWorkingBlocks = changes.blocks ?? before.workingBlocks ?? before.blocks;
     const nextWorkingSeo = changes.seo ?? before.workingSeo ?? before.seo;
+    if (changes.blocks !== undefined) {
+      const over = budgetMessage(nextWorkingBlocks as BlockNode[]);
+      if (over) throw new ServiceError("validation", over);
+    }
     const publishedContentEdit =
       before.status === "published" &&
       (changes.title !== undefined || changes.blocks !== undefined || changes.seo !== undefined);
@@ -706,12 +713,11 @@ export const publishPage = defineService({
     const blocks = before.workingBlocks ?? before.blocks;
     const seo = before.workingSeo ?? before.seo;
     if (input.published) {
-      const blocked = publishA11yMessage(
-        analyzeAccessibility(Array.isArray(blocks) ? (blocks as BlockNode[]) : [], {
-          context: "page",
-        }),
-      );
+      const tree = Array.isArray(blocks) ? (blocks as BlockNode[]) : [];
+      const blocked = publishA11yMessage(analyzeAccessibility(tree, { context: "page" }));
       if (blocked) throw new ServiceError("validation", blocked);
+      const over = budgetMessage(tree);
+      if (over) throw new ServiceError("validation", over);
     }
     if (input.published) {
       await ctx.tx.insert(contentRevisions).values({
