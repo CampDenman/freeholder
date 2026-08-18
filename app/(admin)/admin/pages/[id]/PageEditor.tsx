@@ -64,7 +64,7 @@ export function PageEditor({
         const result = await saveAsSectionAction(name, nodes);
         return {
           error: result.error,
-          instance: result.instance as EditorNode | undefined,
+          instance: result.instance,
         };
       }}
       onDetachSection={async (node) => {
