@@ -4,7 +4,7 @@
 //
 // Admin, HTTP and MCP all call these. Spoke submit never fetches; delivery is
 // a job. Hub ingest is public and write-only, and is 404 until hub mode is on.
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import {
@@ -35,7 +35,10 @@ import { db } from "@/core/db";
 import {
   DEFAULT_HUB_URL,
   deliverQueuedContribution,
+  deliverStatusReply,
+  isCanonicalProjectHub,
   isSelfHub,
+  recordStatusUrl,
   spokeBodyJson,
   type ContributeSettingsView,
 } from "./deliver";
@@ -216,7 +219,7 @@ async function loadSettings(tx: Tx): Promise<ContributeSettingsView> {
   const [row] = await tx.select().from(contributeSettings).limit(1);
   if (!row) {
     return {
-      hubEnabled: false,
+      hubEnabled: isCanonicalProjectHub(),
       hubUrl: DEFAULT_HUB_URL,
       hasReceiveSecret: false,
       receiveSecret: null,
@@ -235,7 +238,7 @@ async function ensureSettings(tx: Tx) {
   if (existing) return existing;
   const [created] = await tx
     .insert(contributeSettings)
-    .values({ id: 1 })
+    .values({ id: 1, hubEnabled: isCanonicalProjectHub() })
     .onConflictDoNothing()
     .returning();
   if (created) return created;
@@ -305,6 +308,31 @@ export const contributeHubStatus = defineService({
   handler: async (_input, ctx) => {
     const settings = await loadSettings(ctx.tx);
     return { hubEnabled: settings.hubEnabled };
+  },
+});
+
+export const setHubEnabled = defineService({
+  name: "contribute.setHubEnabled",
+  summary: "Turn hub ingest on or off. Required boolean — this is the switch.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    enabled: z.boolean(),
+  }),
+  handler: async (input, ctx) => {
+    await ensureSettings(ctx.tx);
+    const [updated] = await ctx.tx
+      .update(contributeSettings)
+      .set({ hubEnabled: input.enabled })
+      .where(eq(contributeSettings.id, 1))
+      .returning();
+    ctx.setSubject("contribute_settings", "1");
+    ctx.queueEvent("contribute.hubToggled", { enabled: input.enabled });
+    return settingsOutput.parse({
+      hubEnabled: updated!.hubEnabled,
+      hubUrl: updated!.hubUrl,
+      hasReceiveSecret: Boolean(updated!.receiveSecret),
+    });
   },
 });
 
@@ -455,8 +483,8 @@ export const submitContribution = defineService({
     }
 
     const local = isSelfHub(settings.hubUrl);
-    const status = local ? "received" : "queued";
-    const source = ctx.actor.kind === "agent" ? "mcp" : "admin";
+    const status: "received" | "queued" = local ? "received" : "queued";
+    const source: "mcp" | "admin" = ctx.actor.kind === "agent" ? "mcp" : "admin";
     const values = {
       contactId,
       kind: input.kind,
@@ -475,7 +503,10 @@ export const submitContribution = defineService({
       dcoAttested: input.dcoAttested,
       dcoSigner: input.dcoSigner ?? null,
       actor: actorString(ctx.actor),
-    } as const;
+      replyUrl: local ? null : recordStatusUrl(),
+      replyToken: local ? null : newSecret(),
+      spokeId: null,
+    };
 
     let row: typeof contributions.$inferSelect;
     if (input.id) {
@@ -642,6 +673,9 @@ export const ingestContribution = defineService({
     contentHash: z.string().trim().min(32).max(128).optional(),
     signature: z.string().trim().min(1).max(500).optional(),
     platformVersion: z.string().trim().max(40).optional(),
+    spokeId: z.string().uuid().optional(),
+    replyUrl: z.string().trim().url().max(500).optional(),
+    replyToken: z.string().trim().min(8).max(200).optional(),
   }),
   rateLimit: {
     limit: 20,
@@ -683,6 +717,9 @@ export const ingestContribution = defineService({
         dcoSigner: input.dcoSigner ?? null,
         externalUrl: input.externalUrl ?? null,
         contentHash: hash,
+        id: input.spokeId,
+        replyUrl: input.replyUrl ?? null,
+        replyToken: input.replyToken ?? null,
       });
       if (!verifySignature(settings.receiveSecret, signed, input.signature)) {
         throw new ServiceError("permission", "That signature is not valid.");
@@ -722,6 +759,9 @@ export const ingestContribution = defineService({
       input.includeDoctor && input.doctorReport !== undefined
         ? redact(input.doctorReport)
         : null;
+    if (input.replyUrl) {
+      assertDeliverableUrl(input.replyUrl);
+    }
     const [row] = await ctx.tx
       .insert(contributions)
       .values({
@@ -742,6 +782,9 @@ export const ingestContribution = defineService({
         dcoAttested: input.dcoAttested,
         dcoSigner: input.dcoSigner ?? null,
         actor: actorString(ctx.actor),
+        spokeId: input.spokeId ?? null,
+        replyUrl: input.replyUrl ?? null,
+        replyToken: input.replyToken ?? null,
       })
       .returning();
     await recordEvent(ctx.tx, row!.id, "ingested", actorString(ctx.actor));
@@ -852,8 +895,92 @@ async function moveStatus(
     status,
     checklistId: row!.checklistId,
   });
+  if (row!.replyUrl && row!.spokeId && row!.replyToken) {
+    await ctx.queueJob(
+      "contribute.reply",
+      { contributionId: row!.id, note: note ?? null },
+      { idempotencyKey: `contribute.reply:${row!.id}:${status}` },
+    );
+  }
   return present(row!);
 }
+
+const replyStatusSchema = z.enum([
+  "received",
+  "triage",
+  "needs_info",
+  "accepted",
+  "duplicate",
+  "wontfix",
+  "shipped",
+]);
+
+function tokensMatch(expected: string, presented: string): boolean {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(presented);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export const recordContributionStatus = defineService({
+  name: "contribute.recordStatus",
+  summary: "Record a hub determination on the instance that filed the report.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    spokeId: z.string().uuid(),
+    replyToken: z.string().trim().min(8).max(200),
+    status: replyStatusSchema,
+    note: z.string().trim().max(4000).optional(),
+    checklistId: z
+      .string()
+      .trim()
+      .regex(/^C\d{1,2}\.\d{2}$/)
+      .optional(),
+    hubId: z.string().uuid().optional(),
+  }),
+  rateLimit: {
+    limit: 30,
+    windowSeconds: 10 * 60,
+    subject: (input) => `contribute:reply:${input.spokeId}`,
+    message: "Wait a moment before sending another status update.",
+  },
+  handler: async (input, ctx) => {
+    const [existing] = await ctx.tx
+      .select()
+      .from(contributions)
+      .where(eq(contributions.id, input.spokeId))
+      .limit(1);
+    if (!existing || !existing.replyToken) {
+      throw new ServiceError("not_found", "That report was not found.");
+    }
+    if (!tokensMatch(existing.replyToken, input.replyToken)) {
+      throw new ServiceError("permission", "That reply token is not valid.");
+    }
+    const [row] = await ctx.tx
+      .update(contributions)
+      .set({
+        status: input.status,
+        checklistId: input.checklistId ?? existing.checklistId,
+        hubReceiptId: input.hubId ?? existing.hubReceiptId,
+      })
+      .where(eq(contributions.id, existing.id))
+      .returning();
+    await recordEvent(
+      ctx.tx,
+      row!.id,
+      input.status,
+      actorString(ctx.actor),
+      input.note,
+    );
+    ctx.setSubject("contribution", row!.id);
+    ctx.queueEvent("contribute.statusUpdated", {
+      id: row!.id,
+      status: input.status,
+      title: row!.title,
+    });
+    return present(row!);
+  },
+});
 
 export async function runContributeDeliverJob(data: Record<string, unknown>) {
   const contributionId = z.string().uuid().parse(data.contributionId);
@@ -864,9 +991,26 @@ export async function runContributeDeliverJob(data: Record<string, unknown>) {
   });
 }
 
+export async function runContributeReplyJob(
+  data: Record<string, unknown>,
+  options: { fetchImpl?: typeof fetch } = {},
+) {
+  const contributionId = z.string().uuid().parse(data.contributionId);
+  const note =
+    typeof data.note === "string" && data.note.trim() ? data.note : undefined;
+  const [row] = await db()
+    .select()
+    .from(contributions)
+    .where(eq(contributions.id, contributionId))
+    .limit(1);
+  if (!row) return { sent: false };
+  return deliverStatusReply(row, note, options);
+}
+
 export default [
   getContributeSettings,
   contributeHubStatus,
+  setHubEnabled,
   updateContributeSettings,
   draftContribution,
   submitContribution,
@@ -876,4 +1020,5 @@ export default [
   ingestContribution,
   triageContribution,
   determineContribution,
+  recordContributionStatus,
 ];

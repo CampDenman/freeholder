@@ -10,6 +10,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
   determineContribution,
+  setHubEnabled,
   submitContribution,
   updateContributeSettings,
 } from "@/core/contribute/service";
@@ -87,6 +88,28 @@ export async function determineContributionAction(
         checklistId: text(form, "checklistId") || undefined,
         parentId: text(form, "parentId") || undefined,
       },
+      actor,
+    );
+    revalidatePath("/admin/contribute");
+    return {};
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      return { error: ownerFacing(error.message) };
+    }
+    throw error;
+  }
+}
+
+export async function setHubEnabledAction(
+  _prev: ContributeActionState,
+  form: FormData,
+): Promise<ContributeActionState> {
+  const actor = await actorFromToken(
+    (await cookies()).get(SESSION_COOKIE)?.value,
+  );
+  try {
+    await setHubEnabled.call(
+      { enabled: text(form, "enabled") === "true" },
       actor,
     );
     revalidatePath("/admin/contribute");

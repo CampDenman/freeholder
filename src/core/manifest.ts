@@ -102,6 +102,8 @@ export default defineModule({
       "contribute.delivered",
       "contribute.ingested",
       "contribute.determined",
+      "contribute.hubToggled",
+      "contribute.statusUpdated",
     ],
   },
 });

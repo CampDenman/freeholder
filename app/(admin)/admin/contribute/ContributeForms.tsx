@@ -6,6 +6,7 @@ import { useActionState } from "react";
 import { Button, Field, Input, Select } from "@/ui/primitives";
 import {
   determineContributionAction,
+  setHubEnabledAction,
   submitContributionAction,
   updateContributeSettingsAction,
   type ContributeActionState,
@@ -89,36 +90,51 @@ export function SettingsForm({
   hubEnabled: boolean;
   hubUrl: string;
   labels: {
-    hubEnabled: string;
+    hubOn: string;
+    hubOff: string;
+    turnOn: string;
+    turnOff: string;
     hubUrl: string;
     save: string;
   };
 }) {
-  const [state, action] = useActionState(updateContributeSettingsAction, empty);
+  const [hubState, hubAction] = useActionState(setHubEnabledAction, empty);
+  const [urlState, urlAction] = useActionState(
+    updateContributeSettingsAction,
+    empty,
+  );
   return (
-    <form action={action} className="grid gap-4">
-      {state.error ? (
-        <p role="alert" className="text-sm font-medium text-danger">
-          {state.error}
+    <div className="grid gap-6">
+      <form action={hubAction} className="grid gap-3">
+        {hubState.error ? (
+          <p role="alert" className="text-sm font-medium text-danger">
+            {hubState.error}
+          </p>
+        ) : null}
+        <p className="text-sm text-ink">
+          {hubEnabled ? labels.hubOn : labels.hubOff}
         </p>
-      ) : null}
-      <label className="flex items-start gap-2 text-sm text-ink">
         <input
-          id="hubEnabled"
-          name="hubEnabled"
-          type="checkbox"
-          defaultChecked={hubEnabled}
-          className="mt-1"
+          type="hidden"
+          name="enabled"
+          value={hubEnabled ? "false" : "true"}
         />
-        <span>{labels.hubEnabled}</span>
-      </label>
-      <Field htmlFor="hubUrl" label={labels.hubUrl}>
-        <Input id="hubUrl" name="hubUrl" defaultValue={hubUrl} />
-      </Field>
-      <Button type="submit" variant="quiet">
-        {labels.save}
-      </Button>
-    </form>
+        <Button type="submit">{hubEnabled ? labels.turnOff : labels.turnOn}</Button>
+      </form>
+      <form action={urlAction} className="grid gap-4">
+        {urlState.error ? (
+          <p role="alert" className="text-sm font-medium text-danger">
+            {urlState.error}
+          </p>
+        ) : null}
+        <Field htmlFor="hubUrl" label={labels.hubUrl}>
+          <Input id="hubUrl" name="hubUrl" defaultValue={hubUrl} />
+        </Field>
+        <Button type="submit" variant="quiet">
+          {labels.save}
+        </Button>
+      </form>
+    </div>
   );
 }
 

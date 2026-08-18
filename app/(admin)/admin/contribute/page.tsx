@@ -98,7 +98,10 @@ export default async function ContributePage() {
               hubEnabled={settings.hubEnabled}
               hubUrl={settings.hubUrl}
               labels={{
-                hubEnabled: t("contribute.settings.hubEnabled"),
+                hubOn: t("contribute.settings.hubOn"),
+                hubOff: t("contribute.settings.hubOff"),
+                turnOn: t("contribute.settings.turnOn"),
+                turnOff: t("contribute.settings.turnOff"),
                 hubUrl: t("contribute.settings.hubUrl"),
                 save: t("contribute.settings.save"),
               }}

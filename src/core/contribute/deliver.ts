@@ -35,6 +35,20 @@ export function isSelfHub(hubUrl: string, appUrl = env().APP_URL): boolean {
   }
 }
 
+/** The project's own site is a hub unless an operator turns ingest off. */
+export function isCanonicalProjectHub(appUrl = env().APP_URL): boolean {
+  try {
+    const host = new URL(appUrl).hostname.toLowerCase();
+    return host === "freeholder.ai" || host === "www.freeholder.ai";
+  } catch {
+    return false;
+  }
+}
+
+export function recordStatusUrl(appUrl = env().APP_URL): string {
+  return `${normalizeHubUrl(appUrl)}/api/v1/contribute.recordStatus`;
+}
+
 export function ingestUrl(hubUrl: string): string {
   return `${normalizeHubUrl(hubUrl)}/api/v1/contribute.ingest`;
 }
@@ -54,6 +68,9 @@ export interface SpokeDeliveryBody {
   externalUrl?: string | null;
   contentHash: string;
   source: "spoke";
+  spokeId?: string;
+  replyUrl?: string;
+  replyToken?: string;
 }
 
 export function spokeBodyFromRow(row: {
@@ -70,6 +87,9 @@ export function spokeBodyFromRow(row: {
   dcoSigner?: string | null;
   externalUrl?: string | null;
   contentHash: string;
+  id?: string;
+  replyUrl?: string | null;
+  replyToken?: string | null;
 }): SpokeDeliveryBody {
   return {
     kind: row.kind,
@@ -86,6 +106,9 @@ export function spokeBodyFromRow(row: {
     externalUrl: row.externalUrl,
     contentHash: row.contentHash,
     source: "spoke",
+    spokeId: row.id,
+    replyUrl: row.replyUrl ?? undefined,
+    replyToken: row.replyToken ?? undefined,
   };
 }
 
@@ -176,4 +199,64 @@ export async function deliverQueuedContribution(
     })
     .where(eq(contributions.id, row.id));
   return { id: row.id, status: "delivered", hubReceiptId };
+}
+
+export interface StatusReplyBody {
+  spokeId: string;
+  replyToken: string;
+  status: string;
+  note?: string;
+  checklistId?: string | null;
+  hubId: string;
+}
+
+export async function deliverStatusReply(
+  row: {
+    id: string;
+    spokeId: string | null;
+    replyUrl: string | null;
+    replyToken: string | null;
+    status: string;
+    checklistId: string | null;
+  },
+  note: string | undefined,
+  options: { fetchImpl?: typeof fetch } = {},
+): Promise<{ sent: boolean }> {
+  if (!row.replyUrl || !row.spokeId || !row.replyToken) {
+    return { sent: false };
+  }
+  const payload: StatusReplyBody = {
+    spokeId: row.spokeId,
+    replyToken: row.replyToken,
+    status: row.status,
+    note,
+    checklistId: row.checklistId,
+    hubId: row.id,
+  };
+  const body = JSON.stringify(payload);
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DELIVER_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetchImpl(row.replyUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body,
+      redirect: "manual",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+  if (response.status >= 500 || response.status === 429) {
+    throw new Error(`Spoke status reply returned ${response.status}`);
+  }
+  if (!response.ok) {
+    throw new Error(`Spoke refused the status reply (${response.status}).`);
+  }
+  return { sent: true };
 }
