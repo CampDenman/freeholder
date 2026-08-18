@@ -34,6 +34,7 @@ import {
   dataRequests,
   privacyRetentionExceptions,
 } from "@/core/privacy/schema";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import {
   actorString,
   defineService,
@@ -323,12 +324,112 @@ async function insertConsent(
   return record!;
 }
 
+const contactRow = row({
+  id: uuid,
+  userId: uuid.nullable(),
+  name: z.string(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  orgId: uuid.nullable(),
+  source: z.string().nullable(),
+  tags: z.array(z.string()),
+  customFields: z.unknown(),
+  lifecycleStage: z.enum(["lead", "prospect", "customer", "repeat"]),
+  preferredLocale: z.string().nullable(),
+  timezone: z.string().nullable(),
+  country: z.string().nullable(),
+  ownerNotes: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const consentRow = row({
+  id: uuid,
+  contactId: uuid,
+  purpose: consentPurpose,
+  channel: consentChannel.nullable(),
+  state: consentState,
+  method: consentMethod,
+  termsVersion: z.string().nullable(),
+  sourceUrl: z.string().nullable(),
+  ip: z.string().nullable(),
+  evidence: z.unknown(),
+  actor: z.string(),
+  occurredAt: timestamp,
+  expiresAt: timestamp.nullable(),
+  createdAt: timestamp,
+});
+const effectiveConsentItem = row({
+  purpose: consentPurpose,
+  channel: consentChannel.nullable(),
+  state: z.enum(["granted", "denied", "withdrawn", "expired"]),
+  record: consentRow.nullable(),
+});
+const consentBundleResult = z.object({
+  effective: listed(effectiveConsentItem),
+  history: listed(consentRow),
+});
+const dataRequestRow = row({
+  id: uuid,
+  contactId: uuid,
+  kind: z.enum(DATA_REQUEST_KINDS),
+  status: dataRequestStatus,
+  jurisdiction: z.string().nullable(),
+  details: z.unknown(),
+  requestedBy: z.string(),
+  verificationMethod: z.string().nullable(),
+  verifiedAt: timestamp.nullable(),
+  responseDueAt: timestamp,
+  resolution: z.string().nullable(),
+  fulfilledAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const retentionExceptionRow = row({
+  id: uuid,
+  dataRequestId: uuid,
+  scope: z.string(),
+  reason: retentionReason,
+  legalBasis: z.string(),
+  notes: z.string().nullable(),
+  expiresAt: timestamp.nullable(),
+  createdBy: z.string(),
+  createdAt: timestamp,
+});
+const artifactRow = row({
+  id: uuid,
+  dataRequestId: uuid,
+  filename: z.string(),
+  mime: z.string(),
+  body: z.unknown(),
+  sha256: z.string(),
+  expiresAt: timestamp,
+  lastDownloadedAt: timestamp.nullable(),
+  createdAt: timestamp,
+});
+const artifactMeta = row({
+  id: uuid,
+  filename: z.string(),
+  mime: z.string(),
+  sha256: z.string(),
+  expiresAt: timestamp,
+  createdAt: timestamp,
+});
+const downloadableArtifactResult = z.object({
+  id: uuid,
+  filename: z.string(),
+  mime: z.string(),
+  sha256: z.string(),
+  expiresAt: timestamp,
+  content: z.string(),
+});
+
 export const recordConsent = defineService({
   name: "contacts.recordConsent",
   summary: "Append evidence of one contact's consent decision.",
   kind: "mutation",
   permission: "scoped",
   input: recordConsentInput,
+  output: consentRow,
   handler: async (input, ctx) => {
     const record = await insertConsent(ctx.tx, input, ctx.actor);
     ctx.setSubject("consent", record.id);
@@ -359,6 +460,7 @@ export const getConsentPreferences = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ contactId: z.string().uuid() }),
+  output: consentBundleResult.extend({ contact: contactRow }),
   handler: async (input, ctx) => {
     const contact = await requireContact(ctx.tx, input.contactId);
     return { contact, ...(await consentBundle(ctx.tx, contact.id)) };
@@ -374,6 +476,12 @@ export const canContact = defineService({
     contactId: z.string().uuid(),
     purpose: consentPurpose,
     channel: consentChannel.nullable(),
+  }),
+  output: z.object({
+    allowed: z.boolean(),
+    reason: z.string(),
+    evidenceId: uuid.nullable(),
+    expiresAt: timestamp.nullable(),
   }),
   handler: async (input, ctx) => {
     await requireContact(ctx.tx, input.contactId);
@@ -397,6 +505,17 @@ export const getMyPrivacyProfile = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({}),
+  output: consentBundleResult.extend({
+    contact: row({
+      id: uuid,
+      name: z.string(),
+      email: z.string().nullable(),
+      phone: z.string().nullable(),
+      preferredLocale: z.string().nullable(),
+      timezone: z.string().nullable(),
+      country: z.string().nullable(),
+    }),
+  }),
   handler: async (_input, ctx) => {
     const contact = await personalContact(ctx.tx, ctx.actor);
     return {
@@ -423,6 +542,10 @@ export const setMyMarketingPreference = defineService({
     channel: marketingChannel,
     state: z.enum(["granted", "withdrawn"]),
     termsVersion: z.string().trim().min(1).max(100),
+  }),
+  output: z.object({
+    contactId: uuid,
+    preference: consentRow,
   }),
   handler: async (input, ctx) => {
     const contact = await personalContact(ctx.tx, ctx.actor);
@@ -494,6 +617,7 @@ export const createDataRequest = defineService({
     jurisdiction: z.string().trim().max(100).nullable().optional(),
     request: requestDetails,
   }),
+  output: dataRequestRow,
   handler: async (input, ctx) => {
     await requireContact(ctx.tx, input.contactId);
     const [request] = await ctx.tx
@@ -534,6 +658,7 @@ export const createMyDataRequest = defineService({
     jurisdiction: z.string().trim().max(100).nullable().optional(),
     request: requestDetails,
   }),
+  output: dataRequestRow,
   handler: async (input, ctx) => {
     const contact = await personalContact(ctx.tx, ctx.actor);
     const [request] = await ctx.tx
@@ -606,6 +731,12 @@ export const listDataRequests = defineService({
     limit: z.number().int().min(1).max(100).default(50),
     offset: z.number().int().min(0).default(0),
   }),
+  output: listed(
+    row({
+      request: dataRequestRow,
+      contact: contactRow,
+    }),
+  ),
   handler: (input, ctx) => {
     const where = and(
       input.status ? eq(dataRequests.status, input.status) : undefined,
@@ -628,6 +759,11 @@ export const getDataRequest = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: z.object({
+    request: dataRequestRow,
+    exceptions: listed(retentionExceptionRow),
+    artifact: artifactMeta.nullable(),
+  }),
   handler: (input, ctx) => requestWithDetails(ctx.tx, input.id),
 });
 
@@ -637,6 +773,17 @@ export const listMyDataRequests = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({}),
+  output: listed(
+    row({
+      request: dataRequestRow,
+      artifact: row({
+        id: uuid.nullable(),
+        filename: z.string().nullable(),
+        sha256: z.string().nullable(),
+        expiresAt: timestamp.nullable(),
+      }).nullable(),
+    }),
+  ),
   handler: async (_input, ctx) => {
     const contact = await personalContact(ctx.tx, ctx.actor);
     return ctx.tx
@@ -671,6 +818,7 @@ export const verifyDataRequest = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), method: z.string().trim().min(1).max(200) }),
+  output: dataRequestRow,
   handler: async (input, ctx) => {
     const [request] = await ctx.tx
       .update(dataRequests)
@@ -712,6 +860,7 @@ export const startDataRequest = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: dataRequestRow,
   handler: async (input, ctx) => {
     const [request] = await ctx.tx
       .update(dataRequests)
@@ -749,6 +898,7 @@ export const addRetentionException = defineService({
       (input) => !input.expiresAt || new Date(input.expiresAt) > new Date(),
       { path: ["expiresAt"], message: "Expiry must be in the future." },
     ),
+  output: retentionExceptionRow,
   handler: async (input, ctx) => {
     const [request] = await ctx.tx
       .select()
@@ -801,6 +951,7 @@ export const removeRetentionException = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: okResult,
   handler: async (input, ctx) => {
     const [exception] = await ctx.tx
       .delete(privacyRetentionExceptions)
@@ -820,6 +971,7 @@ export const cancelMyDataRequest = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ id: z.string().uuid() }),
+  output: dataRequestRow,
   handler: async (input, ctx) => {
     const contact = await personalContact(ctx.tx, ctx.actor);
     const [request] = await ctx.tx
@@ -1339,6 +1491,10 @@ export const fulfillDataRequest = defineService({
     id: z.string().uuid(),
     confirmation: z.string().max(20).optional(),
   }),
+  output: z.object({
+    request: dataRequestRow,
+    artifact: artifactRow,
+  }),
   handler: async (input, ctx) => {
     await ctx.tx.execute(
       sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.id}`}))`,
@@ -1464,6 +1620,7 @@ export const denyDataRequest = defineService({
     id: z.string().uuid(),
     resolution: z.string().trim().min(1).max(4_000),
   }),
+  output: dataRequestRow,
   handler: async (input, ctx) => {
     const [request] = await ctx.tx
       .update(dataRequests)
@@ -1539,6 +1696,7 @@ export const downloadDataRequestArtifact = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: downloadableArtifactResult,
   handler: async (input, ctx) => {
     const row = await artifactById(ctx.tx, input.id);
     const artifact = await markArtifactDownloaded(ctx.tx, row.artifact.id);
@@ -1553,6 +1711,7 @@ export const downloadMyDataRequestArtifact = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ id: z.string().uuid() }),
+  output: downloadableArtifactResult,
   handler: async (input, ctx) => {
     const contact = await personalContact(ctx.tx, ctx.actor);
     const row = await artifactById(ctx.tx, input.id);

@@ -3,6 +3,7 @@
 // Page/post/product/service/email templates (C2.13).
 import { z } from "zod";
 import { and, asc, eq } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
 import instanceConfig from "../../../freeholder.config";
 import { BlockValidationError, parseBlockTree } from "./blocks/registry";
@@ -16,6 +17,40 @@ import { seedTemplates, slugFromTitle } from "./templates";
 
 const presetSchema = z.enum(TEMPLATE_PRESETS);
 const kindSchema = z.enum(["page", "post", "product", "service", "email"] as const);
+const templateRow = row({
+  id: uuid,
+  key: z.string(),
+  kind: kindSchema,
+  preset: presetSchema,
+  name: z.string(),
+  locale: z.string(),
+  blocks: z.unknown(),
+  origin: z.enum(["system", "owner"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const pageRow = row({
+  id: uuid,
+  slug: z.string(),
+  locale: z.string(),
+  title: z.string(),
+  blocks: z.unknown(),
+  status: z.enum(["draft", "published"]),
+  publishedAt: timestamp.nullable(),
+  seo: z.unknown(),
+  workingTitle: z.string().nullable(),
+  workingBlocks: z.unknown().nullable(),
+  workingSeo: z.unknown().nullable(),
+  version: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const createdFromTemplate = z.object({
+  kind: kindSchema,
+  templateKey: z.string(),
+  blocks: z.unknown(),
+  page: pageRow.nullable(),
+});
 
 function instancePreset(): TemplatePreset {
   return instanceConfig.preset;
@@ -31,6 +66,7 @@ export const listTemplates = defineService({
     preset: presetSchema.optional(),
     locale: z.string().default("en"),
   }),
+  output: listed(templateRow),
   handler: async (input, ctx) => {
     const preset = input.preset ?? instancePreset();
     const rows = await ctx.tx
@@ -69,6 +105,7 @@ export const getTemplate = defineService({
     preset: presetSchema.optional(),
     locale: z.string().default("en"),
   }),
+  output: templateRow.nullable(),
   handler: async (input, ctx) => {
     const preset = input.preset ?? instancePreset();
     const [row] = await ctx.tx
@@ -111,6 +148,7 @@ export const updateTemplate = defineService({
     name: z.string().trim().min(1).max(80).optional(),
     blocks: z.unknown(),
   }),
+  output: templateRow,
   handler: async (input, ctx) => {
     const preset = input.preset ?? instancePreset();
     const [existing] = await ctx.tx
@@ -164,6 +202,7 @@ export const resetTemplate = defineService({
     preset: presetSchema.optional(),
     locale: z.string().default("en"),
   }),
+  output: templateRow,
   handler: async (input, ctx) => {
     const preset = input.preset ?? instancePreset();
     const seed = seedTemplates(preset).find((row) => row.key === input.key);
@@ -211,6 +250,7 @@ export const createFromTemplate = defineService({
     preset: presetSchema.optional(),
     locale: z.string().default("en"),
   }),
+  output: createdFromTemplate,
   handler: async (input, ctx) => {
     const template = await ctx.call(getTemplate, {
       key: input.key,
@@ -265,6 +305,7 @@ export const previewTemplate = defineService({
     preset: presetSchema.optional(),
     locale: z.string().default("en"),
   }),
+  output: templateRow,
   handler: async (input, ctx) => {
     const template = await ctx.call(getTemplate, input);
     if (!template) {
@@ -283,6 +324,7 @@ export const ensureTemplates = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ locale: z.string().default("en") }),
+  output: z.object({ created: listed(z.string()) }),
   handler: async (input, ctx) => {
     const created: string[] = [];
     for (const preset of TEMPLATE_PRESETS) {

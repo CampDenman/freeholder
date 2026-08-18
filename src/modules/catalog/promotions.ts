@@ -8,6 +8,7 @@
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { createNotification } from "@/core/notifications/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -17,6 +18,8 @@ import {
   adjustCustomerBalance,
   applyCustomerBalance,
 } from "@/modules/invoicing/advanced-money-service";
+import { paymentRow } from "@/modules/invoicing/contract";
+import { COUPON_KINDS, GIFT_CARD_STATUSES, OFFER_RULE_KINDS } from "./contract";
 import { quoteCoupon } from "./promo-quote";
 import {
   cartCoupons,
@@ -32,6 +35,56 @@ import {
 } from "./schema";
 
 const id = z.string().uuid();
+
+const couponRow = row({
+  id: uuid,
+  code: z.string(),
+  kind: z.enum(COUPON_KINDS),
+  percentOffPpm: z.number().int().nullable(),
+  amountMinor: z.number().int().nullable(),
+  currency: z.string().nullable(),
+  minSubtotalMinor: z.number().int(),
+  maxRedemptions: z.number().int().nullable(),
+  perContactLimit: z.number().int(),
+  startsAt: timestamp.nullable(),
+  endsAt: timestamp.nullable(),
+  active: z.boolean(),
+  recovery: z.boolean(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const couponRedemptionRow = row({
+  id: uuid,
+  couponId: uuid,
+  contactId: uuid,
+  orderId: uuid.nullable(),
+  cartId: uuid.nullable(),
+  discountMinor: z.number().int(),
+  createdAt: timestamp,
+});
+const giftCardRow = row({
+  id: uuid,
+  code: z.string(),
+  currency: z.string(),
+  issuedMinor: z.number().int(),
+  remainingMinor: z.number().int(),
+  contactId: uuid.nullable(),
+  status: z.enum(GIFT_CARD_STATUSES),
+  expiresAt: timestamp.nullable(),
+  note: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const offerRuleRow = row({
+  id: uuid,
+  kind: z.enum(OFFER_RULE_KINDS),
+  name: z.string(),
+  triggerVariantId: uuid.nullable(),
+  offerVariantId: uuid,
+  active: z.boolean(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 const couponCode = z
   .string()
   .trim()
@@ -178,6 +231,7 @@ export const createCoupon = defineService({
     endsAt: z.coerce.date().optional(),
     recovery: z.boolean().default(false),
   }),
+  output: couponRow,
   handler: async (input, ctx) => {
     if (input.kind === "percent" && !input.percentOffPpm) {
       throw new ServiceError("validation", "A percent coupon needs a parts-per-million rate.");
@@ -214,6 +268,7 @@ export const listCoupons = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(couponRow),
   handler: (_input, ctx) => ctx.tx.select().from(coupons).orderBy(desc(coupons.createdAt)).limit(200),
 });
 
@@ -223,6 +278,7 @@ export const applyCouponToCart = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ cartId: id, code: couponCode }),
+  output: z.object({ cartId: uuid, coupon: couponRow }),
   handler: async (input, ctx) => {
     const [cart] = await ctx.tx.select().from(carts).where(eq(carts.id, input.cartId)).limit(1);
     if (!cart || cart.status !== "open") throw new ServiceError("not_found", "That cart is not here.");
@@ -247,6 +303,13 @@ export const quoteCartPromotions = defineService({
     subtotalMinor: z.number().int().min(0),
     shippingMinor: z.number().int().min(0),
     currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
+  }),
+  output: z.object({
+    discountMinor: z.number().int(),
+    shippingMinor: z.number().int(),
+    freeShipping: z.boolean(),
+    couponId: uuid.nullable(),
+    coupons: listed(couponRow),
   }),
   handler: async (input, ctx) => {
     const attached = await ctx.tx
@@ -304,6 +367,7 @@ export const recordCouponRedemption = defineService({
     cartId: id.optional(),
     discountMinor: z.number().int().min(0),
   }),
+  output: couponRedemptionRow,
   handler: async (input, ctx) => {
     const [coupon] = await ctx.tx.select().from(coupons).where(eq(coupons.id, input.couponId)).limit(1);
     if (!coupon) throw new ServiceError("not_found", "That coupon is not here.");
@@ -339,6 +403,7 @@ export const issueGiftCard = defineService({
     expiresAt: z.coerce.date().optional(),
     note: z.string().trim().max(500).optional(),
   }),
+  output: giftCardRow,
   handler: async (input, ctx) => {
     const issuedMinor = decimalToMinor(input.amount, input.currency);
     if (issuedMinor <= 0) throw new ServiceError("validation", "A gift card must be issued for a positive amount.");
@@ -366,6 +431,7 @@ export const listGiftCards = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(giftCardRow),
   handler: (_input, ctx) => ctx.tx.select().from(giftCards).orderBy(desc(giftCards.createdAt)).limit(200),
 });
 
@@ -381,6 +447,12 @@ export const applyGiftCardToInvoice = defineService({
     orderId: id.optional(),
     amountMinor: z.number().int().positive(),
     idempotencyKey: z.string().trim().min(8).max(240),
+  }),
+  output: z.object({
+    giftCardId: uuid,
+    amountMinor: z.number().int(),
+    remainingMinor: z.number().int(),
+    payment: paymentRow,
   }),
   handler: async (input, ctx) => {
     const [card] = await ctx.tx.select().from(giftCards).where(eq(giftCards.code, input.code)).for("update");
@@ -435,6 +507,7 @@ export const createOfferRule = defineService({
     triggerVariantId: id.optional(),
     offerVariantId: id,
   }),
+  output: offerRuleRow,
   handler: async (input, ctx) => {
     const [offer] = await ctx.tx.select({ id: productVariants.id }).from(productVariants).where(eq(productVariants.id, input.offerVariantId)).limit(1);
     if (!offer) throw new ServiceError("not_found", "That offer variant is not here.");
@@ -458,6 +531,7 @@ export const listOfferRules = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(offerRuleRow),
   handler: (_input, ctx) => ctx.tx.select().from(offerRules).orderBy(desc(offerRules.createdAt)).limit(200),
 });
 
@@ -467,6 +541,12 @@ export const listCartOffers = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ cartId: id, justAddedVariantId: id.optional() }),
+  output: listed(
+    z.object({
+      rule: offerRuleRow,
+      variant: row({ id: uuid, sku: z.string(), productName: z.string() }),
+    }),
+  ),
   handler: async (input, ctx) => {
     const { getCart } = await import("./cart");
     const basket = await ctx.call(getCart, { cartId: input.cartId });
@@ -498,6 +578,7 @@ export const recoverAbandonedCarts = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({ sent: z.number().int() }),
   handler: async (_input, ctx) => {
     const abandoned = await ctx.tx
       .select()

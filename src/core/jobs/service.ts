@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Owner-visible queue operations (MASTER.md §43 C1.10).
 import { z } from "zod";
+import { listed, row } from "@/core/contract";
 import {
   cancelJob,
   DEAD_LETTER_QUEUE,
@@ -30,6 +31,26 @@ const jobState = z.enum([
   "cancelled",
   "failed",
 ]);
+
+const jobHistoryRow = row({
+  id: z.string(),
+  name: z.string(),
+  data: z.unknown(),
+  output: z.unknown(),
+  state: jobState,
+  stuck: z.boolean(),
+});
+
+const jobSummary = z.object({
+  queued: z.number().int(),
+  active: z.number().int(),
+  completed: z.number().int(),
+  cancelled: z.number().int(),
+  failed: z.number().int(),
+  deadLetters: z.number().int(),
+  stuck: z.number().int(),
+  total: z.number().int(),
+});
 
 function requireHumanOrSystem(actor: Actor): void {
   if (actor.kind === "user" || actor.kind === "system") return;
@@ -63,6 +84,10 @@ export const listJobRuns = defineService({
     limit: z.number().int().min(1).max(100).default(50),
     offset: z.number().int().min(0).max(1_000_000).default(0),
   }),
+  output: z.object({
+    items: listed(jobHistoryRow),
+    total: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     if (input.name) requireKnownQueue(input.name);
@@ -77,6 +102,7 @@ export const getJobRun = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ name: z.string().min(1).max(120), id: z.uuid() }),
+  output: jobHistoryRow,
   handler: async (input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     requireKnownQueue(input.name);
@@ -92,6 +118,7 @@ export const getJobSummary = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: jobSummary,
   handler: async (_input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     return jobOperationalSummary();
@@ -104,6 +131,7 @@ export const listJobQueues = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(z.string()),
   handler: async (_input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     return jobQueueNames();
@@ -121,6 +149,7 @@ export const cancelJobRun = defineService({
     id: z.uuid(),
     confirm: z.literal("CANCEL"),
   }),
+  output: z.object({ cancelled: z.literal(true) }),
   handler: async (input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     requireKnownQueue(input.name);
@@ -147,6 +176,7 @@ export const retryJobRun = defineService({
     id: z.uuid(),
     confirm: z.literal("RETRY"),
   }),
+  output: z.object({ retried: z.literal(true) }),
   handler: async (input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     requireKnownQueue(input.name);
@@ -173,6 +203,7 @@ export const redriveJobDeadLetters = defineService({
     limit: z.number().int().min(1).max(100).default(1),
     confirm: z.literal("REDRIVE"),
   }),
+  output: z.object({ moved: z.number().int() }),
   handler: async (input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     if (input.sourceName) requireKnownQueue(input.sourceName);

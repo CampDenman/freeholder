@@ -81,7 +81,8 @@ export class ServiceError extends Error {
       | "not_found"
       | "conflict"
       | "rate_limited"
-      | "step_up_required",
+      | "step_up_required"
+      | "internal",
     message: string,
     /** Seconds until a rate-limited caller may retry; surfaced as Retry-After. */
     readonly retryAfterSeconds?: number,
@@ -279,6 +280,13 @@ export interface ServiceDef<In extends z.ZodType, Out> {
   kind: "query" | "mutation";
   permission: Permission;
   input: In;
+  /**
+   * Required public return shape (C3.01). Validated after the handler in
+   * development and tests so a service cannot quietly return something the
+   * contract does not describe. Optional only while the remaining services
+   * are being annotated; the completeness gate refuses a missing schema.
+   */
+  output?: z.ZodType;
   /** Optional throttle, consumed before the transaction opens. */
   rateLimit?: ServiceRateLimit & { subject: (input: z.output<In>) => string | undefined };
   /** Require a fresh second-factor proof from an interactive user session. */
@@ -432,7 +440,7 @@ export function defineService<In extends z.ZodType, Out>(
               { tx, queued },
             ),
         };
-        const out = await def.handler(parsed.data, ctx);
+        const out = assertOutput(def, await def.handler(parsed.data, ctx));
 
         // The outermost call owns the outbox rows: a composed call shares the
         // queue, and writing them per-nested-call would order them by who
@@ -473,6 +481,24 @@ export function defineService<In extends z.ZodType, Out>(
       return result;
     },
   };
+}
+
+/**
+ * C3.01: a declared output schema is the contract. In development and tests
+ * a mismatch is a thrown error so the handler cannot quietly lie. Production
+ * logs and still returns the handler value — a live instance must not 500
+ * because a new column appeared on a row the schema has not listed yet.
+ */
+function assertOutput<Out>(def: ServiceDef<z.ZodType, Out>, out: Out): Out {
+  if (!def.output) return out;
+  const parsed = def.output.safeParse(out);
+  if (parsed.success) return parsed.data as Out;
+  const message = `${def.name} returned a shape its output schema rejects: ${parsed.error.message}`;
+  if (process.env.NODE_ENV === "production") {
+    console.error(message);
+    return out;
+  }
+  throw new ServiceError("internal", message);
 }
 
 const registry = new Map<string, Service>();

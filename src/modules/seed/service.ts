@@ -59,6 +59,11 @@ export const installDemo = defineService({
     /** Publish the pages, rather than leaving them as drafts to look at. */
     publish: z.boolean().default(true),
   }),
+  output: z.object({
+    business: z.string(),
+    pages: z.array(z.string()),
+    assets: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     // Refusing on a populated instance is the whole safety story. There is no
     // force flag: an owner who wants the demo over their real site can delete

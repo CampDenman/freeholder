@@ -11,6 +11,7 @@ import { encryptSecret, decryptSecret } from "@/core/connections/crypto";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { mailOauthStates, mailSenders } from "@/core/mail/schema";
+import { uuid } from "@/core/contract";
 import {
   defineService,
   ServiceError,
@@ -107,6 +108,7 @@ export const beginMailOAuth = defineService({
     provider: z.enum(["google", "microsoft"]),
     returnTo: z.string().max(300).default("/admin/settings"),
   }),
+  output: z.object({ authorizationUrl: z.string() }),
   handler: async (input, ctx) => {
     const actor = requirePerson(ctx.actor);
     if (!RETURN_TO.test(input.returnTo)) {
@@ -232,6 +234,11 @@ export const completeMailOAuth = defineService({
     provider: z.enum(["google", "microsoft"]),
     state: z.string().min(30).max(200),
     code: z.string().min(1).max(4000),
+  }),
+  output: z.object({
+    senderId: uuid,
+    email: z.string(),
+    returnTo: z.string(),
   }),
   handler: async (input, ctx) => {
     const actor = requirePerson(ctx.actor);

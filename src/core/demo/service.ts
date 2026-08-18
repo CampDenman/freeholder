@@ -3,6 +3,7 @@
 // Transactional deterministic demo orchestration.
 import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   demoHandlerInputSchema,
   demoLoadResultSchema,
@@ -461,12 +462,43 @@ const scenarioInput = z.object({
   locale: z.string().regex(/^[a-z]{2,3}(?:-[A-Z]{2})?$/).optional(),
 });
 
+const demoRunRow = row({
+  id: uuid,
+  scenarioKey: z.string(),
+  scenarioVersion: z.number().int(),
+  locale: z.string(),
+  generation: z.number().int(),
+  status: z.enum(["active", "purged"]),
+  loadedAt: timestamp,
+  purgedAt: timestamp.nullable(),
+  updatedAt: timestamp,
+});
+
+const demoScenarioRow = row({
+  key: z.string(),
+  version: z.number().int(),
+  titleKey: z.string(),
+  descriptionKey: z.string(),
+  preset: z.string(),
+  requiredModules: z.array(z.string()),
+  requiredCapabilities: z.array(z.string()),
+  fixtureManifest: z.unknown(),
+  defaultLocale: z.string(),
+  supportedLocales: z.array(z.string()),
+  tourFlowKey: z.string().nullable(),
+  status: z.enum(["draft", "active", "retired"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  activeRun: demoRunRow.nullable(),
+});
+
 export const listDemoScenarios = defineService({
   name: "demo.list",
   summary: "List available deterministic demo scenarios and the active run.",
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(demoScenarioRow),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -503,6 +535,10 @@ export const loadDemoScenario = defineService({
   kind: "mutation",
   permission: "scoped",
   input: scenarioInput,
+  output: z.object({
+    action: z.enum(["unchanged", "loaded"]),
+    run: demoRunRow,
+  }),
   handler: async (input, ctx) => {
     await syncOnboardingDefinitions(ctx.tx);
     const definition = latestScenario(input.key, input.version);
@@ -544,6 +580,10 @@ export const reloadDemoScenario = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    action: z.literal("reloaded"),
+    run: demoRunRow,
+  }),
   handler: async (_input, ctx) => {
     await syncOnboardingDefinitions(ctx.tx);
     const current = await activeRun(ctx.tx);
@@ -569,6 +609,10 @@ export const resetDemoScenario = defineService({
   kind: "mutation",
   permission: "scoped",
   input: scenarioInput,
+  output: z.object({
+    action: z.literal("reset"),
+    run: demoRunRow,
+  }),
   handler: async (input, ctx) => {
     await syncOnboardingDefinitions(ctx.tx);
     const definition = latestScenario(input.key, input.version);
@@ -601,6 +645,10 @@ export const purgeDemoScenario = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    action: z.enum(["unchanged", "purged"]),
+    run: demoRunRow.nullable(),
+  }),
   handler: async (_input, ctx) => {
     const current = await activeRun(ctx.tx);
     if (!current) return { action: "unchanged" as const, run: null };

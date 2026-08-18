@@ -7,6 +7,7 @@
 import { z } from "zod";
 import { desc } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService } from "@/core/service";
 
 export const recentActivity = defineService({
@@ -17,6 +18,14 @@ export const recentActivity = defineService({
   input: z.object({
     limit: z.number().int().min(1).max(100).default(20),
   }),
+  output: listed(
+    row({
+      id: uuid,
+      actor: z.string(),
+      action: z.string(),
+      at: timestamp,
+    }),
+  ),
   handler: (input, ctx) =>
     ctx.tx
       .select()

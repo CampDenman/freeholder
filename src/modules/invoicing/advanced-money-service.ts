@@ -7,8 +7,23 @@ import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { listed, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { HOSTED_PAYMENT_PROVIDER_IDS } from "@/adapters/payments/providers";
+import {
+  customerBalanceAccountRow,
+  customerBalanceEntryRow,
+  flexiblePaymentRow,
+  invoiceRow,
+  lateFeeAssessmentRow,
+  paymentAllocationRow,
+  paymentPlanInstallmentRow,
+  paymentPlanRow,
+  paymentRow,
+  providerBalanceTransactionRow,
+  providerPayoutRow,
+  refundRow,
+} from "./contract";
 import {
   customerBalanceAccounts,
   customerBalanceEntries,
@@ -113,6 +128,10 @@ export const createDepositAndBalanceInvoices = defineService({
     issueNow: z.boolean().default(false),
     idempotencyKey,
   }),
+  output: z.object({
+    deposit: invoiceRow,
+    balance: invoiceRow,
+  }),
   handler: async (input, ctx) => {
     const operationHash = requestHash(input);
     const depositIdempotencyKey = `deposit:${operationHash}`;
@@ -184,6 +203,10 @@ export const createPaymentPlan = defineService({
     installments: z.array(z.object({ dueAt: z.coerce.date(), amountMinor: positiveMinor })).min(2).max(120),
     idempotencyKey,
   }),
+  output: z.object({
+    plan: paymentPlanRow,
+    installments: listed(paymentPlanInstallmentRow),
+  }),
   handler: async (input, ctx) => {
     const hash = requestHash(input);
     await lock(ctx.tx, "payment-plan-idempotency", input.idempotencyKey);
@@ -237,6 +260,11 @@ export const getPaymentPlan = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ invoiceId: z.string().uuid() }),
+  output: z.object({
+    plan: paymentPlanRow,
+    installments: listed(paymentPlanInstallmentRow),
+    allocations: listed(paymentAllocationRow),
+  }),
   handler: async (input, ctx) => {
     const [plan] = await ctx.tx.select().from(paymentPlans).where(eq(paymentPlans.invoiceId, input.invoiceId)).limit(1);
     if (!plan) throw new ServiceError("not_found", "That invoice does not have a payment plan.");
@@ -255,6 +283,11 @@ export const refreshPaymentPlans = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ asOf: z.coerce.date().default(() => new Date()), limit: z.number().int().min(1).max(5_000).default(1_000) }),
+  output: z.object({
+    checked: z.number().int(),
+    changed: z.number().int(),
+    asOf: timestamp,
+  }),
   handler: async (input, ctx) => {
     const rows = await ctx.tx.select().from(paymentPlans).where(inArray(paymentPlans.status, ["active", "defaulted"])).orderBy(asc(paymentPlans.createdAt)).limit(input.limit);
     let changed = 0;
@@ -290,6 +323,7 @@ export const cancelPaymentPlan = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.string().uuid(), reason: z.string().trim().min(3).max(1_000) }),
+  output: paymentPlanRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "payment-plan", input.id);
     const [plan] = await ctx.tx.select().from(paymentPlans).where(eq(paymentPlans.id, input.id)).limit(1);
@@ -325,6 +359,10 @@ export const createFlexiblePaymentInvoice = defineService({
     dueAt: z.coerce.date().optional(),
     issueNow: z.boolean().default(true),
     idempotencyKey,
+  }),
+  output: z.object({
+    flexiblePayment: flexiblePaymentRow,
+    invoice: invoiceRow,
   }),
   handler: async (input, ctx) => {
     const hash = requestHash(input);
@@ -408,6 +446,10 @@ export const assessLateFee = defineService({
     dueAt: z.coerce.date().optional(),
     issueNow: z.boolean().default(true),
     idempotencyKey,
+  }),
+  output: z.object({
+    assessment: lateFeeAssessmentRow,
+    invoice: invoiceRow,
   }),
   handler: async (input, ctx) => {
     const hash = requestHash(input);
@@ -538,6 +580,10 @@ export const adjustCustomerBalance = defineService({
     externalReference: z.string().trim().min(1).max(500).optional(),
     idempotencyKey,
   }),
+  output: z.object({
+    account: customerBalanceAccountRow,
+    entry: customerBalanceEntryRow,
+  }),
   handler: async (input, ctx) => {
     const result = await changeBalance(ctx, {
       contactId: input.contactId,
@@ -561,6 +607,11 @@ export const applyCustomerBalance = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ invoiceId: z.string().uuid(), amountMinor: positiveMinor, idempotencyKey }),
+  output: z.object({
+    payment: paymentRow,
+    account: customerBalanceAccountRow,
+    entry: customerBalanceEntryRow.optional(),
+  }),
   handler: async (input, ctx) => {
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That invoice is not here.");
@@ -599,6 +650,11 @@ export const refundCustomerBalancePayment = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), idempotencyKey }),
+  output: z.object({
+    refund: refundRow,
+    account: customerBalanceAccountRow,
+    entry: customerBalanceEntryRow.optional(),
+  }),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select({ payment: payments, invoice: invoices }).from(payments).innerJoin(invoices, eq(invoices.id, payments.invoiceId)).where(eq(payments.id, input.paymentId)).limit(1);
     if (!row || row.payment.provider !== "balance") throw new ServiceError("conflict", "That payment was not funded from a customer balance.");
@@ -629,6 +685,10 @@ export const getCustomerBalance = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ contactId: z.string().uuid(), currency: currency.optional(), limit: z.number().int().min(1).max(5_000).default(500) }),
+  output: z.object({
+    accounts: listed(customerBalanceAccountRow),
+    entries: listed(customerBalanceEntryRow),
+  }),
   handler: async (input, ctx) => {
     const accounts = await ctx.tx.select().from(customerBalanceAccounts).where(and(eq(customerBalanceAccounts.contactId, input.contactId), input.currency ? eq(customerBalanceAccounts.currency, input.currency) : undefined)).orderBy(asc(customerBalanceAccounts.currency));
     const accountIds = accounts.map((row) => row.id);
@@ -711,6 +771,10 @@ export const recordProviderPayoutObservation = defineService({
     statementRef: z.string().trim().min(1).max(500).optional(),
     failureReason: z.string().trim().min(1).max(1_000).optional(),
   }),
+  output: z.object({
+    payout: providerPayoutRow,
+    applied: z.boolean(),
+  }),
   handler: async (input, ctx) => {
     if (input.status === "failed" && !input.failureReason) throw new ServiceError("validation", "A failed payout needs a failure reason.");
     const result = await observeProviderPayout(ctx, input.provider, input);
@@ -739,6 +803,7 @@ export const recordProviderBalanceTransaction = defineService({
     occurredAt: z.coerce.date(),
     metadata: boundedObject.default({}),
   }),
+  output: providerBalanceTransactionRow,
   handler: async (input, ctx) => {
     const netMinor = input.grossMinor - input.feeMinor;
     if (!Number.isSafeInteger(netMinor)) throw new ServiceError("validation", "The provider net amount is outside Freeholder's safe money range.");
@@ -763,6 +828,11 @@ export const reconcileProviderPayout = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ payoutId: z.string().uuid(), balanceTransactionIds: z.array(z.string().uuid()).min(1).max(10_000) }),
+  output: z.object({
+    payout: providerPayoutRow,
+    transactions: listed(providerBalanceTransactionRow),
+    netMinor: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     if (new Set(input.balanceTransactionIds).size !== input.balanceTransactionIds.length) throw new ServiceError("validation", "A payout transaction can only be listed once.");
     await lock(ctx.tx, "provider-payout", input.payoutId);
@@ -797,6 +867,13 @@ export const listProviderPayouts = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ provider: provider.optional(), status: z.enum(["pending", "in_transit", "paid", "failed", "cancelled"]).optional(), reconciled: z.boolean().optional(), limit: z.number().int().min(1).max(5_000).default(500) }),
+  output: listed(
+    z.object({
+      payout: providerPayoutRow,
+      transactions: listed(providerBalanceTransactionRow),
+      matchedNetMinor: z.number().int(),
+    }),
+  ),
   handler: async (input, ctx) => {
     const payouts = await ctx.tx.select().from(providerPayouts).where(and(
       input.provider ? eq(providerPayouts.provider, input.provider) : undefined,
@@ -818,6 +895,23 @@ export const reconcileAdvancedMoney = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ limit: z.number().int().min(1).max(5_000).default(1_000) }),
+  output: z.object({
+    balanced: z.boolean(),
+    checked: z.object({
+      customerBalances: z.number().int(),
+      paymentPlans: z.number().int(),
+      providerPayouts: z.number().int(),
+    }),
+    discrepancies: listed(
+      z.object({
+        subjectType: z.enum(["customer_balance", "payment_plan", "provider_payout"]),
+        subjectId: uuid,
+        recordedMinor: z.number().int(),
+        calculatedMinor: z.number().int(),
+      }),
+    ),
+    unassignedProviderLines: listed(providerBalanceTransactionRow),
+  }),
   handler: async (input, ctx) => {
     const [accounts, plans, payouts, unassignedProviderLines] = await Promise.all([
       ctx.tx.select().from(customerBalanceAccounts).orderBy(desc(customerBalanceAccounts.updatedAt)).limit(input.limit),

@@ -30,6 +30,7 @@ import { hashPassword } from "@/core/auth/passwords";
 import { isUniqueViolation } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
 import { env } from "@/core/env";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   actorString,
   defineService,
@@ -42,6 +43,24 @@ const DEFAULT_LIFETIME_DAYS = 7;
 const emailAddress = z.string().trim().email().toLowerCase().max(320);
 const invitationId = z.string().uuid();
 const roleKey = z.string().min(2).max(60);
+const invitationDelivery = row({
+  id: uuid,
+  expiresAt: timestamp,
+  delivery: z.enum(["sent", "logged"]),
+});
+const inspectInvitationOutput = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("invalid") }),
+  z.object({ status: z.literal("unavailable"), email: z.string() }),
+  z.object({ status: z.literal("accepted"), email: z.string() }),
+  z.object({ status: z.literal("revoked"), email: z.string() }),
+  z.object({ status: z.literal("expired"), email: z.string() }),
+  z.object({
+    status: z.literal("pending"),
+    email: z.string(),
+    roleName: z.string(),
+    expiresAt: timestamp,
+  }),
+]);
 
 type StoredStatus = "pending" | "accepted" | "revoked" | "expired";
 type PresentedStatus = StoredStatus | "invalid" | "unavailable";
@@ -161,6 +180,13 @@ export const listInvitationRoles = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      key: z.string(),
+      name: z.string(),
+      description: z.string(),
+    }),
+  ),
   handler: async (_input, ctx) => {
     const [catalogue, grants] = await Promise.all([
       ctx.tx
@@ -188,6 +214,31 @@ export const listInvitations = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      email: z.string(),
+      roleKey: z.string(),
+      roleName: z.string(),
+      status: z.enum(["pending", "accepted", "revoked", "expired"]),
+      expiresAt: timestamp,
+      createdBy: z.string(),
+      sendCount: z.number().int(),
+      lastAttemptedAt: timestamp,
+      lastSentAt: timestamp.nullable(),
+      deliveryAdapter: z.string().nullable(),
+      acceptedAt: timestamp.nullable(),
+      revokedAt: timestamp.nullable(),
+      createdAt: timestamp,
+      history: listed(
+        row({
+          action: z.string(),
+          actor: z.string(),
+          at: timestamp,
+        }),
+      ),
+    }),
+  ),
   handler: async (_input, ctx) => {
     const [rows, history] = await Promise.all([
       ctx.tx
@@ -244,6 +295,7 @@ export const createInvitation = defineService({
     roleKey,
     expiresInDays: z.number().int().min(1).max(30).default(DEFAULT_LIFETIME_DAYS),
   }),
+  output: invitationDelivery,
   handler: async (input, ctx) => {
     const role = await requireStaffRole(ctx.tx, input.roleKey);
     await expireStaleForEmail(ctx.tx, input.email);
@@ -340,6 +392,7 @@ export const resendInvitation = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: invitationId }),
+  output: invitationDelivery,
   handler: async (input, ctx) => {
     const [invitation] = await ctx.tx
       .select()
@@ -445,6 +498,7 @@ export const revokeInvitation = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: invitationId }),
+  output: row({ id: uuid }),
   handler: async (input, ctx) => {
     const now = new Date();
     const [row] = await ctx.tx
@@ -476,6 +530,7 @@ export const inspectInvitation = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ token: z.string().min(10).max(200) }),
+  output: inspectInvitationOutput,
   handler: async (input, ctx): Promise<{
     status: PresentedStatus;
     email?: string;
@@ -516,6 +571,11 @@ export const acceptInvitation = defineService({
     subject: (input) => hashToken(input.token),
     message: "Too many invitation attempts. Wait a few minutes and try again.",
   },
+  output: row({
+    userId: uuid,
+    email: z.string(),
+    role: z.string(),
+  }),
   handler: async (input, ctx) => {
     const refuse = () => {
       throw new ServiceError(

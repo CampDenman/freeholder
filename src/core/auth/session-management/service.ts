@@ -13,6 +13,7 @@ import {
   type ProtectedSessionMetadata,
 } from "@/core/auth/sessions";
 import { db } from "@/core/db";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type Tx } from "@/core/service";
 
 const MAX_NOTICE_ATTEMPTS = 5;
@@ -83,6 +84,18 @@ export const listSessions = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      ipHint: z.string().nullable(),
+      createdAt: timestamp,
+      lastSeenAt: timestamp,
+      expiresAt: timestamp,
+      twoFactorVerifiedAt: timestamp.nullable(),
+      deviceLabel: z.string(),
+      current: z.boolean(),
+    }),
+  ),
   handler: async (_input, ctx) => {
     const actor = sessionActor(ctx.actor);
     const rows = await ctx.tx
@@ -117,6 +130,7 @@ export const revokeSession = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ id: z.string().uuid() }),
+  output: okResult.extend({ current: z.boolean() }),
   handler: async (input, ctx) => {
     const actor = sessionActor(ctx.actor);
     const [revoked] = await ctx.tx
@@ -141,6 +155,7 @@ export const revokeOtherSessions = defineService({
   permission: "authenticated",
   stepUp: true,
   input: z.object({}),
+  output: okResult.extend({ revoked: z.number().int() }),
   handler: async (_input, ctx) => {
     const actor = sessionActor(ctx.actor);
     const revoked = await ctx.tx
@@ -167,6 +182,23 @@ export const recentLoginSecurity = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({ limit: z.number().int().min(1).max(50).default(10) }),
+  output: listed(
+    row({
+      id: uuid,
+      sessionId: uuid,
+      deviceLabel: z.string(),
+      ipHint: z.string().nullable(),
+      reason: z.enum(["new_device", "new_network"]).nullable(),
+      noticeStatus: z.enum([
+        "not_needed",
+        "pending",
+        "sent",
+        "failed",
+        "unavailable",
+      ]),
+      createdAt: timestamp,
+    }),
+  ),
   handler: async (input, ctx) => {
     const actor = sessionActor(ctx.actor);
     return ctx.tx

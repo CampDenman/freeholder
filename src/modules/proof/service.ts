@@ -3,6 +3,7 @@
 // Proof-plugin services (C2.23).
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, uuid } from "@/core/contract";
 import { defineService } from "@/core/service";
 import { proofNotices } from "./schema";
 import { seedNoticeBlock } from "./seed";
@@ -13,6 +14,14 @@ export const publishedPaths = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ locale: z.string().default("en") }),
+  output: listed(
+    row({
+      slug: z.string(),
+      title: z.string(),
+      updatedAt: z.date(),
+      kind: z.literal("article"),
+    }),
+  ),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx
       .select({
@@ -38,6 +47,11 @@ export const seedProofNotice = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    id: uuid,
+    created: z.boolean(),
+    block: z.unknown(),
+  }),
   handler: async (_input, ctx) => {
     const existing = await ctx.tx
       .select({ id: proofNotices.id })

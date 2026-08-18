@@ -17,7 +17,28 @@ import {
   revokeSessionByToken,
   validateSession,
 } from "@/core/auth/sessions";
+import { okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
+
+const sessionIssued = row({
+  token: z.string(),
+  sessionId: uuid,
+  expiresAt: timestamp,
+});
+const loginResult = row({
+  userId: uuid,
+  role: z.string(),
+  twoFactorRequired: z.boolean(),
+  token: z.string(),
+  expiresAt: timestamp,
+});
+const sessionUser = row({
+  userId: uuid,
+  role: z.string(),
+  email: z.string(),
+  sessionId: uuid,
+  expiresAt: timestamp,
+});
 import { rateLimitKey, reset as resetRateLimit } from "@/core/security/rate-limit";
 import { seedDefaultRoles } from "@/core/roles/defaults";
 import { seedCoreGuidanceFlows } from "@/core/guidance/definitions";
@@ -67,6 +88,7 @@ export const registerOwner = defineService({
     subject: () => "first-boot",
     message: "Too many setup attempts. Wait a few minutes and try again.",
   },
+  output: row({ userId: uuid }).and(sessionIssued),
   handler: async (input, ctx) => {
     // Migrations seed these too, but first boot is deliberately self-healing:
     // a test database or a restored pre-role database still gets the same
@@ -139,6 +161,7 @@ export const login = defineService({
     subject: (input) => input.email,
     message: "Too many sign-in attempts. Wait a few minutes and try again.",
   },
+  output: loginResult,
   handler: async (input, ctx) => {
     const [user] = await ctx.tx
       .select()
@@ -203,6 +226,7 @@ export const logout = defineService({
   // express "this one is mine". Holding the token is the proof.
   permission: "authenticated",
   input: z.object({ token: z.string().min(1) }),
+  output: okResult,
   handler: async (input, ctx) => {
     const sessionId = await revokeSessionByToken(ctx.tx, input.token);
     if (sessionId) ctx.setSubject("session", sessionId);
@@ -243,6 +267,7 @@ export const changePassword = defineService({
     subject: (_input) => "change-password",
     message: "Too many attempts. Wait a few minutes and try again.",
   },
+  output: okResult.extend({ otherSessionsRevoked: z.number().int() }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "user") {
       throw new ServiceError("permission", "Sign in to change your password.");
@@ -310,6 +335,7 @@ export const whoami = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ token: z.string().min(1) }),
+  output: sessionUser.optional(),
   handler: (input, ctx) => validateSession(ctx.tx, input.token),
 });
 

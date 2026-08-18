@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { and, count, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
+import { listed, row, timestamp } from "@/core/contract";
 import { defineService } from "@/core/service";
 import { cspViolations } from "./schema";
 
@@ -223,6 +224,16 @@ export const listCspViolations = defineService({
     days: z.number().int().min(1).max(30).default(7),
     limit: z.number().int().min(1).max(100).default(20),
   }),
+  output: listed(
+    row({
+      fingerprint: z.string(),
+      documentPath: z.string(),
+      effectiveDirective: z.string(),
+      blockedSource: z.string(),
+      occurrences: z.number().int(),
+      lastAt: timestamp,
+    }),
+  ),
   handler: (input, ctx) => ctx.tx
     .select()
     .from(cspViolations)

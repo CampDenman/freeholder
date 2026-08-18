@@ -7,6 +7,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineService,
   redact,
@@ -53,8 +54,8 @@ const localeSchema = z.string().trim().min(2).max(16).default("en");
 const emailSchema = z.string().trim().email().toLowerCase();
 
 const contributionOutput = z.object({
-  id: z.string().uuid(),
-  contactId: z.string().uuid().nullable(),
+  id: uuid,
+  contactId: uuid.nullable(),
   kind: kindSchema,
   status: statusSchema,
   title: z.string(),
@@ -64,7 +65,7 @@ const contributionOutput = z.object({
   reporterEmail: z.string().nullable(),
   reporterName: z.string().nullable(),
   externalUrl: z.string().nullable(),
-  hubReceiptId: z.string().uuid().nullable(),
+  hubReceiptId: uuid.nullable(),
   contentHash: z.string(),
   includeDoctor: z.boolean(),
   doctorReport: z.unknown().nullable(),
@@ -72,10 +73,10 @@ const contributionOutput = z.object({
   dcoAttested: z.boolean(),
   dcoSigner: z.string().nullable(),
   checklistId: z.string().nullable(),
-  parentId: z.string().uuid().nullable(),
+  parentId: uuid.nullable(),
   actor: z.string(),
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
 });
 
 export type ContributionRecord = z.output<typeof contributionOutput>;
@@ -86,6 +87,39 @@ const settingsOutput = z.object({
   hasReceiveSecret: z.boolean(),
   receiveSecret: z.string().optional(),
 });
+
+const contributionDetail = contributionOutput.extend({
+  events: listed(
+    row({
+      id: uuid,
+      kind: z.string(),
+      body: z.string().nullable(),
+      actor: z.string(),
+      createdAt: timestamp,
+    }),
+  ),
+  assets: listed(
+    row({
+      id: uuid,
+      assetId: uuid,
+      role: z.enum(CONTRIBUTE_ASSET_ROLES),
+    }),
+  ),
+});
+
+const attachOutput = z.union([
+  row({
+    id: uuid,
+    contributionId: uuid,
+    assetId: uuid,
+    role: z.enum(CONTRIBUTE_ASSET_ROLES),
+    createdAt: timestamp,
+  }),
+  z.object({
+    id: uuid,
+    attached: z.literal(false),
+  }),
+]);
 
 registerContactReference({
   table: "contributions",
@@ -289,6 +323,7 @@ export const getContributeSettings = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: settingsOutput,
   handler: async (_input, ctx) => {
     const settings = await loadSettings(ctx.tx);
     return settingsOutput.parse({
@@ -305,6 +340,7 @@ export const contributeHubStatus = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
+  output: z.object({ hubEnabled: z.boolean() }),
   handler: async (_input, ctx) => {
     const settings = await loadSettings(ctx.tx);
     return { hubEnabled: settings.hubEnabled };
@@ -319,6 +355,7 @@ export const setHubEnabled = defineService({
   input: z.object({
     enabled: z.boolean(),
   }),
+  output: settingsOutput,
   handler: async (input, ctx) => {
     await ensureSettings(ctx.tx);
     const [updated] = await ctx.tx
@@ -347,6 +384,7 @@ export const updateContributeSettings = defineService({
     rotateReceiveSecret: z.boolean().optional(),
     clearReceiveSecret: z.boolean().optional(),
   }),
+  output: settingsOutput,
   handler: async (input, ctx) => {
     if (
       (input.rotateReceiveSecret || input.clearReceiveSecret) &&
@@ -401,6 +439,7 @@ export const draftContribution = defineService({
     subject: () => "contribute:draft",
     message: "Wait a few minutes before drafting another report.",
   },
+  output: contributionOutput,
   handler: async (input, ctx) => {
     refuseSecurity(input.kind);
     requirePatchDco(input);
@@ -456,6 +495,7 @@ export const submitContribution = defineService({
     subject: (input) => `contribute:submit:${input.email ?? "session"}`,
     message: "Wait a few minutes before sending another report.",
   },
+  output: contributionOutput,
   handler: async (input, ctx) => {
     refuseSecurity(input.kind);
     requirePatchDco(input);
@@ -577,6 +617,7 @@ export const listContributions = defineService({
     kind: kindSchema.optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }),
+  output: listed(contributionOutput),
   handler: async (input, ctx) => {
     const filters = [
       input.status ? eq(contributions.status, input.status) : undefined,
@@ -598,6 +639,7 @@ export const getContribution = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: contributionDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -642,6 +684,7 @@ export const attachContributionAsset = defineService({
     assetId: z.string().uuid(),
     role: z.enum(CONTRIBUTE_ASSET_ROLES).default("other"),
   }),
+  output: attachOutput,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select({ id: contributions.id })
@@ -683,6 +726,7 @@ export const ingestContribution = defineService({
     subject: (input) => `contribute:ingest:${input.email ?? "anon"}`,
     message: "This inbox is taking a short break. Try again in a few minutes.",
   },
+  output: contributionOutput,
   handler: async (input, ctx) => {
     refuseSecurity(input.kind);
     requirePatchDco(input);
@@ -825,6 +869,7 @@ export const triageContribution = defineService({
     id: z.string().uuid(),
     note: z.string().trim().max(4000).optional(),
   }),
+  output: contributionOutput,
   handler: async (input, ctx) =>
     moveStatus(ctx, input.id, "triage", input.note),
 });
@@ -845,6 +890,7 @@ export const determineContribution = defineService({
       .optional(),
     parentId: z.string().uuid().optional(),
   }),
+  output: contributionOutput,
   handler: async (input, ctx) => {
     if (input.status === "accepted" && !input.checklistId) {
       // A citation is allowed, not required: the work may not be scoped yet.
@@ -944,6 +990,7 @@ export const recordContributionStatus = defineService({
     subject: (input) => `contribute:reply:${input.spokeId}`,
     message: "Wait a moment before sending another status update.",
   },
+  output: contributionOutput,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select()

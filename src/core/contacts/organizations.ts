@@ -5,6 +5,7 @@ import { asc, count, eq, ilike, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { applyCustomFieldPatch } from "@/core/contacts/custom-fields";
 import { contacts, organizations } from "@/core/contacts/schema";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError } from "@/core/service";
 
@@ -25,6 +26,15 @@ const organizationFields = z.object({
   customFields: z.record(z.string(), z.unknown()).default({}),
 });
 
+const organizationRow = row({
+  id: uuid,
+  name: z.string(),
+  domain: z.string().nullable(),
+  customFields: z.unknown(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
 function domainConflict(error: unknown, domain: string | null | undefined): never {
   if (domain && isUniqueViolation(error, "organizations_domain_idx")) {
     throw new ServiceError(
@@ -41,6 +51,7 @@ export const createOrganization = defineService({
   kind: "mutation",
   permission: "scoped",
   input: organizationFields,
+  output: organizationRow,
   handler: async (input, ctx) => {
     const customFields = await applyCustomFieldPatch(
       ctx.tx,
@@ -66,6 +77,7 @@ export const updateOrganization = defineService({
   kind: "mutation",
   permission: "scoped",
   input: organizationFields.partial().extend({ id: z.string().uuid() }),
+  output: organizationRow,
   handler: async (input, ctx) => {
     const { id, ...requested } = input;
     const [existing] = await ctx.tx
@@ -105,6 +117,7 @@ export const getOrganization = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: organizationRow,
   handler: async (input, ctx) => {
     const [organization] = await ctx.tx
       .select()
@@ -127,6 +140,10 @@ export const listOrganizations = defineService({
     search: z.string().trim().max(200).optional(),
     limit: z.number().int().min(1).max(100).default(25),
     offset: z.number().int().min(0).default(0),
+  }),
+  output: z.object({
+    rows: listed(organizationRow.and(row({ memberCount: z.number().int() }))),
+    total: z.number().int(),
   }),
   handler: async (input, ctx) => {
     const where = input.search
@@ -165,6 +182,7 @@ export const deleteOrganization = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: okResult,
   handler: async (input, ctx) => {
     const [member] = await ctx.tx
       .select({ id: contacts.id })

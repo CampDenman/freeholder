@@ -14,7 +14,20 @@ import type { PaymentProviderEvent, SavedPaymentMethodEvidence } from "@/adapter
 import { AdapterError } from "@/adapters/types";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import {
+  adapterStatus,
+  checkoutSession,
+  invoiceRow,
+  paymentDisputeRow,
+  paymentMethodRow,
+  paymentProviderEventRow,
+  paymentRow,
+  providerBalanceTransactionRow,
+  providerPayoutRow,
+  refundRow,
+} from "./contract";
 import {
   cancelPayment,
   createPayment,
@@ -415,6 +428,10 @@ export const processPaymentProviderEvents = defineService({
     receivedAt: z.string().datetime(),
     events: z.array(providerEvent).max(100),
   }),
+  output: z.object({
+    processed: z.number().int(),
+    duplicates: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     let processed = 0;
     let duplicates = 0;
@@ -450,6 +467,41 @@ export const listPaymentProviders = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/), currency, recurring: z.boolean().default(false) }),
+  output: listed(
+    z.object({
+      id: z.string(),
+      status: adapterStatus,
+      capabilities: z.object({
+        refunds: z.boolean(),
+        partialRefunds: z.boolean(),
+        savedMethods: z.boolean(),
+        subscriptions: z.boolean(),
+        disputes: z.boolean(),
+        payouts: z.boolean(),
+        inPerson: z.boolean(),
+        strongCustomerAuthentication: z.boolean(),
+      }),
+      methods: listed(
+        z.object({
+          id: z.string(),
+          label: z.string(),
+          kind: z.enum([
+            "card",
+            "wallet",
+            "bank_debit",
+            "bank_redirect",
+            "buy_now_pay_later",
+            "cash",
+            "bank_transfer",
+            "other",
+          ]),
+          recurring: z.boolean(),
+        }),
+      ),
+      currencySupport: z.string(),
+      selected: z.boolean(),
+    }),
+  ),
   handler: async (input) => Promise.all(paymentAdapters.list().filter((adapter) => adapter.id !== "none").map(async (adapter) => ({
     id: adapter.id,
     status: adapter.status,
@@ -475,6 +527,10 @@ export const beginPaymentCheckout = defineService({
     successUrl: z.string().url().max(2_000),
     cancelUrl: z.string().url().max(2_000),
     idempotencyKey,
+  }),
+  output: z.object({
+    payment: paymentRow,
+    checkout: checkoutSession,
   }),
   handler: async (input, ctx) => {
     if (input.saveMethod && input.saveMethodConsent !== true) throw new ServiceError("validation", "Saving a payment method requires the customer's explicit consent.");
@@ -530,6 +586,7 @@ export const completePaymentCheckout = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ paymentId: z.string().uuid(), idempotencyKey }),
+  output: paymentRow,
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
@@ -552,6 +609,7 @@ export const submitProviderRefund = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), idempotencyKey }),
+  output: refundRow,
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment?.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
@@ -589,6 +647,7 @@ export const recordOfflinePayment = defineService({
     processedAt: z.coerce.date().default(() => new Date()),
     idempotencyKey,
   }),
+  output: paymentRow,
   handler: async (input, ctx) => {
     const payment = await ctx.call(createPayment, { invoiceId: input.invoiceId, provider: "manual", method: input.method, amountMinor: input.amountMinor, idempotencyKey: input.idempotencyKey, metadata: { evidence: input.evidence, externalReference: input.reference } });
     return ctx.call(settlePayment, { id: payment.id, providerRef: input.reference ? `manual:${input.reference}` : `manual:${payment.id}`, processedAt: input.processedAt });
@@ -602,6 +661,7 @@ export const recordOfflineRefund = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), reference: z.string().trim().min(1).max(300).optional(), processedAt: z.coerce.date().default(() => new Date()), idempotencyKey }),
+  output: refundRow,
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment || payment.provider !== "manual") throw new ServiceError("conflict", "Use the payment provider's refund path for a hosted payment.");
@@ -616,6 +676,33 @@ export const listSavedPaymentMethods = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ contactId: z.string().uuid().optional(), includeRevoked: z.boolean().default(false), limit: z.number().int().min(1).max(1_000).default(200) }),
+  output: listed(
+    row({
+      id: uuid,
+      contactId: uuid,
+      provider: z.string(),
+      kind: z.enum([
+        "card",
+        "wallet",
+        "bank_debit",
+        "bank_redirect",
+        "buy_now_pay_later",
+        "cash",
+        "bank_transfer",
+        "other",
+      ]),
+      label: z.string(),
+      brand: z.string().nullable(),
+      last4: z.string().nullable(),
+      expiryMonth: z.number().int().nullable(),
+      expiryYear: z.number().int().nullable(),
+      status: z.enum(["active", "revoked", "expired"]),
+      consentedAt: timestamp,
+      revokedAt: timestamp.nullable(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }),
+  ),
   handler: (input, ctx) => ctx.tx.select({
     id: paymentMethods.id,
     contactId: paymentMethods.contactId,
@@ -645,6 +732,13 @@ export const listPayments = defineService({
     status: z.enum(["created", "processing", "succeeded", "failed", "cancelled"]).optional(),
     limit: z.number().int().min(1).max(5_000).default(200),
   }),
+  output: listed(
+    z.object({
+      payment: paymentRow,
+      invoiceNumber: z.string().nullable(),
+      contactId: uuid,
+    }),
+  ),
   handler: (input, ctx) => ctx.tx.select({
     payment: payments,
     invoiceNumber: invoices.number,
@@ -662,6 +756,10 @@ export const getPayment = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: z.object({
+    payment: paymentRow,
+    invoice: invoiceRow,
+  }),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select({ payment: payments, invoice: invoices }).from(payments).innerJoin(invoices, eq(invoices.id, payments.invoiceId)).where(eq(payments.id, input.id)).limit(1);
     if (!row) throw new ServiceError("not_found", "That payment is not here.");
@@ -676,6 +774,7 @@ export const revokeSavedPaymentMethod = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.string().uuid(), idempotencyKey }),
+  output: paymentMethodRow,
   handler: async (input, ctx) => {
     const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.id)).limit(1);
     if (!method) throw new ServiceError("not_found", "That saved payment method is not here.");
@@ -695,6 +794,7 @@ export const listPaymentDisputes = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ status: z.enum(["open", "won", "lost"]).optional(), limit: z.number().int().min(1).max(1_000).default(100) }),
+  output: listed(paymentDisputeRow),
   handler: (input, ctx) => ctx.tx.select().from(paymentDisputes).where(input.status ? eq(paymentDisputes.status, input.status) : undefined).orderBy(desc(paymentDisputes.createdAt)).limit(input.limit),
 });
 
@@ -704,6 +804,13 @@ export const reconcilePaymentProviders = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ provider: provider.optional(), limit: z.number().int().min(1).max(5_000).default(1_000) }),
+  output: z.object({
+    unsettled: listed(paymentRow),
+    openDisputes: listed(paymentDisputeRow),
+    payouts: listed(providerPayoutRow),
+    balanceTransactions: listed(providerBalanceTransactionRow),
+    events: listed(paymentProviderEventRow),
+  }),
   handler: async (input, ctx) => {
     const providerFilter = input.provider ? eq(payments.provider, input.provider) : inArray(payments.provider, HOSTED_PAYMENT_PROVIDER_IDS);
     const unsettled = await ctx.tx.select().from(payments).where(and(providerFilter, inArray(payments.status, ["created", "processing"]))).orderBy(desc(payments.createdAt)).limit(input.limit);

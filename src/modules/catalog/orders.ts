@@ -8,6 +8,7 @@
 
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { listLocations } from "@/core/locations/service";
@@ -19,12 +20,43 @@ import {
   issueInvoice,
   voidInvoice,
 } from "@/modules/invoicing/invoice-service";
+import { ORDER_STATUSES } from "./contract";
 import { releaseReservation, reserveStock } from "./inventory";
 import { attachCartToContact, getCart } from "./cart";
 import { quoteShipping } from "./shipping";
 import { carts, orderItems, orders, stockReservations } from "./schema";
 
 const id = z.string().uuid();
+
+const orderRow = row({
+  id: uuid,
+  contactId: uuid,
+  cartId: uuid.nullable(),
+  invoiceId: uuid.nullable(),
+  currency: z.string(),
+  status: z.enum(ORDER_STATUSES),
+  subtotalMinor: z.number().int(),
+  discountMinor: z.number().int(),
+  shippingMinor: z.number().int(),
+  taxMinor: z.number().int(),
+  totalMinor: z.number().int(),
+  couponId: uuid.nullable(),
+  shippingMethodId: uuid.nullable(),
+  shippingAddress: z.unknown().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const orderItemRow = row({
+  id: uuid,
+  orderId: uuid,
+  variantId: uuid,
+  quantity: z.number().int(),
+  unitAmountMinor: z.number().int(),
+  lineTotalMinor: z.number().int(),
+  snapshot: z.unknown(),
+  createdAt: timestamp,
+});
+const orderDetail = z.object({ order: orderRow, lines: listed(orderItemRow) });
 const address = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   street1: z.string().trim().min(1).max(300).optional(),
@@ -116,6 +148,7 @@ export const checkoutCart = defineService({
       .optional(),
     applyBalance: z.boolean().default(false),
   }),
+  output: orderDetail,
   handler: async (input, ctx) => {
     let basket = await ctx.call(getCart, { cartId: input.cartId });
     if (basket.cart.status === "converted") {
@@ -374,6 +407,7 @@ export const payOrder = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: orderDetail,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.id)).for("update");
     if (!order) throw new ServiceError("not_found", "That order is not here.");
@@ -425,6 +459,7 @@ export const cancelOrder = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: orderDetail,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.id)).for("update");
     if (!order) throw new ServiceError("not_found", "That order is not here.");
@@ -475,6 +510,7 @@ export const getOrder = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ id }),
+  output: orderDetail,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.id)).limit(1);
     if (!order) throw new ServiceError("not_found", "That order is not here.");
@@ -489,6 +525,7 @@ export const listOrders = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ contactId: id.optional() }),
+  output: listed(orderRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()

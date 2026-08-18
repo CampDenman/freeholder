@@ -16,6 +16,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   connectedAccounts,
   connectionCapabilities,
@@ -52,6 +53,33 @@ const CAPABILITIES = [
   "contacts_read",
   "files_read",
 ] as const;
+
+const connectionListRow = row({
+  id: uuid,
+  userId: uuid,
+  provider: z.enum(["google", "microsoft", "apple", "caldav", "imap"]),
+  email: z.string().nullable(),
+  displayName: z.string().nullable(),
+  kind: z.enum(["personal", "business"]),
+  scopesGranted: z.array(z.string()),
+  status: z.enum(["active", "needs_reconnect", "revoked"]),
+  lastError: z.string().nullable(),
+  sharedWithBusiness: z.boolean(),
+  detailVisibility: z.enum(["busy_only", "full"]),
+  lastSyncAt: timestamp.nullable(),
+  createdAt: timestamp,
+});
+
+const capabilityRow = row({
+  id: uuid,
+  connectedAccountId: uuid,
+  capability: z.enum(CAPABILITIES),
+  enabled: z.boolean(),
+  scopeString: z.string().nullable(),
+  grantedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 
 /**
  * A connection is a person's, so only that person — or the owner — may act on
@@ -98,6 +126,7 @@ export const listConnections = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ mine: z.boolean().default(true) }),
+  output: listed(connectionListRow),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "agent") {
       throw new ServiceError(
@@ -167,6 +196,7 @@ export const recordConnection = defineService({
     credentials: z.record(z.string(), z.unknown()),
     capabilities: z.array(z.enum(CAPABILITIES)).max(10).default([]),
   }),
+  output: z.object({ id: uuid }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "agent") {
       throw new ServiceError(
@@ -290,6 +320,12 @@ export const setConnectionOptions = defineService({
     sharedWithBusiness: z.boolean().optional(),
     detailVisibility: z.enum(["busy_only", "full"]).optional(),
   }),
+  output: row({
+    id: uuid,
+    detailVisibility: z.enum(["busy_only", "full"]),
+    sharedWithBusiness: z.boolean(),
+    kind: z.enum(["personal", "business"]),
+  }),
   handler: async (input, ctx) => {
     const { id, ...changes } = input;
     await reachable(ctx.tx, ctx.actor, id);
@@ -325,6 +361,7 @@ export const setCapability = defineService({
     capability: z.enum(CAPABILITIES),
     enabled: z.boolean(),
   }),
+  output: capabilityRow,
   handler: async (input, ctx) => {
     await reachable(ctx.tx, ctx.actor, input.id);
     const [row] = await ctx.tx
@@ -363,6 +400,10 @@ export const removeConnection = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.uuid() }),
+  output: z.object({
+    id: uuid,
+    provider: z.enum(["google", "microsoft", "apple", "caldav", "imap"]),
+  }),
   handler: async (input, ctx) => {
     await reachable(ctx.tx, ctx.actor, input.id);
     const [row] = await ctx.tx
@@ -395,6 +436,7 @@ export const flagConnection = defineService({
     status: z.enum(["needs_reconnect", "revoked"]),
     reason: z.string().max(500),
   }),
+  output: z.object({ id: uuid }),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .update(connectedAccounts)
@@ -426,6 +468,11 @@ export const rotateCredentials = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({}),
+  output: z.object({
+    examined: z.number().int(),
+    rotated: z.number().int(),
+    failed: z.number().int(),
+  }),
   handler: async (_input, ctx) => {
     if (ctx.actor.kind === "agent") {
       throw new ServiceError(

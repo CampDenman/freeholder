@@ -3,6 +3,7 @@
 // Email preview and test-send from a template (C2.19).
 import { z } from "zod";
 import { eq } from "drizzle-orm";
+import { row, uuid } from "@/core/contract";
 import { defineService, ServiceError, actorString } from "@/core/service";
 import { users } from "@/core/auth/schema";
 import { sendMail } from "@/core/mail/service";
@@ -16,6 +17,29 @@ import {
   type EmailVariables,
 } from "./email-render";
 
+const emailPreview = z.object({
+  subject: z.string(),
+  html: z.string(),
+  text: z.string(),
+  variables: z.record(z.string(), z.string()),
+});
+const mailSend = row({
+  id: uuid,
+  provider: z.enum([
+    "smtp",
+    "console",
+    "gmail",
+    "outlook",
+    "resend",
+    "postmark",
+    "ses",
+    "none",
+  ]),
+  providerRef: z.string().nullable(),
+  delivers: z.boolean(),
+  duplicate: z.boolean(),
+});
+
 export const previewEmail = defineService({
   name: "cms.previewEmail",
   summary: "Table-based HTML and plain text for an email template.",
@@ -27,6 +51,7 @@ export const previewEmail = defineService({
     subject: z.string().max(200).optional(),
     variables: z.record(z.string(), z.string()).optional(),
   }),
+  output: emailPreview,
   handler: async (input, ctx) => {
     const template = await ctx.call(getTemplate, {
       key: input.key,
@@ -57,6 +82,7 @@ export const testSendEmail = defineService({
     locale: z.string().default("en"),
     subject: z.string().max(200).optional(),
   }),
+  output: mailSend,
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "user") {
       throw new ServiceError("permission", "Sign in to send a test email.");

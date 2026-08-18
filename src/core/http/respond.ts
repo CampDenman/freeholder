@@ -12,6 +12,7 @@ const STATUS: Record<ServiceError["code"], number> = {
   conflict: 409,
   rate_limited: 429,
   step_up_required: 403,
+  internal: 500,
 };
 
 export interface ResponseParts {

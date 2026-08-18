@@ -3,7 +3,45 @@
 // Visual design controls over semantic tokens (C2.15).
 import { z } from "zod";
 import { eq } from "drizzle-orm";
+import { uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
+
+const colorTokens = z.object({
+  paper: z.string(),
+  surface: z.string(),
+  surfaceMuted: z.string(),
+  field: z.string(),
+  ink: z.string(),
+  inkMuted: z.string(),
+  rule: z.string(),
+  accent: z.string(),
+  onAccent: z.string(),
+  accentSoft: z.string(),
+  success: z.string(),
+  successSoft: z.string(),
+  warning: z.string(),
+  warningSoft: z.string(),
+  danger: z.string(),
+  dangerSoft: z.string(),
+  focus: z.string(),
+});
+
+const designResult = z.object({
+  theme: z.object({
+    light: colorTokens,
+    dark: colorTokens,
+  }),
+  extras: z.object({
+    fontSans: z.string().optional(),
+    fontMono: z.string().optional(),
+    radius: z.string().optional(),
+    motion: z.string().optional(),
+    measure: z.string().optional(),
+    gutter: z.string().optional(),
+  }),
+  logoAssetId: uuid.nullable(),
+  origin: z.enum(["owner", "system"]),
+});
 import {
   COLOR_ROLES,
   HEX,
@@ -117,6 +155,7 @@ export const getDesign = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
+  output: designResult,
   handler: async (_input, ctx) => {
     const row = await loadOrEmpty(ctx.tx);
     const theme = resolveTheme(row?.colors);
@@ -158,6 +197,7 @@ export const updateDesign = defineService({
     gutter: GUTTER.nullable().optional(),
     logoAssetId: z.string().uuid().nullable().optional(),
   }),
+  output: designResult,
   handler: async (input, ctx) => {
     const existing = await loadOrEmpty(ctx.tx);
     const nextColors: DesignColorOverrides = {
@@ -204,6 +244,7 @@ export const resetDesign = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: designResult,
   handler: async (_input, ctx) => {
     await ctx.tx.delete(designSettings).where(eq(designSettings.id, 1));
     ctx.setSubject("design", "1");

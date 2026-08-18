@@ -8,6 +8,7 @@
 
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -26,6 +27,82 @@ import {
 
 const id = z.string().uuid();
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
+
+const inventoryItemRow = row({
+  id: uuid,
+  variantId: uuid,
+  locationId: uuid,
+  bin: z.string().nullable(),
+  safetyStock: z.number().int(),
+  reorderPoint: z.number().int(),
+  incoming: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const inventoryListRow = inventoryItemRow.extend({
+  sku: z.string(),
+  productName: z.string(),
+  locationName: z.string(),
+  isPrimary: z.boolean(),
+  onHand: z.number().int(),
+  reserved: z.number().int(),
+  incoming: z.number().int(),
+  available: z.number().int(),
+});
+const variantRow = row({
+  id: uuid,
+  productId: uuid,
+  combinationKey: z.string(),
+  sku: z.string(),
+  isDefault: z.boolean(),
+  status: z.enum(["active", "archived"]),
+  backorderPolicy: z.enum(BACKORDER_POLICIES),
+  expectedRestockAt: timestamp.nullable(),
+  requiresShipping: z.boolean(),
+  weightG: z.number().int().nullable(),
+  lengthMm: z.number().int().nullable(),
+  widthMm: z.number().int().nullable(),
+  heightMm: z.number().int().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const supplierRow = row({
+  id: uuid,
+  name: z.string(),
+  contactId: uuid.nullable(),
+  leadTimeDays: z.number().int(),
+  currency: z.string(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const purchaseOrderRow = row({
+  id: uuid,
+  supplierId: uuid,
+  locationId: uuid,
+  status: z.enum(PURCHASE_ORDER_STATUSES),
+  currency: z.string(),
+  expectedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const purchaseOrderLineRow = row({
+  id: uuid,
+  purchaseOrderId: uuid,
+  variantId: uuid,
+  quantity: z.number().int(),
+  receivedQty: z.number().int(),
+  unitCostMinor: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const backInStockRow = row({
+  id: uuid,
+  variantId: uuid,
+  contactId: uuid,
+  locationId: uuid.nullable(),
+  notifiedAt: timestamp.nullable(),
+  createdAt: timestamp,
+});
 
 registerContactReference({
   table: "suppliers",
@@ -164,6 +241,7 @@ export const setInventoryLevels = defineService({
     reorderPoint: z.number().int().min(0).max(1_000_000),
     bin: z.string().trim().min(1).max(40).nullable().optional(),
   }),
+  output: inventoryItemRow,
   handler: async (input, ctx) => {
     const [item] = await ctx.tx
       .update(inventoryItems)
@@ -191,6 +269,7 @@ export const setVariantStockPolicy = defineService({
     backorderPolicy: z.enum(BACKORDER_POLICIES),
     expectedRestockAt: z.coerce.date().nullable().optional(),
   }),
+  output: variantRow,
   handler: async (input, ctx) => {
     if (input.backorderPolicy === "allow_date" && !input.expectedRestockAt) {
       throw new ServiceError("validation", "A dated backorder needs an expected restock date.");
@@ -216,6 +295,7 @@ export const listReorderQueue = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(inventoryListRow),
   handler: async (_input, ctx) => {
     const rows = await ctx.call(listInventory, {});
     return rows.filter((row) => row.reorderPoint > 0 && row.onHand + row.incoming <= row.reorderPoint);
@@ -228,6 +308,7 @@ export const listSuppliers = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(supplierRow),
   handler: (_input, ctx) => ctx.tx.select().from(suppliers).orderBy(asc(suppliers.name)),
 });
 
@@ -242,6 +323,7 @@ export const createSupplier = defineService({
     leadTimeDays: z.number().int().min(0).max(365).default(7),
     contactId: id.optional(),
   }),
+  output: supplierRow,
   handler: async (input, ctx) => {
     if (input.contactId) await requireContact(ctx.tx, input.contactId);
     const [created] = await ctx.tx.insert(suppliers).values(input).returning();
@@ -261,6 +343,7 @@ export const createPurchaseOrder = defineService({
     locationId: id,
     expectedAt: z.coerce.date().optional(),
   }),
+  output: purchaseOrderRow,
   handler: async (input, ctx) => {
     const [supplier] = await ctx.tx.select().from(suppliers).where(eq(suppliers.id, input.supplierId)).limit(1);
     if (!supplier) throw new ServiceError("not_found", "That supplier is not here.");
@@ -289,6 +372,7 @@ export const addPurchaseOrderLine = defineService({
     quantity: z.number().int().min(1).max(1_000_000),
     unitCost: z.string().trim(),
   }),
+  output: purchaseOrderLineRow,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx
       .select()
@@ -324,6 +408,7 @@ export const listPurchaseOrders = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ status: z.enum(PURCHASE_ORDER_STATUSES).optional() }),
+  output: listed(purchaseOrderRow.extend({ lines: listed(purchaseOrderLineRow) })),
   handler: async (input, ctx) => {
     const orders = await ctx.tx
       .select()
@@ -349,6 +434,7 @@ export const placePurchaseOrder = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: purchaseOrderRow,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx
       .select()
@@ -393,6 +479,10 @@ export const receivePurchaseOrderLine = defineService({
     lineId: id,
     quantity: z.number().int().min(1).max(1_000_000),
     note: z.string().trim().min(1).max(500).optional(),
+  }),
+  output: z.object({
+    line: purchaseOrderLineRow,
+    status: z.enum(PURCHASE_ORDER_STATUSES),
   }),
   handler: async (input, ctx) => {
     const [line] = await ctx.tx
@@ -478,6 +568,7 @@ export const cancelPurchaseOrder = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: purchaseOrderRow,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx
       .select()
@@ -525,6 +616,7 @@ export const subscribeBackInStock = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ variantId: id, contactId: id, locationId: id.optional() }),
+  output: backInStockRow,
   handler: async (input, ctx) => {
     await requireContact(ctx.tx, input.contactId);
     const [existing] = await ctx.tx

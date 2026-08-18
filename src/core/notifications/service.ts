@@ -17,6 +17,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { notificationAdapterStatus, pushNotifications, smsNotifications } from "@/adapters/notifications";
 import { users, roleGrants } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
@@ -55,6 +56,81 @@ export const NOTIFICATION_TOPICS = [
   "contribute.ingested",
   "contribute.status",
 ] as const;
+
+const notificationCreateResult = z.object({
+  id: uuid,
+  duplicate: z.boolean(),
+  coalesced: z.boolean(),
+});
+
+const inboxItem = row({
+  id: uuid,
+  topic: z.string(),
+  priority: z.enum(["information", "warning", "critical"]),
+  locale: z.string(),
+  title: z.string(),
+  body: z.string(),
+  href: z.string().nullable(),
+  occurrenceCount: z.number().int(),
+  firstOccurredAt: timestamp,
+  lastOccurredAt: timestamp,
+  readAt: timestamp.nullable(),
+  escalatedAt: timestamp.nullable(),
+});
+
+const preferenceRow = row({
+  id: uuid,
+  userId: uuid.nullable(),
+  contactId: uuid.nullable(),
+  topic: z.string(),
+  channel: z.enum(["in_app", "email", "sms", "push"]),
+  mode: z.enum(["immediate", "digest", "off"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const settingsRow = row({
+  id: uuid,
+  userId: uuid.nullable(),
+  contactId: uuid.nullable(),
+  digestCadence: z.enum(["daily", "weekly"]),
+  digestMinute: z.number().int(),
+  digestWeekday: z.number().int(),
+  timezone: z.string().nullable(),
+  escalationMinutes: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const preferenceStatus = z.object({
+  topics: listed(z.string()),
+  preferences: listed(
+    row({
+      topic: z.string(),
+      channel: z.enum(["in_app", "email", "sms", "push"]),
+      mode: z.enum(["immediate", "digest", "off"]),
+    }),
+  ),
+  settings: row({
+    digestCadence: z.enum(["daily", "weekly"]),
+    digestMinute: z.number().int(),
+    digestWeekday: z.number().int(),
+    timezone: z.string().nullable(),
+    escalationMinutes: z.number().int(),
+  }),
+  email: z.object({
+    provider: z.enum(["smtp", "console", "gmail", "outlook"]),
+    ready: z.boolean(),
+  }),
+  adapters: listed(
+    z.object({
+      channel: z.enum(["sms", "push"]),
+      provider: z.string(),
+      available: z.boolean(),
+      message: z.string(),
+    }),
+  ),
+});
 
 export type NotificationTopic = (typeof NOTIFICATION_TOPICS)[number];
 export type NotificationChannel = "in_app" | "email" | "sms" | "push";
@@ -707,6 +783,7 @@ export const createNotification = defineService({
   permission: "scoped",
   agentCallable: false,
   input: createInput,
+  output: notificationCreateResult,
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "system") {
       throw new ServiceError("permission", "Only trusted platform work may create a notification.");
@@ -727,6 +804,7 @@ export const listNotifications = defineService({
     limit: z.number().int().min(1).max(100).default(50),
     before: z.coerce.date().optional(),
   }),
+  output: listed(inboxItem),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
     const state = input.state === "unread"
@@ -774,6 +852,7 @@ export const unreadNotificationCount = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({}),
+  output: z.number().int(),
   handler: async (_input, ctx) => {
     requirePerson(ctx.actor);
     const [row] = await ctx.tx
@@ -807,6 +886,7 @@ export const markNotificationRead = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ id: z.uuid(), read: z.boolean().default(true) }),
+  output: z.object({ id: uuid, readAt: timestamp.nullable() }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
     await ownedNotification(ctx.tx, ctx.actor.userId, input.id);
@@ -826,6 +906,7 @@ export const archiveNotification = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ id: z.uuid() }),
+  output: z.object({ archived: z.literal(true) }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
     await ownedNotification(ctx.tx, ctx.actor.userId, input.id);
@@ -844,6 +925,7 @@ export const markAllNotificationsRead = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({}),
+  output: z.object({ changed: z.number().int() }),
   handler: async (_input, ctx) => {
     requirePerson(ctx.actor);
     const rows = await ctx.tx
@@ -869,6 +951,7 @@ export const notificationPreferenceStatus = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({}),
+  output: preferenceStatus,
   handler: async (_input, ctx) => {
     requirePerson(ctx.actor);
     const [preferences, settings, business, mail] = await Promise.all([
@@ -939,6 +1022,7 @@ export const updateNotificationPreference = defineService({
       issue.addIssue({ code: "custom", message: "Only email can be delivered as a digest.", path: ["mode"] });
     }
   }),
+  output: preferenceRow,
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
     const [row] = await ctx.tx
@@ -971,6 +1055,7 @@ export const updateNotificationPreferences = defineService({
       mode: z.enum(["immediate", "digest", "off"]),
     })).min(1).max(100),
   }),
+  output: z.object({ saved: z.number().int() }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
     const seen = new Set<string>();
@@ -1022,6 +1107,7 @@ export const updateNotificationSettings = defineService({
       issue.addIssue({ code: "custom", message: "Use an IANA timezone such as America/Vancouver.", path: ["timezone"] });
     }
   }),
+  output: settingsRow,
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
     const [row] = await ctx.tx

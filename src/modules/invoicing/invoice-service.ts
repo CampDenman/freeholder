@@ -17,6 +17,15 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
+import { listed, uuid } from "@/core/contract";
+import {
+  creditNoteRow,
+  invoiceBundle as invoiceBundleOutput,
+  invoiceRow,
+  paymentReceipt,
+  paymentRow,
+  refundRow,
+} from "./contract";
 import {
   creditNoteLines,
   creditNotes,
@@ -287,6 +296,7 @@ export const listInvoices = defineService({
     status: z.enum(["draft", "sent", "viewed", "partially_paid", "paid", "overdue", "void", "refunded"]).optional(),
     limit: z.number().int().min(1).max(500).default(100),
   }),
+  output: listed(invoiceRow),
   handler: async (input, ctx) => {
     const filters = [
       input.contactId ? eq(invoices.contactId, input.contactId) : undefined,
@@ -307,6 +317,7 @@ export const getInvoice = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: invoiceBundleOutput,
   handler: (input, ctx) => invoiceBundle(ctx.tx, input.id),
 });
 
@@ -316,6 +327,7 @@ export const getPaymentReceipt = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ paymentId: z.string().uuid() }),
+  output: paymentReceipt,
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
@@ -368,6 +380,23 @@ export const reconcileMoney = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ limit: z.number().int().min(1).max(5_000).default(1_000) }),
+  output: z.object({
+    balanced: z.boolean(),
+    checked: z.object({
+      invoices: z.number().int(),
+      payments: z.number().int(),
+      refunds: z.number().int(),
+    }),
+    discrepancies: listed(
+      z.object({
+        subjectType: z.enum(["invoice", "payment"]),
+        subjectId: uuid,
+        field: z.string(),
+        recordedMinor: z.number().int(),
+        calculatedMinor: z.number().int(),
+      }),
+    ),
+  }),
   handler: async (input, ctx) => {
     const invoiceRows = await ctx.tx
       .select()
@@ -472,6 +501,7 @@ export const createDraftInvoice = defineService({
   kind: "mutation",
   permission: "scoped",
   input: createDraftInput,
+  output: invoiceBundleOutput,
   handler: async (input, ctx) => {
     const hash = requestHash(input);
     await lock(ctx.tx, "invoice-idempotency", input.idempotencyKey);
@@ -678,6 +708,7 @@ export const issueInvoice = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), dueAt: z.coerce.date().optional() }),
+  output: invoiceBundleOutput,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "invoice", input.id);
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
@@ -721,6 +752,7 @@ export const markInvoiceViewed = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: invoiceRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "invoice", input.id);
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
@@ -741,6 +773,7 @@ export const markInvoiceOverdue = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), asOf: z.coerce.date().default(() => new Date()) }),
+  output: invoiceRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "invoice", input.id);
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
@@ -768,6 +801,7 @@ export const voidInvoice = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.string().uuid(), reason: z.string().trim().min(3).max(1_000) }),
+  output: invoiceRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "invoice", input.id);
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
@@ -810,6 +844,7 @@ export const createPayment = defineService({
   kind: "mutation",
   permission: "scoped",
   input: paymentInput,
+  output: paymentRow,
   handler: async (input, ctx) => {
     const hash = requestHash(input);
     await lock(ctx.tx, "payment-idempotency", `${input.provider}:${input.idempotencyKey}`);
@@ -864,6 +899,7 @@ export const startPayment = defineService({
     providerRef: z.string().trim().min(1).max(500).optional(),
     providerCheckoutRef: z.string().trim().min(1).max(500).optional(),
   }),
+  output: paymentRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "payment", input.id);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.id)).limit(1);
@@ -896,6 +932,7 @@ export const failPayment = defineService({
     code: z.string().trim().max(100).optional(),
     message: z.string().trim().min(1).max(500),
   }),
+  output: paymentRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "payment", input.id);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.id)).limit(1);
@@ -918,6 +955,7 @@ export const cancelPayment = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), reason: z.string().trim().min(3).max(500) }),
+  output: paymentRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "payment", input.id);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.id)).limit(1);
@@ -944,6 +982,7 @@ export const settlePayment = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), providerRef: z.string().trim().min(1).max(500), processedAt: z.coerce.date().default(() => new Date()) }),
+  output: paymentRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "payment", input.id);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.id)).limit(1);
@@ -996,6 +1035,7 @@ export const createRefund = defineService({
     idempotencyKey,
     reason: z.string().trim().min(3).max(1_000),
   }),
+  output: refundRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "refund-idempotency", input.idempotencyKey);
     await lock(ctx.tx, "payment", input.paymentId);
@@ -1039,6 +1079,7 @@ export const startRefund = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), providerRef: z.string().trim().min(1).max(500).optional() }),
+  output: refundRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "refund", input.id);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
@@ -1059,6 +1100,7 @@ export const failRefund = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), code: z.string().trim().max(100).optional(), message: z.string().trim().min(1).max(500) }),
+  output: refundRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "refund", input.id);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
@@ -1080,6 +1122,7 @@ export const cancelRefund = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.string().uuid(), reason: z.string().trim().min(3).max(500) }),
+  output: refundRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "refund", input.id);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
@@ -1106,6 +1149,7 @@ export const settleRefund = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), providerRef: z.string().trim().min(1).max(500), processedAt: z.coerce.date().default(() => new Date()) }),
+  output: refundRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "refund", input.id);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
@@ -1165,6 +1209,7 @@ export const createCreditNote = defineService({
     reason: z.string().trim().min(3).max(1_000),
     lines: z.array(creditLine).min(1).max(1_000),
   }),
+  output: creditNoteRow,
   handler: async (input, ctx) => {
     const hash = requestHash(input);
     await lock(ctx.tx, "credit-idempotency", input.idempotencyKey);
@@ -1225,6 +1270,7 @@ export const issueCreditNote = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.string().uuid() }),
+  output: creditNoteRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "credit-note", input.id);
     const [note] = await ctx.tx.select().from(creditNotes).where(eq(creditNotes.id, input.id)).limit(1);
@@ -1248,6 +1294,7 @@ export const voidCreditNote = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.string().uuid(), reason: z.string().trim().min(3).max(1_000) }),
+  output: creditNoteRow,
   handler: async (input, ctx) => {
     await lock(ctx.tx, "credit-note", input.id);
     const [note] = await ctx.tx.select().from(creditNotes).where(eq(creditNotes.id, input.id)).limit(1);

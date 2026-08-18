@@ -3,6 +3,7 @@
 // Presence, comments, mentions and review threads (C2.03, C2.04).
 import { and, asc, desc, eq, gt, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
 import {
   contentComments,
@@ -13,6 +14,28 @@ import {
 
 const pageId = z.string().uuid();
 const commentId = z.string().uuid();
+const presenceRow = row({
+  actor: z.string(),
+  editing: z.boolean(),
+  lastSeenAt: timestamp,
+});
+const commentRow = row({
+  id: uuid,
+  pageId: uuid,
+  revisionId: uuid.nullable(),
+  blockId: z.string().nullable(),
+  parentId: uuid.nullable(),
+  body: z.string(),
+  mentions: listed(z.string()),
+  kind: z.enum(["comment", "review_request"]),
+  reviewer: z.string().nullable(),
+  reviewState: z.enum(["none", "requested", "approved", "changes_requested"]),
+  resolvedAt: timestamp.nullable(),
+  resolvedBy: z.string().nullable(),
+  createdBy: z.string(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 const PRESENCE_MS = 2 * 60 * 1000;
 const ACTOR_MENTION =
   /user:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
@@ -37,6 +60,12 @@ export const heartbeatPresence = defineService({
   input: z.object({
     pageId,
     editing: z.boolean().default(false),
+  }),
+  output: row({
+    pageId: uuid,
+    actor: z.string(),
+    editing: z.boolean(),
+    lastSeenAt: timestamp,
   }),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
@@ -70,6 +99,7 @@ export const listPresence = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ pageId }),
+  output: listed(presenceRow),
   handler: async (input, ctx) => {
     const since = new Date(Date.now() - PRESENCE_MS);
     return ctx.tx
@@ -92,6 +122,7 @@ export const leavePresence = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ pageId }),
+  output: z.object({ pageId: uuid }),
   handler: async (input, ctx) => {
     const actor = actorString(ctx.actor);
     await ctx.tx
@@ -110,6 +141,7 @@ export const expireStalePresence = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({ removed: z.number().int() }),
   handler: async (_input, ctx) => {
     const cutoff = new Date(Date.now() - PRESENCE_MS);
     const deleted = await ctx.tx
@@ -133,6 +165,7 @@ export const addComment = defineService({
     parentId: commentId.optional(),
     mentions: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   }),
+  output: commentRow,
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
       .select({ id: pages.id })
@@ -204,6 +237,7 @@ export const listComments = defineService({
     pageId,
     includeResolved: z.boolean().default(false),
   }),
+  output: listed(commentRow),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -228,6 +262,7 @@ export const resolveThread = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: commentId }),
+  output: commentRow,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -265,6 +300,7 @@ export const reopenThread = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: commentId }),
+  output: commentRow,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -297,6 +333,7 @@ export const requestReview = defineService({
     revisionId: z.string().uuid().optional(),
     mentions: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   }),
+  output: commentRow,
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
       .select({ id: pages.id })
@@ -349,6 +386,7 @@ export const decideReview = defineService({
     approved: z.boolean(),
     note: z.string().trim().min(1).max(4000).optional(),
   }),
+  output: commentRow,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()

@@ -25,6 +25,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { db } from "@/core/db";
 import { registerContactReference } from "@/core/contacts/service";
@@ -166,6 +167,26 @@ const campaignTouchSchema = z.object({
   content: z.string().max(120).nullable(),
 });
 
+const visitorKind = z.enum(["human", "bot", "suspected"]);
+const countInt = z.coerce.number().int();
+const analyticsEventRow = row({
+  id: uuid,
+  eventKey: z.string().nullable(),
+  anonId: z.string(),
+  sessionId: z.string(),
+  contactId: uuid.nullable(),
+  name: z.string(),
+  path: z.string(),
+  referrer: z.string().nullable(),
+  locale: z.string().nullable(),
+  visitorKind,
+  botReasons: listed(z.string()),
+  classificationOverride: visitorKind.nullable(),
+  classificationNote: z.string().nullable(),
+  props: z.unknown(),
+  at: timestamp,
+});
+
 function campaignValue(value: string | string[] | undefined): string | null {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return null;
@@ -289,6 +310,7 @@ export const track = defineService({
     botReasons: z.array(z.string().max(200)).max(10).default([]),
     campaign: campaignTouchSchema.nullish(),
   }),
+  output: okResult,
   handler: async (input, ctx) => {
     const referrer = referrerHost(input.referrer);
     const inserted = await ctx.tx
@@ -336,6 +358,7 @@ export const recordWebVital = defineService({
     rating: z.enum(["good", "needs-improvement", "poor"]),
     navigationType: z.string().min(1).max(40),
   }),
+  output: z.object({ recorded: z.boolean() }),
   handler: async (input, ctx) => {
     // A metric is accepted only when this browser/session already produced a
     // server-observed page view. This both supplies the trusted bot verdict and
@@ -403,6 +426,7 @@ export const identify = defineService({
     anonId: z.string().min(1).max(64),
     contactId: z.string().uuid(),
   }),
+  output: z.object({ linked: z.number().int() }),
   handler: async (input, ctx) => {
     const updated = await ctx.tx
       .update(analyticsEvents)
@@ -453,6 +477,16 @@ export const overview = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ days: since, includeBots }),
+  output: z.object({
+    days: z.number().int(),
+    includeBots: z.boolean(),
+    automated: countInt,
+    views: countInt,
+    visitors: countInt,
+    sessions: countInt,
+    conversions: countInt,
+    identified: countInt,
+  }),
   handler: async (input, ctx) => {
     const from = new Date(Date.now() - input.days * 86_400_000);
     const only = humansOnly(input.includeBots);
@@ -520,6 +554,13 @@ export const topPages = defineService({
     includeBots,
     limit: z.number().int().min(1).max(50).default(10),
   }),
+  output: listed(
+    row({
+      path: z.string(),
+      views: countInt,
+      visitors: countInt,
+    }),
+  ),
   handler: (input, ctx) =>
     ctx.tx
       .select({
@@ -550,6 +591,12 @@ export const topReferrers = defineService({
     includeBots,
     limit: z.number().int().min(1).max(50).default(10),
   }),
+  output: listed(
+    row({
+      referrer: z.string().nullable(),
+      visitors: countInt,
+    }),
+  ),
   handler: (input, ctx) =>
     ctx.tx
       .select({
@@ -575,6 +622,13 @@ export const dailyViews = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ days: since, includeBots, timezone: z.string().default("UTC") }),
+  output: listed(
+    row({
+      day: z.string(),
+      views: countInt,
+      visitors: countInt,
+    }),
+  ),
   handler: async (input, ctx) => {
     // Bucketed in the *business's* timezone, not UTC. An owner in Vancouver
     // looking at "yesterday" means their yesterday, and a chart that disagrees
@@ -605,6 +659,16 @@ export const webVitalsSummary = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ days: since, includeBots }),
+  output: listed(
+    z.object({
+      metric: z.string(),
+      samples: z.number().int(),
+      p75: z.number(),
+      good: z.number().int(),
+      needsImprovement: z.number().int(),
+      poor: z.number().int(),
+    }),
+  ),
   handler: async (input, ctx) => {
     const metric = sql<string>`${analyticsEvents.props}->>'metric'`;
     const rows = await ctx.tx
@@ -650,6 +714,15 @@ export const campaignAttribution = defineService({
     model: z.enum(["first_touch", "last_touch"]).default("first_touch"),
     limit: z.number().int().min(1).max(50).default(20),
   }),
+  output: listed(
+    z.object({
+      source: z.string(),
+      medium: z.string().nullable(),
+      campaign: z.string().nullable(),
+      visitors: z.number().int(),
+      conversions: z.number().int(),
+    }),
+  ),
   handler: async (input, ctx) => {
     const first = input.model === "first_touch";
     const source = first
@@ -708,6 +781,18 @@ export const classificationCandidates = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ limit: z.number().int().min(1).max(50).default(20) }),
+  output: listed(
+    z.object({
+      reviewId: uuid,
+      visitorLabel: z.string(),
+      originalKind: visitorKind,
+      effectiveKind: visitorKind,
+      reasons: listed(z.string()),
+      lastPath: z.string(),
+      lastAt: timestamp,
+      views: z.number().int(),
+    }),
+  ),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select({
@@ -773,6 +858,10 @@ export const correctClassification = defineService({
     eventId: z.string().uuid(),
     kind: z.enum(["human", "bot", "suspected", "automatic"]),
     classificationNote: z.string().trim().max(500).default(""),
+  }),
+  output: z.object({
+    updated: z.number().int(),
+    effectiveKind: visitorKind.nullable(),
   }),
   handler: async (input, ctx) => {
     const [reviewed] = await ctx.tx
@@ -860,6 +949,12 @@ export const exportAnonymizedAnalytics = defineService({
     days: z.number().int().min(1).max(730).default(90),
     timezone: z.string().min(1).max(100).default("UTC"),
     includeBots,
+  }),
+  output: z.object({
+    filename: z.string(),
+    mime: z.string(),
+    content: z.string(),
+    sha256: z.string(),
   }),
   handler: async (input, ctx) => {
     const from = new Date(Date.now() - input.days * 86_400_000);
@@ -1030,6 +1125,7 @@ export const contactActivity = defineService({
     contactId: z.string().uuid(),
     limit: z.number().int().min(1).max(200).default(50),
   }),
+  output: listed(analyticsEventRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()

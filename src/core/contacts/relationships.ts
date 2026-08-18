@@ -4,6 +4,7 @@
 import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { contactRelationships, contacts } from "@/core/contacts/schema";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import {
   defineService,
@@ -91,6 +92,27 @@ async function emitRelationship(
   ]);
 }
 
+const relationshipRow = row({
+  id: uuid,
+  fromContactId: uuid,
+  toContactId: uuid,
+  kind: relationshipKind,
+  since: z.string().nullable(),
+  notes: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const listedRelationship = relationshipRow.and(
+  row({
+    direction: z.enum(["peer", "outgoing", "incoming"]),
+    otherContact: row({
+      id: uuid,
+      name: z.string(),
+      email: z.string().nullable(),
+    }),
+  }),
+);
+
 export const createRelationship = defineService({
   name: "contacts.createRelationship",
   summary: "Record how two contacts are related.",
@@ -103,6 +125,7 @@ export const createRelationship = defineService({
     since: calendarDate.nullable().optional(),
     notes: z.string().trim().max(2_000).nullable().optional(),
   }),
+  output: relationshipRow,
   handler: async (input, ctx) => {
     if (input.fromContactId === input.toContactId) {
       throw new ServiceError("validation", "A contact cannot be related to itself.");
@@ -147,6 +170,7 @@ export const updateRelationship = defineService({
       (input) => Boolean(input.fromContactId) === Boolean(input.toContactId),
       "Supply both relationship endpoints or neither.",
     ),
+  output: relationshipRow,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select()
@@ -209,6 +233,7 @@ export const deleteRelationship = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: okResult,
   handler: async (input, ctx) => {
     const [relationship] = await ctx.tx
       .select()
@@ -231,6 +256,7 @@ export const listRelationships = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ contactId: z.string().uuid() }),
+  output: listed(listedRelationship),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()

@@ -13,11 +13,9 @@
 // matters beyond one fewer dependency: a converter is exactly the kind of
 // intermediary that can quietly disagree with the validator it is modelling.
 //
-// **What this does not describe: responses.** `ServiceDef` carries an input
-// schema and no output schema, so the honest thing is to say the response is
-// an object and stop, rather than invent a shape the code does not enforce.
-// Giving every service an output schema closes that gap before SDK generation;
-// `MASTER.md` §43 item C3.01 is the authoritative work item.
+// Responses come from `ServiceDef.output` when the service has one (C3.01).
+// A service still missing an output schema is described as a generic object
+// rather than a guessed shape. The completeness gate refuses that gap.
 import { z } from "zod";
 import { listServices, type Service } from "@/core/service";
 import { API_BASE } from "@/core/api/dispatch";
@@ -83,13 +81,25 @@ function errorResponses(): Record<string, unknown> {
  * *input* shape a caller has to satisfy. Asking for the output shape would
  * document defaults as required fields.
  */
+function jsonSchema(schema: z.ZodType, io: "input" | "output"): unknown {
+  try {
+    const json = z.toJSONSchema(schema, {
+      io,
+      // Handler returns include Date objects. JSON Schema has no Date type;
+      // C3.02 can emit format:date-time. Until then, do not fail the document.
+      unrepresentable: "any",
+    });
+    const { $schema: _ignored, ...rest } = json as Record<string, unknown>;
+    return rest;
+  } catch (error) {
+    console.warn(`[openapi] could not describe a ${io} schema`, error);
+    return { type: "object" };
+  }
+}
+
 function inputSchema(service: Service): unknown {
   try {
-    const schema = z.toJSONSchema(service.def.input, { io: "input" });
-    // The $schema key is meaningful in a standalone document and noise inside
-    // an OpenAPI components block, which declares its dialect once.
-    const { $schema: _ignored, ...rest } = schema as Record<string, unknown>;
-    return rest;
+    return jsonSchema(service.def.input, "input");
   } catch (error) {
     // A schema JSON Schema cannot express should not take the whole document
     // down — the rest of the contract is still true, and an empty object says
@@ -100,6 +110,11 @@ function inputSchema(service: Service): unknown {
     );
     return { type: "object" };
   }
+}
+
+function outputSchema(service: Service): unknown {
+  if (!service.def.output) return { type: "object" };
+  return jsonSchema(service.def.output, "output");
 }
 
 /**
@@ -143,7 +158,7 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
     const responses = {
       "200": {
         description: "The service's result.",
-        content: { "application/json": { schema: { type: "object" } } },
+        content: { "application/json": { schema: outputSchema(service) } },
       },
       ...errorResponses(),
     };
@@ -196,7 +211,7 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
         "",
         "Authenticate with `Authorization: Bearer <api key>`. Keys are minted in Settings, and each one is scoped to the services it may call.",
         "",
-        "Responses are described loosely: services declare the shape of what they accept, not yet of what they return, and describing a shape the code does not enforce would be worse than describing none.",
+        "Responses are generated from the same output schemas that validate handler returns in development and tests (C3.01).",
       ].join("\n"),
     },
     servers: [{ url: options.origin }],

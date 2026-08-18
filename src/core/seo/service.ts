@@ -3,9 +3,21 @@
 // SEO services (MASTER.md §5).
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { redirects } from "@/core/seo/schema";
 import { defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
+
+const redirectRow = row({
+  id: uuid,
+  fromPath: z.string(),
+  toPath: z.string(),
+  status: z.enum(["301", "302"]),
+  locale: z.string(),
+  source: z.string(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 
 const path = z
   .string()
@@ -26,6 +38,10 @@ export const resolveRedirect = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ path, locale: z.string().default("en") }),
+  output: row({
+    toPath: z.string(),
+    status: z.enum(["301", "302"]),
+  }).nullable(),
   handler: async (input, ctx) => {
     let current = input.path;
     let status: "301" | "302" = "301";
@@ -61,6 +77,7 @@ export const listRedirects = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(redirectRow),
   handler: (_input, ctx) =>
     ctx.tx.select().from(redirects).orderBy(desc(redirects.createdAt)),
 });
@@ -84,6 +101,7 @@ export const recordRedirect = defineService({
     status: z.enum(["301", "302"]).default("301"),
     source: z.string().default("manual"),
   }),
+  output: redirectRow,
   handler: async (input, ctx) => {
     if (input.fromPath === input.toPath) {
       throw new ServiceError(
@@ -132,6 +150,7 @@ export const deleteRedirect = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: okResult,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .delete(redirects)

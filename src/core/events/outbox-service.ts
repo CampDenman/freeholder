@@ -8,6 +8,7 @@ import {
   outboxEvents,
 } from "@/core/events/schema";
 import { resetOutboxEventForReplay } from "@/core/events/outbox";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineService,
   redact,
@@ -31,6 +32,11 @@ export const outboxSummary = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    pending: z.number().int(),
+    dispatched: z.number().int(),
+    deadLetters: z.number().int(),
+  }),
   handler: async (_input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     const rows = await ctx.tx
@@ -60,6 +66,22 @@ export const listOutboxEvents = defineService({
     eventName: z.string().trim().min(1).max(160).optional(),
     limit: z.number().int().min(1).max(100).default(50),
     offset: z.number().int().min(0).max(1_000_000).default(0),
+  }),
+  output: z.object({
+    items: listed(
+      row({
+        id: uuid,
+        eventName: z.string(),
+        status: eventStatus,
+        attempts: z.number().int(),
+        replayCount: z.number().int(),
+        nextAttemptAt: timestamp.nullable(),
+        deadLetteredAt: timestamp.nullable(),
+        lastError: z.string().nullable(),
+        createdAt: timestamp,
+      }),
+    ),
+    total: z.number().int(),
   }),
   handler: async (input, ctx) => {
     requireHumanOrSystem(ctx.actor);
@@ -102,6 +124,13 @@ export const getOutboxEvent = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.uuid() }),
+  output: row({
+    id: uuid,
+    eventName: z.string(),
+    status: eventStatus,
+    payload: z.unknown(),
+    deliveries: z.array(z.unknown()),
+  }),
   handler: async (input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     const [event] = await ctx.tx
@@ -132,6 +161,11 @@ export const replayOutboxEvent = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.uuid(), confirm: z.literal("REPLAY") }),
+  output: z.object({
+    replayed: z.literal(true),
+    replayCount: z.number().int(),
+    jobId: z.string(),
+  }),
   handler: async (input, ctx) => {
     requireHumanOrSystem(ctx.actor);
     const replayCount = await resetOutboxEventForReplay(ctx.tx, input.id);

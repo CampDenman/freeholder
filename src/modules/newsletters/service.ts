@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -27,6 +28,48 @@ const slug = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .max(180);
 const expectedVersion = z.number().int().positive();
+
+const newsletterRow = row({
+  id: uuid,
+  name: z.string(),
+  slug: z.string(),
+  description: z.string().nullable(),
+  status: z.enum(["active", "paused"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const newsletterIssueRow = row({
+  id: uuid,
+  newsletterId: uuid,
+  slug: z.string(),
+  title: z.string(),
+  excerpt: z.string().nullable(),
+  body: z.string(),
+  status: z.enum(["draft", "published"]),
+  seo: z.unknown(),
+  workingTitle: z.string().nullable(),
+  workingExcerpt: z.string().nullable(),
+  workingBody: z.string().nullable(),
+  workingSeo: z.unknown().nullable(),
+  version: z.number().int(),
+  publishedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const newsletterSubscriptionRow = row({
+  id: uuid,
+  newsletterId: uuid,
+  contactId: uuid,
+  status: z.enum(["pending", "confirmed", "unsubscribed"]),
+  confirmToken: z.string(),
+  unsubscribeToken: z.string(),
+  confirmedAt: timestamp.nullable(),
+  unsubscribedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 
 function token(): string {
   return randomBytes(32).toString("hex");
@@ -123,6 +166,7 @@ export const listNewsletters = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(newsletterRow),
   handler: async (_input, ctx) =>
     ctx.tx.select().from(newsletters).orderBy(desc(newsletters.updatedAt)),
 });
@@ -133,6 +177,7 @@ export const listPublicNewsletters = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
+  output: listed(newsletterRow),
   handler: async (_input, ctx) =>
     ctx.tx.select().from(newsletters).where(eq(newsletters.status, "active")).orderBy(asc(newsletters.name)),
 });
@@ -143,6 +188,11 @@ export const getNewsletter = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id }),
+  output: z.object({
+    newsletter: newsletterRow,
+    issues: listed(newsletterIssueRow),
+    subscriptions: listed(newsletterSubscriptionRow),
+  }),
   handler: async (input, ctx) => {
     const [newsletter] = await ctx.tx.select().from(newsletters).where(eq(newsletters.id, input.id)).limit(1);
     if (!newsletter) throw new ServiceError("not_found", "That newsletter is not here.");
@@ -170,6 +220,7 @@ export const createNewsletter = defineService({
     slug,
     description: z.string().trim().max(2_000).optional(),
   }),
+  output: newsletterRow,
   handler: async (input, ctx) => {
     const [created] = await ctx.tx
       .insert(newsletters)
@@ -202,6 +253,7 @@ export const updateNewsletter = defineService({
     description: z.string().trim().max(2_000).nullable().optional(),
     status: z.enum(["active", "paused"]).optional(),
   }),
+  output: newsletterRow,
   handler: async (input, ctx) => {
     const { id: newsletterId, ...patch } = input;
     const [updated] = await ctx.tx
@@ -222,6 +274,7 @@ export const listPublicIssues = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
+  output: listed(newsletterIssueRow),
   handler: async (_input, ctx) =>
     ctx.tx
       .select()
@@ -236,6 +289,7 @@ export const resolvePublicIssue = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ slug }),
+  output: newsletterIssueRow.nullable(),
   handler: async (input, ctx) => {
     const [issue] = await ctx.tx
       .select()
@@ -259,6 +313,7 @@ export const createIssue = defineService({
     excerpt: z.string().trim().max(500).optional(),
     body: z.string().max(100_000).default(""),
   }),
+  output: newsletterIssueRow,
   handler: async (input, ctx) => {
     const [newsletter] = await ctx.tx
       .select({ id: newsletters.id })
@@ -301,6 +356,7 @@ export const updateIssue = defineService({
     body: z.string().max(100_000).optional(),
     seo: z.object({ title: z.string().max(60).optional(), description: z.string().max(155).optional() }).optional(),
   }),
+  output: newsletterIssueRow,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select()
@@ -350,6 +406,7 @@ export const publishIssue = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id, expectedVersion }),
+  output: newsletterIssueRow,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select()
@@ -398,6 +455,10 @@ export const subscribeToNewsletter = defineService({
     newsletterId: id,
     email: z.string().trim().email().toLowerCase(),
     name: z.string().trim().min(1).max(200).optional(),
+  }),
+  output: z.object({
+    status: z.enum(["confirmed", "pending"]),
+    subscriptionId: uuid,
   }),
   handler: async (input, ctx) => {
     const [newsletter] = await ctx.tx
@@ -476,6 +537,7 @@ export const confirmSubscription = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ token: z.string().trim().min(16).max(128) }),
+  output: newsletterSubscriptionRow,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -511,6 +573,7 @@ export const unsubscribeFromNewsletter = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ token: z.string().trim().min(16).max(128) }),
+  output: newsletterSubscriptionRow,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()

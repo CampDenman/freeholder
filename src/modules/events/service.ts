@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { isUniqueViolation } from "@/core/db";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { resolveContact } from "@/core/contacts/service";
@@ -13,6 +14,7 @@ import { recordRedirect } from "@/core/seo/service";
 import { siteOrigin } from "@/core/seo/origin";
 import {
   EVENT_STATUSES,
+  REGISTRATION_STATUSES,
   eventRegistrations,
   eventSessions,
   eventTickets,
@@ -33,6 +35,68 @@ const name = z.string().trim().min(1).max(240);
 const expectedVersion = z.number().int().positive();
 
 const OCCUPYING = ["reserved", "confirmed", "checked_in"] as const;
+
+const eventRow = row({
+  id: uuid,
+  name: z.string(),
+  slug: z.string(),
+  summary: z.string().nullable(),
+  venueName: z.string().nullable(),
+  venueAddress: z.string().nullable(),
+  venueLocationId: uuid.nullable(),
+  status: z.enum(EVENT_STATUSES),
+  seo: z.unknown(),
+  workingName: z.string().nullable(),
+  workingSummary: z.string().nullable(),
+  workingVenueName: z.string().nullable(),
+  workingVenueAddress: z.string().nullable(),
+  workingSeo: z.unknown().nullable(),
+  version: z.number().int(),
+  publishedAt: timestamp.nullable(),
+  cancelledAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const eventSessionRow = row({
+  id: uuid,
+  eventId: uuid,
+  startsAt: timestamp,
+  endsAt: timestamp,
+  timezone: z.string(),
+  capacity: z.number().int(),
+  waitlistEnabled: z.boolean(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const eventSessionWithRemaining = eventSessionRow.extend({
+  remaining: z.number().int(),
+});
+
+const eventTicketRow = row({
+  id: uuid,
+  eventId: uuid,
+  name: z.string(),
+  priceMinor: z.number().int(),
+  currency: z.string(),
+  active: z.boolean(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const eventRegistrationRow = row({
+  id: uuid,
+  eventId: uuid,
+  sessionId: uuid,
+  ticketId: uuid.nullable(),
+  contactId: uuid,
+  status: z.enum(REGISTRATION_STATUSES),
+  quantity: z.number().int(),
+  checkedInAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 
 registerContactReference({
   table: "event_registrations",
@@ -142,6 +206,7 @@ export const listEvents = defineService({
   input: z.object({
     status: z.enum(EVENT_STATUSES).optional(),
   }),
+  output: listed(eventRow),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -158,6 +223,12 @@ export const getEvent = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id }),
+  output: z.object({
+    event: eventRow,
+    sessions: listed(eventSessionWithRemaining),
+    tickets: listed(eventTicketRow),
+    registrations: listed(eventRegistrationRow),
+  }),
   handler: async (input, ctx) => {
     const event = await loadEvent(ctx, input.id);
     const [sessions, tickets, registrations] = await Promise.all([
@@ -185,6 +256,7 @@ export const listPublicEvents = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
+  output: listed(eventRow),
   handler: async (_input, ctx) =>
     ctx.tx
       .select()
@@ -199,6 +271,7 @@ export const resolvePublicEvent = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ slug }),
+  output: eventRow.extend({ sessions: listed(eventSessionWithRemaining) }).nullable(),
   handler: async (input, ctx) => {
     const [event] = await ctx.tx.select().from(events).where(eq(events.slug, input.slug)).limit(1);
     if (!event || event.status === "draft") return null;
@@ -230,6 +303,7 @@ export const createEvent = defineService({
     venueAddress: z.string().trim().max(500).optional(),
     venueLocationId: id.nullable().optional(),
   }),
+  output: eventRow,
   handler: async (input, ctx) => {
     const [created] = await ctx.tx
       .insert(events)
@@ -267,6 +341,7 @@ export const updateEvent = defineService({
     venueAddress: z.string().trim().max(500).nullable().optional(),
     seo: z.object({ title: z.string().max(60).optional(), description: z.string().max(155).optional() }).optional(),
   }),
+  output: eventRow,
   handler: async (input, ctx) => {
     const existing = await loadEvent(ctx, input.id);
     if (existing.version !== input.expectedVersion) {
@@ -339,6 +414,7 @@ export const publishEvent = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id, expectedVersion }),
+  output: eventRow,
   handler: async (input, ctx) => {
     const existing = await loadEvent(ctx, input.id);
     if (existing.version !== input.expectedVersion) {
@@ -385,6 +461,7 @@ export const cancelEvent = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id, expectedVersion }),
+  output: eventRow,
   handler: async (input, ctx) => {
     const existing = await loadEvent(ctx, input.id);
     if (existing.version !== input.expectedVersion) {
@@ -420,6 +497,7 @@ export const addEventSession = defineService({
     capacity: z.number().int().min(0).max(100_000),
     waitlistEnabled: z.boolean().default(true),
   }),
+  output: eventSessionRow,
   handler: async (input, ctx) => {
     if (input.endsAt <= input.startsAt) {
       throw new ServiceError("validation", "A session must end after it starts.");
@@ -443,6 +521,7 @@ export const addEventTicket = defineService({
     priceMinor: z.number().int().min(0),
     currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).default("CAD"),
   }),
+  output: eventTicketRow,
   handler: async (input, ctx) => {
     await loadEvent(ctx, input.eventId);
     const [created] = await ctx.tx.insert(eventTickets).values(input).returning();
@@ -464,6 +543,7 @@ export const registerForEvent = defineService({
     name: z.string().trim().min(1).max(200).optional(),
     quantity: z.number().int().min(1).max(50).default(1),
   }),
+  output: eventRegistrationRow,
   handler: async (input, ctx) => {
     const event = await loadEvent(ctx, input.eventId);
     if (event.status !== "published") {
@@ -513,6 +593,7 @@ export const cancelRegistration = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: eventRegistrationRow,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select()
@@ -568,6 +649,7 @@ export const checkInRegistration = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: eventRegistrationRow,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select()
@@ -595,6 +677,7 @@ export const eventCalendar = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ slug }),
+  output: z.string().nullable(),
   handler: async (input, ctx) => {
     const event = await ctx.call(resolvePublicEvent, { slug: input.slug });
     if (!event || event.status === "cancelled") return null;

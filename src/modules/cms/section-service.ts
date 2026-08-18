@@ -3,6 +3,7 @@
 // Save-as-Section, detach, and dependency-aware deletion (C2.12).
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError, type Tx } from "@/core/service";
 import { writeRevision } from "./history";
 import { isUniqueViolation } from "@/core/db";
@@ -22,6 +23,21 @@ const nodeSchema = z.object({
   type: z.string().min(1),
   props: z.record(z.string(), z.unknown()),
   children: z.array(z.unknown()).optional(),
+});
+const sectionRow = row({
+  id: uuid,
+  key: z.string(),
+  locale: z.string(),
+  name: z.string(),
+  kind: z.enum(["chrome", "reusable"]),
+  blocks: z.unknown(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const sectionUsage = row({
+  kind: z.enum(["page", "section"]),
+  title: z.string(),
+  id: uuid,
 });
 
 function usageLabel(kind: "page" | "section", title: string, id: string) {
@@ -59,6 +75,7 @@ export const createSection = defineService({
     blocks: blockTreeSchema("page"),
     key: z.string().trim().min(1).max(80).optional(),
   }),
+  output: sectionRow,
   handler: async (input, ctx) => {
     const referenced = collectSectionKeys(input.blocks);
     if (input.key && referenced.has(input.key)) {
@@ -118,6 +135,10 @@ export const saveAsSection = defineService({
     locale: z.string().default("en"),
     nodes: z.array(nodeSchema).min(1),
   }),
+  output: z.object({
+    section: sectionRow,
+    instance: z.unknown(),
+  }),
   handler: async (input, ctx) => {
     const blocks = parseBlockTree(input.nodes, "page");
     const section = await ctx.call(createSection, {
@@ -143,6 +164,7 @@ export const detachSection = defineService({
     sectionKey: z.string().min(1),
     locale: z.string().default("en"),
   }),
+  output: z.object({ nodes: z.unknown() }),
   handler: async (input, ctx) => {
     const [section] = await ctx.tx
       .select()
@@ -165,6 +187,7 @@ export const listSectionUsages = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ key: z.string().min(1) }),
+  output: listed(sectionUsage),
   handler: async (input, ctx) => {
     const pageRows = await ctx.tx
       .select({
@@ -207,6 +230,7 @@ export const deleteSection = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ key: z.string().min(1) }),
+  output: z.object({ key: z.string(), deleted: z.number().int() }),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()

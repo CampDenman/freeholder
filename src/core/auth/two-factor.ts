@@ -39,6 +39,7 @@ import {
   hashTwoFactorToken,
   matchingTotpStep,
 } from "@/core/auth/two-factor-crypto";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { env } from "@/core/env";
 import { defineService, ServiceError, type Actor, type Tx } from "@/core/service";
 import { recordSuccessfulLogin } from "@/core/auth/session-management/service";
@@ -49,6 +50,32 @@ const CHALLENGE_TTL_MS = 10 * 60 * 1000;
 // checked by SimpleWebAuthn. A record keeps the HTTP/OpenAPI contract honest
 // without maintaining a second, inevitably stale copy of the W3C structure.
 const responseValue = z.record(z.string(), z.unknown());
+const twoFactorMethods = z.object({
+  totp: z.boolean(),
+  recovery: z.boolean(),
+  webauthn: z.boolean(),
+});
+const sessionIssued = row({
+  token: z.string(),
+  sessionId: uuid,
+  expiresAt: timestamp,
+});
+const recoveryIssued = okResult.extend({
+  recoveryCodes: listed(z.string()),
+});
+const webauthnCredential = row({
+  id: uuid,
+  userId: uuid,
+  credentialId: z.string(),
+  name: z.string(),
+  counter: z.number().int(),
+  transports: listed(z.string()),
+  deviceType: z.string(),
+  backedUp: z.boolean(),
+  lastUsedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 
 function relyingParty(): { origin: string; rpID: string } {
   const origin = env().APP_URL.replace(/\/+$/, "");
@@ -280,6 +307,10 @@ export const loginChallengeDetails = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ challengeToken: z.string().min(20) }),
+  output: row({
+    methods: twoFactorMethods,
+    webauthnOptions: z.unknown().optional(),
+  }),
   handler: async (input, ctx) => {
     const row = await activeChallenge(ctx.tx, input.challengeToken, "login");
     const credentials = await credentialsFor(ctx.tx, row.userId);
@@ -324,6 +355,10 @@ export const completeTwoFactorLogin = defineService({
     subject: (input) => hashTwoFactorToken(input.challengeToken),
     message: "Too many verification attempts. Start sign-in again.",
   },
+  output: row({
+    userId: uuid,
+    method: z.enum(["totp", "recovery"]),
+  }).and(sessionIssued),
   handler: async (input, ctx) => {
     const row = await activeChallenge(ctx.tx, input.challengeToken, "login");
     const method = await consumeCode(ctx.tx, row.userId, input.code);
@@ -366,6 +401,10 @@ export const completeWebAuthnLogin = defineService({
     subject: (input) => hashTwoFactorToken(input.challengeToken),
     message: "Too many verification attempts. Start sign-in again.",
   },
+  output: row({
+    userId: uuid,
+    method: z.literal("webauthn"),
+  }).and(sessionIssued),
   handler: async (input, ctx) => {
     const row = await activeChallenge(ctx.tx, input.challengeToken, "login");
     if (!row.challenge) throw new ServiceError("permission", "This sign-in did not request a security key.");
@@ -405,6 +444,15 @@ export const twoFactorStatus = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({}),
+  output: row({
+    email: z.string(),
+    required: z.boolean(),
+    verified: z.boolean(),
+    stepUpValid: z.boolean(),
+    totp: row({ createdAt: timestamp }).nullable(),
+    webauthn: listed(webauthnCredential),
+    recoveryCodesRemaining: z.number().int(),
+  }),
   handler: async (_input, ctx) => {
     const actor = userActor(ctx.actor);
     const [totp, credentials, [codes], [account]] = await Promise.all([
@@ -431,6 +479,11 @@ export const beginTotpEnrollment = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({}),
+  output: row({
+    enrollmentToken: z.string(),
+    secret: z.string(),
+    uri: z.string(),
+  }),
   handler: async (_input, ctx) => {
     const actor = requireSession(ctx.actor);
     const [existing] = await ctx.tx.select().from(totpFactors).where(eq(totpFactors.userId, actor.userId)).limit(1);
@@ -456,6 +509,7 @@ export const confirmTotpEnrollment = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ enrollmentToken: z.string().min(20), code: z.string().regex(/^\d{6}$/) }),
+  output: recoveryIssued,
   handler: async (input, ctx) => {
     const actor = requireSession(ctx.actor);
     const row = await activeChallenge(ctx.tx, input.enrollmentToken, "totp-enrollment", actor.userId);
@@ -484,6 +538,10 @@ export const beginWebAuthnRegistration = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({}),
+  output: row({
+    registrationToken: z.string(),
+    options: z.unknown(),
+  }),
   handler: async (_input, ctx) => {
     const actor = requireSession(ctx.actor);
     if (actor.security?.twoFactorEnrolled && !actor.security.stepUpValid) {
@@ -524,6 +582,7 @@ export const finishWebAuthnRegistration = defineService({
     name: z.string().trim().min(1).max(80).default("Security key"),
     credentialResponse: responseValue,
   }),
+  output: recoveryIssued,
   handler: async (input, ctx) => {
     const actor = requireSession(ctx.actor);
     const row = await activeChallenge(ctx.tx, input.registrationToken, "webauthn-registration", actor.userId);
@@ -570,6 +629,7 @@ export const verifyStepUpCode = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ code: z.string().trim().min(6).max(40) }),
+  output: okResult.extend({ method: z.enum(["totp", "recovery"]) }),
   handler: async (input, ctx) => {
     const actor = requireSession(ctx.actor);
     const method = await consumeCode(ctx.tx, actor.userId, input.code);
@@ -585,6 +645,10 @@ export const beginWebAuthnStepUp = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({}),
+  output: row({
+    verificationToken: z.string(),
+    options: z.unknown(),
+  }),
   handler: async (_input, ctx) => {
     const actor = requireSession(ctx.actor);
     const credentials = await credentialsFor(ctx.tx, actor.userId);
@@ -612,6 +676,7 @@ export const finishWebAuthnStepUp = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ verificationToken: z.string().min(20), credentialResponse: responseValue }),
+  output: okResult,
   handler: async (input, ctx) => {
     const actor = requireSession(ctx.actor);
     const row = await activeChallenge(ctx.tx, input.verificationToken, "webauthn-step-up", actor.userId);
@@ -631,6 +696,7 @@ export const regenerateRecoveryCodes = defineService({
   permission: "authenticated",
   stepUp: true,
   input: z.object({}),
+  output: row({ recoveryCodes: listed(z.string()) }),
   handler: async (_input, ctx) => {
     const actor = requireSession(ctx.actor);
     await ctx.tx.delete(twoFactorRecoveryCodes).where(eq(twoFactorRecoveryCodes.userId, actor.userId));
@@ -679,6 +745,7 @@ export const removeTotpFactor = defineService({
   permission: "authenticated",
   stepUp: true,
   input: z.object({}),
+  output: okResult,
   handler: async (_input, ctx) => {
     const actor = requireSession(ctx.actor);
     const factors = await factorCount(ctx.tx, actor.userId);
@@ -698,6 +765,7 @@ export const removeWebAuthnFactor = defineService({
   permission: "authenticated",
   stepUp: true,
   input: z.object({ id: z.string().uuid() }),
+  output: okResult,
   handler: async (input, ctx) => {
     const actor = requireSession(ctx.actor);
     const factors = await factorCount(ctx.tx, actor.userId);

@@ -4,6 +4,7 @@
 
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import {
   actorString,
@@ -13,6 +14,7 @@ import {
 } from "@/core/service";
 import { recordRedirect } from "@/core/seo/service";
 import { blockTreeSchema } from "@/modules/cms/blocks/registry";
+import { taxCategoryRow } from "@/modules/invoicing/contract";
 import { listTaxConfiguration } from "@/modules/invoicing/tax-service";
 import {
   PRODUCT_KINDS,
@@ -312,6 +314,56 @@ const seo = z
   })
   .default({});
 
+const productRow = row({
+  id: uuid,
+  name: z.string(),
+  slug: z.string(),
+  kind: z.enum(PRODUCT_KINDS),
+  subtitle: z.string().nullable(),
+  description: z.unknown(),
+  brand: z.string().nullable(),
+  status: z.enum(PRODUCT_STATUSES),
+  visibility: z.enum(PRODUCT_VISIBILITIES),
+  taxCategoryId: uuid.nullable(),
+  seo: z.unknown(),
+  workingName: z.string().nullable(),
+  workingSubtitle: z.string().nullable(),
+  workingDescription: z.unknown().nullable(),
+  workingSeo: z.unknown().nullable(),
+  schemaType: z.string(),
+  publishedAt: timestamp.nullable(),
+  archivedAt: timestamp.nullable(),
+  version: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const publicProductRow = row({
+  id: uuid,
+  name: z.string(),
+  slug: z.string(),
+  kind: z.enum(PRODUCT_KINDS),
+  subtitle: z.string().nullable(),
+  description: z.unknown(),
+  brand: z.string().nullable(),
+  visibility: z.enum(PRODUCT_VISIBILITIES),
+  taxCategoryId: uuid.nullable(),
+  seo: z.unknown(),
+  schemaType: z.string(),
+  publishedAt: timestamp.nullable(),
+  updatedAt: timestamp,
+});
+const lifecycleEventRow = row({
+  id: uuid,
+  productId: uuid,
+  fromStatus: z.enum(PRODUCT_STATUSES).nullable(),
+  toStatus: z.enum(PRODUCT_STATUSES),
+  fromVisibility: z.enum(PRODUCT_VISIBILITIES).nullable(),
+  toVisibility: z.enum(PRODUCT_VISIBILITIES),
+  resultingVersion: z.number().int(),
+  actor: z.string(),
+  reason: z.string().nullable(),
+  createdAt: timestamp,
+});
 function duplicateSlug(value: string): ServiceError {
   return new ServiceError(
     "conflict",
@@ -399,6 +451,7 @@ export const listProducts = defineService({
     visibility: z.enum(PRODUCT_VISIBILITIES).optional(),
     limit: z.number().int().min(1).max(500).default(200),
   }),
+  output: listed(productRow),
   handler: (input, ctx) => {
     const filters = [
       input.status ? eq(products.status, input.status) : undefined,
@@ -420,6 +473,7 @@ export const getProduct = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: productId }),
+  output: z.object({ product: productRow, history: listed(lifecycleEventRow) }),
   handler: async (input, ctx) => {
     const [product] = await ctx.tx
       .select()
@@ -442,6 +496,7 @@ export const listProductTaxCategories = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(taxCategoryRow),
   handler: async (_input, ctx) => {
     const configuration = await ctx.callAsSystem(listTaxConfiguration, {});
     return configuration.categories;
@@ -454,6 +509,7 @@ export const listVisibleProducts = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
+  output: listed(publicProductRow),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -471,6 +527,7 @@ export const resolveVisibleProduct = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ slug }),
+  output: publicProductRow.nullable(),
   handler: async (input, ctx) => {
     const [product] = await ctx.tx
       .select()
@@ -499,6 +556,7 @@ export const createProduct = defineService({
     description: blockTreeSchema("page").default([]),
     seo,
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     await taxCategory(ctx, input.taxCategoryId ?? null);
     const [created] = await ctx.tx
@@ -549,6 +607,7 @@ export const updateProduct = defineService({
   kind: "mutation",
   permission: "scoped",
   input: updateProductInput,
+  output: productRow,
   handler: async (input, ctx) => {
     const existing = await rowForUpdate(ctx, input.id);
     assertVersion(existing.version, input.expectedVersion);
@@ -647,6 +706,7 @@ export const updateProductDescription = defineService({
     expectedVersion,
     description: blockTreeSchema("page"),
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     const existing = await rowForUpdate(ctx, input.id);
     assertVersion(existing.version, input.expectedVersion);
@@ -740,6 +800,7 @@ export const activateProduct = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: productId, expectedVersion }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await transition(input, ctx, "active");
     ctx.queueEvent("catalog.productActivated", { productId: product.id });
@@ -754,6 +815,7 @@ export const publishProduct = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: productId, expectedVersion }),
+  output: productRow,
   handler: async (input, ctx) => {
     const existing = await rowForUpdate(ctx, input.id);
     assertVersion(existing.version, input.expectedVersion);
@@ -797,6 +859,7 @@ export const archiveProduct = defineService({
     expectedVersion,
     reason: z.string().trim().min(3).max(1_000),
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await transition(input, ctx, "archived");
     ctx.queueEvent("catalog.productArchived", { productId: product.id, reason: input.reason });
@@ -815,6 +878,7 @@ export const restoreProduct = defineService({
     expectedVersion,
     reason: z.string().trim().min(3).max(1_000),
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await transition(input, ctx, "draft");
     ctx.queueEvent("catalog.productRestored", { productId: product.id, reason: input.reason });

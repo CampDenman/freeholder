@@ -4,9 +4,81 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, isNull, lte, or } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { writeRevision } from "./history";
 import { contentPreviewLinks, contentRevisions, pages } from "./schema";
+
+const pageRow = row({
+  id: uuid,
+  slug: z.string(),
+  locale: z.string(),
+  title: z.string(),
+  blocks: z.unknown(),
+  status: z.enum(["draft", "published"]),
+  publishedAt: timestamp.nullable(),
+  seo: z.unknown(),
+  workingTitle: z.string().nullable(),
+  workingBlocks: z.unknown().nullable(),
+  workingSeo: z.unknown().nullable(),
+  version: z.number().int(),
+  scheduledPublishAt: timestamp.nullable(),
+  scheduledUnpublishAt: timestamp.nullable(),
+  approvalState: z.enum(["none", "pending", "approved", "rejected"]),
+  approvalNote: z.string().nullable(),
+  approvedBy: z.string().nullable(),
+  approvedAt: timestamp.nullable(),
+  editLeaseActor: z.string().nullable(),
+  editLeaseUntil: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const revisionRow = row({
+  id: uuid,
+  subjectType: z.enum(["page", "section"]),
+  subjectId: uuid,
+  title: z.string().nullable(),
+  blocks: z.unknown(),
+  seo: z.unknown(),
+  name: z.string().nullable(),
+  kind: z.enum([
+    "create",
+    "autosave",
+    "named",
+    "publish",
+    "unpublish",
+    "restore",
+    "schedule",
+    "approval",
+  ]),
+  actor: z.string(),
+  createdAt: timestamp,
+});
+const previewLink = row({
+  id: uuid,
+  expiresAt: timestamp,
+  createdBy: z.string(),
+  revokedAt: timestamp.nullable(),
+  createdAt: timestamp,
+});
+const blockRef = z.object({ id: z.string(), type: z.string() });
+const blockDiff = z.object({
+  added: listed(blockRef),
+  removed: listed(blockRef),
+  changed: listed(blockRef),
+  unchanged: z.number().int(),
+});
+const labeledRevision = z.object({
+  id: z.string(),
+  label: z.string(),
+  title: z.string(),
+});
+const leaseResult = z.object({
+  held: z.boolean(),
+  by: z.string(),
+  until: timestamp,
+  mine: z.boolean(),
+});
 
 const pageId = z.string().uuid();
 const revisionId = z.string().uuid();
@@ -91,6 +163,12 @@ export const createPreviewLink = defineService({
     pageId,
     expiresInHours: z.number().int().min(1).max(24 * 30).default(72),
   }),
+  output: z.object({
+    id: uuid,
+    token: z.string(),
+    path: z.string(),
+    expiresAt: timestamp,
+  }),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
       .select({ id: pages.id })
@@ -127,6 +205,7 @@ export const listPreviewLinks = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ pageId }),
+  output: listed(previewLink),
   handler: (input, ctx) =>
     ctx.tx
       .select({
@@ -147,6 +226,7 @@ export const revokePreviewLink = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: z.object({ id: uuid, revokedAt: timestamp.nullable() }),
   handler: async (input, ctx) => {
     const [link] = await ctx.tx
       .update(contentPreviewLinks)
@@ -172,6 +252,15 @@ export const resolvePreviewLink = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ token: z.string().min(16).max(128) }),
+  output: row({
+    id: uuid,
+    slug: z.string(),
+    locale: z.string(),
+    title: z.string(),
+    blocks: z.unknown(),
+    seo: z.unknown(),
+    expiresAt: timestamp,
+  }).nullable(),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select({
@@ -207,6 +296,7 @@ export const schedulePage = defineService({
     publishAt: optionalWhen.optional(),
     unpublishAt: optionalWhen.optional(),
   }),
+  output: pageRow,
   handler: async (input, ctx) => {
     const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
@@ -265,6 +355,10 @@ export const applyDueSchedules = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    published: listed(uuid),
+    unpublished: listed(uuid),
+  }),
   handler: async (_input, ctx) => {
     const now = new Date();
     const duePublish = await ctx.tx
@@ -311,6 +405,7 @@ export const requestApproval = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: pageId, note: z.string().trim().max(2_000).optional() }),
+  output: pageRow,
   handler: async (input, ctx) => {
     const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
@@ -354,6 +449,7 @@ export const decideApproval = defineService({
     approved: z.boolean(),
     note: z.string().trim().max(2_000).optional(),
   }),
+  output: pageRow,
   handler: async (input, ctx) => {
     const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
@@ -399,6 +495,7 @@ export const snapshotRevision = defineService({
     pageId,
     name: z.string().trim().min(1).max(80),
   }),
+  output: revisionRow,
   handler: async (input, ctx) => {
     const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
@@ -424,6 +521,7 @@ export const nameRevision = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ revisionId, name: z.string().trim().min(1).max(80) }),
+  output: revisionRow,
   handler: async (input, ctx) => {
     const [revision] = await ctx.tx
       .update(contentRevisions)
@@ -453,6 +551,12 @@ export const compareRevisions = defineService({
         (Boolean(value.toRevisionId) || Boolean(value.pageId)),
       "compare two revisions, or one revision against the current draft",
     ),
+  output: z.object({
+    earlier: labeledRevision,
+    later: labeledRevision,
+    titleChanged: z.boolean(),
+    blocks: blockDiff,
+  }),
   handler: async (input, ctx) => {
     const [earlier] = await ctx.tx
       .select()
@@ -513,6 +617,22 @@ export const describeConflict = defineService({
     blocks: z.unknown().optional(),
     seo: z.unknown().optional(),
   }),
+  output: z.object({
+    stale: z.boolean(),
+    server: z.object({
+      version: z.number().int(),
+      title: z.string(),
+      blocks: z.unknown(),
+      seo: z.unknown(),
+    }),
+    incoming: z.object({
+      title: z.string(),
+      blocks: z.unknown(),
+      seo: z.unknown(),
+    }),
+    titleChanged: z.boolean(),
+    blocks: blockDiff,
+  }),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
@@ -547,6 +667,13 @@ export const reloadWorkingDraft = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ pageId }),
+  output: row({
+    id: uuid,
+    version: z.number().int(),
+    title: z.string(),
+    blocks: z.unknown(),
+    seo: z.unknown(),
+  }),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
@@ -568,6 +695,7 @@ export const touchEditLease = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: pageId, steal: z.boolean().default(false) }),
+  output: leaseResult,
   handler: async (input, ctx) => {
     const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
@@ -601,6 +729,7 @@ export const releaseEditLease = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: pageId }),
+  output: z.object({ id: uuid }),
   handler: async (input, ctx) => {
     const actor = actorString(ctx.actor);
     await ctx.tx

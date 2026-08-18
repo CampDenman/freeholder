@@ -7,6 +7,7 @@
 // decision rather than a setting.
 import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { db } from "@/core/db";
 import { violates } from "@/core/db/errors";
 import { enqueueJob } from "@/core/jobs";
@@ -17,6 +18,37 @@ import {
   newSecret,
 } from "@/core/webhooks/sign";
 import { defineService, ServiceError, type Actor } from "@/core/service";
+
+const webhookListRow = row({
+  id: uuid,
+  name: z.string(),
+  url: z.string(),
+  events: z.array(z.string()),
+  status: z.enum(["active", "paused"]),
+  pausedReason: z.string().nullable(),
+  consecutiveFailures: z.number().int(),
+  lastDeliveryAt: timestamp.nullable(),
+  createdAt: timestamp,
+});
+
+const webhookRow = webhookListRow.extend({
+  secret: z.string(),
+  createdBy: uuid.nullable(),
+  updatedAt: timestamp,
+});
+
+const deliveryRow = row({
+  id: uuid,
+  subscriptionId: uuid,
+  eventName: z.string(),
+  status: z.enum(["pending", "sending", "succeeded", "failed"]),
+  attempts: z.number().int(),
+  responseStatus: z.number().int().nullable(),
+  error: z.string().nullable(),
+  nextAttemptAt: timestamp,
+  createdAt: timestamp,
+  completedAt: timestamp.nullable(),
+});
 
 /** An event name, a family, or everything. */
 const pattern = z
@@ -48,6 +80,7 @@ export const listWebhooks = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(webhookListRow),
   handler: async (_input, ctx) =>
     ctx.tx
       .select({
@@ -76,6 +109,7 @@ export const createWebhook = defineService({
     url: z.string().min(1).max(2000),
     events: z.array(pattern).min(1).max(50),
   }),
+  output: webhookRow,
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "create");
     assertDeliverableUrl(input.url);
@@ -120,6 +154,7 @@ export const updateWebhook = defineService({
     events: z.array(pattern).min(1).max(50).optional(),
     status: z.enum(["active", "paused"]).optional(),
   }),
+  output: webhookRow,
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "change");
     const { id, ...changes } = input;
@@ -163,6 +198,11 @@ export const rotateWebhookSecret = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.uuid() }),
+  output: z.object({
+    id: uuid,
+    name: z.string(),
+    secret: z.string(),
+  }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "change");
     const secret = newSecret();
@@ -194,6 +234,7 @@ export const revealWebhookSecret = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.uuid() }),
+  output: z.object({ secret: z.string() }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "agent") {
       throw new ServiceError(
@@ -219,6 +260,7 @@ export const deleteWebhook = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.uuid() }),
+  output: z.object({ id: uuid, name: z.string() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "remove");
     const [row] = await ctx.tx
@@ -242,6 +284,7 @@ export const listDeliveries = defineService({
     subscriptionId: z.uuid().optional(),
     limit: z.number().int().min(1).max(200).default(50),
   }),
+  output: listed(deliveryRow),
   handler: async (input, ctx) =>
     ctx.tx
       .select({
@@ -279,6 +322,10 @@ export const testWebhook = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.uuid() }),
+  output: z.object({
+    deliveryId: uuid,
+    jobId: z.string(),
+  }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "test");
     const [subscription] = await ctx.tx

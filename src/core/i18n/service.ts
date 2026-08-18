@@ -9,7 +9,26 @@
 // stores them without looking inside.
 import { z } from "zod";
 import { and, eq, inArray } from "drizzle-orm";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
+
+const translationRow = row({
+  id: uuid,
+  entityType: z.string(),
+  entityId: uuid,
+  locale: z.string(),
+  fields: z.unknown(),
+  status: z.enum(["draft", "machine", "reviewed"]),
+  translatedBy: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const localePolicy = row({
+  defaultLocale: z.string(),
+  enabledLocales: z.array(z.string()),
+  locale: z.string(),
+});
 import { entityTranslations } from "@/core/i18n/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { contacts } from "@/core/contacts/schema";
@@ -46,6 +65,7 @@ export const setTranslation = defineService({
     fields: z.record(z.string(), z.unknown()),
     status: z.enum(["draft", "machine", "reviewed"]).default("draft"),
   }),
+  output: translationRow,
   handler: async (input, ctx) => {
     const [business] = await ctx.tx
       .select({
@@ -116,6 +136,7 @@ export const getTranslation = defineService({
     locale,
     includeUnreviewed: z.boolean().default(false),
   }),
+  output: translationRow.nullable(),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -146,6 +167,7 @@ export const translatedIds = defineService({
     locale,
     ids: z.array(z.string().uuid()).max(5000).optional(),
   }),
+  output: listed(uuid),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select({ entityId: entityTranslations.entityId })
@@ -171,6 +193,7 @@ export const listTranslations = defineService({
     entityType: z.string().min(1).max(40),
     entityId: z.string().uuid(),
   }),
+  output: listed(translationRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
@@ -197,6 +220,15 @@ export const translationIndex = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ entityType: z.string().min(1).max(40) }),
+  output: listed(
+    row({
+      id: uuid,
+      entityId: uuid,
+      locale: z.string(),
+      status: z.enum(["draft", "machine", "reviewed"]),
+      updatedAt: timestamp,
+    }),
+  ),
   handler: (input, ctx) =>
     ctx.tx
       .select({
@@ -216,6 +248,7 @@ export const deleteTranslation = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: okResult,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .delete(entityTranslations)
@@ -234,6 +267,7 @@ export const getMyLocale = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({}),
+  output: localePolicy,
   handler: async (_input, ctx) => {
     if (ctx.actor.kind !== "user") {
       throw new ServiceError("permission", "A customer locale requires a signed-in person.");
@@ -253,6 +287,7 @@ export const setMyLocale = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ locale }),
+  output: localePolicy,
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "user") {
       throw new ServiceError("permission", "A customer locale requires a signed-in person.");
