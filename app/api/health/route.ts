@@ -14,6 +14,7 @@
 //
 // CI asserts this is non-zero after starting the image, and scripts/doctor.ts
 // (§17) will read it once it exists.
+import { PLATFORM_VERSION } from "@/core/platform";
 import { ready } from "@/core/runtime";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export async function GET(): Promise<Response> {
     const report = await ready();
     return Response.json({
       ok: true,
+      version: PLATFORM_VERSION,
       modules: report.modules.length,
       services: report.services.length,
       listeners: report.listeners.length,

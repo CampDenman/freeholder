@@ -147,6 +147,7 @@ export const login = defineService({
   summary: "Exchange email + password for a session.",
   kind: "mutation",
   permission: "public",
+  mcpExclude: true,
   input: loginCredentials,
   // Counted per email address rather than per IP: the attack this stops is
   // guessing one account's password, and an attacker with a proxy pool changes

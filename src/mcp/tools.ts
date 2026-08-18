@@ -36,10 +36,16 @@ import { listServices, permits, type Actor, type Service } from "@/core/service"
  * account. They stay available through the human UI and HTTP service surface,
  * but an MCP client is never prompted to handle either side of that secret.
  *
- * A per-service opt-out on `ServiceDef` expresses this better than a list of
- * families; `MASTER.md` §43 item C3.04 tracks that contract.
+ * Families that stay off MCP unless a service sets `mcpExclude: false`.
+ * Per-service `mcpExclude` is the C3.04 opt-out.
  */
 const EXCLUDED_FAMILIES = new Set(["auth", "apikeys", "invitations"]);
+
+export function hiddenFromMcp(service: Service): boolean {
+  if (service.def.mcpExclude === true) return true;
+  if (service.def.mcpExclude === false) return false;
+  return EXCLUDED_FAMILIES.has(service.def.name.split(".")[0]!);
+}
 
 export interface McpTool {
   name: string;
@@ -50,6 +56,10 @@ export interface McpTool {
     readOnlyHint: boolean;
     destructiveHint: boolean;
     idempotentHint: boolean;
+    /** C3.04: who this listing was computed for. */
+    actorKind: Actor["kind"];
+    /** C3.04: a person must confirm before the service will run. */
+    approval: "none" | "step_up" | "human";
   };
 }
 
@@ -115,9 +125,9 @@ export function toolsFor(actor: Actor): McpTool[] {
   const tools: McpTool[] = [];
   for (const service of listServices().values()) {
     const { name, kind, permission, summary } = service.def;
-    if (EXCLUDED_FAMILIES.has(name.split(".")[0]!)) continue;
-    if (service.def.stepUp) continue;
-    if (service.def.agentCallable === false) continue;
+    if (hiddenFromMcp(service)) continue;
+    if (service.def.stepUp && actor.kind !== "user") continue;
+    if (service.def.agentCallable === false && actor.kind === "agent") continue;
     if (!permits(actor, permission, name, kind)) continue;
 
     const verb = name.split(".")[1] ?? "";
@@ -132,6 +142,12 @@ export function toolsFor(actor: Actor): McpTool[] {
         readOnlyHint: kind === "query",
         destructiveHint: kind === "mutation" && DESTRUCTIVE.test(verb),
         idempotentHint: kind === "query",
+        actorKind: actor.kind,
+        approval: service.def.stepUp
+          ? "step_up"
+          : service.def.agentCallable === false
+            ? "human"
+            : "none",
       },
     });
   }
@@ -145,9 +161,11 @@ export function serviceForTool(
 ): Service | undefined {
   for (const service of listServices().values()) {
     if (toolName(service.def.name) !== tool) continue;
-    if (EXCLUDED_FAMILIES.has(service.def.name.split(".")[0]!)) return undefined;
-    if (service.def.stepUp) return undefined;
-    if (service.def.agentCallable === false) return undefined;
+    if (hiddenFromMcp(service)) return undefined;
+    if (service.def.stepUp && actor.kind !== "user") return undefined;
+    if (service.def.agentCallable === false && actor.kind === "agent") {
+      return undefined;
+    }
     // Resolved through the same permission check as the listing, so a tool
     // that was never offered cannot be called by guessing its name.
     if (

@@ -17,7 +17,7 @@ import { buildOpenApi } from "@/core/api/openapi";
 import { siteOrigin } from "@/core/seo/origin";
 import { currentBusiness } from "@/core/settings/read";
 import { ready } from "@/core/runtime";
-import { version } from "@/../package.json";
+import { PLATFORM_VERSION } from "@/core/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export async function GET(): Promise<Response> {
   return Response.json(
     buildOpenApi({
       origin: siteOrigin(),
-      version,
+      version: PLATFORM_VERSION,
       title: business?.name ?? "Freeholder",
     }),
     { headers: { "cache-control": "no-store" } },

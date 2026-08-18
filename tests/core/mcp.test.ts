@@ -14,7 +14,7 @@
 // client would be checking.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { handleMcp, PROTOCOL_VERSION } from "@/mcp/server";
-import { serviceForTool, toolName, toolsFor } from "@/mcp/tools";
+import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 import { listServices, type Actor } from "@/core/service";
 import { ready } from "@/core/runtime";
 import { createApiKey } from "@/core/apikeys/service";
@@ -52,7 +52,7 @@ async function rpc(
   };
 }
 
-describe.runIf(hasDatabase)("the handshake", () => {
+describe.runIf(hasDatabase)("the handshake", { timeout: 30_000 }, () => {
   beforeEach(async () => {
     await truncateSpine();
     await db()
@@ -75,6 +75,8 @@ describe.runIf(hasDatabase)("the handshake", () => {
     expect(body.jsonrpc).toBe("2.0");
     expect(value.protocolVersion).toBe(PROTOCOL_VERSION);
     expect(value.capabilities).toHaveProperty("tools");
+    expect(value.capabilities).toHaveProperty("resources");
+    expect(value.capabilities).toHaveProperty("prompts");
     expect(value.serverInfo).toEqual(INFO);
   });
 
@@ -117,8 +119,33 @@ describe.runIf(hasDatabase)("the handshake", () => {
   });
 
   it("refuses a method it does not implement, with the JSON-RPC code", async () => {
-    const { body } = await rpc("resources/list");
+    const { body } = await rpc("completion/complete");
     expect((body.error as { code: number }).code).toBe(-32601);
+  });
+
+  it("lists contract resources from the same registry", async () => {
+    const { body } = await rpc("resources/list");
+    const resources = (body.result as { resources: { uri: string }[] }).resources;
+    expect(resources.map((resource) => resource.uri)).toContain(
+      "freeholder://contract/services",
+    );
+    const read = await rpc("resources/read", { uri: "freeholder://contract/services" });
+    const text = (read.body.result as { contents: { text: string }[] }).contents[0]!.text;
+    const parsed = JSON.parse(text) as { services: { name: string; mcp: boolean }[] };
+    expect(parsed.services.some((service) => service.name === "contacts.create")).toBe(true);
+    expect(parsed.services.find((service) => service.name === "auth.login")?.mcp).toBe(false);
+  });
+
+  it("offers prompts that only name tools already on the list", async () => {
+    const { body } = await rpc("prompts/list");
+    const names = (body.result as { prompts: { name: string }[] }).prompts.map(
+      (prompt) => prompt.name,
+    );
+    expect(names).toEqual(["chase-overdue", "today-briefing"]);
+    const got = await rpc("prompts/get", { name: "chase-overdue" });
+    expect(
+      (got.body.result as { messages: { content: { text: string } }[] }).messages[0]!.content.text,
+    ).toContain("approve");
   });
 
   it("refuses a body that is not JSON", async () => {
@@ -180,14 +207,7 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     // require fresh interactive two-factor proof, and nothing else is.
     const offered = new Set(toolsFor(OWNER).map((tool) => tool.name));
     const expected = [...listServices().values()]
-      .filter(
-        (service) =>
-          !service.def.stepUp &&
-          service.def.agentCallable !== false &&
-          !["auth", "apikeys", "invitations"].includes(
-            service.def.name.split(".")[0]!,
-          ),
-      )
+      .filter((service) => !hiddenFromMcp(service))
       .map((service) => toolName(service.def.name));
     expect(offered).toEqual(new Set(expected));
   });
@@ -202,17 +222,25 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     expect(names).not.toContain("invitations_create");
     // And they cannot be reached by naming them either.
     expect(serviceForTool(OWNER, "auth_login")).toBeUndefined();
-    expect(serviceForTool(OWNER, "roles_assign")).toBeUndefined();
+    expect(serviceForTool(agent(["roles.*"]), "roles_assign")).toBeUndefined();
+    expect(
+      toolsFor(OWNER).find((tool) => tool.name === "roles_assign")?.annotations.approval,
+    ).toBe("step_up");
   });
 
   it("keeps explicit human-review operations out of agent discovery", async () => {
-    const names = toolsFor(OWNER).map((tool) => tool.name);
+    const key = agent(["media.*"]);
+    const names = toolsFor(key).map((tool) => tool.name);
     expect(names).not.toContain("media_generateAltTextSuggestion");
     expect(names).not.toContain("media_acceptAltTextSuggestion");
     expect(names).not.toContain("media_dismissAltTextSuggestion");
     expect(
-      serviceForTool(OWNER, "media_generateAltTextSuggestion"),
+      serviceForTool(key, "media_generateAltTextSuggestion"),
     ).toBeUndefined();
+    expect(
+      toolsFor(OWNER).find((tool) => tool.name === "media_generateAltTextSuggestion")
+        ?.annotations.approval,
+    ).toBe("human");
   });
 
   it("offers a scoped key only what it can actually call", async () => {

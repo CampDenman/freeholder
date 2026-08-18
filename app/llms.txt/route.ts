@@ -86,6 +86,9 @@ export async function GET(request: Request): Promise<Response> {
     `- Times on this site are shown in ${business.timezone}.`,
     `- Sitemap: ${origin}/sitemap.xml`,
     `- Feeds: ${origin}/feeds/products.xml, ${origin}/feeds/locations.xml, ${origin}/feeds/events.xml, ${origin}/feeds/newsletters.xml`,
+    `- Machine contract: ${origin}/api/openapi.json`,
+    `- Agent tools: ${origin}/api/mcp`,
+    `- Full service list: ${origin}/llms-full.txt`,
     "",
   ];
 

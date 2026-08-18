@@ -15,19 +15,20 @@
 // own failure modes, in exchange for protocol code that is this short. What is
 // *not* implemented is stated below rather than implied.
 //
-// Not implemented, deliberately:
-//   - SSE / server-initiated messages. Nothing here streams or notifies.
-//   - `resources` and `prompts`. Freeholder's capabilities are verbs, and the
-//     nouns are already reachable through the query tools.
-//   - Sessions (`Mcp-Session-Id`). Every request carries its own credential
-//     and is answered on its own; there is no state to resume.
+// Resources and prompts project the same registry (C3.05). There is still no
+// second list of capabilities — `resources/read` on the service catalog is
+// the registry, and prompts only name tools the caller can already list.
+//
+// Sessions: if a client sends `Mcp-Session-Id`, it is echoed. Nothing is
+// stored against it; every request still carries its own credential.
 //
 // Each of those is additive under the protocol, so a client that wants them
 // negotiates and finds them absent rather than breaking.
 import { actorFromRequest } from "@/core/http/actor";
+import { CONTRACT, PLATFORM_VERSION } from "@/core/platform";
 import { ready } from "@/core/runtime";
-import { ServiceError, type Actor } from "@/core/service";
-import { serviceForTool, toolsFor } from "@/mcp/tools";
+import { listServices, ServiceError, type Actor } from "@/core/service";
+import { hiddenFromMcp, serviceForTool, toolsFor } from "@/mcp/tools";
 
 /** The revision this implements. Echoed back when a client asks for it. */
 export const PROTOCOL_VERSION = "2025-06-18";
@@ -78,6 +79,8 @@ function initialize(
       // registry and the caller's scopes, so there is no change to announce —
       // a client that asks again gets the current answer.
       tools: { listChanged: false },
+      resources: { listChanged: false, subscribe: false },
+      prompts: { listChanged: false },
     },
     serverInfo: info,
     instructions: [
@@ -165,6 +168,14 @@ async function handleOne(
       return result(request.id, { tools: toolsFor(actor) });
     case "tools/call":
       return callTool(request, actor);
+    case "resources/list":
+      return result(request.id, { resources: listResources() });
+    case "resources/read":
+      return readResource(request, actor);
+    case "prompts/list":
+      return result(request.id, { prompts: listPrompts() });
+    case "prompts/get":
+      return getPrompt(request);
     default:
       if (request.method.startsWith("notifications/")) {
         // A notification has no id and takes no response. `initialized` is the
@@ -174,7 +185,7 @@ async function handleOne(
       return failure(
         request.id,
         METHOD_NOT_FOUND,
-        `This server does not implement ${request.method}. It offers tools only.`,
+        `This server does not implement ${request.method}.`,
       );
   }
 }
@@ -221,5 +232,110 @@ export async function handleMcp(
   // nothing", which JSON-RPC requires and clients rely on when matching
   // responses back to the requests they sent.
   if (response === undefined) return new Response(null, { status: 202 });
-  return Response.json(response);
+  const session = request.headers.get("mcp-session-id");
+  return Response.json(response, {
+    headers: session ? { "mcp-session-id": session } : undefined,
+  });
+}
+
+function listResources() {
+  return [
+    {
+      uri: "freeholder://contract/openapi",
+      name: "OpenAPI",
+      mimeType: "application/json",
+      description: "This instance's live OpenAPI document.",
+    },
+    {
+      uri: "freeholder://contract/services",
+      name: "Services",
+      mimeType: "application/json",
+      description: "Registered services with kind, permission and MCP visibility.",
+    },
+  ];
+}
+
+function readResource(request: JsonRpcRequest, actor: Actor) {
+  const uri = request.params?.uri;
+  if (typeof uri !== "string") {
+    return failure(request.id, INVALID_PARAMS, "A resource uri is required.");
+  }
+  if (uri === "freeholder://contract/services") {
+    const services = [...listServices().values()].map((service) => ({
+      name: service.def.name,
+      kind: service.def.kind,
+      permission: service.def.permission,
+      mcp: !hiddenFromMcp(service),
+      approval: service.def.stepUp ? "step_up" : "none",
+    }));
+    return result(request.id, {
+      contents: [
+        {
+          uri,
+          mimeType: "application/json",
+          text: JSON.stringify({ actorKind: actor.kind, services }, null, 2),
+        },
+      ],
+    });
+  }
+  if (uri === "freeholder://contract/openapi") {
+    return result(request.id, {
+      contents: [
+        {
+          uri,
+          mimeType: "text/plain",
+          text: `Live OpenAPI is at GET /api/openapi.json (platform ${PLATFORM_VERSION}, contract OpenAPI ${CONTRACT.openapi}).`,
+        },
+      ],
+    });
+  }
+  return failure(request.id, INVALID_PARAMS, `No resource at ${uri}.`);
+}
+
+function listPrompts() {
+  return [
+    {
+      name: "chase-overdue",
+      description: "Find overdue invoices and draft a chase plan.",
+      arguments: [],
+    },
+    {
+      name: "today-briefing",
+      description: "Summarize what needs the owner today.",
+      arguments: [],
+    },
+  ];
+}
+
+function getPrompt(request: JsonRpcRequest) {
+  const name = request.params?.name;
+  if (name === "chase-overdue") {
+    return result(request.id, {
+      description: "Chase overdue invoices",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: "List overdue invoices, then draft one short chase message per contact. Do not send until I approve.",
+          },
+        },
+      ],
+    });
+  }
+  if (name === "today-briefing") {
+    return result(request.id, {
+      description: "Today's briefing",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: "What needs me today? Use the tools you can call. Skip anything you are not permitted to see.",
+          },
+        },
+      ],
+    });
+  }
+  return failure(request.id, INVALID_PARAMS, `No prompt called "${String(name)}".`);
 }

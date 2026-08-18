@@ -17,7 +17,7 @@ import {
   matches,
   newSecret,
 } from "@/core/webhooks/sign";
-import { defineService, ServiceError, type Actor } from "@/core/service";
+import { defineService, redact, ServiceError, type Actor } from "@/core/service";
 
 const webhookListRow = row({
   id: uuid,
@@ -316,6 +316,104 @@ export const listDeliveries = defineService({
  * signature check all work is to send one — and doing that by waiting for a
  * real event means testing in production with somebody's actual data.
  */
+export const inspectDelivery = defineService({
+  name: "webhooks.inspectDelivery",
+  summary: "One delivery, with a redacted copy of what was sent.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ id: z.uuid() }),
+  output: deliveryRow.extend({
+    payload: z.unknown(),
+    responseBody: z.string().nullable(),
+  }),
+  handler: async (input, ctx) => {
+    const [row] = await ctx.tx
+      .select()
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.id, input.id))
+      .limit(1);
+    if (!row) throw new ServiceError("not_found", "No such delivery.");
+    ctx.setSubject("webhook", row.subscriptionId);
+    return {
+      id: row.id,
+      subscriptionId: row.subscriptionId,
+      eventName: row.eventName,
+      status: row.status,
+      attempts: row.attempts,
+      responseStatus: row.responseStatus,
+      error: row.error,
+      nextAttemptAt: row.nextAttemptAt,
+      createdAt: row.createdAt,
+      completedAt: row.completedAt,
+      payload: redact(row.payload),
+      responseBody: row.responseBody,
+    };
+  },
+});
+
+export const replayDelivery = defineService({
+  name: "webhooks.replay",
+  summary: "Queue one delivery again with the payload that was stored.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: z.uuid() }),
+  output: z.object({ deliveryId: uuid, jobId: z.string() }),
+  handler: async (input, ctx) => {
+    refuseAgents(ctx.actor, "replay");
+    const [row] = await ctx.tx
+      .update(webhookDeliveries)
+      .set({
+        status: "pending",
+        nextAttemptAt: new Date(),
+        error: null,
+        responseStatus: null,
+        responseBody: null,
+        completedAt: null,
+      })
+      .where(eq(webhookDeliveries.id, input.id))
+      .returning({
+        id: webhookDeliveries.id,
+        subscriptionId: webhookDeliveries.subscriptionId,
+      });
+    if (!row) throw new ServiceError("not_found", "No such delivery.");
+    const queued = await ctx.queueJob(
+      "core.deliverWebhooks",
+      {},
+      { idempotencyKey: `webhook-replay:${row.id}:${Date.now()}` },
+    );
+    ctx.setSubject("webhook", row.subscriptionId);
+    ctx.queueEvent("webhook.replayed", { id: row.id });
+    return { deliveryId: row.id, jobId: queued.id };
+  },
+});
+
+export const rotateWebhookEndpoint = defineService({
+  name: "webhooks.rotateEndpoint",
+  summary: "Point a webhook at a new URL and issue a new signing secret.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  input: z.object({
+    id: z.uuid(),
+    url: z.string().min(1).max(2000),
+  }),
+  output: webhookRow,
+  handler: async (input, ctx) => {
+    refuseAgents(ctx.actor, "rotate");
+    assertDeliverableUrl(input.url);
+    const secret = newSecret();
+    const [row] = await ctx.tx
+      .update(webhookSubscriptions)
+      .set({ url: input.url, secret, consecutiveFailures: 0, pausedReason: null, status: "active" })
+      .where(eq(webhookSubscriptions.id, input.id))
+      .returning();
+    if (!row) throw new ServiceError("not_found", "No such webhook.");
+    ctx.setSubject("webhook", input.id);
+    ctx.queueEvent("webhook.updated", { id: input.id, name: row.name });
+    return row;
+  },
+});
+
 export const testWebhook = defineService({
   name: "webhooks.test",
   summary: "Send a test event to a webhook now.",
@@ -426,5 +524,8 @@ export default [
   revealWebhookSecret,
   deleteWebhook,
   listDeliveries,
+  inspectDelivery,
+  replayDelivery,
+  rotateWebhookEndpoint,
   testWebhook,
 ];

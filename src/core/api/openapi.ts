@@ -17,6 +17,7 @@
 // A service still missing an output schema is described as a generic object
 // rather than a guessed shape. The completeness gate refuses that gap.
 import { z } from "zod";
+import { CONTRACT, PLATFORM_VERSION, WEBHOOK_SCHEMA_VERSION } from "@/core/platform";
 import { listServices, type Service } from "@/core/service";
 import { API_BASE } from "@/core/api/dispatch";
 
@@ -70,8 +71,24 @@ function errorResponses(): Record<string, unknown> {
       description: "Rate limited. Retry-After says how long to wait.",
       content: body,
     },
+    "500": {
+      description: "The service returned a shape it does not declare, or failed internally.",
+      content: body,
+    },
   };
 }
+
+const WEBHOOK_ENVELOPE = {
+  type: "object",
+  required: ["id", "event", "at", "schemaVersion", "data"],
+  properties: {
+    id: { type: "string", format: "uuid" },
+    event: { type: "string", description: "Dotted event name, e.g. contact.created." },
+    at: { type: "integer", description: "Unix timestamp in seconds." },
+    schemaVersion: { type: "integer", const: WEBHOOK_SCHEMA_VERSION },
+    data: { type: "object", additionalProperties: true },
+  },
+} as const;
 
 /**
  * A service's input as JSON Schema.
@@ -85,9 +102,14 @@ function jsonSchema(schema: z.ZodType, io: "input" | "output"): unknown {
   try {
     const json = z.toJSONSchema(schema, {
       io,
-      // Handler returns include Date objects. JSON Schema has no Date type;
-      // C3.02 can emit format:date-time. Until then, do not fail the document.
       unrepresentable: "any",
+      override: (ctx) => {
+        const def = (ctx.zodSchema as { def?: { type?: string } }).def;
+        if (def?.type === "date") {
+          ctx.jsonSchema.type = "string";
+          ctx.jsonSchema.format = "date-time";
+        }
+      },
     });
     const { $schema: _ignored, ...rest } = json as Record<string, unknown>;
     return rest;
@@ -163,6 +185,9 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
       ...errorResponses(),
     };
 
+    const security =
+      permission === "public" ? [] : [{ bearerAuth: [] as string[] }];
+
     const operations: Record<string, unknown> = {};
     if (kind === "query") {
       // A query is a GET whose input is the query string, and the same call is
@@ -173,6 +198,7 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
         summary,
         description,
         tags: [tag],
+        security,
         parameters: [
           {
             name: "input",
@@ -191,6 +217,7 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
       summary,
       description,
       tags: [tag],
+      security,
       requestBody: {
         required: true,
         content: { "application/json": { schema } },
@@ -202,20 +229,42 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
   }
 
   return {
-    openapi: "3.1.0",
+    openapi: CONTRACT.openapi,
     info: {
       title: `${options.title} — Freeholder API`,
       version: options.version,
       description: [
-        "Every service this instance exposes, generated from the same Zod schemas that validate each request (MASTER.md §28).",
+        "Every service this instance exposes, generated from the same Zod schemas that validate each request and each handler return (MASTER.md §28, C3.02).",
         "",
-        "Authenticate with `Authorization: Bearer <api key>`. Keys are minted in Settings, and each one is scoped to the services it may call.",
+        "Authenticate with `Authorization: Bearer <api key>` except on public operations, which declare an empty security array.",
         "",
-        "Responses are generated from the same output schemas that validate handler returns in development and tests (C3.01).",
+        "Outbound webhooks use the FreeholderEvent envelope in components.schemas.",
       ].join("\n"),
+      "x-freeholder": {
+        platformVersion: PLATFORM_VERSION,
+        webhookSchemaVersion: WEBHOOK_SCHEMA_VERSION,
+        mcpProtocol: CONTRACT.mcpProtocol,
+      },
     },
     servers: [{ url: options.origin }],
     security: [{ bearerAuth: [] }],
+    webhooks: {
+      freeholderEvent: {
+        post: {
+          operationId: "webhook.freeholderEvent",
+          summary: "An event this instance POSTs to a subscribed URL.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/FreeholderEvent" } },
+            },
+          },
+          responses: {
+            "200": { description: "The receiver accepted the delivery." },
+          },
+        },
+      },
+    },
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -223,6 +272,10 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
           scheme: "bearer",
           description: "An API key from Settings → API keys.",
         },
+      },
+      schemas: {
+        FreeholderEvent: WEBHOOK_ENVELOPE,
+        ServiceError: ERROR_SCHEMA,
       },
     },
     tags: [...new Set(services.map((s) => s.def.name.split(".")[0]!))]

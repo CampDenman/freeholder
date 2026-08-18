@@ -297,6 +297,12 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    * HTTP contract, but API-key actors are refused and MCP never advertises it.
    */
   agentCallable?: boolean;
+  /**
+   * C3.04: hide this service from MCP discovery even when the caller could
+   * invoke it over HTTP. Credential and invitation verbs use this so an
+   * agent is never invited to guess a password.
+   */
+  mcpExclude?: boolean;
   handler: (input: z.output<In>, ctx: ServiceContext) => Promise<Out>;
 }
 
