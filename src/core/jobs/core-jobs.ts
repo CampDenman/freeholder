@@ -417,6 +417,17 @@ export const deliverContributions = defineJob({
   },
 });
 
+export const replyContributions = defineJob({
+  name: "contribute.reply",
+  summary: "Send a hub determination back to the instance that filed it.",
+  retry: { limit: 6, delaySeconds: 30, backoff: true, maxDelaySeconds: 3600 },
+  concurrency: 4,
+  handler: async (data) => {
+    const { runContributeReplyJob } = await import("@/core/contribute/service");
+    return runContributeReplyJob(data);
+  },
+});
+
 export const pruneOldNotifications = defineJob({
   name: "core.pruneNotifications",
   summary: "Delete notifications archived for more than one year.",
@@ -456,4 +467,5 @@ export default [
   pruneOldNotifications,
   submitIndexNow,
   deliverContributions,
+  replyContributions,
 ];

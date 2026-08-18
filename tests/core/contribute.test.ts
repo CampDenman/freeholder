@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Contribution channel (C1.30, C1.32).
+// Contribution channel (C1.30–C1.34).
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
@@ -11,6 +11,7 @@ import { signPayload } from "@/core/webhooks/sign";
 import { contributions } from "@/core/contribute/schema";
 import {
   deliverQueuedContribution,
+  isCanonicalProjectHub,
   isSelfHub,
   spokeBodyJson,
 } from "@/core/contribute/deliver";
@@ -19,6 +20,9 @@ import {
   getContributeSettings,
   ingestContribution,
   listContributions,
+  recordContributionStatus,
+  runContributeReplyJob,
+  setHubEnabled,
   submitContribution,
   updateContributeSettings,
 } from "@/core/contribute/service";
@@ -53,6 +57,12 @@ describe("contribute helpers", () => {
     expect(isSelfHub("https://freeholder.ai", "https://shop.example")).toBe(
       false,
     );
+  });
+
+  it("treats freeholder.ai as the canonical project hub", () => {
+    expect(isCanonicalProjectHub("https://freeholder.ai")).toBe(true);
+    expect(isCanonicalProjectHub("https://www.freeholder.ai")).toBe(true);
+    expect(isCanonicalProjectHub("https://shop.example")).toBe(false);
   });
 });
 
@@ -386,5 +396,98 @@ describe.runIf(hasDatabase)("contribute channel", { timeout: 30_000 }, () => {
     const settings = await getContributeSettings.call({}, OWNER);
     expect(settings.hubEnabled).toBe(false);
     expect(settings.hubUrl).toBe("https://freeholder.ai");
+  });
+
+  it("turns hub ingest on with a required boolean", async () => {
+    const denied = await failure(
+      ingestContribution.call(
+        {
+          kind: "bug",
+          title: "Before the switch",
+          body: "Should 404 while ingest is off.",
+        },
+        ANONYMOUS,
+      ),
+    );
+    expect(denied.code).toBe("not_found");
+    const on = await setHubEnabled.call({ enabled: true }, OWNER);
+    expect(on.hubEnabled).toBe(true);
+    const accepted = await ingestContribution.call(
+      {
+        kind: "bug",
+        title: "After the switch",
+        body: "Hub ingest is on.",
+      },
+      ANONYMOUS,
+    );
+    expect(accepted.status).toBe("received");
+    const off = await setHubEnabled.call({ enabled: false }, OWNER);
+    expect(off.hubEnabled).toBe(false);
+  });
+
+  it("replies a determination to the speaking instance", async () => {
+    await updateContributeSettings.call(
+      { hubUrl: "https://freeholder.ai" },
+      OWNER,
+    );
+    const spoke = await submitContribution.call(
+      {
+        kind: "feature",
+        title: "Please reply",
+        body: "I want to hear back.",
+      },
+      OWNER,
+    );
+    const [spokeRow] = await db()
+      .select()
+      .from(contributions)
+      .where(eq(contributions.id, spoke.id));
+    expect(spokeRow?.replyToken).toBeTruthy();
+    await setHubEnabled.call({ enabled: true }, OWNER);
+    const hub = await ingestContribution.call(
+      {
+        kind: "feature",
+        title: "Please reply on the hub",
+        body: "A separate hash so this is the hub copy.",
+        source: "spoke",
+        spokeId: spoke.id,
+        replyUrl: "https://shop.example/api/v1/contribute.recordStatus",
+        replyToken: spokeRow!.replyToken!,
+      },
+      ANONYMOUS,
+    );
+    const decided = await determineContribution.call(
+      { id: hub.id, status: "accepted", checklistId: "C2.12", note: "In the next editor pass." },
+      OWNER,
+    );
+    expect(decided.status).toBe("accepted");
+    const result = await runContributeReplyJob(
+      { contributionId: hub.id, note: "In the next editor pass." },
+      {
+        fetchImpl: async (_url, init) => {
+          const body = JSON.parse(String(init?.body));
+          await recordContributionStatus.call(body, ANONYMOUS);
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        },
+      },
+    );
+    expect(result.sent).toBe(true);
+    const [updated] = await db()
+      .select()
+      .from(contributions)
+      .where(eq(contributions.id, spoke.id));
+    expect(updated?.status).toBe("accepted");
+    expect(updated?.checklistId).toBe("C2.12");
+    const bad = await failure(
+      recordContributionStatus.call(
+        {
+          spokeId: spoke.id,
+          replyToken: "not-the-token-value",
+          status: "wontfix",
+        },
+        ANONYMOUS,
+      ),
+    );
+    expect(bad.code).toBe("permission");
   });
 });

@@ -1062,7 +1062,7 @@ This section encodes the standards from BigDataSEO.com and the Vibe Coding 101 S
 2. **Shoot → deliver → upsell (creator):** Booking completed → client Gallery created (login-gated, watermarked proofs) → client makes Selections → owner finalizes → download delivery per policy → print upsell via gallery price sheet → Order → Payment.
 3. **Content → commerce:** Blog post (SEO module ships schema + OG) → first-party analytics attributes the visit → visitor buys digital product → anon_id merges into Contact → future email campaigns segment on "bought X, hasn't booked Y."
 4. **Agent operations:** "Claude, chase overdue invoices" → MCP → service layer lists `Invoice(status=overdue)` → drafts reminder per contact tone/history from Timeline → sends via mail adapter → logs to AuditLog + TimelineEvents.
-5. **Contribution (owner or their AI → the project):** `contribute.submit` on the instance (admin, HTTP or MCP) writes a local row, then a job POSTs the same body to `{hub}/api/v1/contribute.ingest`. An AI that holds both MCP servers can call the hub directly. The hub resolves the reporter through `contacts.resolve`, notifies staff, and records a determination. Update checks never take this path.
+5. **Contribution (owner or their AI → the project):** `contribute.submit` on the instance (admin, HTTP or MCP) writes a local row, then a job POSTs the same body to `{hub}/api/v1/contribute.ingest`. An AI that holds both MCP servers can call the hub directly. The hub resolves the reporter through `contacts.resolve`, notifies staff, and records a determination. A determination POSTs status back to the speaking instance's `contribute.recordStatus` using a one-time reply token the spoke issued — not an instance census. Update checks never take this path.
 
 ---
 
@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.11 chrome sections are on `main` via #116. Contribution channel (C1.30–C1.33) is the next foundational addition; C2.12 remains the next editor item. |
+| Current focus | C1.30–C1.33 are on `main` via #117. C1.34 replies status to the speaking instance; C2.12 remains the next editor item. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3412,6 +3412,13 @@ reading chat logs.
   CONTRIBUTING.md and SECURITY.md pointers.
   (patch without DCO refused; `externalUrl` GitHub-only; determination
   `checklistId`; CONTRIBUTING.md channel paragraph)
+- [x] **C1.34** Reply hub determinations to the speaking instance: store a
+  reply URL and capability token on ingest, POST status on determine, apply
+  it on the spoke, notify the filer, and keep hub ingest a required on/off.
+  (`0069_colossal_maria_hill.sql`; `contribute.setHubEnabled`,
+  `contribute.recordStatus`, `contribute.reply` job; default-on when
+  `APP_URL` is freeholder.ai; `tests/core/contribute.test.ts`; changeset
+  `contribute-status-replies.md`)
 
 **C1 exit:** several humans can safely administer one business; the foundation
 is recoverable, accessible, international, observable, able to talk to the

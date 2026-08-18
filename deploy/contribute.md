@@ -15,10 +15,15 @@ separate, identity-free GET and is not this path.
 - An optional doctor snapshot is stored only when the caller attaches one.
   Secrets in that snapshot are redacted.
 
-## Hub (off by default)
+## Hub (off by default, except freeholder.ai)
 
-Turn ingest on with `contribute.updateSettings({ hubEnabled: true })`.
-Until then `contribute.ingest` is 404.
+Turn ingest on with `contribute.setHubEnabled({ enabled: true })` or the
+**Accept reports as a hub** button. Until then `contribute.ingest` is 404.
+If this instance's `APP_URL` host is `freeholder.ai`, ingest defaults on.
+
+A determination is POSTed back to the speaking instance as
+`contribute.recordStatus` using the reply token the spoke issued. The spoke
+updates its local row and notifies staff. There is no instance census.
 
 Rotate `receiveSecret` (step-up) if spokes should HMAC their deliveries
 with the same scheme as outbound webhooks. Unsigned public ingest remains

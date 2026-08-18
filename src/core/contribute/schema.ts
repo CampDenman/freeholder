@@ -94,6 +94,12 @@ export const contributions = pgTable(
     reporterName: text("reporter_name"),
     externalUrl: text("external_url"),
     hubReceiptId: uuid("hub_receipt_id"),
+    /** Spoke's local contribution id, so a determination can find the original. */
+    spokeId: uuid("spoke_id"),
+    /** Where the hub POSTs status. Empty on the speaking instance itself. */
+    replyUrl: text("reply_url"),
+    /** Capability token the hub must present to update the spoke. Never returned. */
+    replyToken: text("reply_token"),
     contentHash: text("content_hash").notNull(),
     includeDoctor: boolean("include_doctor").notNull().default(false),
     doctorReport: jsonb("doctor_report"),
