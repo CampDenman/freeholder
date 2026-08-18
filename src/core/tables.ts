@@ -96,3 +96,9 @@ export {
   openingHours,
   serviceAreas,
 } from "@/core/locations/schema";
+export {
+  contributeSettings,
+  contributions,
+  contributionAssets,
+  contributionEvents,
+} from "@/core/contribute/schema";

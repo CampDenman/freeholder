@@ -73,6 +73,7 @@ function topicLabel(topic: string, t: Awaited<ReturnType<typeof getT>>): string 
     "connections.attention": "notifications.topic.connections",
     "agents.failed": "notifications.topic.agents",
     "mail.delivery": "notifications.topic.mail",
+    "contribute.ingested": "notifications.topic.contribute",
   };
   return t(keys[topic] ?? topic);
 }

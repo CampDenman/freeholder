@@ -126,6 +126,7 @@ export default async function AdminLayout({
               promotions: t("catalog.promo.title"),
               events: t("events.title"),
               newsletters: t("newsletters.title"),
+              contribute: t("contribute.title"),
             }}
           />
         </div>

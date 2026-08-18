@@ -32,6 +32,7 @@ const ADMIN_MODULES = [
   "cms",
   "connections",
   "contacts",
+  "contribute",
   "demo",
   "events",
   "forms",

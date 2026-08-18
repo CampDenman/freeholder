@@ -56,7 +56,7 @@ Freeholder is a single open-source application that replaces the rented stack. E
 - **Customer portal** — your clients get one login for their quotes, invoices, bookings, files, and galleries
 - **First-party analytics** — privacy-first, cookie-banner-free, joined to your CRM: visit → lead → quote → paid, one funnel
 - **Multilingual + international** — locales, currencies, timezones, tax zones, and NAP/local-SEO built into the core, not bolted on
-- **AI-native** — a bundled MCP server exposes the whole admin surface to your AI assistant, with scoped permissions and a full audit log. "Chase my overdue invoices" is a sentence, not an afternoon.
+- **AI-native** — a bundled MCP server exposes the whole admin surface to your AI assistant, with scoped permissions and a full audit log. "Chase my overdue invoices" is a sentence, not an afternoon. The same door files a bug, a feature request or a patch with the project: an owner or their agent submits on their instance, and `freeholder.ai` receives it. Nothing is sent until they ask.
 
 ### Quickstart contract
 
@@ -90,6 +90,8 @@ One button exports everything — database, media, and a human-readable archive 
 ### Contributing
 
 Start with the architecture (§2–§8) and the build contract (§9–§16). Translations are the easiest first PR — locale catalogs live in `/locales`. The CI gates enforce the SEO, i18n, and money-handling standards automatically, so you can't accidentally ship a regression to the things that matter most.
+
+Owners can also file a bug, feature request or code submission from their running instance (admin, HTTP or MCP). `freeholder.ai` is the default hub. GitHub PRs remain the merge path; a contribution never becomes a second product plan, and a determination that changes the product lands as a §43 item in this document. Security reports stay on `SECURITY.md`.
 
 ---
 
@@ -136,6 +138,7 @@ freeholder/
 │   ├── agents               # Agent connections, workers, tasks, runs, approvals, spend (§40)
 │   ├── connections          # OAuth accounts, external calendars, credential encryption (§41)
 │   ├── briefing             # The daily briefing and its contributors (§42)
+│   ├── contribute           # Opt-in bug/feature/patch channel to a hub (default freeholder.ai)
 │   └── jobs                 # Background queue, scheduled tasks
 │
 ├── commerce/                # Sell things
@@ -599,6 +602,11 @@ Funnel = `AnalyticsEvent` joined through `contact_id` to money tables. Visit →
 | `GuidanceFlow` | Versioned, role/capability-scoped onboarding assembled from core, modules and plugins. | key, version, audience_roles[], required_capabilities[], steps, status |
 | `GuidanceProgress` | Per-user progress that can be resumed, dismissed or reset as roles/features change. | user_id, flow_key, flow_version, completed_steps[], state, started_at, completed_at |
 | `DemoScenario` | A deterministic, isolated, purgeable example business journey with expected outcomes. | key, version, preset, required_modules[], fixture_manifest, tour_flow_key, status |
+| `Contribution` | One opt-in bug, feature, patch, docs note or question filed by an owner, staff member, their agent, or a visitor of a hub. | contact_id, kind, status, title, body, locale, source, reporter_email, content_hash, include_doctor, doctor_report (redacted jsonb), platform_version, dco_attested, dco_signer, checklist_id, parent_id, hub_receipt_id, actor |
+| `ContributionAsset` | A screenshot, diff or archive already stored as an Asset. | contribution_id, asset_id, role |
+| `ContributionEvent` | Append-only status and note trail. | contribution_id, kind, body, actor, at |
+
+**Contribution channel (mandated).** Every instance can compose a report. Nothing is sent until `contribute.submit` runs. The default destination is `https://freeholder.ai`, which is itself a Freeholder instance with hub ingest enabled; forks may point `hubUrl` elsewhere or leave it empty to file locally only. The daily update check (§39.3) remains a jittered GET of a signed static file and still reports nothing. Security findings are refused here and sent down `SECURITY.md`. Accepted work that changes the product is cited as a §43 id; the inbox never edits this document. Reporter identity on automated paths is `contacts.resolve`.
 
 The MCP server authenticates as a scoped `ApiKey`, calls the same service layer, and every mutation lands in `AuditLog` with `actor = agent:<key-name>`. The owner can read a plain-English log of everything their AI did.
 
@@ -1054,6 +1062,7 @@ This section encodes the standards from BigDataSEO.com and the Vibe Coding 101 S
 2. **Shoot → deliver → upsell (creator):** Booking completed → client Gallery created (login-gated, watermarked proofs) → client makes Selections → owner finalizes → download delivery per policy → print upsell via gallery price sheet → Order → Payment.
 3. **Content → commerce:** Blog post (SEO module ships schema + OG) → first-party analytics attributes the visit → visitor buys digital product → anon_id merges into Contact → future email campaigns segment on "bought X, hasn't booked Y."
 4. **Agent operations:** "Claude, chase overdue invoices" → MCP → service layer lists `Invoice(status=overdue)` → drafts reminder per contact tone/history from Timeline → sends via mail adapter → logs to AuditLog + TimelineEvents.
+5. **Contribution (owner or their AI → the project):** `contribute.submit` on the instance (admin, HTTP or MCP) writes a local row, then a job POSTs the same body to `{hub}/api/v1/contribute.ingest`. An AI that holds both MCP servers can call the hub directly. The hub resolves the reporter through `contacts.resolve`, notifies staff, and records a determination. Update checks never take this path.
 
 ---
 
@@ -1808,6 +1817,8 @@ A plugin registry is **just a signed JSON index** — deliberately boring so tha
               from OpenAPI) per-instance) guides)      consumers)
 ```
 
+Inter-instance contribution uses that same RPC: a spoke POSTs `/api/v1/contribute.ingest`, which is the tool MCP already projects. There is no second contribution protocol and no nested MCP client.
+
 **How each stays current:**
 
 1. **OpenAPI** — generated from the same Zod schemas that validate every request at runtime. It is definitionally impossible for the spec to describe a shape the API doesn't enforce.
@@ -2326,7 +2337,9 @@ telemetry, no instance identifier, nothing reported upstream.** An instance
 that never contacts anything is also an instance that never learns it is
 vulnerable, so the trade is made explicit at setup — checking is on, reporting
 does not exist, and the whole mechanism can be turned off by someone who would
-rather watch a mailing list.
+rather watch a mailing list. An owner who *chooses* to file a bug or a patch
+uses `contribute.submit` (§4.8); that write is not this check and does not run
+unless they or a `contribute.*` agent ask.
 
 ### 39.4 Preflight — the part that earns the trust
 
@@ -2917,12 +2930,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-16 |
+| Last reconciled | 2026-08-17 |
 | Evidence snapshot | `main` at `b18fe29` with C5.09 merged; C5.10–C5.24 catalog and payments work sit uncommitted on top, plus C5.04 tax-template verification, public product pages, events/newsletters, and C2.21. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C1.29 is on `main` via #111. Working drafts for products, events and newsletter issues are in PR #112. |
+| Current focus | C2.11 chrome sections are on `main` via #116. Contribution channel (C1.30–C1.33) is the next foundational addition; C2.12 remains the next editor item. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3377,9 +3390,32 @@ reading chat logs.
   `media.registerStoredOriginal` (same validate/scan/hash path) and can attach
   to a product (`catalog.attachProductMedia`) or page working tree. Coverage in
   `tests/core/media-capture.test.ts`; changeset `media-phone-ingest.md`.)*
+- [x] **C1.30** Model and services for the contribution channel: kinds, local
+  draft/submit, hub ingest, `contacts.resolve`, merge/undo, privacy
+  export/erasure, rate limits, idempotent content hash, opt-in doctor attach
+  and output schemas.
+  (`0068_careless_jack_power.sql`; `src/core/contribute/`;
+  `tests/core/contribute.test.ts`; merge/privacy completeness;
+  changeset `contribute-channel.md`; operator guide `deploy/contribute.md`)
+- [x] **C1.31** Human surfaces: spoke compose/history, hub inbox/determination,
+  public freeholder.ai form, EN/FR/ES, WCAG AA in light and dark, empty and
+  error states.
+  (`/admin/contribute`, `/contribute`; EN/FR/ES catalogs; empty and error
+  states; tokens only)
+- [x] **C1.32** Agent and delivery: MCP/HTTP parity from the registry; deliver
+  job to the configured hub; signed optional receipt; no send without submit;
+  empty hubUrl is local-only; update-check path unchanged.
+  (`contribute.deliver` job; `contribute_*` MCP tools from the registry;
+  signed ingest test; empty hubUrl stays local)
+- [x] **C1.33** Code submissions: patch/diff/PR URL, DCO attestation, license
+  notice, never auto-merge; a determination may cite a §43 ID;
+  CONTRIBUTING.md and SECURITY.md pointers.
+  (patch without DCO refused; `externalUrl` GitHub-only; determination
+  `checklistId`; CONTRIBUTING.md channel paragraph)
 
 **C1 exit:** several humans can safely administer one business; the foundation
-is recoverable, accessible, international, observable and ready to carry money.
+is recoverable, accessible, international, observable, able to talk to the
+project without silent telemetry, and ready to carry money.
 
 ### 43.7 C2 — Universal editor and CMS perfection
 

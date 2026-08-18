@@ -406,6 +406,17 @@ export const submitIndexNow = defineJob({
 });
 
 /** Archived inbox material is operational history, not permanent storage. */
+export const deliverContributions = defineJob({
+  name: "contribute.deliver",
+  summary: "Deliver a submitted contribution to the configured hub.",
+  retry: { limit: 6, delaySeconds: 30, backoff: true, maxDelaySeconds: 3600 },
+  concurrency: 4,
+  handler: async (data) => {
+    const { runContributeDeliverJob } = await import("@/core/contribute/service");
+    return runContributeDeliverJob(data);
+  },
+});
+
 export const pruneOldNotifications = defineJob({
   name: "core.pruneNotifications",
   summary: "Delete notifications archived for more than one year.",
@@ -444,4 +455,5 @@ export default [
   escalateNotifications,
   pruneOldNotifications,
   submitIndexNow,
+  deliverContributions,
 ];
