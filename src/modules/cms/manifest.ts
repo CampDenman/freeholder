@@ -41,6 +41,8 @@ export default defineModule({
       "cms.sectionUpdated",
       "cms.sectionCreated",
       "cms.sectionDeleted",
+      "cms.templateUpdated",
+      "cms.templateReset",
       "cms.commentCreated",
       "cms.commentResolved",
       "cms.commentReopened",
