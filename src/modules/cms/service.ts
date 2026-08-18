@@ -64,7 +64,7 @@ import {
   listSectionUsages,
   saveAsSection,
 } from "./section-service";
-import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
+import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
   defaultAnnouncement,
@@ -784,7 +784,15 @@ export const updateSection = defineService({
       throw new ServiceError("not_found", `no section named "${input.key}"`);
     }
     const context = before.kind === "chrome" ? "chrome" : "page";
-    const blocks = parseBlockTree(input.blocks, context);
+    let blocks: BlockNode[];
+    try {
+      blocks = parseBlockTree(input.blocks, context);
+    } catch (error) {
+      if (error instanceof BlockValidationError) {
+        throw new ServiceError("validation", error.message);
+      }
+      throw error;
+    }
 
     await ctx.tx.insert(contentRevisions).values({
       subjectType: "section",
