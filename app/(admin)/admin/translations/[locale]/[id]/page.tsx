@@ -15,6 +15,7 @@ import {
   TranslationEditor,
   type TranslationRow,
 } from "../../TranslationEditor";
+import { draftPageTranslationAction } from "../../../../translation-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +44,10 @@ export default async function TranslatePagePage({
 
   const fields = (existing?.fields ?? {}) as {
     title?: string;
+    seo?: { title?: string; description?: string };
     blocks?: unknown;
   };
+  const pageSeo = (page.workingSeo ?? page.seo) as { title?: string; description?: string };
 
   // The saved translation is read as a *lookup*, never as the structure: the
   // rows come from the source tree, and a translation whose block has since
@@ -70,6 +73,14 @@ export default async function TranslatePagePage({
       group: t("translations.pageItself"),
       label: t("translations.pageTitle"),
       multiline: false,
+    },
+    {
+      key: "seo.description",
+      source: pageSeo.description ?? "",
+      value: fields.seo?.description ?? "",
+      group: t("translations.pageItself"),
+      label: t("translations.seoDescription"),
+      multiline: true,
     },
     ...translatableStrings(source).map((string) => {
       const key = pathKey(string.path);
@@ -103,6 +114,19 @@ export default async function TranslatePagePage({
           {t("translations.heading", { page: page.title, language: languageName })}
         </h1>
       </div>
+      {existing?.status !== "reviewed" ? (
+        <form action={draftPageTranslationAction} className="flex flex-wrap items-center gap-3">
+          <input type="hidden" name="entityId" value={id} />
+          <input type="hidden" name="locale" value={locale} />
+          <button
+            type="submit"
+            className="rounded-md border border-rule px-3 py-1.5 text-sm text-ink"
+          >
+            {t("translations.draft")}
+          </button>
+          <span className="text-sm text-ink-muted">{t("translations.draftHint")}</span>
+        </form>
+      ) : null}
       <TranslationEditor
         entityId={id}
         locale={locale}
