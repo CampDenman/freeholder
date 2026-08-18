@@ -94,9 +94,11 @@ function refuseIfUnsafe(theme: ThemeTokens): void {
   const failures = contrastFailures(theme);
   if (failures.length === 0) return;
   const first = failures[0]!;
+  const hundredths = Math.round(first.ratio * 100);
+  const shown = `${Math.floor(hundredths / 100)}.${String(hundredths % 100).padStart(2, "0")}`;
   throw new ServiceError(
     "validation",
-    `That pairing fails WCAG ${first.scheme} ${first.pair} (${first.ratio.toFixed(2)}:1, need ${first.need}:1).`,
+    `That pairing fails WCAG ${first.scheme} ${first.pair} (${shown}:1, need ${first.need}:1).`,
   );
 }
 
