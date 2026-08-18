@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.23 plugin block proof. Next: C3. |
+| Current focus | C3 living contract. C2.14–C2.23 stacked. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3527,8 +3527,11 @@ project without silent telemetry, and ready to carry money.
   chrome busts layout; `experimentCacheKey` is the Vary surface; page/image/HTML
   budgets on create/update/publish; public experiments still return one variant;
   `tests/core/cms-cache.test.ts`; changeset `cms-cache-budgets.md`)
-- [ ] **C2.23** Prove a plugin can register a schema, renderer, editor fields,
+- [x] **C2.23** Prove a plugin can register a schema, renderer, editor fields,
   migration, sitemap source and seed block with zero core-editor changes.
+  (`proof` module: `notice` block, `proof_notices` + `0073_plain_lilandra.sql`,
+  `proof.publishedPaths` / `seedNotice`, seed block helper; editor unchanged;
+  `tests/core/cms-plugin-proof.test.ts`; changeset `cms-plugin-proof.md`)
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
