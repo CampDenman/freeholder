@@ -27,6 +27,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@freeholder/plugin-kit": [
+        "./packages/plugin-kit/src/index.ts"
       ]
     }
   },

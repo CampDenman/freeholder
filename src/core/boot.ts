@@ -9,6 +9,7 @@
 import { requireProductionEnv } from "@/core/env";
 import { subscribe } from "@/core/events";
 import { sortModules, type ModuleManifest } from "@/core/module";
+import { assertPluginFitsInstance } from "@/core/plugin";
 import { registerService, type Service } from "@/core/service";
 import {
   registerOnboardingModule,
@@ -61,7 +62,11 @@ export async function boot(
     demoFixtures: [],
   };
 
+  const installed = manifests.map((manifest) => manifest.name);
   for (const manifest of sortModules(manifests)) {
+    if (manifest.kind === "plugin") {
+      assertPluginFitsInstance(manifest, { installed });
+    }
     report.modules.push(manifest.name);
 
     // Blocks before services, and both in dependency order: a module's own

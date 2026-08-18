@@ -56,6 +56,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@freeholder/plugin-kit": fileURLToPath(
+        new URL("./packages/plugin-kit/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {
