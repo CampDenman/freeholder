@@ -107,12 +107,12 @@ export default async function PublicLayout({
           aria-label={t("cms.announcement.region")}
           className="bg-accent text-on-accent"
         >
-          <div className="mx-auto max-w-3xl px-6 py-2">{announcementNodes}</div>
+          <div className="mx-auto px-[var(--fh-gutter,1.5rem)] py-2" style={{ maxWidth: "var(--fh-measure, 48rem)" }}>{announcementNodes}</div>
         </div>
       ) : null}
       {headerNodes.length > 0 || navNodes.length > 0 ? (
         <header className="border-b border-rule bg-surface">
-          <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-4">
+          <div className="mx-auto flex w-full flex-col gap-3 px-[var(--fh-gutter,1.5rem)] py-4" style={{ maxWidth: "var(--fh-measure, 48rem)" }}>
             {headerNodes}
             {navNodes}
           </div>
@@ -122,14 +122,15 @@ export default async function PublicLayout({
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto w-full max-w-3xl flex-1 px-6 py-12"
+        className="mx-auto w-full flex-1 px-[var(--fh-gutter,1.5rem)] py-12"
+        style={{ maxWidth: "var(--fh-measure, 48rem)" }}
       >
         {children}
       </main>
 
       {footerNodes.length > 0 ? (
         <footer className="border-t border-rule bg-surface">
-          <div className="mx-auto max-w-3xl px-6 py-6 text-sm text-ink-muted">
+          <div className="mx-auto px-[var(--fh-gutter,1.5rem)] py-6 text-sm text-ink-muted" style={{ maxWidth: "var(--fh-measure, 48rem)" }}>
             {footerNodes}
           </div>
         </footer>

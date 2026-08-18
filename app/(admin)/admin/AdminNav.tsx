@@ -11,6 +11,7 @@ import {
   Layout,
   ListChecks,
   Package,
+  Palette,
   Stack,
   Truck,
   Boat,
@@ -45,6 +46,7 @@ export interface AdminNavLabels {
   pages: string;
   sections: string;
   templates: string;
+  design: string;
   media: string;
   forms: string;
   contacts: string;
@@ -83,6 +85,7 @@ const LINKS = [
   { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
   { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },
   { href: "/admin/templates", key: "templates", module: "cms", Icon: Copy },
+  { href: "/admin/design", key: "design", module: "settings", Icon: Palette },
   { href: "/admin/builder", key: "builder", module: "builder", Icon: MagicWand },
   { href: "/admin/demos", key: "demos", module: "demo", Icon: Flask },
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },

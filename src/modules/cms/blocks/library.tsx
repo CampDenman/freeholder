@@ -394,11 +394,28 @@ export const brand = defineBlock({
     showTagline: z.boolean().default(false),
   }),
   starter: () => ({}),
-  render: ({ props, ctx }) => (
+  resolve: async () => {
+    const { getDesign } = await import("@/core/design/service");
+    const design = await getDesign.call({}, { kind: "anonymous" });
+    if (!design.logoAssetId) return null;
+    const { resolveImage } = await import("@/core/media/service");
+    return resolveImage.call({ id: design.logoAssetId }, { kind: "anonymous" });
+  },
+  render: ({ props, resolved, ctx }) => (
     <a href={ctx.localizeHref?.(props.href) ?? props.href} className="grid gap-0.5">
-      <span className="text-sm font-semibold text-ink">
-        {ctx.business?.name ?? ctx.t("common.appName")}
-      </span>
+      {resolved ? (
+        <img
+          src={resolved.src}
+          alt={resolved.altText ?? ctx.business?.name ?? ctx.t("common.appName")}
+          width={resolved.width ?? undefined}
+          height={resolved.height ?? undefined}
+          className="h-8 w-auto"
+        />
+      ) : (
+        <span className="text-sm font-semibold text-ink">
+          {ctx.business?.name ?? ctx.t("common.appName")}
+        </span>
+      )}
       {props.showTagline && ctx.business?.tagline ? (
         <span className="text-xs text-ink-muted">{ctx.business.tagline}</span>
       ) : null}

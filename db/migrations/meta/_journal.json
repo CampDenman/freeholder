@@ -505,6 +505,13 @@
       "when": 1787014759300,
       "tag": "0071_remarkable_killer_shrike",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1787015343769,
+      "tag": "0072_fluffy_rattler",
+      "breakpoints": true
     }
   ]
 }

@@ -168,8 +168,8 @@ describe("handwritten inline elements", () => {
     const preview = readFileSync("app/(preview)/layout.tsx", "utf8");
     const page = readFileSync("app/(public)/[[...slug]]/page.tsx", "utf8");
 
-    expect(root).toMatch(/<style nonce=\{nonce\}/);
-    expect(preview).toMatch(/<style nonce=\{nonce\}/);
+    expect(root).toMatch(/<style[\s\S]{0,80}nonce=\{nonce\}/);
+    expect(preview).toMatch(/<style[\s\S]{0,80}nonce=\{nonce\}/);
     expect(preview).toMatch(/<script\s+nonce=\{nonce\}/);
     expect(page).toMatch(/<script[\s\S]{0,100}nonce=\{nonce\}/);
   });
