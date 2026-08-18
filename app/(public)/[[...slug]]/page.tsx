@@ -51,7 +51,8 @@ import { recordPageView } from "./pageview";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
 import { assignmentsFor } from "@/modules/cms/experiments";
-import { ANON_HEADER } from "@/modules/analytics/visitor";
+import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
+import { recordExperimentImpressions } from "@/modules/analytics/service";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { CSP_NONCE_HEADER } from "@/core/http/csp";
 
@@ -241,6 +242,18 @@ export default async function PublicPage({
   const blocks = page.blocks as BlockNode[];
   const visitorId = requestHeaders.get(ANON_HEADER);
   const experimentAssignments = assignmentsFor(blocks, visitorId);
+  if (visitorId && Object.keys(experimentAssignments).length > 0) {
+    await recordExperimentImpressions.call(
+      {
+        anonId: visitorId,
+        sessionId: requestHeaders.get(SESSION_HEADER) ?? visitorId,
+        path: path === "" ? "/" : `/${path}`,
+        locale,
+        assignments: experimentAssignments,
+      },
+      ANONYMOUS,
+    ).catch(() => undefined);
+  }
   const rendered = await renderBlocks(blocks, {
     locale,
     t,

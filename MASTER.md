@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.17 experiments. Next: C2.18–C2.23 (skip C2.21). |
+| Current focus | C2.18 experiment reporting. Next: C2.19–C2.23 (skip C2.21). |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3493,8 +3493,13 @@ project without silent telemetry, and ready to carry money.
   control; `experimentCacheKey` for the cache Vary surface; editor preview
   shows every variant; `tests/core/cms-experiments.test.ts`; changeset
   `cms-experiments.md`)
-- [ ] **C2.18** Record experiment impressions/conversions and join outcomes to
+- [x] **C2.18** Record experiment impressions/conversions and join outcomes to
   contacts, bookings, invoices and revenue with statistically honest reporting.
+  (`analytics.recordExperimentImpressions` / `recordExperimentConversion` /
+  `experimentReport`; conversions from forms, quotes, chat, tips, event
+  registration and orders; no winner below 30 unique visitors; admin
+  `/admin/experiments`; `tests/core/analytics-experiments.test.ts`; changeset
+  `cms-experiment-reporting.md`)
 - [ ] **C2.19** Reuse the block editor for email-safe output with restricted
   palette, table rendering, variable slots, inbox preview and test-send.
 - [ ] **C2.20** Enforce one H1, heading order, semantic landmarks, required alt
