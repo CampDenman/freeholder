@@ -4,6 +4,7 @@
 import { usePathname } from "next/navigation";
 import {
   FileText,
+  Copy,
   CreditCard,
   Gauge,
   Image as ImageIcon,
@@ -43,6 +44,7 @@ export interface AdminNavLabels {
   overview: string;
   pages: string;
   sections: string;
+  templates: string;
   media: string;
   forms: string;
   contacts: string;
@@ -80,6 +82,7 @@ const LINKS = [
   { href: "/admin", key: "overview", module: "admin", Icon: Gauge },
   { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
   { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },
+  { href: "/admin/templates", key: "templates", module: "cms", Icon: Copy },
   { href: "/admin/builder", key: "builder", module: "builder", Icon: MagicWand },
   { href: "/admin/demos", key: "demos", module: "demo", Icon: Flask },
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },

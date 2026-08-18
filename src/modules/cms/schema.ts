@@ -231,3 +231,47 @@ export const contentComments = pgTable(
     index("content_comments_review_idx").on(t.pageId, t.reviewState),
   ],
 );
+
+export const TEMPLATE_KINDS = ["page", "post", "product", "service", "email"] as const;
+export const TEMPLATE_PRESETS = [
+  "creator",
+  "service-business",
+  "shop",
+  "everything",
+  "custom",
+] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+export type TemplatePreset = (typeof TEMPLATE_PRESETS)[number];
+
+/**
+ * A full-page (or email) starting tree (C2.13).
+ *
+ * Templates are defaults, never cages: create-from-template copies the blocks
+ * onto a new page, and reset-to-default restores the seeded tree. Per-entity
+ * detach/rejoin is C2.14.
+ */
+export const contentTemplates = pgTable(
+  "content_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    key: text("key").notNull(),
+    kind: text("kind", { enum: TEMPLATE_KINDS }).notNull(),
+    preset: text("preset", { enum: TEMPLATE_PRESETS }).notNull(),
+    name: text("name").notNull(),
+    locale: text("locale").notNull().default("en"),
+    blocks: jsonb("blocks").notNull().default([]),
+    origin: text("origin", { enum: ["system", "owner"] })
+      .notNull()
+      .default("system"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("content_templates_key_preset_locale_idx").on(
+      t.key,
+      t.preset,
+      t.locale,
+    ),
+    index("content_templates_kind_preset_idx").on(t.kind, t.preset),
+  ],
+);

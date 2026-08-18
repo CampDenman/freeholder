@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-17 |
-| Evidence snapshot | `main` at `fadd737` with C1.34 landed via #118. C2.12 save-as-Section / synced instances is on this branch. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` at `fadd737` with C1.34 landed via #118. C2.12 is #119. C2.13 templates are on this branch. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.12 section instances. Next editor items are C2.13 templates through C2.23 (skip C2.21). |
+| Current focus | C2.13 templates. Next: C2.14–C2.23 (skip C2.21). |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3459,8 +3459,12 @@ project without silent telemetry, and ready to carry money.
   `deleteSection` / `listSectionUsages`; palette search includes saved
   Sections; chrome delete refused; `tests/core/cms-sections.test.ts`;
   changeset `cms-section-instances.md`)
-- [ ] **C2.13** Build page/post/product/service/email templates and per-business
+- [x] **C2.13** Build page/post/product/service/email templates and per-business
   presets with reset-to-default, create-from-template and preview.
+  (`content_templates`; `cms.ensureTemplates` / `listTemplates` / `updateTemplate`
+  / `resetTemplate` / `createFromTemplate` / `previewTemplate`; admin
+  `/admin/templates`; new-page picker; `tests/core/cms-templates.test.ts`;
+  changeset `cms-templates.md`)
 - [ ] **C2.14** Add per-entity layout overrides and clean detach/rejoin behavior
   for products, services, posts, locations, events and galleries.
 - [ ] **C2.15** Build visual design controls over semantic tokens: colors,
