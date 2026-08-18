@@ -94,6 +94,8 @@ import {
   getLayout,
   rejoinLayout,
 } from "./layout-service";
+export { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
+import { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -1195,6 +1197,8 @@ export default [
   attachLayout,
   detachLayout,
   rejoinLayout,
+  draftPageTranslation,
+  pageTranslationReport,
   listRevisions,
   restoreRevision,
   createPreviewLink,
