@@ -344,7 +344,7 @@ export const createPage = defineService({
     seo,
   }),
   handler: async (input, ctx) => {
-    const over = budgetMessage(input.blocks as BlockNode[]);
+    const over = budgetMessage(input.blocks);
     if (over) throw new ServiceError("validation", over);
     const [page] = await ctx.tx
       .insert(pages)
