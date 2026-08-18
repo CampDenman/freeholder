@@ -50,6 +50,20 @@ import {
   submitSiteChat,
   submitTipIntent,
 } from "./inbound";
+export {
+  createSection,
+  deleteSection,
+  detachSection,
+  listSectionUsages,
+  saveAsSection,
+} from "./section-service";
+import {
+  createSection,
+  deleteSection,
+  detachSection,
+  listSectionUsages,
+  saveAsSection,
+} from "./section-service";
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -758,7 +772,7 @@ export const updateSection = defineService({
     key: z.string().min(1),
     locale: z.string().default("en"),
     name: z.string().min(1).optional(),
-    blocks: blockTreeSchema("chrome"),
+    blocks: z.unknown(),
   }),
   handler: async (input, ctx) => {
     const [before] = await ctx.tx
@@ -769,6 +783,8 @@ export const updateSection = defineService({
     if (!before) {
       throw new ServiceError("not_found", `no section named "${input.key}"`);
     }
+    const context = before.kind === "chrome" ? "chrome" : "page";
+    const blocks = parseBlockTree(input.blocks, context);
 
     await ctx.tx.insert(contentRevisions).values({
       subjectType: "section",
@@ -780,7 +796,7 @@ export const updateSection = defineService({
 
     const [section] = await ctx.tx
       .update(sections)
-      .set({ blocks: input.blocks, ...(input.name ? { name: input.name } : {}) })
+      .set({ blocks, ...(input.name ? { name: input.name } : {}) })
       .where(eq(sections.id, before.id))
       .returning();
 
@@ -1114,7 +1130,12 @@ export default [
   getSection,
   listSections,
   updateSection,
+  createSection,
   createSectionLocale,
+  saveAsSection,
+  detachSection,
+  listSectionUsages,
+  deleteSection,
   listRevisions,
   restoreRevision,
   createPreviewLink,

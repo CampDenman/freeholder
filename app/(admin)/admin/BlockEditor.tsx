@@ -40,6 +40,7 @@ import {
   removeNodes,
   writeClipboard,
 } from "@/modules/cms/blocks/edit";
+import { replaceNodes, sectionKeyOf } from "@/modules/cms/section-instances";
 import { PreviewCanvas, type PreviewLabels } from "./PreviewCanvas";
 import { RichField } from "./RichField";
 
@@ -54,6 +55,8 @@ export interface EditorField {
 
 export interface EditorBlockType {
   type: string;
+  /** Distinct palette row when several entries share a type (saved Sections). */
+  paletteId?: string;
   label: string;
   container: boolean;
   fields: EditorField[];
@@ -99,6 +102,9 @@ export interface EditorLabels {
   bullet: string;
   numbered: string;
   richHint: string;
+  saveAsSection?: string;
+  detachSection?: string;
+  sectionName?: string;
 }
 
 /** Distinct enough per session; ids only need to be stable within a tree. */
@@ -114,6 +120,8 @@ export function BlockEditor({
   save,
   onKeepMine,
   onReloadDraft,
+  onSaveAsSection,
+  onDetachSection,
 }: {
   initialBlocks: EditorNode[];
   blockTypes: EditorBlockType[];
@@ -140,6 +148,13 @@ export function BlockEditor({
     version?: number;
     blocks?: EditorNode[];
   }>;
+  onSaveAsSection?: (
+    nodes: EditorNode[],
+    name: string,
+  ) => Promise<{ error?: string; instance?: EditorNode }>;
+  onDetachSection?: (
+    node: EditorNode,
+  ) => Promise<{ error?: string; nodes?: EditorNode[] }>;
 }) {
   const [blocks, setBlocks] = useState<EditorNode[]>(initialBlocks);
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -332,6 +347,13 @@ export function BlockEditor({
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       <div className="grid gap-4">
+        <SectionActions
+          labels={labels}
+          selected={collectById(blocks, selectedSet())}
+          onSaveAsSection={onSaveAsSection}
+          onDetachSection={onDetachSection}
+          onReplace={(ids, next) => mutate(replaceNodes(blocks, ids, next))}
+        />
         <BlockList
           nodes={blocks}
           onChange={mutate}
@@ -525,7 +547,7 @@ function BlockList({
     onChange(next);
   };
 
-  const add = (type: string) => {
+  const add = (type: string, starter?: Record<string, unknown>) => {
     const definition = byType.get(type);
     if (!definition) return;
     onChange([
@@ -533,7 +555,7 @@ function BlockList({
       {
         id: newId(type),
         type,
-        props: structuredClone(definition.starter),
+        props: structuredClone(starter ?? definition.starter),
         ...(definition.container ? { children: [] } : {}),
       },
     ]);
@@ -914,6 +936,97 @@ function Field({
   );
 }
 
+function SectionActions({
+  labels,
+  selected,
+  onSaveAsSection,
+  onDetachSection,
+  onReplace,
+}: {
+  labels: EditorLabels;
+  selected: EditorNode[];
+  onSaveAsSection?: (
+    nodes: EditorNode[],
+    name: string,
+  ) => Promise<{ error?: string; instance?: EditorNode }>;
+  onDetachSection?: (
+    node: EditorNode,
+  ) => Promise<{ error?: string; nodes?: EditorNode[] }>;
+  onReplace: (ids: Set<string>, next: EditorNode[]) => void;
+}) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  if (!onSaveAsSection && !onDetachSection) return null;
+  if (selected.length === 0) return null;
+  const only = selected.length === 1 ? selected[0] : undefined;
+  const canDetach = Boolean(only && sectionKeyOf(only) && onDetachSection);
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      {onSaveAsSection ? (
+        <>
+          <label className="grid gap-1">
+            <span className="font-mono text-xs text-ink-muted">
+              {labels.sectionName ?? "Section name"}
+            </span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+            />
+          </label>
+          <Button
+            type="button"
+            variant="quiet"
+            onClick={() => {
+              if (!name.trim()) return;
+              void onSaveAsSection(selected, name.trim()).then((result) => {
+                if (result.error) {
+                  setError(result.error);
+                  return;
+                }
+                if (result.instance) {
+                  onReplace(new Set(selected.map((node) => node.id)), [
+                    result.instance,
+                  ]);
+                  setName("");
+                  setError(undefined);
+                }
+              });
+            }}
+          >
+            {labels.saveAsSection ?? "Save as Section"}
+          </Button>
+        </>
+      ) : null}
+      {canDetach ? (
+        <Button
+          type="button"
+          variant="quiet"
+          onClick={() => {
+            void onDetachSection!(only!).then((result) => {
+              if (result.error) {
+                setError(result.error);
+                return;
+              }
+              if (result.nodes) {
+                onReplace(new Set([only!.id]), result.nodes);
+                setError(undefined);
+              }
+            });
+          }}
+        >
+          {labels.detachSection ?? "Detach"}
+        </Button>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------ add a block */
 
 function AddBlock({
@@ -923,7 +1036,7 @@ function AddBlock({
 }: {
   blockTypes: EditorBlockType[];
   labels: EditorLabels;
-  onAdd: (type: string) => void;
+  onAdd: (type: string, starter?: Record<string, unknown>) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -933,7 +1046,12 @@ function AddBlock({
     return () => window.removeEventListener("freeholder-slash", openSlash);
   }, []);
   const matches = filterPalette(
-    blockTypes.map((block) => ({ type: block.type, label: block.label })),
+    blockTypes.map((block) => ({
+      type: block.paletteId ?? block.type,
+      insertType: block.type,
+      label: block.label,
+      starter: block.starter,
+    })),
     query,
   );
 
@@ -959,7 +1077,7 @@ function AddBlock({
           onKeyDown={(event) => {
             if (event.key === "Enter" && matches[0]) {
               event.preventDefault();
-              onAdd(matches[0].type);
+              onAdd(matches[0].insertType, matches[0].starter);
               setOpen(false);
               setQuery("");
             }
@@ -978,7 +1096,7 @@ function AddBlock({
             <button
               type="button"
               onClick={() => {
-                onAdd(block.type);
+                onAdd(block.insertType, block.starter);
                 setOpen(false);
                 setQuery("");
               }}

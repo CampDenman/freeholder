@@ -827,3 +827,41 @@ export const locationsIndex = defineBlock({
     );
   },
 });
+
+/**
+ * A live instance of a reusable Section (C2.12). The page stores a key, not a
+ * copy of the tree — editing the Section updates every instance. Detach is
+ * how a page keeps a local copy instead.
+ */
+export const sectionInstance = defineBlock({
+  type: "sectionInstance",
+  labelKey: "cms.block.sectionInstance",
+  contexts: ["page"],
+  schema: z.object({
+    sectionKey: z.string().min(1).max(80),
+  }),
+  starter: () => ({ sectionKey: "section" }),
+  resolve: async (props, ctx) => {
+    const { getSection } = await import("../service");
+    const { parseBlockTree } = await import("./registry");
+    const { renderBlocks } = await import("../render");
+    const section = await getSection.call(
+      { key: props.sectionKey, locale: ctx.locale },
+      { kind: "anonymous" },
+    );
+    if (!section) return null;
+    const tree = parseBlockTree(section.blocks, "page");
+    return {
+      name: section.name,
+      nodes: await renderBlocks(tree, ctx),
+    };
+  },
+  render: ({ resolved, ctx }) => {
+    if (!resolved) {
+      return ctx.identifyBlocks ? (
+        <p className="text-sm text-ink-muted">{ctx.t("cms.section.missing")}</p>
+      ) : null;
+    }
+    return <div className="grid gap-6">{resolved.nodes}</div>;
+  },
+});

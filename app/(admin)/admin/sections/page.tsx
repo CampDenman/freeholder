@@ -8,13 +8,18 @@ import { currentBusiness } from "@/core/settings/read";
 import { languageName } from "@/core/i18n/customer";
 import { hasModuleAccess } from "@/core/service";
 import { getT } from "../../../i18n";
-import { createSectionLocaleAction } from "../../cms-actions";
+import { createSectionLocaleAction, deleteSectionAction } from "../../cms-actions";
 import { requireStaffActor } from "../guard";
 
 export const dynamic = "force-dynamic";
 
-export default async function SectionsPage() {
+export default async function SectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const actor = await requireStaffActor("cms");
+  const query = await searchParams;
   const [sections, business, t] = await Promise.all([
     listSections.call({}, actor),
     currentBusiness(),
@@ -39,6 +44,11 @@ export default async function SectionsPage() {
           {t("cms.sections.title")}
         </h1>
         <p className="mt-1 text-sm text-ink-muted">{t("cms.sections.intro")}</p>
+        {query.error ? (
+          <p role="alert" className="mt-2 text-sm text-danger">
+            {query.error}
+          </p>
+        ) : null}
       </div>
       <Card>
         {sourceSections.length === 0 ? (
@@ -97,6 +107,17 @@ export default async function SectionsPage() {
                       </form>
                     );
                   })}
+                  {canManage && section.kind === "reusable" ? (
+                    <form action={deleteSectionAction}>
+                      <input type="hidden" name="key" value={section.key} />
+                      <button
+                        type="submit"
+                        className="rounded-md border border-rule px-3 py-1.5 text-sm text-danger"
+                      >
+                        {t("cms.sections.delete")}
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               </li>
             ))}

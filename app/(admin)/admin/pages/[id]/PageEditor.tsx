@@ -14,8 +14,10 @@ import {
   type EditorNode,
 } from "../../BlockEditor";
 import {
+  detachSectionAction,
   mergePageBlocksAction,
   reloadWorkingDraftAction,
+  saveAsSectionAction,
   savePageBlocksAction,
 } from "../../../cms-actions";
 
@@ -57,6 +59,19 @@ export function PageEditor({
           version: result.version,
           blocks: result.blocks as EditorNode[] | undefined,
         };
+      }}
+      onSaveAsSection={async (nodes, name) => {
+        const result = await saveAsSectionAction(name, nodes);
+        return {
+          error: result.error,
+          instance: result.instance as EditorNode | undefined,
+        };
+      }}
+      onDetachSection={async (node) => {
+        const key = node.props.sectionKey;
+        if (typeof key !== "string") return { error: "That block is not a Section." };
+        const result = await detachSectionAction(key);
+        return { error: result.error, nodes: result.nodes as EditorNode[] | undefined };
       }}
     />
   );

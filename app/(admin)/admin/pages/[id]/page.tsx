@@ -9,7 +9,7 @@ import { notFound } from "next/navigation";
 import { ArrowSquareOut, ClockCounterClockwise } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
 import { ServiceError } from "@/core/service";
-import { getPage, listRevisions } from "@/modules/cms/service";
+import { getPage, listRevisions, listSections } from "@/modules/cms/service";
 import {
   compareRevisions,
   listPreviewLinks,
@@ -23,7 +23,7 @@ import type { BlockNode } from "@/modules/cms/blocks/types";
 import { Card, CardBody, CardHeader } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
-import { editorBlockTypes, editorLabels } from "../../editorLabels";
+import { editorBlockTypes, editorLabels, sectionPaletteEntries } from "../../editorLabels";
 import { PageEditor } from "./PageEditor";
 import { RevisionList } from "./RevisionList";
 import { PublishToggle } from "./PublishToggle";
@@ -51,7 +51,7 @@ export default async function EditPagePage({
     throw error;
   });
 
-  const [business, revisions, library, t, links, lease, diff, comments, staff] =
+  const [business, revisions, library, t, links, lease, diff, comments, staff, sectionRows] =
     await Promise.all([
       currentBusiness(),
       listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
@@ -67,6 +67,7 @@ export default async function EditPagePage({
         : Promise.resolve(null),
       listComments.call({ pageId: page.id, includeResolved: true }, actor),
       listRoleUsers.call({}, actor).catch(() => [] as { id: string; email: string }[]),
+      listSections.call({}, actor),
     ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -118,15 +119,23 @@ export default async function EditPagePage({
         id={page.id}
         initialVersion={page.version}
         initialBlocks={(page.workingBlocks ?? page.blocks) as BlockNode[]}
-        blockTypes={editorBlockTypes(
-          t,
-          "page",
-          library.rows.map((a) => ({
-            id: a.id,
-            filename: a.filename,
-            kind: a.kind,
-          })),
-        )}
+        blockTypes={[
+          ...editorBlockTypes(
+            t,
+            "page",
+            library.rows.map((a) => ({
+              id: a.id,
+              filename: a.filename,
+              kind: a.kind,
+            })),
+          ),
+          ...sectionPaletteEntries(
+            t,
+            sectionRows
+              .filter((section) => section.kind === "reusable")
+              .map((section) => ({ key: section.key, name: section.name })),
+          ),
+        ]}
         labels={editorLabels(t)}
       />
 
