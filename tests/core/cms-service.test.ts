@@ -218,7 +218,7 @@ describe.runIf(hasDatabase)("the cms module", () => {
         { subjectType: "page", subjectId: page.id },
         STAFF,
       );
-      expect(revisions).toHaveLength(1);
+      expect(revisions.map((revision) => revision.kind)).toEqual(["autosave", "create"]);
       expect((revisions[0]!.blocks as { props: { text: string } }[])[0]!.props.text).toBe(
         "First",
       );
@@ -256,7 +256,11 @@ describe.runIf(hasDatabase)("the cms module", () => {
       expect(restored).toBeNull();
       // §37 wants every change reversible in one action — including a restore,
       // which is why restoring writes a revision of what it replaced.
-      expect(revisionsAfter).toHaveLength(2);
+      expect(revisionsAfter.map((revision) => revision.kind)).toEqual([
+        "restore",
+        "autosave",
+        "create",
+      ]);
       expect(
         (revisionsAfter[0]!.blocks as { props: { text: string } }[])[0]!.props.text,
       ).toBe("Replaced");

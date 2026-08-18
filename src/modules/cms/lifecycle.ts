@@ -5,6 +5,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, isNull, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { actorString, defineService, ServiceError } from "@/core/service";
+import { writeRevision } from "./history";
 import { contentPreviewLinks, contentRevisions, pages } from "./schema";
 
 const pageId = z.string().uuid();
@@ -233,6 +234,21 @@ export const schedulePage = defineService({
       })
       .where(eq(pages.id, input.id))
       .returning();
+    const scheduledBoth = page!.scheduledPublishAt && page!.scheduledUnpublishAt;
+    await writeRevision(ctx.tx, {
+      subjectType: "page",
+      subjectId: page!.id,
+      title: page!.workingTitle ?? page!.title,
+      blocks: page!.workingBlocks ?? page!.blocks,
+      seo: page!.workingSeo ?? page!.seo,
+      kind: "schedule",
+      name: scheduledBoth
+        ? "Scheduled publish and unpublish"
+        : page!.scheduledUnpublishAt && !page!.scheduledPublishAt
+          ? "Scheduled unpublish"
+          : "Scheduled publish",
+      actor: actorString(ctx.actor),
+    });
     ctx.setSubject("page", page!.id);
     ctx.queueEvent("cms.pageScheduled", {
       pageId: page!.id,
@@ -309,6 +325,16 @@ export const requestApproval = defineService({
       })
       .where(eq(pages.id, input.id))
       .returning();
+    await writeRevision(ctx.tx, {
+      subjectType: "page",
+      subjectId: page!.id,
+      title: page!.workingTitle ?? page!.title,
+      blocks: page!.workingBlocks ?? page!.blocks,
+      seo: page!.workingSeo ?? page!.seo,
+      kind: "approval",
+      name: "Requested",
+      actor: actorString(ctx.actor),
+    });
     ctx.setSubject("page", page!.id);
     ctx.queueEvent("cms.pageApprovalChanged", {
       pageId: page!.id,
@@ -345,6 +371,16 @@ export const decideApproval = defineService({
       })
       .where(eq(pages.id, input.id))
       .returning();
+    await writeRevision(ctx.tx, {
+      subjectType: "page",
+      subjectId: page!.id,
+      title: page!.workingTitle ?? page!.title,
+      blocks: page!.workingBlocks ?? page!.blocks,
+      seo: page!.workingSeo ?? page!.seo,
+      kind: "approval",
+      name: input.approved ? "Approved" : "Rejected",
+      actor: actorString(ctx.actor),
+    });
     ctx.setSubject("page", page!.id);
     ctx.queueEvent("cms.pageApprovalChanged", {
       pageId: page!.id,
@@ -366,22 +402,19 @@ export const snapshotRevision = defineService({
   handler: async (input, ctx) => {
     const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
-    const [revision] = await ctx.tx
-      .insert(contentRevisions)
-      .values({
-        subjectType: "page",
-        subjectId: page.id,
-        title: page.workingTitle ?? page.title,
-        blocks: page.workingBlocks ?? page.blocks,
-        seo: page.workingSeo ?? page.seo,
-        name: input.name,
-        kind: "named",
-        actor: actorString(ctx.actor),
-      })
-      .returning();
+    const revision = await writeRevision(ctx.tx, {
+      subjectType: "page",
+      subjectId: page.id,
+      title: page.workingTitle ?? page.title,
+      blocks: page.workingBlocks ?? page.blocks,
+      seo: page.workingSeo ?? page.seo,
+      name: input.name,
+      kind: "named",
+      actor: actorString(ctx.actor),
+    });
     ctx.setSubject("page", page.id);
-    ctx.queueEvent("cms.revisionNamed", { pageId: page.id, revisionId: revision!.id });
-    return revision!;
+    ctx.queueEvent("cms.revisionNamed", { pageId: page.id, revisionId: revision.id });
+    return revision;
   },
 });
 

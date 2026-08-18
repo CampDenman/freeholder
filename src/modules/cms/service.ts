@@ -15,6 +15,7 @@ import { getTranslation, translatedIds } from "@/core/i18n/service";
 import { recordRedirect } from "@/core/seo/service";
 import { queueIndexNow } from "@/core/seo/indexnow";
 import { kindFromSlug, priorityFromSlug } from "@/core/seo/classify";
+import { resolveAuthors, writeRevision } from "./history";
 import { contentRevisions, pages, sections } from "./schema";
 import {
   applyDueSchedules,
@@ -356,6 +357,15 @@ export const createPage = defineService({
         }
         throw error;
       });
+    await writeRevision(ctx.tx, {
+      subjectType: "page",
+      subjectId: page!.id,
+      title: page!.title,
+      blocks: page!.blocks,
+      seo: page!.seo,
+      kind: "create",
+      actor: actorString(ctx.actor),
+    });
     ctx.setSubject("page", page!.id);
     ctx.queueEvent("cms.pageCreated", { pageId: page!.id, slug: page!.slug });
     return page!;
@@ -572,7 +582,7 @@ export const updatePage = defineService({
       );
     }
 
-    await ctx.tx.insert(contentRevisions).values({
+    await writeRevision(ctx.tx, {
       subjectType: "page",
       subjectId: before.id,
       title: before.workingTitle ?? before.title,
@@ -719,18 +729,16 @@ export const publishPage = defineService({
       const over = budgetMessage(tree);
       if (over) throw new ServiceError("validation", over);
     }
-    if (input.published) {
-      await ctx.tx.insert(contentRevisions).values({
-        subjectType: "page",
-        subjectId: before.id,
-        title,
-        blocks,
-        seo,
-        kind: "publish",
-        name: "Published",
-        actor: actorString(ctx.actor),
-      });
-    }
+    await writeRevision(ctx.tx, {
+      subjectType: "page",
+      subjectId: before.id,
+      title,
+      blocks,
+      seo,
+      kind: input.published ? "publish" : "unpublish",
+      name: input.published ? "Published" : "Unpublished",
+      actor: actorString(ctx.actor),
+    });
     const [page] = await ctx.tx
       .update(pages)
       .set({
@@ -867,11 +875,12 @@ export const updateSection = defineService({
       throw error;
     }
 
-    await ctx.tx.insert(contentRevisions).values({
+    await writeRevision(ctx.tx, {
       subjectType: "section",
       subjectId: before.id,
       title: before.name,
       blocks: before.blocks,
+      kind: "autosave",
       actor: actorString(ctx.actor),
     });
 
@@ -949,6 +958,14 @@ export const createSectionLocale = defineService({
           blocks: parseBlockTree(source.blocks, "chrome"),
         })
         .returning();
+      await writeRevision(ctx.tx, {
+        subjectType: "section",
+        subjectId: created!.id,
+        title: created!.name,
+        blocks: created!.blocks,
+        kind: "create",
+        actor: actorString(ctx.actor),
+      });
       ctx.setSubject("section", created!.id);
       ctx.queueEvent("cms.sectionLocalized", {
         key: source.key,
@@ -968,26 +985,103 @@ export const createSectionLocale = defineService({
 
 export const listRevisions = defineService({
   name: "cms.listRevisions",
-  summary: "Earlier versions of a page or section.",
+  summary: "Attributed earlier versions of a page or section.",
   kind: "query",
   permission: "scoped",
   input: z.object({
     subjectType: z.enum(["page", "section"]),
     subjectId: z.string().uuid(),
-    limit: z.number().int().min(1).max(50).default(20),
+    actor: z.string().min(1).optional(),
+    limit: z.number().int().min(1).max(100).default(50),
   }),
-  handler: (input, ctx) =>
-    ctx.tx
+  handler: async (input, ctx) => {
+    const rows = await ctx.tx
       .select()
       .from(contentRevisions)
       .where(
         and(
           eq(contentRevisions.subjectType, input.subjectType),
           eq(contentRevisions.subjectId, input.subjectId),
+          ...(input.actor ? [eq(contentRevisions.actor, input.actor)] : []),
         ),
       )
       .orderBy(desc(contentRevisions.createdAt))
-      .limit(input.limit),
+      .limit(input.limit);
+    const authors = await resolveAuthors(
+      ctx.tx,
+      rows.map((row) => row.actor),
+    );
+    return rows.map((row) => {
+      const author = authors.get(row.actor) ?? {
+        actor: row.actor,
+        kind: "anonymous" as const,
+        id: null,
+        label: row.actor,
+      };
+      return {
+        ...row,
+        authorKind: author.kind,
+        authorId: author.id,
+        authorLabel: author.label,
+      };
+    });
+  },
+});
+
+/**
+ * Who created, last edited and last published a page, plus every distinct
+ * author on the trail. Derived from revisions so there is one record of
+ * authorship, not a second set of columns that can drift (C2.02).
+ */
+export const pageAuthorSummary = defineService({
+  name: "cms.pageAuthorSummary",
+  summary: "The people who have authored a page, and the latest of each role.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ pageId: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    const events = await ctx.call(listRevisions, {
+      subjectType: "page",
+      subjectId: input.pageId,
+      limit: 100,
+    });
+    const oldest = events.at(-1);
+    const newest = events[0];
+    const published = events.find((event) => event.kind === "publish");
+    const authors = new Map<
+      string,
+      { actor: string; kind: string; id: string | null; label: string }
+    >();
+    for (const event of [...events].reverse()) {
+      authors.set(event.actor, {
+        actor: event.actor,
+        kind: event.authorKind,
+        id: event.authorId,
+        label: event.authorLabel,
+      });
+    }
+    const credit = (
+      event:
+        | (typeof events)[number]
+        | undefined,
+    ) =>
+      event
+        ? {
+            at: event.createdAt,
+            actor: event.actor,
+            authorKind: event.authorKind,
+            authorId: event.authorId,
+            authorLabel: event.authorLabel,
+            kind: event.kind,
+          }
+        : null;
+    return {
+      created: credit(oldest),
+      lastEdited: credit(newest),
+      lastPublished: credit(published),
+      authors: [...authors.values()],
+    };
+  },
 });
 
 /**
@@ -1023,13 +1117,14 @@ export const restoreRevision = defineService({
         .limit(1);
       if (!before) throw new ServiceError("not_found", "that page is gone");
 
-      await ctx.tx.insert(contentRevisions).values({
+      await writeRevision(ctx.tx, {
         subjectType: "page",
         subjectId: before.id,
         title: before.workingTitle ?? before.title,
         blocks: before.workingBlocks ?? before.blocks,
         seo: before.workingSeo ?? before.seo,
-        kind: "autosave",
+        kind: "restore",
+        name: "Before restore",
         actor,
       });
       const restoredTitle = revision.title ?? before.title;
@@ -1062,11 +1157,13 @@ export const restoreRevision = defineService({
       .limit(1);
     if (!before) throw new ServiceError("not_found", "that section is gone");
 
-    await ctx.tx.insert(contentRevisions).values({
+    await writeRevision(ctx.tx, {
       subjectType: "section",
       subjectId: before.id,
       title: before.name,
       blocks: before.blocks,
+      kind: "restore",
+      name: "Before restore",
       actor,
     });
     const [section] = await ctx.tx
@@ -1237,6 +1334,7 @@ export default [
   previewEmail,
   testSendEmail,
   listRevisions,
+  pageAuthorSummary,
   restoreRevision,
   createPreviewLink,
   listPreviewLinks,

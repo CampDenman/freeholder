@@ -9,7 +9,13 @@ import { notFound } from "next/navigation";
 import { ArrowSquareOut, ClockCounterClockwise } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
 import { ServiceError } from "@/core/service";
-import { getLayout, getPage, listRevisions, listSections } from "@/modules/cms/service";
+import {
+  getLayout,
+  getPage,
+  listRevisions,
+  listSections,
+  pageAuthorSummary,
+} from "@/modules/cms/service";
 import {
   compareRevisions,
   listPreviewLinks,
@@ -52,10 +58,11 @@ export default async function EditPagePage({
     throw error;
   });
 
-  const [business, revisions, library, t, links, lease, diff, comments, staff, sectionRows, layout] =
+  const [business, revisions, authors, library, t, links, lease, diff, comments, staff, sectionRows, layout] =
     await Promise.all([
       currentBusiness(),
       listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
+      pageAuthorSummary.call({ pageId: page.id }, actor),
       listAssets.call({}, actor),
       getT(),
       listPreviewLinks.call({ pageId: page.id }, actor),
@@ -244,12 +251,29 @@ export default async function EditPagePage({
           ) : (
             <RevisionList
               pageId={page.id}
+              authors={authors.authors.map((person) =>
+                person.kind === "system"
+                  ? t("cms.revisions.authorSystem")
+                  : person.kind === "anonymous"
+                    ? t("cms.revisions.authorAnonymous")
+                    : person.kind === "agent"
+                      ? t("cms.revisions.authorAgent", { name: person.label })
+                      : person.label,
+              )}
               revisions={revisions.map((revision) => ({
                 id: revision.id,
                 when: formatDateTime(revision.createdAt, timezone, locale),
-                actor: revision.actor,
+                author:
+                  revision.authorKind === "system"
+                    ? t("cms.revisions.authorSystem")
+                    : revision.authorKind === "anonymous"
+                      ? t("cms.revisions.authorAnonymous")
+                      : revision.authorKind === "agent"
+                        ? t("cms.revisions.authorAgent", { name: revision.authorLabel })
+                        : revision.authorLabel,
                 name: revision.name,
                 kind: revision.kind,
+                kindLabel: t(`cms.revisions.kind.${revision.kind}`),
               }))}
               labels={{
                 restore: t("cms.revisions.restoreDraft"),
@@ -258,6 +282,7 @@ export default async function EditPagePage({
                 namePlaceholder: t("cms.revisions.namePlaceholder"),
                 saveNamed: t("cms.revisions.saveNamed"),
                 unnamed: t("cms.revisions.unnamed"),
+                authors: t("cms.revisions.authors"),
               }}
             />
           )}

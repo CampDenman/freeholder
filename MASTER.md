@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` at `8ffac43` with C2.13 landed via #124. C2.14–C2.18 are stacked PRs #121–#126. C2.19 email editor is on this branch. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` at `a6f9b40` with C2.12–C2.23 landed. This change closes C2.02 (complete author history). C2 is complete. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3 living contract. C2.14–C2.23 stacked. |
+| Current focus | C3 living contract, starting at C3.01 required output schemas. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3430,8 +3430,15 @@ project without silent telemetry, and ready to carry money.
 
 - [x] **C2.01** Separate working drafts from published revisions for every
   public entity; autosave must never mutate the live version.
-- [ ] **C2.02** Add preview links, scheduled publish/unpublish, approval state,
+- [x] **C2.02** Add preview links, scheduled publish/unpublish, approval state,
   compare/diff, named revisions, restore-as-draft and complete author history.
+  (`cms.createPreviewLink` / `schedulePage` / `requestApproval` /
+  `compareRevisions` / `snapshotRevision` / `restoreRevision`;
+  `cms.listRevisions` resolves author emails and can filter by actor;
+  `cms.pageAuthorSummary`; create/save/publish/unpublish/restore/schedule/
+  approval write attributed revisions; editor lists authors. Coverage in
+  `tests/core/cms-lifecycle.test.ts` and `tests/core/cms-history.test.ts`;
+  changeset `cms-author-history.md`.)
 - [x] **C2.03** Add optimistic concurrency/version tokens, presence, edit
   leases, conflict detection and an explicit merge/reload workflow.
 - [x] **C2.04** Add comments, mentions, review requests and resolved threads

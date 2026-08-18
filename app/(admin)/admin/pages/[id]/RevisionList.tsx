@@ -14,16 +14,19 @@ import {
 export function RevisionList({
   pageId,
   revisions,
+  authors,
   labels,
 }: {
   pageId: string;
   revisions: {
     id: string;
     when: string;
-    actor: string;
+    author: string;
     name: string | null;
     kind: string;
+    kindLabel: string;
   }[];
+  authors: string[];
   labels: {
     restore: string;
     compare: string;
@@ -31,10 +34,16 @@ export function RevisionList({
     namePlaceholder: string;
     saveNamed: string;
     unnamed: string;
+    authors: string;
   };
 }) {
   return (
     <div className="grid gap-4">
+      {authors.length > 0 ? (
+        <p className="text-sm text-ink-muted">
+          {labels.authors} {authors.join(", ")}
+        </p>
+      ) : null}
       <form action={snapshotRevisionAction} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="id" value={pageId} />
         <label className="grid gap-1 text-sm">
@@ -62,10 +71,10 @@ export function RevisionList({
           >
             <div className="grid gap-0.5">
               <span className="text-sm text-ink">
-                {revision.name ?? labels.unnamed}
+                {revision.name ?? revision.kindLabel ?? labels.unnamed}
               </span>
               <time className="font-mono text-xs text-ink-muted tabular-nums">
-                {revision.when} · {revision.actor}
+                {revision.when} · {revision.author}
               </time>
             </div>
             <div className="ms-auto flex flex-wrap items-center gap-2">

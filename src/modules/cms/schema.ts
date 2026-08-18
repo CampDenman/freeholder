@@ -132,7 +132,18 @@ export const contentRevisions = pgTable(
     seo: jsonb("seo").notNull().default({}),
     /** Owner-given name for a snapshot they may want again (C2.02). */
     name: text("name"),
-    kind: text("kind", { enum: ["autosave", "named", "publish"] })
+    kind: text("kind", {
+      enum: [
+        "create",
+        "autosave",
+        "named",
+        "publish",
+        "unpublish",
+        "restore",
+        "schedule",
+        "approval",
+      ],
+    })
       .notNull()
       .default("autosave"),
     /** "user:<id>", "agent:<key-name>", "system" — as everywhere else. */

@@ -3,7 +3,8 @@
 // Save-as-Section, detach, and dependency-aware deletion (C2.12).
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { actorString, defineService, ServiceError, type Tx } from "@/core/service";
+import { writeRevision } from "./history";
 import { isUniqueViolation } from "@/core/db";
 import { pages, sections } from "./schema";
 import { blockTreeSchema, parseBlockTree } from "./blocks/registry";
@@ -87,6 +88,14 @@ export const createSection = defineService({
             blocks: input.blocks,
           })
           .returning();
+        await writeRevision(ctx.tx, {
+          subjectType: "section",
+          subjectId: created!.id,
+          title: created!.name,
+          blocks: created!.blocks,
+          kind: "create",
+          actor: actorString(ctx.actor),
+        });
         ctx.setSubject("section", created!.id);
         ctx.queueEvent("cms.sectionCreated", { key: created!.key });
         return created!;
