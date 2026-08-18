@@ -1199,7 +1199,7 @@ freeholder/                          # Apache-2.0
 │
 ├── locales/                         # ICU MessageFormat catalogs: en.json, fr.json, es.json…
 ├── db/migrations/
-├── seed/                            # demo business: "Aurora Coast Photography" — full fake data
+├── seed/                            # demo business packs: Aurora Coast Photography (default) and Law Firm Edition (`FREEHOLDER_EDITION=law-firm`)
 ├── scripts/                         # setup, seed, doctor (env checks), export
 ├── tests/
 │
