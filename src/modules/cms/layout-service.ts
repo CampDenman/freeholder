@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Per-entity layout detach / rejoin (C2.14).
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
