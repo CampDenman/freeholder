@@ -498,6 +498,13 @@
       "when": 1787014510381,
       "tag": "0070_cool_william_stryker",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1787014759300,
+      "tag": "0071_remarkable_killer_shrike",
+      "breakpoints": true
     }
   ]
 }

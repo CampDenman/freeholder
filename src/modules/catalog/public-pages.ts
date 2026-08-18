@@ -11,12 +11,15 @@ import type { ServiceContext } from "@/core/service";
 import { pages } from "@/modules/cms/schema";
 import { addNavLink, NAV_SECTION_KEYS } from "@/modules/cms/chrome-nav";
 import {
+  attachLayout,
   createPage,
+  getLayout,
   getSection,
   publishPage,
   updatePage,
   updateSection,
 } from "@/modules/cms/service";
+import { blocksFromTemplate } from "@/modules/cms/layout-service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { getBusiness } from "@/core/settings/service";
 import { products } from "./schema";
@@ -27,11 +30,17 @@ function pathFor(slug: string): string {
   return `${PRODUCTS_INDEX_SLUG}/${slug}`;
 }
 
-function productBlocks(productId: string, slug: string, name: string): BlockNode[] {
-  return [
-    { id: "product-h1", type: "heading", props: { text: name, level: 1, align: "start" } },
-    { id: "product-detail", type: "productDetail", props: { productId, slug } },
-  ];
+async function productLayout(
+  ctx: ServiceContext,
+  product: { id: string; slug: string; name: string; kind: string },
+  locale: string,
+) {
+  return blocksFromTemplate(
+    ctx,
+    product.kind === "service" ? "service" : "product",
+    { title: product.name, slug: product.slug, productId: product.id },
+    locale,
+  );
 }
 
 function indexBlocks(title: string): BlockNode[] {
@@ -119,13 +128,22 @@ export async function syncProductPublicPage(
 
   if (!owned && !shouldPublish) return;
 
+  const layout = await productLayout(ctx, product, locale);
+
   if (!owned) {
     const created = await ctx.callAsSystem(createPage, {
       slug: target,
       locale,
       title: product.name,
-      blocks: productBlocks(product.id, product.slug, product.name),
+      blocks: layout.blocks,
       seo: { description: describeProduct(product) },
+    });
+    await ctx.callAsSystem(attachLayout, {
+      pageId: created.id,
+      entityType: product.kind === "service" ? "service" : "product",
+      entityId: product.id,
+      templateKey: layout.templateKey,
+      detached: false,
     });
     if (shouldPublish) {
       await ctx.callAsSystem(publishPage, { id: created.id, published: true });
@@ -133,11 +151,23 @@ export async function syncProductPublicPage(
     return;
   }
 
+  const attachment = await ctx.callAsSystem(getLayout, { pageId: owned });
   await ctx.callAsSystem(updatePage, {
     id: owned,
     slug: target,
     title: product.name,
     seo: { description: describeProduct(product) },
+    ...(attachment && !attachment.detached ? { blocks: layout.blocks } : {}),
   });
+  if (attachment && !attachment.detached) {
+    // updatePage auto-detaches when blocks change; re-attach as following.
+    await ctx.callAsSystem(attachLayout, {
+      pageId: owned,
+      entityType: product.kind === "service" ? "service" : "product",
+      entityId: product.id,
+      templateKey: layout.templateKey,
+      detached: false,
+    });
+  }
   await ctx.callAsSystem(publishPage, { id: owned, published: shouldPublish });
 }

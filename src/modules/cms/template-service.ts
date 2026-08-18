@@ -226,6 +226,14 @@ export const createFromTemplate = defineService({
       locale: input.locale,
       blocks,
     });
+    const { attachLayout } = await import("./layout-service");
+    await ctx.call(attachLayout, {
+      pageId: page.id,
+      entityType: template.kind === "post" ? "post" : "page",
+      entityId: page.id,
+      templateKey: template.key,
+      detached: true,
+    });
     return {
       kind: template.kind,
       templateKey: template.key,
