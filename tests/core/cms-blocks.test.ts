@@ -71,6 +71,10 @@ describe("the registry", () => {
     expect(page).toContain("sectionInstance");
     expect(page).not.toContain("nav");
     expect(chrome).not.toContain("sectionInstance");
+    const email = paletteFor("email").map((b) => b.type);
+    expect(email).toContain("heading");
+    expect(email).toContain("variable");
+    expect(email).not.toContain("faq");
   });
 });
 

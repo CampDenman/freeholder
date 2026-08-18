@@ -96,6 +96,8 @@ import {
 } from "./layout-service";
 export { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
 import { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
+export { previewEmail, testSendEmail } from "./email-service";
+import { previewEmail, testSendEmail } from "./email-service";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -1199,6 +1201,8 @@ export default [
   rejoinLayout,
   draftPageTranslation,
   pageTranslationReport,
+  previewEmail,
+  testSendEmail,
   listRevisions,
   restoreRevision,
   createPreviewLink,

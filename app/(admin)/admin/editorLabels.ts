@@ -73,7 +73,7 @@ function translateField(
 
 export function editorBlockTypes(
   t: Translate,
-  context: "page" | "chrome",
+  context: "page" | "chrome" | "email",
   assets: AssetChoice[] = [],
 ): EditorBlockType[] {
   return paletteFor(context).map((entry) => ({
