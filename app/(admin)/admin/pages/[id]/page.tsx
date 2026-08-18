@@ -9,7 +9,7 @@ import { notFound } from "next/navigation";
 import { ArrowSquareOut, ClockCounterClockwise } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
 import { ServiceError } from "@/core/service";
-import { getPage, listRevisions, listSections } from "@/modules/cms/service";
+import { getLayout, getPage, listRevisions, listSections } from "@/modules/cms/service";
 import {
   compareRevisions,
   listPreviewLinks,
@@ -31,6 +31,7 @@ import { PageLifecycle } from "./PageLifecycle";
 import { PagePresence } from "./PagePresence";
 import { PageComments } from "./PageComments";
 import { currentBusiness } from "@/core/settings/read";
+import { detachLayoutAction, rejoinLayoutAction } from "../../../cms-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,7 @@ export default async function EditPagePage({
     throw error;
   });
 
-  const [business, revisions, library, t, links, lease, diff, comments, staff, sectionRows] =
+  const [business, revisions, library, t, links, lease, diff, comments, staff, sectionRows, layout] =
     await Promise.all([
       currentBusiness(),
       listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
@@ -68,6 +69,7 @@ export default async function EditPagePage({
       listComments.call({ pageId: page.id, includeResolved: true }, actor),
       listRoleUsers.call({}, actor).catch(() => [] as { id: string; email: string }[]),
       listSections.call({}, actor),
+      getLayout.call({ pageId: page.id }, actor),
     ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -102,6 +104,23 @@ export default async function EditPagePage({
             />
           </div>
         </div>
+        {layout ? (
+          <form
+            action={layout.detached ? rejoinLayoutAction : detachLayoutAction}
+            className="mt-3 flex flex-wrap items-center gap-3 text-sm"
+          >
+            <input type="hidden" name="pageId" value={page.id} />
+            <input type="hidden" name="title" value={page.workingTitle ?? page.title} />
+            <span className="text-ink-muted">
+              {layout.detached
+                ? t("cms.layout.detached", { template: layout.templateKey })
+                : t("cms.layout.following", { template: layout.templateKey })}
+            </span>
+            <button type="submit" className="rounded-md border border-rule px-3 py-1.5 text-ink">
+              {layout.detached ? t("cms.layout.rejoin") : t("cms.layout.detach")}
+            </button>
+          </form>
+        ) : null}
         <div className="mt-2">
           <PagePresence
             pageId={page.id}

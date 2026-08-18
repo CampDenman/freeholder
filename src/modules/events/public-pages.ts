@@ -7,12 +7,15 @@ import type { ServiceContext } from "@/core/service";
 import { pages } from "@/modules/cms/schema";
 import { addNavLink, NAV_SECTION_KEYS } from "@/modules/cms/chrome-nav";
 import {
+  attachLayout,
   createPage,
+  getLayout,
   getSection,
   publishPage,
   updatePage,
   updateSection,
 } from "@/modules/cms/service";
+import { blocksFromTemplate } from "@/modules/cms/layout-service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { getBusiness } from "@/core/settings/service";
 import { events } from "./schema";
@@ -21,13 +24,6 @@ export const EVENTS_INDEX_SLUG = "events";
 
 function pathFor(slug: string): string {
   return `${EVENTS_INDEX_SLUG}/${slug}`;
-}
-
-function eventBlocks(eventId: string, slug: string, name: string): BlockNode[] {
-  return [
-    { id: "event-h1", type: "heading", props: { text: name, level: 1, align: "start" } },
-    { id: "event-detail", type: "eventDetail", props: { eventId, slug } },
-  ];
 }
 
 function indexBlocks(title: string): BlockNode[] {
@@ -99,22 +95,46 @@ export async function syncEventPublicPage(ctx: ServiceContext, eventId: string):
   const owned = await pageOwnedBy(ctx, event.id, locale);
   const shouldPublish = event.status === "published";
   if (!owned && !shouldPublish) return;
+  const layout = await blocksFromTemplate(
+    ctx,
+    "event",
+    { title: event.name, slug: event.slug, eventId: event.id },
+    locale,
+  );
   if (!owned) {
     const created = await ctx.callAsSystem(createPage, {
       slug: target,
       locale,
       title: event.name,
-      blocks: eventBlocks(event.id, event.slug, event.name),
+      blocks: layout.blocks,
       seo: { description: event.seo.description ?? event.summary ?? `Event: ${event.name}` },
+    });
+    await ctx.callAsSystem(attachLayout, {
+      pageId: created.id,
+      entityType: "event",
+      entityId: event.id,
+      templateKey: layout.templateKey,
+      detached: false,
     });
     if (shouldPublish) await ctx.callAsSystem(publishPage, { id: created.id, published: true });
     return;
   }
+  const attachment = await ctx.callAsSystem(getLayout, { pageId: owned });
   await ctx.callAsSystem(updatePage, {
     id: owned,
     slug: target,
     title: event.name,
     seo: { description: event.seo.description ?? event.summary ?? `Event: ${event.name}` },
+    ...(attachment && !attachment.detached ? { blocks: layout.blocks } : {}),
   });
+  if (attachment && !attachment.detached) {
+    await ctx.callAsSystem(attachLayout, {
+      pageId: owned,
+      entityType: "event",
+      entityId: event.id,
+      templateKey: layout.templateKey,
+      detached: false,
+    });
+  }
   await ctx.callAsSystem(publishPage, { id: owned, published: shouldPublish });
 }

@@ -196,7 +196,17 @@ export async function onLocationCreated(payload: unknown): Promise<void> {
   );
   const page = await pageAt(pathFor(slug), locale);
   if (page) {
-    const { publishPage } = await import("./service");
+    const { attachLayout, publishPage } = await import("./service");
+    await attachLayout.call(
+      {
+        pageId: page.id,
+        entityType: "location",
+        entityId: id,
+        templateKey: "page.landing",
+        detached: false,
+      },
+      SYSTEM,
+    );
     await publishPage.call({ id: page.id, published: true }, SYSTEM);
   }
 }

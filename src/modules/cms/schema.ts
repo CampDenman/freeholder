@@ -275,3 +275,40 @@ export const contentTemplates = pgTable(
     index("content_templates_kind_preset_idx").on(t.kind, t.preset),
   ],
 );
+
+export const LAYOUT_ENTITY_TYPES = [
+  "product",
+  "service",
+  "post",
+  "location",
+  "event",
+  "gallery",
+  "page",
+] as const;
+export type LayoutEntityType = (typeof LAYOUT_ENTITY_TYPES)[number];
+
+/**
+ * Whether a public entity page still follows its template (C2.14).
+ *
+ * No row, or `detached = false`, means the page is rebuilt from the template
+ * when the entity changes. Detach copies the current tree and leaves it
+ * alone; rejoin throws the copy away and follows again.
+ */
+export const contentLayouts = pgTable(
+  "content_layouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id").notNull(),
+    entityType: text("entity_type", { enum: LAYOUT_ENTITY_TYPES }).notNull(),
+    entityId: uuid("entity_id").notNull(),
+    templateKey: text("template_key").notNull(),
+    detached: boolean("detached").notNull().default(false),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("content_layouts_page_idx").on(t.pageId),
+    uniqueIndex("content_layouts_entity_locale_idx").on(t.entityType, t.entityId),
+    index("content_layouts_template_idx").on(t.templateKey),
+  ],
+);
