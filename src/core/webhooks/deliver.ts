@@ -15,6 +15,7 @@
 // with in-process listeners.
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/core/db";
+import { WEBHOOK_SCHEMA_VERSION } from "@/core/platform";
 import { webhookDeliveries, webhookSubscriptions } from "@/core/webhooks/schema";
 import {
   DELIVERY_HEADER,
@@ -167,6 +168,7 @@ async function attempt(delivery: Claimed): Promise<void> {
     // Seconds, matching the signature's timestamp, so a receiver comparing
     // the two is comparing like with like.
     at: Math.floor(Date.now() / 1000),
+    schemaVersion: WEBHOOK_SCHEMA_VERSION,
     data: delivery.payload,
   });
   const signature = signPayload(

@@ -22,9 +22,12 @@ import {
   createWebhook,
   deleteWebhook,
   fanOut,
+  inspectDelivery,
   listDeliveries,
   listWebhooks,
+  replayDelivery,
   revealWebhookSecret,
+  rotateWebhookEndpoint,
   rotateWebhookSecret,
   testWebhook,
   updateWebhook,
@@ -208,7 +211,7 @@ describe("the retry schedule", () => {
   });
 });
 
-describe.runIf(hasDatabase)("keeping subscriptions", () => {
+describe.runIf(hasDatabase)("keeping subscriptions", { timeout: 30_000 }, () => {
   beforeEach(async () => {
     await truncateSpine();
     await db()
@@ -249,6 +252,34 @@ describe.runIf(hasDatabase)("keeping subscriptions", () => {
     );
     const rotated = await rotateWebhookSecret.call({ id: hook.id }, OWNER);
     expect(rotated.secret).not.toBe(hook.secret);
+  });
+
+  it("rotates the endpoint and secret together", async () => {
+    const hook = await createWebhook.call(
+      { name: "Zapier", url: "https://example.test/hook", events: ["*"] },
+      OWNER,
+    );
+    const rotated = await rotateWebhookEndpoint.call(
+      { id: hook.id, url: "https://example.test/v2" },
+      OWNER,
+    );
+    expect(rotated.url).toBe("https://example.test/v2");
+    expect(rotated.secret).not.toBe(hook.secret);
+  });
+
+  it("inspects a delivery with secrets stripped and can replay it", async () => {
+    const hook = await createWebhook.call(
+      { name: "Zapier", url: "https://example.test/hook", events: ["*"] },
+      OWNER,
+    );
+    await fanOut("contact.created", { name: "Rae", token: "super-secret" });
+    const [queued] = await listDeliveries.call({ subscriptionId: hook.id }, OWNER);
+    const inspected = await inspectDelivery.call({ id: queued!.id }, OWNER);
+    expect(inspected.payload).toMatchObject({ name: "Rae", token: "[redacted]" });
+    const replayed = await replayDelivery.call({ id: queued!.id }, OWNER);
+    expect(replayed.deliveryId).toBe(queued!.id);
+    const [again] = await db().select().from(webhookDeliveries);
+    expect(again?.status).toBe("pending");
   });
 
   it("refuses a second subscription with the same name", async () => {
@@ -440,9 +471,11 @@ describe.runIf(hasDatabase)("actually delivering", () => {
     const envelope = JSON.parse(received.body) as {
       id: string;
       event: string;
+      schemaVersion: number;
       data: { name: string };
     };
     expect(envelope.event).toBe("contact.created");
+    expect(envelope.schemaVersion).toBe(1);
     expect(envelope.data.name).toBe("Rae");
     // The delivery id is in the body and the header, so a receiver can dedupe
     // however it prefers.

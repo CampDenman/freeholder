@@ -37,6 +37,7 @@ export default defineModule({
       "webhook.created",
       "webhook.updated",
       "webhook.deleted",
+      "webhook.replayed",
       "agent.connected",
       "agent.hired",
       "agent.updated",

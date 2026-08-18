@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` at `c6e3a18` with C2 complete (C2.02 via #133). This change closes C3.01 (required output schemas on every service). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` at `59befcc` with C3.01 landed via #134. This change closes C3.02–C3.07 (OpenAPI, SDK, actor-aware MCP, resources/prompts, contract docs/drift, webhook replay/redaction/rotation). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3 living contract, next C3.02 complete OpenAPI response/error/auth/webhook schemas. |
+| Current focus | C3 plugin system and portable operation (C3.08). |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3552,18 +3552,36 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   (`ServiceDef.output`; `assertOutput` in development/tests; OpenAPI 200
   bodies from the same schemas; completeness gate in
   `tests/core/service-output.test.ts`; changeset `service-output-schemas.md`.)
-- [ ] **C3.02** Generate complete OpenAPI request, success, error, auth and
+- [x] **C3.02** Generate complete OpenAPI request, success, error, auth and
   webhook schemas with stable operation IDs and version metadata.
-- [ ] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
+  (`buildOpenApi`: 200 from output schemas, 4xx/500 from `ServiceError`,
+  public ops `security: []`, `FreeholderEvent` webhook component,
+  `info.x-freeholder` platform/webhook/MCP versions. Coverage in
+  `tests/core/contract-projections.test.ts`.)
+- [x] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
   service registry; remove every package scaffold/no-op build.
-- [ ] **C3.04** Make MCP discovery actor-aware—including actor kind, service
+  (`packages/sdk` `FreeholderClient.call` POSTs `/api/v1/<service>`; version
+  equals `PLATFORM_VERSION`; real `tsc` build. Coverage in
+  `tests/core/sdk.test.ts`.)
+- [x] **C3.04** Make MCP discovery actor-aware—including actor kind, service
   opt-out and approval annotations—so listed tools are genuinely callable.
-- [ ] **C3.05** Complete MCP resources/prompts and supported transport/session
+  (`ServiceDef.mcpExclude`; `hiddenFromMcp`; tool `annotations.actorKind` and
+  `approval`; step-up tools listed only for users. Coverage in
+  `tests/core/mcp.test.ts`.)
+- [x] **C3.05** Complete MCP resources/prompts and supported transport/session
   behavior where they improve discovery without creating a second registry.
-- [ ] **C3.06** Generate human reference docs and `llms.txt` contract sections
+  (`resources/list|read` on `freeholder://contract/*`; `prompts/list|get`;
+  `Mcp-Session-Id` echoed, nothing stored. Coverage in `tests/core/mcp.test.ts`.)
+- [x] **C3.06** Generate human reference docs and `llms.txt` contract sections
   from the same schemas; add a drift/completeness gate over all projections.
-- [ ] **C3.07** Add webhook subscriptions, delivery inspection/replay, schema
+  (`contractProjections` / `humanReference` / `llmsContractSection`;
+  `/llms-full.txt`; OpenAPI paths === registry. Coverage in
+  `tests/core/contract-projections.test.ts`.)
+- [x] **C3.07** Add webhook subscriptions, delivery inspection/replay, schema
   versioning, endpoint rotation and explicit sensitive-field redaction.
+  (`webhooks.inspectDelivery` redacts; `webhooks.replay`;
+  `webhooks.rotateEndpoint`; envelope `schemaVersion`. Coverage in
+  `tests/core/webhooks.test.ts`.)
 
 #### Plugin system and registries
 

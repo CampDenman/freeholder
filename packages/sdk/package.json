@@ -9,10 +9,19 @@
     "url": "https://github.com/campdenman/freeholder.git",
     "directory": "packages/sdk"
   },
-  "main": "src/index.ts",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "LICENSE"],
   "scripts": {
-    "build": "echo 'sdk scaffold — build lands with the v1 slice'",
-    "lint": "echo 'sdk scaffold — lint lands with the v1 slice'",
-    "test": "echo 'sdk scaffold — tests land with the v1 slice'"
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test"
   }
 }
