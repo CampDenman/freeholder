@@ -1151,7 +1151,10 @@ describe.runIf(hasDatabase)("knowing what a file is still used by", () => {
       {
         slug: "shows-it",
         title: "Shows it",
-        blocks: [{ id: "img", type: "image", props: { assetId: asset.id } }],
+        blocks: [
+          { id: "h", type: "heading", props: { text: "Shows it", level: 1 } },
+          { id: "img", type: "image", props: { assetId: asset.id } },
+        ],
       },
       STAFF,
     );

@@ -132,7 +132,11 @@ describe.runIf(hasDatabase)("the cms module", () => {
   describe("pages", () => {
     it("serves only published pages to the public", async () => {
       const page = await createPage.call(
-        { slug: "about", title: "About", blocks: [] },
+        {
+          slug: "about",
+          title: "About",
+          blocks: [{ id: "h", type: "heading", props: { text: "About", level: 1 } }],
+        },
         STAFF,
       );
       // A draft is not "unlisted" — it is not readable by URL at all.
@@ -175,7 +179,14 @@ describe.runIf(hasDatabase)("the cms module", () => {
     });
 
     it("keeps drafts out of the sitemap source", async () => {
-      const live = await createPage.call({ slug: "live", title: "Live" }, STAFF);
+      const live = await createPage.call(
+        {
+          slug: "live",
+          title: "Live",
+          blocks: [{ id: "h", type: "heading", props: { text: "Live", level: 1 } }],
+        },
+        STAFF,
+      );
       await publishPage.call({ id: live.id, published: true }, STAFF);
       await createPage.call({ slug: "hidden", title: "Hidden" }, STAFF);
 

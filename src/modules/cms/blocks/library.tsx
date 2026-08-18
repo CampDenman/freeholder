@@ -511,6 +511,8 @@ export const image = defineBlock({
     assetId: z.string().uuid().optional(),
     /** Overrides the asset's own description where the context needs it to. */
     alt: z.string().optional(),
+    /** Empty alt is a decision, not a missing description (C2.20). */
+    decorative: z.boolean().default(false),
     width: z.enum(["column", "wide", "full"]).default("column"),
     rounded: z.boolean().default(true),
   }),
@@ -525,7 +527,7 @@ export const image = defineBlock({
   },
   render: ({ props, resolved }) => {
     if (!resolved) return null;
-    const alt = props.alt ?? resolved.altText ?? "";
+    const alt = props.decorative ? "" : (props.alt ?? resolved.altText ?? "");
     return (
       <picture>
         {resolved.sources.map((source) => (

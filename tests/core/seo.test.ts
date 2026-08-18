@@ -198,7 +198,14 @@ describe.runIf(hasDatabase)("the sitemap, assembled from the modules", () => {
   });
 
   it("collects what every module declared, and only what is published", async () => {
-    const live = await createPage.call({ slug: "about", title: "About" }, STAFF);
+    const live = await createPage.call(
+      {
+        slug: "about",
+        title: "About",
+        blocks: [{ id: "h", type: "heading", props: { text: "About", level: 1 } }],
+      },
+      STAFF,
+    );
     await publishPage.call({ id: live.id, published: true }, STAFF);
     await createPage.call({ slug: "draft", title: "Draft" }, STAFF);
 

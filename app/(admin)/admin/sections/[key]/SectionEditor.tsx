@@ -28,6 +28,7 @@ export function SectionEditor({
       blockTypes={blockTypes}
       labels={labels}
       previewSrc={`/preview/section/${sectionKey}?locale=${encodeURIComponent(locale)}`}
+      a11yContext="chrome"
       save={(blocks) => saveSectionBlocksAction(sectionKey, locale, blocks)}
     />
   );

@@ -98,6 +98,7 @@ export { draftPageTranslation, pageTranslationReport } from "./translation-workf
 import { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
 export { previewEmail, testSendEmail } from "./email-service";
 import { previewEmail, testSendEmail } from "./email-service";
+import { analyzeAccessibility, publishA11yMessage } from "./a11y-hints";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -669,6 +670,23 @@ export const mergePage = defineService({
   handler: async (input, ctx) => ctx.call(updatePage, input),
 });
 
+export const pageAccessibilityReport = defineService({
+  name: "cms.pageAccessibilityReport",
+  summary: "Heading, alt, link and landmark hints for one page.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ id: z.string().uuid() }),
+  handler: async (input, ctx) => {
+    const page = await ctx.call(getPage, { id: input.id });
+    const blocks = page.workingBlocks ?? page.blocks;
+    return {
+      hints: analyzeAccessibility(Array.isArray(blocks) ? (blocks as BlockNode[]) : [], {
+        context: "page",
+      }),
+    };
+  },
+});
+
 export const publishPage = defineService({
   name: "cms.publishPage",
   summary: "Make a page live, or take it back to draft.",
@@ -687,6 +705,14 @@ export const publishPage = defineService({
     const title = before.workingTitle ?? before.title;
     const blocks = before.workingBlocks ?? before.blocks;
     const seo = before.workingSeo ?? before.seo;
+    if (input.published) {
+      const blocked = publishA11yMessage(
+        analyzeAccessibility(Array.isArray(blocks) ? (blocks as BlockNode[]) : [], {
+          context: "page",
+        }),
+      );
+      if (blocked) throw new ServiceError("validation", blocked);
+    }
     if (input.published) {
       await ctx.tx.insert(contentRevisions).values({
         subjectType: "page",
@@ -1178,6 +1204,7 @@ export default [
   purgeDemoCms,
   verifyDemoCms,
   updatePage,
+  pageAccessibilityReport,
   publishPage,
   getSection,
   listSections,

@@ -110,7 +110,12 @@ describe.runIf(hasDatabase)("translating content", () => {
 
   const publishedPage = async () => {
     const page = await createPage.call(
-      { slug: "services", title: "Services", seo: { title: "Services" } },
+      {
+        slug: "services",
+        title: "Services",
+        seo: { title: "Services" },
+        blocks: [{ id: "h", type: "heading", props: { text: "Services", level: 1 } }],
+      },
       STAFF,
     );
     await publishPage.call({ id: page.id, published: true }, STAFF);
@@ -224,7 +229,14 @@ describe.runIf(hasDatabase)("what each locale's sitemap lists", () => {
   });
 
   it("lists every page for the site's own language, unprefixed", async () => {
-    const page = await createPage.call({ slug: "about", title: "About" }, STAFF);
+    const page = await createPage.call(
+      {
+        slug: "about",
+        title: "About",
+        blocks: [{ id: "h", type: "heading", props: { text: "About", level: 1 } }],
+      },
+      STAFF,
+    );
     await publishPage.call({ id: page.id, published: true }, STAFF);
 
     const paths = await publishedPaths.call({ locale: "en" }, ANONYMOUS);
@@ -235,9 +247,23 @@ describe.runIf(hasDatabase)("what each locale's sitemap lists", () => {
     // Listing an untranslated page under /fr-CA/ would advertise a French page
     // that is in English — which is how a site earns a duplicate-content
     // problem in two languages instead of one.
-    const translated = await createPage.call({ slug: "about", title: "About" }, STAFF);
+    const translated = await createPage.call(
+      {
+        slug: "about",
+        title: "About",
+        blocks: [{ id: "h", type: "heading", props: { text: "About", level: 1 } }],
+      },
+      STAFF,
+    );
     await publishPage.call({ id: translated.id, published: true }, STAFF);
-    const untranslated = await createPage.call({ slug: "contact", title: "Contact" }, STAFF);
+    const untranslated = await createPage.call(
+      {
+        slug: "contact",
+        title: "Contact",
+        blocks: [{ id: "h2", type: "heading", props: { text: "Contact", level: 1 } }],
+      },
+      STAFF,
+    );
     await publishPage.call({ id: untranslated.id, published: true }, STAFF);
 
     await setTranslation.call(
