@@ -7,9 +7,10 @@
 
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError, type Tx } from "@/core/service";
 import { businessLocations } from "@/core/locations/schema";
-import { STOCK_HOLDERS, STOCK_REASONS } from "./contract";
+import { RESERVATION_STATUSES, STOCK_HOLDERS, STOCK_REASONS } from "./contract";
 import {
   inventoryItems,
   productVariants,
@@ -19,6 +20,88 @@ import {
 } from "./schema";
 
 const id = z.string().uuid();
+
+const inventoryItemRow = row({
+  id: uuid,
+  variantId: uuid,
+  locationId: uuid,
+  bin: z.string().nullable(),
+  safetyStock: z.number().int(),
+  reorderPoint: z.number().int(),
+  incoming: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const stockBalanceRow = z.object({
+  onHand: z.number().int(),
+  reserved: z.number().int(),
+  incoming: z.number().int(),
+  available: z.number().int(),
+});
+const inventoryListRow = inventoryItemRow.extend({
+  sku: z.string(),
+  productName: z.string(),
+  locationName: z.string(),
+  isPrimary: z.boolean(),
+  onHand: z.number().int(),
+  reserved: z.number().int(),
+  incoming: z.number().int(),
+  available: z.number().int(),
+});
+const stockMovementRow = row({
+  id: uuid,
+  inventoryItemId: uuid,
+  delta: z.number().int(),
+  reason: z.enum(STOCK_REASONS),
+  referenceType: z.string().nullable(),
+  referenceId: uuid.nullable(),
+  actor: z.string(),
+  note: z.string().nullable(),
+  createdAt: timestamp,
+});
+const stockReservationRow = row({
+  id: uuid,
+  inventoryItemId: uuid,
+  quantity: z.number().int(),
+  holderType: z.enum(STOCK_HOLDERS),
+  holderId: uuid,
+  expiresAt: timestamp,
+  status: z.enum(RESERVATION_STATUSES),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const movementWithBalance = z.object({
+  movement: stockMovementRow.nullable(),
+  balance: stockBalanceRow,
+});
+const availabilityResult = z.discriminatedUnion("tracked", [
+  z.object({
+    tracked: z.literal(false),
+    available: z.literal(true),
+    quantity: z.number().int(),
+  }),
+  z.object({
+    tracked: z.literal(true),
+    available: z.boolean(),
+    backordered: z.boolean(),
+    restockAt: timestamp.nullable(),
+    onHand: z.number().int(),
+    reserved: z.number().int(),
+    incoming: z.number().int(),
+    canPromise: z.number().int(),
+  }),
+]);
+const reserveResult = z.discriminatedUnion("tracked", [
+  z.object({
+    tracked: z.literal(false),
+    reservation: z.null(),
+  }),
+  z.object({
+    tracked: z.literal(true),
+    reservation: stockReservationRow,
+    balance: stockBalanceRow,
+  }),
+]);
 
 export interface StockBalance {
   onHand: number;
@@ -194,6 +277,7 @@ export const enableInventory = defineService({
     locationId: id,
     bin: z.string().trim().min(1).max(40).optional(),
   }),
+  output: inventoryItemRow,
   handler: async (input, ctx) => {
     const [variant] = await ctx.tx
       .select({ id: productVariants.id, status: productVariants.status })
@@ -247,6 +331,7 @@ export const listInventory = defineService({
     locationId: id.optional(),
     variantId: id.optional(),
   }),
+  output: listed(inventoryListRow),
   handler: async (input, ctx) => {
     const filters = [
       input.locationId ? eq(inventoryItems.locationId, input.locationId) : undefined,
@@ -285,6 +370,7 @@ export const listStockMovements = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ itemId: id, limit: z.number().int().min(1).max(200).default(50) }),
+  output: listed(stockMovementRow),
   handler: async (input, ctx) => {
     const [item] = await ctx.tx
       .select({ id: inventoryItems.id })
@@ -314,6 +400,7 @@ export const recordStockMovement = defineService({
     referenceType: z.string().trim().min(1).max(40).optional(),
     referenceId: id.optional(),
   }),
+  output: movementWithBalance,
   handler: async (input, ctx) => {
     const movement = await applyMovement(ctx.tx, {
       itemId: input.itemId,
@@ -345,6 +432,7 @@ export const countStock = defineService({
     quantity: z.number().int().min(0).max(1_000_000),
     note: z.string().trim().min(1).max(500).optional(),
   }),
+  output: movementWithBalance,
   handler: async (input, ctx) => {
     await lockItem(ctx.tx, input.itemId);
     const current = await stockBalance(ctx.tx, input.itemId);
@@ -384,6 +472,7 @@ export const adjustStock = defineService({
     delta: z.number().int().refine((value) => value !== 0),
     note: z.string().trim().min(1).max(500),
   }),
+  output: movementWithBalance,
   handler: async (input, ctx) => {
     const movement = await applyMovement(ctx.tx, {
       itemId: input.itemId,
@@ -413,6 +502,7 @@ export const recordDamage = defineService({
     quantity: z.number().int().min(1).max(1_000_000),
     note: z.string().trim().min(1).max(500),
   }),
+  output: movementWithBalance,
   handler: async (input, ctx) => {
     const movement = await applyMovement(ctx.tx, {
       itemId: input.itemId,
@@ -442,6 +532,13 @@ export const transferStock = defineService({
     toLocationId: id,
     quantity: z.number().int().min(1).max(1_000_000),
     note: z.string().trim().min(1).max(500).optional(),
+  }),
+  output: z.object({
+    transferId: uuid,
+    outgoing: stockMovementRow,
+    incoming: stockMovementRow,
+    from: stockBalanceRow,
+    to: stockBalanceRow,
   }),
   handler: async (input, ctx) => {
     const source = await lockItem(ctx.tx, input.fromItemId);
@@ -523,6 +620,7 @@ export const availability = defineService({
     locationId: id.optional(),
     quantity: z.number().int().min(1).max(1_000_000).default(1),
   }),
+  output: availabilityResult,
   handler: async (input, ctx) => {
     const [variant] = await ctx.tx
       .select({
@@ -594,6 +692,7 @@ export const reserveStock = defineService({
     holderId: id,
     expiresAt: z.coerce.date(),
   }),
+  output: reserveResult,
   handler: async (input, ctx) => {
     if (input.expiresAt.getTime() <= Date.now()) {
       throw new ServiceError("validation", "A reservation must expire in the future.");
@@ -656,6 +755,7 @@ export const releaseReservation = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: z.object({ reservation: stockReservationRow, balance: stockBalanceRow }),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -683,6 +783,7 @@ export const consumeReservation = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id, note: z.string().trim().min(1).max(500).optional() }),
+  output: movementWithBalance,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -728,6 +829,7 @@ export const expireReservations = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({ expired: z.number().int() }),
   handler: async (_input, ctx) => {
     const expired = await ctx.tx
       .update(stockReservations)
@@ -749,6 +851,7 @@ export const listReservations = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ itemId: id }),
+  output: listed(stockReservationRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
@@ -763,6 +866,7 @@ export const listTrackedVariantChoices = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(row({ id: uuid, sku: z.string(), productName: z.string() })),
   handler: (_input, ctx) =>
     ctx.tx
       .select({

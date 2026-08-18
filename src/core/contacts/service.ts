@@ -30,6 +30,7 @@ import {
   repointContactRelationships,
   restoreContactRelationships,
 } from "@/core/contacts/relationships";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 
@@ -100,6 +101,41 @@ const contactFields = z.object({
   ownerNotes: z.string().max(10_000).nullable().optional(),
 });
 
+const contactRow = row({
+  id: uuid,
+  userId: uuid.nullable(),
+  name: z.string(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  orgId: uuid.nullable(),
+  source: z.string().nullable(),
+  tags: z.array(z.string()),
+  customFields: z.unknown(),
+  lifecycleStage,
+  preferredLocale: z.string().nullable(),
+  timezone: z.string().nullable(),
+  country: z.string().nullable(),
+  ownerNotes: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const resolvedContact = z.object({
+  contact: contactRow,
+  created: z.boolean(),
+  updated: z.boolean(),
+});
+const mergedContact = contactRow.and(row({ mergeOperationId: uuid }));
+const timelineEventRow = row({
+  id: uuid,
+  contactId: uuid,
+  actor: z.string(),
+  eventType: z.string(),
+  subjectType: z.string(),
+  subjectId: z.string().nullable(),
+  payload: z.unknown(),
+  occurredAt: timestamp,
+});
+
 /**
  * The unique email index is the spine's identity rule; hitting it is a conflict
  * with an obvious remedy, not an internal error. Surfacing it that way is what
@@ -146,6 +182,7 @@ export const createContact = defineService({
   kind: "mutation",
   permission: "scoped",
   input: contactFields,
+  output: contactRow,
   handler: async (input, ctx) => {
     await ensureOrganization(ctx.tx, input.orgId);
     const customFields = await applyCustomFieldPatch(
@@ -257,6 +294,7 @@ export const resolveContact = defineService({
   input: contactFields.partial().extend({
     email: z.string().trim().email().toLowerCase(),
   }),
+  output: resolvedContact,
   handler: async (input, ctx) => {
     await ensureOrganization(ctx.tx, input.orgId);
     const resolvedInput: ResolveInput = {
@@ -626,6 +664,7 @@ export const mergeContacts = defineService({
     duplicateId: z.string().uuid(),
     candidateId: z.string().uuid().optional(),
   }),
+  output: mergedContact,
   handler: async (input, ctx) => {
     if (input.survivingId === input.duplicateId) {
       throw new ServiceError(
@@ -844,6 +883,11 @@ export const undoContactMerge = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ operationId: z.string().uuid() }),
+  output: z.object({
+    operationId: uuid,
+    survivingContact: contactRow,
+    restoredContact: contactRow,
+  }),
   handler: async (input, ctx) => {
     const [operation] = await ctx.tx
       .select()
@@ -971,6 +1015,7 @@ export const updateContact = defineService({
   kind: "mutation",
   permission: "scoped",
   input: contactFields.partial().extend({ id: z.string().uuid() }),
+  output: contactRow,
   handler: async (input, ctx) => {
     const { id, ...requested } = input;
     if (Object.keys(requested).length === 0) {
@@ -1050,6 +1095,7 @@ export const getContact = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: contactRow,
   handler: async (input, ctx) => {
     const [contact] = await ctx.tx
       .select()
@@ -1075,6 +1121,10 @@ export const listContacts = defineService({
     organizationId: z.string().uuid().optional(),
     limit: z.number().int().min(1).max(100).default(25),
     offset: z.number().int().min(0).default(0),
+  }),
+  output: z.object({
+    rows: listed(contactRow),
+    total: z.number().int(),
   }),
   handler: async (input, ctx) => {
     const filters = [
@@ -1119,6 +1169,7 @@ export const listContactTags = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(z.string()),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx.execute<{ tag: string }>(sql`
       select distinct unnest(${contacts.tags}) as tag
@@ -1144,6 +1195,7 @@ export const contactTimeline = defineService({
     contactId: z.string().uuid(),
     limit: z.number().int().min(1).max(200).default(50),
   }),
+  output: listed(timelineEventRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
@@ -1164,6 +1216,15 @@ export const contactStats = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    total: z.number().int(),
+    byStage: z.object({
+      lead: z.number().int(),
+      prospect: z.number().int(),
+      customer: z.number().int(),
+      repeat: z.number().int(),
+    }),
+  }),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx
       .select({ stage: contacts.lifecycleStage, n: count() })

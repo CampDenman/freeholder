@@ -3,6 +3,7 @@
 // Per-entity layout detach / rejoin (C2.14).
 import { z } from "zod";
 import { eq } from "drizzle-orm";
+import { row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
@@ -24,6 +25,16 @@ export interface LayoutBindings {
 }
 
 const entityTypeSchema = z.enum(LAYOUT_ENTITY_TYPES);
+const layoutRow = row({
+  id: uuid,
+  pageId: uuid,
+  entityType: entityTypeSchema,
+  entityId: uuid,
+  templateKey: z.string(),
+  detached: z.boolean(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 
 function templateKeyFor(entityType: LayoutEntityType): string {
   switch (entityType) {
@@ -136,6 +147,7 @@ export const getLayout = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ pageId: z.string().uuid() }),
+  output: layoutRow.nullable(),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -158,6 +170,7 @@ export const attachLayout = defineService({
     templateKey: z.string().min(1).max(80),
     detached: z.boolean().default(false),
   }),
+  output: layoutRow,
   handler: async (input, ctx) => {
     const [page] = await ctx.tx.select({ id: pages.id }).from(pages).where(eq(pages.id, input.pageId)).limit(1);
     if (!page) throw new ServiceError("not_found", "That page is not on this site.");
@@ -204,6 +217,7 @@ export const detachLayout = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ pageId: z.string().uuid() }),
+  output: layoutRow,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -240,6 +254,10 @@ export const rejoinLayout = defineService({
       })
       .optional(),
     locale: z.string().default("en"),
+  }),
+  output: z.object({
+    layout: layoutRow,
+    blocks: z.unknown(),
   }),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx

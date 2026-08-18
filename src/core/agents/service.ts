@@ -13,6 +13,7 @@
 // parent's trust level and can never be more autonomous than its parent.
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   agentConnections,
   agentRuns,
@@ -32,6 +33,111 @@ import {
 
 const AUTONOMY = ["suggest", "approve", "autonomous"] as const;
 type Autonomy = (typeof AUTONOMY)[number];
+
+const connectionRow = row({
+  id: uuid,
+  name: z.string(),
+  kind: z.enum(["managed", "inbound"]),
+  adapter: z.string().nullable(),
+  model: z.string().nullable(),
+  credentialRef: z.string().nullable(),
+  baseUrl: z.string().nullable(),
+  maxConcurrency: z.number().int(),
+  status: z.enum(["active", "paused"]),
+  lastSeenAt: timestamp.nullable(),
+  lastError: z.string().nullable(),
+  createdBy: uuid.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const agentRow = row({
+  id: uuid,
+  connectionId: uuid,
+  name: z.string(),
+  role: z.string(),
+  instructions: z.string(),
+  apiKeyId: uuid.nullable(),
+  toolScopes: z.array(z.string()),
+  autonomy: z.enum(AUTONOMY),
+  maxConcurrency: z.number().int(),
+  budgetCents: z.number().int(),
+  budgetPeriod: z.enum(["day", "week", "month"]),
+  status: z.enum(["active", "paused"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const taskStatus = z.enum([
+  "queued",
+  "running",
+  "waiting_approval",
+  "blocked",
+  "done",
+  "failed",
+  "needs_attention",
+  "cancelled",
+]);
+
+const taskRow = row({
+  id: uuid,
+  parentId: uuid.nullable(),
+  rootId: uuid,
+  agentId: uuid.nullable(),
+  title: z.string(),
+  brief: z.string(),
+  input: z.unknown(),
+  inputTrust: z.enum(["owner", "system", "untrusted"]),
+  status: taskStatus,
+  priority: z.number().int(),
+  dependsOn: z.array(uuid),
+  dueAt: timestamp.nullable(),
+  autonomyCeiling: z.enum(AUTONOMY).nullable(),
+  budgetCents: z.number().int().nullable(),
+  result: z.unknown().nullable(),
+  failureReason: z.string().nullable(),
+  attempts: z.number().int(),
+  createdByActor: z.string(),
+  source: z.enum(["human", "schedule", "event", "agent"]),
+  sourceRef: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const runRow = row({
+  id: uuid,
+  taskId: uuid,
+  agentId: uuid,
+  attempt: z.number().int(),
+  status: z.enum(["running", "done", "failed", "cancelled"]),
+  startedAt: timestamp,
+  endedAt: timestamp.nullable(),
+  model: z.string().nullable(),
+  tokensIn: z.number().int(),
+  tokensOut: z.number().int(),
+  costCents: z.number().int(),
+  stopReason: z
+    .enum(["done", "budget", "timeout", "refused", "error", "cancelled"])
+    .nullable(),
+  error: z.string().nullable(),
+  leaseExpiresAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const stepRow = row({
+  id: uuid,
+  runId: uuid,
+  seq: z.number().int(),
+  kind: z.enum(["message", "tool_call", "tool_result", "note"]),
+  serviceName: z.string().nullable(),
+  input: z.unknown().nullable(),
+  output: z.unknown().nullable(),
+  tokens: z.number().int(),
+  durationMs: z.number().int().nullable(),
+  error: z.string().nullable(),
+  createdAt: timestamp,
+});
 
 /** Ordered, so "no higher than" is a comparison rather than a lookup table. */
 const RANK: Record<Autonomy, number> = { suggest: 1, approve: 2, autonomous: 3 };
@@ -77,6 +183,20 @@ export const listConnections = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      name: z.string(),
+      kind: z.enum(["managed", "inbound"]),
+      adapter: z.string().nullable(),
+      model: z.string().nullable(),
+      credentialRef: z.string().nullable(),
+      maxConcurrency: z.number().int(),
+      status: z.enum(["active", "paused"]),
+      lastSeenAt: timestamp.nullable(),
+      lastError: z.string().nullable(),
+    }),
+  ),
   handler: async (_input, ctx) =>
     ctx.tx
       .select({
@@ -122,6 +242,7 @@ export const connectAgentRuntime = defineService({
       message: "a managed connection needs an adapter to run the loop with",
       path: ["adapter"],
     }),
+  output: connectionRow,
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "add a runtime");
     const [row] = await ctx.tx
@@ -155,6 +276,20 @@ export const listAgents = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      name: z.string(),
+      role: z.string(),
+      connectionId: uuid,
+      toolScopes: z.array(z.string()),
+      autonomy: z.enum(AUTONOMY),
+      maxConcurrency: z.number().int(),
+      budgetCents: z.number().int(),
+      budgetPeriod: z.enum(["day", "week", "month"]),
+      status: z.enum(["active", "paused"]),
+    }),
+  ),
   handler: async (_input, ctx) =>
     ctx.tx
       .select({
@@ -202,6 +337,7 @@ export const hireAgent = defineService({
     budgetCents: z.number().int().min(0).max(10_000_000).default(0),
     budgetPeriod: z.enum(["day", "week", "month"]).default("month"),
   }),
+  output: agentRow.extend({ token: z.string() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "hire an agent");
 
@@ -276,6 +412,7 @@ export const updateAgent = defineService({
     budgetPeriod: z.enum(["day", "week", "month"]).optional(),
     status: z.enum(["active", "paused"]).optional(),
   }),
+  output: agentRow,
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "change an agent");
     const { id, ...changes } = input;
@@ -308,6 +445,7 @@ export const pauseAllAgents = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ paused: z.boolean().default(true) }),
+  output: z.object({ changed: z.number().int() }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "pause agents");
     const rows = await ctx.tx
@@ -352,6 +490,7 @@ export const createTask = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object(taskInput),
+  output: taskRow,
   handler: async (input, ctx) => {
     let rootId: string | undefined;
     let inputTrust = input.inputTrust;
@@ -450,6 +589,7 @@ export const listTasks = defineService({
     rootId: z.uuid().optional(),
     limit: z.number().int().min(1).max(200).default(50),
   }),
+  output: listed(taskRow),
   handler: async (input, ctx) => {
     const filters = [
       input.status ? inArray(agentTasks.status, input.status) : undefined,
@@ -473,6 +613,13 @@ export const getTask = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.uuid() }),
+  output: taskRow
+    .extend({
+      runs: listed(runRow),
+      steps: listed(stepRow),
+      children: listed(taskRow),
+    })
+    .nullable(),
   handler: async (input, ctx) => {
     const [task] = await ctx.tx
       .select()
@@ -516,6 +663,7 @@ export const assignTask = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.uuid(), agentId: z.uuid().nullable() }),
+  output: taskRow,
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "reassign work");
     const [row] = await ctx.tx
@@ -536,6 +684,7 @@ export const cancelTask = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.uuid(), reason: z.string().max(500).optional() }),
+  output: z.object({ cancelled: z.number().int() }),
   handler: async (input, ctx) => {
     const [task] = await ctx.tx
       .select({ id: agentTasks.id, rootId: agentTasks.rootId })
@@ -575,6 +724,15 @@ export const agentSpendReport = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      name: z.string(),
+      budgetCents: z.number().int(),
+      budgetPeriod: z.enum(["day", "week", "month"]),
+      spentCents: z.number().int(),
+    }),
+  ),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx
       .select({

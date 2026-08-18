@@ -4,11 +4,18 @@
 
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { decimalToMinor } from "@/adapters/payments/currency";
 import { assertPositiveMinor, safeMinor } from "@/modules/invoicing/money";
-import { BUNDLE_PRICE_MODES, RELATION_KINDS } from "./contract";
+import {
+  BUNDLE_PRICE_MODES,
+  PRODUCT_KINDS,
+  PRODUCT_STATUSES,
+  PRODUCT_VISIBILITIES,
+  RELATION_KINDS,
+} from "./contract";
 import { resolvePrice } from "./pricing";
 import {
   bundleComponents,
@@ -19,6 +26,57 @@ import {
 
 const productId = z.string().uuid();
 const expectedVersion = z.number().int().positive().max(2_147_483_647);
+
+const productRow = row({
+  id: uuid,
+  name: z.string(),
+  slug: z.string(),
+  kind: z.enum(PRODUCT_KINDS),
+  subtitle: z.string().nullable(),
+  description: z.unknown(),
+  brand: z.string().nullable(),
+  status: z.enum(PRODUCT_STATUSES),
+  visibility: z.enum(PRODUCT_VISIBILITIES),
+  taxCategoryId: uuid.nullable(),
+  seo: z.unknown(),
+  workingName: z.string().nullable(),
+  workingSubtitle: z.string().nullable(),
+  workingDescription: z.unknown().nullable(),
+  workingSeo: z.unknown().nullable(),
+  schemaType: z.string(),
+  publishedAt: timestamp.nullable(),
+  archivedAt: timestamp.nullable(),
+  version: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const bundleComponentRow = row({
+  id: uuid,
+  bundleProductId: uuid,
+  componentVariantId: uuid,
+  quantity: z.number().int(),
+  priceMode: z.enum(BUNDLE_PRICE_MODES),
+  amountMinor: z.number().int().nullable(),
+  percentOffPpm: z.number().int().nullable(),
+  position: z.number().int(),
+  createdAt: timestamp,
+});
+const bundleQuoteLine = z.object({
+  componentId: uuid,
+  variantId: uuid,
+  quantity: z.number().int(),
+  priceMode: z.enum(BUNDLE_PRICE_MODES),
+  amountMinor: z.number().int(),
+  explanation: z.string(),
+});
+const bundleQuote = z.object({
+  available: z.boolean(),
+  currency: z.string(),
+  productId: uuid,
+  totalMinor: z.number().int(),
+  reason: z.string(),
+  lines: listed(bundleQuoteLine),
+});
 
 async function productForUpdate(ctx: ServiceContext, id: string, version: number) {
   const [product] = await ctx.tx.select().from(products).where(eq(products.id, id)).for("update");
@@ -51,6 +109,14 @@ export const listProductRelations = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ productId }),
+  output: listed(
+    row({
+      id: uuid,
+      kind: z.enum(RELATION_KINDS),
+      position: z.number().int(),
+      related: productRow,
+    }),
+  ),
   handler: async (input, ctx) => {
     const [product] = await ctx.tx.select({ id: products.id }).from(products).where(eq(products.id, input.productId));
     if (!product) throw new ServiceError("not_found", "That product is not here.");
@@ -79,6 +145,7 @@ export const addProductRelation = defineService({
     relatedProductId: productId,
     kind: z.enum(RELATION_KINDS),
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     if (input.productId === input.relatedProductId) {
       throw new ServiceError("validation", "A product cannot be related to itself.");
@@ -123,6 +190,7 @@ export const removeProductRelation = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ productId, expectedVersion, relationId: productId }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const deleted = await ctx.tx
@@ -140,6 +208,7 @@ export const listBundleComponents = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ productId }),
+  output: listed(bundleComponentRow),
   handler: async (input, ctx) => {
     const [product] = await ctx.tx.select({ id: products.id, kind: products.kind }).from(products).where(eq(products.id, input.productId));
     if (!product) throw new ServiceError("not_found", "That product is not here.");
@@ -166,6 +235,7 @@ export const addBundleComponent = defineService({
     percentOffPpm: z.number().int().min(1).max(1_000_000).optional(),
     currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     if (product.kind !== "bundle") {
@@ -233,6 +303,7 @@ export const removeBundleComponent = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ productId, expectedVersion, componentId: productId }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const deleted = await ctx.tx
@@ -256,6 +327,7 @@ export const quoteBundle = defineService({
     quantity: z.number().int().positive().max(10_000).default(1),
     at: z.coerce.date().default(() => new Date()),
   }),
+  output: bundleQuote,
   handler: async (input, ctx) => {
     const [product] = await ctx.tx.select().from(products).where(eq(products.id, input.productId));
     if (!product) throw new ServiceError("not_found", "That product is not here.");

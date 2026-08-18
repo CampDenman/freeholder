@@ -8,6 +8,7 @@ import {
   mergeCandidates,
 } from "@/core/contacts/schema";
 import { mergeContacts } from "@/core/contacts/service";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
 
 export const DUPLICATE_REASON_CODES = [
@@ -93,6 +94,57 @@ export function scoreDuplicatePair(pair: BlockedPair): {
   };
 }
 
+const lifecycleStage = z.enum(["lead", "prospect", "customer", "repeat"]);
+const contactRow = row({
+  id: uuid,
+  userId: uuid.nullable(),
+  name: z.string(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  orgId: uuid.nullable(),
+  source: z.string().nullable(),
+  tags: z.array(z.string()),
+  customFields: z.unknown(),
+  lifecycleStage,
+  preferredLocale: z.string().nullable(),
+  timezone: z.string().nullable(),
+  country: z.string().nullable(),
+  ownerNotes: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const mergedContact = contactRow.and(row({ mergeOperationId: uuid }));
+const mergeCandidateRow = row({
+  id: uuid,
+  contactAId: uuid.nullable(),
+  contactBId: uuid.nullable(),
+  contactAName: z.string(),
+  contactAEmail: z.string().nullable(),
+  contactBName: z.string(),
+  contactBEmail: z.string().nullable(),
+  score: z.number().int(),
+  reasons: z.unknown(),
+  status: z.enum(["open", "dismissed", "merged"]),
+  detectedAt: timestamp,
+  dismissedAt: timestamp.nullable(),
+  mergedAt: timestamp.nullable(),
+  updatedAt: timestamp,
+});
+const mergeOperationRow = row({
+  id: uuid,
+  candidateId: uuid.nullable(),
+  survivingContactId: uuid,
+  duplicateContactId: uuid,
+  survivorBefore: z.unknown(),
+  duplicateBefore: z.unknown(),
+  survivorAfter: z.unknown(),
+  referenceState: z.unknown(),
+  undoable: z.boolean(),
+  undoBlockers: z.array(z.string()),
+  mergedAt: timestamp,
+  undoneAt: timestamp.nullable(),
+});
+
 /**
  * Rebuild the open queue from indexed blocking keys. Nothing in this service
  * merges: confidence earns a place in the queue, never authority over data.
@@ -103,6 +155,10 @@ export const scanDuplicateCandidates = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    scannedPairs: z.number().int(),
+    openCandidates: z.number().int(),
+  }),
   handler: async (_input, ctx) => {
     const pairs = await ctx.tx.execute<BlockedPair>(sql`
       with blocked_pairs as (
@@ -214,6 +270,10 @@ export const listDuplicateCandidates = defineService({
     limit: z.number().int().min(1).max(100).default(25),
     offset: z.number().int().min(0).default(0),
   }),
+  output: z.object({
+    rows: listed(mergeCandidateRow),
+    total: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     const where = eq(mergeCandidates.status, input.status);
     const rows = await ctx.tx
@@ -237,6 +297,7 @@ export const dismissDuplicateCandidate = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: mergeCandidateRow,
   handler: async (input, ctx) => {
     const [candidate] = await ctx.tx
       .update(mergeCandidates)
@@ -266,6 +327,7 @@ export const mergeDuplicateCandidate = defineService({
     survivingId: z.string().uuid(),
     duplicateId: z.string().uuid(),
   }),
+  output: mergedContact,
   handler: (input, ctx) => ctx.call(mergeContacts, input),
 });
 
@@ -275,6 +337,7 @@ export const listContactMergeOperations = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ limit: z.number().int().min(1).max(100).default(25) }),
+  output: listed(mergeOperationRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()

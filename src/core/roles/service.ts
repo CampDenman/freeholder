@@ -4,6 +4,7 @@
 import { and, asc, count, eq } from "drizzle-orm";
 import { z } from "zod";
 import { roleGrants, roles, users } from "@/core/auth/schema";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import {
   defineService,
@@ -11,6 +12,24 @@ import {
   ServiceError,
   type GrantAccess,
 } from "@/core/service";
+
+const roleKeyResult = z.object({ key: z.string() });
+const roleRow = row({
+  key: z.string(),
+  name: z.string(),
+  description: z.string(),
+  isSystem: z.boolean(),
+  assignable: z.boolean(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  grants: listed(
+    row({
+      module: z.string(),
+      access: z.enum(["view", "manage"]),
+    }),
+  ),
+  users: z.number(),
+});
 
 const roleKey = z
   .string()
@@ -81,6 +100,13 @@ export const listRoleModules = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      module: z.string(),
+      queries: z.number().int(),
+      mutations: z.number().int(),
+    }),
+  ),
   handler: async () =>
     [...installedModules()]
       .map(([module, totals]) => ({ module, ...totals }))
@@ -93,6 +119,7 @@ export const listRoles = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(roleRow),
   handler: async (_input, ctx) => {
     const [rows, grants, assignments] = await Promise.all([
       ctx.tx.select().from(roles).orderBy(asc(roles.name)),
@@ -131,6 +158,7 @@ export const createRole = defineService({
     description: z.string().trim().max(500).default(""),
     grants: z.array(grant).max(100).default([]),
   }),
+  output: roleKeyResult,
   handler: async (input, ctx) => {
     assertGrants(input.grants);
     const key = input.key ?? keyFromName(input.name);
@@ -178,6 +206,7 @@ export const updateRole = defineService({
     description: z.string().trim().max(500).default(""),
     grants: z.array(grant).max(100),
   }),
+  output: roleKeyResult,
   handler: async (input, ctx) => {
     assertGrants(input.grants);
     const [existing] = await ctx.tx
@@ -227,6 +256,7 @@ export const deleteRole = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ key: roleKey }),
+  output: roleKeyResult,
   handler: async (input, ctx) => {
     const [role] = await ctx.tx
       .select({ isSystem: roles.isSystem })
@@ -263,6 +293,14 @@ export const listRoleUsers = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      email: z.string(),
+      role: z.string(),
+      lastLoginAt: timestamp.nullable(),
+    }),
+  ),
   handler: async (_input, ctx) =>
     ctx.tx
       .select({
@@ -282,6 +320,7 @@ export const assignRole = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ userId: z.string().uuid(), roleKey }),
+  output: z.object({ userId: uuid, role: z.string() }),
   handler: async (input, ctx) => {
     const [targetRole] = await ctx.tx
       .select({ assignable: roles.assignable })

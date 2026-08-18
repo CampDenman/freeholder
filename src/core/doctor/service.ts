@@ -9,6 +9,20 @@
 import { z } from "zod";
 import { defineService } from "@/core/service";
 import { runDoctor } from "@/core/doctor";
+import { listed, row } from "@/core/contract";
+
+const doctorCheck = row({
+  id: z.string(),
+  title: z.string(),
+  verdict: z.enum(["ok", "warn", "fail"]),
+  detail: z.string(),
+  remedy: z.string().optional(),
+});
+const doctorReport = z.object({
+  verdict: z.enum(["ok", "warn", "fail"]),
+  checks: listed(doctorCheck),
+  ranAt: z.string(),
+});
 
 /**
  * Owner-only.
@@ -23,6 +37,7 @@ export const doctor = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: doctorReport,
   handler: () => runDoctor(),
 });
 

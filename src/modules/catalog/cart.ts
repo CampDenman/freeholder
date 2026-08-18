@@ -8,10 +8,12 @@
 
 import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { CART_KINDS, CART_STATUSES } from "./contract";
 import { availability, releaseReservation, reserveStock } from "./inventory";
 import { resolvePrice } from "./pricing";
 import { cartItems, carts, productVariants, products, wishlistItems, wishlists } from "./schema";
@@ -20,6 +22,79 @@ const id = z.string().uuid();
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
 const CART_HOLD_MS = 30 * 60 * 1000;
 const ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
+
+const cartRow = row({
+  id: uuid,
+  token: z.string(),
+  contactId: uuid.nullable(),
+  currency: z.string(),
+  kind: z.enum(CART_KINDS),
+  status: z.enum(CART_STATUSES),
+  name: z.string().nullable(),
+  lastActivityAt: timestamp,
+  abandonedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const cartStock = z.discriminatedUnion("tracked", [
+  z.object({
+    tracked: z.literal(false),
+    available: z.boolean(),
+    quantity: z.number().int().optional(),
+  }),
+  z.object({
+    tracked: z.literal(true),
+    available: z.boolean(),
+    backordered: z.boolean(),
+    restockAt: timestamp.nullable(),
+    onHand: z.number().int(),
+    reserved: z.number().int(),
+    incoming: z.number().int(),
+    canPromise: z.number().int(),
+  }),
+]);
+const cartLineRow = row({
+  id: uuid,
+  cartId: uuid,
+  variantId: uuid,
+  locationId: uuid.nullable(),
+  quantity: z.number().int(),
+  reservationId: uuid.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  sku: z.string(),
+  productName: z.string(),
+  requiresShipping: z.boolean(),
+  weightG: z.number().int().nullable(),
+  lengthMm: z.number().int().nullable(),
+  widthMm: z.number().int().nullable(),
+  heightMm: z.number().int().nullable(),
+  unitAmountMinor: z.number().int().nullable(),
+  lineTotalMinor: z.number().int().nullable(),
+  priceAvailable: z.boolean(),
+  priceReason: z.string().nullable(),
+  stock: cartStock,
+});
+const cartProjection = z.object({
+  cart: cartRow,
+  lines: listed(cartLineRow),
+  subtotalMinor: z.number().int(),
+  allPriced: z.boolean(),
+  allAvailable: z.boolean(),
+});
+const wishlistRow = row({
+  id: uuid,
+  contactId: uuid,
+  name: z.string(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const wishlistItemRow = row({
+  id: uuid,
+  variantId: uuid,
+  sku: z.string(),
+  productName: z.string(),
+});
 
 async function mergeCartLines(tx: Tx, fromCartId: string, toCartId: string) {
   const incoming = await tx.select().from(cartItems).where(eq(cartItems.cartId, fromCartId));
@@ -188,6 +263,7 @@ export const getOrCreateCart = defineService({
     contactId: id.optional(),
     currency,
   }),
+  output: cartProjection,
   handler: async (input, ctx) => {
     if (input.contactId) await requireContact(ctx.tx, input.contactId);
     const [byToken] = input.token
@@ -237,6 +313,7 @@ export const attachCartToContact = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ token: z.string().uuid(), contactId: id }),
+  output: cartProjection,
   handler: async (input, ctx) => {
     await requireContact(ctx.tx, input.contactId);
     const [guest] = await ctx.tx.select().from(carts).where(eq(carts.token, input.token)).limit(1);
@@ -305,6 +382,7 @@ export const addCartItem = defineService({
     quantity: z.number().int().min(1).max(1_000_000).default(1),
     locationId: id.optional(),
   }),
+  output: cartProjection,
   handler: async (input, ctx) => {
     const cart = await loadCart(ctx.tx, input.cartId);
     if (cart.status !== "open" || cart.kind !== "cart") {
@@ -383,6 +461,7 @@ export const setCartItemQuantity = defineService({
     quantity: z.number().int().min(0).max(1_000_000),
     locationId: id.optional(),
   }),
+  output: cartProjection,
   handler: async (input, ctx) => {
     if (input.quantity === 0) {
       return ctx.call(removeCartItem, { cartId: input.cartId, variantId: input.variantId });
@@ -435,6 +514,7 @@ export const removeCartItem = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ cartId: id, variantId: id }),
+  output: cartProjection,
   handler: async (input, ctx) => {
     const cart = await loadCart(ctx.tx, input.cartId);
     const [existing] = await ctx.tx
@@ -459,6 +539,7 @@ export const getCart = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ cartId: id.optional(), token: z.string().uuid().optional() }),
+  output: cartProjection,
   handler: async (input, ctx) => {
     if (!input.cartId && !input.token) {
       throw new ServiceError("validation", "A cart id or token is required.");
@@ -477,6 +558,7 @@ export const saveCart = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ cartId: id, name: z.string().trim().min(1).max(80) }),
+  output: cartProjection,
   handler: async (input, ctx) => {
     const source = await projectCart(ctx, input.cartId);
     if (!source.cart.contactId) {
@@ -512,6 +594,7 @@ export const listSavedCarts = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ contactId: id }),
+  output: listed(cartProjection),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -528,6 +611,10 @@ export const addWishlistItem = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ contactId: id, variantId: id }),
+  output: z.object({
+    wishlist: wishlistRow.nullable(),
+    items: listed(wishlistItemRow),
+  }),
   handler: async (input, ctx) => {
     await requireContact(ctx.tx, input.contactId);
     let [list] = await ctx.tx.select().from(wishlists).where(eq(wishlists.contactId, input.contactId)).limit(1);
@@ -549,6 +636,10 @@ export const removeWishlistItem = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ contactId: id, variantId: id }),
+  output: z.object({
+    wishlist: wishlistRow.nullable(),
+    items: listed(wishlistItemRow),
+  }),
   handler: async (input, ctx) => {
     const [list] = await ctx.tx.select().from(wishlists).where(eq(wishlists.contactId, input.contactId)).limit(1);
     if (list) {
@@ -566,6 +657,10 @@ export const listWishlist = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ contactId: id }),
+  output: z.object({
+    wishlist: wishlistRow.nullable(),
+    items: listed(wishlistItemRow),
+  }),
   handler: async (input, ctx) => {
     const [list] = await ctx.tx.select().from(wishlists).where(eq(wishlists.contactId, input.contactId)).limit(1);
     if (!list) return { wishlist: null, items: [] };
@@ -591,6 +686,14 @@ export const listSellableVariants = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      sku: z.string(),
+      productName: z.string(),
+      requiresShipping: z.boolean(),
+    }),
+  ),
   handler: (_input, ctx) =>
     ctx.tx
       .select({
@@ -612,6 +715,7 @@ export const listCarts = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ status: z.enum(["open", "converted", "abandoned"]).optional() }),
+  output: listed(cartRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
@@ -627,6 +731,7 @@ export const abandonStaleCarts = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({ abandoned: z.number().int() }),
   handler: async (_input, ctx) => {
     const cutoff = new Date(Date.now() - ABANDON_AFTER_MS);
     const stale = await ctx.tx

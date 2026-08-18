@@ -12,10 +12,12 @@ import {
   inArray,
 } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { auditLog } from "@/core/events/schema";
 import {
   guidanceFlowDefinitionSchema,
+  guidanceStepSchema,
   type GuidanceFlowDefinition,
   type GuidanceOutcome,
   type GuidanceStepDefinition,
@@ -322,6 +324,39 @@ const flowInput = z.object({
   flowKey: z.string().regex(/^[a-z][a-z0-9.-]*$/).max(120),
 });
 
+const guidanceStepView = guidanceStepSchema.extend({
+  completed: z.boolean(),
+});
+
+const guidanceFlowView = row({
+  key: z.string(),
+  version: z.number().int(),
+  titleKey: z.string(),
+  descriptionKey: z.string(),
+  audienceRoles: z.array(z.string()),
+  requiredCapabilities: z.array(z.string()),
+  audienceMatch: z.boolean(),
+  state: z.enum(["not_started", "active", "dismissed", "completed"]),
+  completedCount: z.number().int(),
+  totalCount: z.number().int(),
+  startedAt: timestamp.nullable(),
+  completedAt: timestamp.nullable(),
+  steps: listed(guidanceStepView),
+});
+
+const guidanceContextView = row({
+  key: z.string(),
+  titleKey: z.string(),
+  audienceMatch: z.boolean(),
+  hrefs: z.array(z.string()),
+});
+
+const guidanceMutation = z.object({
+  key: z.string(),
+  version: z.number().int(),
+  state: z.enum(["active", "dismissed"]),
+});
+
 async function requiredFlow(
   tx: Tx,
   actor: Extract<Actor, { kind: "user" }>,
@@ -343,6 +378,7 @@ export const listGuidance = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({ flowKey: flowInput.shape.flowKey.optional() }),
+  output: listed(guidanceFlowView),
   handler: (_input, ctx) =>
     guidanceViews(ctx.tx, requireUser(ctx.actor), _input.flowKey),
 });
@@ -353,6 +389,7 @@ export const listGuidanceContexts = defineService({
   kind: "query",
   permission: "authenticated",
   input: z.object({}),
+  output: listed(guidanceContextView),
   handler: async (_input, ctx): Promise<GuidanceContextView[]> => {
     const actor = requireUser(ctx.actor);
     return (await eligibleFlows(ctx.tx, actor)).map(({ definition, steps }) => ({
@@ -370,6 +407,7 @@ export const startGuidance = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: flowInput,
+  output: guidanceMutation,
   handler: async (input, ctx) => {
     const actor = requireUser(ctx.actor);
     const flow = await requiredFlow(ctx.tx, actor, input.flowKey);
@@ -407,6 +445,7 @@ export const dismissGuidance = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: flowInput,
+  output: guidanceMutation,
   handler: async (input, ctx) => {
     const actor = requireUser(ctx.actor);
     const flow = await requiredFlow(ctx.tx, actor, input.flowKey);
@@ -446,6 +485,7 @@ export const resetGuidance = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: flowInput,
+  output: guidanceMutation,
   handler: async (input, ctx) => {
     const actor = requireUser(ctx.actor);
     const flow = await requiredFlow(ctx.tx, actor, input.flowKey);

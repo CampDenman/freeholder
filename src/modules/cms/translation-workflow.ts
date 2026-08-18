@@ -3,6 +3,7 @@
 // Locale workflow on top of i18n (C2.16): machine drafts and SEO completeness.
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
 import { getTranslation, setTranslation } from "@/core/i18n/service";
 import { entityTranslations } from "@/core/i18n/schema";
@@ -77,6 +78,25 @@ async function draftValues(
   }
 }
 
+const translationRow = row({
+  id: uuid,
+  entityType: z.string(),
+  entityId: uuid,
+  locale: z.string(),
+  fields: z.unknown(),
+  status: z.enum(["draft", "machine", "reviewed"]),
+  translatedBy: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const translationReport = row({
+  pageId: uuid,
+  title: z.string(),
+  slug: z.string(),
+  status: z.enum(["draft", "machine", "reviewed", "missing"]),
+  seoComplete: z.boolean(),
+});
+
 export function seoComplete(fields: {
   title?: string;
   seo?: PageSeoFields;
@@ -96,6 +116,7 @@ export const draftPageTranslation = defineService({
     locale: z.string().min(2).max(20),
     replace: z.boolean().default(false),
   }),
+  output: translationRow,
   handler: async (input, ctx) => {
     const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
     if (!page) throw new ServiceError("not_found", "That page is not on this site.");
@@ -145,6 +166,7 @@ export const pageTranslationReport = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ locale: z.string().min(2).max(20) }),
+  output: listed(translationReport),
   handler: async (input, ctx) => {
     const pageRows = await ctx.tx
       .select({

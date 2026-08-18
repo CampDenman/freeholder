@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { builderAgent, type AgentToolDefinition } from "@/adapters/agent";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { env } from "@/core/env";
 import {
   actorString,
@@ -121,6 +122,35 @@ const modelProposal = z.object({
 });
 
 const proposalId = z.object({ id: z.string().uuid() });
+
+const builderProposalRow = row({
+  id: uuid,
+  brief: z.string(),
+  lane: z.enum(["structure", "vocabulary", "refused"]),
+  status: z.enum(["ready", "applied", "rejected", "stale", "rolled_back"]),
+  summary: z.string(),
+  rationale: z.string(),
+  baseSnapshot: z.unknown(),
+  changes: z.unknown(),
+  diff: z.unknown(),
+  applyResult: z.unknown(),
+  model: z.string(),
+  provider: z.string().nullable(),
+  inputTokens: z.number().int(),
+  outputTokens: z.number().int(),
+  totalTokens: z.number().int(),
+  createdByActor: z.string(),
+  appliedAt: timestamp.nullable(),
+  rolledBackAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const builderStaleResult = z.object({
+  applied: z.literal(false),
+  status: z.literal("stale"),
+  message: z.string(),
+});
 
 function assertBuilderReader(actor: Actor): void {
   if (actor.kind === "system" || actor.kind === "agent") return;
@@ -395,6 +425,14 @@ export const builderStatus = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    adapter: z.string(),
+    configured: z.boolean(),
+    monthlyTokenBudget: z.number().int(),
+    usedTokens: z.number().int(),
+    remainingTokens: z.number().int(),
+    maxOutputTokensPerProposal: z.number().int(),
+  }),
   handler: async (_input, ctx) => {
     assertBuilderReader(ctx.actor);
     const adapter = builderAgent();
@@ -417,6 +455,7 @@ export const propose = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ brief: z.string().trim().min(3).max(5_000) }),
+  output: builderProposalRow,
   handler: async (input, ctx) => {
     assertBuilderReader(ctx.actor);
     // Serialize proposal calls for this one instance. The lock is held through
@@ -482,6 +521,7 @@ export const listProposals = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ limit: z.number().int().min(1).max(100).default(30) }),
+  output: listed(builderProposalRow),
   handler: (input, ctx) => {
     assertBuilderReader(ctx.actor);
     return ctx.tx.select().from(builderProposals).orderBy(desc(builderProposals.createdAt)).limit(input.limit);
@@ -494,6 +534,7 @@ export const getProposal = defineService({
   kind: "query",
   permission: "scoped",
   input: proposalId,
+  output: builderProposalRow,
   handler: async (input, ctx) => {
     assertBuilderReader(ctx.actor);
     const [row] = await ctx.tx.select().from(builderProposals).where(eq(builderProposals.id, input.id)).limit(1);
@@ -515,6 +556,14 @@ export const applyProposal = defineService({
   permission: "scoped",
   agentCallable: false,
   input: proposalId,
+  output: z.union([
+    builderStaleResult,
+    z.object({
+      applied: z.literal(true),
+      status: z.literal("applied"),
+      proposal: builderProposalRow,
+    }),
+  ]),
   handler: async (input, ctx) => {
     assertOwner(ctx.actor);
     const [proposal] = await ctx.tx.select().from(builderProposals)
@@ -612,6 +661,7 @@ export const rejectProposal = defineService({
   permission: "scoped",
   agentCallable: false,
   input: proposalId,
+  output: builderProposalRow,
   handler: async (input, ctx) => {
     assertOwner(ctx.actor);
     const [row] = await ctx.tx.update(builderProposals).set({ status: "rejected" })
@@ -629,6 +679,7 @@ export const rollbackProposal = defineService({
   permission: "scoped",
   agentCallable: false,
   input: proposalId,
+  output: z.union([builderStaleResult, builderProposalRow]),
   handler: async (input, ctx) => {
     assertOwner(ctx.actor);
     const [proposal] = await ctx.tx.select().from(builderProposals)

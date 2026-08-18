@@ -8,12 +8,15 @@
 
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { decimalToMinor } from "@/adapters/payments/currency";
 import { defineService, ServiceError } from "@/core/service";
 import { getFormById } from "@/modules/forms/service";
 import { roundRatio, safeMinor } from "@/modules/invoicing/money";
 import {
   CANCELLATION_FEE_TYPES,
+  PRICE_LIST_KINDS,
+  PRICE_BREAK_MODES,
   PRICE_RULE_MODES,
   SERVICE_ASSIGNMENTS,
   SERVICE_DEPOSIT_TYPES,
@@ -31,6 +34,90 @@ import { getProductVariants } from "./variants";
 
 const id = z.string().uuid();
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
+
+const cancellationPolicyRow = row({
+  id: uuid,
+  name: z.string(),
+  freeUntilHours: z.number().int(),
+  feeType: z.enum(CANCELLATION_FEE_TYPES),
+  feeValue: z.number().int().nullable(),
+  rescheduleLimit: z.number().int(),
+  noShowFeeMinor: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const serviceOfferingRow = row({
+  id: uuid,
+  productId: uuid,
+  durationMin: z.number().int(),
+  bufferBeforeMin: z.number().int(),
+  bufferAfterMin: z.number().int(),
+  locationType: z.enum(SERVICE_LOCATION_TYPES),
+  depositType: z.enum(SERVICE_DEPOSIT_TYPES),
+  depositValue: z.number().int(),
+  cancellationPolicyId: uuid.nullable(),
+  intakeFormId: uuid.nullable(),
+  waiverTemplateId: uuid.nullable(),
+  capacity: z.number().int(),
+  assignment: z.enum(SERVICE_ASSIGNMENTS),
+  calendarIds: listed(uuid),
+  travelTimeMin: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const priceRuleRow = row({
+  id: uuid,
+  productId: uuid,
+  mode: z.enum(PRICE_RULE_MODES),
+  planSchedule: z.unknown(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const resolvedPrice = z.discriminatedUnion("available", [
+  z.object({
+    available: z.literal(false),
+    currency: z.string(),
+    variantId: uuid,
+    quantity: z.number().int(),
+    reason: z.string(),
+  }),
+  z.object({
+    available: z.literal(true),
+    currency: z.string(),
+    variantId: uuid,
+    quantity: z.number().int(),
+    amountMinor: z.number().int(),
+    totalMinor: z.number().int(),
+    compareAtMinor: z.number().int().nullable(),
+    priceListId: uuid,
+    priceListName: z.string(),
+    kind: z.enum(PRICE_LIST_KINDS),
+    breakMode: z.enum(PRICE_BREAK_MODES).nullable(),
+    breakdown: listed(z.object({ qty: z.number().int(), unitMinor: z.number().int() })),
+    reason: z.string(),
+  }),
+]);
+const servicePaymentQuote = z.discriminatedUnion("available", [
+  z.object({
+    available: z.literal(false),
+    mode: z.enum(PRICE_RULE_MODES),
+    currency: z.string(),
+    reason: z.string(),
+  }),
+  z.object({
+    available: z.literal(true),
+    mode: z.enum(PRICE_RULE_MODES),
+    currency: z.string(),
+    priceMinor: z.number().int(),
+    depositMinor: z.number().int(),
+    balanceMinor: z.number().int(),
+    dueNowMinor: z.number().int(),
+    schedule: z.unknown(),
+    durationMin: z.number().int(),
+    capacity: z.number().int(),
+    price: resolvedPrice,
+  }),
+]);
 
 function assertFeeValue(
   feeType: (typeof CANCELLATION_FEE_TYPES)[number],
@@ -143,6 +230,7 @@ export const listCancellationPolicies = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(cancellationPolicyRow),
   handler: (_input, ctx) =>
     ctx.tx.select().from(cancellationPolicies).orderBy(asc(cancellationPolicies.name)),
 });
@@ -162,6 +250,7 @@ export const createCancellationPolicy = defineService({
     noShowFeeAmount: z.string().trim().optional(),
     currency: currency.optional(),
   }),
+  output: cancellationPolicyRow,
   handler: async (input, ctx) => {
     const feeValue =
       input.feeType === "fixed"
@@ -194,6 +283,7 @@ export const deleteCancellationPolicy = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: z.object({ id: uuid }),
   handler: async (input, ctx) => {
     const [used] = await ctx.tx
       .select({ id: serviceOfferings.id })
@@ -222,6 +312,7 @@ export const getServiceOffering = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ productId: id }),
+  output: serviceOfferingRow.nullable(),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -238,6 +329,7 @@ export const listPriceRules = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ productId: id }),
+  output: listed(priceRuleRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
@@ -269,6 +361,7 @@ export const upsertServiceOffering = defineService({
     calendarIds: z.array(id).default([]),
     travelTimeMin: z.number().int().min(0).max(24 * 60).default(0),
   }),
+  output: serviceOfferingRow,
   handler: async (input, ctx) => {
     const [product] = await ctx.tx
       .select({ id: products.id, kind: products.kind })
@@ -357,6 +450,7 @@ export const setPriceRule = defineService({
     intervalDays: z.number().int().min(1).max(365).optional(),
     periodDays: z.number().int().min(7).max(365).optional(),
   }),
+  output: priceRuleRow,
   handler: async (input, ctx) => {
     const [product] = await ctx.tx
       .select({ id: products.id, kind: products.kind })
@@ -405,6 +499,7 @@ export const removePriceRule = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ productId: id, mode: z.enum(PRICE_RULE_MODES) }),
+  output: z.object({ id: uuid, mode: z.enum(PRICE_RULE_MODES) }),
   handler: async (input, ctx) => {
     const [deleted] = await ctx.tx
       .delete(priceRules)
@@ -429,6 +524,7 @@ export const quoteServicePayment = defineService({
     quantity: z.number().int().min(1).max(1_000).default(1),
     at: z.coerce.date().optional(),
   }),
+  output: servicePaymentQuote,
   handler: async (input, ctx) => {
     const [offering] = await ctx.tx
       .select()

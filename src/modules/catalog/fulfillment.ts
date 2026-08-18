@@ -9,6 +9,7 @@
 
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { createNotification } from "@/core/notifications/service";
@@ -21,6 +22,12 @@ import {
   settleRefund,
 } from "@/modules/invoicing/invoice-service";
 import { QUANTITY_SCALE } from "@/modules/invoicing/money";
+import {
+  FULFILLMENT_KINDS,
+  FULFILLMENT_STATUSES,
+  ORDER_STATUSES,
+  RETURN_STATUSES,
+} from "./contract";
 import { consumeReservation, recordStockMovement, releaseReservation, reserveStock } from "./inventory";
 import {
   digitalDeliveries,
@@ -37,6 +44,89 @@ import {
 } from "./schema";
 
 const id = z.string().uuid();
+
+const fulfillmentRow = row({
+  id: uuid,
+  orderId: uuid,
+  locationId: uuid.nullable(),
+  kind: z.enum(FULFILLMENT_KINDS),
+  status: z.enum(FULFILLMENT_STATUSES),
+  boxId: uuid.nullable(),
+  weightG: z.number().int().nullable(),
+  carrier: z.string().nullable(),
+  service: z.string().nullable(),
+  trackingNumber: z.string().nullable(),
+  trackingUrl: z.string().nullable(),
+  shippedAt: timestamp.nullable(),
+  deliveredAt: timestamp.nullable(),
+  note: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const fulfillmentItemRow = row({
+  id: uuid,
+  fulfillmentId: uuid,
+  orderItemId: uuid,
+  quantity: z.number().int(),
+  createdAt: timestamp,
+});
+const fulfillmentDetail = z.object({
+  fulfillment: fulfillmentRow,
+  items: listed(fulfillmentItemRow),
+});
+const digitalDeliveryRow = row({
+  id: uuid,
+  orderId: uuid,
+  orderItemId: uuid,
+  token: z.string(),
+  assetId: uuid.nullable(),
+  grantedAt: timestamp,
+  downloadedAt: timestamp.nullable(),
+  createdAt: timestamp,
+});
+const returnRequestRow = row({
+  id: uuid,
+  orderId: uuid,
+  contactId: uuid,
+  status: z.enum(RETURN_STATUSES),
+  reason: z.string(),
+  restock: z.boolean(),
+  labelUrl: z.string().nullable(),
+  creditNoteId: uuid.nullable(),
+  refundId: uuid.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const returnItemRow = row({
+  id: uuid,
+  returnId: uuid,
+  orderItemId: uuid,
+  quantity: z.number().int(),
+  restockedQuantity: z.number().int(),
+  createdAt: timestamp,
+});
+const returnDetail = z.object({
+  return: returnRequestRow,
+  items: listed(returnItemRow),
+});
+const orderRow = row({
+  id: uuid,
+  contactId: uuid,
+  cartId: uuid.nullable(),
+  invoiceId: uuid.nullable(),
+  currency: z.string(),
+  status: z.enum(ORDER_STATUSES),
+  subtotalMinor: z.number().int(),
+  discountMinor: z.number().int(),
+  shippingMinor: z.number().int(),
+  taxMinor: z.number().int(),
+  totalMinor: z.number().int(),
+  couponId: uuid.nullable(),
+  shippingMethodId: uuid.nullable(),
+  shippingAddress: z.unknown().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 
 registerContactReference({
   table: "return_requests",
@@ -238,6 +328,7 @@ export const createFulfillment = defineService({
     locationId: id.optional(),
     items: z.array(z.object({ orderItemId: id, quantity: z.number().int().min(1).max(1_000_000) })).min(1),
   }),
+  output: fulfillmentDetail,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId)).for("update");
     if (!order) throw new ServiceError("not_found", "That order is not here.");
@@ -284,6 +375,7 @@ export const getFulfillment = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id }),
+  output: fulfillmentDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(fulfillments).where(eq(fulfillments.id, input.id)).limit(1);
     if (!row) throw new ServiceError("not_found", "That shipment is not here.");
@@ -301,6 +393,7 @@ export const listFulfillments = defineService({
     orderId: id.optional(),
     status: z.enum(["pending", "picking", "packed", "shipped", "delivered", "failed", "returned"]).optional(),
   }),
+  output: listed(fulfillmentRow),
   handler: (input, ctx) => {
     const filters = [
       input.orderId ? eq(fulfillments.orderId, input.orderId) : undefined,
@@ -321,6 +414,7 @@ export const packFulfillment = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id, boxId: id.optional(), weightG: z.number().int().min(0).optional() }),
+  output: fulfillmentDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(fulfillments).where(eq(fulfillments.id, input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That shipment is not here.");
@@ -352,6 +446,7 @@ export const shipFulfillment = defineService({
     trackingNumber: z.string().trim().min(1).max(120).optional(),
     trackingUrl: z.string().trim().url().max(500).optional(),
   }),
+  output: fulfillmentDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(fulfillments).where(eq(fulfillments.id, input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That shipment is not here.");
@@ -414,6 +509,7 @@ export const deliverFulfillment = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: fulfillmentDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(fulfillments).where(eq(fulfillments.id, input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That shipment is not here.");
@@ -452,6 +548,7 @@ export const failFulfillment = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id, note: z.string().trim().min(3).max(500) }),
+  output: fulfillmentDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(fulfillments).where(eq(fulfillments.id, input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That shipment is not here.");
@@ -474,6 +571,7 @@ export const grantDigitalFulfillment = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ orderId: id }),
+  output: z.object({ grants: listed(digitalDeliveryRow) }),
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId)).for("update");
     if (!order) throw new ServiceError("not_found", "That order is not here.");
@@ -555,6 +653,7 @@ export const listDigitalDeliveries = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ orderId: id }),
+  output: listed(digitalDeliveryRow),
   handler: (input, ctx) =>
     ctx.tx.select().from(digitalDeliveries).where(eq(digitalDeliveries.orderId, input.orderId)),
 });
@@ -570,6 +669,7 @@ export const requestReturn = defineService({
     restock: z.boolean().default(true),
     items: z.array(z.object({ orderItemId: id, quantity: z.number().int().min(1).max(1_000_000) })).min(1),
   }),
+  output: returnDetail,
   handler: async (input, ctx) => {
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.id, input.orderId)).limit(1);
     if (!order) throw new ServiceError("not_found", "That order is not here.");
@@ -622,6 +722,7 @@ export const getReturn = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id }),
+  output: returnDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id, input.id)).limit(1);
     if (!row) throw new ServiceError("not_found", "That return is not here.");
@@ -639,6 +740,7 @@ export const listReturns = defineService({
     orderId: id.optional(),
     status: z.enum(["requested", "approved", "received", "refunded", "rejected"]).optional(),
   }),
+  output: listed(returnRequestRow),
   handler: (input, ctx) => {
     const filters = [
       input.orderId ? eq(returnRequests.orderId, input.orderId) : undefined,
@@ -663,6 +765,7 @@ export const decideReturn = defineService({
     decision: z.enum(["approved", "rejected"]),
     labelUrl: z.string().trim().url().max(500).optional(),
   }),
+  output: returnDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id, input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That return is not here.");
@@ -703,6 +806,7 @@ export const receiveReturn = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id, locationId: id.optional() }),
+  output: returnDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id, input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That return is not here.");
@@ -756,6 +860,7 @@ export const refundReturn = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id, idempotencyKey: z.string().trim().min(8).max(240) }),
+  output: returnDetail,
   handler: async (input, ctx) => {
     const [row] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id, input.id)).for("update");
     if (!row) throw new ServiceError("not_found", "That return is not here.");
@@ -843,6 +948,7 @@ export const listFulfillmentQueue = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(orderRow),
   handler: (_input, ctx) =>
     ctx.tx
       .select()

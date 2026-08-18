@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { bulkMail, mail, mailConfigurationStatus } from "@/adapters/mail";
 import { createGmailMail } from "@/adapters/mail/gmail";
 import { createOutlookMail } from "@/adapters/mail/outlook";
@@ -36,6 +37,117 @@ const senderProvider = z.enum([
   "postmark",
   "ses",
 ]);
+
+const mailProvider = z.enum([
+  "gmail",
+  "outlook",
+  "smtp",
+  "console",
+  "resend",
+  "postmark",
+  "ses",
+  "none",
+]);
+
+const mailSenderRow = row({
+  id: uuid,
+  purpose: z.enum(["transactional", "bulk"]),
+  provider: z.enum([
+    "gmail",
+    "outlook",
+    "smtp",
+    "console",
+    "resend",
+    "postmark",
+    "ses",
+  ]),
+  connectedAccountId: uuid.nullable(),
+  email: z.string(),
+  displayName: z.string().nullable(),
+  providerIdentity: z.string().nullable(),
+  verificationStatus: z.enum(["pending", "verified", "failed"]),
+  status: z.enum(["active", "paused", "needs_attention"]),
+  isDefault: z.boolean(),
+  verificationDetail: z.unknown(),
+  lastVerifiedAt: timestamp.nullable(),
+  lastError: z.string().nullable(),
+  createdBy: uuid.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const mailDeliveryRow = row({
+  id: uuid,
+  senderId: uuid.nullable(),
+  purpose: z.enum(["transactional", "bulk"]),
+  provider: mailProvider,
+  recipient: z.string(),
+  subject: z.string(),
+  status: z.enum([
+    "queued",
+    "submitted",
+    "delivered",
+    "bounced",
+    "complained",
+    "failed",
+    "suppressed",
+  ]),
+  providerRef: z.string().nullable(),
+  idempotencyKey: z.string().nullable(),
+  requestedBy: z.string(),
+  attempts: z.number().int(),
+  lastError: z.string().nullable(),
+  submittedAt: timestamp.nullable(),
+  deliveredAt: timestamp.nullable(),
+  providerStatusAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const mailSuppressionRow = row({
+  email: z.string(),
+  reason: z.enum(["hard_bounce", "complaint", "provider", "manual"]),
+  provider: z.enum(["resend", "postmark", "ses", "manual"]),
+  sourceEventId: uuid.nullable(),
+  detail: z.string().nullable(),
+  active: z.boolean(),
+  releasedAt: timestamp.nullable(),
+  releasedBy: uuid.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const mailConfiguration = z.object({
+  transactional: z.object({
+    provider: z.enum(["smtp", "console", "gmail", "outlook"]),
+    delivers: z.boolean(),
+    missing: z.array(z.string()),
+    fromAddress: z.string().nullable(),
+  }),
+  oauth: listed(
+    z.object({
+      provider: z.enum(["google", "microsoft"]),
+      configured: z.boolean(),
+      missing: z.array(z.string()),
+    }),
+  ),
+  bulk: z.object({
+    provider: z.enum(["resend", "postmark", "ses", "none"]),
+    sendConfigured: z.boolean(),
+    feedbackConfigured: z.boolean(),
+    missing: z.array(z.string()),
+    webhookPath: z.string().nullable(),
+    fromAddress: z.string().nullable(),
+  }),
+});
+
+const mailSendResult = z.object({
+  id: uuid,
+  provider: mailProvider,
+  providerRef: z.string().nullable(),
+  delivers: z.boolean(),
+  duplicate: z.boolean(),
+});
 
 type Purpose = "transactional" | "bulk";
 type SenderRow = typeof mailSenders.$inferSelect & {
@@ -332,6 +444,38 @@ export const mailStatus = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ limit: z.number().int().min(1).max(100).default(25) }),
+  output: z.object({
+    configuration: mailConfiguration,
+    senders: listed(
+      row({
+        id: uuid,
+        purpose: z.enum(["transactional", "bulk"]),
+        provider: z.enum([
+          "gmail",
+          "outlook",
+          "smtp",
+          "console",
+          "resend",
+          "postmark",
+          "ses",
+        ]),
+        email: z.string(),
+        displayName: z.string().nullable(),
+        verificationStatus: z.enum(["pending", "verified", "failed"]),
+        status: z.enum(["active", "paused", "needs_attention"]),
+        isDefault: z.boolean(),
+        lastVerifiedAt: timestamp.nullable(),
+        lastError: z.string().nullable(),
+        createdAt: timestamp,
+        accountStatus: z
+          .enum(["active", "needs_reconnect", "revoked"])
+          .nullable(),
+        capabilityEnabled: z.boolean().nullable(),
+      }),
+    ),
+    deliveries: listed(mailDeliveryRow),
+    suppressions: listed(mailSuppressionRow),
+  }),
   handler: async (input, ctx) => {
     const [senders, deliveries, suppressions] = await Promise.all([
       ctx.tx
@@ -401,6 +545,7 @@ export const registerMailSender = defineService({
     displayName: z.string().trim().min(1).max(200).optional(),
     providerIdentity: z.string().trim().min(1).max(300).optional(),
   }),
+  output: mailSenderRow,
   handler: async (input, ctx) => {
     refuseAgent(ctx.actor, "register");
     const configured = providerForPurpose(input.purpose);
@@ -477,6 +622,7 @@ export const verifyMailSender = defineService({
   stepUp: true,
   agentCallable: false,
   input: z.object({ id: z.uuid() }),
+  output: mailSenderRow,
   handler: async (input, ctx) => {
     refuseAgent(ctx.actor, "verify");
     const sender = await getSender(ctx.tx, input.id);
@@ -524,6 +670,7 @@ export const setDefaultMailSender = defineService({
   stepUp: true,
   agentCallable: false,
   input: z.object({ id: z.uuid() }),
+  output: mailSenderRow,
   handler: async (input, ctx) => {
     refuseAgent(ctx.actor, "change");
     const sender = await getSender(ctx.tx, input.id);
@@ -584,6 +731,7 @@ export const updateMailSender = defineService({
   stepUp: true,
   agentCallable: false,
   input: z.object({ id: z.uuid(), status: z.enum(["active", "paused"]) }),
+  output: mailSenderRow,
   handler: async (input, ctx) => {
     refuseAgent(ctx.actor, "change");
     const [row] = await ctx.tx
@@ -610,6 +758,7 @@ export const testMailSender = defineService({
     message: "Too many mail tests were sent. Wait a few minutes and try again.",
   },
   input: z.object({ id: z.uuid() }),
+  output: mailSendResult,
   handler: async (input, ctx) => {
     const actor = ctx.actor;
     refuseAgent(actor, "test");
@@ -654,6 +803,7 @@ export const releaseMailSuppression = defineService({
   stepUp: true,
   agentCallable: false,
   input: z.object({ email: address, confirmation: z.string() }),
+  output: mailSuppressionRow,
   handler: async (input, ctx) => {
     refuseAgent(ctx.actor, "release");
     if (input.confirmation !== input.email) {
@@ -719,6 +869,10 @@ export const recordMailProviderEvent = defineService({
     rawDigest: z.string().length(64),
     occurredAt: z.iso.datetime(),
   }),
+  output: z.union([
+    z.object({ duplicate: z.literal(true) }),
+    z.object({ id: uuid, duplicate: z.literal(false) }),
+  ]),
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "system") {
       throw new ServiceError("permission", "Only an authenticated provider webhook may record this event.");

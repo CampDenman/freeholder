@@ -5,7 +5,17 @@
 import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { TaxQuoteRequest } from "@/adapters/tax";
+import { listed, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
+import {
+  publicTaxTemplate as publicTaxTemplateSchema,
+  taxCategoryRow,
+  taxExemptionRow,
+  taxQuote,
+  taxRateRow,
+  taxRegistrationRow,
+  taxZoneRow,
+} from "./contract";
 import {
   invoices,
   taxCategories,
@@ -76,6 +86,13 @@ export const listTaxConfiguration = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    categories: listed(taxCategoryRow),
+    zones: listed(taxZoneRow),
+    rates: listed(taxRateRow),
+    registrations: listed(taxRegistrationRow),
+    exemptions: listed(taxExemptionRow),
+  }),
   handler: async (_input, ctx) => {
     const [categories, zones, rates, registrations, exemptions] = await Promise.all([
       ctx.tx.select().from(taxCategories).orderBy(asc(taxCategories.code)),
@@ -99,6 +116,7 @@ export const createTaxCategory = defineService({
     description: z.string().trim().max(2_000).optional(),
     defaultRateHintPpm: ratePpm.optional(),
   }),
+  output: taxCategoryRow,
   handler: async (input, ctx) => {
     const [created] = await ctx.tx.insert(taxCategories).values(input).returning();
     ctx.setSubject("taxCategory", created!.id);
@@ -125,6 +143,7 @@ export const createTaxZone = defineService({
     roundingScope: z.enum(["line", "invoice"]).default("line"),
     roundingMode: z.enum(["half_up", "bankers"]).default("half_up"),
   }),
+  output: taxZoneRow,
   handler: async (input, ctx) => {
     const [created] = await ctx.tx.insert(taxZones).values(input).returning();
     ctx.setSubject("taxZone", created!.id);
@@ -141,6 +160,10 @@ export const listTaxTemplates = defineService({
     group: z
       .enum(["canada", "european_union", "united_kingdom", "united_states", "australia", "new_zealand"])
       .optional(),
+  }),
+  output: z.object({
+    templates: listed(publicTaxTemplateSchema),
+    warning: z.string(),
   }),
   handler: async (input) => ({
     templates: taxTemplates
@@ -164,6 +187,13 @@ export const installTaxTemplate = defineService({
   }).refine((value) => value.thresholdMinor === 0 || Boolean(value.thresholdCurrency), {
     message: "A non-zero tax threshold needs its currency.",
     path: ["thresholdCurrency"],
+  }),
+  output: z.object({
+    created: z.boolean(),
+    template: publicTaxTemplateSchema,
+    zone: taxZoneRow,
+    rates: listed(taxRateRow),
+    registration: taxRegistrationRow.nullable(),
   }),
   handler: async (input, ctx) => {
     const definition = taxTemplate(input.key);
@@ -276,6 +306,7 @@ export const addTaxRate = defineService({
     (value) => !value.effectiveFrom || !value.effectiveTo || value.effectiveTo >= value.effectiveFrom,
     { message: "The rate cannot end before it starts.", path: ["effectiveTo"] },
   ),
+  output: taxRateRow,
   handler: async (input, ctx) => {
     const [zone] = await ctx.tx.select({ id: taxZones.id }).from(taxZones).where(eq(taxZones.id, input.zoneId));
     if (!zone) throw new ServiceError("not_found", "That tax zone is not here.");
@@ -308,6 +339,7 @@ export const setTaxRegistration = defineService({
     status: z.enum(["monitoring", "active", "paused", "closed"]),
     acknowledgeTemplateLimitations: z.boolean().default(false),
   }),
+  output: taxRegistrationRow,
   handler: async (input, ctx) => {
     const { id, acknowledgeTemplateLimitations, ...values } = input;
     const [zone] = await ctx.tx.select().from(taxZones).where(eq(taxZones.id, input.zoneId)).limit(1);
@@ -383,6 +415,7 @@ export const setTaxExemption = defineService({
       (value) => !value.validatedAt || !value.expiresAt || value.expiresAt > value.validatedAt,
       { message: "The exemption cannot expire before validation.", path: ["expiresAt"] },
     ),
+  output: taxExemptionRow,
   handler: async (input, ctx) => {
     const { id, ...values } = input;
     const [saved] = id
@@ -402,6 +435,38 @@ export const listTaxThresholds = defineService({
   input: z.object({
     asOf: z.coerce.date().default(() => new Date()),
     window: z.enum(["calendar_year", "rolling_12_months"]).default("calendar_year"),
+  }),
+  output: z.object({
+    thresholds: listed(
+      z.object({
+        zone: z.object({ id: uuid, name: z.string(), country: z.string() }),
+        registration: z.object({
+          id: uuid,
+          status: z.enum(["monitoring", "active", "paused", "closed"]),
+          thresholdMinor: z.number().int(),
+          thresholdCurrency: z.string().nullable(),
+        }),
+        window: z.enum(["calendar_year", "rolling_12_months"]),
+        startsAt: z.string(),
+        endsAt: z.string(),
+        state: z.enum(["not_configured", "reached", "approaching", "below"]),
+        grossSalesMinor: z.number().int(),
+        refundsMinor: z.number().int(),
+        netSalesMinor: z.number().int(),
+        transactions: z.number().int(),
+        remainingMinor: z.number().int(),
+        progressPpm: z.number().int(),
+        totalsByCurrency: listed(
+          z.object({
+            currency: z.string(),
+            grossSalesMinor: z.number().int(),
+            refundsMinor: z.number().int(),
+            transactions: z.number().int(),
+          }),
+        ),
+        explanation: z.string(),
+      }),
+    ),
   }),
   handler: async (input, ctx) => {
     const start = new Date(input.asOf);
@@ -519,6 +584,7 @@ export const quoteTax = defineService({
     shippingMinor: nonNegativeMinor.default(0),
     occurredAt: z.coerce.date().default(() => new Date()),
   }),
+  output: taxQuote,
   handler: async (input, ctx) => {
     const onDate = input.occurredAt.toISOString().slice(0, 10);
     const zones = await ctx.tx.select().from(taxZones).where(eq(taxZones.active, true));

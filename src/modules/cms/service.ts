@@ -8,13 +8,14 @@
 // permission check, audit row and revision history a human does.
 import { z } from "zod";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import { businessProfile } from "@/core/settings/schema";
 import { getTranslation, translatedIds } from "@/core/i18n/service";
 import { recordRedirect } from "@/core/seo/service";
 import { queueIndexNow } from "@/core/seo/indexnow";
-import { kindFromSlug, priorityFromSlug } from "@/core/seo/classify";
+import { kindFromSlug, priorityFromSlug, PUBLIC_ENTITY_KINDS } from "@/core/seo/classify";
 import { resolveAuthors, writeRevision } from "./history";
 import { contentRevisions, pages, sections } from "./schema";
 import {
@@ -155,6 +156,109 @@ const seo = z
   })
   .default({});
 
+const pageRow = row({
+  id: uuid,
+  slug: z.string(),
+  locale: z.string(),
+  title: z.string(),
+  blocks: z.unknown(),
+  status: z.enum(["draft", "published"]),
+  publishedAt: timestamp.nullable(),
+  seo: z.unknown(),
+  workingTitle: z.string().nullable(),
+  workingBlocks: z.unknown().nullable(),
+  workingSeo: z.unknown().nullable(),
+  version: z.number().int(),
+  scheduledPublishAt: timestamp.nullable(),
+  scheduledUnpublishAt: timestamp.nullable(),
+  approvalState: z.enum(["none", "pending", "approved", "rejected"]),
+  approvalNote: z.string().nullable(),
+  approvedBy: z.string().nullable(),
+  approvedAt: timestamp.nullable(),
+  editLeaseActor: z.string().nullable(),
+  editLeaseUntil: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const sectionRow = row({
+  id: uuid,
+  key: z.string(),
+  locale: z.string(),
+  name: z.string(),
+  kind: z.enum(["chrome", "reusable"]),
+  blocks: z.unknown(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const revisionRow = row({
+  id: uuid,
+  subjectType: z.enum(["page", "section"]),
+  subjectId: uuid,
+  title: z.string().nullable(),
+  blocks: z.unknown(),
+  seo: z.unknown(),
+  name: z.string().nullable(),
+  kind: z.enum([
+    "create",
+    "autosave",
+    "named",
+    "publish",
+    "unpublish",
+    "restore",
+    "schedule",
+    "approval",
+  ]),
+  actor: z.string(),
+  authorKind: z.enum(["user", "agent", "system", "anonymous"]),
+  authorId: z.string().nullable(),
+  authorLabel: z.string(),
+  createdAt: timestamp,
+});
+const authorCredit = row({
+  at: timestamp,
+  actor: z.string(),
+  authorKind: z.enum(["user", "agent", "system", "anonymous"]),
+  authorId: z.string().nullable(),
+  authorLabel: z.string(),
+  kind: z.string(),
+});
+const publishedPath = row({
+  slug: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  imageUrl: z.string().nullable(),
+  kind: z.enum(PUBLIC_ENTITY_KINDS),
+  priority: z.number(),
+  updatedAt: timestamp,
+});
+const a11yHint = row({
+  code: z.enum([
+    "missingH1",
+    "multipleH1",
+    "headingOrder",
+    "imageMissing",
+    "imageAltUnset",
+    "vagueLink",
+    "emptyHref",
+    "htmlImage",
+    "htmlLandmarks",
+    "videoMissing",
+  ]),
+  severity: z.enum(["error", "warning"]),
+  blockId: z.string().optional(),
+});
+const restoreResult = z.discriminatedUnion("subjectType", [
+  z.object({
+    subjectType: z.literal("page"),
+    id: uuid,
+    version: z.number().int(),
+  }),
+  z.object({
+    subjectType: z.literal("section"),
+    id: uuid,
+  }),
+]);
+
 /* ------------------------------------------------------------------ pages */
 
 /**
@@ -170,6 +274,7 @@ export const resolvePage = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ slug: lookupSlug, locale: z.string().default("en") }),
+  output: pageRow.nullable(),
   handler: async (input, ctx) => {
     // Pages are stored in the site's own language and *translated*, not
     // duplicated (§4.9). So the lookup is by slug in the source language, and
@@ -225,6 +330,7 @@ export const getPage = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: pageRow,
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
       .select()
@@ -242,6 +348,7 @@ export const listPages = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(pageRow),
   handler: (_input, ctx) =>
     ctx.tx.select().from(pages).orderBy(desc(pages.updatedAt)),
 });
@@ -258,6 +365,7 @@ export const publishedPaths = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ locale: z.string().default("en") }),
+  output: listed(publishedPath),
   handler: async (input, ctx) => {
     const published = await ctx.tx
       .select({
@@ -344,6 +452,7 @@ export const createPage = defineService({
     blocks: blockTreeSchema("page").default([]),
     seo,
   }),
+  output: pageRow,
   handler: async (input, ctx) => {
     const over = budgetMessage(input.blocks);
     if (over) throw new ServiceError("validation", over);
@@ -386,6 +495,7 @@ export const deleteDraftPage = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: row({ id: uuid, slug: z.string() }),
   handler: async (input, ctx) => {
     const [page] = await ctx.tx
       .select()
@@ -433,6 +543,7 @@ export const loadDemoCms = defineService({
   kind: "mutation",
   permission: "scoped",
   input: demoHandlerInputSchema,
+  output: demoLoadResultSchema,
   handler: async (input, ctx) => {
     await requireDemoHandlerRun(
       ctx.tx,
@@ -479,6 +590,7 @@ export const purgeDemoCms = defineService({
   kind: "mutation",
   permission: "scoped",
   input: demoHandlerInputSchema,
+  output: demoPurgeResultSchema,
   handler: async (input, ctx) => {
     await requireDemoHandlerRun(
       ctx.tx,
@@ -512,6 +624,7 @@ export const verifyDemoCms = defineService({
   kind: "query",
   permission: "scoped",
   input: demoHandlerInputSchema,
+  output: demoVerifyResultSchema,
   handler: async (input, ctx) => {
     await requireDemoHandlerRun(
       ctx.tx,
@@ -563,6 +676,7 @@ export const updatePage = defineService({
     blocks: blockTreeSchema("page").optional(),
     seo: seo.optional(),
   }),
+  output: pageRow,
   handler: async (input, ctx) => {
     const { id, expectedVersion, ...changes } = input;
     if (Object.keys(changes).length === 0) {
@@ -684,6 +798,7 @@ export const mergePage = defineService({
     blocks: blockTreeSchema("page").optional(),
     seo: seo.optional(),
   }),
+  output: pageRow,
   handler: async (input, ctx) => ctx.call(updatePage, input),
 });
 
@@ -693,6 +808,7 @@ export const pageAccessibilityReport = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: z.object({ hints: listed(a11yHint) }),
   handler: async (input, ctx) => {
     const page = await ctx.call(getPage, { id: input.id });
     const blocks = page.workingBlocks ?? page.blocks;
@@ -710,6 +826,7 @@ export const publishPage = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid(), published: z.boolean() }),
+  output: pageRow,
   handler: async (input, ctx) => {
     const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
@@ -794,6 +911,7 @@ export const getSection = defineService({
     locale: z.string().default("en"),
     fallback: z.boolean().default(true),
   }),
+  output: sectionRow.nullable(),
   handler: async (input, ctx) => {
     const [section] = await ctx.tx
       .select()
@@ -840,6 +958,7 @@ export const listSections = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(sectionRow),
   handler: (_input, ctx) =>
     ctx.tx.select().from(sections).orderBy(sections.kind, sections.name),
 });
@@ -855,6 +974,7 @@ export const updateSection = defineService({
     name: z.string().min(1).optional(),
     blocks: z.unknown(),
   }),
+  output: sectionRow,
   handler: async (input, ctx) => {
     const [before] = await ctx.tx
       .select()
@@ -910,6 +1030,7 @@ export const createSectionLocale = defineService({
     key: z.string().min(1),
     locale: z.string().min(2).max(35),
   }),
+  output: sectionRow,
   handler: async (input, ctx) => {
     const [business] = await ctx.tx
       .select({
@@ -994,6 +1115,7 @@ export const listRevisions = defineService({
     actor: z.string().min(1).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }),
+  output: listed(revisionRow),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -1039,6 +1161,19 @@ export const pageAuthorSummary = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ pageId: z.string().uuid() }),
+  output: z.object({
+    created: authorCredit.nullable(),
+    lastEdited: authorCredit.nullable(),
+    lastPublished: authorCredit.nullable(),
+    authors: listed(
+      row({
+        actor: z.string(),
+        kind: z.string(),
+        id: z.string().nullable(),
+        label: z.string(),
+      }),
+    ),
+  }),
   handler: async (input, ctx) => {
     const events = await ctx.call(listRevisions, {
       subjectType: "page",
@@ -1097,6 +1232,7 @@ export const restoreRevision = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ revisionId: z.string().uuid() }),
+  output: restoreResult,
   handler: async (input, ctx) => {
     const [revision] = await ctx.tx
       .select()
@@ -1198,6 +1334,7 @@ export const ensureDefaults = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ locale: z.string().default("en") }),
+  output: z.object({ created: listed(z.string()) }),
   handler: async (input, ctx) => {
     const [business] = await ctx.tx
       .select({ name: businessProfile.name, tagline: businessProfile.tagline })

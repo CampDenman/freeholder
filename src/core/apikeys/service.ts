@@ -10,6 +10,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { apiKeys } from "@/core/apikeys/schema";
 import { mintApiKey } from "@/core/apikeys/tokens";
 import { violates } from "@/core/db/errors";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineService,
   listServices,
@@ -72,6 +73,19 @@ export const listScopes = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      area: z.string(),
+      family: z.string(),
+      services: listed(
+        row({
+          name: z.string(),
+          summary: z.string(),
+          kind: z.enum(["query", "mutation"]),
+        }),
+      ),
+    }),
+  ),
   handler: async (_input, _ctx) => {
     const services = [...listServices().values()];
     const modules = new Map<string, { name: string; summary: string; kind: string }[]>();
@@ -106,6 +120,20 @@ export const createApiKey = defineService({
     scopes: z.array(z.string().min(1).max(120)).max(200).default([]),
     /** Days until it stops working. Absent means it does not expire. */
     expiresInDays: z.number().int().min(1).max(3650).optional(),
+  }),
+  output: row({
+    id: uuid,
+    name: z.string(),
+    tokenHash: z.string(),
+    prefix: z.string(),
+    scopes: listed(z.string()),
+    createdBy: uuid.nullable(),
+    lastUsedAt: timestamp.nullable(),
+    expiresAt: timestamp.nullable(),
+    revokedAt: timestamp.nullable(),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    token: z.string(),
   }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "create");
@@ -151,6 +179,18 @@ export const listApiKeys = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ includeRevoked: z.boolean().default(false) }),
+  output: listed(
+    row({
+      id: uuid,
+      name: z.string(),
+      prefix: z.string(),
+      scopes: listed(z.string()),
+      lastUsedAt: timestamp.nullable(),
+      expiresAt: timestamp.nullable(),
+      revokedAt: timestamp.nullable(),
+      createdAt: timestamp,
+    }),
+  ),
   handler: async (input, ctx) =>
     ctx.tx
       .select({
@@ -175,6 +215,10 @@ export const revokeApiKey = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.uuid() }),
+  output: row({
+    id: uuid,
+    name: z.string(),
+  }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "revoke");
 

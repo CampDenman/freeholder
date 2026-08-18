@@ -37,6 +37,7 @@
 // that. MASTER.md §40 says the same thing.
 import { z } from "zod";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { row, timestamp, uuid } from "@/core/contract";
 import {
   agentConnections,
   agentRuns,
@@ -173,6 +174,28 @@ export const claimTask = defineService({
     /** Only take work explicitly assigned to me. */
     assignedOnly: z.boolean().default(false),
   }),
+  output: row({
+    runId: uuid,
+    leaseExpiresAt: timestamp,
+    leaseMinutes: z.number().int(),
+    task: z.object({
+      id: uuid,
+      rootId: uuid,
+      parentId: uuid.nullable(),
+      title: z.string(),
+      brief: z.string(),
+      input: z.unknown(),
+      inputTrust: z.enum(["owner", "system", "untrusted"]),
+      attempt: z.number().int(),
+    }),
+    agent: z.object({
+      name: z.string(),
+      role: z.string(),
+      instructions: z.string(),
+    }),
+    autonomy: z.enum(["suggest", "approve", "autonomous"]),
+    guidance: z.string(),
+  }).nullable(),
   handler: async (input, ctx) => {
     const agent = await agentForActor(ctx.tx, ctx.actor);
 
@@ -325,6 +348,11 @@ export const reportStep = defineService({
     durationMs: z.number().int().min(0).nullish(),
     error: z.string().max(2000).nullish(),
   }),
+  output: z.object({
+    stepId: uuid,
+    seq: z.number().int(),
+    leaseExpiresAt: timestamp,
+  }),
   handler: async (input, ctx) => {
     const agent = await agentForActor(ctx.tx, ctx.actor);
     const run = await ownRun(ctx.tx, input.runId, agent.id);
@@ -421,6 +449,10 @@ export const completeTask = defineService({
     tokensIn: z.number().int().min(0).default(0),
     tokensOut: z.number().int().min(0).default(0),
   }),
+  output: z.object({
+    taskId: uuid,
+    status: z.enum(["done", "needs_attention", "queued"]),
+  }),
   handler: async (input, ctx) => {
     const agent = await agentForActor(ctx.tx, ctx.actor);
     const run = await ownRun(ctx.tx, input.runId, agent.id);
@@ -516,6 +548,10 @@ export const releaseTask = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ runId: z.uuid(), reason: z.string().max(500).optional() }),
+  output: z.object({
+    taskId: uuid,
+    status: z.literal("queued"),
+  }),
   handler: async (input, ctx) => {
     const agent = await agentForActor(ctx.tx, ctx.actor);
     const run = await ownRun(ctx.tx, input.runId, agent.id);

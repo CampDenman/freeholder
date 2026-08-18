@@ -7,6 +7,7 @@
 // crown a winner when there are too few unique visitors.
 import { z } from "zod";
 import { and, eq, inArray } from "drizzle-orm";
+import { listed, row } from "@/core/contract";
 import { defineService } from "@/core/service";
 import { analyticsEvents } from "./schema";
 
@@ -32,6 +33,7 @@ export const recordExperimentImpressions = defineService({
     locale: z.string().max(20).optional(),
     assignments: z.record(z.string().min(1).max(80), z.string().min(1).max(40)),
   }),
+  output: z.object({ recorded: z.number().int() }),
   handler: async (input, ctx) => {
     const { track } = await import("./service");
     const day = dayKey();
@@ -65,6 +67,10 @@ export const recordExperimentConversion = defineService({
     amountMinor: z.number().int().nonnegative().optional(),
     currency: z.string().length(3).optional(),
     path: z.string().max(2000).default("/"),
+  }),
+  output: z.object({
+    recorded: z.number().int(),
+    experiments: z.number().int(),
   }),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
@@ -122,6 +128,22 @@ export const experimentReport = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    z.object({
+      experimentKey: z.string(),
+      variants: listed(
+        row({
+          variant: z.string(),
+          impressions: z.number().int(),
+          uniqueVisitors: z.number().int(),
+          conversions: z.number().int(),
+          revenueMinor: z.number().int(),
+        }),
+      ),
+      uniqueVisitors: z.number().int(),
+      comparable: z.boolean(),
+    }),
+  ),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx
       .select({

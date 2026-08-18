@@ -7,8 +7,16 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { pointOfSaleAdapter, pointOfSaleAdapters } from "@/adapters/point-of-sale";
 import { AdapterError } from "@/adapters/types";
+import { listed } from "@/core/contract";
 import { listLocations } from "@/core/locations/service";
 import { defineService, ServiceError } from "@/core/service";
+import {
+  adapterStatus,
+  paymentReceipt,
+  paymentRow,
+  posCollection,
+  refundRow,
+} from "./contract";
 import {
   createPayment,
   createRefund,
@@ -35,6 +43,18 @@ export const listPointOfSale = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    z.object({
+      id: z.string(),
+      status: adapterStatus,
+      capabilities: z.object({
+        countertop: z.boolean(),
+        tapToPay: z.boolean(),
+        cashRecording: z.boolean(),
+        refunds: z.boolean(),
+      }),
+    }),
+  ),
   handler: async () =>
     pointOfSaleAdapters
       .list()
@@ -59,6 +79,11 @@ export const beginInPersonPayment = defineService({
     amountMinor: z.number().int().positive().optional(),
     readerRef: z.string().trim().min(1).max(200).optional(),
     idempotencyKey: z.string().trim().min(8).max(240),
+  }),
+  output: z.object({
+    payment: paymentRow,
+    collection: posCollection,
+    receipt: paymentReceipt.nullable(),
   }),
   handler: async (input, ctx) => {
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
@@ -159,6 +184,7 @@ export const listInPersonPayments = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ limit: z.number().int().min(1).max(500).default(200) }),
+  output: listed(paymentRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
@@ -174,6 +200,12 @@ export const reconcileInPersonPayments = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    balanced: z.boolean(),
+    unsettled: listed(paymentRow),
+    succeeded: z.number().int(),
+    methods: listed(z.enum(["cash", "card_present", "tap_to_pay"])),
+  }),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -204,6 +236,7 @@ export const refundInPersonPayment = defineService({
     reason: z.string().trim().min(3).max(1_000),
     idempotencyKey: z.string().trim().min(8).max(240),
   }),
+  output: refundRow,
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");

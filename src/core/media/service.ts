@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { db } from "@/core/db";
 import {
   assets,
@@ -53,6 +54,67 @@ import {
   type VariantFormat,
   type VariantSet,
 } from "@/core/media/variants";
+
+const assetRow = row({
+  id: uuid,
+  kind: z.enum(["image", "video", "doc", "audio"]),
+  storageKey: z.string(),
+  filename: z.string(),
+  mime: z.string(),
+  legacyBytes: z.number().int(),
+  bytes: z.number(),
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+  durationSeconds: z.number().int().nullable(),
+  variants: z.unknown(),
+  altText: z.string().nullable(),
+  blurhash: z.string().nullable(),
+  status: z.enum(["processing", "ready", "quarantined", "failed", "trashed"]),
+  scanStatus: z.enum(["pending", "clean", "not_configured", "infected", "error"]),
+  scanEngine: z.string().nullable(),
+  scanMessage: z.string().nullable(),
+  scannedAt: timestamp.nullable(),
+  checksumSha256: z.string().nullable(),
+  metadata: z.unknown(),
+  provenance: z.unknown(),
+  source: z.enum(["upload", "import", "generated", "migration", "capture"]),
+  uploadedBy: z.string().nullable(),
+  focalX: z.number().int(),
+  focalY: z.number().int(),
+  deletedAt: timestamp.nullable(),
+  purgeAfter: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const suggestionRow = row({
+  id: uuid,
+  assetId: uuid,
+  status: z.enum(["ready", "accepted", "dismissed", "superseded"]),
+  suggestion: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  promptVersion: z.string(),
+  sourceChecksum: z.string(),
+  authoredAltTextAtRequest: z.string().nullable(),
+  requestedBy: z.string(),
+  reviewedBy: z.string().nullable(),
+  reviewedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const suggestionProviderState = {
+  available: z.boolean(),
+  provider: z.string(),
+  model: z.string().nullable(),
+  unavailableReason: z.string().nullable(),
+};
+
+const completeUploadResult = z.union([
+  z.object({ ok: z.literal(true), asset: assetRow.nullable() }),
+  z.object({ ok: z.literal(false), message: z.string() }),
+]);
 
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -423,6 +485,7 @@ export const uploadAsset = defineService({
     provenance: provenanceSchema,
     metadata: mediaMetadataSchema,
   }),
+  output: assetRow,
   handler: async (input, ctx) => {
     if (
       ctx.actor.kind === "anonymous" &&
@@ -557,6 +620,13 @@ export const beginUpload = defineService({
   kind: "mutation",
   permission: "public",
   input: uploadIntent,
+  output: z.object({
+    id: uuid,
+    strategy: z.enum(["direct_multipart", "proxy"]),
+    partSize: z.number().int().nullable(),
+    partCount: z.number().int().nullable(),
+    expiresAt: timestamp,
+  }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "anonymous" && !input.provenance.captureToken) {
       throw new ServiceError("permission", "Sign in or use an upload link.");
@@ -679,6 +749,35 @@ export const uploadStatus = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ id: z.string().uuid() }),
+  output: z.object({
+    id: uuid,
+    strategy: z.enum(["direct_multipart", "proxy"]),
+    state: z.enum([
+      "created",
+      "uploading",
+      "uploaded",
+      "processing",
+      "complete",
+      "failed",
+      "aborted",
+      "expired",
+    ]),
+    filename: z.string(),
+    contentType: z.string(),
+    expectedBytes: z.number(),
+    partSize: z.number().int().nullable(),
+    partCount: z.number().int().nullable(),
+    parts: listed(
+      z.object({
+        partNumber: z.number().int(),
+        etag: z.string(),
+        bytes: z.number().optional(),
+      }),
+    ),
+    assetId: uuid.nullable(),
+    failureReason: z.string().nullable(),
+    expiresAt: timestamp,
+  }),
   handler: async (input, ctx) => {
     const session = await uploadSession(ctx.tx, input.id);
     if (!session) throw new ServiceError("not_found", "That upload is not here.");
@@ -726,6 +825,16 @@ export const signUploadParts = defineService({
   input: z.object({
     id: z.string().uuid(),
     partNumbers: z.array(z.number().int().min(1).max(MAX_MULTIPART_PARTS)).min(1).max(25),
+  }),
+  output: z.object({
+    parts: listed(
+      z.object({
+        partNumber: z.number().int(),
+        url: z.string(),
+        method: z.literal("PUT"),
+      }),
+    ),
+    expiresAt: timestamp,
   }),
   handler: async (input, ctx) => {
     const session = await uploadSession(ctx.tx, input.id);
@@ -797,6 +906,7 @@ export const completeUpload = defineService({
     parts: z.array(multipartPartSchema).min(1).max(MAX_MULTIPART_PARTS),
     altText: z.string().max(500).optional(),
   }),
+  output: completeUploadResult,
   handler: async (input, ctx) => {
     const session = await lockedUploadSession(ctx.tx, input.id);
     if (!session || session.strategy !== "direct_multipart") {
@@ -965,6 +1075,7 @@ export const registerStoredOriginal = defineService({
     metadata: mediaMetadataSchema,
     checksumSha256: z.string().length(64).optional(),
   }),
+  output: assetRow,
   handler: async (input, ctx) => {
     const head = await storage().head(input.key);
     if (!head) throw new ServiceError("not_found", "The staged file is gone.");
@@ -1010,6 +1121,7 @@ export const abortUpload = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ id: z.string().uuid() }),
+  output: okResult,
   handler: async (input, ctx) => {
     const session = await lockedUploadSession(ctx.tx, input.id);
     if (!session) throw new ServiceError("not_found", "That upload is not here.");
@@ -1047,6 +1159,10 @@ export const listAssets = defineService({
     limit: z.number().int().min(1).max(100).default(50),
     offset: z.number().int().min(0).default(0),
   }),
+  output: z.object({
+    rows: listed(assetRow),
+    total: z.number(),
+  }),
   handler: async (input, ctx) => {
     const visibility = input.status
       ? eq(assets.status, input.status)
@@ -1079,6 +1195,7 @@ export const getAsset = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: assetRow,
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
       .select()
@@ -1119,6 +1236,21 @@ export const resolveImage = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ id: z.string().uuid() }),
+  output: z
+    .object({
+      src: z.string(),
+      sources: listed(
+        z.object({
+          format: z.string(),
+          srcset: z.string(),
+          type: z.string(),
+        }),
+      ),
+      width: z.number().int().nullable(),
+      height: z.number().int().nullable(),
+      altText: z.string().nullable(),
+    })
+    .nullable(),
   handler: async (input, ctx): Promise<ResolvedImage | null> => {
     const [asset] = await ctx.tx
       .select()
@@ -1176,6 +1308,19 @@ export const resolveAsset = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ id: z.string().uuid() }),
+  output: z
+    .object({
+      id: uuid,
+      kind: z.enum(["video", "doc", "audio"]),
+      src: z.string(),
+      mime: z.string(),
+      filename: z.string(),
+      bytes: z.number(),
+      width: z.number().int().nullable(),
+      height: z.number().int().nullable(),
+      durationSeconds: z.number().int().nullable(),
+    })
+    .nullable(),
   handler: async (input, ctx): Promise<ResolvedAsset | null> => {
     const [asset] = await ctx.tx
       .select()
@@ -1206,6 +1351,12 @@ export const authorizeAssetDownload = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ id: z.string().uuid() }),
+  output: row({
+    storageKey: z.string(),
+    filename: z.string(),
+    mime: z.string(),
+    bytes: z.number(),
+  }).nullable(),
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
       .select({
@@ -1243,6 +1394,11 @@ export const authorizeObjectDelivery = defineService({
       .max(1_024)
       .refine((key) => !key.includes("..") && !key.startsWith("/")),
   }),
+  output: row({
+    contentType: z.string(),
+    filename: z.string(),
+    kind: z.enum(["image", "video", "doc", "audio"]),
+  }).nullable(),
   handler: async (input, ctx) => {
     const [object] = await ctx.tx
       .select({
@@ -1273,6 +1429,7 @@ export const setAltText = defineService({
     id: z.string().uuid(),
     altText: z.string().max(500),
   }),
+  output: assetRow,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select({ kind: assets.kind })
@@ -1356,6 +1513,10 @@ export const altTextSuggestionState = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: z.object({
+    ...suggestionProviderState,
+    suggestion: suggestionRow.nullable(),
+  }),
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
       .select({ id: assets.id, kind: assets.kind })
@@ -1397,6 +1558,10 @@ export const listAltTextSuggestionStates = defineService({
   input: z.object({
     ids: z.array(z.string().uuid()).min(1).max(100),
   }),
+  output: z.object({
+    ...suggestionProviderState,
+    suggestions: listed(suggestionRow),
+  }),
   handler: async (input, ctx) => {
     const suggestions = await ctx.tx
       .select()
@@ -1437,6 +1602,7 @@ export const generateAltTextSuggestion = defineService({
     message: "That image has had several suggestions generated recently. Review one or try again later.",
   },
   input: z.object({ id: z.string().uuid() }),
+  output: suggestionRow,
   handler: async (input, ctx) => {
     requireHumanReview(ctx.actor);
     const [asset] = await ctx.tx
@@ -1552,6 +1718,7 @@ export const acceptAltTextSuggestion = defineService({
     suggestionId: z.string().uuid(),
     altText: z.string().trim().min(1).max(500),
   }),
+  output: assetRow,
   handler: async (input, ctx) => {
     requireHumanReview(ctx.actor);
     const [asset] = await ctx.tx
@@ -1620,6 +1787,7 @@ export const dismissAltTextSuggestion = defineService({
   permission: "scoped",
   agentCallable: false,
   input: z.object({ id: z.string().uuid(), suggestionId: z.string().uuid() }),
+  output: okResult,
   handler: async (input, ctx) => {
     requireHumanReview(ctx.actor);
     const [suggestion] = await ctx.tx
@@ -1660,6 +1828,7 @@ export const setFocalPoint = defineService({
     x: z.number().int().min(0).max(10_000),
     y: z.number().int().min(0).max(10_000),
   }),
+  output: assetRow,
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
       .update(assets)
@@ -1682,6 +1851,7 @@ export const updateAssetDetails = defineService({
     metadata: mediaMetadataSchema.optional(),
     provenance: provenanceSchema.optional(),
   }),
+  output: assetRow,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select()
@@ -1739,6 +1909,10 @@ export const assetUsage = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: z.object({
+    pages: z.number(),
+    sections: z.number(),
+  }),
   handler: async (input, ctx) => {
     // The id travels as a jsonpath *variable* rather than being concatenated
     // into the expression: the path stays a constant, and a value that is not
@@ -1767,6 +1941,7 @@ export const trashAsset = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: assetRow,
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
       .select()
@@ -1805,6 +1980,7 @@ export const restoreAsset = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: assetRow,
   handler: async (input, ctx) => {
     const [existing] = await ctx.tx
       .select()
@@ -1857,6 +2033,11 @@ export const purgeAsset = defineService({
   permission: "scoped",
   stepUp: true,
   input: z.object({ id: z.string().uuid(), confirmation: z.string().max(255) }),
+  output: z.object({
+    ok: z.literal(true),
+    assetId: uuid,
+    objects: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     if (
       ctx.actor.kind !== "system" &&
@@ -1898,6 +2079,10 @@ export const purgeExpiredAsset = defineService({
     id: z.string().uuid(),
     asOf: z.string().datetime().optional(),
   }),
+  output: z.object({
+    assetId: uuid,
+    objects: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "system") {
       throw new ServiceError("permission", "Only lifecycle maintenance can run this operation.");
@@ -1928,6 +2113,7 @@ export const rescanAsset = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: assetRow,
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
       .select()

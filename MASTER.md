@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` at `a6f9b40` with C2.12–C2.23 landed. This change closes C2.02 (complete author history). C2 is complete. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` at `c6e3a18` with C2 complete (C2.02 via #133). This change closes C3.01 (required output schemas on every service). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3 living contract, starting at C3.01 required output schemas. |
+| Current focus | C3 living contract, next C3.02 complete OpenAPI response/error/auth/webhook schemas. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3547,8 +3547,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 
 #### One generated platform contract
 
-- [ ] **C3.01** Add required output schemas to every service and validate
+- [x] **C3.01** Add required output schemas to every service and validate
   handler responses against them in tests and development.
+  (`ServiceDef.output`; `assertOutput` in development/tests; OpenAPI 200
+  bodies from the same schemas; completeness gate in
+  `tests/core/service-output.test.ts`; changeset `service-output-schemas.md`.)
 - [ ] **C3.02** Generate complete OpenAPI request, success, error, auth and
   webhook schemas with stable operation IDs and version metadata.
 - [ ] **C3.03** Generate and test `@freeholder/sdk` types/client from the live

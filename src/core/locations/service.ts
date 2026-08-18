@@ -14,6 +14,7 @@
 // a blank address block in its footer.
 import { z } from "zod";
 import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   businessLocations,
   openingHours,
@@ -35,6 +36,56 @@ const slug = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
     message: "use lowercase letters, numbers and single dashes",
   });
+
+const locationRow = row({
+  id: uuid,
+  name: z.string(),
+  slug: z.string(),
+  isPrimary: z.boolean(),
+  schemaType: z.string().nullable(),
+  street: z.string().nullable(),
+  unit: z.string().nullable(),
+  city: z.string().nullable(),
+  region: z.string().nullable(),
+  postalCode: z.string().nullable(),
+  country: z.string(),
+  latitude: z.string().nullable(),
+  longitude: z.string().nullable(),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+  googleBusinessProfileUrl: z.string().nullable(),
+  sameAs: z.array(z.string()),
+  priceRange: z.string().nullable(),
+  timezone: z.string().nullable(),
+  status: z.enum(["visible", "hidden"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const hoursRow = row({
+  id: uuid,
+  locationId: uuid,
+  weekday: z.number().int().nullable(),
+  onDate: z.string().nullable(),
+  opens: z.string().nullable(),
+  closes: z.string().nullable(),
+  closed: z.boolean(),
+  label: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const serviceAreaRow = row({
+  id: uuid,
+  locationId: uuid,
+  kind: z.enum(["radius", "regions"]),
+  centerLatitude: z.string().nullable(),
+  centerLongitude: z.string().nullable(),
+  radiusKm: z.string().nullable(),
+  regions: z.array(z.string()),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
 
 /**
  * Coordinates arrive as numbers and are stored as `numeric`, which drizzle
@@ -127,6 +178,7 @@ export const listLocations = defineService({
     /** Hidden locations are for the admin; the public surface never sees one. */
     includeHidden: z.boolean().default(false),
   }),
+  output: listed(locationRow),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -153,6 +205,7 @@ export const primaryLocation = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
+  output: locationRow.nullable(),
   handler: async (_input, ctx) => {
     const [row] = await ctx.tx
       .select()
@@ -184,6 +237,12 @@ export const getLocation = defineService({
     .refine((v) => Boolean(v.id) !== Boolean(v.slug), {
       message: "ask by id or by slug",
     }),
+  output: locationRow
+    .extend({
+      hours: listed(hoursRow),
+      serviceArea: serviceAreaRow.nullable(),
+    })
+    .nullable(),
   handler: async (input, ctx) => {
     const [location] = await ctx.tx
       .select()
@@ -219,6 +278,7 @@ export const createLocationService = defineService({
   kind: "mutation",
   permission: "scoped",
   input: createLocation,
+  output: locationRow,
   handler: createLocationRow,
 });
 
@@ -230,6 +290,7 @@ export const createSetupLocation = defineService({
   permission: "authenticated",
   agentCallable: false,
   input: createLocation,
+  output: locationRow,
   handler: async (input, ctx) => {
     await requireSetupOwner(ctx.tx, ctx.actor);
     return createLocationRow(input, ctx);
@@ -272,6 +333,7 @@ export const updateLocation = defineService({
   kind: "mutation",
   permission: "scoped",
   input: patchLocation,
+  output: locationRow,
   handler: async (input, ctx) => {
     const { id, ...changes } = input;
     if (Object.keys(changes).length === 0) {
@@ -315,6 +377,7 @@ export const setPrimaryLocation = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.uuid() }),
+  output: locationRow,
   handler: async (input, ctx) => {
     const [location] = await ctx.tx
       .select()
@@ -366,6 +429,7 @@ export const setOpeningHours = defineService({
     locationId: z.uuid(),
     entries: z.array(hoursEntry).max(120),
   }),
+  output: listed(hoursRow),
   handler: async (input, ctx) => {
     const [location] = await ctx.tx
       .select({ id: businessLocations.id })
@@ -438,6 +502,7 @@ export const setServiceArea = defineService({
       ])
       .nullable(),
   }),
+  output: serviceAreaRow.nullable(),
   handler: async (input, ctx) => {
     const [location] = await ctx.tx
       .select({ id: businessLocations.id })
@@ -479,6 +544,7 @@ export const deleteLocation = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.uuid() }),
+  output: z.object({ id: uuid, slug: z.string() }),
   handler: async (input, ctx) => {
     const [location] = await ctx.tx
       .select()

@@ -5,6 +5,7 @@
 // Each path resolves the unified contact and emits an event. None of them
 // invents a module-private customer.
 import { z } from "zod";
+import { okResult } from "@/core/contract";
 import { defineService } from "@/core/service";
 import { resolveContact } from "@/core/contacts/service";
 
@@ -18,6 +19,7 @@ export const submitQuoteRequest = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ name, email, message }),
+  output: okResult,
   handler: async (input, ctx) => {
     const resolved = await ctx.callAsSystem(resolveContact, {
       name: input.name,
@@ -39,6 +41,7 @@ export const submitSiteChat = defineService({
   kind: "mutation",
   permission: "public",
   input: z.object({ name, email, message }),
+  output: okResult,
   handler: async (input, ctx) => {
     const resolved = await ctx.callAsSystem(resolveContact, {
       name: input.name,
@@ -66,6 +69,7 @@ export const submitTipIntent = defineService({
     currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
     message: z.string().trim().max(400).optional(),
   }),
+  output: okResult,
   handler: async (input, ctx) => {
     const resolved = await ctx.callAsSystem(resolveContact, {
       name: input.name ?? input.email,

@@ -14,6 +14,7 @@
 import { z } from "zod";
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
+import { okResult } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { passwordResets, sessions, users } from "@/core/auth/schema";
 import { hashPassword } from "@/core/auth/passwords";
@@ -57,6 +58,7 @@ export const requestPasswordReset = defineService({
     subject: (input) => input.email,
     message: "Too many reset requests for that address. Try again shortly.",
   },
+  output: okResult,
   handler: async (input, ctx) => {
     const [user] = await ctx.tx
       .select()
@@ -147,6 +149,7 @@ export const resetPassword = defineService({
     subject: () => "reset",
     message: "Too many attempts. Wait a few minutes and try again.",
   },
+  output: okResult.extend({ sessionsRevoked: z.number().int() }),
   handler: async (input, ctx) => {
     const [reset] = await ctx.tx
       .select()

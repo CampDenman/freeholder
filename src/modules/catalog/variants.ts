@@ -4,8 +4,10 @@
 
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
+import { BACKORDER_POLICIES, PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_VISIBILITIES } from "./contract";
 import {
   optionTypes,
   optionValues,
@@ -30,6 +32,83 @@ const skuFragment = z
   .toLowerCase()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .max(24);
+
+const productRow = row({
+  id: uuid,
+  name: z.string(),
+  slug: z.string(),
+  kind: z.enum(PRODUCT_KINDS),
+  subtitle: z.string().nullable(),
+  description: z.unknown(),
+  brand: z.string().nullable(),
+  status: z.enum(PRODUCT_STATUSES),
+  visibility: z.enum(PRODUCT_VISIBILITIES),
+  taxCategoryId: uuid.nullable(),
+  seo: z.unknown(),
+  workingName: z.string().nullable(),
+  workingSubtitle: z.string().nullable(),
+  workingDescription: z.unknown().nullable(),
+  workingSeo: z.unknown().nullable(),
+  schemaType: z.string(),
+  publishedAt: timestamp.nullable(),
+  archivedAt: timestamp.nullable(),
+  version: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const optionTypeRow = row({
+  id: uuid,
+  name: z.string(),
+  code: z.string(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const optionValueRow = row({
+  id: uuid,
+  optionTypeId: uuid,
+  name: z.string(),
+  skuFragment: z.string(),
+  position: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const variantRow = row({
+  id: uuid,
+  productId: uuid,
+  combinationKey: z.string(),
+  sku: z.string(),
+  isDefault: z.boolean(),
+  status: z.enum(["active", "archived"]),
+  backorderPolicy: z.enum(BACKORDER_POLICIES),
+  expectedRestockAt: timestamp.nullable(),
+  requiresShipping: z.boolean(),
+  weightG: z.number().int().nullable(),
+  lengthMm: z.number().int().nullable(),
+  widthMm: z.number().int().nullable(),
+  heightMm: z.number().int().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const variantOptionRow = row({
+  variantId: uuid,
+  optionTypeId: uuid,
+  optionValueId: uuid,
+});
+const assignmentRow = row({
+  id: uuid,
+  productId: uuid,
+  optionTypeId: uuid,
+  position: z.number().int(),
+  createdAt: timestamp,
+  optionType: optionTypeRow.nullable(),
+  selectedValueIds: listed(uuid),
+  values: listed(optionValueRow),
+});
+const matrixCombo = z.object({
+  valueIds: listed(uuid),
+  fragments: listed(z.string()),
+  labels: listed(z.string()),
+});
 
 function combinationKey(valueIds: readonly string[]): string {
   return [...valueIds].sort().join(":");
@@ -73,6 +152,7 @@ export const listOptionTypes = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(optionTypeRow.extend({ values: listed(optionValueRow) })),
   handler: async (_input, ctx) => {
     const types = await ctx.tx.select().from(optionTypes).orderBy(asc(optionTypes.name));
     const values = types.length
@@ -98,6 +178,7 @@ export const createOptionType = defineService({
     name: z.string().trim().min(1).max(80),
     code: optionCode,
   }),
+  output: optionTypeRow,
   handler: async (input, ctx) => {
     const [created] = await ctx.tx
       .insert(optionTypes)
@@ -126,6 +207,7 @@ export const addOptionValue = defineService({
     skuFragment,
     position: z.number().int().min(0).max(100_000).optional(),
   }),
+  output: optionValueRow,
   handler: async (input, ctx) => {
     const [type] = await ctx.tx.select({ id: optionTypes.id }).from(optionTypes).where(eq(optionTypes.id, input.optionTypeId));
     if (!type) throw new ServiceError("not_found", "That option type is not here.");
@@ -203,6 +285,17 @@ export const getProductVariants = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ productId }),
+  output: z.object({
+    product: productRow,
+    assignments: listed(assignmentRow),
+    variants: listed(variantRow.extend({ options: listed(variantOptionRow) })),
+    preview: z.object({
+      add: listed(matrixCombo),
+      retain: listed(variantRow),
+      archive: listed(variantRow),
+      reactivate: listed(variantRow),
+    }),
+  }),
   handler: async (input, ctx) => {
     const [product] = await ctx.tx.select().from(products).where(eq(products.id, input.productId)).limit(1);
     if (!product) throw new ServiceError("not_found", "That product is not here.");
@@ -250,6 +343,7 @@ export const assignProductOption = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ productId, expectedVersion, optionTypeId: productId }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const [type] = await ctx.tx.select().from(optionTypes).where(eq(optionTypes.id, input.optionTypeId));
@@ -295,6 +389,7 @@ export const setProductOptionValues = defineService({
     optionTypeId: productId,
     optionValueIds: z.array(productId).max(200),
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const [assignment] = await ctx.tx
@@ -337,6 +432,7 @@ export const applyVariantMatrix = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ productId, expectedVersion }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const assignments = await loadAssignments(ctx, product.id);
@@ -448,6 +544,7 @@ export const setDefaultVariant = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ productId, expectedVersion, variantId: productId }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const [variant] = await ctx.tx

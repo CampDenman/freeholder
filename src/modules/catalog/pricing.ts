@@ -4,6 +4,7 @@
 
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -22,6 +23,75 @@ import {
 
 const id = z.string().uuid();
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
+
+const customerGroupRow = row({
+  id: uuid,
+  name: z.string(),
+  tag: z.string().nullable(),
+  lifecycleStage: z.string().nullable(),
+  taxExempt: z.boolean(),
+  exemptionRef: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const priceListRow = row({
+  id: uuid,
+  name: z.string(),
+  currency: z.string(),
+  kind: z.enum(PRICE_LIST_KINDS),
+  customerGroupId: uuid.nullable(),
+  contactId: uuid.nullable(),
+  startsAt: timestamp.nullable(),
+  endsAt: timestamp.nullable(),
+  priority: z.number().int(),
+  active: z.boolean(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const priceListEntryRow = row({
+  id: uuid,
+  priceListId: uuid,
+  variantId: uuid,
+  amountMinor: z.number().int(),
+  compareAtMinor: z.number().int().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const priceBreakRow = row({
+  id: uuid,
+  priceListId: uuid,
+  variantId: uuid.nullable(),
+  mode: z.enum(PRICE_BREAK_MODES),
+  minQty: z.number().int(),
+  maxQty: z.number().int().nullable(),
+  unitAmountMinor: z.number().int().nullable(),
+  percentOffPpm: z.number().int().nullable(),
+  createdAt: timestamp,
+});
+const resolvedPrice = z.discriminatedUnion("available", [
+  z.object({
+    available: z.literal(false),
+    currency: z.string(),
+    variantId: uuid,
+    quantity: z.number().int(),
+    reason: z.string(),
+  }),
+  z.object({
+    available: z.literal(true),
+    currency: z.string(),
+    variantId: uuid,
+    quantity: z.number().int(),
+    amountMinor: z.number().int(),
+    totalMinor: z.number().int(),
+    compareAtMinor: z.number().int().nullable(),
+    priceListId: uuid,
+    priceListName: z.string(),
+    kind: z.enum(PRICE_LIST_KINDS),
+    breakMode: z.enum(PRICE_BREAK_MODES).nullable(),
+    breakdown: listed(z.object({ qty: z.number().int(), unitMinor: z.number().int() })),
+    reason: z.string(),
+  }),
+]);
 
 registerContactReference({
   table: "price_lists",
@@ -96,6 +166,7 @@ export const listCustomerGroups = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(customerGroupRow),
   handler: (_input, ctx) => ctx.tx.select().from(customerGroups).orderBy(asc(customerGroups.name)),
 });
 
@@ -111,6 +182,7 @@ export const createCustomerGroup = defineService({
     taxExempt: z.boolean().default(false),
     exemptionRef: z.string().trim().min(1).max(200).optional(),
   }),
+  output: customerGroupRow,
   handler: async (input, ctx) => {
     if (!input.tag && !input.lifecycleStage) {
       throw new ServiceError("validation", "A customer group needs a contact tag or a lifecycle stage.");
@@ -127,6 +199,7 @@ export const listPriceLists = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ currency: currency.optional(), kind: z.enum(PRICE_LIST_KINDS).optional() }),
+  output: listed(priceListRow.extend({ entries: listed(priceListEntryRow) })),
   handler: async (input, ctx) => {
     const filters = [
       input.currency ? eq(priceLists.currency, input.currency) : undefined,
@@ -166,6 +239,7 @@ export const createPriceList = defineService({
     priority: z.number().int().min(-100_000).max(100_000).default(0),
     active: z.boolean().default(true),
   }),
+  output: priceListRow,
   handler: async (input, ctx) => {
     if (input.kind === "contract" && !input.contactId) {
       throw new ServiceError("validation", "A contract price list must name the contact it applies to.");
@@ -202,6 +276,7 @@ export const setPriceListEntry = defineService({
     amount: z.string().trim().min(1).max(20),
     compareAt: z.string().trim().min(1).max(20).optional(),
   }),
+  output: priceListEntryRow,
   handler: async (input, ctx) => {
     const [list] = await ctx.tx.select().from(priceLists).where(eq(priceLists.id, input.priceListId));
     if (!list) throw new ServiceError("not_found", "That price list is not here.");
@@ -253,6 +328,7 @@ export const setPriceBreak = defineService({
     amount: z.string().trim().min(1).max(20).optional(),
     percentOffPpm: z.number().int().min(1).max(1_000_000).optional(),
   }),
+  output: priceBreakRow,
   handler: async (input, ctx) => {
     if (Boolean(input.amount) === Boolean(input.percentOffPpm)) {
       throw new ServiceError("validation", "A price break needs either a unit amount or a percent off, not both.");
@@ -347,6 +423,7 @@ export const resolvePrice = defineService({
     quantity: z.number().int().positive().max(1_000_000).default(1),
     at: z.coerce.date().default(() => new Date()),
   }),
+  output: resolvedPrice,
   handler: async (input, ctx) => {
     const [variant] = await ctx.tx.select().from(productVariants).where(eq(productVariants.id, input.variantId));
     if (!variant) throw new ServiceError("not_found", "That variant is not here.");

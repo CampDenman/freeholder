@@ -13,6 +13,7 @@
 // is one greppable call rather than a service that quietly trusts its caller.
 import { z } from "zod";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import {
@@ -120,6 +121,31 @@ const slug = z
   .max(80)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lower-case words separated by hyphens.");
 
+const formRow = row({
+  id: uuid,
+  slug: z.string(),
+  name: z.string(),
+  fields: z.unknown(),
+  submitLabel: z.string().nullable(),
+  successMessage: z.string().nullable(),
+  destination: z.enum(["contact", "none"]),
+  notify: listed(z.string()),
+  status: z.enum(["active", "closed"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const formSubmissionRow = row({
+  id: uuid,
+  formId: uuid,
+  contactId: uuid.nullable(),
+  data: z.unknown(),
+  sourceUrl: z.string().nullable(),
+  status: z.enum(["received", "spam"]),
+  spamReasons: listed(z.string()),
+  createdAt: timestamp,
+});
+
 /* ------------------------------------------------------------------ authoring */
 
 export const listForms = defineService({
@@ -128,6 +154,18 @@ export const listForms = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      slug: z.string(),
+      name: z.string(),
+      status: z.enum(["active", "closed"]),
+      destination: z.enum(["contact", "none"]),
+      fields: z.unknown(),
+      updatedAt: timestamp,
+      submissions: z.coerce.number().int(),
+    }),
+  ),
   handler: async (_input, ctx) => {
     const rows = await ctx.tx
       .select({
@@ -155,6 +193,7 @@ export const getForm = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ slug }),
+  output: formRow.nullable(),
   handler: async (input, ctx) => {
     const [form] = await ctx.tx
       .select()
@@ -180,6 +219,7 @@ export const getFormById = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: formRow.nullable(),
   handler: async (input, ctx) => {
     const [form] = await ctx.tx
       .select()
@@ -204,6 +244,7 @@ export const createForm = defineService({
     destination: z.enum(["contact", "none"]).default("contact"),
     notify: z.array(z.string().email()).default([]),
   }),
+  output: formRow,
   handler: async (input, ctx) => {
     const [form] = await ctx.tx
       .insert(forms)
@@ -239,6 +280,7 @@ export const updateForm = defineService({
     notify: z.array(z.string().email()).optional(),
     status: z.enum(["active", "closed"]).optional(),
   }),
+  output: formRow,
   handler: async (input, ctx) => {
     const { id, ...changes } = input;
     if (Object.keys(changes).length === 0) {
@@ -262,6 +304,7 @@ export const deleteForm = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: z.string().uuid() }),
+  output: row({ id: uuid, slug: z.string() }),
   handler: async (input, ctx) => {
     const [form] = await ctx.tx
       .delete(forms)
@@ -304,6 +347,7 @@ export const loadDemoForms = defineService({
   kind: "mutation",
   permission: "scoped",
   input: demoHandlerInputSchema,
+  output: demoLoadResultSchema,
   handler: async (input, ctx) => {
     await requireDemoHandlerRun(
       ctx.tx,
@@ -343,6 +387,7 @@ export const purgeDemoForms = defineService({
   kind: "mutation",
   permission: "scoped",
   input: demoHandlerInputSchema,
+  output: demoPurgeResultSchema,
   handler: async (input, ctx) => {
     await requireDemoHandlerRun(
       ctx.tx,
@@ -373,6 +418,7 @@ export const verifyDemoForms = defineService({
   kind: "query",
   permission: "scoped",
   input: demoHandlerInputSchema,
+  output: demoVerifyResultSchema,
   handler: async (input, ctx) => {
     await requireDemoHandlerRun(
       ctx.tx,
@@ -427,6 +473,11 @@ export const submitForm = defineService({
     subject: (input) => `form:${input.slug}`,
     message: "This form has taken a lot of submissions just now. Try again shortly.",
   },
+  output: z.object({
+    ok: z.literal(true),
+    submissionId: uuid,
+    message: z.string(),
+  }),
   handler: async (input, ctx) => {
     const [form] = await ctx.tx
       .select()
@@ -532,6 +583,7 @@ export const listSubmissions = defineService({
     status: z.enum(["received", "spam", "all"]).default("received"),
     limit: z.number().int().min(1).max(200).default(50),
   }),
+  output: listed(formSubmissionRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
@@ -564,6 +616,7 @@ export const reviewSubmission = defineService({
     id: z.string().uuid(),
     status: z.enum(["received", "spam"]),
   }),
+  output: formSubmissionRow,
   handler: async (input, ctx) => {
     const [before] = await ctx.tx
       .select()
@@ -619,6 +672,10 @@ export const submissionCounts = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({
+    received: z.coerce.number().int(),
+    spam: z.coerce.number().int(),
+  }),
   handler: async (_input, ctx) => {
     const [row] = await ctx.tx
       .select({

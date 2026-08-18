@@ -15,6 +15,7 @@ import { hashCustomerMagicLinkToken } from "@/core/auth/two-factor-crypto";
 import { contacts, customerMagicLinks } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { businessProfile } from "@/core/settings/schema";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { DEFAULT_LOCALE, translator } from "@/core/i18n";
 import {
@@ -63,6 +64,7 @@ export const requestCustomerMagicLink = defineService({
     subject: (input) => input.email,
     message: "Too many sign-in links were requested. Try again shortly.",
   },
+  output: okResult.extend({ message: z.string() }),
   handler: async (input, ctx) => {
     const [contact] = await ctx.tx
       .select()
@@ -168,6 +170,17 @@ export const consumeCustomerMagicLink = defineService({
     subject: () => "customer-magic",
     message: "Too many sign-in attempts. Wait a few minutes and try again.",
   },
+  output: row({
+    contactId: uuid,
+    userId: uuid,
+    linked: z.boolean(),
+    defaultLocale: z.string(),
+    enabledLocales: listed(z.string()),
+    locale: z.string(),
+    token: z.string(),
+    sessionId: uuid,
+    expiresAt: timestamp,
+  }),
   handler: async (input, ctx) => {
     const [link] = await ctx.tx
       .select()

@@ -11,11 +11,36 @@ import { eq, sql } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { businessProfile, moduleSettings } from "@/core/settings/schema";
 import { requireSetupOwner } from "@/core/settings/setup";
+import { listed, row, timestamp } from "@/core/contract";
 import {
   defineService,
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
+
+const businessProfileRow = row({
+  id: z.number().int(),
+  name: z.string(),
+  tagline: z.string().nullable(),
+  schemaType: z.string(),
+  country: z.string(),
+  defaultLocale: z.string(),
+  enabledLocales: z.array(z.string()),
+  baseCurrency: z.string(),
+  timezone: z.string(),
+  units: z.enum(["metric", "imperial"]),
+  firstDayOfWeek: z.number().int(),
+  setupCompletedAt: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const moduleSettingsRow = row({
+  module: z.string(),
+  enabled: z.boolean(),
+  config: z.unknown(),
+  updatedAt: timestamp,
+});
 
 const PROFILE_ID = 1;
 
@@ -61,6 +86,7 @@ export const getBusiness = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
+  output: businessProfileRow.nullable(),
   handler: async (_input, ctx) => {
     const [profile] = await ctx.tx
       .select()
@@ -82,6 +108,11 @@ export const setupState = defineService({
   kind: "query",
   permission: "public",
   input: z.object({}),
+  output: z.object({
+    hasOwner: z.boolean(),
+    hasBusiness: z.boolean(),
+    completed: z.boolean(),
+  }),
   handler: async (_input, ctx) => {
     const [owner] = await ctx.tx
       .select({ id: users.id })
@@ -124,6 +155,7 @@ export const updateBusiness = defineService({
   kind: "mutation",
   permission: "scoped",
   input: createProfile,
+  output: businessProfileRow,
   handler: writeBusiness,
 });
 
@@ -135,6 +167,7 @@ export const saveSetupBusiness = defineService({
   permission: "authenticated",
   agentCallable: false,
   input: createProfile,
+  output: businessProfileRow,
   handler: async (input, ctx) => {
     await requireSetupOwner(ctx.tx, ctx.actor);
     return writeBusiness(input, ctx);
@@ -152,6 +185,7 @@ export const patchBusiness = defineService({
   kind: "mutation",
   permission: "scoped",
   input: patchProfile,
+  output: businessProfileRow,
   handler: async (input, ctx) => {
     if (Object.keys(input).length === 0) {
       throw new ServiceError(
@@ -209,6 +243,7 @@ export const completeSetup = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: businessProfileRow,
   handler: async (_input, ctx) => finishSetup(ctx),
 });
 
@@ -220,6 +255,7 @@ export const finishSetupAsOwner = defineService({
   permission: "authenticated",
   agentCallable: false,
   input: z.object({}),
+  output: businessProfileRow,
   handler: async (_input, ctx) => {
     await requireSetupOwner(ctx.tx, ctx.actor);
     return finishSetup(ctx);
@@ -244,6 +280,7 @@ export const setModuleConfig = defineService({
     module: z.string().min(1),
     config: z.record(z.string(), z.unknown()),
   }),
+  output: moduleSettingsRow,
   handler: async (input, ctx) => {
     const { default: manifests } = await import("@/modules");
     const manifest = manifests.find((m) => m.name === input.module);
@@ -288,6 +325,7 @@ export const getModuleConfig = defineService({
   kind: "query",
   permission: "public",
   input: z.object({ module: z.string().min(1) }),
+  output: z.record(z.string(), z.unknown()),
   handler: async (input, ctx) => {
     const [row] = await ctx.tx
       .select({ config: moduleSettings.config })
@@ -313,6 +351,7 @@ export const listModules = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(moduleSettingsRow),
   // Only modules with a stored row. The set of *installed* modules comes from
   // the boot report; the admin screen merges the two so a module that has
   // never been toggled still appears, at its manifest default.
@@ -326,6 +365,7 @@ export const setModuleEnabled = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ module: z.string().min(1), enabled: z.boolean() }),
+  output: moduleSettingsRow,
   handler: async (input, ctx) => {
     if (input.module === "core") {
       // §3: core is always on. Allowing this would let an owner switch off

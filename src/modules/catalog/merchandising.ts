@@ -4,10 +4,17 @@
 
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { assets } from "@/core/media/schema";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
-import { ATTRIBUTE_KINDS, MEDIA_ROLES } from "./contract";
+import {
+  ATTRIBUTE_KINDS,
+  MEDIA_ROLES,
+  PRODUCT_KINDS,
+  PRODUCT_STATUSES,
+  PRODUCT_VISIBILITIES,
+} from "./contract";
 import {
   attributeDefinitions,
   productAttributes,
@@ -26,6 +33,98 @@ const attributeKey = z
   .max(40);
 
 const THREE_D_MIME = new Set(["model/gltf-binary", "model/gltf+json", "model/vnd.usdz+zip"]);
+
+const productRow = row({
+  id: uuid,
+  name: z.string(),
+  slug: z.string(),
+  kind: z.enum(PRODUCT_KINDS),
+  subtitle: z.string().nullable(),
+  description: z.unknown(),
+  brand: z.string().nullable(),
+  status: z.enum(PRODUCT_STATUSES),
+  visibility: z.enum(PRODUCT_VISIBILITIES),
+  taxCategoryId: uuid.nullable(),
+  seo: z.unknown(),
+  workingName: z.string().nullable(),
+  workingSubtitle: z.string().nullable(),
+  workingDescription: z.unknown().nullable(),
+  workingSeo: z.unknown().nullable(),
+  schemaType: z.string(),
+  publishedAt: timestamp.nullable(),
+  archivedAt: timestamp.nullable(),
+  version: z.number().int(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const attributeDefinitionRow = row({
+  id: uuid,
+  key: z.string(),
+  label: z.string(),
+  kind: z.enum(ATTRIBUTE_KINDS),
+  unit: z.string().nullable(),
+  groupName: z.string().nullable(),
+  isFilterable: z.boolean(),
+  isComparable: z.boolean(),
+  enumOptions: listed(z.string()),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const productAttributeRow = row({
+  productId: uuid,
+  attributeId: uuid,
+  textValue: z.string().nullable(),
+  numberValue: z.string().nullable(),
+  boolValue: z.boolean().nullable(),
+  key: z.string(),
+  label: z.string(),
+  kind: z.enum(ATTRIBUTE_KINDS),
+  unit: z.string().nullable(),
+  groupName: z.string().nullable(),
+  isFilterable: z.boolean(),
+  isComparable: z.boolean(),
+});
+const productMediaRow = row({
+  id: uuid,
+  productId: uuid,
+  variantId: uuid.nullable(),
+  assetId: uuid,
+  role: z.enum(MEDIA_ROLES),
+  position: z.number().int(),
+  createdAt: timestamp,
+});
+const assetRow = row({
+  id: uuid,
+  kind: z.enum(["image", "video", "doc", "audio"]),
+  storageKey: z.string(),
+  filename: z.string(),
+  mime: z.string(),
+  legacyBytes: z.number().int(),
+  bytes: z.number().int(),
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+  durationSeconds: z.number().int().nullable(),
+  variants: z.unknown(),
+  altText: z.string().nullable(),
+  blurhash: z.string().nullable(),
+  status: z.string(),
+  scanStatus: z.string(),
+  scanEngine: z.string().nullable(),
+  scanMessage: z.string().nullable(),
+  scannedAt: timestamp.nullable(),
+  checksumSha256: z.string().nullable(),
+  metadata: z.unknown(),
+  provenance: z.unknown(),
+  source: z.string(),
+  uploadedBy: z.string().nullable(),
+  focalX: z.number().int(),
+  focalY: z.number().int(),
+  deletedAt: timestamp.nullable(),
+  purgeAfter: timestamp.nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+const mediaAttachment = z.object({ media: productMediaRow, asset: assetRow });
 
 async function productForUpdate(ctx: ServiceContext, id: string, version: number) {
   const [product] = await ctx.tx.select().from(products).where(eq(products.id, id)).for("update");
@@ -80,6 +179,7 @@ export const listAttributeDefinitions = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({}),
+  output: listed(attributeDefinitionRow),
   handler: (_input, ctx) =>
     ctx.tx.select().from(attributeDefinitions).orderBy(asc(attributeDefinitions.groupName), asc(attributeDefinitions.label)),
 });
@@ -99,6 +199,7 @@ export const createAttributeDefinition = defineService({
     isComparable: z.boolean().default(false),
     enumOptions: z.array(z.string().trim().min(1).max(80)).max(100).default([]),
   }),
+  output: attributeDefinitionRow,
   handler: async (input, ctx) => {
     if (input.kind === "measure" && !input.unit) {
       throw new ServiceError("validation", "A measured attribute needs a unit.");
@@ -128,6 +229,7 @@ export const listProductAttributes = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ productId }),
+  output: listed(productAttributeRow),
   handler: async (input, ctx) => {
     const [product] = await ctx.tx.select({ id: products.id }).from(products).where(eq(products.id, input.productId));
     if (!product) throw new ServiceError("not_found", "That product is not here.");
@@ -167,6 +269,7 @@ export const setProductAttribute = defineService({
     bool: z.boolean().optional(),
     enum: z.string().trim().min(1).max(80).optional(),
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const [definition] = await ctx.tx
@@ -203,6 +306,7 @@ export const filterProductsByAttribute = defineService({
     max: z.string().trim().regex(/^-?[0-9]+(?:\.[0-9]+)?$/).optional(),
     bool: z.boolean().optional(),
   }),
+  output: listed(productRow),
   handler: async (input, ctx) => {
     const [definition] = await ctx.tx
       .select()
@@ -243,6 +347,19 @@ export const compareProducts = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ productIds: z.array(productId).min(2).max(8) }),
+  output: z.object({
+    products: listed(productRow),
+    rows: listed(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        kind: z.enum(ATTRIBUTE_KINDS),
+        unit: z.string().nullable(),
+        groupName: z.string().nullable(),
+        values: z.record(z.string(), z.union([z.boolean(), z.string(), z.null()])),
+      }),
+    ),
+  }),
   handler: async (input, ctx) => {
     const uniqueIds = [...new Set(input.productIds)];
     const selected = await ctx.tx.select().from(products).where(inArray(products.id, uniqueIds));
@@ -301,6 +418,7 @@ export const listProductMedia = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ productId, variantId: productId.optional() }),
+  output: listed(mediaAttachment),
   handler: async (input, ctx) => {
     const [product] = await ctx.tx.select({ id: products.id }).from(products).where(eq(products.id, input.productId));
     if (!product) throw new ServiceError("not_found", "That product is not here.");
@@ -339,6 +457,7 @@ export const attachProductMedia = defineService({
     variantId: productId.optional(),
     position: z.number().int().min(0).max(100_000).optional(),
   }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const [asset] = await ctx.tx.select().from(assets).where(eq(assets.id, input.assetId));
@@ -383,6 +502,7 @@ export const detachProductMedia = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ productId, expectedVersion, mediaId: productId }),
+  output: productRow,
   handler: async (input, ctx) => {
     const product = await productForUpdate(ctx, input.productId, input.expectedVersion);
     const deleted = await ctx.tx

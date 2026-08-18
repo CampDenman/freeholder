@@ -8,6 +8,7 @@ import {
   customFieldDefinitions,
   organizations,
 } from "@/core/contacts/schema";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 
@@ -125,6 +126,20 @@ export async function applyCustomFieldPatch(
   return result;
 }
 
+const customFieldRow = row({
+  id: uuid,
+  entity: entitySchema,
+  key: z.string(),
+  label: z.string(),
+  kind: kindSchema,
+  helpText: z.string().nullable(),
+  options: z.array(z.string()),
+  position: z.number().int(),
+  active: z.boolean(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
 export const createCustomField = defineService({
   name: "contacts.createCustomField",
   summary: "Define a typed field an owner can use on contacts or organizations.",
@@ -139,6 +154,7 @@ export const createCustomField = defineService({
     options: optionsSchema,
     position: z.number().int().min(0).max(10_000).default(0),
   }),
+  output: customFieldRow,
   handler: async (input, ctx) => {
     if (input.kind === "select" && input.options.length === 0) {
       throw new ServiceError("validation", "A choice field needs at least one choice.");
@@ -205,6 +221,7 @@ export const updateCustomField = defineService({
     position: z.number().int().min(0).max(10_000).optional(),
     active: z.boolean().optional(),
   }),
+  output: customFieldRow,
   handler: async (input, ctx) => {
     const [definition] = await ctx.tx
       .select()
@@ -250,6 +267,7 @@ export const listCustomFields = defineService({
     entity: entitySchema.optional(),
     includeInactive: z.boolean().default(false),
   }),
+  output: listed(customFieldRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()

@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import encodeQR from "qr";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, actorString, type ServiceContext } from "@/core/service";
 import { siteOrigin } from "@/core/seo/origin";
 import { storage } from "@/adapters/storage";
@@ -22,6 +23,39 @@ const CAPTURE_TTL_MS = 24 * 60 * 60 * 1000;
 const id = z.string().uuid();
 const token = z.string().trim().min(16).max(128);
 const source = z.enum(CAPTURE_SOURCES);
+
+const captureSessionView = row({
+  id: uuid,
+  source: z.enum(CAPTURE_SOURCES),
+  status: z.enum(CAPTURE_STATUSES),
+  targetType: z.string().nullable(),
+  targetId: z.string().nullable(),
+  uploadCount: z.number().int(),
+  displaySurface: z.string().nullable(),
+  permissionGrantedAt: timestamp.nullable(),
+  trimStartMs: z.number().int(),
+  trimEndMs: z.number().int().nullable(),
+  caption: z.string().nullable(),
+  focalX: z.number().int(),
+  focalY: z.number().int(),
+  staged: z.boolean(),
+  stagedMime: z.string().nullable(),
+  stagedFilename: z.string().nullable(),
+  items: listed(
+    z.object({
+      id: uuid,
+      filename: z.string(),
+      bytes: z.number(),
+      mime: z.string(),
+      assetId: uuid.nullable(),
+    }),
+  ),
+  uploadId: uuid.nullable(),
+  assetId: uuid.nullable(),
+  expiresAt: timestamp,
+  completedAt: timestamp.nullable(),
+  captureUrl: z.string().nullable(),
+});
 
 function newToken(): string {
   return randomBytes(32).toString("hex");
@@ -245,6 +279,7 @@ export const stageCompletedUpload = defineService({
     bytes: z.number().int().positive(),
     checksumSha256: z.string().length(64).optional(),
   }),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     if (!input.token && !input.sessionId) {
       throw new ServiceError("validation", "Identify the capture session.");
@@ -312,6 +347,7 @@ export const createCaptureSession = defineService({
     targetType: z.string().trim().max(80).optional(),
     targetId: z.string().trim().max(80).optional(),
   }),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     const [created] = await ctx.tx
       .insert(mediaCaptureSessions)
@@ -338,6 +374,10 @@ export const createUploadLink = defineService({
     source: z.enum(["upload_link", "camera_roll", "share_sheet"]).default("upload_link"),
     targetType: z.string().trim().max(80).optional(),
     targetId: z.string().trim().max(80).optional(),
+  }),
+  output: captureSessionView.extend({
+    token: z.string(),
+    qrSvg: z.string(),
   }),
   handler: async (input, ctx) => {
     const value = newToken();
@@ -374,6 +414,7 @@ export const getCaptureSession = defineService({
       token: token.optional(),
     })
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: captureSessionView.nullable(),
   handler: async (input, ctx) => {
     const [row] = input.token
       ? await ctx.tx
@@ -403,6 +444,7 @@ export const grantCapturePermission = defineService({
     id,
     displaySurface: z.enum(["monitor", "window", "browser"]).optional(),
   }),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     const existing = await load(ctx, input.id);
     if (existing.status === "discarded" || existing.status === "confirmed") {
@@ -427,6 +469,7 @@ export const startCapture = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     const existing = await load(ctx, input.id);
     if (!existing.permissionGrantedAt) {
@@ -451,6 +494,7 @@ export const stopCapture = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     const existing = await load(ctx, input.id);
     if (existing.status !== "live") {
@@ -479,6 +523,7 @@ export const reviewCapture = defineService({
     focalX: z.number().int().min(0).max(10_000).optional(),
     focalY: z.number().int().min(0).max(10_000).optional(),
   }),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     const existing = await load(ctx, input.id);
     if (existing.status !== "preview" && existing.status !== "pending") {
@@ -522,6 +567,10 @@ export const attachCaptureUpload = defineService({
       durationSeconds: z.number().int().nonnegative().optional(),
     })
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({
+    session: captureSessionView,
+    asset: z.null(),
+  }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "anonymous" && !input.token) {
       throw new ServiceError("permission", "A phone ingest needs its upload link.");
@@ -564,6 +613,7 @@ export const confirmCapture = defineService({
       token: token.optional(),
     })
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "anonymous" && !input.token) {
       throw new ServiceError("permission", "A phone ingest needs its upload link.");
@@ -690,6 +740,7 @@ export const discardCapture = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id }),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     const existing = await load(ctx, input.id);
     if (existing.status === "confirmed") {
@@ -730,6 +781,7 @@ export const listCaptureSessions = defineService({
   input: z.object({
     status: z.enum(CAPTURE_STATUSES).optional(),
   }),
+  output: listed(captureSessionView),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
       .select()
@@ -752,6 +804,7 @@ export const bindCaptureAsset = defineService({
       assetId: id,
     })
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: captureSessionView,
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "anonymous" && !input.token) {
       throw new ServiceError("permission", "A phone ingest needs its upload link.");
@@ -800,6 +853,11 @@ export const appendCaptureChunk = defineService({
       bytes: z.instanceof(Uint8Array),
     })
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({
+    sessionId: uuid,
+    sequence: z.number().int(),
+    bytes: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "anonymous" && !input.token) {
       throw new ServiceError("permission", "A phone ingest needs its upload link.");
@@ -862,6 +920,10 @@ export const assembleCapture = defineService({
       filename: z.string().min(1).max(255).default("capture.webm"),
     })
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
+  output: z.object({
+    session: captureSessionView,
+    asset: z.null(),
+  }),
   handler: async (input, ctx) => {
     if (ctx.actor.kind === "anonymous" && !input.token) {
       throw new ServiceError("permission", "A phone ingest needs its upload link.");
@@ -922,6 +984,7 @@ export const expireCaptureSessions = defineService({
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
+  output: z.object({ expired: listed(uuid) }),
   handler: async (_input, ctx) => {
     const due = await ctx.tx
       .select()
