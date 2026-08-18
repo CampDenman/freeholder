@@ -8,14 +8,11 @@
 // behaviour and also the reason a gap is invisible from the front: nothing
 // breaks, the French visitor simply reads English. This is where it shows.
 //
-// Pages only, for now. Sections carry their own locale column — a French
-// header is a section row, not a translation of one — so the mechanism is
-// already there and needs a different screen.
+// Pages use entity_translations. Chrome is a locale variant of a Section
+// (C2.16) — a French header is a row, not a translation of one.
 import { Translate as TranslateIcon } from "@phosphor-icons/react/dist/ssr";
 import { notFound } from "next/navigation";
-import { formatDateTime } from "@/core/i18n";
-import { translationIndex } from "@/core/i18n/service";
-import { listPages } from "@/modules/cms/service";
+import { listPages, listSections, pageTranslationReport } from "@/modules/cms/service";
 import { currentBusiness } from "@/core/settings/read";
 import { Card, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
@@ -26,25 +23,35 @@ export const dynamic = "force-dynamic";
 
 export default async function TranslationsPage() {
   const actor = await requireStaffActor("i18n");
-  const [pages, rows, business, t] = await Promise.all([
+  const [pages, business, t, sections] = await Promise.all([
     listPages.call({}, actor),
-    translationIndex.call({ entityType: "page" }, actor),
     currentBusiness(),
     getT(),
+    listSections.call({}, actor),
   ]);
 
   const sourceLocale = business?.defaultLocale ?? "en";
   const targets = (business?.enabledLocales ?? []).filter(
     (locale) => locale !== sourceLocale,
   );
+  const reports = Object.fromEntries(
+    await Promise.all(
+      targets.map(async (locale) => [
+        locale,
+        await pageTranslationReport.call({ locale }, actor),
+      ]),
+    ),
+  ) as Record<string, Awaited<ReturnType<typeof pageTranslationReport.call>>>;
   // Nothing to translate into is not an empty screen, it is a screen that
   // should not exist: the nav hides it, and a typed URL says so too.
   if (targets.length === 0) notFound();
 
-  const timezone = business?.timezone ?? "UTC";
   const canManage = hasModuleAccess(actor, "i18n", "manage");
   const names = new Intl.DisplayNames([sourceLocale], { type: "language" });
-  const byKey = new Map(rows.map((row) => [`${row.entityId}:${row.locale}`, row]));
+  const chromeKeys = [...new Set(sections.map((section) => section.key))];
+  const chromeLocales = new Map(
+    sections.map((section) => [`${section.key}:${section.locale}`, section]),
+  );
 
   return (
     <div className="grid gap-6">
@@ -91,10 +98,10 @@ export default async function TranslationsPage() {
                       </span>
                     </th>
                     {targets.map((locale) => {
-                      const row = byKey.get(`${page.id}:${locale}`);
+                      const row = reports[locale]?.find((item) => item.pageId === page.id);
                       const status = (
                         <>
-                          {row ? (
+                          {row && row.status !== "missing" ? (
                             <Pill
                               tone={row.status === "reviewed" ? "success" : "warning"}
                             >
@@ -106,13 +113,10 @@ export default async function TranslationsPage() {
                               {t("translations.missing")}
                             </span>
                           )}
-                          {row ? (
-                            <time
-                              dateTime={row.updatedAt.toISOString()}
-                              className="font-mono text-xs text-ink-muted tabular-nums"
-                            >
-                              {formatDateTime(row.updatedAt, timezone, sourceLocale)}
-                            </time>
+                          {row && row.status === "reviewed" && !row.seoComplete ? (
+                            <span className="text-xs text-warning">
+                              {t("translations.seoIncomplete")}
+                            </span>
                           ) : null}
                         </>
                       );
@@ -140,6 +144,42 @@ export default async function TranslationsPage() {
           </div>
         </Card>
       )}
+
+      {chromeKeys.length > 0 ? (
+        <Card>
+          <div className="border-b border-rule px-4 py-3">
+            <h2 className="text-sm font-semibold text-ink">{t("translations.chrome")}</h2>
+            <p className="mt-1 text-sm text-ink-muted">{t("translations.chromeIntro")}</p>
+          </div>
+          <ul className="grid list-none gap-0 p-0">
+            {chromeKeys.map((key) => {
+              const source = chromeLocales.get(`${key}:${sourceLocale}`) ?? sections.find((row) => row.key === key);
+              return (
+                <li key={key} className="flex flex-wrap items-center gap-3 border-b border-rule px-4 py-3 last:border-0">
+                  <span className="font-medium">{source?.name ?? key}</span>
+                  <span className="font-mono text-xs text-ink-muted">{key}</span>
+                  {targets.map((locale) => {
+                    const variant = chromeLocales.get(`${key}:${locale}`);
+                    return variant ? (
+                      <a
+                        key={locale}
+                        href={`/admin/sections/${encodeURIComponent(key)}?locale=${encodeURIComponent(locale)}`}
+                        className="text-sm text-ink underline decoration-rule underline-offset-2"
+                      >
+                        {names.of(locale) ?? locale}
+                      </a>
+                    ) : (
+                      <span key={locale} className="text-sm text-ink-muted">
+                        {names.of(locale) ?? locale} · {t("translations.missing")}
+                      </span>
+                    );
+                  })}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      ) : null}
 
       <p className="max-w-prose text-sm text-ink-muted">
         {t("translations.reviewedOnly")}

@@ -72,6 +72,12 @@ export async function saveTranslationAction(
         locale,
         fields: {
           ...(title.trim() ? { title: title.trim() } : {}),
+          seo: {
+            ...(values["seo.title"]?.trim() ? { title: values["seo.title"].trim() } : {}),
+            ...(values["seo.description"]?.trim()
+              ? { description: values["seo.description"].trim() }
+              : {}),
+          },
           blocks: applyTranslations(source, values),
         },
         status: reviewed ? "reviewed" : "draft",
@@ -87,4 +93,18 @@ export async function saveTranslationAction(
 
   revalidatePath("/admin/translations", "layout");
   return { saved: true };
+}
+
+export async function draftPageTranslationAction(form: FormData): Promise<void> {
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const text = (key: string): string => {
+    const value = form.get(key);
+    return typeof value === "string" ? value : "";
+  };
+  const { draftPageTranslation } = await import("@/modules/cms/service");
+  await draftPageTranslation.call(
+    { pageId: text("entityId"), locale: text("locale") },
+    actor,
+  );
+  revalidatePath("/admin/translations", "layout");
 }
