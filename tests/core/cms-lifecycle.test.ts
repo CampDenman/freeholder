@@ -3,8 +3,13 @@
 // Preview links, schedule, approval, named revisions and restore-as-draft (C2.02).
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { db } from "@/core/db";
+import { users } from "@/core/auth/schema";
+import { actorString } from "@/core/service";
 import {
   createPage,
+  listRevisions,
+  pageAuthorSummary,
   publishPage,
   resolvePage,
   restoreRevision,
@@ -33,8 +38,18 @@ import {
   truncateSpine,
 } from "../helpers/spine";
 
+async function realiseAuthors(): Promise<void> {
+  await db().insert(users).values([
+    { id: OWNER.userId, email: "owner@example.test", role: "owner" },
+    { id: STAFF.userId, email: "staff@example.test", role: "editor" },
+  ]);
+}
+
 describe.runIf(hasDatabase)("cms content lifecycle", { timeout: 30_000 }, () => {
-  beforeEach(truncateSpine);
+  beforeEach(async () => {
+    await truncateSpine();
+    await realiseAuthors();
+  });
   afterAll(closeDb);
 
   async function publishedPage() {
@@ -172,6 +187,73 @@ describe.runIf(hasDatabase)("cms content lifecycle", { timeout: 30_000 }, () => 
     expect(diff.titleChanged).toBe(true);
     expect(diff.blocks.added.map((block) => block.id)).toContain("p");
     expect(diff.blocks.changed.map((block) => block.id)).toContain("h");
+  });
+
+  it("records a complete attributed author history across two people", async () => {
+    const created = await createPage.call(
+      {
+        slug: "shared",
+        title: "Shared",
+        blocks: [{ id: "h", type: "heading", props: { text: "Shared", level: 1 } }],
+      },
+      OWNER,
+    );
+    await updatePage.call(
+      {
+        id: created.id,
+        title: "Shared draft",
+        blocks: [{ id: "h", type: "heading", props: { text: "Draft", level: 1 } }],
+      },
+      STAFF,
+    );
+    await requestApproval.call({ id: created.id, note: "Please look" }, STAFF);
+    await decideApproval.call({ id: created.id, approved: true }, OWNER);
+    await publishPage.call({ id: created.id, published: true }, OWNER);
+    await schedulePage.call(
+      { id: created.id, unpublishAt: new Date(Date.now() + 60_000) },
+      STAFF,
+    );
+
+    const history = await listRevisions.call(
+      { subjectType: "page", subjectId: created.id },
+      OWNER,
+    );
+    expect(history.map((row) => row.kind)).toEqual([
+      "schedule",
+      "publish",
+      "approval",
+      "approval",
+      "autosave",
+      "create",
+    ]);
+    expect(history.map((row) => row.authorLabel)).toEqual([
+      "staff@example.test",
+      "owner@example.test",
+      "owner@example.test",
+      "staff@example.test",
+      "staff@example.test",
+      "owner@example.test",
+    ]);
+
+    const onlyStaff = await listRevisions.call(
+      {
+        subjectType: "page",
+        subjectId: created.id,
+        actor: actorString(STAFF),
+      },
+      OWNER,
+    );
+    expect(onlyStaff.every((row) => row.authorLabel === "staff@example.test")).toBe(true);
+    expect(onlyStaff.map((row) => row.kind)).toEqual(["schedule", "approval", "autosave"]);
+
+    const summary = await pageAuthorSummary.call({ pageId: created.id }, OWNER);
+    expect(summary.created?.authorLabel).toBe("owner@example.test");
+    expect(summary.lastEdited?.authorLabel).toBe("staff@example.test");
+    expect(summary.lastPublished?.authorLabel).toBe("owner@example.test");
+    expect(summary.authors.map((person) => person.label).sort()).toEqual([
+      "owner@example.test",
+      "staff@example.test",
+    ]);
   });
 
   it("hands an edit lease to the first editor and reports the holder to the second", async () => {
