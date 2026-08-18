@@ -8,4 +8,5 @@ export {
   contentPreviewLinks,
   contentPresence,
   contentComments,
+  contentTemplates,
 } from "./schema";

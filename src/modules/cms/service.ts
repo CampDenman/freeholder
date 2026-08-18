@@ -64,6 +64,24 @@ import {
   listSectionUsages,
   saveAsSection,
 } from "./section-service";
+export {
+  createFromTemplate,
+  ensureTemplates,
+  getTemplate,
+  listTemplates,
+  previewTemplate,
+  resetTemplate,
+  updateTemplate,
+} from "./template-service";
+import {
+  createFromTemplate,
+  ensureTemplates,
+  getTemplate,
+  listTemplates,
+  previewTemplate,
+  resetTemplate,
+  updateTemplate,
+} from "./template-service";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
 import type { BlockNode } from "./blocks/types";
 import {
@@ -1100,6 +1118,9 @@ export const ensureDefaults = defineService({
       .returning({ id: pages.id });
     if (insertedHome.length > 0) created.push("page:home");
 
+    const templates = await ctx.call(ensureTemplates, { locale: input.locale });
+    created.push(...templates.created);
+
     ctx.setSubject("module", "cms");
     return { created };
   },
@@ -1144,6 +1165,13 @@ export default [
   detachSection,
   listSectionUsages,
   deleteSection,
+  listTemplates,
+  getTemplate,
+  updateTemplate,
+  resetTemplate,
+  createFromTemplate,
+  previewTemplate,
+  ensureTemplates,
   listRevisions,
   restoreRevision,
   createPreviewLink,

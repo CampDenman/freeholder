@@ -8,14 +8,18 @@ import { createPageAction, type SaveResult } from "../../../cms-actions";
 
 export function NewPageForm({
   labels,
+  templates,
 }: {
   labels: {
     title: string;
     slug: string;
     slugHint: string;
+    template: string;
+    templateNone: string;
     submit: string;
     pending: string;
   };
+  templates: { key: string; name: string }[];
 }) {
   const [state, action, pending] = useActionState<SaveResult, FormData>(
     createPageAction,
@@ -34,6 +38,23 @@ export function NewPageForm({
       <Field label={labels.slug} htmlFor="slug" hint={labels.slugHint}>
         <Input id="slug" name="slug" className="font-mono" />
       </Field>
+      {templates.length > 0 ? (
+        <Field label={labels.template} htmlFor="templateKey">
+          <select
+            id="templateKey"
+            name="templateKey"
+            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+            defaultValue=""
+          >
+            <option value="">{labels.templateNone}</option>
+            {templates.map((template) => (
+              <option key={template.key} value={template.key}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <div>
         <Button type="submit" disabled={pending}>
           {pending ? labels.pending : labels.submit}

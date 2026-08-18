@@ -14,17 +14,20 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
+  createFromTemplate,
   createPage,
   createSectionLocale,
   deleteSection,
   detachSection,
   ensureDefaults,
+  resetTemplate,
   saveAsSection,
   mergePage,
   publishPage,
   restoreRevision,
   updatePage,
   updateSection,
+  updateTemplate,
 } from "@/modules/cms/service";
 import {
   createPreviewLink,
@@ -311,15 +314,78 @@ export async function createPageAction(
 ): Promise<SaveResult> {
   const title = text(form, "title");
   const slug = text(form, "slug");
+  const templateKey = text(form, "templateKey");
   let id: string;
   try {
-    const page = await createPage.call({ title, slug }, await currentActor());
-    id = page.id;
+    const actor = await currentActor();
+    if (templateKey) {
+      const created = await createFromTemplate.call(
+        { key: templateKey, title, slug: slug || undefined },
+        actor,
+      );
+      if (!created.page) {
+        return { error: "That template cannot create a page." };
+      }
+      id = created.page.id;
+    } else {
+      const page = await createPage.call({ title, slug }, actor);
+      id = page.id;
+    }
   } catch (error) {
     return present(error);
   }
   // Outside the try: redirect() signals by throwing, and catching it here
   // would turn a successful create into "something went wrong".
+  redirect(`/admin/pages/${id}`);
+}
+
+export async function saveTemplateBlocksAction(
+  key: string,
+  locale: string,
+  blocks: unknown,
+): Promise<SaveResult> {
+  try {
+    await updateTemplate.call({ key, locale, blocks }, await currentActor());
+    revalidatePath("/admin/templates");
+    return {};
+  } catch (error) {
+    return present(error);
+  }
+}
+
+export async function resetTemplateAction(form: FormData): Promise<void> {
+  const key = text(form, "key");
+  const locale = text(form, "locale") || "en";
+  try {
+    await resetTemplate.call({ key, locale }, await currentActor());
+  } catch (error) {
+    const message = error instanceof ServiceError ? error.message : "Could not reset that template.";
+    redirect(`/admin/templates?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/admin/templates");
+  redirect(`/admin/templates/${encodeURIComponent(key)}?locale=${encodeURIComponent(locale)}`);
+}
+
+export async function createFromTemplateAction(
+  _previous: SaveResult,
+  form: FormData,
+): Promise<SaveResult> {
+  const key = text(form, "key");
+  const title = text(form, "title");
+  const slug = text(form, "slug");
+  let id: string | undefined;
+  try {
+    const created = await createFromTemplate.call(
+      { key, title, slug: slug || undefined },
+      await currentActor(),
+    );
+    if (!created.page) {
+      return { error: "That template cannot create a page." };
+    }
+    id = created.page.id;
+  } catch (error) {
+    return present(error);
+  }
   redirect(`/admin/pages/${id}`);
 }
 
