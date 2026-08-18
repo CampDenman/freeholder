@@ -181,6 +181,82 @@ export const tokens = {
 
 export type Tokens = typeof tokens;
 
+export const COLOR_ROLES = [
+  "paper",
+  "surface",
+  "surfaceMuted",
+  "field",
+  "ink",
+  "inkMuted",
+  "rule",
+  "accent",
+  "onAccent",
+  "accentSoft",
+  "success",
+  "successSoft",
+  "warning",
+  "warningSoft",
+  "danger",
+  "dangerSoft",
+  "focus",
+] as const;
+
+export type ColorRole = (typeof COLOR_ROLES)[number];
+
+export const HEX = /^#[0-9a-f]{6}$/;
+
+export function luminance(hex: string): number {
+  const channels = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+}
+
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+export interface ContrastFailure {
+  scheme: "light" | "dark";
+  pair: string;
+  ratio: number;
+  need: number;
+}
+
+/** The same pairings `tests/core/tokens.test.ts` requires of Bench. */
+export function contrastFailures(theme: ThemeTokens): ContrastFailure[] {
+  const out: ContrastFailure[] = [];
+  for (const scheme of ["light", "dark"] as const) {
+    const c = theme[scheme];
+    const fail = (pair: string, ratio: number, need: number) => {
+      if (ratio < need) out.push({ scheme, pair, ratio, need });
+    };
+    for (const ground of ["paper", "surface", "surfaceMuted", "field"] as const) {
+      fail(`ink on ${ground}`, contrastRatio(c.ink, c[ground]), 4.5);
+    }
+    fail("inkMuted on paper", contrastRatio(c.inkMuted, c.paper), 4.5);
+    fail("inkMuted on surface", contrastRatio(c.inkMuted, c.surface), 4.5);
+    fail("onAccent on accent", contrastRatio(c.onAccent, c.accent), 4.5);
+    fail("success on successSoft", contrastRatio(c.success, c.successSoft), 4.5);
+    fail("warning on warningSoft", contrastRatio(c.warning, c.warningSoft), 4.5);
+    fail("danger on dangerSoft", contrastRatio(c.danger, c.dangerSoft), 4.5);
+    fail("focus on paper", contrastRatio(c.focus, c.paper), 3);
+    fail("focus on surface", contrastRatio(c.focus, c.surface), 3);
+  }
+  return out;
+}
+
+export interface TokenExtras {
+  fontSans?: string;
+  fontMono?: string;
+  radius?: string;
+  motion?: string;
+  measure?: string;
+  gutter?: string;
+}
+
 const CSS_VAR_PREFIX = "fh";
 
 function toKebab(key: string): string {
@@ -200,12 +276,28 @@ export function colorsToCss(scheme: ColorTokens): string {
     .join("\n  ");
 }
 
+function extrasToCss(extras?: TokenExtras): string {
+  if (!extras) return "";
+  const lines: string[] = [];
+  if (extras.fontSans) lines.push(`--${CSS_VAR_PREFIX}-font-sans: ${extras.fontSans};`);
+  if (extras.fontMono) lines.push(`--${CSS_VAR_PREFIX}-font-mono: ${extras.fontMono};`);
+  if (extras.radius) lines.push(`--${CSS_VAR_PREFIX}-radius: ${extras.radius};`);
+  if (extras.motion) lines.push(`--${CSS_VAR_PREFIX}-motion: ${extras.motion};`);
+  if (extras.measure) lines.push(`--${CSS_VAR_PREFIX}-measure: ${extras.measure};`);
+  if (extras.gutter) lines.push(`--${CSS_VAR_PREFIX}-gutter: ${extras.gutter};`);
+  return lines.length ? `\n  ${lines.join("\n  ")}` : "";
+}
+
 /** The `<style>` body that themes a document, both schemes included. */
-export function themeStylesheet(theme: ThemeTokens = colors): string {
+export function themeStylesheet(
+  theme: ThemeTokens = colors,
+  extras?: TokenExtras,
+): string {
+  const extra = extrasToCss(extras);
   return [
-    `:root {\n  ${colorsToCss(theme.light)}\n}`,
-    `@media (prefers-color-scheme: dark) {\n  :root {\n    ${colorsToCss(theme.dark)}\n  }\n}`,
-    `:root[data-theme="dark"] {\n  ${colorsToCss(theme.dark)}\n}`,
-    `:root[data-theme="light"] {\n  ${colorsToCss(theme.light)}\n}`,
+    `:root {\n  ${colorsToCss(theme.light)}${extra}\n}`,
+    `@media (prefers-color-scheme: dark) {\n  :root {\n    ${colorsToCss(theme.dark)}${extra}\n  }\n}`,
+    `:root[data-theme="dark"] {\n  ${colorsToCss(theme.dark)}${extra}\n}`,
+    `:root[data-theme="light"] {\n  ${colorsToCss(theme.light)}${extra}\n}`,
   ].join("\n");
 }

@@ -18,6 +18,7 @@
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { themeStylesheet } from "@/core/design/tokens";
+import { currentDesign } from "@/core/design/read";
 import { CSP_NONCE_HEADER } from "@/core/http/csp";
 import { themeAttribute } from "@/core/design/theme";
 import { readThemePreference } from "./theme";
@@ -30,17 +31,23 @@ export default async function RootLayout({
 }: {
   children: ReactNode;
 }) {
-  const [theme, locale, requestHeaders] = await Promise.all([
+  const [theme, locale, requestHeaders, design] = await Promise.all([
     readThemePreference().then(themeAttribute),
     getLocale(),
     headers(),
+    currentDesign(),
   ]);
   const nonce = requestHeaders.get(CSP_NONCE_HEADER) ?? undefined;
 
   return (
     <html lang={locale} dir={localeDirection(locale)} data-theme={theme}>
       <head>
-        <style nonce={nonce} dangerouslySetInnerHTML={{ __html: themeStylesheet() }} />
+        <style
+          nonce={nonce}
+          dangerouslySetInnerHTML={{
+            __html: themeStylesheet(design.theme, design.extras),
+          }}
+        />
       </head>
       <body className="bg-paper font-sans text-ink antialiased">
         {children}

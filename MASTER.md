@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.14 entity layout detach/rejoin. Next: C2.15–C2.23 (skip C2.21). |
+| Current focus | C2.15 design tokens. Next: C2.16–C2.23 (skip C2.21). |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3471,9 +3471,12 @@ project without silent telemetry, and ready to carry money.
   product/event/location public pages follow the template until detached;
   editing a page auto-detaches; `tests/core/cms-layouts.test.ts`;
   changeset `cms-entity-layouts.md`)
-- [ ] **C2.15** Build visual design controls over semantic tokens: colors,
+- [x] **C2.15** Build visual design controls over semantic tokens: colors,
   typography, spacing, radius, borders, shadows, responsive layout, logo and
   motion—preserving light/dark and WCAG invariants.
+  (`design_settings`; `settings.getDesign` / `updateDesign` / `resetDesign`;
+  admin `/admin/design`; public measure/gutter/logo; WCAG AA refusal;
+  `tests/core/design-tokens.test.ts`; changeset `cms-design-tokens.md`)
 - [ ] **C2.16** Support locale-aware content workflow, side-by-side source/
   translation editing, machine drafts, reviewer state, translated chrome and
   locale-specific SEO completeness.

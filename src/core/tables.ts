@@ -75,6 +75,7 @@ export {
 export { redirects } from "@/core/seo/schema";
 export { cspViolations, rateLimitCounters } from "@/core/security/schema";
 export { businessProfile, moduleSettings } from "@/core/settings/schema";
+export { designSettings } from "@/core/design/schema";
 export { entityTranslations } from "@/core/i18n/schema";
 export { passwordResets } from "@/core/auth/schema";
 export { outboxEventDeliveries, outboxEvents } from "@/core/events/schema";

@@ -25,6 +25,8 @@ export default defineModule({
       "contact.mergeUndone",
       "settings.businessUpdated",
       "settings.setupCompleted",
+      "design.updated",
+      "design.reset",
       "module.enabled",
       "module.disabled",
       "location.created",
