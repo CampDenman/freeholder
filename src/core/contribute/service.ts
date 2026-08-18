@@ -483,8 +483,8 @@ export const submitContribution = defineService({
     }
 
     const local = isSelfHub(settings.hubUrl);
-    const status = (local ? "received" : "queued") as "received" | "queued";
-    const source = (ctx.actor.kind === "agent" ? "mcp" : "admin") as "mcp" | "admin";
+    const status: "received" | "queued" = local ? "received" : "queued";
+    const source: "mcp" | "admin" = ctx.actor.kind === "agent" ? "mcp" : "admin";
     const values = {
       contactId,
       kind: input.kind,

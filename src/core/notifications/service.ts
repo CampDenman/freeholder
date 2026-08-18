@@ -1450,7 +1450,7 @@ function eventTemplate(eventName: string, payload: Record<string, unknown>): Eve
         title: typeof payload.title === "string" ? payload.title.slice(0, 120) : "",
       },
       href: `/admin/contribute/${payload.id}`,
-      dedupeKey: `contribute-status:${payload.id}:${String(payload.status ?? "")}`,
+      dedupeKey: `contribute-status:${payload.id}:${typeof payload.status === "string" ? payload.status : ""}`,
     };
   }
   if (eventName === "contribute.ingested" && typeof payload.id === "string") {

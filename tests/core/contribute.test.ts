@@ -465,7 +465,11 @@ describe.runIf(hasDatabase)("contribute channel", { timeout: 30_000 }, () => {
       { contributionId: hub.id, note: "In the next editor pass." },
       {
         fetchImpl: async (_url, init) => {
-          const body = JSON.parse(String(init?.body));
+          const raw = init?.body;
+          if (typeof raw !== "string") {
+            throw new Error("expected a JSON body");
+          }
+          const body: unknown = JSON.parse(raw);
           await recordContributionStatus.call(body, ANONYMOUS);
           return new Response(JSON.stringify({ ok: true }), { status: 200 });
         },
