@@ -291,6 +291,7 @@ test.describe("real-browser product journeys", () => {
       await page.getByRole("button", { name: "Add a block" }).click();
       await page.getByRole("button", { name: "Heading", exact: true }).click();
       await page.getByLabel("Text").fill("Start a journey");
+      await page.getByLabel("Size").selectOption("1");
       await page.getByRole("button", { name: "Add a block" }).click();
       await page.getByRole("button", { name: "Form", exact: true }).click();
       await page.getByLabel("formSlug").fill("journey-enquiry");
