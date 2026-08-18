@@ -20,6 +20,10 @@
 // are the real control and the dragging is a convenience on top.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  analyzeAccessibility,
+  type A11yContext,
+} from "@/modules/cms/a11y-hints";
+import {
   ArrowDown,
   ArrowUp,
   Copy,
@@ -105,6 +109,20 @@ export interface EditorLabels {
   saveAsSection?: string;
   detachSection?: string;
   sectionName?: string;
+  a11y: {
+    title: string;
+    ok: string;
+    missingH1: string;
+    multipleH1: string;
+    headingOrder: string;
+    imageMissing: string;
+    imageAltUnset: string;
+    vagueLink: string;
+    emptyHref: string;
+    htmlImage: string;
+    htmlLandmarks: string;
+    videoMissing: string;
+  };
 }
 
 /** Distinct enough per session; ids only need to be stable within a tree. */
@@ -117,6 +135,7 @@ export function BlockEditor({
   blockTypes,
   labels,
   previewSrc,
+  a11yContext = "page",
   save,
   onKeepMine,
   onReloadDraft,
@@ -128,6 +147,7 @@ export function BlockEditor({
   labels: EditorLabels;
   /** The preview page for this subject. */
   previewSrc: string;
+  a11yContext?: A11yContext;
   /** Persists the whole tree. Throws with a readable message on refusal. */
   save: (blocks: EditorNode[]) => Promise<{
     error?: string;
@@ -376,6 +396,10 @@ export function BlockEditor({
             });
           }}
         />
+        <A11yHints
+          hints={analyzeAccessibility(blocks, { context: a11yContext })}
+          labels={labels.a11y}
+        />
         <SaveStatus
           status={status}
           error={error}
@@ -435,6 +459,39 @@ export function BlockEditor({
         />
       </div>
     </div>
+  );
+}
+
+/* --------------------------------------------------------------------- a11y */
+
+function A11yHints({
+  hints,
+  labels,
+}: {
+  hints: ReturnType<typeof analyzeAccessibility>;
+  labels: EditorLabels["a11y"];
+}) {
+  return (
+    <section
+      aria-label={labels.title}
+      className="grid gap-2 rounded-lg border border-rule bg-surface p-4"
+    >
+      <h2 className="text-sm font-semibold text-ink">{labels.title}</h2>
+      {hints.length === 0 ? (
+        <p className="text-sm text-ink-muted">{labels.ok}</p>
+      ) : (
+        <ul className="grid gap-1.5 text-sm">
+          {hints.map((hint, index) => (
+            <li
+              key={`${hint.code}-${hint.blockId ?? index}`}
+              className={hint.severity === "error" ? "text-danger" : "text-ink-muted"}
+            >
+              {labels[hint.code]}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

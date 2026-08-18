@@ -15,12 +15,14 @@ export function TemplateEditor({
   initialBlocks,
   blockTypes,
   labels,
+  a11yContext = "page",
 }: {
   templateKey: string;
   locale: string;
   initialBlocks: EditorNode[];
   blockTypes: EditorBlockType[];
   labels: EditorLabels;
+  a11yContext?: "page" | "email";
 }) {
   return (
     <BlockEditor
@@ -28,6 +30,7 @@ export function TemplateEditor({
       blockTypes={blockTypes}
       labels={labels}
       previewSrc={`/preview/template/${encodeURIComponent(templateKey)}?locale=${encodeURIComponent(locale)}`}
+      a11yContext={a11yContext}
       save={(blocks) => saveTemplateBlocksAction(templateKey, locale, blocks)}
     />
   );

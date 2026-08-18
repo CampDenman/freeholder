@@ -103,7 +103,14 @@ describe.runIf(hasDatabase)("cms content lifecycle", { timeout: 30_000 }, () => 
   });
 
   it("refuses to publish a page still waiting for approval", async () => {
-    const created = await createPage.call({ slug: "review", title: "Review", blocks: [] }, OWNER);
+    const created = await createPage.call(
+      {
+        slug: "review",
+        title: "Review",
+        blocks: [{ id: "h", type: "heading", props: { text: "Review", level: 1 } }],
+      },
+      OWNER,
+    );
     await requestApproval.call({ id: created.id, note: "Please look" }, OWNER);
     const blocked = await failure(publishPage.call({ id: created.id, published: true }, OWNER));
     expect(blocked.code).toBe("conflict");

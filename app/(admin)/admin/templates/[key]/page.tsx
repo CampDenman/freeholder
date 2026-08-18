@@ -99,6 +99,7 @@ export default async function EditTemplatePage({
       <TemplateEditor
         templateKey={template.key}
         locale={locale}
+        a11yContext={template.kind === "email" ? "email" : "page"}
         initialBlocks={template.blocks as BlockNode[]}
         blockTypes={editorBlockTypes(
           t,

@@ -203,11 +203,18 @@ describe.runIf(hasDatabase)("the owner-facing content builder", () => {
           slug: "temporary-launch",
           locale: "en",
           title: "Temporary launch",
-          blocks: [{
-            id: "temporary-launch-copy",
-            type: "text",
-            props: { body: "Temporary launch copy.", align: "start", measure: true },
-          }],
+          blocks: [
+            {
+              id: "temporary-launch-h1",
+              type: "heading",
+              props: { text: "Temporary launch", level: 1, align: "start" },
+            },
+            {
+              id: "temporary-launch-copy",
+              type: "text",
+              props: { body: "Temporary launch copy.", align: "start", measure: true },
+            },
+          ],
           seo: {},
           publish: true,
         }],

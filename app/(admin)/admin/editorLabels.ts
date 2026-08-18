@@ -125,6 +125,20 @@ export function editorLabels(t: Translate): EditorLabels {
     saveAsSection: t("cms.editor.saveAsSection"),
     detachSection: t("cms.editor.detachSection"),
     sectionName: t("cms.editor.sectionName"),
+    a11y: {
+      title: t("cms.a11y.title"),
+      ok: t("cms.a11y.ok"),
+      missingH1: t("cms.a11y.missingH1"),
+      multipleH1: t("cms.a11y.multipleH1"),
+      headingOrder: t("cms.a11y.headingOrder"),
+      imageMissing: t("cms.a11y.imageMissing"),
+      imageAltUnset: t("cms.a11y.imageAltUnset"),
+      vagueLink: t("cms.a11y.vagueLink"),
+      emptyHref: t("cms.a11y.emptyHref"),
+      htmlImage: t("cms.a11y.htmlImage"),
+      htmlLandmarks: t("cms.a11y.htmlLandmarks"),
+      videoMissing: t("cms.a11y.videoMissing"),
+    },
   };
 }
 

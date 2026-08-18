@@ -41,6 +41,7 @@ export function PageEditor({
       blockTypes={blockTypes}
       labels={labels}
       previewSrc={`/preview/page/${id}`}
+      a11yContext="page"
       save={async (blocks) => {
         const result = await savePageBlocksAction(id, blocks, versionRef.current);
         if (result.version) versionRef.current = result.version;

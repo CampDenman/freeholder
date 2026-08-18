@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C2.20 heading and accessibility hints. Next: C2.22, C2.23. |
+| Current focus | C2.22 cache and performance. Next: C2.23. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3505,8 +3505,11 @@ project without silent telemetry, and ready to carry money.
   (`email` block context; `variable` slots; `renderEmailHtml` / `renderEmailText`;
   `cms.previewEmail` / `testSendEmail`; inbox preview on email templates;
   `tests/core/cms-email.test.ts`; changeset `cms-email-editor.md`)
-- [ ] **C2.20** Enforce one H1, heading order, semantic landmarks, required alt
+- [x] **C2.20** Enforce one H1, heading order, semantic landmarks, required alt
   decisions, link meaning, responsive images and per-page accessibility hints.
+  (`analyzeAccessibility`; `cms.pageAccessibilityReport`; publish refuses 0 or
+  2+ H1s; editor hint panel; decorative image decision; `tests/core/cms-a11y.test.ts`;
+  changeset `cms-a11y-hints.md`)
 - [x] **C2.21** Generate OG images, IndexNow notifications and product/location/
   event/newsletter feeds from the same public entity registry.
   *(Evidence: `src/core/seo/{entities,feeds,indexnow,meta,classify}.ts` plus
