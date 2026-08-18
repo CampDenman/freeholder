@@ -63,6 +63,9 @@ export function DesignForm({
     measureNarrow: string;
     measureDefault: string;
     measureWide: string;
+    fontSystem: string;
+    px: (n: number) => string;
+    ms: (n: number) => string;
   };
 }) {
   const [state, action, pending] = useActionState<DesignActionState, FormData>(
@@ -121,7 +124,7 @@ export function DesignForm({
               <Select id="fontSans" name="fontSans" defaultValue={values.fontSans}>
                 <option value="">{labels.radiusDefault}</option>
                 <option value='system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'>
-                  System
+                  {labels.fontSystem}
                 </option>
               </Select>
             </Field>
@@ -129,24 +132,24 @@ export function DesignForm({
               <Select id="fontMono" name="fontMono" defaultValue={values.fontMono}>
                 <option value="">{labels.radiusDefault}</option>
                 <option value="ui-monospace, SFMono-Regular, Menlo, monospace">
-                  System
+                  {labels.fontSystem}
                 </option>
               </Select>
             </Field>
             <Field label={labels.radius} htmlFor="radius">
               <Select id="radius" name="radius" defaultValue={values.radius}>
                 <option value="">{labels.radiusDefault}</option>
-                <option value="0.25rem">4px</option>
-                <option value="0.375rem">6px</option>
-                <option value="0.5rem">8px</option>
-                <option value="0.75rem">12px</option>
+                <option value="0.25rem">{labels.px(4)}</option>
+                <option value="0.375rem">{labels.px(6)}</option>
+                <option value="0.5rem">{labels.px(8)}</option>
+                <option value="0.75rem">{labels.px(12)}</option>
               </Select>
             </Field>
             <Field label={labels.motion} htmlFor="motion">
               <Select id="motion" name="motion" defaultValue={values.motion}>
                 <option value="">{labels.motionDefault}</option>
-                <option value="120ms">120ms</option>
-                <option value="180ms">180ms</option>
+                <option value="120ms">{labels.ms(120)}</option>
+                <option value="180ms">{labels.ms(180)}</option>
                 <option value="0.01ms">{labels.motionReduced}</option>
               </Select>
             </Field>
@@ -161,9 +164,9 @@ export function DesignForm({
             <Field label={labels.gutter} htmlFor="gutter">
               <Select id="gutter" name="gutter" defaultValue={values.gutter}>
                 <option value="">{labels.measureDefault}</option>
-                <option value="1rem">16px</option>
-                <option value="1.5rem">24px</option>
-                <option value="2rem">32px</option>
+                <option value="1rem">{labels.px(16)}</option>
+                <option value="1.5rem">{labels.px(24)}</option>
+                <option value="2rem">{labels.px(32)}</option>
               </Select>
             </Field>
             <Field label={labels.logo} htmlFor="logoAssetId">

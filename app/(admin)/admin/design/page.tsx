@@ -69,6 +69,9 @@ export default async function DesignPage() {
           measureNarrow: t("design.measureNarrow"),
           measureDefault: t("design.measureDefault"),
           measureWide: t("design.measureWide"),
+          fontSystem: t("design.fontSystem"),
+          px: (n) => t("design.px", { n }),
+          ms: (n) => t("design.ms", { n }),
         }}
       />
     </div>
