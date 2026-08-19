@@ -1,0 +1,25 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+name: freeholder
+services:
+  - name: web
+    image:
+      registry_type: GHCR
+      registry: campdenman
+      repository: freeholder
+      tag: edge
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    envs:
+      - key: APP_URL
+        scope: RUN_TIME
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: SESSION_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: CREDENTIAL_KEY
+        scope: RUN_TIME
+        type: SECRET

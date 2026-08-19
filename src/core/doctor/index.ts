@@ -22,6 +22,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
+import { PLATFORM_VERSION } from "@/core/platform";
 
 export type Verdict = "ok" | "warn" | "fail";
 
@@ -720,6 +721,50 @@ async function checkAltTextSuggester(): Promise<Check> {
   );
 }
 
+async function checkPlugins(): Promise<Check[]> {
+  try {
+    const { installedPlugins } = await import("@/core/plugins/schema");
+    const rows = await db().select().from(installedPlugins);
+    const disabled = rows.filter((row) => row.status === "disabled");
+    if (disabled.length === 0) {
+      return [
+        ok(
+          "plugins.installed",
+          "Plugins",
+          rows.length === 0
+            ? "No plugins are installed."
+            : `${rows.length} plugin${rows.length === 1 ? " is" : "s are"} installed.`,
+        ),
+      ];
+    }
+    return [
+      warn(
+        "plugins.disabled",
+        "Plugins",
+        disabled.map((row) => `${row.name}: ${row.disabledReason ?? "disabled"}`).join(" "),
+        "Enable the plugin once the cause is fixed, or uninstall it.",
+      ),
+    ];
+  } catch (error) {
+    return [
+      warn(
+        "plugins.installed",
+        "Plugins",
+        `Could not read installed plugins: ${reason(error)}`,
+        "Apply migrations so the installed_plugins table exists.",
+      ),
+    ];
+  }
+}
+
+function checkPlatformVersion(): Check {
+  return ok(
+    "platform.version",
+    "Freeholder version",
+    `This instance is ${PLATFORM_VERSION}.`,
+  );
+}
+
 /**
  * Run every check.
  *
@@ -740,6 +785,8 @@ export async function runDoctor(): Promise<DoctorReport> {
     await checkJobs(),
     ...(await checkCredentialKey()),
     ...(await checkSecurity()),
+    ...(await checkPlugins()),
+    checkPlatformVersion(),
   ];
 
   const verdict: Verdict = checks.some((check) => check.verdict === "fail")

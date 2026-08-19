@@ -50,6 +50,15 @@ export const configSchema = z.object({
     .default("everything"),
   locales: z.array(z.string()).min(1).default(["en"]),
   baseCurrency: z.string().length(3).default("USD"),
+  plugins: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        version: z.string().min(1),
+        enabled: z.boolean().default(true),
+      }),
+    )
+    .default([]),
 });
 
 export type FreeholderConfig = z.infer<typeof configSchema>;

@@ -1,0 +1,20 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+services:
+  app:
+    image: ghcr.io/campdenman/freeholder:edge
+    ports:
+      - "3000:3000"
+    env_file: ../.env.example
+    depends_on:
+      - db
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: freeholder
+      POSTGRES_PASSWORD: freeholder
+      POSTGRES_DB: freeholder
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

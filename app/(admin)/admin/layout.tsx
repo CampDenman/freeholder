@@ -130,6 +130,8 @@ export default async function AdminLayout({
               events: t("events.title"),
               newsletters: t("newsletters.title"),
               contribute: t("contribute.title"),
+              plugins: t("plugins.title"),
+              imports: t("imports.title"),
             }}
           />
         </div>

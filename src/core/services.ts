@@ -39,6 +39,9 @@ import settingsServices from "@/core/settings/service";
 import webhookServices from "@/core/webhooks/service";
 import contributeServices from "@/core/contribute/service";
 import designServices from "@/core/design/service";
+import pluginServices from "@/core/plugins/service";
+import importServices from "@/core/import/service";
+import portabilityServices from "@/core/portability/service";
 import type { Service } from "@/core/service";
 import type { EventDeliveryContext } from "@/core/events";
 
@@ -78,6 +81,9 @@ const services: Service[] = [
   ...webhookServices,
   ...contributeServices,
   ...designServices,
+  ...pluginServices,
+  ...importServices,
+  ...portabilityServices,
 ];
 
 export default services;

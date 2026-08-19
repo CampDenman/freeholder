@@ -8,7 +8,11 @@ in core, never a fork (§18).
 | Target | Tier | Database | Media | ~Monthly |
 |---|---|---|---|---|
 | [`digitalocean-droplet`](digitalocean-droplet/) | 1 | Postgres on the droplet | Spaces | $29 |
-| `replit` | 1 | Replit Postgres | Replit Object Storage | *planned* |
+| [`digitalocean-app`](digitalocean-app/) | 1 | Managed Postgres | Spaces | $32 |
+| [`replit`](replit/) | 1 | Replit Postgres | Replit Object Storage | $25 |
+| [`railway`](railway/) | 1 | Railway Postgres | S3-compatible | $25 |
+| [`render`](render/) | 1 | Render Postgres | S3-compatible | $28 |
+| [`docker-selfhost`](docker-selfhost/) | 1 | Compose Postgres | S3 / MinIO (dev) | $20 |
 
 ## The storage mandate
 

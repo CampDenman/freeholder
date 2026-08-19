@@ -14,4 +14,7 @@ limits:
   - "Media MUST live in Spaces (§18 storage mandate) — the droplet holds compute and the database, never the archive"
   - "One box: Postgres shares the droplet, so a rebuild restores from pg_dump rather than failing over"
   - "Jobs run in the web process until core/jobs lands; long work will need a second container"
+update:
+  strategy: image-swap
+  rollback: compose pull the previous sha tag
 tested_on: "2026-07-28"

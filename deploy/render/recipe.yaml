@@ -1,0 +1,18 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+name: render
+tier: 1
+maintainers: ["@tonyaly"]
+freeholder_min_version: "0.0.0"
+provides:
+  database: render-postgres
+  storage: s3-compatible
+  jobs: web-process
+  cron: render-cron
+estimated_monthly_cost_usd: { min: 14, typical: 28 }
+limits:
+  - "Media MUST live in S3-compatible object storage"
+update:
+  strategy: image-swap
+  rollback: redeploy the previous image
+tested_on: "2026-08-18"

@@ -103,3 +103,9 @@ export {
   contributionAssets,
   contributionEvents,
 } from "@/core/contribute/schema";
+export {
+  installedPlugins,
+  pluginRegistries,
+  pluginRetentions,
+  importRuns,
+} from "@/core/plugins/schema";

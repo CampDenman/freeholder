@@ -25,6 +25,11 @@ import catalogManifest from "@/modules/catalog/manifest";
 import eventsManifest from "@/modules/events/manifest";
 import newslettersManifest from "@/modules/newsletters/manifest";
 import proofManifest from "@/modules/proof/manifest";
+import giftRegistryManifest from "../../plugins/gift-registry/manifest";
+import printOnDemandManifest from "../../plugins/print-on-demand/manifest";
+import communityManifest from "../../plugins/community/manifest";
+import voiceVideoManifest from "../../plugins/voice-video/manifest";
+import marketplaceManifest from "../../plugins/marketplace/manifest";
 import type { ModuleManifest } from "@/core/module";
 
 const manifests: ModuleManifest[] = [
@@ -39,6 +44,11 @@ const manifests: ModuleManifest[] = [
   eventsManifest,
   newslettersManifest,
   proofManifest,
+  giftRegistryManifest,
+  printOnDemandManifest,
+  communityManifest,
+  voiceVideoManifest,
+  marketplaceManifest,
 ];
 
 export default manifests;

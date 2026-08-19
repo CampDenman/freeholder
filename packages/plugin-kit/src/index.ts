@@ -19,6 +19,9 @@ export {
   type PluginPermission,
 } from "./contract";
 export { parseSemver, satisfies } from "./semver";
+export { scaffoldPlugin } from "./scaffold";
+export { inspectPluginFolder, EXAMPLE_KINDS } from "./harness";
+export { defineImporter, type ImporterDefinitionInput, type ImporterSourceKind } from "./importer";
 
 import {
   validatePluginContract,

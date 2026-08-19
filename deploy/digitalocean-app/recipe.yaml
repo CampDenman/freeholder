@@ -1,0 +1,19 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+name: digitalocean-app
+tier: 1
+maintainers: ["@tonyaly"]
+freeholder_min_version: "0.0.0"
+provides:
+  database: digitalocean-managed-postgres
+  storage: spaces-s3
+  jobs: worker-component
+  cron: app-platform-job
+estimated_monthly_cost_usd: { min: 17, typical: 32 }
+limits:
+  - "Media MUST live in Spaces"
+  - "No persistent disk — storage adapter is s3"
+update:
+  strategy: image-swap
+  rollback: redeploy the previous spec image tag
+tested_on: "2026-08-18"

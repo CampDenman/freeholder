@@ -30,7 +30,7 @@ export function isPluginManifest(
 }
 
 export function assertPluginFitsInstance(
-  manifest: ModuleManifest,
+  manifest: ModuleManifest & { freeholder?: string; license?: string; migrations?: string[] },
   options: {
     platformVersion?: string;
     installed: readonly string[];
@@ -42,25 +42,26 @@ export function assertPluginFitsInstance(
       `"${manifest.name}" is a core module, not a plugin.`,
     );
   }
+  const plugin = manifest;
   const platform = options.platformVersion ?? PLATFORM_VERSION;
-  if (!pluginFitsPlatform(manifest.freeholder, platform)) {
+  if (!pluginFitsPlatform(plugin.freeholder, platform)) {
     throw new PluginContractError(
-      `Plugin "${manifest.name}"@${manifest.version} requires Freeholder ${manifest.freeholder}; this instance is ${platform}.`,
+      `Plugin "${plugin.name}"@${plugin.version} requires Freeholder ${plugin.freeholder}; this instance is ${platform}.`,
     );
   }
-  for (const name of manifest.requires ?? []) {
+  for (const name of plugin.requires ?? []) {
     if (!options.installed.includes(name)) {
       throw new PluginContractError(
-        `Plugin "${manifest.name}" requires module "${name}", which is not installed.`,
+        `Plugin "${plugin.name}" requires module "${name}", which is not installed.`,
       );
     }
   }
   const dir = options.migrationsDir;
   if (!dir) return;
-  for (const file of manifest.migrations) {
+  for (const file of plugin.migrations) {
     if (!existsSync(join(dir, file))) {
       throw new PluginContractError(
-        `Plugin "${manifest.name}" declares migration "${file}", which is not in ${dir}.`,
+        `Plugin "${plugin.name}" declares migration "${file}", which is not in ${dir}.`,
       );
     }
   }
