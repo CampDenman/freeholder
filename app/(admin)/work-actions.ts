@@ -13,7 +13,11 @@ import {
   cancelTask,
   createTask,
   flagTask,
+  inspectRun,
   reopenTask,
+  retryTask,
+  stopRun,
+  tailRun,
   updateTask,
 } from "@/core/agents/service";
 
@@ -131,4 +135,29 @@ export async function cancelTaskAction(form: FormData): Promise<void> {
   await cancelTask.call({ id, reason: text(form, "reason") || undefined }, await actor());
   revalidatePath("/admin/work");
   revalidatePath(`/admin/work/${id}`);
+}
+
+export async function stopRunAction(form: FormData): Promise<void> {
+  const runId = text(form, "runId");
+  const stopped = await stopRun.call(
+    { runId, reason: text(form, "reason") || undefined },
+    await actor(),
+  );
+  revalidatePath("/admin/work");
+  revalidatePath(`/admin/work/${stopped.taskId}`);
+}
+
+export async function retryTaskAction(form: FormData): Promise<void> {
+  const id = text(form, "id");
+  await retryTask.call({ id }, await actor());
+  revalidatePath("/admin/work");
+  revalidatePath(`/admin/work/${id}`);
+}
+
+export async function tailRunAction(runId: string, afterSeq: number) {
+  return tailRun.call({ runId, afterSeq }, await actor());
+}
+
+export async function inspectRunAction(runId: string) {
+  return inspectRun.call({ runId }, await actor());
 }

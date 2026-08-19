@@ -47,9 +47,10 @@ import {
   agentTasks,
 } from "@/core/agents/schema";
 import { apiKeys } from "@/core/apikeys/schema";
-import { effectiveAutonomy } from "@/core/agents/service";
+import { effectiveAutonomy, MAX_TASK_ATTEMPTS } from "@/core/agents/service";
 import {
   defineService,
+  redact,
   ServiceError,
   type Actor,
   type Tx,
@@ -58,8 +59,7 @@ import {
 /** How long a claim is held before the platform assumes the agent is gone. */
 export const LEASE_MINUTES = 10;
 
-/** Attempts at a task before it is parked for a person to look at. */
-export const MAX_TASK_ATTEMPTS = 3;
+export { MAX_TASK_ATTEMPTS } from "@/core/agents/service";
 
 interface ResolvedAgent {
   id: string;
@@ -369,8 +369,8 @@ export const reportStep = defineService({
         seq: nextSeq?.seq ?? 1,
         kind: input.kind,
         serviceName: input.serviceName ?? null,
-        input: input.input ?? null,
-        output: input.output ?? null,
+        input: input.input ? redact(input.input) : null,
+        output: input.output ? redact(input.output) : null,
         tokens: input.tokens,
         durationMs: input.durationMs ?? null,
         error: input.error ?? null,
