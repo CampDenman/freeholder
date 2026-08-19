@@ -1,5 +1,4 @@
-# @freeholder/templates (MIT)
+# @freeholder/templates (Apache-2.0)
 
-Theme starters and business-preset templates — block arrangements, design
-tokens, and section defaults that ship per preset (`MASTER.md` §13, §32).
-Scaffold only for now.
+Theme starters and business-preset templates — Bench tokens, seeded page
+lists, entity layouts and email slots per preset (`MASTER.md` §13, §32, C3.15).

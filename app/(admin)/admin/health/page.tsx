@@ -13,6 +13,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
 import { doctor } from "@/core/doctor/service";
+import { platformVersion } from "@/core/portability/service";
 import { currentBusiness } from "@/core/settings/read";
 import { Callout, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
@@ -24,11 +25,12 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function HealthPage() {
   const actor = await requireStaffActor("platform");
-  const [report, business, violations, t] = await Promise.all([
+  const [report, business, violations, t, version] = await Promise.all([
     doctor.call({}, actor),
     currentBusiness(),
     listCspViolations.call({ days: 7, limit: 20 }, actor),
     getT(),
+    platformVersion.call({}, actor),
   ]);
 
   const icon = {
@@ -44,6 +46,9 @@ export default async function HealthPage() {
         <h1 className="text-xl font-bold tracking-tight">{t("doctor.title")}</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">
           {t("doctor.intro")}
+        </p>
+        <p className="mt-2 font-mono text-xs text-ink-muted">
+          {t("doctor.version", { version: String(version.version) })}
         </p>
       </div>
 

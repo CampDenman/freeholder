@@ -45,6 +45,7 @@ import {
   PRODUCT_STATUSES,
   PRODUCT_VISIBILITIES,
 } from "@/modules/catalog/contract";
+import { IMPORT_STATUSES, PLUGIN_STATUSES } from "@/core/plugins/schema";
 import en from "../../locales/en.json";
 import es from "../../locales/es.json";
 import fr from "../../locales/fr.json";
@@ -231,6 +232,23 @@ describe("the families built from a template key", () => {
     ["catalog.promo.couponKind", COUPON_KINDS],
     ["catalog.promo.giftStatus", GIFT_CARD_STATUSES],
     ["catalog.promo.offerKind", OFFER_RULE_KINDS],
+    ["plugins.status", PLUGIN_STATUSES],
+    [
+      "imports.status",
+      IMPORT_STATUSES,
+    ],
+    [
+      "imports.kind",
+      [
+        "html",
+        "sitemap",
+        "rss",
+        "atom",
+        "wordpress-rest",
+        "wordpress-wxr",
+        "archive",
+      ],
+    ],
   ])("names every member of %s", (prefix, values) => {
     const missing = values
       .map((value) => `${prefix}.${value}`)

@@ -9,9 +9,13 @@
     "url": "https://github.com/campdenman/freeholder.git",
     "directory": "packages/create-freeholder"
   },
+  "type": "module",
+  "bin": {
+    "create-freeholder": "./src/index.ts"
+  },
   "scripts": {
-    "build": "echo 'scaffold — lands with the v1 slice'",
-    "lint": "echo 'scaffold — lands with the v1 slice'",
-    "test": "echo 'scaffold — lands with the v1 slice'"
+    "build": "node --check src/index.ts",
+    "lint": "node --check src/index.ts",
+    "test": "node --test"
   }
 }

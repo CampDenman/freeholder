@@ -1,0 +1,19 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+name: docker-selfhost
+tier: 1
+maintainers: ["@tonyaly"]
+freeholder_min_version: "0.0.0"
+provides:
+  database: compose-postgres
+  storage: minio-or-s3
+  jobs: web-process
+  cron: host-cron
+estimated_monthly_cost_usd: { min: 0, typical: 20 }
+limits:
+  - "Production media MUST leave the compose volume for real S3/R2/Spaces"
+  - "MinIO is the local-dev profile only"
+update:
+  strategy: image-swap
+  rollback: compose pull the previous tag
+tested_on: "2026-08-18"

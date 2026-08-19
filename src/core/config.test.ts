@@ -11,6 +11,7 @@ describe("defineConfig", () => {
     expect(c.adapters.payments).toBe("manual");
     expect(c.adapters.storage).toBe("local");
     expect(c.locales).toEqual(["en"]);
+    expect(c.plugins).toEqual([]);
   });
 
   it("accepts every installed payment adapter and rejects unknown ones", () => {

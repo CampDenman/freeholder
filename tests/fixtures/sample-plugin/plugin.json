@@ -1,0 +1,10 @@
+{
+  "name": "sample",
+  "version": "0.1.0",
+  "freeholder": ">=0.0.0",
+  "license": "MIT",
+  "permissions": ["cms:view"],
+  "requires": ["core"],
+  "migrations": [],
+  "capabilities": { "blocks": true }
+}

@@ -9,7 +9,8 @@
 import { requireProductionEnv } from "@/core/env";
 import { subscribe } from "@/core/events";
 import { sortModules, type ModuleManifest } from "@/core/module";
-import { assertPluginFitsInstance } from "@/core/plugin";
+import { isolatePlugins, bootableManifests, isolatePluginLoad } from "@/core/plugins/isolate";
+import { isPluginManifest } from "@/core/plugin";
 import { registerService, type Service } from "@/core/service";
 import {
   registerOnboardingModule,
@@ -46,6 +47,96 @@ export function isService(value: unknown): value is Service {
   );
 }
 
+async function wireManifest(
+  manifest: ModuleManifest,
+  report: BootReport,
+): Promise<void> {
+  if (manifest.blocks) {
+    const loaded = await manifest.blocks();
+    const exported = loaded.default;
+    if (!Array.isArray(exported)) {
+      throw new Error(
+        `module "${manifest.name}" declares blocks, but its blocks module has no default export array. Export them as \`export default [ ... ]\`.`,
+      );
+    }
+    const { registerBlock } = await import("@/modules/cms/blocks/registry");
+    for (const block of exported) {
+      registerBlock(block as Parameters<typeof registerBlock>[0]);
+      report.blocks.push((block as { type: string }).type);
+    }
+  }
+
+  if (manifest.jobs) {
+    const loaded = await manifest.jobs();
+    const exported = loaded.default;
+    if (!Array.isArray(exported)) {
+      throw new Error(
+        `module "${manifest.name}" declares jobs, but its jobs module has no default export array.`,
+      );
+    }
+    const { registerJob } = await import("@/core/jobs");
+    for (const job of exported) {
+      registerJob(job as Parameters<typeof registerJob>[0]);
+      report.jobs.push((job as { name: string }).name);
+    }
+  }
+
+  let loadedServices: Record<string, unknown> | undefined;
+  if (manifest.services) {
+    loadedServices = await manifest.services();
+    const exported = loadedServices.default;
+    if (!Array.isArray(exported)) {
+      throw new Error(
+        `module "${manifest.name}" declares services, but its services module has no default export array. Export the services as \`export default [ ... ]\`.`,
+      );
+    }
+    for (const service of exported) {
+      if (!isService(service)) {
+        throw new Error(
+          `module "${manifest.name}" exports something that is not a service. Every entry must come from defineService().`,
+        );
+      }
+      registerService(service);
+      report.services.push(service.def.name);
+    }
+  }
+
+  for (const [event, handlerName] of Object.entries(
+    manifest.events?.listens ?? {},
+  )) {
+    const handler = loadedServices?.[handlerName];
+    if (typeof handler !== "function") {
+      throw new Error(
+        `module "${manifest.name}" listens for "${event}" with "${handlerName}", but its services module exports no such function.`,
+      );
+    }
+    subscribe(
+      event,
+      `${manifest.name}:${event}:${handlerName}`,
+      handler as (payload: unknown) => void | Promise<void>,
+    );
+    report.listeners.push({
+      event,
+      module: manifest.name,
+      handler: handlerName,
+    });
+  }
+
+  if (manifest.onboarding) {
+    const loaded = await manifest.onboarding();
+    const contribution = registerOnboardingModule(manifest.name, loaded.default);
+    report.guidance.push(
+      ...contribution.guidance.map((flow) => `${flow.key}@${flow.version}`),
+    );
+    report.demoScenarios.push(
+      ...contribution.scenarios.map((scenario) => `${scenario.key}@${scenario.version}`),
+    );
+    report.demoFixtures.push(
+      ...contribution.fixtures.map((fixture) => `${fixture.key}@${fixture.version}`),
+    );
+  }
+}
+
 export async function boot(
   manifests: ModuleManifest[],
 ): Promise<BootReport> {
@@ -63,100 +154,22 @@ export async function boot(
   };
 
   const installed = manifests.map((manifest) => manifest.name);
-  for (const manifest of sortModules(manifests)) {
-    if (manifest.kind === "plugin") {
-      assertPluginFitsInstance(manifest, { installed });
+  const isolated = isolatePlugins(manifests, installed);
+  for (const failed of isolated.filter((entry) => entry.error)) {
+    report.modules.push(`${failed.manifest.name} (disabled: ${failed.error})`);
+  }
+  for (const manifest of sortModules(bootableManifests(isolated))) {
+    const wired = await isolatePluginLoad(manifest.name, () =>
+      wireManifest(manifest, report),
+    );
+    if (!wired.ok) {
+      if (isPluginManifest(manifest)) {
+        report.modules.push(`${manifest.name} (disabled: ${wired.error})`);
+        continue;
+      }
+      throw new Error(wired.error);
     }
     report.modules.push(manifest.name);
-
-    // Blocks before services, and both in dependency order: a module's own
-    // services may validate a block tree against the registry the moment they
-    // are called, and `requires: ["cms"]` is what guarantees the registry it
-    // is adding to already exists.
-    if (manifest.blocks) {
-      const loaded = await manifest.blocks();
-      const exported = loaded.default;
-      if (!Array.isArray(exported)) {
-        throw new Error(
-          `module "${manifest.name}" declares blocks, but its blocks module has no default export array. Export them as \`export default [ ... ]\`.`,
-        );
-      }
-      const { registerBlock } = await import("@/modules/cms/blocks/registry");
-      for (const block of exported) {
-        registerBlock(block as Parameters<typeof registerBlock>[0]);
-        report.blocks.push((block as { type: string }).type);
-      }
-    }
-
-    if (manifest.jobs) {
-      const loaded = await manifest.jobs();
-      const exported = loaded.default;
-      if (!Array.isArray(exported)) {
-        throw new Error(
-          `module "${manifest.name}" declares jobs, but its jobs module has no default export array.`,
-        );
-      }
-      const { registerJob } = await import("@/core/jobs");
-      for (const job of exported) {
-        registerJob(job as Parameters<typeof registerJob>[0]);
-        report.jobs.push((job as { name: string }).name);
-      }
-    }
-
-    let loadedServices: Record<string, unknown> | undefined;
-    if (manifest.services) {
-      loadedServices = await manifest.services();
-      const exported = loadedServices.default;
-      if (!Array.isArray(exported)) {
-        throw new Error(
-          `module "${manifest.name}" declares services, but its services module has no default export array. Export the services as \`export default [ ... ]\`.`,
-        );
-      }
-      for (const service of exported) {
-        if (!isService(service)) {
-          throw new Error(
-            `module "${manifest.name}" exports something that is not a service. Every entry must come from defineService().`,
-          );
-        }
-        registerService(service);
-        report.services.push(service.def.name);
-      }
-    }
-
-    for (const [event, handlerName] of Object.entries(
-      manifest.events?.listens ?? {},
-    )) {
-      const handler = loadedServices?.[handlerName];
-      if (typeof handler !== "function") {
-        throw new Error(
-          `module "${manifest.name}" listens for "${event}" with "${handlerName}", but its services module exports no such function.`,
-        );
-      }
-      subscribe(
-        event,
-        `${manifest.name}:${event}:${handlerName}`,
-        handler as (payload: unknown) => void | Promise<void>,
-      );
-      report.listeners.push({
-        event,
-        module: manifest.name,
-        handler: handlerName,
-      });
-    }
-
-    if (manifest.onboarding) {
-      const loaded = await manifest.onboarding();
-      const contribution = registerOnboardingModule(manifest.name, loaded.default);
-      report.guidance.push(
-        ...contribution.guidance.map((flow) => `${flow.key}@${flow.version}`),
-      );
-      report.demoScenarios.push(
-        ...contribution.scenarios.map((scenario) => `${scenario.key}@${scenario.version}`),
-      );
-      report.demoFixtures.push(
-        ...contribution.fixtures.map((fixture) => `${fixture.key}@${fixture.version}`),
-      );
-    }
   }
 
   validateOnboardingRegistry({

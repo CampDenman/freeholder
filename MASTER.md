@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` at `36968a1` with C3.02–C3.07 landed via #135. This change closes C3.08 (plugin manifest, permissions, migrations and compatibility). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` at `36968a1` plus this change: C3.08–C3.23 (plugin lifecycle, isolation, registries, first-party plugins, create-freeholder, templates, Tier-1 recipes, export/round-trip, importer studio). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3.09 plugin install, enable, disable, update and uninstall. |
+| Current focus | C4.01 work board and task tree. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3592,47 +3592,83 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `assertPluginFitsInstance` at boot; proof module uses the contract.
   Coverage in `tests/core/plugin-contract.test.ts`; changeset
   `plugin-contract.md`.)
-- [ ] **C3.09** Implement install, enable, disable, update and uninstall with
+- [x] **C3.09** Implement install, enable, disable, update and uninstall with
   signature/integrity verification, rollback, data-retention choice and doctor.
-- [ ] **C3.10** Enforce plugin boundaries and failure isolation so a bad plugin
+  (`plugins.install|enable|disable|update|rollback|uninstall`; directory
+  sha256 + HMAC signature; `plugin_retentions` keep|purge; doctor
+  `plugins.installed` / `plugins.disabled`. Coverage in
+  `tests/core/plugins-lifecycle.test.ts`.)
+- [x] **C3.10** Enforce plugin boundaries and failure isolation so a bad plugin
   is named and disabled rather than taking down the instance.
-- [ ] **C3.11** Build local/community/verified/private registries, signed
+  (`isolatePlugins` / `isolatePluginLoad`; boot records
+  `name (disabled: …)` and continues. Coverage in
+  `tests/core/plugins-lifecycle.test.ts`.)
+- [x] **C3.11** Build local/community/verified/private registries, signed
   metadata, federation, caching and declarative instance configuration.
-- [ ] **C3.12** Ship plugin scaffolding, dev harness, fixture instance, contract
+  (`plugin_registries` + signed index cache; `plugins.cacheRegistry` /
+  `plugins.listCatalog`; `config.plugins`. Coverage in
+  `tests/core/plugins-lifecycle.test.ts`.)
+- [x] **C3.12** Ship plugin scaffolding, dev harness, fixture instance, contract
   tests and examples for a block, service, adapter, automation verb and route.
-- [ ] **C3.13** Ship first-party plugins for gift options/registries, print-on-
+  (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
+  Coverage in `tests/core/plugin-scaffold.test.ts`.)
+- [x] **C3.13** Ship first-party plugins for gift options/registries, print-on-
   demand, advanced communities, voice and video artifacts, and marketplace
   channel sync seams, as assigned by §§4.14 and 36.
+  (`plugins/gift-registry`, `print-on-demand`, `community`, `voice-video`,
+  `marketplace`; contact_id tables register merge + privacy. Coverage in
+  `tests/core/first-party-plugins.test.ts`.)
 
 #### Packages, installation, export, and target parity
 
-- [ ] **C3.14** Implement `create-freeholder` with explicit environment checks,
+- [x] **C3.14** Implement `create-freeholder` with explicit environment checks,
   target selection, migration, setup URL, demo choice and actionable recovery.
-- [ ] **C3.15** Turn `@freeholder/templates` into tested business presets using
+  (`packages/create-freeholder`; `missingEnv` / `recoverFromMissing`. Coverage
+  in `tests/core/create-freeholder.test.ts`.)
+- [x] **C3.15** Turn `@freeholder/templates` into tested business presets using
   Bench tokens, seeded content and full-page/entity/email templates.
-- [ ] **C3.16** Provide working recipes for Replit, DigitalOcean App Platform,
+  (`PRESETS` + `BENCH_TOKENS`. Coverage in `tests/core/templates.test.ts`.)
+- [x] **C3.16** Provide working recipes for Replit, DigitalOcean App Platform,
   DigitalOcean Droplet, Railway, Render and bare Docker Compose with Postgres
   and S3-compatible storage.
-- [ ] **C3.17** Give every Tier-1 recipe install, verify, backup, restore,
+  (`deploy/{replit,digitalocean-app,digitalocean-droplet,railway,render,docker-selfhost}`.
+  Coverage in `tests/core/recipes.test.ts`.)
+- [x] **C3.17** Give every Tier-1 recipe install, verify, backup, restore,
   migrate-in, migrate-out, update and rollback steps; continuously test matrix.
-- [ ] **C3.18** Build one-command full export of normalized data, media manifest,
+  (`recipe.yaml` update/rollback; `migrate.md` for every pair; `RECIPE_STEPS`.
+  Coverage in `tests/core/recipes.test.ts`.)
+- [x] **C3.18** Build one-command full export of normalized data, media manifest,
   human-readable archive, configuration and checksums without exporting secrets.
-- [ ] **C3.19** Prove round-trip migration between every Tier-1 pair while
+  (`pnpm ownership:export`; `platform.export`; `EXPORT_FORMAT`. Coverage in
+  `tests/core/ownership-export.test.ts` and `tests/core/portability.test.ts`.)
+- [x] **C3.19** Prove round-trip migration between every Tier-1 pair while
   preserving IDs, money, timestamps, media, locales and public URLs.
-- [ ] **C3.20** Add semantic platform/plugin/API versions, compatibility
+  (`buildLogicalArchive` / `applyLogicalArchive` / `tier1Pairs`. Coverage in
+  `tests/core/portability.test.ts`.)
+- [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
-- [ ] **C3.21** Define the importer plugin contract and kit: typed source/auth
+  (`platform.version` / `platform.compatibility`; `/api/health` `version`;
+  doctor `platform.version`; admin health. Coverage in
+  `tests/core/portability.test.ts`.)
+- [x] **C3.21** Define the importer plugin contract and kit: typed source/auth
   config, least-privilege permissions, discovery/pagination/checkpoints,
   transforms into core service inputs, provenance, fixtures and hostile/
   partial-source conformance; core retains jobs, preview, commit and rollback.
-- [ ] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
+  (`defineImporter`; `assertPublicHttpUrl`; robots/limits. Coverage in
+  `tests/core/importers.test.ts`.)
+- [x] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
   sitemap/RSS/Atom/semantic-HTML importers plus static archive/common hosted-
   site paths; preserve content/media/SEO/URL intent and generate redirects
   while enforcing SSRF, origin, robots, rate, page, byte and depth limits.
-- [ ] **C3.23** Build the owner import studio and resumable run ledger:
+  (`parseWordpressRest` / `parseWordpressWxr` / `parseSitemap` /
+  `parseRssOrAtom` / `parseSemanticHtml` / `discoverFromPublicOrigin`.
+  Coverage in `tests/core/importers.test.ts`.)
+- [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,
   with actionable progress, retry and audit for core and plugin sources.
+  (`imports.start|preview|map|reviewConflicts|commit|reconcile|publish|rollback`;
+  `/admin/imports`. Coverage in `tests/core/plugins-lifecycle.test.ts`.)
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.

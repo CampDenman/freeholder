@@ -1,0 +1,20 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+name: replit
+tier: 1
+maintainers: ["@tonyaly"]
+freeholder_min_version: "0.0.0"
+provides:
+  database: replit-postgres
+  storage: replit-object-storage
+  jobs: web-process
+  cron: replit-scheduled
+estimated_monthly_cost_usd: { min: 0, typical: 25 }
+limits:
+  - "Media MUST live in Replit Object Storage (§18)"
+  - "Dev workspaces sleep; use a Deployment for production"
+  - "Single region"
+update:
+  strategy: image-swap
+  rollback: pin the previous sha tag and redeploy
+tested_on: "2026-08-18"

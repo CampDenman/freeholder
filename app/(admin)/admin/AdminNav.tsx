@@ -38,6 +38,8 @@ import {
   CalendarBlank,
   Newspaper,
   ChatCircleText,
+  PuzzlePiece,
+  DownloadSimple,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -78,6 +80,8 @@ export interface AdminNavLabels {
   events: string;
   newsletters: string;
   contribute: string;
+  plugins: string;
+  imports: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -116,6 +120,8 @@ const LINKS = [
   { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
   { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
   { href: "/admin/contribute", key: "contribute", module: "contribute", Icon: ChatCircleText },
+  { href: "/admin/plugins", key: "plugins", module: "platform", Icon: PuzzlePiece },
+  { href: "/admin/imports", key: "imports", module: "platform", Icon: DownloadSimple },
   { href: "/admin/health", key: "health", module: "platform", Icon: Stethoscope },
   { href: "/admin/jobs", key: "jobs", module: "platform", Icon: ListChecks },
 ] as const;
