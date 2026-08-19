@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` plus C4.01 (#138) and this change for C4.02 (live run streaming, redacted step inspection, stop, retry, cancel that revokes leases). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` plus C4.02 (#139) and this change for C4.03 (managed writes honour suggest/approve/autonomous, with previews for blocks, messages, money and irreversible actions). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.03 suggest/approve/autonomous writes with previews. |
+| Current focus | C4.04 approval inbox, expiry, rejection and once-only execution. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3687,8 +3687,11 @@ deployments are portable, testable and incapable of silently forking the truth.
   (`agents.inspectRun` / `agents.tailRun` / `agents.stopRun` /
   `agents.retryTask`; `reportStep` redacts on write; cancel revokes leases.
   `/admin/work/[id]` live run view. Coverage in `tests/core/agents-run.test.ts`.)
-- [ ] **C4.03** Enforce suggest/approve/autonomous behavior for every managed
+- [x] **C4.03** Enforce suggest/approve/autonomous behavior for every managed
   write, with previews for block diffs, messages, money and destructive actions.
+  (`agents.proposeWrite` / `agents.listApprovals`; `classifyManagedWrite`;
+  irreversible writes always queue even at autonomous. Coverage in
+  `tests/core/agents-autonomy.test.ts`.)
 - [ ] **C4.04** Build approval inbox, expiry, rejection notes, step-up auth,
   execution of approved input exactly once and immutable decision audit.
 - [ ] **C4.05** Implement the managed-agent adapter family, provider/model
