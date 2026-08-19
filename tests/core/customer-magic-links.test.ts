@@ -66,7 +66,7 @@ describe("the customer magic-link browser handoff", () => {
   });
 });
 
-describe.runIf(hasDatabase)("customer magic-link lifecycle", () => {
+describe.runIf(hasDatabase)("customer magic-link lifecycle", { timeout: 30_000 }, () => {
   let logged: string[] = [];
 
   async function createContact(email = EMAIL, name = "Portal Customer") {
@@ -236,14 +236,15 @@ describe.runIf(hasDatabase)("customer magic-link lifecycle", () => {
   });
 
   it("invalidates a duplicate Contact's bearer links during merge", async () => {
+    const mergeEmail = "merge-dup@example.test";
     const [survivor, duplicate] = await db()
       .insert(contacts)
       .values([
         { name: "Survivor" },
-        { name: "Duplicate", email: EMAIL },
+        { name: "Duplicate", email: mergeEmail },
       ])
       .returning();
-    const token = await requestToken();
+    const token = await requestToken(mergeEmail);
     await mergeContacts.call(
       { survivingId: survivor!.id, duplicateId: duplicate!.id },
       OWNER,
