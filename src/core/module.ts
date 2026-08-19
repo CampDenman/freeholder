@@ -13,6 +13,11 @@ type Lazy<T> = () => Promise<T>;
 export interface ModuleManifest {
   name: string;
   version: string;
+  /**
+   * Core modules omit this. Plugins stamp `kind: "plugin"` via `definePlugin`
+   * so boot can apply the C3.08 compatibility and permission contract.
+   */
+  kind?: "module" | "plugin";
   /** Dependency check at boot; topo-sorted before wiring. */
   requires?: string[];
   /** Drizzle tables owned by this module. */

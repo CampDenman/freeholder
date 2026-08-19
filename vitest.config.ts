@@ -56,6 +56,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@freeholder/plugin-kit": fileURLToPath(
+        new URL("./packages/plugin-kit/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {
@@ -64,6 +67,11 @@ export default defineConfig({
     // One sacred database (§2 principle 12) means one database for the suite
     // too: files that truncate spine tables must not run beside each other.
     fileParallelism: false,
+    // Truncate now covers every installed module. The Vitest defaults (5s
+    // tests, 10s hooks) lose the race once catalog/invoicing/cms tables join
+    // the spine, and the next test then sees leftover unique emails.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     globalSetup: ["./tests/setup/migrate.ts"],
     env: {
       ...(testDatabaseUrl ? { DATABASE_URL: testDatabaseUrl } : {}),

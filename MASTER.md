@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` at `59befcc` with C3.01 landed via #134. This change closes C3.02–C3.07 (OpenAPI, SDK, actor-aware MCP, resources/prompts, contract docs/drift, webhook replay/redaction/rotation). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` at `36968a1` with C3.02–C3.07 landed via #135. This change closes C3.08 (plugin manifest, permissions, migrations and compatibility). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3 plugin system and portable operation (C3.08). |
+| Current focus | C3.09 plugin install, enable, disable, update and uninstall. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3585,8 +3585,13 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 
 #### Plugin system and registries
 
-- [ ] **C3.08** Finalize plugin manifest/version/capability contracts, module
+- [x] **C3.08** Finalize plugin manifest/version/capability contracts, module
   dependencies, permissions, configuration, migrations and compatibility.
+  (`definePlugin` in `@freeholder/plugin-kit`; `freeholder` semver range,
+  SPDX license, `permissions`, `migrations`, `capabilities`;
+  `assertPluginFitsInstance` at boot; proof module uses the contract.
+  Coverage in `tests/core/plugin-contract.test.ts`; changeset
+  `plugin-contract.md`.)
 - [ ] **C3.09** Implement install, enable, disable, update and uninstall with
   signature/integrity verification, rollback, data-retention choice and doctor.
 - [ ] **C3.10** Enforce plugin boundaries and failure isolation so a bad plugin

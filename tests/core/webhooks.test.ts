@@ -362,7 +362,7 @@ describe.runIf(hasDatabase)("keeping subscriptions", { timeout: 30_000 }, () => 
   });
 });
 
-describe.runIf(hasDatabase)("queueing what happened", () => {
+describe.runIf(hasDatabase)("queueing what happened", { timeout: 30_000 }, () => {
   beforeEach(async () => {
     await truncateSpine();
     await db()
@@ -431,7 +431,7 @@ describe.runIf(hasDatabase)("queueing what happened", () => {
   });
 });
 
-describe.runIf(hasDatabase)("actually delivering", () => {
+describe.runIf(hasDatabase)("actually delivering", { timeout: 30_000 }, () => {
   let stop: (() => Promise<void>) | undefined;
 
   beforeEach(async () => {

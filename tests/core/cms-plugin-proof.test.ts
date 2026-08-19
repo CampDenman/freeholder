@@ -33,6 +33,7 @@ describe("plugin block proof", () => {
 
   it("declares a migration, sitemap source and seed block", () => {
     const proof = manifests.find((row) => row.name === "proof");
+    expect(proof?.kind).toBe("plugin");
     expect(proof?.requires).toEqual(expect.arrayContaining(["cms"]));
     expect(proof?.seo?.sitemapSources).toEqual(["proof.publishedPaths"]);
     expect(proof?.tables).toBeTypeOf("function");
