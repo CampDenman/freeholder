@@ -10,10 +10,12 @@ import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { getTask, listAgents, listTasks } from "@/core/agents/service";
 import { FlagTaskForm, UpdateTaskForm } from "../WorkForms";
+import { LiveRun } from "../LiveRun";
 import {
   assignTaskAction,
   cancelTaskAction,
   reopenTaskAction,
+  retryTaskAction,
 } from "../../../work-actions";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +41,11 @@ export default async function WorkTaskPage({
   const locale = business?.defaultLocale ?? "en";
   const parked = ["needs_attention", "failed", "blocked", "cancelled"].includes(task.status);
   const finished = task.status === "done" || task.status === "cancelled";
+  const canRetry = ["needs_attention", "failed", "cancelled", "blocked", "queued"].includes(
+    task.status,
+  );
   const dependsOn = tree.filter((item) => task.dependsOn.includes(item.id));
+  const latestRun = task.runs.at(-1);
 
   return (
     <div className="grid gap-6">
@@ -97,6 +103,39 @@ export default async function WorkTaskPage({
         </Card>
       ) : null}
 
+      {latestRun ? (
+        <Card>
+          <CardHeader
+            title={t("work.run")}
+            status={
+              <Pill tone="neutral">
+                {t("work.run.attempt", { value: latestRun.attempt })} · {latestRun.costCents}¢
+              </Pill>
+            }
+          />
+          <CardBody>
+            <LiveRun
+              runId={latestRun.id}
+              live={latestRun.status === "running"}
+              initialSteps={task.steps.filter((step) => step.runId === latestRun.id)}
+              labels={{
+                live: t("work.run.live"),
+                stopped: t("work.run.stopped"),
+                stop: t("work.stop"),
+                empty: t("work.run.empty"),
+                tokens: t("work.run.tokens"),
+                step: {
+                  message: t("work.step.message"),
+                  tool_call: t("work.step.tool_call"),
+                  tool_result: t("work.step.tool_result"),
+                  note: t("work.step.note"),
+                },
+              }}
+            />
+          </CardBody>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader title={t("work.assign")} />
         <CardBody>
@@ -149,6 +188,12 @@ export default async function WorkTaskPage({
           <CardHeader title={t("work.attention")} />
           <CardBody>
             <div className="grid gap-4">
+              {canRetry && task.status !== "queued" ? (
+                <form action={retryTaskAction}>
+                  <input type="hidden" name="id" value={task.id} />
+                  <Button type="submit">{t("work.retry")}</Button>
+                </form>
+              ) : null}
               {parked ? (
                 <form action={reopenTaskAction}>
                   <input type="hidden" name="id" value={task.id} />

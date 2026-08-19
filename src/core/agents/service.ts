@@ -27,8 +27,10 @@ import { violates } from "@/core/db/errors";
 import {
   actorString,
   defineService,
+  redact,
   ServiceError,
   type Actor,
+  type Tx,
 } from "@/core/service";
 
 const AUTONOMY = ["suggest", "approve", "autonomous"] as const;
@@ -141,8 +143,31 @@ const stepRow = row({
   createdAt: timestamp,
 });
 
+/** Attempts at a task before it is parked for a person to look at. */
+export const MAX_TASK_ATTEMPTS = 3;
+
 /** Ordered, so "no higher than" is a comparison rather than a lookup table. */
 const RANK: Record<Autonomy, number> = { suggest: 1, approve: 2, autonomous: 3 };
+
+function redactStep<T extends { input: unknown; output: unknown }>(step: T): T {
+  return { ...step, input: redact(step.input), output: redact(step.output) };
+}
+
+async function revokeRuns(tx: Tx, taskIds: string[], reason: string): Promise<number> {
+  if (taskIds.length === 0) return 0;
+  const ended = await tx
+    .update(agentRuns)
+    .set({
+      status: "cancelled",
+      stopReason: "cancelled",
+      endedAt: sql`now()`,
+      leaseExpiresAt: null,
+      error: reason,
+    })
+    .where(and(inArray(agentRuns.taskId, taskIds), eq(agentRuns.status, "running")))
+    .returning({ id: agentRuns.id });
+  return ended.length;
+}
 
 function refuseAgents(actor: Actor, verb: string): void {
   if (actor.kind === "agent") {
@@ -718,7 +743,163 @@ export const getTask = defineService({
       .where(eq(agentTasks.parentId, task.id))
       .orderBy(asc(agentTasks.createdAt));
 
-    return { ...task, runs, steps, children };
+    return { ...task, runs, steps: steps.map(redactStep), children };
+  },
+});
+
+export const inspectRun = defineService({
+  name: "agents.inspectRun",
+  summary: "One run and its redacted steps.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ runId: z.uuid() }),
+  output: runRow
+    .extend({
+      steps: listed(stepRow),
+    })
+    .nullable(),
+  handler: async (input, ctx) => {
+    const [run] = await ctx.tx
+      .select()
+      .from(agentRuns)
+      .where(eq(agentRuns.id, input.runId))
+      .limit(1);
+    if (!run) return null;
+    const steps = await ctx.tx
+      .select()
+      .from(agentSteps)
+      .where(eq(agentSteps.runId, run.id))
+      .orderBy(asc(agentSteps.seq));
+    return { ...run, steps: steps.map(redactStep) };
+  },
+});
+
+export const tailRun = defineService({
+  name: "agents.tailRun",
+  summary: "New redacted steps since a sequence number, for a live run view.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    runId: z.uuid(),
+    afterSeq: z.number().int().min(0).default(0),
+  }),
+  output: runRow
+    .extend({
+      live: z.boolean(),
+      steps: listed(stepRow),
+    })
+    .nullable(),
+  handler: async (input, ctx) => {
+    const [run] = await ctx.tx
+      .select()
+      .from(agentRuns)
+      .where(eq(agentRuns.id, input.runId))
+      .limit(1);
+    if (!run) return null;
+    const steps = await ctx.tx
+      .select()
+      .from(agentSteps)
+      .where(
+        and(eq(agentSteps.runId, run.id), sql`${agentSteps.seq} > ${input.afterSeq}`),
+      )
+      .orderBy(asc(agentSteps.seq));
+    return {
+      ...run,
+      live: run.status === "running",
+      steps: steps.map(redactStep),
+    };
+  },
+});
+
+export const stopRun = defineService({
+  name: "agents.stopRun",
+  summary: "End an active run and revoke its lease.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    runId: z.uuid(),
+    reason: z.string().max(500).optional(),
+  }),
+  output: runRow.extend({ taskStatus: z.enum(["queued", "needs_attention"]) }),
+  handler: async (input, ctx) => {
+    refuseAgents(ctx.actor, "stop a run");
+    const [run] = await ctx.tx
+      .select()
+      .from(agentRuns)
+      .where(eq(agentRuns.id, input.runId))
+      .limit(1);
+    if (!run) throw new ServiceError("not_found", "No such run.");
+    if (run.status !== "running") {
+      throw new ServiceError("conflict", "That run is not active.");
+    }
+    const reason = input.reason ?? "Stopped by the owner.";
+    const [ended] = await ctx.tx
+      .update(agentRuns)
+      .set({
+        status: "cancelled",
+        stopReason: "cancelled",
+        endedAt: sql`now()`,
+        leaseExpiresAt: null,
+        error: reason,
+      })
+      .where(eq(agentRuns.id, run.id))
+      .returning();
+    const [task] = await ctx.tx
+      .select({ attempts: agentTasks.attempts })
+      .from(agentTasks)
+      .where(eq(agentTasks.id, run.taskId))
+      .limit(1);
+    const taskStatus =
+      (task?.attempts ?? 0) >= MAX_TASK_ATTEMPTS
+        ? ("needs_attention" as const)
+        : ("queued" as const);
+    await ctx.tx
+      .update(agentTasks)
+      .set({ status: taskStatus, failureReason: reason })
+      .where(eq(agentTasks.id, run.taskId));
+    ctx.setSubject("agent_task", run.taskId);
+    ctx.queueEvent("agentRun.stopped", { runId: run.id, taskId: run.taskId });
+    return { ...ended!, taskStatus };
+  },
+});
+
+export const retryTask = defineService({
+  name: "agents.retryTask",
+  summary: "Put failed or parked work back on the queue for another attempt.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: z.uuid() }),
+  output: taskRow,
+  handler: async (input, ctx) => {
+    refuseAgents(ctx.actor, "retry work");
+    const [before] = await ctx.tx
+      .select()
+      .from(agentTasks)
+      .where(eq(agentTasks.id, input.id))
+      .limit(1);
+    if (!before) throw new ServiceError("not_found", "No such task.");
+    if (before.status === "running") {
+      throw new ServiceError("conflict", "Stop the run before retrying this task.");
+    }
+    if (before.status === "done") {
+      throw new ServiceError("conflict", "Finished work cannot be retried.");
+    }
+    const [live] = await ctx.tx
+      .select({ id: agentRuns.id })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.taskId, before.id), eq(agentRuns.status, "running")))
+      .limit(1);
+    if (live) {
+      throw new ServiceError("conflict", "Stop the run before retrying this task.");
+    }
+    const [row] = await ctx.tx
+      .update(agentTasks)
+      .set({ status: "queued", failureReason: null, attempts: 0 })
+      .where(eq(agentTasks.id, input.id))
+      .returning();
+    ctx.setSubject("agent_task", row!.id);
+    ctx.queueEvent("agentTask.retried", { id: row!.id });
+    return row!;
   },
 });
 
@@ -883,6 +1064,12 @@ export const cancelTask = defineService({
       )
       .returning({ id: agentTasks.id });
 
+    await revokeRuns(
+      ctx.tx,
+      cancelled.map((row) => row.id),
+      input.reason ?? "Cancelled.",
+    );
+
     ctx.setSubject("agent_task", input.id);
     ctx.queueEvent("agentTask.cancelled", { id: input.id, count: cancelled.length });
     return { cancelled: cancelled.length };
@@ -943,6 +1130,10 @@ export default [
   listTasks,
   listBoard,
   getTask,
+  inspectRun,
+  tailRun,
+  stopRun,
+  retryTask,
   updateTask,
   flagTask,
   reopenTask,
