@@ -25,7 +25,7 @@ export function attachPluginContactColumn(options: {
     repoint: (tx, duplicateId, survivingId) =>
       tx
         .update(schema)
-        .set({ contactId: survivingId } as never)
+        .set({ contactId: survivingId })
         .where(eq(schema.contactId, duplicateId)),
     captureForUndo: async (tx, duplicateId, survivingId) => ({
       state: await tx
@@ -60,7 +60,7 @@ export function attachPluginContactColumn(options: {
       if (moved.length) {
         await tx
           .update(schema)
-          .set({ contactId: duplicateId } as never)
+          .set({ contactId: duplicateId })
           .where(inArray(schema.id, moved.map((row) => row.id)));
       }
     },

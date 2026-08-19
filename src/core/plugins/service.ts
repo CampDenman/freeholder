@@ -10,7 +10,6 @@ import { actorString, defineService, ServiceError } from "@/core/service";
 import {
   assertPluginFitsInstance,
 } from "@/core/plugin";
-import type { ModuleManifest } from "@/core/module";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { validatePluginContract, type PluginContractInput } from "@freeholder/plugin-kit";
 import { installedPlugins, pluginRegistries, pluginRetentions } from "./schema";
@@ -115,7 +114,7 @@ export const installPlugin = defineService({
           license: manifest.license,
           requires: manifest.requires,
           migrations: manifest.migrations ?? [],
-        } as ModuleManifest,
+        },
         { installed, platformVersion: PLATFORM_VERSION },
       );
     } catch (error) {
@@ -397,7 +396,7 @@ export const cachePluginRegistry = defineService({
       .where(eq(pluginRegistries.url, input.url))
       .limit(1);
     const values = {
-      cachedIndex: index as RegistryIndex,
+      cachedIndex: index,
       signature: input.signature,
       fetchedAt: new Date().toISOString(),
     };
