@@ -40,6 +40,7 @@ import {
   ChatCircleText,
   PuzzlePiece,
   DownloadSimple,
+  Kanban,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -82,6 +83,7 @@ export interface AdminNavLabels {
   contribute: string;
   plugins: string;
   imports: string;
+  work: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -119,6 +121,7 @@ const LINKS = [
   { href: "/admin/roles", key: "roles", module: "roles", Icon: ShieldCheck },
   { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
   { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
+  { href: "/admin/work", key: "work", module: "agents", Icon: Kanban },
   { href: "/admin/contribute", key: "contribute", module: "contribute", Icon: ChatCircleText },
   { href: "/admin/plugins", key: "plugins", module: "platform", Icon: PuzzlePiece },
   { href: "/admin/imports", key: "imports", module: "platform", Icon: DownloadSimple },

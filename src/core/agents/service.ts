@@ -12,7 +12,7 @@
 // an agent actor, under two constraints it cannot escape: a child inherits its
 // parent's trust level and can never be more autonomous than its parent.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   agentConnections,
@@ -68,7 +68,7 @@ const agentRow = row({
   updatedAt: timestamp,
 });
 
-const taskStatus = z.enum([
+export const TASK_STATUSES = [
   "queued",
   "running",
   "waiting_approval",
@@ -77,7 +77,9 @@ const taskStatus = z.enum([
   "failed",
   "needs_attention",
   "cancelled",
-]);
+] as const;
+
+const taskStatus = z.enum(TASK_STATUSES);
 
 const taskRow = row({
   id: uuid,
@@ -565,6 +567,24 @@ export const createTask = defineService({
   },
 });
 
+export const BOARD_COLUMNS = [
+  "queued",
+  "running",
+  "waiting_approval",
+  "needs_attention",
+  "done",
+] as const;
+
+export type BoardColumn = (typeof BOARD_COLUMNS)[number];
+
+export function boardColumn(
+  status: (typeof taskStatus.options)[number],
+): BoardColumn | null {
+  if (status === "cancelled") return null;
+  if (status === "failed" || status === "blocked") return "needs_attention";
+  return status;
+}
+
 export const listTasks = defineService({
   name: "agents.tasks",
   summary: "The board of work.",
@@ -586,15 +606,27 @@ export const listTasks = defineService({
       )
       .optional(),
     agentId: z.uuid().optional(),
+    unassigned: z.boolean().optional(),
     rootId: z.uuid().optional(),
+    dueBefore: z.iso.datetime().optional(),
+    dueAfter: z.iso.datetime().optional(),
+    minPriority: z.number().int().min(1).max(5).optional(),
+    includeCancelled: z.boolean().default(false),
     limit: z.number().int().min(1).max(200).default(50),
   }),
   output: listed(taskRow),
   handler: async (input, ctx) => {
     const filters = [
       input.status ? inArray(agentTasks.status, input.status) : undefined,
+      !input.status && !input.includeCancelled
+        ? sql`${agentTasks.status} <> 'cancelled'`
+        : undefined,
       input.agentId ? eq(agentTasks.agentId, input.agentId) : undefined,
+      input.unassigned ? isNull(agentTasks.agentId) : undefined,
       input.rootId ? eq(agentTasks.rootId, input.rootId) : undefined,
+      input.dueBefore ? lte(agentTasks.dueAt, new Date(input.dueBefore)) : undefined,
+      input.dueAfter ? gte(agentTasks.dueAt, new Date(input.dueAfter)) : undefined,
+      input.minPriority ? gte(agentTasks.priority, input.minPriority) : undefined,
     ].filter((clause) => clause !== undefined);
 
     return ctx.tx
@@ -603,6 +635,39 @@ export const listTasks = defineService({
       .where(filters.length > 0 ? and(...filters) : undefined)
       .orderBy(desc(agentTasks.priority), asc(agentTasks.createdAt))
       .limit(input.limit);
+  },
+});
+
+export const listBoard = defineService({
+  name: "agents.board",
+  summary: "The work board grouped the way an owner scans it.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    agentId: z.uuid().optional(),
+    unassigned: z.boolean().optional(),
+    dueBefore: z.iso.datetime().optional(),
+    minPriority: z.number().int().min(1).max(5).optional(),
+  }),
+  output: listed(
+    row({
+      column: z.enum(BOARD_COLUMNS),
+      tasks: listed(taskRow),
+    }),
+  ),
+  handler: async (input, ctx) => {
+    const tasks = await ctx.call(listTasks, {
+      agentId: input.agentId,
+      unassigned: input.unassigned,
+      dueBefore: input.dueBefore,
+      minPriority: input.minPriority,
+      includeCancelled: false,
+      limit: 200,
+    });
+    return BOARD_COLUMNS.map((column) => ({
+      column,
+      tasks: tasks.filter((task) => boardColumn(task.status) === column),
+    }));
   },
 });
 
@@ -654,6 +719,115 @@ export const getTask = defineService({
       .orderBy(asc(agentTasks.createdAt));
 
     return { ...task, runs, steps, children };
+  },
+});
+
+export const updateTask = defineService({
+  name: "agents.updateTask",
+  summary: "Change a task's priority, due date or brief.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id: z.uuid(),
+    title: z.string().min(1).max(200).optional(),
+    brief: z.string().max(50_000).optional(),
+    priority: z.number().int().min(1).max(5).optional(),
+    dueAt: z.iso.datetime().nullable().optional(),
+  }),
+  output: taskRow,
+  handler: async (input, ctx) => {
+    refuseAgents(ctx.actor, "edit the board");
+    const patch: {
+      title?: string;
+      brief?: string;
+      priority?: number;
+      dueAt?: Date | null;
+    } = {};
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.brief !== undefined) patch.brief = input.brief;
+    if (input.priority !== undefined) patch.priority = input.priority;
+    if (input.dueAt !== undefined) patch.dueAt = input.dueAt ? new Date(input.dueAt) : null;
+    if (Object.keys(patch).length === 0) {
+      throw new ServiceError("validation", "agents.updateTask: nothing to change");
+    }
+    const [row] = await ctx.tx
+      .update(agentTasks)
+      .set(patch)
+      .where(eq(agentTasks.id, input.id))
+      .returning();
+    if (!row) throw new ServiceError("not_found", "No such task.");
+    ctx.setSubject("agent_task", row.id);
+    ctx.queueEvent("agentTask.updated", { id: row.id });
+    return row;
+  },
+});
+
+export const flagTask = defineService({
+  name: "agents.flagTask",
+  summary: "Park a task on the needs-attention column.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id: z.uuid(),
+    reason: z.string().min(1).max(500),
+  }),
+  output: taskRow,
+  handler: async (input, ctx) => {
+    refuseAgents(ctx.actor, "flag work as needing attention");
+    const [before] = await ctx.tx
+      .select({ status: agentTasks.status })
+      .from(agentTasks)
+      .where(eq(agentTasks.id, input.id))
+      .limit(1);
+    if (!before) throw new ServiceError("not_found", "No such task.");
+    if (before.status === "done" || before.status === "cancelled") {
+      throw new ServiceError("conflict", "Finished work cannot be flagged.");
+    }
+    const [row] = await ctx.tx
+      .update(agentTasks)
+      .set({ status: "needs_attention", failureReason: input.reason })
+      .where(eq(agentTasks.id, input.id))
+      .returning();
+    ctx.setSubject("agent_task", row!.id);
+    ctx.queueEvent("agentTask.flagged", { id: row!.id });
+    return row!;
+  },
+});
+
+export const reopenTask = defineService({
+  name: "agents.reopenTask",
+  summary: "Send needs-attention work back to the queue, or park it as blocked.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: z.uuid() }),
+  output: taskRow,
+  handler: async (input, ctx) => {
+    refuseAgents(ctx.actor, "reopen work");
+    const [before] = await ctx.tx
+      .select()
+      .from(agentTasks)
+      .where(eq(agentTasks.id, input.id))
+      .limit(1);
+    if (!before) throw new ServiceError("not_found", "No such task.");
+    if (!["needs_attention", "failed", "blocked", "cancelled"].includes(before.status)) {
+      throw new ServiceError("conflict", "Only parked or failed work can be reopened.");
+    }
+    let next: "queued" | "blocked" = "queued";
+    if (before.dependsOn.length > 0) {
+      const blockers = await ctx.tx
+        .select({ id: agentTasks.id, status: agentTasks.status })
+        .from(agentTasks)
+        .where(inArray(agentTasks.id, before.dependsOn));
+      if (blockers.some((row) => row.status !== "done")) next = "blocked";
+    }
+    const [row] = await ctx.tx
+      .update(agentTasks)
+      .set({ status: next, failureReason: null })
+      .where(eq(agentTasks.id, input.id))
+      .returning();
+    ctx.setSubject("agent_task", row!.id);
+    ctx.queueEvent("agentTask.reopened", { id: row!.id, status: row!.status });
+    return row!;
   },
 });
 
@@ -767,7 +941,11 @@ export default [
   pauseAllAgents,
   createTask,
   listTasks,
+  listBoard,
   getTask,
+  updateTask,
+  flagTask,
+  reopenTask,
   assignTask,
   cancelTask,
   agentSpendReport,
