@@ -47,10 +47,13 @@ describe.runIf(hasDatabase)("cms translation workflow", { timeout: 30_000 }, () 
     );
   }
 
-  it("seeds a machine draft that is not reviewed", async () => {
+  it("seeds an honest draft when no translation model ran", async () => {
     const page = await bilingualPage();
     const draft = await draftPageTranslation.call({ pageId: page.id, locale: "fr" }, OWNER);
-    expect(draft.status).toBe("machine");
+    // No AI adapter is configured in tests, so the identity seed must say
+    // "draft" — recording "machine" here would tell the owner a French
+    // translation exists when the text is still English.
+    expect(draft.status).toBe("draft");
     expect((draft.fields as { title?: string }).title).toContain("[draft]");
 
     const publicRead = await getTranslation.call(
@@ -61,7 +64,7 @@ describe.runIf(hasDatabase)("cms translation workflow", { timeout: 30_000 }, () 
 
     const report = await pageTranslationReport.call({ locale: "fr" }, OWNER);
     const row = report.find((item) => item.pageId === page.id);
-    expect(row?.status).toBe("machine");
+    expect(row?.status).toBe("draft");
     expect(row?.seoComplete).toBe(true);
   });
 
