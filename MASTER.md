@@ -3689,9 +3689,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   `/admin/work/[id]` live run view. Coverage in `tests/core/agents-run.test.ts`.)
 - [x] **C4.03** Enforce suggest/approve/autonomous behavior for every managed
   write, with previews for block diffs, messages, money and destructive actions.
-  (`agents.proposeWrite` / `agents.listApprovals`; `classifyManagedWrite`;
-  irreversible writes always queue even at autonomous. Coverage in
-  `tests/core/agents-autonomy.test.ts`.)
+  (`agents.proposeWrite` / `agents.listApprovals`; write classification is a
+  declared `writeClass` on each service definition and fails closed —
+  undeclared or destructive writes always queue, even at autonomous; suggest
+  never escalates; the gate shares the paused-agent/connection check with
+  every other agent verb and refuses proposals outside the agent's scopes;
+  approval input is stored verbatim for once-only execution and redacted on
+  every read; `0077_agent_approval_autonomy.sql` records the proposing rung.
+  Coverage in `tests/core/agents-autonomy.test.ts`.)
 - [ ] **C4.04** Build approval inbox, expiry, rejection notes, step-up auth,
   execution of approved input exactly once and immutable decision audit.
 - [ ] **C4.05** Implement the managed-agent adapter family, provider/model

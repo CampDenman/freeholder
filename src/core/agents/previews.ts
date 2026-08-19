@@ -1,35 +1,34 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Previews for managed agent writes (C4.03, MASTER.md §40).
-import { redact } from "@/core/service";
+import { redact, WRITE_CLASSES, type WriteClass } from "@/core/service";
 
-export const WRITE_KINDS = [
-  "blocks",
-  "message",
-  "money",
-  "destructive",
-  "write",
-] as const;
+export const WRITE_KINDS = WRITE_CLASSES;
 
-export type WriteKind = (typeof WRITE_KINDS)[number];
+export type WriteKind = WriteClass;
 
-const DESTRUCTIVE = /\.(delete|purge|erase|void|destroy)\b/;
-const MONEY = /invoic|payment|refund|creditNote|giftCard|amountCents/i;
-const MESSAGE = /(^mail\.|message|sendMail|newsletters\.|sms\.)/i;
-const BLOCKS = /^cms\.(updatePage|updateSection|createPage)$/;
+export interface WriteClassification {
+  kind: WriteKind;
+  /**
+   * False when the service definition never declared a `writeClass`. The
+   * gate fails closed on such writes: without a declaration there is no
+   * proof the action is reversible, so it queues for approval whatever the
+   * agent's autonomy.
+   */
+  declared: boolean;
+}
 
-export function classifyManagedWrite(serviceName: string, input: unknown): WriteKind {
-  if (DESTRUCTIVE.test(serviceName)) return "destructive";
-  if (BLOCKS.test(serviceName)) return "blocks";
-  if (MESSAGE.test(serviceName)) return "message";
-  if (MONEY.test(serviceName)) return "money";
-  if (input && typeof input === "object" && "amountCents" in input) return "money";
-  return "write";
+export function classifyManagedWrite(def: {
+  name: string;
+  writeClass?: WriteClass;
+}): WriteClassification {
+  if (def.writeClass) return { kind: def.writeClass, declared: true };
+  return { kind: "write", declared: false };
 }
 
 /** Irreversible work is never autonomous, whatever the agent's ceiling. */
-export function alwaysRequiresApproval(kind: WriteKind): boolean {
-  return kind === "destructive";
+export function alwaysRequiresApproval(classification: WriteClassification): boolean {
+  return classification.kind === "destructive" || !classification.declared;
 }
 
 export function previewSummary(kind: WriteKind, serviceName: string): string {
@@ -70,7 +69,7 @@ export function buildWritePreview(
     return {
       kind,
       serviceName,
-      amountCents: safe.amountCents ?? safe.amount_cents ?? null,
+      amountMinor: safe.amountMinor ?? safe.amountCents ?? safe.amount_cents ?? null,
       currency: safe.currency ?? null,
       action: serviceName.split(".").slice(1).join("."),
     };

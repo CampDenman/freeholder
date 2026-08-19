@@ -7,17 +7,14 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineService,
   getService,
+  permits,
   redact,
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
-import {
-  agentApprovals,
-  agentRuns,
-  agents,
-  agentTasks,
-} from "@/core/agents/schema";
+import { agentApprovals, agentRuns, agentTasks } from "@/core/agents/schema";
 import { effectiveAutonomy } from "@/core/agents/service";
+import { agentForActor } from "@/core/agents/execution";
 import {
   alwaysRequiresApproval,
   buildWritePreview,
@@ -35,10 +32,16 @@ const approvalRow = row({
   preview: z.unknown(),
   serviceName: z.string(),
   input: z.unknown(),
+  proposedAutonomy: z.enum(["suggest", "approve", "autonomous"]),
   status: z.enum(["pending", "approved", "rejected", "expired"]),
   expiresAt: timestamp.nullable(),
   createdAt: timestamp,
 });
+
+/** What proposeWrite hands back: secrets stay out of agent-visible copies. */
+function redactedApproval<T extends { input: unknown }>(approval: T): T {
+  return { ...approval, input: redact(approval.input) ?? {} };
+}
 
 async function beforeBlocks(
   ctx: ServiceContext,
@@ -54,7 +57,9 @@ async function beforeBlocks(
   try {
     const reader =
       serviceName === "cms.updatePage" ? getService("cms.getPage") : getService("cms.getSection");
-    const current = (await ctx.callAsSystem(reader, { id })) as { blocks?: unknown };
+    // The agent's own permission, not system: the before half of a diff must
+    // never show an agent content its key could not read directly.
+    const current = (await ctx.call(reader, { id })) as { blocks?: unknown };
     return current?.blocks ?? null;
   } catch {
     return null;
@@ -78,12 +83,10 @@ export const proposeWrite = defineService({
     approval: approvalRow.nullable(),
   }),
   handler: async (input, ctx) => {
-    if (ctx.actor.kind !== "agent") {
-      throw new ServiceError(
-        "permission",
-        "This is for agents running a claimed task. Present the agent's API key.",
-      );
-    }
+    // Resolves through the key join and refuses paused agents and paused
+    // connections — the same gate every other agent verb passes through, so
+    // the kill switch also stops writes mid-lease.
+    const agent = await agentForActor(ctx.tx, ctx.actor);
 
     const [run] = await ctx.tx
       .select({
@@ -95,24 +98,7 @@ export const proposeWrite = defineService({
       .from(agentRuns)
       .where(eq(agentRuns.id, input.runId))
       .limit(1);
-    if (!run || run.status !== "running") {
-      throw new ServiceError("not_found", "No such active run.");
-    }
-
-    const [agent] = await ctx.tx
-      .select({
-        id: agents.id,
-        name: agents.name,
-        autonomy: agents.autonomy,
-        apiKeyId: agents.apiKeyId,
-      })
-      .from(agents)
-      .where(eq(agents.id, run.agentId))
-      .limit(1);
-    if (!agent) throw new ServiceError("not_found", "That run has no agent.");
-
-    const keyName = `agent:${agent.name}`;
-    if (ctx.actor.keyName !== keyName) {
+    if (!run || run.status !== "running" || run.agentId !== agent.id) {
       throw new ServiceError("not_found", "No such active run.");
     }
 
@@ -128,34 +114,49 @@ export const proposeWrite = defineService({
     if (!task) throw new ServiceError("not_found", "That run has no task.");
 
     const service = getService(input.serviceName);
-    const kind = classifyManagedWrite(input.serviceName, input.input);
-    const preview = buildWritePreview(
-      kind,
-      input.serviceName,
-      input.input,
-      { beforeBlocks: await beforeBlocks(ctx, input.serviceName, input.input) },
-    );
-    const summary = input.summary ?? previewSummary(kind, input.serviceName);
+    // The gate must not widen the agent's reach: a proposal for a service the
+    // key could not call directly is refused before any preview is built, so
+    // neither the before-read nor the parked approval leaks or requests
+    // authority the agent does not hold.
+    if (
+      !permits(ctx.actor, service.def.permission, service.def.name, service.def.kind) ||
+      service.def.agentCallable === false
+    ) {
+      throw new ServiceError(
+        "permission",
+        `This agent's key is not allowed to call ${service.def.name}, so it cannot propose it either.`,
+      );
+    }
 
     if (service.def.kind === "query") {
       const result = await ctx.call(service, input.input);
       return { outcome: "executed" as const, result, approval: null };
     }
 
+    const classification = classifyManagedWrite(service.def);
+    const kind = classification.kind;
+    const preview = buildWritePreview(kind, input.serviceName, input.input, {
+      beforeBlocks: await beforeBlocks(ctx, input.serviceName, input.input),
+    });
+    const summary = input.summary ?? previewSummary(kind, input.serviceName);
+
     const autonomy = effectiveAutonomy(
       agent.autonomy,
       task.autonomyCeiling,
       task.inputTrust,
     );
-    const mustApprove = autonomy !== "autonomous" || alwaysRequiresApproval(kind);
+    const mustApprove = autonomy !== "autonomous" || alwaysRequiresApproval(classification);
 
     if (!mustApprove) {
       const result = await ctx.call(service, input.input);
       return { outcome: "executed" as const, result, approval: null };
     }
 
-    const awaiting = autonomy === "approve" || alwaysRequiresApproval(kind);
-    const [row] = await ctx.tx
+    // Suggest is the lowest rung: it only ever records a proposal. Approval
+    // requests come from the approve rung, or from autonomous work that hit
+    // an irreversible or undeclared write.
+    const awaiting = autonomy !== "suggest";
+    const [inserted] = await ctx.tx
       .insert(agentApprovals)
       .values({
         runId: run.id,
@@ -164,7 +165,10 @@ export const proposeWrite = defineService({
         summary,
         preview,
         serviceName: input.serviceName,
-        input: redact(input.input) ?? {},
+        // Verbatim, as the schema promises: C4.04 executes exactly what was
+        // approved. Redaction happens on every read surface instead.
+        input: input.input,
+        proposedAutonomy: autonomy,
         status: "pending",
         expiresAt: sql`now() + interval '7 days'`,
       })
@@ -177,16 +181,16 @@ export const proposeWrite = defineService({
         .where(eq(agentTasks.id, task.id));
     }
 
-    ctx.setSubject("agent_approval", row!.id);
+    ctx.setSubject("agent_approval", inserted!.id);
     ctx.queueEvent("agentApproval.proposed", {
-      id: row!.id,
+      id: inserted!.id,
       taskId: task.id,
       kind,
     });
     return {
       outcome: awaiting ? ("awaiting_approval" as const) : ("proposed" as const),
       result: null,
-      approval: row!,
+      approval: redactedApproval(inserted!),
     };
   },
 });
@@ -213,12 +217,14 @@ export const listApprovals = defineService({
       input.taskId ? eq(agentApprovals.taskId, input.taskId) : undefined,
       input.status ? eq(agentApprovals.status, input.status) : undefined,
     ].filter((clause) => clause !== undefined);
-    return ctx.tx
+    const rows = await ctx.tx
       .select()
       .from(agentApprovals)
       .where(filters.length ? and(...filters) : undefined)
       .orderBy(desc(agentApprovals.createdAt))
       .limit(input.limit);
+    // Stored verbatim for once-only execution; redacted wherever it is shown.
+    return rows.map(redactedApproval);
   },
 });
 

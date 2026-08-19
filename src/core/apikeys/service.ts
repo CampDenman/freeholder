@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// API keys (MASTER.md §11, §26, §28).
+// API keys (MASTER.md Â§11, Â§26, Â§28).
 //
 // Human-only and separately grant-scoped: see `refuseAgents` below.
 // A key is a standing grant against the whole service registry, so minting one
@@ -21,10 +21,10 @@ import {
 /**
  * Keys cannot mint or revoke keys.
  *
- * §11's scope model deliberately gives API keys only their explicit scopes.
+ * Â§11's scope model deliberately gives API keys only their explicit scopes.
  * A key scoped `apikeys.*` could therefore satisfy this module like any other.
  * That is right for business services and wrong here, because it makes a
- * limited key a route to an unlimited one —
+ * limited key a route to an unlimited one â€”
  * mint a second key with every scope, and the first key's limits were
  * decoration.
  *
@@ -45,7 +45,7 @@ function refuseAgents(actor: Actor, verb: string): void {
  * A scope names a service, or a whole module with `<module>.*`.
  *
  * Checked against the registry rather than accepted as free text: a scope with
- * a typo grants nothing, and it grants nothing *silently* — the key works for
+ * a typo grants nothing, and it grants nothing *silently* â€” the key works for
  * everything public and refuses everything else, which reads as "the API is
  * broken" rather than "the scope is misspelt". The registry is the same list
  * `permits()` will consult, so agreement is guaranteed by construction.
@@ -167,7 +167,7 @@ export const createApiKey = defineService({
     ctx.queueEvent("apikey.created", { id: row!.id, name: row!.name });
 
     // The only time the token exists outside the caller's hands. It is not in
-    // the audit trail — `redact` catches the key — and it cannot be read back
+    // the audit trail â€” `redact` catches the key â€” and it cannot be read back
     // from any later call, because only its hash was stored.
     return { ...row!, token: minted.token };
   },
@@ -210,6 +210,7 @@ export const listApiKeys = defineService({
 
 export const revokeApiKey = defineService({
   name: "apikeys.revoke",
+  writeClass: "destructive",
   summary: "Stop an API key working.",
   kind: "mutation",
   permission: "scoped",
@@ -230,7 +231,7 @@ export const revokeApiKey = defineService({
 
     if (!row) {
       // Already revoked and never existed answer the same way. Revocation is
-      // the emergency path — an owner who has just pasted a key into the wrong
+      // the emergency path â€” an owner who has just pasted a key into the wrong
       // window wants it dead, not a lecture about which state it was in.
       throw new ServiceError("not_found", "No live key with that id.");
     }
