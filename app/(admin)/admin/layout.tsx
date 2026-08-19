@@ -132,6 +132,7 @@ export default async function AdminLayout({
               contribute: t("contribute.title"),
               plugins: t("plugins.title"),
               imports: t("imports.title"),
+              work: t("work.title"),
             }}
           />
         </div>

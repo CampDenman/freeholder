@@ -46,6 +46,7 @@ import {
   PRODUCT_VISIBILITIES,
 } from "@/modules/catalog/contract";
 import { IMPORT_STATUSES, PLUGIN_STATUSES } from "@/core/plugins/schema";
+import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
 import en from "../../locales/en.json";
 import es from "../../locales/es.json";
 import fr from "../../locales/fr.json";
@@ -232,6 +233,8 @@ describe("the families built from a template key", () => {
     ["catalog.promo.couponKind", COUPON_KINDS],
     ["catalog.promo.giftStatus", GIFT_CARD_STATUSES],
     ["catalog.promo.offerKind", OFFER_RULE_KINDS],
+    ["work.status", TASK_STATUSES],
+    ["work.column", BOARD_COLUMNS],
     ["plugins.status", PLUGIN_STATUSES],
     [
       "imports.status",

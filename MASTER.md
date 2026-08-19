@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` at `36968a1` plus this change: C3.08–C3.23 (plugin lifecycle, isolation, registries, first-party plugins, create-freeholder, templates, Tier-1 recipes, export/round-trip, importer studio). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` plus C3.08–C3.23 (#136, #137) and this change for C4.01 (work board, task tree, assignment, due/priority, needs-attention). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.01 work board and task tree. |
+| Current focus | C4.02 live run streaming, inspection, retry and stop. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3677,8 +3677,11 @@ deployments are portable, testable and incapable of silently forking the truth.
 
 #### Workforce completion
 
-- [ ] **C4.01** Build the work board, task tree/dependency view, assignment,
+- [x] **C4.01** Build the work board, task tree/dependency view, assignment,
   filters, due/priority controls and needs-attention workflow.
+  (`agents.board` / `agents.updateTask` / `agents.flagTask` /
+  `agents.reopenTask`; `/admin/work` columns and `/admin/work/[id]` tree.
+  Coverage in `tests/core/agents-board.test.ts`.)
 - [ ] **C4.02** Build live run streaming, redacted step inspection, retry,
   cancellation and a stop control that revokes/ends active work.
 - [ ] **C4.03** Enforce suggest/approve/autonomous behavior for every managed

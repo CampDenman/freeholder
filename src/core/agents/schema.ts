@@ -203,6 +203,8 @@ export const agentTasks = pgTable(
     index("agent_tasks_root_idx").on(t.rootId),
     index("agent_tasks_parent_idx").on(t.parentId),
     index("agent_tasks_agent_idx").on(t.agentId),
+    index("agent_tasks_due_idx").on(t.dueAt),
+    index("agent_tasks_status_idx").on(t.status),
     // The claim query: runnable work, best first. Partial, because finished
     // tasks are most of the table and none of them are claimable.
     index("agent_tasks_runnable_idx")
