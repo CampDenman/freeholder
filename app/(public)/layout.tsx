@@ -176,20 +176,20 @@ export default async function PublicLayout({
           style={{ maxWidth: "var(--fh-measure, 48rem)" }}
         >
           <span>
-            Built by{" "}
+            {t("colophon.builtBy")}{" "}
             <a
               href="https://wevibesites.com"
               className="underline underline-offset-2 hover:text-ink"
             >
-              WeVibeSites
+              {t("colophon.builder")}
             </a>
           </span>
           <a
             href="tel:+16393834662"
             className="tabular-nums hover:text-ink"
-            aria-label="Call WeVibeSites at 639 383 4662"
+            aria-label={t("colophon.callAria")}
           >
-            (639) 383-4662
+            {t("colophon.phone")}
           </a>
         </div>
       </div>
