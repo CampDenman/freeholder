@@ -4027,7 +4027,9 @@ owner operations, never substitute for them.
   idempotency key plus converted-cart retry; `payOrder` only after the
   invoice is `paid`; cancel voids the unpaid invoice; confirmation is
   `getOrder` + `/admin/orders/[id]`; coupons/discounts stay C5.23; public
-  storefront checkout waits on product landing pages.)*
+  storefront checkout waits on product landing pages; naming a `contactId`
+  on `getOrCreateCart`/`attachCartToContact`/`checkoutCart` requires an
+  authorized caller — a bare contact UUID is never a credential.)*
 - [x] **C5.22** Build order lifecycle, mixed physical/digital/service lines,
   fulfillment state, translated admin order/customer views, portal views and
   complete timeline events.

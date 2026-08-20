@@ -22,7 +22,7 @@ import {
 } from "@/modules/invoicing/invoice-service";
 import { ORDER_STATUSES } from "./contract";
 import { releaseReservation, reserveStock } from "./inventory";
-import { attachCartToContact, getCart } from "./cart";
+import { attachCartToContact, getCart, requireContactAuthority } from "./cart";
 import { quoteShipping } from "./shipping";
 import { carts, orderItems, orders, stockReservations } from "./schema";
 
@@ -151,6 +151,11 @@ export const checkoutCart = defineService({
   }),
   output: orderDetail,
   handler: async (input, ctx) => {
+    // An order and an invoice against a named contact is authority over that
+    // contact, not a formality — see requireContactAuthority. The public
+    // storefront checkout (when it lands) verifies the shopper's email first
+    // and composes through ctx.callAsSystem.
+    requireContactAuthority(ctx, "catalog.checkoutCart");
     let basket = await ctx.call(getCart, { cartId: input.cartId });
     if (basket.cart.status === "converted") {
       const [existing] = await ctx.tx.select().from(orders).where(eq(orders.cartId, basket.cart.id)).limit(1);

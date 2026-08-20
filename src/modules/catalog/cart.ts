@@ -12,7 +12,13 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
-import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import {
+  defineService,
+  permits,
+  ServiceError,
+  type ServiceContext,
+  type Tx,
+} from "@/core/service";
 import { CART_KINDS, CART_STATUSES } from "./contract";
 import { availability, releaseReservation, reserveStock } from "./inventory";
 import { resolvePrice } from "./pricing";
@@ -235,6 +241,23 @@ async function requireContact(tx: Tx, contactId: string) {
   if (!row) throw new ServiceError("not_found", "That contact is not here.");
 }
 
+/**
+ * Naming a contact is a claim of authority over that contact's basket: the
+ * caller can read it back and put lines in it. A UUID is an identifier, not
+ * a credential, so an anonymous visitor who has one proves nothing. Staff
+ * with catalog access, system composition and catalog-scoped agent keys
+ * carry real authority; the storefront paths that identify a customer
+ * (signed form submission, magic link, the future portal session) compose
+ * through services that verify first and elevate with ctx.callAsSystem.
+ */
+export function requireContactAuthority(ctx: ServiceContext, serviceName: string) {
+  if (permits(ctx.actor, "scoped", serviceName, "mutation")) return;
+  throw new ServiceError(
+    "permission",
+    "Sign in, or open the link we emailed you, to use a saved customer profile.",
+  );
+}
+
 async function loadCart(tx: Tx, cartId: string) {
   const [cart] = await tx.select().from(carts).where(eq(carts.id, cartId)).limit(1);
   if (!cart) throw new ServiceError("not_found", "That cart is not here.");
@@ -265,7 +288,10 @@ export const getOrCreateCart = defineService({
   }),
   output: cartProjection,
   handler: async (input, ctx) => {
-    if (input.contactId) await requireContact(ctx.tx, input.contactId);
+    if (input.contactId) {
+      requireContactAuthority(ctx, "catalog.getOrCreateCart");
+      await requireContact(ctx.tx, input.contactId);
+    }
     const [byToken] = input.token
       ? await ctx.tx.select().from(carts).where(eq(carts.token, input.token)).limit(1)
       : [];
@@ -315,6 +341,7 @@ export const attachCartToContact = defineService({
   input: z.object({ token: z.string().uuid(), contactId: id }),
   output: cartProjection,
   handler: async (input, ctx) => {
+    requireContactAuthority(ctx, "catalog.attachCartToContact");
     await requireContact(ctx.tx, input.contactId);
     const [guest] = await ctx.tx.select().from(carts).where(eq(carts.token, input.token)).limit(1);
     if (!guest || guest.status !== "open" || guest.kind !== "cart") {
