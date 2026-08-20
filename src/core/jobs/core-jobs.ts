@@ -337,6 +337,18 @@ export const expireCaptureSessions = defineJob({
   },
 });
 
+/** An approval nobody answers lapses instead of sitting pending forever. */
+export const expireAgentApprovals = defineJob({
+  name: "core.expireAgentApprovals",
+  summary: "Lapse expired managed-write approvals and release their tasks.",
+  schedule: "7 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { expireApprovals } = await import("@/core/agents/writes");
+    return expireApprovals.call({}, { kind: "system" });
+  },
+});
+
 /** Trash is reversible for thirty days, then storage is reclaimed in batches. */
 export const purgeExpiredMediaAssets = defineJob({
   name: "core.purgeExpiredMedia",
@@ -460,6 +472,7 @@ export default [
   pruneJobKeys,
   sweepMediaOrphans,
   expireCaptureSessions,
+  expireAgentApprovals,
   purgeExpiredMediaAssets,
   deliverNotifications,
   deliverNotificationDigests,
