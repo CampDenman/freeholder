@@ -107,7 +107,7 @@ describe.runIf(hasDatabase)("calling a service over HTTP", () => {
     // A mutation reachable by GET is one a prefetch, a crawler or an <img> tag
     // can fire. No downstream CSRF check helps if the request never looked
     // unsafe.
-    const response = await get("contacts.create", "?name=Ann");
+    const response = await get("contacts.resolve", "?email=ann@example.test");
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: { message: string } };
     expect(body.error.message).toContain("POST");
@@ -118,30 +118,36 @@ describe.runIf(hasDatabase)("calling a service over HTTP", () => {
       { name: "Writer", scopes: ["contacts.*"] },
       OWNER,
     );
-    const response = await get("contacts.create", "?name=Ann", {
+    const response = await get("contacts.resolve", "?email=ann@example.test", {
       authorization: `Bearer ${key.token}`,
     });
     expect(response.status).toBe(400);
   });
 
   it("carries out a mutation for a key that holds the scope", async () => {
+    // contacts.resolve, deliberately: it is the mutation the spine *wants*
+    // automated callers using (CLAUDE.md), so it is the canonical example.
     const key = await createApiKey.call(
       { name: "Writer", scopes: ["contacts.*"] },
       OWNER,
     );
     const response = await post(
-      "contacts.create",
+      "contacts.resolve",
       { name: "Ann Example", email: "ann@example.test" },
       { authorization: `Bearer ${key.token}` },
     );
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { name: string };
-    expect(body.name).toBe("Ann Example");
+    const body = (await response.json()) as { contact: { name: string }; created: boolean };
+    expect(body.contact.name).toBe("Ann Example");
+    expect(body.created).toBe(true);
   });
 
-  it("refuses the same call for a key without the scope", async () => {
+  it("keeps deliberate human entry closed to keys, whatever their scope", async () => {
+    // contacts.create is for a person at a form. An automated caller holding
+    // even contacts.* must be pointed at resolve instead — the unique email
+    // index cannot stop a key from duplicating email-less contacts.
     const key = await createApiKey.call(
-      { name: "Reader", scopes: ["cms.*"] },
+      { name: "Writer", scopes: ["contacts.*"] },
       OWNER,
     );
     const response = await post(
@@ -150,13 +156,26 @@ describe.runIf(hasDatabase)("calling a service over HTTP", () => {
       { authorization: `Bearer ${key.token}` },
     );
     expect(response.status).toBe(403);
+  });
+
+  it("refuses the same call for a key without the scope", async () => {
+    const key = await createApiKey.call(
+      { name: "Reader", scopes: ["cms.*"] },
+      OWNER,
+    );
+    const response = await post(
+      "contacts.resolve",
+      { name: "Ann Example", email: "ann@example.test" },
+      { authorization: `Bearer ${key.token}` },
+    );
+    expect(response.status).toBe(403);
     const body = (await response.json()) as { error: { message: string } };
     // Written for the developer holding the key, not for a business owner.
-    expect(body.error.message).toContain("contacts.create");
+    expect(body.error.message).toContain("contacts.resolve");
   });
 
   it("answers 401 rather than 403 when nothing was presented", async () => {
-    const response = await post("contacts.create", { name: "Ann" });
+    const response = await post("contacts.resolve", { email: "ann@example.test" });
     expect(response.status).toBe(401);
   });
 
@@ -166,7 +185,7 @@ describe.runIf(hasDatabase)("calling a service over HTTP", () => {
       OWNER,
     );
     const response = await post(
-      "contacts.create",
+      "contacts.resolve",
       { email: "not-an-email" },
       { authorization: `Bearer ${key.token}` },
     );
@@ -183,8 +202,8 @@ describe.runIf(hasDatabase)("calling a service over HTTP", () => {
       OWNER,
     );
     const response = await post(
-      "contacts.create",
-      { name: "No CSRF Needed" },
+      "contacts.resolve",
+      { name: "No CSRF Needed", email: "nocsrf@example.test" },
       { authorization: `Bearer ${key.token}` },
     );
     expect(response.status).toBe(200);
@@ -267,10 +286,16 @@ describe.runIf(hasDatabase)("the published contract", () => {
   it("names the scope a caller needs, in the description", async () => {
     // Somebody reading this is deciding what to ask their owner to grant.
     const document = await spec();
-    const operation = document.paths["/api/v1/contacts.create"]!.post! as unknown as {
+    const operation = document.paths["/api/v1/contacts.resolve"]!.post! as unknown as {
       description: string;
     };
-    expect(operation.description).toContain("contacts.create");
+    expect(operation.description).toContain("contacts.resolve");
     expect(operation.description).toContain("contacts.*");
+    // And the human-only door says so instead of naming a scope that would
+    // not help.
+    const humanOnly = document.paths["/api/v1/contacts.create"]!.post! as unknown as {
+      description: string;
+    };
+    expect(humanOnly.description).toContain("API keys cannot call");
   });
 });

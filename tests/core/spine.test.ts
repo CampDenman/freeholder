@@ -655,7 +655,12 @@ describe.runIf(hasDatabase)("the spine, against a real database", () => {
         keyName: "claude",
         scopes: ["contacts.*"],
       };
-      await createContact.call({ name: "Agent-made" }, claude);
+      // resolve, not create: deliberate entry is human-only, and an agent's
+      // path onto the spine is the resolving one.
+      await resolveContact.call(
+        { name: "Agent-made", email: "agent-made@example.test" },
+        claude,
+      );
       const audit = await auditRows();
       expect(audit[0]!.actor).toBe("agent:claude");
       const timeline = await timelineRows();

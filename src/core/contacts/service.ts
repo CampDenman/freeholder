@@ -175,12 +175,19 @@ async function ensureOrganization(
   }
 }
 
-/** Deliberate creation by a human. Automated paths use `contacts.resolve`. */
+/**
+ * Deliberate creation by a human. Automated paths use `contacts.resolve` —
+ * and CLAUDE.md counts agents among the automated paths, so this is closed
+ * to API-key and MCP callers: the unique email index would catch an
+ * email-keyed fork, but nothing would stop an agent from freely duplicating
+ * email-less contacts.
+ */
 export const createContact = defineService({
   name: "contacts.create",
   summary: "Add a person or organization member to the spine.",
   kind: "mutation",
   permission: "scoped",
+  agentCallable: false,
   input: contactFields,
   output: contactRow,
   handler: async (input, ctx) => {
