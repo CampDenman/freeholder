@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` through C4.07 (#154), plus this change for C4.08 (playbooks as data: declared parameters, versioned wording, manual and event triggers with the payload quoted rather than interpolated, and portable import/export). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.08 (#155), plus this change for C4.09 (unguessable untrusted fences over input and tool results, an egress conformance gate over agent-callable URL services, and an end-to-end injection suite proving the platform holds when the model does not). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.09 untrusted-input envelopes, indirect prompt-injection tests, secret/output redaction, URL/network policies and exfiltration limits. |
+| Current focus | C4.10 credential-key rotation, backup/recovery documentation, per-agent and per-connection grants, revocation and reconnect notifications. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3781,8 +3781,27 @@ deployments are portable, testable and incapable of silently forking the truth.
   switched off and unassigned. `/admin/work/playbooks` carries writing,
   running, enabling, deleting and importing in EN/FR/ES. Coverage in
   `tests/core/agents-playbooks.test.ts`.)
-- [ ] **C4.09** Harden untrusted-input envelopes, indirect prompt-injection
+- [x] **C4.09** Harden untrusted-input envelopes, indirect prompt-injection
   tests, secret/output redaction, URL/network policies and exfiltration limits.
+  (`src/core/agents/envelope.ts`: the fence is an unguessable per-run marker
+  rather than a fixed tag — the C4.05 `<untrusted-data>` frame could be closed
+  by one line inside a form submission — the body is scanned for the marker
+  and neutralised if it somehow appears, and the platform's instruction sits
+  after the quoted material as well as before it, so a model that meets
+  "ignore previous instructions" mid-payload meets the real instruction on the
+  way out. Tool results are fenced the same way: business data is full of
+  words customers wrote, and none of them are the owner. Egress is a
+  conformance gate rather than a claim — every agent-callable service whose
+  input carries a URL must be named in a reviewed list with the reason it is
+  safe, and the gate found `agents_createPlaybook` and its siblings being
+  advertised over MCP despite refusing agents at runtime, now closed
+  declaratively. Coverage in `tests/core/agents-injection.test.ts`: the fence
+  survives a payload carrying its own closing marker, autonomy can never be
+  raised by input, redaction keeps secrets out of anything stored or shown,
+  configuration tools are never offered to a key, and an end-to-end run where
+  the model does exactly what a hostile payload says still changes nothing —
+  untrusted input forces the suggest rung, so every attempted write is a
+  proposal and the spine is untouched.)
 
 #### Connected accounts and recurring work
 
