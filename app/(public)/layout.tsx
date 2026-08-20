@@ -180,7 +180,7 @@ export default async function PublicLayout({
       {showBuilder ? (
         <a
           href="/admin/builder"
-          className="fixed bottom-5 end-5 z-40 inline-flex items-center gap-2 rounded-full border border-accent bg-accent px-4 py-2.5 text-sm font-bold text-on-accent shadow-[0_12px_32px_rgb(0_0_0/0.2)]"
+          className="fixed bottom-5 end-5 z-40 inline-flex items-center gap-2 rounded-full border border-accent bg-accent px-4 py-2.5 text-sm font-bold text-on-accent shadow-float"
         >
           <MagicWand size={17} weight="fill" />
           {t("builder.publicAffordance")}

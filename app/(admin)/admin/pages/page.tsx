@@ -38,7 +38,7 @@ export default async function PagesPage() {
         {canManage ? (
           <a
             href="/admin/pages/new"
-            className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
+            className="ms-auto inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-press"
           >
             <Plus size={15} weight="bold" />
             {t("cms.pages.new")}

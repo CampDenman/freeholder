@@ -71,7 +71,7 @@ export default async function AdminLayout({
             >
               <Bell size={18} weight={unread > 0 ? "fill" : "regular"} />
               {unread > 0 ? (
-                <span className="absolute -end-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center font-mono text-[0.65rem] font-bold leading-5 text-white">
+                <span className="absolute -end-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center font-mono text-[0.65rem] font-bold leading-5 text-on-danger">
                   {unread > 99 ? "99+" : unread}
                 </span>
               ) : null}
