@@ -1970,6 +1970,8 @@
   "media.capture.trimEnd": "Fin de recorte (ms)",
   "media.capture.cropX": "Ancla de recorte, horizontal",
   "media.capture.cropY": "Ancla de recorte, vertical",
+  "media.capture.uploadIncomplete": "Una parte de esta grabación no se ha subido. Comprueba tu conexión y reintenta la subida: el material sigue a salvo en este dispositivo.",
+  "media.capture.retryUpload": "Reintentar la subida",
   "media.capture.saveReview": "Guardar revisión",
   "media.capture.confirm": "Confirmar en la biblioteca",
   "media.capture.confirmed": "Este archivo está en la biblioteca.",
