@@ -162,6 +162,37 @@ export default async function PublicLayout({
           </div>
         </footer>
       ) : null}
+
+      {/*
+        Colophon. Deliberately quiet: Freeholder is a demonstration of what
+        WeVibeSites builds, so the phone number is here for anyone who wants it
+        rather than pushed as a call-to-action the way it is on wevibesites.com.
+        Rendered outside the CMS footer above so it does not depend on a
+        Section existing, and so an editor cannot remove the attribution.
+      */}
+      <div className="border-t border-rule bg-surface">
+        <div
+          className="mx-auto flex flex-col gap-1 px-[var(--fh-gutter,1.5rem)] py-4 text-xs text-ink-muted sm:flex-row sm:items-center sm:justify-between"
+          style={{ maxWidth: "var(--fh-measure, 48rem)" }}
+        >
+          <span>
+            Built by{" "}
+            <a
+              href="https://wevibesites.com"
+              className="underline underline-offset-2 hover:text-ink"
+            >
+              WeVibeSites
+            </a>
+          </span>
+          <a
+            href="tel:+16393834662"
+            className="tabular-nums hover:text-ink"
+            aria-label="Call WeVibeSites at 639 383 4662"
+          >
+            (639) 383-4662
+          </a>
+        </div>
+      </div>
       <AnalyticsConsentControl
         policy={analytics.consentPolicy}
         state={consent}
