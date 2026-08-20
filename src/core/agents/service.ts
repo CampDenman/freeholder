@@ -24,6 +24,7 @@ import {
 } from "@/core/agents/schema";
 import { createApiKey } from "@/core/apikeys/service";
 import { violates } from "@/core/db/errors";
+import { WORKFORCE_ADAPTER_IDS } from "@/adapters/agent/workforce-types";
 import {
   actorString,
   defineService,
@@ -268,6 +269,23 @@ export const connectAgentRuntime = defineService({
     .refine((v) => v.kind !== "managed" || Boolean(v.adapter), {
       message: "a managed connection needs an adapter to run the loop with",
       path: ["adapter"],
+    })
+    // A typo here would otherwise surface as a run failing days later. The
+    // known family lives with the adapters, not in a second list here.
+    .refine(
+      (v) =>
+        v.kind !== "managed" ||
+        !v.adapter ||
+        WORKFORCE_ADAPTER_IDS.includes(v.adapter as (typeof WORKFORCE_ADAPTER_IDS)[number]),
+      {
+        message: `the workforce adapters installed in this build are: ${WORKFORCE_ADAPTER_IDS.join(", ")}`,
+        path: ["adapter"],
+      },
+    )
+    .refine((v) => v.kind !== "managed" || v.adapter !== "openai" || Boolean(v.model), {
+      message:
+        "name the OpenAI model this connection should run — the platform does not guess one",
+      path: ["model"],
     }),
   output: connectionRow,
   handler: async (input, ctx) => {

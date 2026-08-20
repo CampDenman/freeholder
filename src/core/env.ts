@@ -162,6 +162,8 @@ const envSchema = z.object({
   // Blank values are normalized to absent by env(), so `.env.example` remains
   // copyable as-is; the adapter and doctor then treat these as unconfigured.
   OPENAI_API_KEY: z.string().trim().optional(),
+  /** Conventional key for managed Anthropic workforce connections (C4.05). */
+  ANTHROPIC_API_KEY: z.string().trim().optional(),
   OPENAI_ALT_TEXT_MODEL: z
     .string()
     .trim()

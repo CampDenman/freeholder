@@ -721,6 +721,64 @@ async function checkAltTextSuggester(): Promise<Check> {
   );
 }
 
+/**
+ * Configuration-only, like the alt-text check: doctor never spends provider
+ * credits proving a key works. What it can prove is that every managed
+ * connection names an installed adapter and that the environment variable the
+ * connection points at actually holds a value.
+ */
+async function checkManagedAgentConnections(): Promise<Check[]> {
+  try {
+    const { agentConnections } = await import("@/core/agents/schema");
+    const { workforceAdapter } = await import("@/adapters/agent/workforce");
+    const managed = (await db().select().from(agentConnections)).filter(
+      (row) => row.kind === "managed",
+    );
+    if (managed.length === 0) {
+      return [
+        ok(
+          "agents.managedConnections",
+          "Managed agent runtimes",
+          "No managed connections are configured. Inbound agents bring their own runtime and need nothing here.",
+        ),
+      ];
+    }
+    return managed.map((connection) => {
+      const adapter = workforceAdapter(connection);
+      if (adapter.id === "none") {
+        return fail(
+          "agents.managedConnections",
+          `Managed runtime — ${connection.name}`,
+          `The connection names adapter "${connection.adapter ?? ""}", which is not installed in this build.`,
+          "Edit the connection to use one of the installed workforce adapters, or pause it.",
+        );
+      }
+      if (!adapter.configured) {
+        return fail(
+          "agents.managedConnections",
+          `Managed runtime — ${connection.name}`,
+          `${adapter.id} is selected but ${adapter.credentialRef} is not set in the environment.`,
+          `Set ${adapter.credentialRef} and restart, or pause the connection. Doctor makes no billable test request.`,
+        );
+      }
+      return ok(
+        "agents.managedConnections",
+        `Managed runtime — ${connection.name}`,
+        `${adapter.id} is configured (model ${connection.model ?? adapter.defaultModel}). A request is made only when a run executes.`,
+      );
+    });
+  } catch (error) {
+    return [
+      fail(
+        "agents.managedConnections",
+        "Managed agent runtimes",
+        `Managed connections could not be inspected: ${reason(error)}`,
+        "Check database connectivity.",
+      ),
+    ];
+  }
+}
+
 async function checkPlugins(): Promise<Check[]> {
   try {
     const { installedPlugins } = await import("@/core/plugins/schema");
@@ -786,6 +844,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...(await checkCredentialKey()),
     ...(await checkSecurity()),
     ...(await checkPlugins()),
+    ...(await checkManagedAgentConnections()),
     checkPlatformVersion(),
   ];
 
