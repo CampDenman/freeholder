@@ -1970,6 +1970,8 @@
   "media.capture.trimEnd": "Trim end (ms)",
   "media.capture.cropX": "Crop anchor, horizontal",
   "media.capture.cropY": "Crop anchor, vertical",
+  "media.capture.uploadIncomplete": "Part of this recording has not uploaded. Check your connection, then retry the upload — the footage is still safe on this device.",
+  "media.capture.retryUpload": "Retry upload",
   "media.capture.saveReview": "Save review",
   "media.capture.confirm": "Confirm into library",
   "media.capture.confirmed": "This file is in the library.",

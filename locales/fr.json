@@ -1970,6 +1970,8 @@
   "media.capture.trimEnd": "Fin de coupe (ms)",
   "media.capture.cropX": "Ancrage du recadrage, horizontal",
   "media.capture.cropY": "Ancrage du recadrage, vertical",
+  "media.capture.uploadIncomplete": "Une partie de cet enregistrement n'a pas été téléversée. Vérifiez votre connexion, puis réessayez le téléversement — la séquence est encore en sécurité sur cet appareil.",
+  "media.capture.retryUpload": "Réessayer le téléversement",
   "media.capture.saveReview": "Enregistrer la revue",
   "media.capture.confirm": "Confirmer dans la bibliothèque",
   "media.capture.confirmed": "Ce fichier est dans la bibliothèque.",

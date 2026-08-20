@@ -160,6 +160,46 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
     expect(asset.bytes).toBe(original.byteLength);
   });
 
+  it("refuses to assemble a recording with a missing chunk", async () => {
+    // Local playback on the recording device always looks whole, so the
+    // server is the only place a dropped upload can be caught before the
+    // owner believes the recording is safe.
+    const session = await createCaptureSession.call({ source: "screen" }, OWNER);
+    await grantCapturePermission.call({ id: session.id }, OWNER);
+    const original = await png();
+    const split = Math.max(1, Math.floor(original.byteLength / 2));
+    const { appendCaptureChunk, assembleCapture } = await import("@/core/media/capture");
+    await appendCaptureChunk.call(
+      { id: session.id, sequence: 0, contentType: "image/png", bytes: original.subarray(0, split) },
+      OWNER,
+    );
+    await appendCaptureChunk.call(
+      { id: session.id, sequence: 2, contentType: "image/png", bytes: original.subarray(split) },
+      OWNER,
+    );
+    const gap = await failure(
+      assembleCapture.call({ id: session.id, filename: "holes.png" }, OWNER),
+    );
+    expect(gap.code).toBe("conflict");
+    // A lost *tail* is contiguous, so only the recorder's count can catch it.
+    await appendCaptureChunk.call(
+      { id: session.id, sequence: 1, contentType: "image/png", bytes: original.subarray(0, split) },
+      OWNER,
+    );
+    const short = await failure(
+      assembleCapture.call(
+        { id: session.id, filename: "short.png", expectedChunks: 4 },
+        OWNER,
+      ),
+    );
+    expect(short.code).toBe("conflict");
+    const assembled = await assembleCapture.call(
+      { id: session.id, filename: "whole.png", expectedChunks: 3 },
+      OWNER,
+    );
+    expect(assembled.session.staged).toBe(true);
+  });
+
   it("binds a resumable upload started with a capture token", async () => {
     const link = await createUploadLink.call({ source: "upload_link" }, OWNER);
     const { uploadAsset } = await import("@/core/media/service");
