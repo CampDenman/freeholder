@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { reviewSubmission } from "@/modules/forms/service";
+import { ownerFacing } from "./action-helpers";
 
 function text(form: FormData, key: string): string {
   const value = form.get(key);
@@ -33,20 +34,6 @@ export async function reviewSubmissionAction(form: FormData): Promise<void> {
 export interface ActionState {
   error?: string;
   saved?: boolean;
-}
-
-/**
- * A validation message with its machine addressing removed.
- *
- * `defineService` prefixes a rejected input with the service name and the
- * failing path — `forms.update: fields: The field "x" is…` — which is right
- * for an API caller and noise above a text box. The sentence after it was
- * written for a person, so that is what an owner is shown. (The general fix
- * is task #19, catalog keys for service errors; this is the one screen where
- * the leak is in front of somebody who is not a developer.)
- */
-function ownerFacing(message: string): string {
-  return message.replace(/^[a-z][\w.]*: (?:[\w.[\]]+: )?/, "");
 }
 
 /**

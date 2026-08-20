@@ -6,14 +6,11 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
+import { ownerFacing } from "./action-helpers";
 
 export interface TranslationActionState {
   error?: string;
   saved?: boolean;
-}
-
-function ownerFacing(message: string): string {
-  return message.replace(/^[a-z][\w.]*: (?:[\w.[\]]+: )?/, "");
 }
 
 /**
