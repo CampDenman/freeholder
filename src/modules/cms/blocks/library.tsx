@@ -128,7 +128,7 @@ export const callCta = defineBlock({
   schema: z.object({
     eyebrow: z.string().min(1),
     label: z.string().min(1),
-    phone: z.string().regex(/^\+[1-9]\d{7,14}$/, "Use an E.164 phone number, such as +16393834662."),
+    phone: z.string().regex(/^\+[1-9]\d{7,14}$/, "Use an E.164 phone number, such as +15551234567."),
     displayPhone: z.string().min(1),
     supportText: z.string().min(1),
   }),
