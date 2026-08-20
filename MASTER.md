@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` plus C4.03 (#140, including the fail-closed declared write classification) and this change for C4.04 (approval inbox with once-only execution, mandatory rejection notes, expiry sweep and immutable decisions). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.04 (#147) and the workforce adapter slice (#150), plus this change for C4.05's managed loop (claim → model turn → tools through the write gate → bounded stop). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.05 managed-agent adapter family, tool loop and limits. |
+| Current focus | C4.06 per-run/task/agent/period budgets before every step, spend ledger and reporting. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3708,19 +3708,26 @@ deployments are portable, testable and incapable of silently forking the truth.
   tasks; step-up + human-only on both decision verbs; `/admin/work/approvals`
   inbox with pending and decided views in EN/FR/ES. Coverage in
   `tests/core/agents-approvals.test.ts`.)
-- [ ] **C4.05** Implement the managed-agent adapter family, provider/model
+- [x] **C4.05** Implement the managed-agent adapter family, provider/model
   selection, tool loop, time/step limits, retries and provider-independent use.
-  *(Split for reviewable delivery — the gate's ID grammar keeps this one box,
-  checked only when both slices are landed. Slice 1, landed: the workforce
-  turn contract (`src/adapters/agent/workforce*.ts`) with anthropic, openai
-  and pm_brain adapters over raw HTTP, per-connection model and credential
-  selection via `credential_ref` env-var indirection, honest unavailable
-  refusals, `agents.connect` adapter/model validation and the
-  `agents.managedConnections` doctor check;
-  `tests/core/agents-workforce-adapter.test.ts`. Slice 2, remaining: the
-  managed tool loop — worker claiming, registry-derived tools, every write
-  through `agents.proposeWrite`, step recording, wall-clock/step limits,
-  retries and stop reasons.)*
+  (Delivered in two slices under one box. Adapters: the workforce turn
+  contract in `src/adapters/agent/workforce*.ts` with anthropic, openai and
+  pm_brain over raw HTTP, per-connection model and `credential_ref` env-var
+  credential selection, honest unavailable refusals, `agents.connect`
+  adapter/model validation and the `agents.managedConnections` doctor check
+  — `tests/core/agents-workforce-adapter.test.ts`. Loop:
+  `src/core/agents/managed.ts` driven by `core.runManagedAgents` every
+  minute; work taken with the same `agents.claimTask`, narrated with
+  `agents.reportStep` and finished with `agents.completeTask` an inbound
+  runtime uses; the tool surface is exactly `mcp/tools.toolsFor`; reads run
+  under the agent's own actor and every mutation goes through
+  `agents.proposeWrite`, so autonomy is enforcement for managed execution;
+  untrusted input is fenced as quoted data; 24-turn and 8-minute bounds stop
+  with `stop_reason = timeout`, failures retry to the attempt ceiling then
+  park as `needs_attention`; the kill switch stops claiming; `completeTask`
+  no longer overwrites a task the gate parked as `waiting_approval`.
+  Provider pricing into `cost_cents` is C4.06's ledger. Coverage in
+  `tests/core/agents-managed-loop.test.ts` with a scripted provider.)
 - [ ] **C4.06** Enforce per-run/task/agent/period budgets before every step;
   build spend ledger, estimates, alerts and owner-readable reporting.
 - [ ] **C4.07** Add per-agent pause and global kill switch that prevent new

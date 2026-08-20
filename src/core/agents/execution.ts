@@ -445,6 +445,12 @@ export const completeTask = defineService({
     outcome: z.enum(["done", "failed", "refused"]),
     result: z.record(z.string(), z.unknown()).nullish(),
     failureReason: z.string().max(2000).nullish(),
+    /**
+     * Names *which* bound stopped a failed run, in the run's own vocabulary.
+     * "timeout" covers the step and wall-clock ceilings; "budget" the money
+     * cap. Ignored for done and refused, whose stop reasons are themselves.
+     */
+    stopReason: z.enum(["timeout", "budget"]).nullish(),
     costCents: z.number().int().min(0).max(1_000_000).default(0),
     tokensIn: z.number().int().min(0).default(0),
     tokensOut: z.number().int().min(0).default(0),
@@ -490,7 +496,7 @@ export const completeTask = defineService({
             ? "done"
             : input.outcome === "refused"
               ? "refused"
-              : "error",
+              : (input.stopReason ?? "error"),
         endedAt: sql`now()`,
         leaseExpiresAt: null,
         costCents: input.costCents,
@@ -509,11 +515,18 @@ export const completeTask = defineService({
     await ctx.tx
       .update(agentTasks)
       .set({
-        status,
         result: input.result ?? null,
         failureReason: succeeded ? null : (input.failureReason ?? "The agent did not say."),
       })
       .where(eq(agentTasks.id, run.taskId));
+    // Only a still-running task takes the outcome's status. If the write gate
+    // parked it as waiting_approval mid-run, finishing the run must not mark
+    // the *task* done — the owner's decision is what happens next, and the
+    // C4.04 machinery re-queues it from there.
+    await ctx.tx
+      .update(agentTasks)
+      .set({ status })
+      .where(and(eq(agentTasks.id, run.taskId), eq(agentTasks.status, "running")));
 
     if (input.costCents > 0 || input.tokensIn > 0 || input.tokensOut > 0) {
       await ctx.tx.insert(agentSpend).values({

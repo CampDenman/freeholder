@@ -337,6 +337,23 @@ export const expireCaptureSessions = defineJob({
   },
 });
 
+/**
+ * The managed workforce's heartbeat (§40): tasks are claimed, not pushed, and
+ * for a managed connection this worker is the claimant. Bounded per tick;
+ * anything still queued runs on the next minute.
+ */
+export const runManagedAgents = defineJob({
+  name: "core.runManagedAgents",
+  summary: "Claim and execute queued tasks for managed agent connections.",
+  schedule: "* * * * *",
+  concurrency: 1,
+  leaseSeconds: 30 * 60,
+  handler: async () => {
+    const { runManagedAgentWork } = await import("@/core/agents/managed");
+    return runManagedAgentWork();
+  },
+});
+
 /** An approval nobody answers lapses instead of sitting pending forever. */
 export const expireAgentApprovals = defineJob({
   name: "core.expireAgentApprovals",
@@ -473,6 +490,7 @@ export default [
   sweepMediaOrphans,
   expireCaptureSessions,
   expireAgentApprovals,
+  runManagedAgents,
   purgeExpiredMediaAssets,
   deliverNotifications,
   deliverNotificationDigests,
