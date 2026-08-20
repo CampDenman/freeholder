@@ -3710,6 +3710,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/agents-approvals.test.ts`.)
 - [ ] **C4.05** Implement the managed-agent adapter family, provider/model
   selection, tool loop, time/step limits, retries and provider-independent use.
+  *(Split for reviewable delivery — the gate's ID grammar keeps this one box,
+  checked only when both slices are landed. Slice 1, landed: the workforce
+  turn contract (`src/adapters/agent/workforce*.ts`) with anthropic, openai
+  and pm_brain adapters over raw HTTP, per-connection model and credential
+  selection via `credential_ref` env-var indirection, honest unavailable
+  refusals, `agents.connect` adapter/model validation and the
+  `agents.managedConnections` doctor check;
+  `tests/core/agents-workforce-adapter.test.ts`. Slice 2, remaining: the
+  managed tool loop — worker claiming, registry-derived tools, every write
+  through `agents.proposeWrite`, step recording, wall-clock/step limits,
+  retries and stop reasons.)*
 - [ ] **C4.06** Enforce per-run/task/agent/period budgets before every step;
   build spend ledger, estimates, alerts and owner-readable reporting.
 - [ ] **C4.07** Add per-agent pause and global kill switch that prevent new
