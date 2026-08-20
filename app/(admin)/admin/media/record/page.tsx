@@ -13,6 +13,7 @@ import {
   startRecordingAction,
 } from "../../../capture-actions";
 import { RecordStudio } from "../RecordStudio";
+import { domainOrNull } from "../../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +29,8 @@ export default async function MediaRecordPage({
     getT(),
     query.session ? getCaptureSession.call({ id: query.session }, actor) : null,
     query.link ? getCaptureSession.call({ id: query.link }, actor) : null,
-    listProducts.call({ limit: 100 }, actor).catch(() => []),
-    listPages.call({}, actor).catch(() => []),
+    domainOrNull(listProducts.call({ limit: 100 }, actor)).then((rows) => rows ?? []),
+    domainOrNull(listPages.call({}, actor)).then((rows) => rows ?? []),
   ]);
 
   return (
@@ -107,6 +108,8 @@ export default async function MediaRecordPage({
             saveReview: t("media.capture.saveReview"),
             confirm: t("media.capture.confirm"),
             discard: t("media.capture.discard"),
+            uploadIncomplete: t("media.capture.uploadIncomplete"),
+            retryUpload: t("media.capture.retryUpload"),
           }}
         />
       ) : null}

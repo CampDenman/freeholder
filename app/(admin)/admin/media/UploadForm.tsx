@@ -326,6 +326,9 @@ export function UploadForm({
             if ((caught as Error).name === "AbortError") {
               const id = activeUploadId.current;
               if (id) {
+                // Best effort: a failed abort does not orphan the staged
+                // parts forever — cleanupOrphanedMedia expires stale uploads
+                // and aborts their multipart state on schedule.
                 await apiJson("/api/media/uploads/abort", {
                   method: "POST",
                   body: JSON.stringify({ id }),
@@ -389,6 +392,8 @@ export function UploadForm({
               controller.current?.abort();
               const id = activeUploadId.current;
               if (id) {
+                // Best effort — cleanupOrphanedMedia reclaims the parts if
+                // this call never lands.
                 void apiJson("/api/media/uploads/abort", {
                   method: "POST",
                   body: JSON.stringify({ id }),

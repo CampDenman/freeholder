@@ -110,7 +110,7 @@ export default async function ContactsPage({
           {canManage ? (
             <a
               href="/admin/contacts/new"
-              className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
+              className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-press"
             >
               <Plus size={15} weight="bold" />
               {t("contacts.new")}

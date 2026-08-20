@@ -96,11 +96,13 @@ export async function appendChunkAction(form: FormData): Promise<void> {
 }
 
 export async function assembleCaptureAction(form: FormData): Promise<void> {
+  const expected = Number(field(form, "expectedChunks") || 0);
   await assembleCapture.call(
     {
       id: field(form, "id") || undefined,
       token: field(form, "token") || undefined,
       filename: field(form, "filename") || "capture.webm",
+      expectedChunks: Number.isInteger(expected) && expected > 0 ? expected : undefined,
     },
     (await actor()) ?? { kind: "anonymous" },
   );

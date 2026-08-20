@@ -104,7 +104,7 @@ export const button = defineBlock({
       className={cx(
         "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold",
         props.variant === "solid"
-          ? "bg-accent text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
+          ? "bg-accent text-on-accent shadow-press"
           : "border border-rule text-ink",
       )}
     >
@@ -145,7 +145,7 @@ export const callCta = defineBlock({
       aria-label={`${props.label}: ${props.displayPhone}`}
       className={cx(
         "group mb-4 grid w-full gap-3 rounded-xl border border-accent bg-accent px-5 py-4",
-        "text-on-accent shadow-[inset_0_-3px_0_rgb(0_0_0/0.18),0_12px_28px_rgb(0_0_0/0.12)]",
+        "text-on-accent shadow-raised",
         "transition-transform hover:-translate-y-0.5 sm:grid-cols-[1fr_auto] sm:items-center sm:px-6",
       )}
     >

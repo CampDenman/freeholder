@@ -61,7 +61,7 @@ export const LEASE_MINUTES = 10;
 
 export { MAX_TASK_ATTEMPTS } from "@/core/agents/service";
 
-interface ResolvedAgent {
+export interface ResolvedAgent {
   id: string;
   name: string;
   autonomy: "suggest" | "approve" | "autonomous";
@@ -79,7 +79,7 @@ interface ResolvedAgent {
  * the actor: the prefix is a display convention, and a rename or a second
  * naming scheme would silently break a string match. The join is the fact.
  */
-async function agentForActor(tx: Tx, actor: Actor): Promise<ResolvedAgent> {
+export async function agentForActor(tx: Tx, actor: Actor): Promise<ResolvedAgent> {
   if (actor.kind !== "agent") {
     throw new ServiceError(
       "permission",

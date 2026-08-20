@@ -82,6 +82,41 @@ function tablesReferencingContacts(): Array<{
   return found;
 }
 
+/**
+ * Contact columns the merge deliberately leaves alone, each with the human
+ * decision written next to it. An entry here is a documented exception, not
+ * an escape hatch — the assertion below fails on any *undocumented* column.
+ */
+const DELIBERATE_MERGE_EXCLUSIONS: Record<string, string> = {
+  "contact_merge_operations.surviving_contact_id":
+    "The merge ledger is an immutable audit snapshot: rewriting who merged into whom would falsify history, and undo reads these ids as they were.",
+  "contact_merge_operations.duplicate_contact_id":
+    "Same ledger, same reason — the duplicate id names a contact that no longer exists, which is the point of the record.",
+};
+
+/**
+ * Every column *named* like a contact reference, whatever its declaration.
+ * The FK-based reflection above only sees `.references()`; a bare
+ * `uuid("contact_id")` column would sail through it — this scan is written in
+ * the same terms as the CLAUDE.md rule, the column name.
+ */
+function columnsNamedLikeContactReferences(): Array<{
+  table: string;
+  column: string;
+}> {
+  const found: Array<{ table: string; column: string }> = [];
+  for (const table of allTables()) {
+    const config = getTableConfig(table);
+    if (config.name === contactsTableName) continue;
+    for (const column of config.columns) {
+      if (/(^|_)contact_id$/.test(column.name)) {
+        found.push({ table: config.name, column: column.name });
+      }
+    }
+  }
+  return found;
+}
+
 describe("contacts.merge covers the whole spine", () => {
   it("finds the contact_id foreign keys by reflection", () => {
     // Guards the gate itself: a reflection that silently stops seeing foreign
@@ -122,6 +157,30 @@ describe("contacts.merge covers the whole spine", () => {
             `its own with registerContactReference() from its services module. Decide ` +
             `deliberately what a merge means if contact_id participates in a unique constraint ` +
             `on that table.`,
+    ).toEqual([]);
+  });
+
+  it("accounts for every column merely *named* like a contact reference", () => {
+    // A `uuid("contact_id")` without `.references()` is invisible to the
+    // FK reflection, so the gate would pass while the merge orphaned its
+    // rows. Every name-shaped contact column must be either repointed or a
+    // documented deliberate exclusion.
+    const repointed = new Set(contactReferences().map((r) => r.table));
+    const unaccounted = columnsNamedLikeContactReferences().filter(
+      ({ table, column }) =>
+        !repointed.has(table) &&
+        !(`${table}.${column}` in DELIBERATE_MERGE_EXCLUSIONS),
+    );
+
+    expect(
+      unaccounted,
+      unaccounted.length === 0
+        ? ""
+        : `These columns are named like contact references but are neither repointed by ` +
+            `contacts.merge nor documented as deliberate exclusions: ` +
+            `${unaccounted.map((c) => `${c.table}.${c.column}`).join(", ")}.\n\n` +
+            `Either add .references(() => contacts.id) plus a registerContactReference() ` +
+            `entry, or record the human decision in DELIBERATE_MERGE_EXCLUSIONS in this file.`,
     ).toEqual([]);
   });
 

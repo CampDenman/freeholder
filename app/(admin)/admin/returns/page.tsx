@@ -12,6 +12,7 @@ import { Button, Callout, Card, CardBody, CardHeader, Field, Pill, Select } from
 import { getT } from "../../../i18n";
 import { productAction } from "../../catalog-actions";
 import { requireStaffActor } from "../guard";
+import { domainOrNull } from "../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default async function ReturnsPage({
     listLocations.call({}, actor),
     getT(),
   ]);
-  const selected = query.id ? await getReturn.call({ id: query.id }, actor).catch(() => null) : null;
+  const selected = query.id ? await domainOrNull(getReturn.call({ id: query.id }, actor)) : null;
   const canManage = hasModuleAccess(actor, "catalog", "manage");
 
   return (

@@ -116,7 +116,7 @@ Owners can also file a bug, feature request or code submission from their runnin
 9. **International by default.** Locale, currency, timezone, and location are first-class core config, not bolt-ons. All money is `(amount_cents, currency)`, all timestamps are UTC with a business timezone for display, all user-facing strings run through the i18n layer from commit one — retrofitting i18n is the single most expensive refactor a platform can face.
 10. **SEO is architecture, not garnish.** Public pages are server-rendered HTML, URL structure follows a RIBA-compliant browse hierarchy (Root-Indexed Browse Architecture — every indexable page reachable within shallow hops from root-linked index pages), and every page ships complete meta, JSON-LD, and hreflang. The SEO module doesn't "add SEO"; the routing layer *is* the SEO.
 11. **Vibe-coded by design.** The primary way this codebase — and any deployed instance — gets edited is a coding agent in conversation with its owner. Every design decision is made with that reader in mind: strict TypeScript + Zod make the spec machine-checkable, modules and adapters have contracts narrow enough for an agent to hold one fully in context, conventions are enforced by lint/types/CI rather than tribal knowledge, and seed/demo mode exists so an agent can verify its change end-to-end. Code that is hard for an agent to safely modify is a design defect, not a documentation gap.
-12. **One sacred database (mandate).** Every piece of state lives in the ACID-compliant relational database (PostgreSQL) — religiously normalized (3NF as the default; denormalization only as a measured, documented optimization with the normalized source retained), deliberately abstracted (modules and plugins reach data exclusively through the service layer, never raw tables), and well-indexed as a review requirement (every foreign key indexed; every service-layer query pattern backed by an index; migrations adding queries without indexes fail review). No shadow stores: no state in JSON files, no truth in localStorage, no "we'll just cache it in memory." jsonb is permitted only for genuinely owner-defined schemaless data (custom fields, block content) and hot jsonb paths get generated columns + indexes. Transactions wrap every multi-table mutation — a half-created order must be impossible, not unlikely. The database *is* the business; everything else is a projection of it.
+12. **One sacred database (mandate).** Every piece of state lives in the ACID-compliant relational database (PostgreSQL) — religiously normalized (3NF as the default; denormalization only as a measured, documented optimization with the normalized source retained), deliberately abstracted (modules and plugins reach data exclusively through the service layer, never raw tables), and well-indexed as a review requirement (every foreign key indexed; every service-layer query pattern backed by an index; migrations adding queries without indexes fail review). No shadow stores: no state in JSON files, no truth in localStorage, no "we'll just cache it in memory." jsonb is permitted only for genuinely owner-defined schemaless data (custom fields, block content) and hot jsonb paths get generated columns + indexes. Transactions wrap every multi-table mutation — a half-created order must be impossible, not unlikely. The database *is* the business; everything else is a projection of it. *(One sanctioned exception to one-transaction composition exists: `mail.completeOAuth` commits its one-time state claim on a second connection before exchanging the provider's single-use code, because rolling the claim back would advertise a retry that can never succeed. The rationale and its pool-exhaustion caveat are written at the call site in `src/core/mail/oauth.ts`; a second exception requires amending this sentence.)*
 
 ---
 
@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` plus C4.01 (#138) and this change for C4.02 (live run streaming, redacted step inspection, stop, retry, cancel that revokes leases). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` plus C4.02 (#139) and this change for C4.03 (managed writes honour suggest/approve/autonomous, with previews for blocks, messages, money and irreversible actions). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.03 suggest/approve/autonomous writes with previews. |
+| Current focus | C4.04 approval inbox, expiry, rejection and once-only execution. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3687,8 +3687,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   (`agents.inspectRun` / `agents.tailRun` / `agents.stopRun` /
   `agents.retryTask`; `reportStep` redacts on write; cancel revokes leases.
   `/admin/work/[id]` live run view. Coverage in `tests/core/agents-run.test.ts`.)
-- [ ] **C4.03** Enforce suggest/approve/autonomous behavior for every managed
+- [x] **C4.03** Enforce suggest/approve/autonomous behavior for every managed
   write, with previews for block diffs, messages, money and destructive actions.
+  (`agents.proposeWrite` / `agents.listApprovals`; write classification is a
+  declared `writeClass` on each service definition and fails closed —
+  undeclared or destructive writes always queue, even at autonomous; suggest
+  never escalates; the gate shares the paused-agent/connection check with
+  every other agent verb and refuses proposals outside the agent's scopes;
+  approval input is stored verbatim for once-only execution and redacted on
+  every read; `0077_agent_approval_autonomy.sql` records the proposing rung.
+  Coverage in `tests/core/agents-autonomy.test.ts`.)
 - [ ] **C4.04** Build approval inbox, expiry, rejection notes, step-up auth,
   execution of approved input exactly once and immutable decision audit.
 - [ ] **C4.05** Implement the managed-agent adapter family, provider/model
@@ -4019,7 +4027,9 @@ owner operations, never substitute for them.
   idempotency key plus converted-cart retry; `payOrder` only after the
   invoice is `paid`; cancel voids the unpaid invoice; confirmation is
   `getOrder` + `/admin/orders/[id]`; coupons/discounts stay C5.23; public
-  storefront checkout waits on product landing pages.)*
+  storefront checkout waits on product landing pages; naming a `contactId`
+  on `getOrCreateCart`/`attachCartToContact`/`checkoutCart` requires an
+  authorized caller — a bare contact UUID is never a credential.)*
 - [x] **C5.22** Build order lifecycle, mixed physical/digital/service lines,
   fulfillment state, translated admin order/customer views, portal views and
   complete timeline events.

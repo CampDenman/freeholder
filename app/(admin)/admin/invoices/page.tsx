@@ -10,6 +10,7 @@ import { Card, CardBody, CardHeader, Pill, Select } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { INVOICE_STATUSES, invoiceTone, money } from "./format";
+import { domainOrNull } from "../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export default async function InvoicesPage({
   const missing = [...new Set(rows.map((invoice) => invoice.contactId).filter((id) => !names.has(id)))];
   await Promise.all(
     missing.map(async (id) => {
-      const contact = await getContact.call({ id }, actor).catch(() => null);
+      const contact = await domainOrNull(getContact.call({ id }, actor));
       if (contact) names.set(contact.id, contact.name);
     }),
   );

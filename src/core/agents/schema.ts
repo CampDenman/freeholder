@@ -307,9 +307,23 @@ export const agentApprovals = pgTable(
     kind: text("kind").notNull(),
     summary: text("summary").notNull(),
     preview: jsonb("preview").notNull().default({}),
-    /** The call that will be made, verbatim, if this is approved. */
+    /**
+     * The call that will be made, verbatim, if this is approved. Never
+     * redacted at rest — C4.04 replays exactly this — so every read surface
+     * redacts before showing it.
+     */
     serviceName: text("service_name").notNull(),
     input: jsonb("input").notNull().default({}),
+    /**
+     * The effective autonomy when the row was created. The inbox must be
+     * able to tell a suggest-rung proposal from an approval request without
+     * guessing from surrounding state.
+     */
+    proposedAutonomy: text("proposed_autonomy", {
+      enum: ["suggest", "approve", "autonomous"],
+    })
+      .notNull()
+      .default("approve"),
     status: text("status", {
       enum: ["pending", "approved", "rejected", "expired"],
     })

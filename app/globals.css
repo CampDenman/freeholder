@@ -70,7 +70,20 @@
   --color-warning-soft: var(--fh-warning-soft);
   --color-danger: var(--fh-danger);
   --color-danger-soft: var(--fh-danger-soft);
+  --color-on-danger: var(--fh-on-danger);
   --color-focus: var(--fh-focus);
+
+  /* Shadows come from the token set too — `shadow-press` is the pressed
+   * edge on solid buttons, defined once in tokens.ts. */
+  --shadow-sm: var(--fh-shadow-sm, 0 1px 2px rgb(16 18 22 / 0.06));
+  --shadow-md: var(--fh-shadow-md, 0 2px 8px rgb(16 18 22 / 0.08));
+  --shadow-press: var(--fh-shadow-press, inset 0 -2px 0 rgb(0 0 0 / 0.16));
+  --shadow-raised: var(
+    --fh-shadow-raised,
+    inset 0 -3px 0 rgb(0 0 0 / 0.18),
+    0 12px 28px rgb(0 0 0 / 0.12)
+  );
+  --shadow-float: var(--fh-shadow-float, 0 12px 32px rgb(0 0 0 / 0.2));
 
   --font-sans: var(
     --fh-font-sans,

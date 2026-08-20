@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import { ownerFacing } from "./action-helpers";
 import {
   commitImport,
   previewImport,
@@ -24,10 +25,6 @@ export interface ImportActionState {
 function text(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
-}
-
-function ownerFacing(message: string): string {
-  return message.replace(/^[a-z][\w.]*: (?:[\w.[\]]+: )?/, "");
 }
 
 export async function startImportAction(
