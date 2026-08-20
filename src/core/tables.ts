@@ -26,6 +26,7 @@ export {
   agentApprovals,
   agentSpend,
   agentPlaybooks,
+  agentPlaybookVersions,
 } from "@/core/agents/schema";
 export {
   connectedAccounts,
