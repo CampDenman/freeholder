@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Outbound webhooks (MASTER.md §11, §28).
+// Outbound webhooks (MASTER.md Â§11, Â§28).
 //
 // Owner-only throughout. A subscription is a standing instruction to send this
 // business's events to somebody else's server, which is a data-sharing
@@ -61,7 +61,7 @@ const pattern = z
 
 /**
  * A key must not be able to point the business's events at an address of its
- * choosing — that is exfiltration wearing configuration's clothes, and it
+ * choosing â€” that is exfiltration wearing configuration's clothes, and it
  * would be invisible in the audit trail as anything worse than "a setting
  * changed". Same reasoning as apikeys refusing agents.
  */
@@ -168,7 +168,7 @@ export const updateWebhook = defineService({
       .set({
         ...changes,
         // Turning one back on clears the reason it stopped and the count that
-        // stopped it — otherwise a single further failure pauses it again and
+        // stopped it â€” otherwise a single further failure pauses it again and
         // the owner never gets a real second chance.
         ...(changes.status === "active"
           ? { pausedReason: null, consecutiveFailures: 0 }
@@ -222,7 +222,7 @@ export const rotateWebhookSecret = defineService({
 /**
  * The signing secret, shown on request rather than in the list.
  *
- * A receiver needs it to verify anything, so it has to be readable — unlike an
+ * A receiver needs it to verify anything, so it has to be readable â€” unlike an
  * API key, which only ever has to be *recognised*. Keeping it out of the list
  * response means it is not sitting in the markup of a screen an owner leaves
  * open, and asking for it is an auditable act.
@@ -255,6 +255,7 @@ export const revealWebhookSecret = defineService({
 
 export const deleteWebhook = defineService({
   name: "webhooks.remove",
+  writeClass: "destructive",
   summary: "Stop sending events to a server.",
   kind: "mutation",
   permission: "scoped",
@@ -313,7 +314,7 @@ export const listDeliveries = defineService({
  * Send a delivery an owner can watch.
  *
  * The only way to find out whether an address, a firewall and a receiver's
- * signature check all work is to send one — and doing that by waiting for a
+ * signature check all work is to send one â€” and doing that by waiting for a
  * real event means testing in production with somebody's actual data.
  */
 export const inspectDelivery = defineService({
@@ -468,8 +469,8 @@ export async function fanOut(
   outboxEventId?: string,
 ): Promise<number> {
   // The webhook system does not report on itself. A subscription to `*` would
-  // otherwise be told every time a webhook was created or changed — including
-  // its own creation, which is self-referential noise — and, more seriously,
+  // otherwise be told every time a webhook was created or changed â€” including
+  // its own creation, which is self-referential noise â€” and, more seriously,
   // it is the shape of a feedback loop: the day something emits an event when
   // a delivery fails, a `*` subscription would generate a delivery about the
   // failed delivery, forever. Cheap insurance against a bug nobody would spot

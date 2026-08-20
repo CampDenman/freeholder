@@ -918,6 +918,12 @@ export const assembleCapture = defineService({
       id: id.optional(),
       token: token.optional(),
       filename: z.string().min(1).max(255).default("capture.webm"),
+      /**
+       * How many chunks the recorder produced. The client knows; storage can
+       * only prove contiguity, and a recording whose *last* chunks never
+       * arrived is contiguous. With the count, a tail loss is refused too.
+       */
+      expectedChunks: z.number().int().min(1).max(100_000).optional(),
     })
     .refine((value) => Boolean(value.id || value.token), "Identify the capture session."),
   output: z.object({
@@ -948,6 +954,24 @@ export const assembleCapture = defineService({
       .orderBy(asc(mediaCaptureChunks.sequence));
     if (chunks.length === 0) {
       throw new ServiceError("validation", "This capture has no recorded chunks yet.");
+    }
+    // Refuse to assemble a recording with holes. Local playback on the
+    // recording device always looks intact, so a silent gap here is the one
+    // place the owner could lose footage without ever being told.
+    const missing = chunks
+      .map((chunk, index) => ({ expected: index, got: chunk.sequence }))
+      .filter((pair) => pair.got !== pair.expected);
+    if (missing.length > 0) {
+      throw new ServiceError(
+        "conflict",
+        `This recording is missing uploaded chunks (first gap at #${missing[0]!.expected}). Retry the upload before assembling.`,
+      );
+    }
+    if (input.expectedChunks !== undefined && chunks.length !== input.expectedChunks) {
+      throw new ServiceError(
+        "conflict",
+        `This recording has ${chunks.length} of ${input.expectedChunks} uploaded chunks. Retry the upload before assembling.`,
+      );
     }
     const parts: Uint8Array<ArrayBuffer>[] = [];
     let total = 0;

@@ -28,6 +28,7 @@ const ROLES = [
   "warningSoft",
   "danger",
   "dangerSoft",
+  "onDanger",
   "focus",
 ] as const;
 
@@ -80,6 +81,12 @@ describe("the token set", () => {
 
       it(`${scheme}: text on the accent is legible`, () => {
         expect(contrast(c.onAccent, c.accent)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it(`${scheme}: text on solid danger is legible`, () => {
+        // The dark scheme lightens the danger fill, so a literal white
+        // would fail here — which is why the pairing is a token at all.
+        expect(contrast(c.onDanger, c.danger)).toBeGreaterThanOrEqual(4.5);
       });
 
       it(`${scheme}: semantic colours read on their own soft grounds`, () => {

@@ -47,6 +47,12 @@ export interface ColorTokens {
   warningSoft: string;
   danger: string;
   dangerSoft: string;
+  /**
+   * Text and icons placed on solid `danger`. A literal white here fails AA
+   * the moment a dark scheme lightens the danger fill — which is exactly
+   * what Bench's does — so the pairing is a token like `onAccent`.
+   */
+  onDanger: string;
   /** Keyboard focus. Must clear 3:1 against both paper and surface. */
   focus: string;
 }
@@ -81,6 +87,7 @@ export const colors: ThemeTokens = {
     warningSoft: "#fbeed6",
     danger: "#b3261e",
     dangerSoft: "#fbe6e4",
+    onDanger: "#ffffff",
     focus: "#2551e0",
   },
   dark: {
@@ -102,6 +109,8 @@ export const colors: ThemeTokens = {
     warningSoft: "#2c2312",
     danger: "#f08d85",
     dangerSoft: "#2e1917",
+    // Dark ink, not white: the dark scheme's danger is a light fill.
+    onDanger: "#2b0f0c",
     focus: "#5c86ff",
   },
 };
@@ -161,6 +170,12 @@ export const shadow = {
   none: "none",
   sm: "0 1px 2px rgb(16 18 22 / 0.06)",
   md: "0 2px 8px rgb(16 18 22 / 0.08)",
+  /** The pressed-edge inset on solid buttons. One definition, not nine copies. */
+  press: "inset 0 -2px 0 rgb(0 0 0 / 0.16)",
+  /** A heavier pressed edge plus lift, for the one emphasized hero action. */
+  raised: "inset 0 -3px 0 rgb(0 0 0 / 0.18), 0 12px 28px rgb(0 0 0 / 0.12)",
+  /** Elevation for floating chrome such as the public chat launcher. */
+  float: "0 12px 32px rgb(0 0 0 / 0.2)",
 } as const;
 
 export const motion = {
@@ -198,6 +213,7 @@ export const COLOR_ROLES = [
   "warningSoft",
   "danger",
   "dangerSoft",
+  "onDanger",
   "focus",
 ] as const;
 
@@ -242,6 +258,7 @@ export function contrastFailures(theme: ThemeTokens): ContrastFailure[] {
     fail("success on successSoft", contrastRatio(c.success, c.successSoft), 4.5);
     fail("warning on warningSoft", contrastRatio(c.warning, c.warningSoft), 4.5);
     fail("danger on dangerSoft", contrastRatio(c.danger, c.dangerSoft), 4.5);
+    fail("onDanger on danger", contrastRatio(c.onDanger, c.danger), 4.5);
     fail("focus on paper", contrastRatio(c.focus, c.paper), 3);
     fail("focus on surface", contrastRatio(c.focus, c.surface), 3);
   }
@@ -288,6 +305,13 @@ function extrasToCss(extras?: TokenExtras): string {
   return lines.length ? `\n  ${lines.join("\n  ")}` : "";
 }
 
+/** Scheme-independent tokens: shadows are the same on both grounds. */
+function staticTokensCss(): string {
+  return Object.entries(shadow)
+    .map(([key, value]) => `--${CSS_VAR_PREFIX}-shadow-${toKebab(key)}: ${value};`)
+    .join("\n  ");
+}
+
 /** The `<style>` body that themes a document, both schemes included. */
 export function themeStylesheet(
   theme: ThemeTokens = colors,
@@ -295,7 +319,7 @@ export function themeStylesheet(
 ): string {
   const extra = extrasToCss(extras);
   return [
-    `:root {\n  ${colorsToCss(theme.light)}${extra}\n}`,
+    `:root {\n  ${colorsToCss(theme.light)}\n  ${staticTokensCss()}${extra}\n}`,
     `@media (prefers-color-scheme: dark) {\n  :root {\n    ${colorsToCss(theme.dark)}${extra}\n  }\n}`,
     `:root[data-theme="dark"] {\n  ${colorsToCss(theme.dark)}${extra}\n}`,
     `:root[data-theme="light"] {\n  ${colorsToCss(theme.light)}${extra}\n}`,

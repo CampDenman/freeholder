@@ -18,6 +18,7 @@ import { getT } from "../../../../i18n";
 import { invoiceAction } from "../../../invoice-actions";
 import { requireStaffActor } from "../../guard";
 import { formatPpm, invoiceTone, money, quantityFromMicros } from "../format";
+import { domainOrNull } from "../../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export default async function InvoiceDetailPage({
     throw error;
   });
   const [contact, business, t] = await Promise.all([
-    getContact.call({ id: bundle.invoice.contactId }, actor).catch(() => null),
+    domainOrNull(getContact.call({ id: bundle.invoice.contactId }, actor)),
     currentBusiness(),
     getT(),
   ]);
@@ -54,7 +55,7 @@ export default async function InvoiceDetailPage({
     await Promise.all(
       bundle.payments
         .filter((payment) => payment.status === "succeeded")
-        .map((payment) => getPaymentReceipt.call({ paymentId: payment.id }, actor).catch(() => null)),
+        .map((payment) => domainOrNull(getPaymentReceipt.call({ paymentId: payment.id }, actor))),
     )
   ).filter((row) => row !== null);
 

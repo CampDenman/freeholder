@@ -74,6 +74,7 @@ export const previewEmail = defineService({
 
 export const testSendEmail = defineService({
   name: "cms.testSendEmail",
+  writeClass: "message",
   summary: "Send this email template to the signed-in person.",
   kind: "mutation",
   permission: "scoped",

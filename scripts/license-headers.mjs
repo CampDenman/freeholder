@@ -27,6 +27,14 @@ const EXEMPT = [
   /(^|\/)pnpm-lock\.yaml$/,
   /(^|\/)package-lock\.json$/,
   /(^|\/)yarn\.lock$/,
+  // Prose. The repository LICENSE covers documentation (LICENSING.md's
+  // "documentation" clause reaches it that way); an SPDX banner at the top
+  // of rendered prose is reader-hostile, so the exemption is a decision
+  // recorded here — previously Markdown was skipped *silently* by the
+  // comment-style map, which made the documentation half of the licensing
+  // rule look enforced when it was not. Binary assets (images, fonts) stay
+  // naturally out of scope the same way: no comment syntax.
+  /\.(md|txt)$/,
 ];
 
 const COMMENT = {

@@ -18,8 +18,11 @@ import tseslint from "typescript-eslint";
 // operations that lose a cent, not arithmetic.
 const MONEY_GATE = [
   {
+    // `Minor` is this codebase's own universal suffix (amountMinor,
+    // totalMinor, shippingMinor…) — a division rule that misses it is inert
+    // against the very code it exists to guard.
     selector:
-      'BinaryExpression[operator="/"] > Identifier[name=/([Cc]ents|[Mm]inorUnits|[Aa]mount)$/]',
+      'BinaryExpression[operator="/"] > Identifier[name=/([Cc]ents|[Mm]inorUnits|[Mm]inor|[Aa]mount)$/]',
     message:
       "Money is integer minor units (MASTER.md §15.4): dividing it produces a float. formatMoney() renders it without ever dividing.",
   },
@@ -52,6 +55,27 @@ const MONEY_GATE = [
 // Client components cannot call `t` — the catalogs are server-side and the
 // locale is resolved per request — so they take their strings as props. That
 // is what makes a rule this blunt workable.
+// Colour gate (CLAUDE.md non-negotiable: every colour comes from a semantic
+// token in src/core/design/tokens.ts). The tokens test proves the *palette*
+// clears WCAG AA in both schemes; this is what makes components actually use
+// it. It catches the two shapes a bypass takes: Tailwind's raw palette
+// (`text-white` on an inverting ground was a live AA failure) and arbitrary
+// values smuggling a literal (`bg-[#fff]`, `shadow-[…rgb(0_0_0/0.16)]`).
+const COLOR_GATE = [
+  {
+    selector:
+      "Literal[value=/(^|[\\s'\"])(bg|text|border|ring|outline|fill|stroke|from|via|to|divide|decoration|caret|accent)-(white|black|slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)([-0-9\\/]|$|[\\s'\"])/]",
+    message:
+      "Tailwind's raw palette bypasses the design tokens (CLAUDE.md). Use a semantic utility (bg-surface, text-ink, bg-danger, text-on-danger…) or add a token to src/core/design/tokens.ts.",
+  },
+  {
+    selector:
+      "Literal[value=/-\\[[^\\]]*(#[0-9a-fA-F]{3}|rgba?\\(|hsla?\\(|oklch\\()/]",
+    message:
+      "Arbitrary colour values bypass the design tokens (CLAUDE.md). Define the value once in src/core/design/tokens.ts and use its utility.",
+  },
+];
+
 const I18N_GATE = [
   {
     // Two or more letters in a row: skips punctuation, arrows, dashes and the
@@ -89,6 +113,16 @@ export default tseslint.config(
     extends: [tseslint.configs.disableTypeChecked],
   },
   {
+    // Plugins carry money and render UI like everything else; leaving them
+    // outside the gates made them the one place a cent could quietly become
+    // a float. (packages/** stays out of the program entirely — it has its
+    // own builds — and is the documented residual hole.)
+    files: ["plugins/**/*.ts", "plugins/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE],
+    },
+  },
+  {
     files: ["src/**/*.ts", "src/**/*.tsx"],
     rules: {
       // Framework-free below app/: src/ is the application, app/ is the
@@ -106,12 +140,16 @@ export default tseslint.config(
           ],
         },
       ],
-      "no-restricted-syntax": ["error", ...MONEY_GATE],
+      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE],
     },
   },
   {
     files: ["app/**/*.ts", "app/**/*.tsx"],
     rules: {
+      // The server actions in app/**/*.ts are exactly the files that parse
+      // money out of FormData — the money gate must reach them, not just the
+      // rendered .tsx surfaces.
+      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE],
       // Service-layer gate (MASTER.md §15.5): routes call services, never the
       // database. Blocking only the schema modules left the front door open —
       // a handler could take the Drizzle client itself and issue raw SQL,
@@ -139,11 +177,15 @@ export default tseslint.config(
     },
   },
   {
-    // The rendered surfaces carry both gates. `src/ui/**` overlaps the src/
-    // block above, so the money gate is restated here rather than lost.
-    files: ["app/**/*.tsx", "src/ui/**/*.tsx"],
+    // The rendered surfaces carry every gate. These globs overlap the src/
+    // and app/ blocks above, so the money and colour gates are restated here
+    // rather than lost — flat config replaces, it does not merge.
+    // `src/modules/**/*.tsx` is the block-rendering surface (cms render,
+    // forms, events, newsletters, proof): it ships user-facing markup like
+    // app/ does, so it carries the i18n gate like app/ does.
+    files: ["app/**/*.tsx", "src/ui/**/*.tsx", "src/modules/**/*.tsx"],
     rules: {
-      "no-restricted-syntax": ["error", ...MONEY_GATE, ...I18N_GATE],
+      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE, ...I18N_GATE],
     },
   },
   {

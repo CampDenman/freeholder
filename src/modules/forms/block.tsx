@@ -130,7 +130,7 @@ function RenderedForm({
 
       <button
         type="submit"
-        className="inline-flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[inset_0_-2px_0_rgb(0_0_0/0.16)]"
+        className="inline-flex w-fit items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-press"
       >
         {form.submitLabel ?? t("forms.public.submit")}
       </button>
