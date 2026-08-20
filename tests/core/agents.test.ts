@@ -237,7 +237,10 @@ describe.runIf(hasDatabase)("hiring workers", () => {
     await hireAgent.call({ connectionId: link.id, name: "A", role: "a" }, OWNER);
     await hireAgent.call({ connectionId: link.id, name: "B", role: "b" }, OWNER);
 
-    expect(await pauseAllAgents.call({}, OWNER)).toEqual({ changed: 2 });
+    // Nothing is running, so nothing to stop — the count is still reported,
+    // because "paused two workers and ended one run" is the sentence an owner
+    // needs after hitting the switch (C4.07).
+    expect(await pauseAllAgents.call({}, OWNER)).toEqual({ changed: 2, stoppedRuns: 0 });
     const all = await db().select().from(agents);
     expect(all.every((row) => row.status === "paused")).toBe(true);
   });

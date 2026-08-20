@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { formatDateTime } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { getT } from "../../../i18n";
@@ -10,6 +10,7 @@ import { requireStaffActor } from "../guard";
 import { BOARD_COLUMNS, listAgents, listBoard } from "@/core/agents/service";
 import { listApprovals } from "@/core/agents/writes";
 import { CreateTaskForm } from "./WorkForms";
+import { pauseAgentAction } from "../../work-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -68,6 +69,75 @@ export default async function WorkBoardPage({
         </div>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("work.intro")}</p>
       </div>
+
+      {one("saved") ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t(`work.saved.${one("saved") === "resumed" ? "resumed" : "paused"}`)}
+        </p>
+      ) : null}
+      {one("error") ? (
+        <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+          {t("work.error.pause")}
+        </p>
+      ) : null}
+
+      <Card>
+        <CardHeader title={t("work.workers.title")} />
+        <CardBody>
+          <p className="mb-3 max-w-prose text-sm text-ink-muted">
+            {t("work.workers.intro")}
+          </p>
+          {agents.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("work.workers.empty")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {agents.map((agent) => (
+                <li
+                  key={agent.id}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-rule px-3 py-2"
+                >
+                  <span className="font-medium">{agent.name}</span>
+                  <Pill tone={agent.status === "paused" ? "warning" : "success"}>
+                    {t(`work.workers.status.${agent.status}`)}
+                  </Pill>
+                  <span className="font-mono text-xs text-ink-muted">{agent.role}</span>
+                  <form action={pauseAgentAction} className="ms-auto">
+                    <input type="hidden" name="id" value={agent.id} />
+                    <input
+                      type="hidden"
+                      name="paused"
+                      value={agent.status === "paused" ? "false" : "true"}
+                    />
+                    <Button
+                      type="submit"
+                      variant={agent.status === "paused" ? "quiet" : "danger"}
+                    >
+                      {agent.status === "paused"
+                        ? t("work.workers.resume")
+                        : t("work.workers.pause")}
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-rule pt-4">
+            <p className="text-sm text-ink-muted">{t("work.workers.killSwitchHint")}</p>
+            <form action={pauseAgentAction} className="ms-auto flex gap-2">
+              <input type="hidden" name="paused" value="true" />
+              <Button type="submit" variant="danger">
+                {t("work.workers.pauseAll")}
+              </Button>
+            </form>
+            <form action={pauseAgentAction}>
+              <input type="hidden" name="paused" value="false" />
+              <Button type="submit" variant="quiet">
+                {t("work.workers.resumeAll")}
+              </Button>
+            </form>
+          </div>
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("work.filter")} />

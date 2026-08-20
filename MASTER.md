@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` through C4.05 (#150, #152), plus this change for C4.06 (turn pricing, budgets enforced before every step across period/task/run scopes, real cost in the spend ledger, owner alerts and `/admin/work/spend`). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.06 (#153), plus this change for C4.07 (per-agent pause and the kill switch revoke live leases, the managed loop stops within one turn, and the Workers card carries both controls). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.07 per-agent pause and global kill switch that stop new claims and safely end current leases. |
+| Current focus | C4.08 playbooks: parameter schemas, manual/event/schedule triggers, versioned prompts, permissions and import/export as data. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3745,8 +3745,21 @@ deployments are portable, testable and incapable of silently forking the truth.
   per agent and in total against the cap in EN/FR/ES; crossing 80% and the
   cap notify the owner once per period on the new `agents.budget` topic.
   Coverage in `tests/core/agents-budgets.test.ts`.)
-- [ ] **C4.07** Add per-agent pause and global kill switch that prevent new
+- [x] **C4.07** Add per-agent pause and global kill switch that prevent new
   claims and safely stop or expire current leases.
+  (`agents.pause` and the extended `agents.pauseAll` both revoke the leases
+  their agents are holding through one `revokeRunningLeases` helper: runs end
+  `cancelled` with the lease cleared, and each task returns to `queued` — or
+  `needs_attention` once attempts are spent — so stopping never loses work.
+  Neither is behind step-up, deliberately: a second-factor challenge is the
+  wrong friction in the moment an owner reaches for the switch, and stopping
+  is always the safe direction. Claiming was already refused for a paused
+  agent or connection; the managed loop now re-reads its run before every
+  turn, so an in-flight run stops within one turn and never overwrites the
+  task the pause re-queued. Owner controls are the Workers card on
+  `/admin/work` — per-agent pause/resume plus pause-everything — as plain
+  form posts that work without JavaScript, in EN/FR/ES. Coverage in
+  `tests/core/agents-pause.test.ts`.)
 - [ ] **C4.08** Complete playbooks with parameter schemas, manual/event/schedule
   triggers, versioned prompts, permissions and import/export as data.
 - [ ] **C4.09** Harden untrusted-input envelopes, indirect prompt-injection
