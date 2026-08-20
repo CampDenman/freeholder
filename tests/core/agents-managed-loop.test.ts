@@ -76,11 +76,24 @@ async function hireManaged(
       adapter: "openai",
       model: "gpt-test",
       credentialRef: KEY_VAR,
+      // A managed run always costs money, so a managed worker always needs a
+      // price and a budget (C4.06). Generous here: these tests are about the
+      // loop, and the budget rules have their own suite.
+      inputCentsPerMillion: 100,
+      outputCentsPerMillion: 500,
     },
     OWNER,
   );
   return hireAgent.call(
-    { connectionId: connection.id, name, role: "worker", toolScopes, autonomy },
+    {
+      connectionId: connection.id,
+      name,
+      role: "worker",
+      toolScopes,
+      autonomy,
+      budgetCents: 100_000,
+      budgetPeriod: "month",
+    },
     OWNER,
   );
 }

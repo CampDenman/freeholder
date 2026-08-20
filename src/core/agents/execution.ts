@@ -187,6 +187,8 @@ export const claimTask = defineService({
       input: z.unknown(),
       inputTrust: z.enum(["owner", "system", "untrusted"]),
       attempt: z.number().int(),
+      /** This task's own ceiling in cents, if the owner set one (C4.06). */
+      budgetCents: z.number().int().nullable(),
     }),
     agent: z.object({
       name: z.string(),
@@ -309,6 +311,7 @@ export const claimTask = defineService({
         input: task.input,
         inputTrust: task.inputTrust,
         attempt: task.attempts,
+        budgetCents: task.budgetCents,
       },
       agent: { name: agent.name, role: agent.role, instructions: agent.instructions },
       autonomy,
