@@ -26,6 +26,12 @@ or backlog.
   opens a second transaction on a second connection, so half the mutation can
   commit while the other half rolls back. Elevation is `ctx.callAsSystem` and
   nothing else — it is deliberately greppable.
+  One sanctioned exception exists: `mail.completeOAuth` commits its one-time
+  state claim on a second connection before exchanging the provider code,
+  because provider codes are single-use and rolling the claim back would
+  advertise an impossible retry. The rationale and its pool-deadlock caveat
+  live at the call site in `src/core/mail/oauth.ts`. Do not add a second
+  exception without recording it here.
 - **Single-tenant.** One deploy = one business. No tenant-isolation
   abstractions.
 - **Monolith + toggleable modules.** No microservices. Adapters for the

@@ -19,6 +19,7 @@ import { getT } from "../../../../i18n";
 import { productAction } from "../../../catalog-actions";
 import { requireStaffActor } from "../../guard";
 import { money } from "../../invoices/format";
+import { domainOrNull } from "../../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function OrderDetailPage({
     throw error;
   });
   const [contact, locations, ships, grants, returns, t] = await Promise.all([
-    getContact.call({ id: bundle.order.contactId }, actor).catch(() => null),
+    domainOrNull(getContact.call({ id: bundle.order.contactId }, actor)),
     listLocations.call({}, actor),
     listFulfillments.call({ orderId: id }, actor),
     listDigitalDeliveries.call({ orderId: id }, actor),

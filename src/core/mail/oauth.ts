@@ -248,6 +248,14 @@ export const completeMailOAuth = defineService({
     // code. Provider codes are one-use too: if the network response is lost
     // after the provider consumes it, rolling this claim back would advertise
     // a retry that can never succeed and would weaken replay evidence.
+    //
+    // This is the codebase's ONE sanctioned exception to "one transaction per
+    // mutation" (CLAUDE.md; MASTER.md §2 principle 12) — recorded there, not
+    // just here. Caveat it carries: this handler holds its own pooled
+    // connection while `db()` takes a second one, so under total pool
+    // exhaustion the two acquisitions can deadlock. Keep the pool floor
+    // above the worst-case concurrent OAuth completions, and do not copy
+    // this shape anywhere else.
     const [state] = await db()
       .update(mailOauthStates)
       .set({ consumedAt: sql`now()` })
