@@ -195,6 +195,7 @@ export const createPlaybook = defineService({
   summary: "Write a reusable brief and say what starts it.",
   kind: "mutation",
   permission: "scoped",
+  agentCallable: false,
   input: z.object({
     name: z.string().trim().min(1).max(120),
     note: z.string().trim().max(500).optional(),
@@ -241,6 +242,7 @@ export const updatePlaybook = defineService({
   summary: "Change a playbook. Changing its wording writes a new version.",
   kind: "mutation",
   permission: "scoped",
+  agentCallable: false,
   input: z.object({
     id: z.uuid(),
     name: z.string().trim().min(1).max(120).optional(),
@@ -320,6 +322,7 @@ export const deletePlaybook = defineService({
   summary: "Remove a playbook. Work it already created is untouched.",
   kind: "mutation",
   permission: "scoped",
+  agentCallable: false,
   writeClass: "destructive",
   input: z.object({ id: z.uuid() }),
   output: z.object({ id: uuid }),
@@ -382,6 +385,7 @@ export const runPlaybook = defineService({
   summary: "Start the work a playbook describes, now.",
   kind: "mutation",
   permission: "scoped",
+  agentCallable: false,
   writeClass: "write",
   input: z.object({
     id: z.uuid(),
@@ -482,6 +486,7 @@ export const importPlaybook = defineService({
   summary: "Add a playbook from a document somebody shared.",
   kind: "mutation",
   permission: "scoped",
+  agentCallable: false,
   input: z.object({
     document: playbookDocument,
     /** Import under a different name when one already exists. */

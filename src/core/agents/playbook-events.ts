@@ -35,6 +35,11 @@ export default [startPlaybooksForEvent];
  * Called for every committed event. Never throws into the bus: a playbook
  * that cannot start must not fail the mutation that emitted the event, and
  * the refusal is already in the audit trail.
+ *
+ * The cheap match happens *before* the service call, deliberately. Every
+ * service call writes an audit row, and a listener that looked and found
+ * nothing is not something that happened to the business — an audit trail
+ * with one row per event per listener is one nobody can read.
  */
 export async function startEventPlaybooks(
   eventName: string,
@@ -44,11 +49,31 @@ export async function startEventPlaybooks(
   if (eventName.startsWith("agentPlaybook.") || eventName.startsWith("agentTask.")) {
     return;
   }
-  const record =
-    payload && typeof payload === "object" && !Array.isArray(payload)
-      ? (payload as Record<string, unknown>)
-      : {};
-  await startPlaybooksForEvent
-    .call({ eventName, payload: record }, { kind: "system" })
-    .catch(() => undefined);
+  try {
+    const { db } = await import("@/core/db");
+    const { and, eq, sql } = await import("drizzle-orm");
+    const { agentPlaybooks } = await import("@/core/agents/schema");
+    const family = `${eventName.split(".")[0]!}.*`;
+    const [waiting] = await db()
+      .select({ id: agentPlaybooks.id })
+      .from(agentPlaybooks)
+      .where(
+        and(
+          eq(agentPlaybooks.trigger, "event"),
+          eq(agentPlaybooks.enabled, true),
+          sql`${agentPlaybooks.eventPattern} in (${eventName}, ${family})`,
+        ),
+      )
+      .limit(1);
+    if (!waiting) return;
+
+    const record =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : {};
+    await startPlaybooksForEvent.call({ eventName, payload: record }, { kind: "system" });
+  } catch {
+    // The mutation that emitted the event has already committed; a playbook
+    // that could not start must not undo it.
+  }
 }
