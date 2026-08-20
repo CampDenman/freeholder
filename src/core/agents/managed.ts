@@ -20,7 +20,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { redact, ServiceError, type Actor } from "@/core/service";
 import { apiKeys } from "@/core/apikeys/schema";
-import { agentConnections, agents } from "@/core/agents/schema";
+import { agentConnections, agentRuns, agents } from "@/core/agents/schema";
 import { claimTask, completeTask, reportStep } from "@/core/agents/execution";
 import { proposeWrite } from "@/core/agents/writes";
 import {
@@ -130,6 +130,22 @@ function affordableOutputTokens(
   // Integer arithmetic throughout: cents × 1e6 / (cents per million tokens).
   const affordable = Math.floor((left * 1_000_000) / perMillion);
   return Math.min(ceiling, affordable);
+}
+
+/**
+ * Is this run still ours to continue?
+ *
+ * Read fresh from the database rather than trusted from memory: a pause, a
+ * stop button or an expired lease all end a run from outside this process,
+ * and the loop is the last place that should find out.
+ */
+async function stillRunning(runId: string): Promise<boolean> {
+  const [run] = await db()
+    .select({ status: agentRuns.status })
+    .from(agentRuns)
+    .where(eq(agentRuns.id, runId))
+    .limit(1);
+  return run?.status === "running";
 }
 
 /** The price the owner set on this connection, if they set one. */
@@ -392,6 +408,13 @@ export async function executeManagedRun(
         });
         return;
       }
+
+      // The kill switch, felt within one turn (C4.07). Pausing an agent ends
+      // its runs and hands the work back; a loop that kept going would be
+      // doing exactly what the owner just stopped, and would then overwrite
+      // the re-queued task when it finished. Checked before spending money
+      // rather than after.
+      if (!(await stillRunning(claim.runId))) return;
 
       // The check §40 asks for, before the step rather than after it: what
       // this turn could cost at worst, against what the run has left.

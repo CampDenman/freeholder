@@ -32,6 +32,7 @@ import {
   redact,
   ServiceError,
   type Actor,
+  type ServiceContext,
   type Tx,
 } from "@/core/service";
 
@@ -497,6 +498,114 @@ export const updateAgent = defineService({
 });
 
 /**
+ * End the runs these agents are holding, and give their work back (C4.07).
+ *
+ * Pausing that only sets a flag stops the *next* claim while the current run
+ * keeps going for the rest of its lease — up to ten minutes of an agent doing
+ * the thing an owner just hit the switch to stop. §40 asks for both halves:
+ * prevent new claims *and* safely stop or expire current leases. Safely means
+ * the work returns to the queue rather than being lost, and the attempt still
+ * counts, because it was one.
+ */
+async function revokeRunningLeases(
+  ctx: ServiceContext,
+  agentIds: string[],
+  reason: string,
+): Promise<number> {
+  if (agentIds.length === 0) return 0;
+  const running = await ctx.tx
+    .select({ id: agentRuns.id, taskId: agentRuns.taskId })
+    .from(agentRuns)
+    .where(and(inArray(agentRuns.agentId, agentIds), eq(agentRuns.status, "running")));
+  if (running.length === 0) return 0;
+
+  await ctx.tx
+    .update(agentRuns)
+    .set({
+      status: "cancelled",
+      stopReason: "cancelled",
+      endedAt: sql`now()`,
+      leaseExpiresAt: null,
+      error: reason,
+    })
+    .where(
+      inArray(
+        agentRuns.id,
+        running.map((run) => run.id),
+      ),
+    );
+
+  for (const run of running) {
+    const [task] = await ctx.tx
+      .select({ attempts: agentTasks.attempts })
+      .from(agentTasks)
+      .where(eq(agentTasks.id, run.taskId))
+      .limit(1);
+    await ctx.tx
+      .update(agentTasks)
+      .set({
+        status:
+          (task?.attempts ?? 0) >= MAX_TASK_ATTEMPTS ? "needs_attention" : "queued",
+        failureReason: reason,
+      })
+      .where(and(eq(agentTasks.id, run.taskId), eq(agentTasks.status, "running")));
+    ctx.queueEvent("agentRun.stopped", { runId: run.id, taskId: run.taskId });
+  }
+  return running.length;
+}
+
+/**
+ * Pause or resume one worker (§40's per-agent pause).
+ *
+ * Deliberately not behind step-up, unlike editing an agent: this is the
+ * control an owner reaches for when something is going wrong, and a
+ * second-factor challenge is exactly the wrong friction in that moment.
+ * Stopping is always safe — the work goes back on the queue.
+ */
+export const pauseAgent = defineService({
+  name: "agents.pause",
+  summary: "Pause or resume one worker, ending any run it is holding.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id: z.uuid(),
+    paused: z.boolean().default(true),
+    reason: z.string().max(500).optional(),
+  }),
+  output: row({
+    id: uuid,
+    name: z.string(),
+    status: z.enum(["active", "paused"]),
+    stoppedRuns: z.number().int(),
+  }),
+  handler: async (input, ctx) => {
+    refuseAgents(ctx.actor, "pause an agent");
+    const [row] = await ctx.tx
+      .update(agents)
+      .set({ status: input.paused ? "paused" : "active" })
+      .where(eq(agents.id, input.id))
+      .returning({ id: agents.id, name: agents.name, status: agents.status });
+    if (!row) throw new ServiceError("not_found", "No such agent.");
+
+    const stoppedRuns = input.paused
+      ? await revokeRunningLeases(
+          ctx,
+          [row.id],
+          input.reason ?? `${row.name} was paused by the owner.`,
+        )
+      : 0;
+
+    ctx.setSubject("agent", row.id);
+    ctx.queueEvent(input.paused ? "agent.paused" : "agent.resumed", {
+      id: row.id,
+      name: row.name,
+      stoppedRuns,
+    });
+    return { ...row, stoppedRuns };
+  },
+});
+
+/**
  * Stop every agent at once (§40's kill switch).
  *
  * Separate from pausing one because it is the thing an owner reaches for when
@@ -505,22 +614,36 @@ export const updateAgent = defineService({
  */
 export const pauseAllAgents = defineService({
   name: "agents.pauseAll",
-  summary: "Pause every agent immediately.",
+  summary: "Pause every agent immediately, ending any runs they hold.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ paused: z.boolean().default(true) }),
-  output: z.object({ changed: z.number().int() }),
+  input: z.object({
+    paused: z.boolean().default(true),
+    reason: z.string().max(500).optional(),
+  }),
+  output: z.object({
+    changed: z.number().int(),
+    stoppedRuns: z.number().int(),
+  }),
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "pause agents");
     const rows = await ctx.tx
       .update(agents)
       .set({ status: input.paused ? "paused" : "active" })
       .returning({ id: agents.id });
+    const stoppedRuns = input.paused
+      ? await revokeRunningLeases(
+          ctx,
+          rows.map((row) => row.id),
+          input.reason ?? "Every agent was paused by the owner.",
+        )
+      : 0;
     ctx.setSubject("agent", "all");
     ctx.queueEvent(input.paused ? "agent.allPaused" : "agent.allResumed", {
       count: rows.length,
+      stoppedRuns,
     });
-    return { changed: rows.length };
+    return { changed: rows.length, stoppedRuns };
   },
 });
 
@@ -1214,6 +1337,7 @@ export default [
   listAgents,
   hireAgent,
   updateAgent,
+  pauseAgent,
   pauseAllAgents,
   createTask,
   listTasks,

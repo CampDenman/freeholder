@@ -15,6 +15,8 @@ import {
   createTask,
   flagTask,
   inspectRun,
+  pauseAgent,
+  pauseAllAgents,
   reopenTask,
   retryTask,
   stopRun,
@@ -33,6 +35,29 @@ function text(form: FormData, key: string): string {
 
 async function actor() {
   return actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+}
+
+/**
+ * Pause or resume one worker, or every worker at once (C4.07).
+ *
+ * Plain form posts rather than a client component: the kill switch has to
+ * work on a page whose JavaScript never arrived, which is the moment an owner
+ * is most likely to want it.
+ */
+export async function pauseAgentAction(form: FormData): Promise<void> {
+  const paused = text(form, "paused") !== "false";
+  const id = text(form, "id");
+  try {
+    if (id) {
+      await pauseAgent.call({ id, paused }, await actor());
+    } else {
+      await pauseAllAgents.call({ paused }, await actor());
+    }
+  } catch {
+    redirect("/admin/work?error=pause");
+  }
+  revalidatePath("/admin/work");
+  redirect(`/admin/work?saved=${paused ? "paused" : "resumed"}`);
 }
 
 export async function createTaskAction(
