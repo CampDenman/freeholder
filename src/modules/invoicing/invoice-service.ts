@@ -635,7 +635,7 @@ export const createDraftInvoice = defineService({
         customerTaxId: input.customerTaxId,
         requiredTaxLegend:
           quoteDetails.exemption?.kind === "reverse_charge"
-            ? "Tax not charged — reverse charge applies."
+            ? "Tax not charged â€” reverse charge applies."
             : input.tax.mode === "not_applicable"
               ? input.tax.reason
               : quote.totalTaxMinor === 0
@@ -796,6 +796,7 @@ function inArrayValue<T extends string>(value: string, choices: readonly T[]): v
 
 export const voidInvoice = defineService({
   name: "invoicing.void",
+  writeClass: "destructive",
   summary: "Void an unpaid invoice while retaining its issued number and audit trail.",
   kind: "mutation",
   permission: "scoped",
@@ -1025,6 +1026,7 @@ export const settlePayment = defineService({
 
 export const createRefund = defineService({
   name: "invoicing.createRefund",
+  writeClass: "money",
   summary: "Reserve an idempotent refund amount against one successful payment.",
   kind: "mutation",
   permission: "scoped",
@@ -1289,6 +1291,7 @@ export const issueCreditNote = defineService({
 
 export const voidCreditNote = defineService({
   name: "invoicing.voidCreditNote",
+  writeClass: "destructive",
   summary: "Void an issued credit note without deleting its legal number or history.",
   kind: "mutation",
   permission: "scoped",

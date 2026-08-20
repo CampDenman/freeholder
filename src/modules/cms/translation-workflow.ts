@@ -40,18 +40,36 @@ function sourceStrings(title: string, seo: PageSeoFields, blocks: BlockNode[]) {
   return rows;
 }
 
+interface DraftedValues {
+  values: Record<string, string>;
+  /**
+   * True only when a translation model actually produced the values. The
+   * caller records "machine" strictly on this flag: an identity seed written
+   * because no adapter ran must surface as an untranslated draft, never as a
+   * finished machine translation the owner believes is French.
+   */
+  machine: boolean;
+}
+
 async function draftValues(
   rows: { key: string; value: string }[],
   locale: string,
   entityId: string,
-): Promise<Record<string, string>> {
+): Promise<DraftedValues> {
   const identity = Object.fromEntries(
     rows.map((row) => [row.key, `[draft] ${row.value}`]),
   );
+  const { aiAdapters } = await import("@/adapters/ai");
+  let adapter;
   try {
-    const { aiAdapters } = await import("@/adapters/ai");
-    const adapter = aiAdapters.get(instanceConfig.adapters.ai);
-    if (!adapter.status.available) return identity;
+    adapter = aiAdapters.get(instanceConfig.adapters.ai);
+  } catch {
+    // The configured provider has no registered implementation. The seed
+    // still works; it just must not claim a machine ran.
+    return { values: identity, machine: false };
+  }
+  if (!adapter.status.available) return { values: identity, machine: false };
+  try {
     const result = await adapter.generate({
       purpose: "translation",
       system:
@@ -66,15 +84,15 @@ async function draftValues(
         : result.text
           ? (JSON.parse(result.text) as Record<string, unknown>)
           : null;
-    if (!parsed) return identity;
+    if (!parsed) return { values: identity, machine: false };
     const out: Record<string, string> = {};
     for (const row of rows) {
       const value = parsed[row.key];
       out[row.key] = typeof value === "string" && value.trim() ? value : identity[row.key]!;
     }
-    return out;
+    return { values: out, machine: true };
   } catch {
-    return identity;
+    return { values: identity, machine: false };
   }
 }
 
@@ -108,7 +126,8 @@ export function seoComplete(fields: {
 
 export const draftPageTranslation = defineService({
   name: "cms.draftPageTranslation",
-  summary: "Seed a machine draft. It is never served publicly until reviewed.",
+  summary:
+    "Seed a translation draft — machine-translated only when an AI adapter actually ran. Never served publicly until reviewed.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({
@@ -138,7 +157,7 @@ export const draftPageTranslation = defineService({
     const rows = sourceStrings(title, seo, blocks);
     const drafted = await draftValues(rows, input.locale, page.id);
     const blockValues: Record<string, string> = {};
-    for (const [key, value] of Object.entries(drafted)) {
+    for (const [key, value] of Object.entries(drafted.values)) {
       if (key !== "title" && key !== "seo.description" && key !== "seo.title") {
         blockValues[key] = value;
       }
@@ -147,12 +166,12 @@ export const draftPageTranslation = defineService({
       entityType: "page",
       entityId: page.id,
       locale: input.locale,
-      status: "machine",
+      status: drafted.machine ? "machine" : "draft",
       fields: {
-        title: drafted.title,
+        title: drafted.values.title,
         seo: {
-          title: drafted["seo.title"],
-          description: drafted["seo.description"],
+          title: drafted.values["seo.title"],
+          description: drafted.values["seo.description"],
         },
         blocks: applyTranslations(blocks, blockValues),
       },

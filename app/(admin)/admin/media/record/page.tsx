@@ -107,6 +107,8 @@ export default async function MediaRecordPage({
             saveReview: t("media.capture.saveReview"),
             confirm: t("media.capture.confirm"),
             discard: t("media.capture.discard"),
+            uploadIncomplete: t("media.capture.uploadIncomplete"),
+            retryUpload: t("media.capture.retryUpload"),
           }}
         />
       ) : null}

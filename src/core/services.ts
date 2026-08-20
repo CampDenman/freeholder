@@ -11,6 +11,7 @@ import magicLinkServices from "@/core/auth/magic-links/service";
 import resetServices from "@/core/auth/reset";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
+import agentWrites from "@/core/agents/writes";
 import apiKeyServices from "@/core/apikeys/service";
 import connectionServices from "@/core/connections/service";
 import contactServices from "@/core/contacts/service";
@@ -53,6 +54,7 @@ const services: Service[] = [
   ...resetServices,
   ...agentServices,
   ...agentExecution,
+  ...agentWrites,
   ...apiKeyServices,
   ...connectionServices,
   ...contactServices,

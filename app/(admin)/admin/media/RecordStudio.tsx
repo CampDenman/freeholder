@@ -29,6 +29,8 @@ export interface RecordStudioLabels {
   saveReview: string;
   confirm: string;
   discard: string;
+  uploadIncomplete: string;
+  retryUpload: string;
 }
 
 interface Session {
@@ -66,6 +68,54 @@ export function RecordStudio({
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const stream = useRef<MediaStream | null>(null);
+  // Local playback assembles from memory and always looks intact, so upload
+  // failures must be tracked chunk by chunk or a hole in the server copy
+  // stays invisible until the recording is gone.
+  const uploads = useRef<Promise<void>[]>([]);
+  const failedChunks = useRef<Map<number, Blob>>(new Map());
+  const chunkCount = useRef(0);
+  const mimeType = useRef("video/webm");
+
+  async function uploadChunk(sequence: number, data: Blob, attempts = 3): Promise<void> {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        const form = new FormData();
+        form.set("id", session.id);
+        form.set("sequence", String(sequence));
+        form.set(
+          "file",
+          new File([data], `chunk-${sequence}.webm`, { type: mimeType.current }),
+        );
+        await appendChunkAction(form);
+        failedChunks.current.delete(sequence);
+        return;
+      } catch {
+        if (attempt < attempts) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+        }
+      }
+    }
+    failedChunks.current.set(sequence, data);
+  }
+
+  async function finalize(): Promise<void> {
+    await Promise.all(uploads.current);
+    if (failedChunks.current.size > 0) {
+      const retry = [...failedChunks.current.entries()];
+      await Promise.all(retry.map(([sequence, data]) => uploadChunk(sequence, data, 2)));
+    }
+    if (failedChunks.current.size > 0) {
+      setError(labels.uploadIncomplete);
+      return;
+    }
+    setError(null);
+    const assemble = new FormData();
+    assemble.set("id", session.id);
+    assemble.set("filename", `${session.source}.webm`);
+    assemble.set("expectedChunks", String(chunkCount.current));
+    await assembleCaptureAction(assemble);
+    setStaged(true);
+  }
 
   useEffect(() => {
     return () => {
@@ -103,23 +153,25 @@ export function RecordStudio({
     if (!stream.current) await requestPermission();
     if (!stream.current) return;
     chunks.current = [];
+    uploads.current = [];
+    failedChunks.current = new Map();
+    chunkCount.current = 0;
     const liveForm = new FormData();
     liveForm.set("id", session.id);
     await markLiveAction(liveForm);
     const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
       ? "video/webm;codecs=vp9,opus"
       : "video/webm";
+    mimeType.current = mime;
     const instance = new MediaRecorder(stream.current, { mimeType: mime });
     let sequence = 0;
     instance.ondataavailable = (event) => {
       if (event.data.size === 0) return;
       chunks.current.push(event.data);
-      const form = new FormData();
-      form.set("id", session.id);
-      form.set("sequence", String(sequence));
-      form.set("file", new File([event.data], `chunk-${sequence}.webm`, { type: mime }));
+      const current = sequence;
       sequence += 1;
-      void appendChunkAction(form);
+      chunkCount.current = sequence;
+      uploads.current.push(uploadChunk(current, event.data));
     };
     instance.start(2_000);
     recorder.current = instance;
@@ -144,11 +196,7 @@ export function RecordStudio({
     const stop = new FormData();
     stop.set("id", session.id);
     await markStoppedAction(stop);
-    const assemble = new FormData();
-    assemble.set("id", session.id);
-    assemble.set("filename", `${session.source}.webm`);
-    await assembleCaptureAction(assemble);
-    setStaged(true);
+    await finalize();
   }
 
   return (
@@ -186,6 +234,11 @@ export function RecordStudio({
           {!live && status !== "confirmed" ? (
             <Button type="button" onClick={() => void begin()}>
               {labels.record}
+            </Button>
+          ) : null}
+          {!live && !staged && error === labels.uploadIncomplete ? (
+            <Button type="button" onClick={() => void finalize()}>
+              {labels.retryUpload}
             </Button>
           ) : null}
         </div>
