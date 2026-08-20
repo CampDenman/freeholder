@@ -58,13 +58,30 @@ describe.runIf(hasDatabase)("catalog carts", { timeout: 30_000 }, () => {
     expect(filled.allPriced).toBe(true);
 
     const contact = await createContact.call({ name: "Ada", email: "ada@example.test" }, OWNER);
-    const owned = await attachCartToContact.call({ token: guest.cart.token, contactId: contact.id }, ANONYMOUS);
+    // A contact UUID is an identifier, not a credential: an anonymous caller
+    // holding one must not be able to read or fill that contact's basket.
+    const refused = await failure(
+      attachCartToContact.call({ token: guest.cart.token, contactId: contact.id }, ANONYMOUS),
+    );
+    expect(refused.code).toBe("permission");
+    expect(
+      (
+        await failure(
+          getOrCreateCart.call(
+            { contactId: contact.id, currency: "CAD" },
+            ANONYMOUS,
+          ),
+        )
+      ).code,
+    ).toBe("permission");
+
+    const owned = await attachCartToContact.call({ token: guest.cart.token, contactId: contact.id }, OWNER);
     expect(owned.cart.contactId).toBe(contact.id);
     expect(owned.lines[0]?.quantity).toBe(2);
 
     const again = await getOrCreateCart.call(
       { token: guest.cart.token, contactId: contact.id, currency: "CAD" },
-      ANONYMOUS,
+      OWNER,
     );
     expect(again.cart.id).toBe(owned.cart.id);
   });
@@ -76,7 +93,7 @@ describe.runIf(hasDatabase)("catalog carts", { timeout: 30_000 }, () => {
     await addCartItem.call({ cartId: owned.cart.id, variantId: variant.id, quantity: 1 }, OWNER);
     const guest = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
     await addCartItem.call({ cartId: guest.cart.id, variantId: variant.id, quantity: 3 }, ANONYMOUS);
-    const merged = await attachCartToContact.call({ token: guest.cart.token, contactId: contact.id }, ANONYMOUS);
+    const merged = await attachCartToContact.call({ token: guest.cart.token, contactId: contact.id }, OWNER);
     expect(merged.cart.id).toBe(owned.cart.id);
     expect(merged.lines[0]?.quantity).toBe(4);
   });
