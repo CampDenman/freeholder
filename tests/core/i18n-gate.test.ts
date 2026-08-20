@@ -47,6 +47,7 @@ import {
 } from "@/modules/catalog/contract";
 import { IMPORT_STATUSES, PLUGIN_STATUSES } from "@/core/plugins/schema";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
+import { WRITE_KINDS } from "@/core/agents/previews";
 import en from "../../locales/en.json";
 import es from "../../locales/es.json";
 import fr from "../../locales/fr.json";
@@ -235,6 +236,7 @@ describe("the families built from a template key", () => {
     ["catalog.promo.offerKind", OFFER_RULE_KINDS],
     ["work.status", TASK_STATUSES],
     ["work.column", BOARD_COLUMNS],
+    ["work.approval.kind", WRITE_KINDS],
     ["plugins.status", PLUGIN_STATUSES],
     [
       "imports.status",

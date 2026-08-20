@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// CMS services (MASTER.md §11, §32).
+// CMS services (MASTER.md Â§11, Â§32).
 //
 // The module's only entry points. The public route, the admin, the REST API
 // and MCP all arrive here, which is what makes "structure is a database write"
@@ -264,7 +264,7 @@ const restoreResult = z.discriminatedUnion("subjectType", [
 /**
  * The page behind a path, for the public surface.
  *
- * Public, and *only* published rows — a draft must not be readable by URL,
+ * Public, and *only* published rows â€” a draft must not be readable by URL,
  * because "unlisted" is not a permission model. The admin preview path reads
  * through `cms.getPage`, which is staff-only and can see drafts.
  */
@@ -277,8 +277,8 @@ export const resolvePage = defineService({
   output: pageRow.nullable(),
   handler: async (input, ctx) => {
     // Pages are stored in the site's own language and *translated*, not
-    // duplicated (§4.9). So the lookup is by slug in the source language, and
-    // the requested locale decides which words come back — which is what makes
+    // duplicated (Â§4.9). So the lookup is by slug in the source language, and
+    // the requested locale decides which words come back â€” which is what makes
     // /fr/services the same page as /services rather than a parallel one
     // somebody has to remember to keep in step.
     const [source] = await ctx.tx
@@ -305,7 +305,7 @@ export const resolvePage = defineService({
     if (!translation) {
       // No reviewed translation: the page is served in the site's own
       // language rather than not at all. A visitor who followed a French link
-      // to an untranslated page should read the English one, not a 404 — and
+      // to an untranslated page should read the English one, not a 404 â€” and
       // hreflang only ever advertises the locales that do have one.
       return page;
     }
@@ -354,7 +354,7 @@ export const listPages = defineService({
 });
 
 /**
- * Published pages as paths — the sitemap source this module contributes (§5).
+ * Published pages as paths â€” the sitemap source this module contributes (Â§5).
  *
  * Public because a sitemap is public. It returns only what is already readable
  * at a URL, so it cannot leak a draft.
@@ -408,7 +408,7 @@ export const publishedPaths = defineService({
       return published.map((page) => toEntry(page.slug, page));
     }
 
-    // A locale's sitemap lists what that locale actually has (§5). A page with
+    // A locale's sitemap lists what that locale actually has (Â§5). A page with
     // no reviewed translation is served in the site's own language, and
     // listing it under /fr/ would advertise a French page that is in English.
     const translated = new Set(
@@ -442,6 +442,7 @@ const duplicateSlug = (slugValue: string) =>
 
 export const createPage = defineService({
   name: "cms.createPage",
+  writeClass: "blocks",
   summary: "Add a page.",
   kind: "mutation",
   permission: "scoped",
@@ -491,6 +492,7 @@ export const createPage = defineService({
  */
 export const deleteDraftPage = defineService({
   name: "cms.deleteDraftPage",
+  writeClass: "destructive",
   summary: "Permanently remove one draft page.",
   kind: "mutation",
   permission: "scoped",
@@ -661,10 +663,11 @@ export const verifyDemoCms = defineService({
  *
  * The revision is written *before* the update, inside the same transaction, so
  * "restore" always has somewhere to go back to and a failed save cannot leave a
- * revision describing a state that never existed (§2 principle 12).
+ * revision describing a state that never existed (Â§2 principle 12).
  */
 export const updatePage = defineService({
   name: "cms.updatePage",
+  writeClass: "blocks",
   summary: "Change a page's content or settings.",
   kind: "mutation",
   permission: "scoped",
@@ -742,7 +745,7 @@ export const updatePage = defineService({
         throw error;
       });
 
-    // §5: "automatic redirect creation on slug change — slugs never silently
+    // Â§5: "automatic redirect creation on slug change â€” slugs never silently
     // break". Renaming a page is a normal editorial act; every link anyone
     // ever shared to the old address breaking is not, and the platform is the
     // only party that can see the rename happen.
@@ -784,7 +787,7 @@ export const updatePage = defineService({
  *
  * The editor has already seen `cms.describeConflict`. This write is the same
  * working-copy update as `cms.updatePage`, but only after the caller names the
- * current server version — "keep mine" is explicit, not a silent overwrite.
+ * current server version â€” "keep mine" is explicit, not a silent overwrite.
  */
 export const mergePage = defineService({
   name: "cms.mergePage",
@@ -903,7 +906,7 @@ export const publishPage = defineService({
  */
 export const getSection = defineService({
   name: "cms.getSection",
-  summary: "One section by key — the header, the footer, a saved arrangement.",
+  summary: "One section by key â€” the header, the footer, a saved arrangement.",
   kind: "query",
   permission: "public",
   input: z.object({
@@ -965,6 +968,7 @@ export const listSections = defineService({
 
 export const updateSection = defineService({
   name: "cms.updateSection",
+  writeClass: "blocks",
   summary: "Change a section's content.",
   kind: "mutation",
   permission: "scoped",
@@ -1223,7 +1227,7 @@ export const pageAuthorSummary = defineService({
  * Put a page or section back to an earlier version.
  *
  * Restoring is itself a change, so it writes a revision of the *current* state
- * first — §37 requires every change to be "reversible within one action", and
+ * first â€” Â§37 requires every change to be "reversible within one action", and
  * an undo you cannot undo only half satisfies that.
  */
 export const restoreRevision = defineService({
@@ -1315,18 +1319,18 @@ export const restoreRevision = defineService({
 /* ---------------------------------------------------------------- defaults */
 
 /**
- * Give a fresh instance a site (§32: "day one still looks designed").
+ * Give a fresh instance a site (Â§32: "day one still looks designed").
  *
- * Idempotent by construction — every insert is `onConflictDoNothing` against
- * the natural key — so it is safe to call on every setup completion, on a
+ * Idempotent by construction â€” every insert is `onConflictDoNothing` against
+ * the natural key â€” so it is safe to call on every setup completion, on a
  * re-run, and from an admin button that repairs a site somebody emptied.
  *
  * Owner-permission, because creating a site's chrome is not a routine staff
  * edit. The setup-completion listener is not a user and has nobody to act as,
- * so it calls as `system` — which `permits()` allows past every check. That is
+ * so it calls as `system` â€” which `permits()` allows past every check. That is
  * the one elevation in this module, it is named `onSetupCompleted`, and it is
  * greppable, which is the whole reason elevation is spelled out rather than
- * implied (§11).
+ * implied (Â§11).
  */
 export const ensureDefaults = defineService({
   name: "cms.ensureDefaults",
@@ -1420,7 +1424,7 @@ export const ensureDefaults = defineService({
  *
  * The first module event listener in the codebase, and the reason the bus
  * exists: core's settings module announces that a business now exists, and cms
- * responds without either module importing the other (§11 — "modules
+ * responds without either module importing the other (Â§11 â€” "modules
  * communicate only via the event bus and core services").
  */
 export {

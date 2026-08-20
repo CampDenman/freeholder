@@ -1,9 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Contact services (MASTER.md §2 principle 3, §4.1). The spine's write path:
+// Contact services (MASTER.md Â§2 principle 3, Â§4.1). The spine's write path:
 // every mutation emits a TimelineEvent (modules write events; the CRM reads
 // them) and lands in the audit log via the service wrapper. No module gets
-// its own notion of "customer" — this is the only door.
+// its own notion of "customer" â€” this is the only door.
 import { z } from "zod";
 import {
   and,
@@ -93,10 +93,10 @@ const contactFields = z.object({
   tags: contactTags.optional(),
   customFields: z.record(z.string(), z.unknown()).optional(),
   lifecycleStage: lifecycleStage.optional(),
-  /** BCP-47; customer-facing surfaces follow this (§4.9). */
+  /** BCP-47; customer-facing surfaces follow this (Â§4.9). */
   preferredLocale: localeValue.nullable().optional(),
   timezone: timezoneValue.nullable().optional(),
-  /** ISO-3166-1 alpha-2, uppercased; tax keys off this (§4.10). */
+  /** ISO-3166-1 alpha-2, uppercased; tax keys off this (Â§4.10). */
   country: countryValue.nullable().optional(),
   ownerNotes: z.string().max(10_000).nullable().optional(),
 });
@@ -211,7 +211,7 @@ type ResolveInput = Partial<z.output<typeof contactFields>>;
 
 /**
  * What an automated path is allowed to change about a contact it already knows
- * (§4.6: a form's destination is contact_create *or update*).
+ * (Â§4.6: a form's destination is contact_create *or update*).
  *
  * The governing rule is that automated data fills blanks and never overwrites.
  * A returning visitor typing a phone number into a form should not be able to
@@ -219,18 +219,18 @@ type ResolveInput = Partial<z.output<typeof contactFields>>;
  * submission must not relabel where the contact originally came from. So:
  *
  * - blank fields are filled;
- * - `source` is first-touch and therefore never rewritten — overwriting it
+ * - `source` is first-touch and therefore never rewritten â€” overwriting it
  *   would destroy the attribution the analytics funnel is built on;
  * - `name` is replaced only while it is still the placeholder `resolve` itself
  *   wrote (the email address), so "someone@example.com" becomes "Sam Okonjo"
  *   the first time a real name arrives, and never changes again;
- * - `lifecycleStage` only moves forward, as it does in a merge — a newsletter
+ * - `lifecycleStage` only moves forward, as it does in a merge â€” a newsletter
  *   signup from an existing customer must not demote them back to a lead;
  * - `tags` union, `customFields` merge with the stored value winning;
  * - `ownerNotes` is never touched by an automated path at all.
  *
  * Returns the columns that actually changed, so an unchanged contact costs no
- * UPDATE — `updated_at` is a change cursor now, and bumping it on every form
+ * UPDATE â€” `updated_at` is a change cursor now, and bumping it on every form
  * view would make it useless for exactly the sync and export paths that read it.
  */
 function incomingChanges(
@@ -281,9 +281,9 @@ function incomingChanges(
 
 /**
  * The door every automated path uses. A form submission, an import, a checkout
- * by a returning visitor, an affiliate signup — all of them mean "this email
+ * by a returning visitor, an affiliate signup â€” all of them mean "this email
  * address is the person," and none of them may mint a second spine record for
- * someone the business already knows (§2 principle 3). Anonymous surfaces reach
+ * someone the business already knows (Â§2 principle 3). Anonymous surfaces reach
  * this through `ctx.callAsSystem`; they never create contacts directly.
  */
 export const resolveContact = defineService({
@@ -407,7 +407,7 @@ export const resolveContact = defineService({
 
 /** One table that references `contacts.id`, and how a merge repoints it. */
 export interface ContactReference {
-  /** Physical table name — what the completeness gate matches against. */
+  /** Physical table name â€” what the completeness gate matches against. */
   table: string;
   repoint: (
     tx: Tx,
@@ -466,13 +466,13 @@ function assertPointerState(
 /**
  * Every table that references `contacts.id`.
  *
- * ⚠ CONVENTION (CLAUDE.md): a module that adds a `contact_id` column adds its
+ * âš  CONVENTION (CLAUDE.md): a module that adds a `contact_id` column adds its
  * entry here in the same PR. Rows left pointing at a deleted duplicate are the
- * silent fork of the spine that §2 principle 3 exists to prevent.
+ * silent fork of the spine that Â§2 principle 3 exists to prevent.
  *
  * The list is hand-maintained rather than reflected off the schema on purpose.
  * A generic `UPDATE ... SET contact_id` would corrupt any table whose
- * contact_id sits in a unique constraint — a per-contact subscription row, say,
+ * contact_id sits in a unique constraint â€” a per-contact subscription row, say,
  * where the survivor may already hold the very row being repointed onto it.
  * Those tables need a decision (merge? drop? keep the survivor's?), and a
  * reflection cannot make one.
@@ -584,11 +584,11 @@ const references: ContactReference[] = [
 /**
  * How a *module* declares what a merge means for its own table.
  *
- * Core cannot import a module's schema (§11), so a module that adds a
+ * Core cannot import a module's schema (Â§11), so a module that adds a
  * contact_id column registers its repoint from its own services module, which
  * boot imports exactly when the module is installed. The decision stays with
- * the people who know what their table means — which is the whole argument for
- * the list being hand-written — while the obligation to make one is still
+ * the people who know what their table means â€” which is the whole argument for
+ * the list being hand-written â€” while the obligation to make one is still
  * enforced by the completeness gate.
  *
  * Idempotent per table, because boot is a precondition rather than a one-shot
@@ -656,6 +656,7 @@ const storedReferenceStateSchema = z.array(
 /** Fold a duplicate into the record that survives. */
 export const mergeContacts = defineService({
   name: "contacts.merge",
+  writeClass: "destructive",
   summary: "Merge a duplicate contact into the one that survives.",
   kind: "mutation",
   permission: "scoped",
@@ -727,7 +728,7 @@ export const mergeContacts = defineService({
 
     // Two contacts, two logins, one survivor: `contacts.user_id` is unique and
     // 1:1, so the merge can keep only one of them. Every way of choosing
-    // silently is wrong — the loser's `users` row would outlive the contact it
+    // silently is wrong â€” the loser's `users` row would outlive the contact it
     // described, leaving a credential that still signs in and resolves to
     // nobody, and deleting it instead would destroy a password and every
     // session belonging to a real person on the strength of one click.
@@ -743,7 +744,7 @@ export const mergeContacts = defineService({
     ) {
       throw new ServiceError(
         "conflict",
-        `Both contacts can sign in — ${surviving.email ?? "the survivor"} and ` +
+        `Both contacts can sign in â€” ${surviving.email ?? "the survivor"} and ` +
           `${duplicate.email ?? "the duplicate"} each have their own login. ` +
           `Remove one of the two logins first, then merge.`,
       );
@@ -756,7 +757,7 @@ export const mergeContacts = defineService({
     }> = [];
     const undoBlockers: string[] = [];
 
-    // Every contact_id FK in the schema, repointed — core's and every
+    // Every contact_id FK in the schema, repointed â€” core's and every
     // installed module's, with an explicit recovery boundary.
     for (const reference of contactReferences()) {
       const before = await reference.captureForUndo(
@@ -1011,6 +1012,7 @@ export const undoContactMerge = defineService({
 
 export const updateContact = defineService({
   name: "contacts.update",
+  writeClass: "write",
   summary: "Change spine fields on a contact.",
   kind: "mutation",
   permission: "scoped",
@@ -1153,7 +1155,7 @@ export const listContacts = defineService({
       .offset(input.offset);
 
     // Counted separately rather than by measuring `rows`, which only ever
-    // holds one page — a caller cannot page through what it cannot size.
+    // holds one page â€” a caller cannot page through what it cannot size.
     const [totals] = await ctx.tx
       .select({ n: count() })
       .from(contacts)
@@ -1181,9 +1183,9 @@ export const listContactTags = defineService({
 });
 
 /**
- * The CRM timeline for one contact (§4.1). A *view* over the spine rather than
+ * The CRM timeline for one contact (Â§4.1). A *view* over the spine rather than
  * a separate store: modules write TimelineEvents as things happen, and this
- * reads them back. Nothing here knows what a quote or a booking is — that is
+ * reads them back. Nothing here knows what a quote or a booking is â€” that is
  * the point of the integration contract.
  */
 export const contactTimeline = defineService({
@@ -1207,7 +1209,7 @@ export const contactTimeline = defineService({
 
 /**
  * The shape of the spine at a glance. Counted in the database rather than by
- * loading rows and measuring the array — a contact list that outgrows one page
+ * loading rows and measuring the array â€” a contact list that outgrows one page
  * must not turn the dashboard into a full table scan in application memory.
  */
 export const contactStats = defineService({

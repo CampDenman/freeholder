@@ -66,6 +66,7 @@ async function referencedKeys(tx: Tx, start: Iterable<string>): Promise<Set<stri
 
 export const createSection = defineService({
   name: "cms.createSection",
+  writeClass: "blocks",
   summary: "Save a reusable Section from a name and a block tree.",
   kind: "mutation",
   permission: "scoped",
@@ -226,6 +227,7 @@ export const listSectionUsages = defineService({
 
 export const deleteSection = defineService({
   name: "cms.deleteSection",
+  writeClass: "destructive",
   summary: "Delete a reusable Section when nothing still instances it.",
   kind: "mutation",
   permission: "scoped",

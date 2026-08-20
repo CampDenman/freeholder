@@ -123,6 +123,7 @@ registerContactPrivacySource({
 
 export const checkoutCart = defineService({
   name: "catalog.checkoutCart",
+  writeClass: "money",
   summary: "Turn an open cart into an order and an invoice.",
   kind: "mutation",
   permission: "public",
@@ -269,7 +270,7 @@ export const checkoutCart = defineService({
       lines: basket.lines.map((line, index) => ({
         sourceType: "variant",
         sourceId: line.variantId,
-        description: `${line.productName} · ${line.sku}`,
+        description: `${line.productName} Â· ${line.sku}`,
         quantityMicros: line.quantity * QUANTITY_SCALE,
         unitAmountMinor: line.unitAmountMinor!,
         discountMinor: discountShares[index] ?? 0,
@@ -403,6 +404,7 @@ export const checkoutCart = defineService({
 
 export const payOrder = defineService({
   name: "catalog.payOrder",
+  writeClass: "money",
   summary: "Mark an order paid after its invoice is settled. Stock leaves on shipment.",
   kind: "mutation",
   permission: "scoped",
@@ -455,6 +457,7 @@ export const payOrder = defineService({
 
 export const cancelOrder = defineService({
   name: "catalog.cancelOrder",
+  writeClass: "destructive",
   summary: "Cancel an unpaid order and release its stock holds.",
   kind: "mutation",
   permission: "scoped",
@@ -487,7 +490,7 @@ export const cancelOrder = defineService({
       try {
         await ctx.callAsSystem(voidInvoice, { id: order.invoiceId, reason: "Order cancelled." });
       } catch {
-        /* already void, or invoicing refused — the order still cancels */
+        /* already void, or invoicing refused â€” the order still cancels */
       }
     }
     await ctx.tx.update(orders).set({ status: "cancelled", updatedAt: new Date() }).where(eq(orders.id, order.id));
