@@ -26,15 +26,22 @@ export function PagePresence({
   useEffect(() => {
     let cancelled = false;
     const pulse = async (editing: boolean) => {
-      const result = await heartbeatPresenceAction(pageId, editing);
-      if (!cancelled && result.actors) setActors(result.actors);
+      try {
+        const result = await heartbeatPresenceAction(pageId, editing);
+        if (!cancelled && result.actors) setActors(result.actors);
+      } catch {
+        // A missed heartbeat is recoverable: the next tick retries, and the
+        // server expires silent editors by TTL either way.
+      }
     };
     void pulse(true);
     const timer = window.setInterval(() => void pulse(true), 30_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
-      void leavePresenceAction(pageId);
+      // Best effort: if this release never lands (tab killed mid-flight),
+      // the presence row expires by TTL rather than lingering forever.
+      leavePresenceAction(pageId).catch(() => undefined);
     };
   }, [pageId]);
 

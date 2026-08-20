@@ -24,12 +24,17 @@ export const connectMarketplaceChannel = defineService({
   }),
   output: channelRow,
   handler: async (input, ctx) => {
+    // "pending", not "connected": this seam records the owner's intent and
+    // proves the plugin contract. No credentials are taken and no provider
+    // call is made, so a row claiming "connected" would assert a sync that
+    // does not exist. A real provider adapter flips the status when it
+    // actually connects.
     const [row] = await ctx.tx
       .insert(marketplaceChannels)
-      .values({ ...input, status: "connected" })
+      .values({ ...input, status: "pending" })
       .returning();
     ctx.setSubject("marketplace_channel", row!.id);
-    ctx.queueEvent("marketplace.connected", { id: row!.id, provider: row!.provider });
+    ctx.queueEvent("marketplace.channelAdded", { id: row!.id, provider: row!.provider });
     return row!;
   },
 });

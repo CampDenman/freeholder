@@ -53,6 +53,7 @@ import { productAction } from "../../../catalog-actions";
 import { requireStaffActor } from "../../guard";
 import { editorBlockTypes, editorLabels } from "../../editorLabels";
 import { ProductEditor } from "./ProductEditor";
+import { domainOrNull } from "../../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +73,7 @@ export default async function ProductPage({
     }),
     listProductTaxCategories.call({}, actor),
     listOptionTypes.call({}, actor),
-    getProductVariants.call({ productId: id }, actor).catch(() => null),
+    domainOrNull(getProductVariants.call({ productId: id }, actor)),
     listAttributeDefinitions.call({}, actor),
     listProductAttributes.call({ productId: id }, actor),
     listProductMedia.call({ productId: id }, actor),
@@ -84,7 +85,7 @@ export default async function ProductPage({
     listCancellationPolicies.call({}, actor),
     listPriceRules.call({ productId: id }, actor),
     hasModuleAccess(actor, "forms")
-      ? listForms.call({}, actor).catch(() => [])
+      ? domainOrNull(listForms.call({}, actor)).then((rows) => rows ?? [])
       : Promise.resolve([]),
     searchParams,
     currentBusiness(),
@@ -97,7 +98,7 @@ export default async function ProductPage({
             catalog
               .filter((row) => row.id !== id)
               .slice(0, 20)
-              .map((row) => getProductVariants.call({ productId: row.id }, actor).catch(() => null)),
+              .map((row) => domainOrNull(getProductVariants.call({ productId: row.id }, actor))),
           )
         ).flatMap((row) => row?.variants ?? [])
       : [];
