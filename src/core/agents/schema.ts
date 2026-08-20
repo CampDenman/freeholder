@@ -60,6 +60,17 @@ export const agentConnections = pgTable(
      */
     credentialRef: text("credential_ref"),
     baseUrl: text("base_url"),
+    /**
+     * What this connection's model costs, in cents per million tokens (C4.06).
+     *
+     * Configuration, not a secret, so it lives here rather than in the
+     * environment (§17). Null falls back to the platform's published-price
+     * table; a model absent from both is unpriced, and an unpriced model
+     * cannot spend a budget — the fail-closed direction, because a budget
+     * enforced against a guessed price is not a budget.
+     */
+    inputCentsPerMillion: integer("input_cents_per_million"),
+    outputCentsPerMillion: integer("output_cents_per_million"),
     /** How many runs this runtime will take at once. */
     maxConcurrency: integer("max_concurrency").notNull().default(2),
     status: text("status", { enum: ["active", "paused"] })

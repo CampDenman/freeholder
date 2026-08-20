@@ -23,6 +23,13 @@ import { apiKeys } from "@/core/apikeys/schema";
 import { agentConnections, agents } from "@/core/agents/schema";
 import { claimTask, completeTask, reportStep } from "@/core/agents/execution";
 import { proposeWrite } from "@/core/agents/writes";
+import {
+  budgetRefusalMessage,
+  resolveRunBudget,
+  type RunBudget,
+} from "@/core/agents/budget";
+import { estimateNextTurnCents, turnCostCents } from "@/core/agents/pricing";
+import { notifyBudget, notifyCannotSpend } from "@/core/agents/budget-alerts";
 import { serviceForTool, toolsFor } from "@/mcp/tools";
 import { workforceAdapter } from "@/adapters/agent/workforce";
 import type {
@@ -39,17 +46,24 @@ export const MANAGED_MAX_WALL_MS = 8 * 60_000;
 /** Runs one job tick will execute; the rest wait a minute for the next. */
 const RUNS_PER_TICK = 3;
 const MAX_OUTPUT_TOKENS_PER_TURN = 4_000;
+/** Below this a turn cannot say anything useful; stop instead of trying. */
+const MIN_OUTPUT_TOKENS_PER_TURN = 256;
 /** Characters of a tool result the model is shown. Data, not a firehose. */
 const TOOL_RESULT_LIMIT = 8_000;
 
 interface ManagedWorker {
+  agentId: string;
   agentName: string;
   actor: Actor;
+  budgetCents: number;
+  budgetPeriod: "day" | "week" | "month";
   connection: {
     adapter: string | null;
     model: string | null;
     credentialRef: string | null;
     baseUrl: string | null;
+    inputCentsPerMillion: number | null;
+    outputCentsPerMillion: number | null;
   };
 }
 
@@ -57,13 +71,18 @@ interface ManagedWorker {
 async function managedWorkers(): Promise<ManagedWorker[]> {
   const rows = await db()
     .select({
+      agentId: agents.id,
       agentName: agents.name,
       keyName: apiKeys.name,
       scopes: apiKeys.scopes,
+      budgetCents: agents.budgetCents,
+      budgetPeriod: agents.budgetPeriod,
       adapter: agentConnections.adapter,
       model: agentConnections.model,
       credentialRef: agentConnections.credentialRef,
       baseUrl: agentConnections.baseUrl,
+      inputCentsPerMillion: agentConnections.inputCentsPerMillion,
+      outputCentsPerMillion: agentConnections.outputCentsPerMillion,
     })
     .from(agents)
     .innerJoin(agentConnections, eq(agentConnections.id, agents.connectionId))
@@ -76,15 +95,53 @@ async function managedWorkers(): Promise<ManagedWorker[]> {
       ),
     );
   return rows.map((row) => ({
+    agentId: row.agentId,
     agentName: row.agentName,
     actor: { kind: "agent", keyName: row.keyName, scopes: row.scopes ?? [] },
+    budgetCents: row.budgetCents,
+    budgetPeriod: row.budgetPeriod,
     connection: {
       adapter: row.adapter,
       model: row.model,
       credentialRef: row.credentialRef,
       baseUrl: row.baseUrl,
+      inputCentsPerMillion: row.inputCentsPerMillion,
+      outputCentsPerMillion: row.outputCentsPerMillion,
     },
   }));
+}
+
+/**
+ * How many output tokens this run can still pay for.
+ *
+ * Asking for fewer tokens than the ceiling is the difference between a budget
+ * that *reports* an overspend and one that prevents it: the provider will not
+ * bill for output it was never allowed to produce.
+ */
+function affordableOutputTokens(
+  budget: RunBudget,
+  spentCents: number,
+  ceiling: number,
+): number {
+  const left = budget.remainingCents - spentCents;
+  if (left <= 0) return 0;
+  const perMillion = budget.price.outputCentsPerMillion;
+  if (perMillion <= 0) return ceiling;
+  // Integer arithmetic throughout: cents × 1e6 / (cents per million tokens).
+  const affordable = Math.floor((left * 1_000_000) / perMillion);
+  return Math.min(ceiling, affordable);
+}
+
+/** The price the owner set on this connection, if they set one. */
+function priceOverride(worker: ManagedWorker) {
+  return {
+    ...(worker.connection.inputCentsPerMillion !== null
+      ? { inputCentsPerMillion: worker.connection.inputCentsPerMillion }
+      : {}),
+    ...(worker.connection.outputCentsPerMillion !== null
+      ? { outputCentsPerMillion: worker.connection.outputCentsPerMillion }
+      : {}),
+  };
 }
 
 type Claim = NonNullable<Awaited<ReturnType<(typeof claimTask)["call"]>>>;
@@ -210,6 +267,9 @@ interface RunTally {
   tokensIn: number;
   tokensOut: number;
   turns: number;
+  /** Priced as it goes, so a stop knows what the run already owes. */
+  costCents: number;
+  largestInputTokens: number;
 }
 
 async function record(
@@ -234,7 +294,7 @@ async function finish(
   tally: RunTally,
   end:
     | { outcome: "done"; result: Record<string, unknown> }
-    | { outcome: "failed"; failureReason: string; stopReason?: "timeout" }
+    | { outcome: "failed"; failureReason: string; stopReason?: "timeout" | "budget" }
     | { outcome: "refused"; failureReason: string },
 ): Promise<void> {
   await completeTask.call(
@@ -246,12 +306,15 @@ async function finish(
       stopReason: end.outcome === "failed" ? end.stopReason : undefined,
       tokensIn: tally.tokensIn,
       tokensOut: tally.tokensOut,
-      // Provider pricing is C4.06's ledger work; tokens are recorded now so
-      // that ledger has something true to price.
-      costCents: 0,
+      // What the turns actually cost at this connection's price. The spend
+      // ledger and every budget check downstream read this number.
+      costCents: tally.costCents,
     },
     worker.actor,
   );
+  // Told after the money is recorded, so the figure an owner is shown is the
+  // one in the ledger rather than one about to change.
+  await notifyBudget(worker, tally.costCents).catch(() => undefined);
 }
 
 /** Execute one claimed task to its end. Exported for the tests. */
@@ -261,7 +324,13 @@ export async function executeManagedRun(
   adapter: WorkforceAgentAdapter = workforceAdapter(worker.connection),
 ): Promise<void> {
   const model = worker.connection.model ?? adapter.defaultModel;
-  const tally: RunTally = { tokensIn: 0, tokensOut: 0, turns: 0 };
+  const tally: RunTally = {
+    tokensIn: 0,
+    tokensOut: 0,
+    turns: 0,
+    costCents: 0,
+    largestInputTokens: 0,
+  };
   const startedAt = Date.now();
   const tools: AgentToolDefinition[] = toolsFor(worker.actor).map((tool) => ({
     type: "function",
@@ -283,6 +352,28 @@ export async function executeManagedRun(
     return;
   }
 
+  // Money is resolved before the first turn, not after the last: §40 wants the
+  // cap checked ahead of each step, and a run that cannot afford its opening
+  // turn should never make it.
+  const resolved = await resolveRunBudget({
+    agentId: worker.agentId,
+    budgetCents: worker.budgetCents,
+    budgetPeriod: worker.budgetPeriod,
+    taskId: claim.task.id,
+    taskBudgetCents: claim.task.budgetCents ?? null,
+    model,
+    priceOverride: priceOverride(worker),
+  });
+  if ("refusal" in resolved) {
+    await finish(worker, claim.runId, tally, {
+      outcome: "failed",
+      failureReason: budgetRefusalMessage(resolved.refusal, worker.agentName),
+      stopReason: "budget",
+    });
+    return;
+  }
+  const budget: RunBudget = resolved.budget;
+
   try {
     for (;;) {
       if (tally.turns >= MANAGED_MAX_STEPS) {
@@ -302,17 +393,54 @@ export async function executeManagedRun(
         return;
       }
 
+      // The check §40 asks for, before the step rather than after it: what
+      // this turn could cost at worst, against what the run has left.
+      //
+      // The output half is *made* affordable rather than merely checked — a
+      // turn is asked for only as many tokens as the remaining budget can
+      // pay for. The input half cannot be known before sending, so it is
+      // estimated from the largest input this run has seen (a transcript
+      // only grows) with a floor. That leaves exactly one exposure: a first
+      // turn whose real input dwarfs the floor can overshoot by one turn.
+      // It is then recorded in full and blocks every further claim, which is
+      // the honest bound — not a silent one.
+      const affordableOutput = affordableOutputTokens(
+        budget,
+        tally.costCents,
+        MAX_OUTPUT_TOKENS_PER_TURN,
+      );
+      const estimate = estimateNextTurnCents(budget.price, {
+        largestInputTokens: tally.largestInputTokens,
+        maxOutputTokens: affordableOutput,
+      });
+      if (affordableOutput < MIN_OUTPUT_TOKENS_PER_TURN || tally.costCents + estimate > budget.remainingCents) {
+        await finish(worker, claim.runId, tally, {
+          outcome: "failed",
+          failureReason:
+            tally.turns === 0
+              ? `${worker.agentName} cannot afford a single turn within its remaining budget (${budget.remainingCents} cents).`
+              : `The run stopped at its budget: ${tally.costCents} cents spent, ${budget.remainingCents} available, and the next turn could cost ${estimate}.`,
+          stopReason: "budget",
+        });
+        return;
+      }
+
       tally.turns += 1;
       const turn = await adapter.turn({
         model,
         system: systemPrompt(claim),
         messages: transcript,
         tools,
-        maxOutputTokens: MAX_OUTPUT_TOKENS_PER_TURN,
+        maxOutputTokens: affordableOutput,
         requestId: claim.runId,
       });
       tally.tokensIn += turn.usage.inputTokens;
       tally.tokensOut += turn.usage.outputTokens;
+      tally.costCents += turnCostCents(budget.price, turn.usage);
+      tally.largestInputTokens = Math.max(
+        tally.largestInputTokens,
+        turn.usage.inputTokens,
+      );
       transcript.push({
         role: "assistant",
         content: turn.text,
@@ -384,9 +512,32 @@ export async function executeManagedRun(
  * Bounded per tick so one busy instance cannot hold the job lease all day —
  * whatever queues now runs a minute later.
  */
-export async function runManagedAgentWork(): Promise<{ runs: number }> {
+export async function runManagedAgentWork(): Promise<{ runs: number; blocked: number }> {
   let runs = 0;
+  let blocked = 0;
   for (const worker of await managedWorkers()) {
+    // Checked before claiming rather than after: a worker that cannot spend
+    // would otherwise burn its task's attempts on runs that never start, and
+    // park real work as needs_attention for a reason that is really a
+    // setting. The owner hears about it instead.
+    const affordable = await resolveRunBudget({
+      agentId: worker.agentId,
+      budgetCents: worker.budgetCents,
+      budgetPeriod: worker.budgetPeriod,
+      taskId: "00000000-0000-0000-0000-000000000000",
+      taskBudgetCents: null,
+      model: worker.connection.model,
+      priceOverride: priceOverride(worker),
+    });
+    if ("refusal" in affordable) {
+      blocked += 1;
+      await notifyCannotSpend(
+        worker,
+        affordable.refusal,
+        budgetRefusalMessage(affordable.refusal, worker.agentName),
+      ).catch(() => undefined);
+      continue;
+    }
     while (runs < RUNS_PER_TICK) {
       let claim: Claim | null;
       try {
@@ -401,5 +552,5 @@ export async function runManagedAgentWork(): Promise<{ runs: number }> {
       await executeManagedRun(worker, claim);
     }
   }
-  return { runs };
+  return { runs, blocked };
 }

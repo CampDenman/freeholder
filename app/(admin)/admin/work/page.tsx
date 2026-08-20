@@ -59,6 +59,12 @@ export default async function WorkBoardPage({
               <Pill tone="warning">{pendingApprovals.length}</Pill>
             ) : null}
           </Link>
+          <Link
+            href="/admin/work/spend"
+            className="inline-flex items-center gap-2 rounded-md border border-rule px-3 py-1.5 text-sm font-semibold text-ink"
+          >
+            {t("work.spend.link")}
+          </Link>
         </div>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("work.intro")}</p>
       </div>

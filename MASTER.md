@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` through C4.04 (#147) and the workforce adapter slice (#150), plus this change for C4.05's managed loop (claim → model turn → tools through the write gate → bounded stop). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.05 (#150, #152), plus this change for C4.06 (turn pricing, budgets enforced before every step across period/task/run scopes, real cost in the spend ledger, owner alerts and `/admin/work/spend`). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.06 per-run/task/agent/period budgets before every step, spend ledger and reporting. |
+| Current focus | C4.07 per-agent pause and global kill switch that stop new claims and safely end current leases. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3728,8 +3728,23 @@ deployments are portable, testable and incapable of silently forking the truth.
   no longer overwrites a task the gate parked as `waiting_approval`.
   Provider pricing into `cost_cents` is C4.06's ledger. Coverage in
   `tests/core/agents-managed-loop.test.ts` with a scripted provider.)
-- [ ] **C4.06** Enforce per-run/task/agent/period budgets before every step;
+- [x] **C4.06** Enforce per-run/task/agent/period budgets before every step;
   build spend ledger, estimates, alerts and owner-readable reporting.
+  (`src/core/agents/pricing.ts` prices a turn in integer cents with bigint
+  half-up rounding, from published model prices or the owner's own price on
+  the connection — `0078_agent_model_prices.sql`; an unpriced model cannot
+  spend, which is what makes a cap a promise. `src/core/agents/budget.ts`
+  resolves the nested period/task/run scopes before the first turn and the
+  managed loop re-checks before every step, *making* each turn affordable by
+  clamping its output tokens to what the remaining budget buys rather than
+  only reporting the overspend; a run that cannot afford a turn stops with
+  `stop_reason = budget`, and a worker that cannot spend at all is refused
+  before it claims, so no task burns attempts on a setting. Real cost lands
+  in `agent_spend` per run; `agents.spend` reports spent, remaining, tokens,
+  runs and whether the model is priced at all; `/admin/work/spend` shows it
+  per agent and in total against the cap in EN/FR/ES; crossing 80% and the
+  cap notify the owner once per period on the new `agents.budget` topic.
+  Coverage in `tests/core/agents-budgets.test.ts`.)
 - [ ] **C4.07** Add per-agent pause and global kill switch that prevent new
   claims and safely stop or expire current leases.
 - [ ] **C4.08** Complete playbooks with parameter schemas, manual/event/schedule

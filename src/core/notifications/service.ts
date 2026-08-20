@@ -52,6 +52,7 @@ export const NOTIFICATION_TOPICS = [
   "forms.submission",
   "connections.attention",
   "agents.failed",
+  "agents.budget",
   "mail.delivery",
   "contribute.ingested",
   "contribute.status",
@@ -1522,6 +1523,49 @@ function eventTemplate(eventName: string, payload: Record<string, unknown>): Eve
         : { bodyKey: "notifications.event.agent.body" }),
       href: "/admin/jobs",
       dedupeKey: `agent-task:${payload.id}`,
+    };
+  }
+  if (
+    (eventName === "agent.budgetWarning" || eventName === "agent.budgetExhausted") &&
+    typeof payload.id === "string"
+  ) {
+    const exhausted = eventName === "agent.budgetExhausted";
+    return {
+      module: "agents",
+      topic: "agents.budget",
+      priority: exhausted ? "critical" : "warning",
+      titleKey: exhausted
+        ? "notifications.event.agentBudget.exhaustedTitle"
+        : "notifications.event.agentBudget.warningTitle",
+      bodyKey: "notifications.event.agentBudget.body",
+      messageParams: {
+        name: typeof payload.name === "string" ? payload.name.slice(0, 120) : "",
+        spent: typeof payload.spentCents === "number" ? payload.spentCents : 0,
+        budget: typeof payload.budgetCents === "number" ? payload.budgetCents : 0,
+        period: typeof payload.period === "string" ? payload.period : "month",
+      },
+      href: "/admin/work/spend",
+      // Keyed on the window: the same agent crossing the same line next month
+      // is news again, not a duplicate.
+      dedupeKey: `agent-budget:${payload.id}:${exhausted ? "exhausted" : "warning"}:${
+        typeof payload.periodKey === "string" ? payload.periodKey : ""
+      }`,
+    };
+  }
+  if (eventName === "agent.cannotSpend" && typeof payload.id === "string") {
+    return {
+      module: "agents",
+      topic: "agents.budget",
+      priority: "warning",
+      titleKey: "notifications.event.agentBudget.blockedTitle",
+      body:
+        typeof payload.detail === "string"
+          ? payload.detail.slice(0, 4000)
+          : "This agent cannot run managed work until its budget is set.",
+      href: "/admin/work/spend",
+      dedupeKey: `agent-cannot-spend:${payload.id}:${
+        typeof payload.reason === "string" ? payload.reason : ""
+      }:${typeof payload.periodKey === "string" ? payload.periodKey : ""}`,
     };
   }
   if (eventName === "contribute.statusUpdated" && typeof payload.id === "string") {

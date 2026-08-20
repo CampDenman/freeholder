@@ -25,6 +25,7 @@ import {
 import { createApiKey } from "@/core/apikeys/service";
 import { violates } from "@/core/db/errors";
 import { WORKFORCE_ADAPTER_IDS } from "@/adapters/agent/workforce-types";
+import { modelPrice } from "@/core/agents/pricing";
 import {
   actorString,
   defineService,
@@ -45,6 +46,8 @@ const connectionRow = row({
   model: z.string().nullable(),
   credentialRef: z.string().nullable(),
   baseUrl: z.string().nullable(),
+  inputCentsPerMillion: z.number().int().nullable(),
+  outputCentsPerMillion: z.number().int().nullable(),
   maxConcurrency: z.number().int(),
   status: z.enum(["active", "paused"]),
   lastSeenAt: timestamp.nullable(),
@@ -264,8 +267,24 @@ export const connectAgentRuntime = defineService({
         })
         .nullish(),
       baseUrl: z.url().max(500).nullish(),
+      /**
+       * What this model costs, in cents per million tokens (C4.06). Optional
+       * for a model whose published price the platform ships; required for
+       * anything else, because a budget cannot be enforced against a guess.
+       */
+      inputCentsPerMillion: z.number().int().min(0).max(1_000_000).nullish(),
+      outputCentsPerMillion: z.number().int().min(0).max(1_000_000).nullish(),
       maxConcurrency: z.number().int().min(1).max(50).default(2),
     })
+    .refine(
+      (v) =>
+        (v.inputCentsPerMillion === null || v.inputCentsPerMillion === undefined) ===
+        (v.outputCentsPerMillion === null || v.outputCentsPerMillion === undefined),
+      {
+        message: "set both the input and output price, or neither",
+        path: ["outputCentsPerMillion"],
+      },
+    )
     .refine((v) => v.kind !== "managed" || Boolean(v.adapter), {
       message: "a managed connection needs an adapter to run the loop with",
       path: ["adapter"],
@@ -1096,10 +1115,17 @@ export const cancelTask = defineService({
 
 /* ------------------------------------------------------------------ money */
 
-/** What an agent has spent this period, and what it is allowed to. */
+/**
+ * What an agent has spent this period, and what it is allowed to.
+ *
+ * Carries the tokens behind the money and what remains, because "you have
+ * spent 340 of 500 cents" is a sentence an owner can act on and "340" alone
+ * is not. `priced` says whether the platform can enforce the cap at all: an
+ * unpriced model reports honestly rather than looking free (C4.06).
+ */
 export const agentSpendReport = defineService({
   name: "agents.spend",
-  summary: "What each worker has cost this period.",
+  summary: "What each worker has cost this period, and what it may still spend.",
   kind: "query",
   permission: "scoped",
   input: z.object({}),
@@ -1107,9 +1133,16 @@ export const agentSpendReport = defineService({
     row({
       id: uuid,
       name: z.string(),
+      status: z.enum(["active", "paused"]),
       budgetCents: z.number().int(),
       budgetPeriod: z.enum(["day", "week", "month"]),
       spentCents: z.number().int(),
+      remainingCents: z.number().int(),
+      tokensIn: z.number().int(),
+      tokensOut: z.number().int(),
+      runs: z.number().int(),
+      model: z.string().nullable(),
+      priced: z.boolean(),
     }),
   ),
   handler: async (_input, ctx) => {
@@ -1117,11 +1150,19 @@ export const agentSpendReport = defineService({
       .select({
         id: agents.id,
         name: agents.name,
+        status: agents.status,
         budgetCents: agents.budgetCents,
         budgetPeriod: agents.budgetPeriod,
+        model: agentConnections.model,
+        inputCentsPerMillion: agentConnections.inputCentsPerMillion,
+        outputCentsPerMillion: agentConnections.outputCentsPerMillion,
         spentCents: sql<number>`coalesce(sum(${agentSpend.costCents}), 0)::int`,
+        tokensIn: sql<number>`coalesce(sum(${agentSpend.tokensIn}), 0)::int`,
+        tokensOut: sql<number>`coalesce(sum(${agentSpend.tokensOut}), 0)::int`,
+        runs: sql<number>`count(${agentSpend.id})::int`,
       })
       .from(agents)
+      .innerJoin(agentConnections, eq(agentConnections.id, agents.connectionId))
       .leftJoin(
         agentSpend,
         and(
@@ -1131,9 +1172,39 @@ export const agentSpendReport = defineService({
           sql`${agentSpend.periodStart} >= date_trunc(${agents.budgetPeriod}, now())`,
         ),
       )
-      .groupBy(agents.id, agents.name, agents.budgetCents, agents.budgetPeriod)
+      .groupBy(
+        agents.id,
+        agents.name,
+        agents.status,
+        agents.budgetCents,
+        agents.budgetPeriod,
+        agentConnections.model,
+        agentConnections.inputCentsPerMillion,
+        agentConnections.outputCentsPerMillion,
+      )
       .orderBy(asc(agents.name));
-    return rows;
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      status: row.status,
+      budgetCents: row.budgetCents,
+      budgetPeriod: row.budgetPeriod,
+      spentCents: row.spentCents,
+      remainingCents: Math.max(0, row.budgetCents - row.spentCents),
+      tokensIn: row.tokensIn,
+      tokensOut: row.tokensOut,
+      runs: row.runs,
+      model: row.model,
+      priced:
+        modelPrice(row.model, {
+          ...(row.inputCentsPerMillion !== null
+            ? { inputCentsPerMillion: row.inputCentsPerMillion }
+            : {}),
+          ...(row.outputCentsPerMillion !== null
+            ? { outputCentsPerMillion: row.outputCentsPerMillion }
+            : {}),
+        }) !== null,
+    }));
   },
 });
 
