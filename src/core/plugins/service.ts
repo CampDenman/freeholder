@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Plugin install, enable, disable, update, uninstall (C3.09–C3.11).
+// Plugin install, enable, disable, update, uninstall (C3.09â€“C3.11).
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
@@ -279,6 +279,7 @@ export const rollbackPlugin = defineService({
 
 export const uninstallPlugin = defineService({
   name: "plugins.uninstall",
+  writeClass: "destructive",
   summary: "Remove a plugin. keep leaves its data; purge asks doctor to drop it later.",
   kind: "mutation",
   permission: "scoped",

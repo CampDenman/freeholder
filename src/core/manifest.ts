@@ -66,6 +66,7 @@ export default defineModule({
       "agentTask.completed",
       "agentTask.failed",
       "agentRun.stopped",
+      "agentApproval.proposed",
       "connection.recorded",
       "connection.updated",
       "connection.removed",
