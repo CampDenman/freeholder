@@ -8,6 +8,7 @@ import { currentBusiness } from "@/core/settings/read";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { BOARD_COLUMNS, listAgents, listBoard } from "@/core/agents/service";
+import { listApprovals } from "@/core/agents/writes";
 import { CreateTaskForm } from "./WorkForms";
 
 export const dynamic = "force-dynamic";
@@ -27,10 +28,11 @@ export default async function WorkBoardPage({
   const agentId = one("agentId") || undefined;
   const unassigned = one("unassigned") === "1";
   const minPriority = one("minPriority") ? Number(one("minPriority")) : undefined;
-  const [t, business, agents, columns] = await Promise.all([
+  const [t, business, agents, pendingApprovals, columns] = await Promise.all([
     getT(),
     currentBusiness(),
     listAgents.call({}, actor),
+    listApprovals.call({ status: "pending", limit: 200 }, actor),
     listBoard.call(
       {
         agentId,
@@ -46,7 +48,18 @@ export default async function WorkBoardPage({
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">{t("work.title")}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-xl font-bold tracking-tight">{t("work.title")}</h1>
+          <Link
+            href="/admin/work/approvals"
+            className="inline-flex items-center gap-2 rounded-md border border-rule px-3 py-1.5 text-sm font-semibold text-ink"
+          >
+            {t("work.approvals")}
+            {pendingApprovals.length > 0 ? (
+              <Pill tone="warning">{pendingApprovals.length}</Pill>
+            ) : null}
+          </Link>
+        </div>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("work.intro")}</p>
       </div>
 

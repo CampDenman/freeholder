@@ -34,6 +34,9 @@ const approvalRow = row({
   input: z.unknown(),
   proposedAutonomy: z.enum(["suggest", "approve", "autonomous"]),
   status: z.enum(["pending", "approved", "rejected", "expired"]),
+  decidedBy: uuid.nullable(),
+  decidedAt: timestamp.nullable(),
+  decisionNote: z.string().nullable(),
   expiresAt: timestamp.nullable(),
   createdAt: timestamp,
 });
@@ -228,4 +231,162 @@ export const listApprovals = defineService({
   },
 });
 
-export default [proposeWrite, listApprovals];
+/**
+ * Load one approval for a decision error message. The atomic claim below is
+ * what enforces once-only; this only explains a refused claim truthfully.
+ */
+async function explainUndecidable(ctx: ServiceContext, id: string): Promise<never> {
+  const [existing] = await ctx.tx
+    .select({ status: agentApprovals.status, expiresAt: agentApprovals.expiresAt })
+    .from(agentApprovals)
+    .where(eq(agentApprovals.id, id))
+    .limit(1);
+  if (!existing) throw new ServiceError("not_found", "That approval is not here.");
+  if (existing.status === "pending") {
+    throw new ServiceError("conflict", "That approval just expired. Ask the agent to propose again.");
+  }
+  throw new ServiceError(
+    "conflict",
+    `That approval was already ${existing.status}. Decisions are made exactly once.`,
+  );
+}
+
+function requireDecider(ctx: ServiceContext): string {
+  // agentCallable: false already refuses agents; this pins the rest down.
+  // A decision must belong to a person — system composition approving its
+  // own agent's work would make the inbox decorative.
+  if (ctx.actor.kind !== "user") {
+    throw new ServiceError("permission", "Sign in as a person to decide approvals.");
+  }
+  return ctx.actor.userId;
+}
+
+const CLAIMABLE = and(
+  eq(agentApprovals.status, "pending"),
+  sql`(${agentApprovals.expiresAt} is null or ${agentApprovals.expiresAt} > now())`,
+);
+
+/** After a decision or expiry, a task parked on approval goes back to work. */
+async function releaseTask(ctx: ServiceContext, taskId: string): Promise<void> {
+  const [pending] = await ctx.tx
+    .select({ id: agentApprovals.id })
+    .from(agentApprovals)
+    .where(and(eq(agentApprovals.taskId, taskId), eq(agentApprovals.status, "pending")))
+    .limit(1);
+  if (pending) return;
+  await ctx.tx
+    .update(agentTasks)
+    .set({ status: "queued" })
+    .where(and(eq(agentTasks.id, taskId), eq(agentTasks.status, "waiting_approval")));
+}
+
+export const approveWrite = defineService({
+  name: "agents.approveWrite",
+  summary: "Approve one parked managed write and execute it exactly once.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  input: z.object({ id: z.uuid(), note: z.string().trim().max(2000).optional() }),
+  output: row({ approval: approvalRow, result: z.unknown().nullable() }),
+  handler: async (input, ctx) => {
+    const decidedBy = requireDecider(ctx);
+    // The atomic claim IS the once-only guarantee: two concurrent decisions
+    // race on this row lock and the loser matches zero rows. If execution
+    // below throws, the whole transaction rolls back and the row stays
+    // pending — approved means executed, always.
+    const [claimed] = await ctx.tx
+      .update(agentApprovals)
+      .set({
+        status: "approved",
+        decidedBy,
+        decidedAt: sql`now()`,
+        decisionNote: input.note?.length ? input.note : null,
+      })
+      .where(and(eq(agentApprovals.id, input.id), CLAIMABLE))
+      .returning();
+    if (!claimed) await explainUndecidable(ctx, input.id);
+
+    // Exactly what was proposed — the input is stored verbatim for this call
+    // and redacted on every read instead. Executed as the approving person,
+    // so their own permissions govern the write and the audit trail names
+    // who let it happen.
+    const service = getService(claimed!.serviceName);
+    const result = await ctx.call(service, claimed!.input);
+
+    await releaseTask(ctx, claimed!.taskId);
+    ctx.setSubject("agent_approval", claimed!.id);
+    ctx.queueEvent("agentApproval.approved", {
+      id: claimed!.id,
+      taskId: claimed!.taskId,
+      serviceName: claimed!.serviceName,
+    });
+    return { approval: redactedApproval(claimed!), result: result ?? null };
+  },
+});
+
+export const rejectWrite = defineService({
+  name: "agents.rejectWrite",
+  summary: "Reject one parked managed write, with a note the record keeps.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  // The note is required: a bare rejection teaches the agent nothing and
+  // leaves the audit trail mute about why the owner said no.
+  input: z.object({ id: z.uuid(), note: z.string().trim().min(1).max(2000) }),
+  output: row({ approval: approvalRow }),
+  handler: async (input, ctx) => {
+    const decidedBy = requireDecider(ctx);
+    const [claimed] = await ctx.tx
+      .update(agentApprovals)
+      .set({
+        status: "rejected",
+        decidedBy,
+        decidedAt: sql`now()`,
+        decisionNote: input.note,
+      })
+      .where(and(eq(agentApprovals.id, input.id), CLAIMABLE))
+      .returning();
+    if (!claimed) await explainUndecidable(ctx, input.id);
+
+    await releaseTask(ctx, claimed!.taskId);
+    ctx.setSubject("agent_approval", claimed!.id);
+    ctx.queueEvent("agentApproval.rejected", {
+      id: claimed!.id,
+      taskId: claimed!.taskId,
+      serviceName: claimed!.serviceName,
+    });
+    return { approval: redactedApproval(claimed!) };
+  },
+});
+
+export const expireApprovals = defineService({
+  name: "agents.expireApprovals",
+  summary: "Lapse pending approvals nobody answered and release their tasks.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({}),
+  output: row({ expired: z.number().int() }),
+  handler: async (_input, ctx) => {
+    const lapsed = await ctx.tx
+      .update(agentApprovals)
+      .set({ status: "expired", decidedAt: sql`now()` })
+      .where(
+        and(
+          eq(agentApprovals.status, "pending"),
+          sql`${agentApprovals.expiresAt} <= now()`,
+        ),
+      )
+      .returning({ id: agentApprovals.id, taskId: agentApprovals.taskId });
+    for (const row of new Map(lapsed.map((item) => [item.taskId, item])).values()) {
+      await releaseTask(ctx, row.taskId);
+    }
+    for (const row of lapsed) {
+      ctx.queueEvent("agentApproval.expired", { id: row.id, taskId: row.taskId });
+    }
+    return { expired: lapsed.length };
+  },
+});
+
+export default [proposeWrite, listApprovals, approveWrite, rejectWrite, expireApprovals];
