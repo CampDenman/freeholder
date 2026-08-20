@@ -137,6 +137,7 @@ export function SecurityControls({
             {/* A QR quiet zone is white by specification, not by theme —
                 phone cameras need the same high-contrast ground on both
                 schemes, so this literal is deliberate. */}
+            {/* eslint-disable-next-line no-restricted-syntax */}
             {totp.qrSvg ? <div className="w-56 max-w-full bg-white p-3" dangerouslySetInnerHTML={{ __html: totp.qrSvg }} /> : null}
             <p className="text-sm text-ink-muted">{labels.manualSecret} <code className="select-all font-mono text-ink">{totp.secret}</code></p>
             <form action={confirmTotp} className="grid gap-3">
