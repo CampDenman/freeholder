@@ -9,6 +9,7 @@ import { currentBusiness } from "@/core/settings/read";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { getTask, listAgents, listTasks } from "@/core/agents/service";
+import { listApprovals } from "@/core/agents/writes";
 import { FlagTaskForm, UpdateTaskForm } from "../WorkForms";
 import { LiveRun } from "../LiveRun";
 import {
@@ -28,11 +29,12 @@ export default async function WorkTaskPage({
 }) {
   const { id } = await params;
   const actor = await requireStaffActor("agents");
-  const [t, business, task, agents] = await Promise.all([
+  const [t, business, task, agents, approvals] = await Promise.all([
     getT(),
     currentBusiness(),
     getTask.call({ id }, actor),
     listAgents.call({}, actor),
+    listApprovals.call({ taskId: id, status: "pending" }, actor),
   ]);
   if (!task) notFound();
 
@@ -96,6 +98,27 @@ export default async function WorkTaskPage({
                   <Link href={`/admin/work/${item.id}`} className="text-sm">
                     {item.title} — {t(`work.status.${item.status}`)}
                   </Link>
+                </li>
+              ))}
+            </ul>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {approvals.length > 0 ? (
+        <Card>
+          <CardHeader title={t("work.approvals")} />
+          <CardBody>
+            <ul className="grid list-none gap-3 p-0">
+              {approvals.map((item) => (
+                <li key={item.id} className="grid gap-2 rounded-md border border-rule px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Pill tone="warning">{t(`work.approval.kind.${item.kind}`)}</Pill>
+                    <span className="text-sm">{item.summary}</span>
+                  </div>
+                  <pre className="overflow-x-auto font-mono text-xs text-ink-muted">
+                    {JSON.stringify(item.preview, null, 2)}
+                  </pre>
                 </li>
               ))}
             </ul>
