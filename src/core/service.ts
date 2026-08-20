@@ -273,6 +273,22 @@ export interface ServiceRateLimit extends RateLimitPolicy {
   message: string;
 }
 
+/**
+ * How the managed-write gate (C4.03) previews and gates a mutation an agent
+ * asks for. Classification is declared here, on the definition, because a
+ * name heuristic cannot promise "irreversible writes always queue": the
+ * service author knows whether the verb moves money or destroys data; a
+ * regex guesses.
+ */
+export const WRITE_CLASSES = [
+  "blocks",
+  "message",
+  "money",
+  "destructive",
+  "write",
+] as const;
+export type WriteClass = (typeof WRITE_CLASSES)[number];
+
 export interface ServiceDef<In extends z.ZodType, Out> {
   /** Dotted "<module>.<verb>": "contacts.create", "auth.login"… */
   name: string;
@@ -280,6 +296,12 @@ export interface ServiceDef<In extends z.ZodType, Out> {
   kind: "query" | "mutation";
   permission: Permission;
   input: In;
+  /**
+   * C4.03: how `agents.proposeWrite` treats this mutation. Undeclared
+   * mutations fail closed — they queue for owner approval whatever the
+   * agent's autonomy. "destructive" queues even at autonomous.
+   */
+  writeClass?: WriteClass;
   /**
    * Required public return shape (C3.01). Validated after the handler in
    * development and tests so a service cannot quietly return something the

@@ -68,6 +68,24 @@ describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
       acceptedTerms: false as unknown as true,
     }, OWNER))).code).toBe("validation");
 
+    // Anonymous checkout against a named contact is authority nobody proved:
+    // the storefront path verifies the shopper first and composes as system.
+    expect(
+      (
+        await failure(
+          checkoutCart.call(
+            {
+              cartId: basket.cart.id,
+              contactId: contact.id,
+              idempotencyKey: "order-dl-1",
+              acceptedTerms: true,
+            },
+            ANONYMOUS,
+          ),
+        )
+      ).code,
+    ).toBe("permission");
+
     const placed = await checkoutCart.call(
       {
         cartId: basket.cart.id,
@@ -75,7 +93,7 @@ describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
         idempotencyKey: "order-dl-1",
         acceptedTerms: true,
       },
-      ANONYMOUS,
+      OWNER,
     );
     expect(placed.order.status).toBe("pending_payment");
     expect(placed.order.contactId).toBe(contact.id);

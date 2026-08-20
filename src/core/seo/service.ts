@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// SEO services (MASTER.md §5).
+// SEO services (MASTER.md Â§5).
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
@@ -28,8 +28,8 @@ const path = z
  * Where a path should send someone, if anywhere.
  *
  * Public and called on the 404 path, so a link shared before a rename still
- * lands somewhere useful. Chains are followed a few hops — a page renamed
- * twice should still resolve — and then give up rather than loop, because a
+ * lands somewhere useful. Chains are followed a few hops â€” a page renamed
+ * twice should still resolve â€” and then give up rather than loop, because a
  * redirect cycle is a configuration mistake and not a request to spin.
  */
 export const resolveRedirect = defineService({
@@ -86,7 +86,7 @@ export const listRedirects = defineService({
  * Record that a path has moved.
  *
  * `system` is permitted because the caller that matters is `cms.updatePage`
- * noticing a slug change — an owner renaming a page has not asked for a
+ * noticing a slug change â€” an owner renaming a page has not asked for a
  * redirect and should not have to. It reaches this through `ctx.callAsSystem`.
  */
 export const recordRedirect = defineService({
@@ -110,7 +110,7 @@ export const recordRedirect = defineService({
       );
     }
 
-    // Renaming A→B then B→A must not leave a redirect pointing at a page that
+    // Renaming Aâ†’B then Bâ†’A must not leave a redirect pointing at a page that
     // exists again. The old row is retargeted, so the live page always wins.
     await ctx.tx
       .delete(redirects)
@@ -146,6 +146,7 @@ export const recordRedirect = defineService({
 
 export const deleteRedirect = defineService({
   name: "seo.deleteRedirect",
+  writeClass: "destructive",
   summary: "Stop redirecting a path.",
   kind: "mutation",
   permission: "scoped",
