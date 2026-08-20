@@ -61,6 +61,12 @@ export default async function WorkBoardPage({
             ) : null}
           </Link>
           <Link
+            href="/admin/work/playbooks"
+            className="inline-flex items-center gap-2 rounded-md border border-rule px-3 py-1.5 text-sm font-semibold text-ink"
+          >
+            {t("work.playbooks.link")}
+          </Link>
+          <Link
             href="/admin/work/spend"
             className="inline-flex items-center gap-2 rounded-md border border-rule px-3 py-1.5 text-sm font-semibold text-ink"
           >

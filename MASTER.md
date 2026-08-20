@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` through C4.06 (#153), plus this change for C4.07 (per-agent pause and the kill switch revoke live leases, the managed loop stops within one turn, and the Workers card carries both controls). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.07 (#154), plus this change for C4.08 (playbooks as data: declared parameters, versioned wording, manual and event triggers with the payload quoted rather than interpolated, and portable import/export). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.08 playbooks: parameter schemas, manual/event/schedule triggers, versioned prompts, permissions and import/export as data. |
+| Current focus | C4.09 untrusted-input envelopes, indirect prompt-injection tests, secret/output redaction, URL/network policies and exfiltration limits. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3760,8 +3760,27 @@ deployments are portable, testable and incapable of silently forking the truth.
   `/admin/work` — per-agent pause/resume plus pause-everything — as plain
   form posts that work without JavaScript, in EN/FR/ES. Coverage in
   `tests/core/agents-pause.test.ts`.)
-- [ ] **C4.08** Complete playbooks with parameter schemas, manual/event/schedule
+- [x] **C4.08** Complete playbooks with parameter schemas, manual/event/schedule
   triggers, versioned prompts, permissions and import/export as data.
+  (`src/core/agents/playbooks.ts` plus `playbook-params.ts` and
+  `playbook-events.ts`; `0079_agent_playbook_versions.sql` adds the version
+  history, a playbook-level autonomy ceiling and per-run budget. Parameters
+  are a small closed vocabulary — string/text/number/boolean/choice — so a
+  spec can be rendered as a form, exported, and validated exactly; undeclared
+  values are dropped rather than interpolated. Editing the wording or the
+  parameters writes a new version and bumps `version`, while renaming or
+  switching a playbook off does not, so a task's `source_ref`
+  (`playbook:<id>@v<n>`) always resolves to the instructions it was actually
+  given. Triggers must be able to fire: a schedule needs a five-field cron
+  (runtime is C4.14), an event needs a name or family, and matching event
+  playbooks start work from the bus. Event-triggered work never interpolates
+  the payload into the brief — the brief stays the owner's words and the
+  payload travels as `untrusted` task input — which is the injection boundary
+  §40 requires. Playbooks are closed to agents entirely; export is a portable
+  document with no ids, credentials or agent binding, and an import arrives
+  switched off and unassigned. `/admin/work/playbooks` carries writing,
+  running, enabling, deleting and importing in EN/FR/ES. Coverage in
+  `tests/core/agents-playbooks.test.ts`.)
 - [ ] **C4.09** Harden untrusted-input envelopes, indirect prompt-injection
   tests, secret/output redaction, URL/network policies and exfiltration limits.
 

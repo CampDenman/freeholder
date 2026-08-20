@@ -384,7 +384,7 @@ export const agentSpend = pgTable(
   (t) => [index("agent_spend_agent_period_idx").on(t.agentId, t.periodStart)],
 );
 
-/** Reusable work with a trigger (§40, stage 5). Modelled now, driven later. */
+/** Reusable work with a trigger (§40, stage 5). */
 export const agentPlaybooks = pgTable(
   "agent_playbooks",
   {
@@ -402,8 +402,55 @@ export const agentPlaybooks = pgTable(
     scheduleCron: text("schedule_cron"),
     eventPattern: text("event_pattern"),
     enabled: boolean("enabled").notNull().default(true),
+    /**
+     * The current prompt version (C4.08). Every change to the brief or the
+     * parameters writes a row in `agent_playbook_versions` and bumps this, so
+     * a task can record which wording produced it — "the playbook was
+     * different then" is otherwise unanswerable.
+     */
+    version: integer("version").notNull().default(1),
+    /**
+     * A ceiling on what work from this playbook may do, independent of the
+     * agent's own. §40's ladder only lowers, so a playbook can be more
+     * cautious than its worker and never more permissive.
+     */
+    autonomyCeiling: text("autonomy_ceiling", {
+      enum: ["suggest", "approve", "autonomous"],
+    }),
+    /** Optional per-task money ceiling for work this playbook creates. */
+    budgetCents: integer("budget_cents"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [uniqueIndex("agent_playbooks_name_idx").on(t.name)],
+);
+
+/**
+ * Every wording a playbook has had (C4.08).
+ *
+ * Prompts are how an owner directs work, and they get edited. Without the
+ * history, a task that went wrong last month cannot be read against the
+ * instructions it was actually given — the row says what the playbook says
+ * *now*, which is a different sentence.
+ */
+export const agentPlaybookVersions = pgTable(
+  "agent_playbook_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    playbookId: uuid("playbook_id")
+      .notNull()
+      .references(() => agentPlaybooks.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    briefTemplate: text("brief_template").notNull(),
+    paramsSchema: jsonb("params_schema").notNull().default({}),
+    /** Why this wording changed, in the editor's own words. */
+    note: text("note"),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("agent_playbook_versions_idx").on(t.playbookId, t.version),
+  ],
 );

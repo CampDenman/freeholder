@@ -661,6 +661,9 @@ const taskInput = {
   dueAt: z.iso.datetime().nullish(),
   autonomyCeiling: z.enum(AUTONOMY).nullish(),
   budgetCents: z.number().int().min(0).max(10_000_000).nullish(),
+  /** Why this work exists. Set by playbooks; agents may never claim one. */
+  source: z.enum(["human", "schedule", "event"]).optional(),
+  sourceRef: z.string().max(200).optional(),
 };
 
 /**
@@ -728,7 +731,15 @@ export const createTask = defineService({
         autonomyCeiling: ceiling,
         budgetCents: input.budgetCents ?? null,
         createdByActor: actorString(ctx.actor),
-        source: ctx.actor.kind === "agent" ? "agent" : "human",
+        // A caller that knows *why* the work exists says so — a playbook run
+        // names itself and its version (C4.08). Everything else is decided
+        // here, because an agent must not be able to claim its own work came
+        // from a schedule.
+        source:
+          ctx.actor.kind === "agent"
+            ? "agent"
+            : (input.source ?? "human"),
+        sourceRef: input.sourceRef ?? null,
       })
       .returning();
 

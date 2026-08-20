@@ -12,6 +12,8 @@ import resetServices from "@/core/auth/reset";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
 import agentWrites from "@/core/agents/writes";
+import agentPlaybookServices from "@/core/agents/playbooks";
+import agentPlaybookEvents from "@/core/agents/playbook-events";
 import apiKeyServices from "@/core/apikeys/service";
 import connectionServices from "@/core/connections/service";
 import contactServices from "@/core/contacts/service";
@@ -55,6 +57,8 @@ const services: Service[] = [
   ...agentServices,
   ...agentExecution,
   ...agentWrites,
+  ...agentPlaybookServices,
+  ...agentPlaybookEvents,
   ...apiKeyServices,
   ...connectionServices,
   ...contactServices,
@@ -104,8 +108,10 @@ export async function onAnyEvent(
 ): Promise<void> {
   const { fanOut } = await import("@/core/webhooks/service");
   const { fanOutEventNotification } = await import("@/core/notifications/service");
+  const { startEventPlaybooks } = await import("@/core/agents/playbook-events");
   await Promise.all([
     fanOut(eventName, payload, context?.eventId),
     fanOutEventNotification(eventName, payload, context?.eventId),
+    startEventPlaybooks(eventName, payload),
   ]);
 }

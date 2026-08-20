@@ -554,6 +554,13 @@
       "when": 1787069200000,
       "tag": "0078_agent_model_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1787069300000,
+      "tag": "0079_agent_playbook_versions",
+      "breakpoints": true
     }
   ]
 }
