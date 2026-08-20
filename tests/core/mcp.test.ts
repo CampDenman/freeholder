@@ -247,14 +247,17 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
     // An agent shown eighty tools and permitted six discovers that by failing,
     // and every failure is a real request in the audit log.
     const names = toolsFor(agent(["contacts.*"])).map((tool) => tool.name);
-    expect(names).toContain("contacts_create");
+    expect(names).toContain("contacts_resolve");
+    expect(names).toContain("contacts_update");
+    // Deliberate human entry: automated paths — agents included — resolve.
+    expect(names).not.toContain("contacts_create");
     expect(names).not.toContain("media_trash");
   });
 
   it("offers an anonymous caller the public tools and no more", async () => {
     const names = toolsFor(ANON).map((tool) => tool.name);
     expect(names).toContain("settings_getBusiness");
-    expect(names).not.toContain("contacts_create");
+    expect(names).not.toContain("contacts_resolve");
   });
 
   it("marks reads as read-only and deletions as destructive", async () => {
@@ -314,7 +317,7 @@ describe.runIf(hasDatabase)("running a tool", () => {
     const { body } = await rpc(
       "tools/call",
       {
-        name: "contacts_create",
+        name: "contacts_resolve",
         arguments: { name: "Rae Fielding", email: "rae@example.test" },
       },
       { authorization: `Bearer ${token}` },
@@ -322,11 +325,12 @@ describe.runIf(hasDatabase)("running a tool", () => {
     const value = body.result as {
       isError: boolean;
       content: { type: string; text: string }[];
-      structuredContent: { result: { name: string } };
+      structuredContent: { result: { contact: { name: string }; created: boolean } };
     };
     expect(value.isError).toBe(false);
     expect(value.content[0]!.type).toBe("text");
-    expect(value.structuredContent.result.name).toBe("Rae Fielding");
+    expect(value.structuredContent.result.contact.name).toBe("Rae Fielding");
+    expect(value.structuredContent.result.created).toBe(true);
 
     // It really happened, through the service, in the database.
     expect(await db().select().from(contacts)).toHaveLength(1);
@@ -350,7 +354,7 @@ describe.runIf(hasDatabase)("running a tool", () => {
   it("reports a validation failure as a tool result the model can read", async () => {
     const { body } = await rpc(
       "tools/call",
-      { name: "contacts_create", arguments: { email: "not-an-email" } },
+      { name: "contacts_resolve", arguments: { email: "not-an-email" } },
       { authorization: `Bearer ${token}` },
     );
     const value = body.result as { isError: boolean; content: { text: string }[] };
@@ -390,7 +394,7 @@ describe.runIf(hasDatabase)("running a tool", () => {
     // The whole reason an agent gets its own credential.
     await rpc(
       "tools/call",
-      { name: "contacts_create", arguments: { name: "Attributed" } },
+      { name: "contacts_resolve", arguments: { name: "Attributed", email: "attributed@example.test" } },
       { authorization: `Bearer ${token}` },
     );
     const { auditLog } = await import("@/core/events/schema");

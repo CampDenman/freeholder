@@ -4,7 +4,7 @@
 // and what has changed lately (§4.8 — "the owner can read a plain-English log
 // of everything their AI did").
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { contactStats, createContact } from "@/core/contacts/service";
+import { contactStats, createContact, resolveContact } from "@/core/contacts/service";
 import { recentActivity } from "@/core/events/service";
 import { updateBusiness } from "@/core/settings/service";
 import {
@@ -86,8 +86,10 @@ describe.runIf(hasDatabase)("the admin overview data", () => {
 
     it("records agent actions under the key that did them", async () => {
       // This is the §4.8 promise in practice: an owner can see what the AI did.
-      await createContact.call(
-        { name: "Made by an agent" },
+      // resolve, not create: deliberate entry is human-only, and resolving
+      // is the door an agent's key actually opens onto the spine.
+      await resolveContact.call(
+        { name: "Made by an agent", email: "agent-made@example.test" },
         { kind: "agent", keyName: "claude", scopes: ["contacts.*"] },
       );
       const [entry] = await recentActivity.call({ limit: 1 }, STAFF);
