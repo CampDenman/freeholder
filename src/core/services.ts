@@ -20,6 +20,8 @@ import connectionServices from "@/core/connections/service";
 import connectionGrantServices from "@/core/connections/grants";
 import calendarOAuthServices from "@/core/connections/calendar-oauth";
 import calendarSyncServices from "@/core/connections/calendar-sync";
+import mailReadOAuthServices from "@/core/connections/mail-read-oauth";
+import mailImportServices from "@/core/connections/mail-import";
 import calendarBusyServices from "@/core/connections/busy";
 import briefingServices from "@/core/briefing/service";
 import briefingContributorServices from "@/core/briefing/contributors";
@@ -73,6 +75,8 @@ const services: Service[] = [
   ...connectionGrantServices,
   ...calendarOAuthServices,
   ...calendarSyncServices,
+  ...mailReadOAuthServices,
+  ...mailImportServices,
   ...calendarBusyServices,
   ...briefingServices,
   ...briefingContributorServices,

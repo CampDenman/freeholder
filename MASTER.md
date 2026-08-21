@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C4.16 (#163), plus this change for C4.17 (a playbook that reports into the briefing, and a briefing that reaches somebody who has not opened the admin since Monday). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.17 (#164), plus this change for C4.18 (a mailbox read for who is in it, through the one door into the spine, with no bodies and no subjects nobody shared). C4 is complete. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.18 Gmail/Microsoft mail read and contact import as untrusted data through `contacts.resolve`, timeline and duplicate workflow. |
+| Current focus | C4.20 the builder's code lane: proposal, sandboxed build, tests and owner review. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3992,8 +3992,34 @@ deployments are portable, testable and incapable of silently forking the truth.
   re-assembling a day cannot buzz the same phone twice, and a briefing with
   nothing in it never sends at all. Coverage in
   `tests/core/briefing-playbooks.test.ts`.)
-- [ ] **C4.18** Add Gmail/Microsoft mail read and contact import as untrusted
+- [x] **C4.18** Add Gmail/Microsoft mail read and contact import as untrusted
   data through `contacts.resolve`, timeline and duplicate workflow.
+  (§41: "Mail is read as data about people, not as an inbox to reimplement."
+  `mail-providers.ts` asks each provider for headers only — Gmail with
+  `format=metadata`, Graph with a `$select` that never names the body — so a
+  client that cannot download a body cannot leak one, and a test pins the
+  request shape rather than the intention. `mail-import.ts` turns a message
+  into exactly two things: a correspondent resolved through `contacts.resolve`,
+  the one automated door (§2 principle 3), and a timeline event against them.
+  Import is a merge, not an insert, and new arrivals go to §30's duplicate
+  queue rather than being merged on a guess. A display name is a string a
+  stranger chose: it fills a blank and never overwrites what the owner typed,
+  which is `resolve`'s existing behaviour relied on rather than reimplemented —
+  the test for it uses a From header written as an attack. Subjects are stored
+  only for an account explicitly shared with the business, because somebody who
+  connected their own mail so the CRM knows who they talk to has not handed
+  over what they talked about; the correspondent still resolves either way.
+  Every stored payload carries `trust: "untrusted"` at the point of storage
+  (§40). Reading is the holder's, not an administrator's: §41 keeps reading
+  somebody else's account out of v1, and a `connections` manage grant is
+  refused with that reason rather than a silent not-found. Connecting is its
+  own flow on its own callback (`/api/connections/mail-read`), read-only with
+  no write scope at all, for the reason calendars got one in C4.11 — a code
+  issued to read somebody's mail must not be redeemable as permission to send
+  as them. `core.importConnectedMail` runs hourly and is idempotent per
+  `(contact, provider message id)`, because the "since" window is coarse. No
+  migration: `mail_oauth_states.purpose` was already an application-level enum.
+  Coverage in `tests/core/mail-import.test.ts`.)
 
 #### Owner-facing self-builder
 

@@ -376,6 +376,26 @@ export const runPlaybooks = defineJob({
 });
 
 /**
+ * Read connected mailboxes for who has been in touch (C4.18).
+ *
+ * Hourly, not by the minute: this is about who wrote to the business, and a
+ * correspondent who appeared forty minutes ago is not news the CRM has to have
+ * this second. It also keeps a first sync of a busy mailbox to one bounded
+ * batch an hour rather than a rush at a provider's rate limit.
+ */
+export const importConnectedMail = defineJob({
+  name: "core.importConnectedMail",
+  summary: "Read connected mailboxes and fold correspondents into contacts.",
+  schedule: "27 * * * *",
+  concurrency: 1,
+  leaseSeconds: 20 * 60,
+  handler: async () => {
+    const { importDueMailboxes } = await import("@/core/connections/mail-import");
+    return importDueMailboxes();
+  },
+});
+
+/**
  * The daily briefing, built before anybody arrives (C4.15).
  *
  * Hourly rather than at one fixed time: the business's chosen hour is read
@@ -560,6 +580,7 @@ export default [
   escalateNotifications,
   pruneOldNotifications,
   syncExternalCalendars,
+  importConnectedMail,
   submitIndexNow,
   deliverContributions,
   replyContributions,
