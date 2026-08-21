@@ -756,7 +756,10 @@ export async function onFormSubmitted(
 
 export { HONEYPOT_FIELD, STAMP_FIELD };
 
+import briefingContributors from "@/modules/forms/briefing";
+
 export default [
+  ...briefingContributors,
   listForms,
   getForm,
   getFormById,

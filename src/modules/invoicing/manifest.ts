@@ -9,6 +9,7 @@ export default defineModule({
   requires: ["core"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  briefing: { contributors: ["invoicing.briefingOverdue"] },
   events: {
     emits: [
       "invoice.created",

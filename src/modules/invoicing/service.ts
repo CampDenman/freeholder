@@ -10,7 +10,10 @@ import taxServices from "./tax-service";
 
 export { quoteTax } from "./tax-service";
 
+import briefingContributors from "@/modules/invoicing/briefing";
+
 export default [
+  ...briefingContributors,
   ...taxServices,
   ...invoiceServices,
   ...advancedMoneyServices,

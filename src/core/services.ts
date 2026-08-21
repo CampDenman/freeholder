@@ -22,6 +22,7 @@ import calendarOAuthServices from "@/core/connections/calendar-oauth";
 import calendarSyncServices from "@/core/connections/calendar-sync";
 import calendarBusyServices from "@/core/connections/busy";
 import briefingServices from "@/core/briefing/service";
+import briefingContributorServices from "@/core/briefing/contributors";
 import contactServices from "@/core/contacts/service";
 import customFieldServices from "@/core/contacts/custom-fields";
 import duplicateServices from "@/core/contacts/duplicates";
@@ -73,6 +74,7 @@ const services: Service[] = [
   ...calendarSyncServices,
   ...calendarBusyServices,
   ...briefingServices,
+  ...briefingContributorServices,
   ...contactServices,
   ...customFieldServices,
   ...duplicateServices,

@@ -25,6 +25,7 @@ export default defineModule({
   requires: ["core", "cms"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  briefing: { contributors: ["forms.briefingEnquiries"] },
   onboarding: () => import("./onboarding"),
   blocks: () => import("./blocks"),
   events: {
