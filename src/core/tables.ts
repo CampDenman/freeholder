@@ -29,6 +29,11 @@ export {
   agentPlaybookVersions,
 } from "@/core/agents/schema";
 export {
+  briefings,
+  briefingContributions,
+  briefingPreferences,
+} from "@/core/briefing/schema";
+export {
   agentConnectionGrants,
   connectedAccounts,
   connectionCapabilities,

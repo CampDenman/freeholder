@@ -375,6 +375,26 @@ export const runPlaybooks = defineJob({
   },
 });
 
+/**
+ * The daily briefing, built before anybody arrives (C4.15).
+ *
+ * Hourly rather than at one fixed time: the business's chosen hour is read
+ * from its own timezone, and an instance that was asleep at that hour still
+ * produces the day's briefing at the next tick rather than skipping the day.
+ * Re-assembly replaces the day's sections, so running twice is harmless.
+ */
+export const assembleBriefings = defineJob({
+  name: "core.assembleBriefings",
+  summary: "Assemble each person's daily briefing.",
+  schedule: "5 * * * *",
+  concurrency: 1,
+  leaseSeconds: 15 * 60,
+  handler: async () => {
+    const { assembleDueBriefings } = await import("@/core/briefing/service");
+    return assembleDueBriefings();
+  },
+});
+
 /** An approval nobody answers lapses instead of sitting pending forever. */
 export const expireAgentApprovals = defineJob({
   name: "core.expireAgentApprovals",
@@ -532,6 +552,7 @@ export default [
   expireCaptureSessions,
   expireAgentApprovals,
   runPlaybooks,
+  assembleBriefings,
   runManagedAgents,
   purgeExpiredMediaAssets,
   deliverNotifications,

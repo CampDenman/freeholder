@@ -7,6 +7,7 @@ import {
   Copy,
   CreditCard,
   Gauge,
+  Sun,
   Image as ImageIcon,
   Layout,
   ListChecks,
@@ -47,6 +48,7 @@ import { cx } from "@/ui/primitives";
 export interface AdminNavLabels {
   region: string;
   overview: string;
+  briefing: string;
   pages: string;
   sections: string;
   templates: string;
@@ -91,6 +93,7 @@ export interface AdminNavLabels {
 // the interface cannot keep; entries arrive with their modules.
 const LINKS = [
   { href: "/admin", key: "overview", module: "admin", Icon: Gauge },
+  { href: "/admin/briefing", key: "briefing", module: "admin", Icon: Sun },
   { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
   { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },
   { href: "/admin/templates", key: "templates", module: "cms", Icon: Copy },
