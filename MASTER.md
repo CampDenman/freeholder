@@ -2931,7 +2931,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C4.17 (#164), plus this change for C4.18 (a mailbox read for who is in it, through the one door into the spine, with no bodies and no subjects nobody shared). C4 is complete. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.17 (#164), plus this change for C4.18 (a mailbox read for who is in it, through the one door into the spine, with no bodies and no subjects nobody shared). C4's connections, scheduling and briefing work is complete; C4.20–C4.23 (the builder's code lane and the catalogue) remain. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
