@@ -127,6 +127,29 @@ async function bookableCalendar(
   };
 }
 
+/**
+ * Serialise everybody trying to take a seat on the same calendar (C6.04).
+ *
+ * The exclusion constraint protects a calendar that holds one thing at once,
+ * and deliberately does not fire on a shared one — a class of twelve overlaps
+ * by design. That leaves counting seats, which is check-then-act: two
+ * transactions can both read "two of three taken" and both insert, and the
+ * class ends up with four people in a room for three.
+ *
+ * A row lock on the calendar is the cheapest correct answer. The second
+ * transaction waits for the first to commit and then counts what is really
+ * there. It costs nothing on an exclusive calendar because that path never
+ * takes it, and nothing at all when two people book *different* calendars.
+ */
+async function lockCalendarForSeating(
+  ctx: ServiceContext,
+  calendarId: string,
+): Promise<void> {
+  await ctx.tx.execute(
+    sql`select id from ${calendars} where ${calendars.id} = ${calendarId} for update`,
+  );
+}
+
 /** The seats already held on a shared calendar for an overlapping window. */
 async function seatsTaken(
   ctx: ServiceContext,
@@ -199,7 +222,10 @@ export const createBooking = defineService({
     const exclusive = calendar.capacityDefault <= 1;
     if (!exclusive) {
       // A class of twelve: the constraint deliberately does not fire here, so
-      // the seat count is checked in the transaction that takes them.
+      // the seat count is checked under a lock in the transaction that takes
+      // them. Without the lock this is check-then-act, and two people take the
+      // last place at once.
+      await lockCalendarForSeating(ctx, calendar.id);
       const taken = await seatsTaken(ctx, {
         calendarId: calendar.id,
         startsAt,
@@ -565,6 +591,7 @@ export const addBookingParticipant = defineService({
     if (!booking) throw new ServiceError("not_found", "No such appointment.");
 
     const calendar = await bookableCalendar(ctx, booking.calendarId);
+    await lockCalendarForSeating(ctx, calendar.id);
     const taken = await seatsTaken(ctx, {
       calendarId: booking.calendarId,
       startsAt: booking.startsAt,
