@@ -15,9 +15,10 @@
 // enters the system — which is exactly the moment they should.
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
+  agentConnectionGrants,
   connectedAccounts,
   connectionCapabilities,
 } from "@/core/connections/schema";
@@ -442,15 +443,53 @@ export const flagConnection = defineService({
       .update(connectedAccounts)
       .set({ status: input.status, lastError: input.reason })
       .where(eq(connectedAccounts.id, input.id))
-      .returning({ id: connectedAccounts.id });
+      .returning({
+        id: connectedAccounts.id,
+        email: connectedAccounts.email,
+        provider: connectedAccounts.provider,
+      });
     if (!row) throw new ServiceError("not_found", "No such connected account.");
+
+    // A provider revoking a grant revokes what this instance handed on from
+    // it (C4.10). Leaving agent grants live against a dead account would mean
+    // the owner's list of who can reach their mailbox stops being true the
+    // moment it matters most.
+    const affected =
+      input.status === "revoked"
+        ? await ctx.tx
+            .update(agentConnectionGrants)
+            .set({
+              revokedAt: sql`now()`,
+              revokedReason: `The account was revoked: ${input.reason}`,
+              updatedAt: sql`now()`,
+            })
+            .where(
+              and(
+                eq(agentConnectionGrants.connectedAccountId, input.id),
+                isNull(agentConnectionGrants.revokedAt),
+              ),
+            )
+            .returning({ agentId: agentConnectionGrants.agentId })
+        : await ctx.tx
+            .select({ agentId: agentConnectionGrants.agentId })
+            .from(agentConnectionGrants)
+            .where(
+              and(
+                eq(agentConnectionGrants.connectedAccountId, input.id),
+                isNull(agentConnectionGrants.revokedAt),
+              ),
+            );
 
     ctx.setSubject("connected_account", input.id);
     ctx.queueEvent("connection.needsAttention", {
       id: input.id,
       status: input.status,
+      account: row.email ?? row.provider,
+      // Named in the notification: "reconnect your mail" is advice, and
+      // "reconnect your mail — two agents are waiting on it" is a reason.
+      agentsAffected: affected.length,
     });
-    return row;
+    return { id: row.id };
   },
 });
 

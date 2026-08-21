@@ -16,6 +16,7 @@ import agentPlaybookServices from "@/core/agents/playbooks";
 import agentPlaybookEvents from "@/core/agents/playbook-events";
 import apiKeyServices from "@/core/apikeys/service";
 import connectionServices from "@/core/connections/service";
+import connectionGrantServices from "@/core/connections/grants";
 import contactServices from "@/core/contacts/service";
 import customFieldServices from "@/core/contacts/custom-fields";
 import duplicateServices from "@/core/contacts/duplicates";
@@ -61,6 +62,7 @@ const services: Service[] = [
   ...agentPlaybookEvents,
   ...apiKeyServices,
   ...connectionServices,
+  ...connectionGrantServices,
   ...contactServices,
   ...customFieldServices,
   ...duplicateServices,

@@ -29,6 +29,7 @@ export {
   agentPlaybookVersions,
 } from "@/core/agents/schema";
 export {
+  agentConnectionGrants,
   connectedAccounts,
   connectionCapabilities,
   externalCalendars,

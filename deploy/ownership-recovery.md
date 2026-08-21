@@ -120,6 +120,43 @@ Rotate without downtime:
    secrets backup, and retain the old key only under the backup-retention
    policy needed to restore older database archives.
 
+## Who can reach a connected account
+
+Rotating a key changes how a credential is stored. It does not change *who*
+may use it, and those are separate questions with separate answers.
+
+An agent's scopes say what kind of work it may do. They never say whose
+account it may do that work with: on an instance holding the owner's mailbox,
+a shared shop inbox and a staff member's personal calendar, an agent scoped to
+read calendars would otherwise read all three. So reaching a connected account
+is a second, narrower permission (`agent_connection_grants`), granted one
+agent and one account at a time:
+
+- `connections.grantToAgent` — an owner or connection manager, signed in with
+  a fresh second factor, gives one worker `read` or `write` on one account.
+- `connections.revokeFromAgent` — takes it back. Deliberately *not* behind
+  step-up: removing access is the safe direction and should never wait.
+- `connections.grants` lists every grant, including revoked ones. Revocation
+  is a timestamp rather than a deletion, so "did that agent ever have access
+  to my calendar, and when did it stop" has an answer.
+- `connections.mine` is what an agent itself sees: the accounts it was given,
+  never the rest, and never a credential.
+
+Two cascades matter when recovering or auditing an instance:
+
+- A provider withdrawing consent (`connections.flag` with `revoked`) revokes
+  every agent grant on that account in the same transaction. The list of who
+  can reach a mailbox stays true at the moment it matters most.
+- An account that merely `needs_reconnect` keeps its grants — an expired token
+  is not the owner changing their mind — but cannot be used until it is
+  reconnected, and the reconnect notification names how many agents are
+  waiting on it.
+
+After restoring a database into a new environment, review `connections.grants`
+before resuming agent work: the grants come back with the data, and an
+instance restored for testing should usually have them revoked rather than
+left pointing at production mailboxes.
+
 If neither current nor previous key decrypts a row, Freeholder marks the
 connection `needs_reconnect` instead of deleting ciphertext or retrying into a
 provider lockout. A lost key is a reconnect incident, not a reason to weaken
