@@ -29,9 +29,53 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { agents } from "@/core/agents/schema";
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+
+/**
+ * Which worker may use which connected account (C4.10, MASTER.md §41).
+ *
+ * Scopes say what *kind* of thing an agent may do — read calendars, read
+ * mail. They cannot say *whose*, and on an instance with the owner's Gmail,
+ * a shared shop inbox and a staff member's personal calendar all connected,
+ * "whose" is the whole question. So reaching a connected account is a
+ * separate, explicit grant an owner makes one account at a time, and the
+ * absence of a row is a refusal.
+ *
+ * Revocation is a timestamp rather than a delete: an owner asking "did that
+ * agent ever have access to my calendar, and when did it stop" deserves an
+ * answer, and a deleted row answers nothing.
+ */
+export const agentConnectionGrants = pgTable(
+  "agent_connection_grants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    connectedAccountId: uuid("connected_account_id")
+      .notNull()
+      .references((): AnyPgColumn => connectedAccounts.id, { onDelete: "cascade" }),
+    /** What the agent may do with it. A subset of what the provider granted. */
+    access: text("access", { enum: ["read", "write"] })
+      .notNull()
+      .default("read"),
+    grantedBy: uuid("granted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedReason: text("revoked_reason"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("agent_connection_grants_idx").on(t.agentId, t.connectedAccountId),
+    index("agent_connection_grants_account_idx").on(t.connectedAccountId),
+  ],
+);
 
 export const connectedAccounts = pgTable(
   "connected_accounts",

@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` through C4.08 (#155), plus this change for C4.09 (unguessable untrusted fences over input and tool results, an egress conformance gate over agent-callable URL services, and an end-to-end injection suite proving the platform holds when the model does not). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.09 (#156), plus this change for C4.10 (per-agent, per-connection grants with revocation history, cascading revocation from the provider, and the reconnect notice naming who is waiting). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.10 credential-key rotation, backup/recovery documentation, per-agent and per-connection grants, revocation and reconnect notifications. |
+| Current focus | C4.11 Google and Microsoft OAuth with incremental calendar scopes and several accounts per provider. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3805,8 +3805,27 @@ deployments are portable, testable and incapable of silently forking the truth.
 
 #### Connected accounts and recurring work
 
-- [ ] **C4.10** Complete credential-key rotation, backup/recovery documentation,
+- [x] **C4.10** Complete credential-key rotation, backup/recovery documentation,
   per-agent/per-connection grants, revocation and reconnect notifications.
+  (Rotation and its runbook already existed from B10/C1.23 —
+  `connections.rotateCredentials` with `CREDENTIAL_KEY_PREVIOUS`, resumable and
+  idempotent, drilled in CI. What was missing was *whose*: a scope says an
+  agent may read calendars, never which calendar, so
+  `agent_connection_grants` (`0080_agent_connection_grants.sql`) makes
+  reaching one connected account a separate grant an owner makes one agent and
+  one account at a time, and absence is refusal. `connections.grantToAgent` is
+  step-up and human-only; `connections.revokeFromAgent` deliberately is not,
+  because taking access away should never wait. `accountsForAgent` and
+  `assertAgentMayUseAccount` in `src/core/connections/grants.ts` are the only
+  supported way to reach an account on an agent's behalf — the C4.11–C4.13
+  calendar and C4.18 mail work route through them — and `connections.mine` is
+  the first consumer, so the grant is load-bearing rather than a table waiting
+  for one. A provider revoking an account revokes every grant on it in the
+  same transaction; `needs_reconnect` keeps grants but withholds use, and the
+  reconnect notification now names how many agents are waiting. Operator guide
+  extended in `deploy/ownership-recovery.md`, including reviewing grants after
+  restoring a database elsewhere. Coverage in
+  `tests/core/connection-grants.test.ts`.)
 - [ ] **C4.11** Implement Google and Microsoft OAuth with incremental calendar
   scopes and several accounts per provider/person.
 - [ ] **C4.12** Sync external calendars with tokens, busy-only default,
