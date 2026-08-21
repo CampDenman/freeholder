@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C4.13 (#160), plus this change for C4.14 (one scheduled job for every schedule an owner ever writes, a missed window that runs once rather than once per minute it was missed, and overlap refused with the reason shown). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.14 (#161), plus this change for C4.15 (a briefing assembled before anybody arrives, sections that come from contributors rather than a list, needs-me-first ordering, and hiding that hides a section without switching off the work). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.15 briefing entities: contributor registry, preassembly, needs-me-first ordering, read state and per-section preferences. |
+| Current focus | C4.16 core briefing contributors: appointments, enquiries, overdue invoices, agent failures, webhook failures, reconnects and updates. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3916,8 +3916,32 @@ deployments are portable, testable and incapable of silently forking the truth.
   `timezone`, `next_run_at`, `last_run_at`, `catch_up` and `last_outcome` with
   a partial index on the due predicate. Coverage in
   `tests/core/agents-schedule.test.ts`.)
-- [ ] **C4.15** Build briefing entities, contributor registry, preassembly,
+- [x] **C4.15** Build briefing entities, contributor registry, preassembly,
   needs-me-first ordering, read state and per-section preferences.
+  (`src/core/briefing/` holds the three tables §42 names and the mechanism
+  around them. Sections are **stored, not recomputed on read**: "three invoices
+  were overdue this morning" is a statement about a moment, and a briefing that
+  quietly rewrote itself as the day went on would be one nobody could act on —
+  which is also why assembly is a scheduled job (`core.assembleBriefings`) and
+  the screen is a pure read. A contributor is an ordinary **service**, declared
+  by a manifest exactly as `seo.sitemapSources` is, so a briefing gains a
+  section when a module is enabled and no screen changes; a contribution is
+  validated against a contract, runs inside the assembling transaction, and is
+  visible in the audit trail, so a module cannot smuggle one in by writing
+  rows. A contributor that throws or answers off-contract costs its own section
+  and nothing else — this is the screen that carries the warnings about the
+  platform being unhappy, so it has to survive one unhappy part of it. Silence
+  and an empty section are the same answer and both are omitted. Ordering is
+  needs-me-first (`attention`, then `today`, then `changed`), not declaration
+  order. Hiding a section is a preference and never a delete: switching off
+  "overdue invoices" must not stop invoices being chased, and the hidden
+  section is listed so it can be brought back. Re-assembling a day replaces its
+  sections rather than producing a second Tuesday, and read state survives it.
+  `/admin/briefing` reports and links only — §42 deliberately keeps buttons
+  that fire irreversible work off a summary screen. Core's own contributors are
+  C4.16 and playbook/module delivery is C4.17; today the registry honestly
+  returns none, which yields an empty briefing rather than a broken one.
+  `0083_briefings.sql`. Coverage in `tests/core/briefing.test.ts`.)
 - [ ] **C4.16** Add core briefing contributors for appointments, enquiries,
   overdue invoices, agent failures, webhook failures, reconnects and updates.
 - [ ] **C4.17** Add playbook/module contributions plus email, SMS and push

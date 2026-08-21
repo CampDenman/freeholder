@@ -48,6 +48,12 @@ export interface ModuleManifest {
   jobs?: Lazy<Record<string, unknown>>;
   mcpTools?: Lazy<Record<string, unknown>>;
   seo?: { sitemapSources: string[] };
+  /**
+   * Services that may put a section in the daily briefing (§42). The same
+   * seam as `sitemapSources`: a briefing gains a section when a module is
+   * enabled, and no screen changes.
+   */
+  briefing?: { contributors: string[] };
   settingsSchema?: z.ZodType;
   /**
    * Versioned guidance and deterministic demo contributions (sections 13, 24).
