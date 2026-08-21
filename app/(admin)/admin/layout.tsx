@@ -127,6 +127,7 @@ export default async function AdminLayout({
               fulfillment: t("catalog.fulfill.title"),
               returns: t("catalog.returns.title"),
               promotions: t("catalog.promo.title"),
+              calendar: t("calendar.title"),
               events: t("events.title"),
               newsletters: t("newsletters.title"),
               contribute: t("contribute.title"),

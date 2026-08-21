@@ -78,6 +78,7 @@ export interface AdminNavLabels {
   fulfillment: string;
   returns: string;
   promotions: string;
+  calendar: string;
   events: string;
   newsletters: string;
   contribute: string;
@@ -111,6 +112,7 @@ const LINKS = [
   { href: "/admin/fulfillment", key: "fulfillment", module: "catalog", Icon: AirplaneTakeoff },
   { href: "/admin/returns", key: "returns", module: "catalog", Icon: ArrowUUpLeft },
   { href: "/admin/promotions", key: "promotions", module: "catalog", Icon: Ticket },
+  { href: "/admin/calendar", key: "calendar", module: "connections", Icon: CalendarBlank },
   { href: "/admin/events", key: "events", module: "events", Icon: CalendarBlank },
   { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
