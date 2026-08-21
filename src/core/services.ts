@@ -48,6 +48,7 @@ import notificationServices from "@/core/notifications/service";
 import schedulingServices from "@/core/scheduling/service";
 import availabilityServices from "@/core/scheduling/availability-service";
 import bookingServices from "@/core/scheduling/bookings";
+import resolverServices from "@/core/scheduling/resolver-service";
 import roleServices from "@/core/roles/service";
 import cspServices from "@/core/security/csp-reports";
 import seoServices from "@/core/seo/service";
@@ -106,6 +107,7 @@ const services: Service[] = [
   ...schedulingServices,
   ...availabilityServices,
   ...bookingServices,
+  ...resolverServices,
   ...roleServices,
   ...cspServices,
   ...seoServices,
