@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.03 the availability resolver, now that there are real bookings to subtract. |
+| Current focus | C6.05 booking audiences — public, token, tags and sign-in — with their own hours, services, notice and horizon. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4411,8 +4411,34 @@ payment, tax, inventory and reporting path, with no floating-point money.
   is a closed day rather than a row to delete. `0086_availability.sql`.
   Coverage in `tests/core/availability.test.ts`; the resolver that subtracts
   bookings from these windows is C6.03.)
-- [ ] **C6.03** Implement the availability resolver for compound resources,
+- [x] **C6.03** Implement the availability resolver for compound resources,
   assignment pools/round-robin, capacity, travel time and daily/period caps.
+  (`src/core/scheduling/resolver.ts` derives slots at request time from all
+  seven inputs §4.4 names and caches none of them, because "every cached
+  answer is a double-booking waiting for a cache miss". Open windows (C6.02),
+  minus existing bookings (C6.07), minus busy time synced from a connected
+  calendar (C4.12) — which reaches the resolver through the calendar's
+  `external_calendar_id` link and carries only times, since C4.12 never stored
+  a title it was not permitted to. **Buffers and travel time widen the slot
+  before it is tested**, not after, so a slot that would leave a photographer
+  no time to cross town is never offered at all. Lead time and horizon come
+  from the calendar (C6.01), and `max_per_day` is enforced because burnout is
+  a scheduling bug. **Compound requirements are chosen together, not in
+  sequence**: a service needing a person and a room offers a slot only where
+  both are free, and falls to a second room when the first is taken — a
+  resolver that picked the person first would offer slots it cannot honour,
+  which is worse than offering fewer. A named person is a *preference* rather
+  than a filter unless the service's assignment is `specific`, so a pool is
+  never hidden behind one name; round-robin shows each time once and gives it
+  to whoever has least on, because which of three free people a customer gets
+  is the business's decision. Shared calendars report places left and refuse a
+  party larger than those. `scheduling.slots` is deliberately `public`: what is
+  free next Tuesday is exactly the question a visitor may ask, and the answer
+  carries times and a calendar's name and nothing else. It reads the service's
+  shape from the catalog by name rather than by import (§11), and refuses
+  clearly on an instance with no catalog rather than inventing a duration.
+  Coverage in `tests/core/resolver.test.ts` — each of the seven subtractions
+  tested on its own against one simple week, so a failure names what broke.)
 - [x] **C6.04** Enforce no-overlap/exclusion constraints in Postgres and prove
   concurrent attempts cannot double-book.
   (Two shapes of calendar need two mechanisms, and only one of them is the

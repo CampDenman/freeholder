@@ -1,0 +1,396 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// The availability resolver (MASTER.md §4.4, C6.03).
+//
+// §4.4: "Availability is **computed, never stored**. The answer to 'what can I
+// book?' is derived at request time from the rules, the exceptions, existing
+// bookings, the external busy blocks, the buffers, the lead time, the horizon,
+// and the capacity — because every cached answer is a double-booking waiting
+// for a cache miss."
+//
+// So this reads all of those and returns slots. The order matters and is the
+// whole design:
+//
+//   1. open windows from the pattern and its exceptions (C6.02)
+//   2. minus what is already booked (C6.07)
+//   3. minus busy time synced from a connected calendar (C4.12/C4.13)
+//   4. cut into slots of the service's duration, on the granularity asked for
+//   5. each slot widened by the service's buffers before it is tested, so a
+//      photographer is not booked back-to-back across town
+//   6. dropped if it is inside the lead time or beyond the horizon
+//   7. dropped if the day is already at the calendar's daily cap
+//
+// **Compound requirements are resolved together, not in sequence.** A service
+// needing a therapist *and* a room offers a slot only where both are free. A
+// resolver that picked the person first and then looked for a room would offer
+// slots it cannot honour, which is worse than offering fewer.
+import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
+import { openWindows, type OpenWindow } from "@/core/scheduling/availability";
+import {
+  bookings,
+  calendars,
+  calendarMemberships,
+  HOLDING_STATUSES,
+} from "@/core/scheduling/schema";
+import {
+  connectedAccounts,
+  externalCalendars,
+  externalEvents,
+} from "@/core/connections/schema";
+import { zonedDate } from "@/core/i18n/zoned";
+import type { Tx } from "@/core/service";
+
+export interface Slot {
+  startsAt: Date;
+  endsAt: Date;
+  /** Which calendar would take it, so the customer can be told who they got. */
+  calendarId: string;
+  calendarName: string;
+  /** The room, van or chair that goes with it, when the service needs one. */
+  resourceCalendarIds: string[];
+  /** Places left, for a class. Always 1 for a calendar that holds one thing. */
+  seatsAvailable: number;
+}
+
+export interface SlotRequest {
+  serviceOfferingId: string;
+  /** Inclusive local dates in the business's zone, `YYYY-MM-DD`. */
+  from: string;
+  to: string;
+  timezone: string;
+  durationMin: number;
+  bufferBeforeMin?: number;
+  bufferAfterMin?: number;
+  /** Travel between locations, added to the buffer after (§4.10). */
+  travelTimeMin?: number;
+  /** 15-minute increments, or on the hour only. */
+  granularityMin?: number;
+  capacity?: number;
+  assignment?: "specific" | "pool" | "round_robin";
+  /** "I want Sam" — offered first, and never the only answer for a pool. */
+  preferredCalendarId?: string;
+  /** Seats this enquiry wants, so a party of three is not offered a single place. */
+  seats?: number;
+  /** Now, injectable so a test is not at the mercy of the clock. */
+  now?: Date;
+  maxSlots?: number;
+}
+
+interface Busy {
+  startsAt: Date;
+  endsAt: Date;
+}
+
+const DEFAULT_GRANULARITY = 15;
+const DEFAULT_MAX_SLOTS = 500;
+
+/** Everything a calendar has already committed to, from both sources. */
+async function busyFor(
+  tx: Tx,
+  calendarId: string,
+  window: { from: Date; to: Date },
+): Promise<Busy[]> {
+  const booked = await tx
+    .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.calendarId, calendarId),
+        sql`${bookings.status} = any(${sql.param([...HOLDING_STATUSES])})`,
+        gte(bookings.endsAt, window.from),
+        lte(bookings.startsAt, window.to),
+      ),
+    );
+
+  // §4.4: imported busy time is "never shown to customers, always respected".
+  // It reaches here through the calendar's link to the synced one (C6.01), and
+  // carries only times — the privacy design in C4.12 means there is nothing
+  // else on it to reach a booking page.
+  const external = await tx
+    .select({ startsAt: externalEvents.startsAt, endsAt: externalEvents.endsAt })
+    .from(externalEvents)
+    .innerJoin(
+      externalCalendars,
+      eq(externalCalendars.id, externalEvents.externalCalendarId),
+    )
+    .innerJoin(calendars, eq(calendars.externalCalendarId, externalCalendars.id))
+    .innerJoin(
+      connectedAccounts,
+      eq(connectedAccounts.id, externalCalendars.connectedAccountId),
+    )
+    .where(
+      and(
+        eq(calendars.id, calendarId),
+        eq(connectedAccounts.sharedWithBusiness, true),
+        sql`${externalCalendars.role} <> 'ignored'`,
+        eq(externalEvents.busy, true),
+        gte(externalEvents.endsAt, window.from),
+        lte(externalEvents.startsAt, window.to),
+      ),
+    );
+
+  return [...booked, ...external].sort(
+    (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+  );
+}
+
+function overlaps(a: Busy, b: Busy): boolean {
+  return a.startsAt < b.endsAt && b.startsAt < a.endsAt;
+}
+
+/** Seats already held on a shared calendar across a candidate slot. */
+function seatsHeld(
+  held: { startsAt: Date; endsAt: Date; capacityUsed: number }[],
+  slot: Busy,
+): number {
+  return held
+    .filter((booking) => overlaps(booking, slot))
+    .reduce((total, booking) => total + booking.capacityUsed, 0);
+}
+
+/**
+ * The candidate start times inside one open window.
+ *
+ * Aligned to the granularity from the top of the window's hour, so "on the
+ * hour only" means on the hour rather than on the hour the window happens to
+ * open at.
+ */
+function* startsIn(
+  window: OpenWindow,
+  durationMin: number,
+  granularityMin: number,
+): Generator<Date> {
+  const step = granularityMin * 60_000;
+  const duration = durationMin * 60_000;
+  const anchor = new Date(window.startsAt);
+  anchor.setUTCMinutes(0, 0, 0);
+  let cursor = anchor.getTime();
+  while (cursor < window.startsAt.getTime()) cursor += step;
+  for (; cursor + duration <= window.endsAt.getTime(); cursor += step) {
+    yield new Date(cursor);
+  }
+}
+
+/**
+ * What can be booked, for one service, across a range of dates.
+ *
+ * Returns slots in time order. A slot names the calendar that would take it,
+ * because §4.4 wants the customer told who they got.
+ */
+export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]> {
+  const now = request.now ?? new Date();
+  const granularity = request.granularityMin ?? DEFAULT_GRANULARITY;
+  const bufferBefore = (request.bufferBeforeMin ?? 0) * 60_000;
+  // Travel rides with the buffer after: both are the reason the next slot
+  // cannot start the moment this one ends.
+  const bufferAfter =
+    ((request.bufferAfterMin ?? 0) + (request.travelTimeMin ?? 0)) * 60_000;
+  const seats = request.seats ?? 1;
+  const maxSlots = request.maxSlots ?? DEFAULT_MAX_SLOTS;
+
+  const members = await tx
+    .select({
+      calendarId: calendars.id,
+      name: calendars.name,
+      timezone: calendars.timezone,
+      capacityDefault: calendars.capacityDefault,
+      bookingHorizonDays: calendars.bookingHorizonDays,
+      minNoticeMin: calendars.minNoticeMin,
+      maxPerDay: calendars.maxPerDay,
+      role: calendarMemberships.role,
+      priority: calendarMemberships.priority,
+    })
+    .from(calendarMemberships)
+    .innerJoin(calendars, eq(calendars.id, calendarMemberships.calendarId))
+    .where(
+      and(
+        eq(calendarMemberships.serviceOfferingId, request.serviceOfferingId),
+        eq(calendars.status, "active"),
+      ),
+    )
+    .orderBy(asc(calendarMemberships.priority), asc(calendars.name));
+  if (members.length === 0) return [];
+
+  const people = members.filter((member) => member.role !== "resource");
+  const resources = members.filter((member) => member.role === "resource");
+  if (people.length === 0) return [];
+
+  const candidates =
+    request.assignment === "specific" && request.preferredCalendarId
+      ? people.filter((member) => member.calendarId === request.preferredCalendarId)
+      : request.preferredCalendarId
+        ? // A preference, not a filter: §4.4 wants the named person offered
+          // first without the pool being hidden behind them.
+          [
+            ...people.filter((member) => member.calendarId === request.preferredCalendarId),
+            ...people.filter((member) => member.calendarId !== request.preferredCalendarId),
+          ]
+        : people;
+  if (candidates.length === 0) return [];
+
+  const rangeStart = new Date(`${request.from}T00:00:00.000Z`);
+  const rangeEnd = new Date(`${request.to}T23:59:59.999Z`);
+  // Widened, because a booking that started before the range can still block
+  // a slot inside it.
+  const busyWindow = {
+    from: new Date(rangeStart.getTime() - 86_400_000),
+    to: new Date(rangeEnd.getTime() + 86_400_000),
+  };
+
+  // Loaded once per calendar rather than per slot: a fortnight of fifteen
+  // minute slots is a thousand candidates, and a query each would be a
+  // thousand queries.
+  const busyByCalendar = new Map<string, Busy[]>();
+  const heldByCalendar = new Map<
+    string,
+    { startsAt: Date; endsAt: Date; capacityUsed: number }[]
+  >();
+  for (const member of [...candidates, ...resources]) {
+    busyByCalendar.set(member.calendarId, await busyFor(tx, member.calendarId, busyWindow));
+    if (member.capacityDefault > 1) {
+      heldByCalendar.set(
+        member.calendarId,
+        await tx
+          .select({
+            startsAt: bookings.startsAt,
+            endsAt: bookings.endsAt,
+            capacityUsed: bookings.capacityUsed,
+          })
+          .from(bookings)
+          .where(
+            and(
+              eq(bookings.calendarId, member.calendarId),
+              sql`${bookings.status} = any(${sql.param([...HOLDING_STATUSES])})`,
+              gte(bookings.endsAt, busyWindow.from),
+              lte(bookings.startsAt, busyWindow.to),
+            ),
+          ),
+      );
+    }
+  }
+
+  const perDay = new Map<string, number>();
+  const found: Slot[] = [];
+
+  for (const member of candidates) {
+    const earliest = new Date(now.getTime() + member.minNoticeMin * 60_000);
+    const latest = new Date(now.getTime() + member.bookingHorizonDays * 86_400_000);
+
+    const windows = await openWindows(tx, {
+      calendarId: member.calendarId,
+      timezone: member.timezone,
+      from: request.from,
+      to: request.to,
+      kinds: ["bookable"],
+    });
+
+    for (const window of windows) {
+      for (const startsAt of startsIn(window, request.durationMin, granularity)) {
+        if (found.length >= maxSlots) return found;
+        const endsAt = new Date(startsAt.getTime() + request.durationMin * 60_000);
+
+        // Lead time and horizon: no bookings in the next two hours, none more
+        // than six months out.
+        if (startsAt < earliest || startsAt > latest) continue;
+
+        // The buffers are what is tested against existing work, not the
+        // appointment itself, so a slot that would leave no travel time is
+        // never offered.
+        const guarded = {
+          startsAt: new Date(startsAt.getTime() - bufferBefore),
+          endsAt: new Date(endsAt.getTime() + bufferAfter),
+        };
+
+        const shared = member.capacityDefault > 1;
+        if (shared) {
+          const taken = seatsHeld(heldByCalendar.get(member.calendarId) ?? [], {
+            startsAt,
+            endsAt,
+          });
+          if (taken + seats > member.capacityDefault) continue;
+        } else if (
+          (busyByCalendar.get(member.calendarId) ?? []).some((busy) =>
+            overlaps(busy, guarded),
+          )
+        ) {
+          continue;
+        }
+
+        // Daily and weekly caps, because burnout is a scheduling bug.
+        const day = zonedDate(startsAt, member.timezone);
+        const dayKey = `${member.calendarId}:${day.year}-${day.month}-${day.day}`;
+        if (member.maxPerDay !== null && (perDay.get(dayKey) ?? 0) >= member.maxPerDay) {
+          continue;
+        }
+
+        // Compound requirements, chosen together rather than in sequence: the
+        // slot exists only if a resource is free for it too.
+        const resource = resources.find(
+          (candidate) =>
+            !(busyByCalendar.get(candidate.calendarId) ?? []).some((busy) =>
+              overlaps(busy, guarded),
+            ),
+        );
+        if (resources.length > 0 && !resource) continue;
+
+        found.push({
+          startsAt,
+          endsAt,
+          calendarId: member.calendarId,
+          calendarName: member.name,
+          resourceCalendarIds: resource ? [resource.calendarId] : [],
+          seatsAvailable: shared
+            ? member.capacityDefault -
+              seatsHeld(heldByCalendar.get(member.calendarId) ?? [], { startsAt, endsAt })
+            : 1,
+        });
+        perDay.set(dayKey, (perDay.get(dayKey) ?? 0) + 1);
+      }
+    }
+  }
+
+  // Round-robin spreads the work; everything else reads in time order with the
+  // preferred or highest-priority calendar winning a tie.
+  if (request.assignment === "round_robin") {
+    const load = new Map(candidates.map((member) => [member.calendarId, 0]));
+    return dedupeByStart(
+      found.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
+      load,
+    );
+  }
+
+  return found.sort(
+    (a, b) =>
+      a.startsAt.getTime() - b.startsAt.getTime() ||
+      candidates.findIndex((member) => member.calendarId === a.calendarId) -
+        candidates.findIndex((member) => member.calendarId === b.calendarId),
+  );
+}
+
+/**
+ * One offer per start time, given to whoever has least on.
+ *
+ * A customer picking a time should be shown the time once. Which of three
+ * available people they get is the business's decision, and round-robin is the
+ * business saying "whoever is quietest".
+ */
+function dedupeByStart(slots: Slot[], load: Map<string, number>): Slot[] {
+  const byStart = new Map<number, Slot[]>();
+  for (const slot of slots) {
+    const key = slot.startsAt.getTime();
+    byStart.set(key, [...(byStart.get(key) ?? []), slot]);
+  }
+  const chosen: Slot[] = [];
+  const running = new Map(load);
+  for (const key of [...byStart.keys()].sort((a, b) => a - b)) {
+    const options = byStart.get(key)!;
+    const pick = options.reduce((least, option) =>
+      (running.get(option.calendarId) ?? 0) < (running.get(least.calendarId) ?? 0)
+        ? option
+        : least,
+    );
+    running.set(pick.calendarId, (running.get(pick.calendarId) ?? 0) + 1);
+    chosen.push(pick);
+  }
+  return chosen;
+}
