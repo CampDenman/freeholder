@@ -19,6 +19,7 @@ import connectionServices from "@/core/connections/service";
 import connectionGrantServices from "@/core/connections/grants";
 import calendarOAuthServices from "@/core/connections/calendar-oauth";
 import calendarSyncServices from "@/core/connections/calendar-sync";
+import calendarBusyServices from "@/core/connections/busy";
 import contactServices from "@/core/contacts/service";
 import customFieldServices from "@/core/contacts/custom-fields";
 import duplicateServices from "@/core/contacts/duplicates";
@@ -67,6 +68,7 @@ const services: Service[] = [
   ...connectionGrantServices,
   ...calendarOAuthServices,
   ...calendarSyncServices,
+  ...calendarBusyServices,
   ...contactServices,
   ...customFieldServices,
   ...duplicateServices,

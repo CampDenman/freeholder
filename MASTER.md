@@ -2930,12 +2930,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-20 |
-| Evidence snapshot | `main` through C4.11 (#158), plus this change for C4.12 (busy-only shadows by default, cursors that may be refused, ignored calendars that are not fetched, and a refusal that asks for a reconnection instead of retrying). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Last reconciled | 2026-08-21 |
+| Evidence snapshot | `main` through C4.12 (#159), plus this change for C4.13 (one union of busy time carrying nothing but times, a week that is drawn to scale across a clock change, and every calendar that does *not* count listed with the reason). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.13 unified calendar display and busy unions feeding availability without leaking private detail. |
+| Current focus | C4.14 runtime playbook scheduling: timezone/DST, `next_run_at`, catch-up policy, overlap refusal and outage-safe advancement. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3867,8 +3867,29 @@ deployments are portable, testable and incapable of silently forking the truth.
   calendars share one path and a rotated credential is never written twice.
   Coverage in `tests/core/calendar-sync.test.ts`; the display and the
   availability union are C4.13.)
-- [ ] **C4.13** Build unified calendar display and connect busy unions to the
+- [x] **C4.13** Build unified calendar display and connect busy unions to the
   availability engine without leaking private event details.
+  (`src/core/connections/busy.ts` is the union and the only supported way to
+  ask what external calendars have taken. It returns periods and *only*
+  periods — no title, no calendar, no account, not even how many things
+  overlap — so a caller that wanted to leak a private engagement has nothing
+  in the shape to leak it with; a test asserts the returned keys are exactly
+  `startsAt` and `endsAt`. Merging happens here rather than in each caller,
+  because two overlapping engagements are one period of unavailability and a
+  resolver that saw them separately would double-count. §4.4's rule that
+  imported busy time is "never shown to customers, always respected" is why
+  `bookable` calendars block too and only `ignored` ones do not, and §41's
+  personal-first default is why an account nobody shared with the business
+  does not block the business's diary. `/admin/calendar` draws the week from
+  it: no event opens, because there is nothing behind a block. What it does
+  list is every calendar that is *not* counted and why — personal, ignored, or
+  needing a reconnection — since that is the list somebody checks after a
+  double booking. `src/core/i18n/zoned.ts` gives the page real local day
+  boundaries, so the 23- and 25-hour days are drawn to scale and an hour the
+  clock skipped resolves forward rather than starting a day early. The
+  availability resolver (C6.03) consumes `externalBusyWindows` and needs no
+  other door into this data. Coverage in `tests/core/calendar-busy.test.ts`
+  and `tests/core/zoned.test.ts`.)
 - [ ] **C4.14** Implement runtime playbook scheduling with timezone/DST,
   `next_run_at`, catch-up policy, overlap refusal and outage-safe advancement.
 - [ ] **C4.15** Build briefing entities, contributor registry, preassembly,
