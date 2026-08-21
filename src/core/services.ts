@@ -23,6 +23,7 @@ import calendarSyncServices from "@/core/connections/calendar-sync";
 import calendarBusyServices from "@/core/connections/busy";
 import briefingServices from "@/core/briefing/service";
 import briefingContributorServices from "@/core/briefing/contributors";
+import briefingPlaybookSection from "@/core/briefing/playbook-section";
 import contactServices from "@/core/contacts/service";
 import customFieldServices from "@/core/contacts/custom-fields";
 import duplicateServices from "@/core/contacts/duplicates";
@@ -75,6 +76,7 @@ const services: Service[] = [
   ...calendarBusyServices,
   ...briefingServices,
   ...briefingContributorServices,
+  ...briefingPlaybookSection,
   ...contactServices,
   ...customFieldServices,
   ...duplicateServices,

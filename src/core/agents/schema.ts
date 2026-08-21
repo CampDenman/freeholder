@@ -436,6 +436,16 @@ export const agentPlaybooks = pgTable(
     }),
     /** Optional per-task money ceiling for work this playbook creates. */
     budgetCents: integer("budget_cents"),
+    /**
+     * "Report into my briefing" (§42, C4.17).
+     *
+     * This is the mechanism behind adding more and more things an owner wants
+     * their agents to do regularly and report on: they write a prompt, pick a
+     * schedule, and tick this. What the work produced then appears as its own
+     * briefing section, which they can hide like any other without stopping
+     * the work itself.
+     */
+    reportsToBriefing: boolean("reports_to_briefing").notNull().default(false),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

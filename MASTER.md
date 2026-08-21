@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C4.15 (#162), plus this change for C4.16 (the sections core and the modules actually contribute — including the failures that are deliberately silent everywhere else). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.16 (#163), plus this change for C4.17 (a playbook that reports into the briefing, and a briefing that reaches somebody who has not opened the admin since Monday). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.17 playbook and module contributions plus email, SMS and push delivery through notification preferences. |
+| Current focus | C4.18 Gmail/Microsoft mail read and contact import as untrusted data through `contacts.resolve`, timeline and duplicate workflow. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3968,8 +3968,30 @@ deployments are portable, testable and incapable of silently forking the truth.
   assertion that every declared contributor resolves to a service that
   actually exists — a section that silently never appears is the failure mode
   this design would otherwise have.)
-- [ ] **C4.17** Add playbook/module contributions plus email, SMS and push
+- [x] **C4.17** Add playbook/module contributions plus email, SMS and push
   delivery through notification preferences.
+  (§42 calls "report into my briefing" the mechanism behind an owner adding
+  more and more things they want their agents to do regularly and report on:
+  they write a prompt, pick a schedule, and tick a box. `reports_to_briefing`
+  is that box (`0084`), and `briefing.playbookSection` is what it turns into.
+  Playbook sections are registered at assembly rather than declared anywhere,
+  because playbooks are written at runtime — the same reason their schedules
+  live in a column (C4.14) — and each is keyed `playbook:<id>` so an owner can
+  hide one without touching the others or the work behind it. The section
+  reports what the work *said*: no paraphrase, because a summary that quietly
+  rewrote an agent's answer would be a third thing, trusted like the second and
+  true like neither. A result with no sentence in it produces no section rather
+  than an object rendered at somebody first thing in the morning, and a run
+  that failed says so — a playbook the owner asked to report is one whose
+  silence reads as "nothing to report". Module contributions were already the
+  mechanism C4.15 built and C4.16 used. **Delivery goes down the ordinary
+  notification path** on a new `briefing.ready` topic, so which channels it
+  reaches — inbox, email, SMS, push — is the person's existing preference
+  rather than a second set of settings to keep in step, and §4.14's quiet hours
+  and digests apply for free. It is deduplicated per person per day, so
+  re-assembling a day cannot buzz the same phone twice, and a briefing with
+  nothing in it never sends at all. Coverage in
+  `tests/core/briefing-playbooks.test.ts`.)
 - [ ] **C4.18** Add Gmail/Microsoft mail read and contact import as untrusted
   data through `contacts.resolve`, timeline and duplicate workflow.
 

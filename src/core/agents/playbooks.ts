@@ -59,6 +59,7 @@ const playbookRow = row({
   paramsSchema: z.unknown(),
   trigger: z.enum(TRIGGERS),
   scheduleCron: z.string().nullable(),
+  reportsToBriefing: z.boolean(),
   timezone: z.string().nullable(),
   nextRunAt: timestamp.nullable(),
   lastRunAt: timestamp.nullable(),
@@ -97,6 +98,8 @@ const definition = {
   eventPattern: z.string().trim().max(200).nullish(),
   autonomyCeiling: z.enum(AUTONOMY).nullish(),
   budgetCents: z.number().int().min(0).max(10_000_000).nullish(),
+  /** "Report into my briefing" (§42, C4.17). */
+  reportsToBriefing: z.boolean().default(false),
   enabled: z.boolean().default(true),
 };
 

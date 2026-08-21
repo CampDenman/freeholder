@@ -33,6 +33,8 @@ export const briefingContribution = z
     body: z.string().max(4_000).optional(),
     items: z.array(briefingItem).max(50).default([]),
     severity: z.enum(["attention", "today", "changed"]).default("changed"),
+    /** Set by a playbook section, so the run behind it stays reachable. */
+    playbookRunId: z.uuid().optional(),
   })
   .nullable();
 
@@ -56,6 +58,14 @@ export interface RegisteredContributor {
   source: "core" | "module" | "playbook";
   /** Ties within a severity, so a briefing reads the same way every day. */
   position: number;
+  /**
+   * Extra input for contributors that are registered more than once.
+   *
+   * One playbook is one section, so the same service answers for each of them
+   * and needs to be told which (C4.17). Core and module contributors are
+   * registered once and carry nothing here.
+   */
+  params?: Record<string, string>;
 }
 
 /**
@@ -89,7 +99,48 @@ export async function briefingContributors(): Promise<RegisteredContributor[]> {
       found.push({ key: service, service, source: "module", position: 100 + index });
     });
   }
+  found.push(...(await playbookContributors()));
   return found.sort((a, b) => a.position - b.position);
+}
+
+/**
+ * One section per playbook that was told to report into the briefing.
+ *
+ * Read at assembly rather than declared anywhere, because playbooks are
+ * written at runtime — the same reason their schedules live in a column
+ * (C4.14). A key of `playbook:<id>` is what lets an owner hide one playbook's
+ * section without touching the others or the work behind it.
+ */
+async function playbookContributors(): Promise<RegisteredContributor[]> {
+  try {
+    const { db } = await import("@/core/db");
+    const { and, asc, eq } = await import("drizzle-orm");
+    const { agentPlaybooks } = await import("@/core/agents/schema");
+    const reporting = await db()
+      .select({ id: agentPlaybooks.id })
+      .from(agentPlaybooks)
+      .where(
+        and(
+          eq(agentPlaybooks.reportsToBriefing, true),
+          eq(agentPlaybooks.enabled, true),
+        ),
+      )
+      .orderBy(asc(agentPlaybooks.name))
+      .limit(30);
+    return reporting.map((playbook, index) => ({
+      key: `playbook:${playbook.id}`,
+      service: "briefing.playbookSection",
+      source: "playbook" as const,
+      // Below core and the modules: what an owner asked an agent to look into
+      // is rarely more urgent than the platform saying it is broken.
+      position: 200 + index,
+      params: { playbookId: playbook.id },
+    }));
+  } catch {
+    // No agents table yet, or a database that cannot be read: the rest of the
+    // briefing is still worth having.
+    return [];
+  }
 }
 
 /** Highest first: what needs the person, then today, then what changed. */

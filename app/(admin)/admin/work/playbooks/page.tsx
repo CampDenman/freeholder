@@ -11,6 +11,7 @@ import {
   deletePlaybookAction,
   runPlaybookAction,
   schedulePlaybookAction,
+  toggleBriefingReportAction,
   togglePlaybookAction,
 } from "../../../playbook-actions";
 import { currentBusiness } from "@/core/settings/read";
@@ -185,6 +186,19 @@ export default async function PlaybooksPage({
                           <Button type="submit">{t("work.playbooks.run")}</Button>
                         </form>
                       ) : null}
+                      <form action={toggleBriefingReportAction}>
+                        <input type="hidden" name="id" value={playbook.id} />
+                        <input
+                          type="hidden"
+                          name="reportsToBriefing"
+                          value={playbook.reportsToBriefing ? "false" : "true"}
+                        />
+                        <Button type="submit" variant="quiet">
+                          {playbook.reportsToBriefing
+                            ? `✓ ${t("work.playbooks.reportsToBriefing")}`
+                            : t("work.playbooks.reportsToBriefing")}
+                        </Button>
+                      </form>
                       <form action={togglePlaybookAction} className="ms-auto">
                         <input type="hidden" name="id" value={playbook.id} />
                         <input

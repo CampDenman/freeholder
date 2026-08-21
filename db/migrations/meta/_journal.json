@@ -589,6 +589,13 @@
       "when": 1787069700000,
       "tag": "0083_briefings",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1787069800000,
+      "tag": "0084_playbook_briefing",
+      "breakpoints": true
     }
   ]
 }
