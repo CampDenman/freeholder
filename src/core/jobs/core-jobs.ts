@@ -457,6 +457,26 @@ export const replyContributions = defineJob({
   },
 });
 
+/**
+ * Keep external calendars in step (C4.12).
+ *
+ * Every quarter hour, because a booking page that offers a slot somebody
+ * filled ten minutes ago is the failure this exists to prevent, and because a
+ * cursor makes the poll cost roughly nothing when nothing changed.
+ */
+export const syncExternalCalendars = defineJob({
+  name: "core.syncExternalCalendars",
+  summary: "Refresh busy time from connected Google and Microsoft calendars.",
+  schedule: "*/15 * * * *",
+  concurrency: 1,
+  leaseSeconds: 10 * 60,
+  handler: async () => {
+    const { syncDueCalendarAccounts } = await import("@/core/connections/calendar-sync");
+    const result = await syncDueCalendarAccounts();
+    return { synced: result.synced, failed: result.failed };
+  },
+});
+
 export const pruneOldNotifications = defineJob({
   name: "core.pruneNotifications",
   summary: "Delete notifications archived for more than one year.",
@@ -496,6 +516,7 @@ export default [
   deliverNotificationDigests,
   escalateNotifications,
   pruneOldNotifications,
+  syncExternalCalendars,
   submitIndexNow,
   deliverContributions,
   replyContributions,

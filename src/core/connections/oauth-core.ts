@@ -16,12 +16,14 @@
 import { and, eq } from "drizzle-orm";
 import { env } from "@/core/env";
 import { providerJson, requestWithTimeout } from "@/adapters/mail/http";
-import { encryptSecret } from "@/core/connections/crypto";
+import { MailAdapterError } from "@/adapters/mail/types";
+import { db } from "@/core/db";
+import { decryptSecret, encryptSecret } from "@/core/connections/crypto";
 import {
   connectedAccounts,
   connectionCapabilities,
 } from "@/core/connections/schema";
-import { ServiceError, type ServiceContext } from "@/core/service";
+import { ServiceError, type ServiceContext, type Tx } from "@/core/service";
 
 export type OAuthProvider = "google" | "microsoft";
 
@@ -291,6 +293,139 @@ export async function upsertConnectedAccount(
     status: "active",
   });
   return { accountId, scopes };
+}
+
+/**
+ * A usable access token for this account, refreshing it if it has expired.
+ *
+ * Two effects here deliberately outlive the caller's transaction, because the
+ * provider's side of them cannot be rolled back: a rotated refresh token must
+ * be kept even if the caller's work fails, and a provider that says the grant
+ * is gone must leave the account marked for reconnection rather than
+ * retrying into a lockout. The compare-and-set on the old ciphertext is what
+ * stops a slower concurrent refresh overwriting a newer credential.
+ */
+export async function accessTokenForAccount(
+  tx: Tx,
+  account: { id: string; provider: OAuthProvider },
+): Promise<string> {
+  const [row] = await tx
+    .select({
+      credentials: connectedAccounts.credentials,
+      scopesGranted: connectedAccounts.scopesGranted,
+    })
+    .from(connectedAccounts)
+    .where(eq(connectedAccounts.id, account.id))
+    .limit(1);
+  if (!row?.credentials) {
+    throw new ServiceError("conflict", "That connected account has no credentials.");
+  }
+  const current = JSON.parse(
+    decryptSecret(row.credentials, account.id),
+  ) as Partial<OAuthCredentials>;
+  if (
+    current.accessToken &&
+    current.expiresAt &&
+    new Date(current.expiresAt).getTime() > Date.now() + 60_000
+  ) {
+    return current.accessToken;
+  }
+  if (!current.refreshToken) {
+    await markAccount(account.id, row.credentials, {
+      status: "needs_reconnect",
+      lastError: "The provider did not issue a refresh token. Reconnect this account.",
+    });
+    throw new ServiceError("conflict", "That account needs to be reconnected.");
+  }
+
+  const endpoints = providerEndpoints(account.provider);
+  const body = new URLSearchParams({
+    client_id: endpoints.clientId,
+    client_secret: endpoints.clientSecret,
+    refresh_token: current.refreshToken,
+    grant_type: "refresh_token",
+    // Microsoft wants the scopes named again, and the right answer is
+    // whatever this account actually holds — including anything a later
+    // purpose added to it (C4.11).
+    ...(account.provider === "microsoft"
+      ? { scope: [...(row.scopesGranted ?? []), "offline_access"].join(" ") }
+      : {}),
+  });
+
+  let token: TokenPayload;
+  try {
+    const response = await requestWithTimeout(globalThis.fetch, endpoints.tokenUrl, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    token = await providerJson<TokenPayload>(response, account.provider);
+  } catch (error) {
+    const revoked =
+      error instanceof MailAdapterError &&
+      error.providerCode?.toLowerCase() === "invalid_grant";
+    await markAccount(
+      account.id,
+      row.credentials,
+      revoked
+        ? {
+            status: "needs_reconnect",
+            lastError:
+              "The provider revoked or expired this authorization. Reconnect this account.",
+          }
+        : {
+            lastError:
+              "The authorization could not be refreshed. Freeholder will retry without disabling the connection.",
+          },
+    );
+    throw error;
+  }
+  if (!token.access_token) {
+    throw new ServiceError("conflict", "The provider returned no refreshed access token.");
+  }
+  const next: OAuthCredentials = {
+    accessToken: token.access_token,
+    refreshToken: token.refresh_token ?? current.refreshToken,
+    expiresAt: new Date(Date.now() + (token.expires_in ?? 3600) * 1000).toISOString(),
+    tokenType: token.token_type ?? current.tokenType ?? "Bearer",
+  };
+  await db()
+    .update(connectedAccounts)
+    .set({
+      credentials: encryptSecret(JSON.stringify(next), account.id),
+      status: "active",
+      lastError: null,
+    })
+    .where(
+      and(
+        eq(connectedAccounts.id, account.id),
+        eq(connectedAccounts.credentials, row.credentials),
+      ),
+    );
+  return next.accessToken;
+}
+
+async function markAccount(
+  accountId: string,
+  encryptedCredentials: string,
+  changes: { status?: "needs_reconnect"; lastError: string },
+): Promise<void> {
+  try {
+    await db()
+      .update(connectedAccounts)
+      .set(changes)
+      .where(
+        and(
+          eq(connectedAccounts.id, accountId),
+          eq(connectedAccounts.credentials, encryptedCredentials),
+        ),
+      );
+  } catch {
+    // Preserve the provider error as the caller's failure. Database/doctor
+    // telemetry will expose a separate persistence outage without leaking
+    // credential or provider response detail into logs.
+    console.error("OAuth refresh evidence could not be persisted.");
+  }
 }
 
 /** What a connected account can be used for, as the column allows. */
