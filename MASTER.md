@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.04 proving concurrent attempts cannot double-book, then C6.03's resolver on top of real bookings. |
+| Current focus | C6.03 the availability resolver, now that there are real bookings to subtract. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4413,8 +4413,29 @@ payment, tax, inventory and reporting path, with no floating-point money.
   bookings from these windows is C6.03.)
 - [ ] **C6.03** Implement the availability resolver for compound resources,
   assignment pools/round-robin, capacity, travel time and daily/period caps.
-- [ ] **C6.04** Enforce no-overlap/exclusion constraints in Postgres and prove
+- [x] **C6.04** Enforce no-overlap/exclusion constraints in Postgres and prove
   concurrent attempts cannot double-book.
+  (Two shapes of calendar need two mechanisms, and only one of them is the
+  exclusion constraint. A calendar that holds one thing at once is protected by
+  `bookings_no_overlap` (C6.07's `0087`), which fires under any interleaving
+  because the database evaluates it. A **shared** calendar overlaps by design,
+  so the constraint deliberately does not fire — leaving seat counting, which
+  is check-then-act and the easier of the two to get wrong. Writing this proof
+  found exactly that hole: six concurrent bookings for a three-place class
+  could all read "nothing taken" and all insert. It is closed with a row lock
+  on the calendar, taken before counting, so the second transaction waits for
+  the first to commit and counts reality rather than a stale snapshot. The lock
+  is per calendar, so two people booking different rooms never wait on each
+  other. **The proof is shaped by what each mechanism allows**: the exclusion
+  constraint is proven by racing — eight simultaneous attempts on one slot,
+  exactly one winner, and overlaps that are partial, containing and contained
+  all refused — because a constraint holds however the race falls. The lock
+  cannot be proven that way, since a run that misses the bad interleaving
+  proves nothing, so its ordering is forced and asserted directly. A separate
+  test reads `pg_constraint` and asserts the `EXCLUDE USING gist` definition
+  is really in the database, because a service-layer check that happened to
+  pass every race would still be the wrong implementation. Coverage in
+  `tests/core/booking-concurrency.test.ts`.)
 - [ ] **C6.05** Add booking audiences—public, token, tags and sign-in—with
   separate hours, services, calendars, notice, horizon and buffers.
 - [ ] **C6.06** Publish/import ICS and implement Google/Microsoft booking write,
