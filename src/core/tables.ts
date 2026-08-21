@@ -28,6 +28,7 @@ export {
   agentPlaybooks,
   agentPlaybookVersions,
 } from "@/core/agents/schema";
+export { calendars, calendarMemberships } from "@/core/scheduling/schema";
 export {
   briefings,
   briefingContributions,

@@ -45,6 +45,7 @@ const ADMIN_MODULES = [
   "media",
   "platform",
   "roles",
+  "scheduling",
   "seo",
   "settings",
   "webhooks",
@@ -92,7 +93,8 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     assignable: true,
     grants: [
       ...view(["admin", "events", "forms", "locations", "media", "settings"]),
-      ...manage(["contacts"]),
+      // Somebody whose day is appointments needs the diary they appear in.
+      ...manage(["contacts", "scheduling"]),
     ],
   },
   {
