@@ -127,7 +127,7 @@ export const mailOauthStates = pgTable(
      * exactly; renaming it waits for a major version, because §39.5 requires
      * the previous release to keep reading the schema this one writes.
      */
-    purpose: text("purpose", { enum: ["mail", "calendar"] })
+    purpose: text("purpose", { enum: ["mail", "calendar", "mail_read"] })
       .notNull()
       .default("mail"),
     /** Which calendar access was asked for, so completion can check it. */
