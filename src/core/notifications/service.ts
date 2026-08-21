@@ -49,6 +49,7 @@ import {
 } from "@/core/service";
 
 export const NOTIFICATION_TOPICS = [
+  "briefing.ready",
   "forms.submission",
   "connections.attention",
   "agents.failed",

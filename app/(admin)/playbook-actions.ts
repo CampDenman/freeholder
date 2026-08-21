@@ -111,6 +111,23 @@ export async function runPlaybookAction(form: FormData): Promise<void> {
   redirect(`/admin/work/${taskId}`);
 }
 
+/** "Report into my briefing", on or off (C4.17). */
+export async function toggleBriefingReportAction(form: FormData): Promise<void> {
+  try {
+    await updatePlaybook.call(
+      {
+        id: text(form, "id"),
+        reportsToBriefing: text(form, "reportsToBriefing") === "true",
+      },
+      await actor(),
+    );
+  } catch {
+    redirect(`${PLAYBOOKS}?error=briefing`);
+  }
+  revalidatePath(PLAYBOOKS);
+  redirect(PLAYBOOKS);
+}
+
 export async function togglePlaybookAction(form: FormData): Promise<void> {
   try {
     await updatePlaybook.call(

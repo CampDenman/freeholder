@@ -81,7 +81,7 @@ export async function businessToday(): Promise<{ onDate: string; timezone: strin
 async function askContributor(
   ctx: ServiceContext,
   serviceName: string,
-  request: { userId: string; onDate: string; timezone: string },
+  request: Record<string, string>,
 ): Promise<BriefingContribution> {
   try {
     const service = getService(serviceName);
@@ -145,6 +145,7 @@ export const assembleBriefing = defineService({
         userId: input.userId,
         onDate,
         timezone,
+        ...contributor.params,
       });
       // Nothing to say and an empty list are the same answer, and §42 omits
       // both: a briefing that lists everything is one nobody finishes.
@@ -158,6 +159,7 @@ export const assembleBriefing = defineService({
         items: said.items,
         severity: said.severity,
         position: contributor.position,
+        playbookRunId: said.playbookRunId ?? null,
       });
       sections += 1;
     }
@@ -166,6 +168,27 @@ export const assembleBriefing = defineService({
       .update(briefings)
       .set({ status: "ready", assembledAt: sql`now()`, updatedAt: sql`now()` })
       .where(eq(briefings.id, briefing!.id));
+
+    // Delivery is not only a screen (§42): a business owner who does not open
+    // the admin until Thursday still needs to know about Monday. This goes
+    // through the ordinary notification path, so which channels it reaches —
+    // inbox, email, SMS, push — is the person's existing preference and not a
+    // second set of settings to keep in step. A briefing with nothing in it is
+    // not worth anybody's phone buzzing.
+    if (sections > 0) {
+      await ctx.call(getService("notifications.create"), {
+        recipient: { kind: "user", id: input.userId },
+        topic: "briefing.ready",
+        priority: "information",
+        titleKey: "notifications.event.briefing.title",
+        bodyKey: "notifications.event.briefing.body",
+        messageParams: { count: sections },
+        href: "/admin/briefing",
+        idempotencyKey: `briefing:${briefing!.id}`,
+        // One a day, however many times the day is re-assembled.
+        dedupeKey: `briefing:${input.userId}:${onDate}`,
+      });
+    }
 
     ctx.setSubject("briefing", briefing!.id);
     ctx.queueEvent("briefing.assembled", {
