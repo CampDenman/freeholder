@@ -610,6 +610,13 @@
       "when": 1787070000000,
       "tag": "0086_availability",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1787070100000,
+      "tag": "0087_bookings",
+      "breakpoints": true
     }
   ]
 }

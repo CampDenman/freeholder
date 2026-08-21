@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.01 (#166), plus this change for C6.02 (a weekly pattern, the days that break it, and open windows computed rather than stored). C5 is complete, so the 2026-08-14 commerce deviation is discharged; C4.20–C4.23 remain open alongside C6. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C6.02 (#167), plus this change for C6.07 (appointments, and a database that refuses to double-book them). C5 is complete, so the 2026-08-14 commerce deviation is discharged; C4.20–C4.23 remain open alongside C6. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.03 the availability resolver: compound resources, assignment pools, capacity, travel time and period caps. |
+| Current focus | C6.04 proving concurrent attempts cannot double-book, then C6.03's resolver on top of real bookings. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4422,9 +4422,41 @@ payment, tax, inventory and reporting path, with no floating-point money.
 
 #### Bookings, rentals, and events
 
-- [ ] **C6.07** Build booking create/hold/confirm/complete/cancel/no-show state,
+- [x] **C6.07** Build booking create/hold/confirm/complete/cancel/no-show state,
   contact resolution, capacity, deposits and invoice convergence, including
   the admin appointment list, calendar, detail and lifecycle workspace.
+  **Taken ahead of C6.03 and C6.04 deliberately** (2026-08-21): both of those
+  subtract existing bookings from availability, and a resolver built before the
+  bookings table could only subtract *external* busy time — it would answer
+  confidently and double-book. The checklist order is not a dependency order,
+  and the reorder is recorded here rather than made silently.
+  (`bookings` names a **calendar**, never a user, which is what lets a room and
+  a therapist be booked by one mechanism. §4.4's state machine is a transition
+  map: a finished appointment cannot be reopened, because the honest move is a
+  new booking rather than rewriting what happened, and a cancellation must
+  carry a reason since that reason reaches the customer. Rescheduling creates a
+  new row linked to the prior one, releasing the old one first so an
+  appointment can move by half an hour without colliding with itself.
+  **Double-booking is prevented in the database**: `0087` adds an
+  `EXCLUDE USING gist` constraint over `(calendar_id, tstzrange)`, scoped to
+  bookings that hold time and to calendars that hold one thing at once —
+  `exclusive` is denormalized onto the row because an exclusion constraint
+  cannot join to find a class calendar's capacity. A half-open range means
+  back-to-back is not an overlap; buffers stay the service's business. Shared
+  calendars check seats inside the transaction that takes them, and a guest
+  with no email address is recorded by name, because refusing "and my sister"
+  pushes an owner back to paper. Contact resolution goes through
+  `contacts.resolve` and never `create`; both new `contact_id` columns are
+  repointed in `contacts.merge` and registered for privacy export and erasure,
+  where erasure keeps the slot and forgets the person — a booking is also the
+  business's record of when somebody was here. Every transition writes a
+  `TimelineEvent`, so the CRM shows a client's whole history without booking
+  knowing the CRM exists. `/admin/appointments` groups the diary by day in the
+  business's zone and the detail page offers exactly the transitions the
+  service allows, showing the zone the appointment was agreed in when it
+  differs. Coverage in `tests/core/bookings.test.ts`, including two real
+  concurrent transactions racing for one slot where exactly one wins —
+  C6.04 extends that proof.)
 - [ ] **C6.08** Add group bookings, waitlists/promotion, reschedule tokens,
   policy/deadline enforcement and cancellation/refund outcomes with admin
   waitlist, reschedule and refund controls.

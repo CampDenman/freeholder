@@ -20,18 +20,22 @@
 // therapist *and* a room" into a query rather than a feature.
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   smallint,
   text,
   time,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
 import { businessLocations } from "@/core/locations/schema";
 import { externalCalendars } from "@/core/connections/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
@@ -238,6 +242,144 @@ export const availabilityExceptions = pgTable(
            then ${t.starts} is null and ${t.ends} is null
            else ${t.starts} is not null and ${t.ends} is not null
                 and ${t.ends} > ${t.starts} end`,
+    ),
+  ],
+);
+
+export const BOOKING_STATUSES = [
+  "requested",
+  "confirmed",
+  "in_progress",
+  "completed",
+  "no_show",
+  "cancelled",
+] as const;
+export const BOOKING_SOURCES = ["site", "admin", "agent", "import"] as const;
+export const PARTICIPANT_STATUSES = ["registered", "attended", "no_show"] as const;
+
+/** The statuses that hold time. Everything else has released it. */
+export const HOLDING_STATUSES = [
+  "requested",
+  "confirmed",
+  "in_progress",
+] as const;
+
+/**
+ * A scheduled commitment (MASTER.md §4.4, C6.07).
+ *
+ * A booking names a **calendar**, never a user, which is what lets a room, a
+ * person and the business be booked by the same machinery (C6.01).
+ *
+ * **Store UTC; render in two zones.** `timezoneAtBooking` is kept because
+ * timezone confusion is the single largest cause of no-shows: a DST change
+ * between booking and appointment becomes a known quantity rather than a
+ * surprise, and the customer can always be shown the time they agreed to.
+ *
+ * **A booking is not a payment.** Deposits, balances and no-show fees resolve
+ * to an invoice like everything else (§4.3); `invoiceId` is the link, and a
+ * free consultation produces no invoice at all.
+ */
+export const bookings = pgTable(
+  "bookings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "restrict" }),
+    /** Untyped by a foreign key: catalog is a module and core may not depend on one. */
+    serviceOfferingId: uuid("service_offering_id"),
+    calendarId: uuid("calendar_id")
+      .notNull()
+      .references(() => calendars.id, { onDelete: "restrict" }),
+    /** A room as well as a therapist: the compound requirement, once booked. */
+    secondaryCalendarIds: uuid("secondary_calendar_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    timezoneAtBooking: text("timezone_at_booking").notNull(),
+    status: text("status", { enum: BOOKING_STATUSES }).notNull().default("requested"),
+    locationId: uuid("location_id").references(() => businessLocations.id, {
+      onDelete: "set null",
+    }),
+    /** An address or a meeting URL — whichever the service's location type means. */
+    locationDetail: text("location_detail"),
+    /** Seats this booking holds. A class of twelve is twelve seats, not twelve bookings. */
+    capacityUsed: integer("capacity_used").notNull().default(1),
+    /**
+     * Whether this booking has the calendar to itself.
+     *
+     * Denormalized from the calendar's capacity because the exclusion
+     * constraint cannot join: a class calendar's bookings overlap by design,
+     * and a 1:1 calendar's must not. Set once, at the moment the booking is
+     * made, from the calendar it was made on.
+     */
+    exclusive: boolean("exclusive").notNull().default(true),
+    invoiceId: uuid("invoice_id"),
+    /** A moved appointment points at the one it replaced, so the history survives. */
+    rescheduledFromId: uuid("rescheduled_from_id"),
+    /** Signed, so a customer moves their own appointment without an account. */
+    rescheduleToken: text("reschedule_token"),
+    intakeSubmissionId: uuid("intake_submission_id"),
+    waiverId: uuid("waiver_id"),
+    source: text("source", { enum: BOOKING_SOURCES }).notNull().default("admin"),
+    notes: text("notes"),
+    cancellationReason: text("cancellation_reason"),
+    /** Anything a later feature wants, without another migration. */
+    meta: jsonb("meta"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("bookings_calendar_idx").on(t.calendarId, t.startsAt),
+    index("bookings_contact_idx").on(t.contactId, t.startsAt),
+    index("bookings_status_idx").on(t.status, t.startsAt),
+    uniqueIndex("bookings_reschedule_token_idx")
+      .on(t.rescheduleToken)
+      .where(sql`${t.rescheduleToken} is not null`),
+    check("bookings_order", sql`${t.endsAt} > ${t.startsAt}`),
+    check("bookings_capacity_positive", sql`${t.capacityUsed} > 0`),
+    // The exclusion constraint itself is written in the migration: Drizzle has
+    // no expression for `EXCLUDE USING gist`, and §4.4 is explicit that
+    // double-booking is prevented in the database rather than in the UI —
+    // no amount of careful service-layer checking survives two processes.
+  ],
+);
+
+/**
+ * Group bookings, classes, and a client bringing two people (§4.4).
+ *
+ * A participant may have no contact at all: "and my sister" is a real thing to
+ * book, and refusing to record her because she has no email address would push
+ * the owner back to a paper list.
+ */
+export const bookingParticipants = pgTable(
+  "booking_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    name: text("name"),
+    status: text("status", { enum: PARTICIPANT_STATUSES })
+      .notNull()
+      .default("registered"),
+    seatCount: integer("seat_count").notNull().default(1),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("booking_participants_booking_idx").on(t.bookingId),
+    index("booking_participants_contact_idx").on(t.contactId),
+    check("booking_participants_seats", sql`${t.seatCount} > 0`),
+    // Somebody has to be identifiable, by a row in the spine or by a name.
+    check(
+      "booking_participants_identified",
+      sql`${t.contactId} is not null or ${t.name} is not null`,
     ),
   ],
 );
