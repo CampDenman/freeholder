@@ -2930,12 +2930,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` through C4.10 (#157), plus this change for C4.11 (one shared provider handshake, calendar consent on its own route, scopes that accumulate rather than replace, and purpose-bound OAuth state). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Last reconciled | 2026-08-20 |
+| Evidence snapshot | `main` through C4.11 (#158), plus this change for C4.12 (busy-only shadows by default, cursors that may be refused, ignored calendars that are not fetched, and a refusal that asks for a reconnection instead of retrying). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.12 external calendar sync: tokens, busy-only default, optional details, health and privacy-preserving storage. |
+| Current focus | C4.13 unified calendar display and busy unions feeding availability without leaking private detail. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3844,8 +3844,29 @@ deployments are portable, testable and incapable of silently forking the truth.
   matches on — writing this test found that the mail flow could consume a
   calendar state, now closed. Coverage in `tests/core/calendar-oauth.test.ts`;
   the mail suites pass unchanged against the shared core.)
-- [ ] **C4.12** Sync external calendars with tokens, busy-only default,
+- [x] **C4.12** Sync external calendars with tokens, busy-only default,
   optional details, health/errors and privacy-preserving storage.
+  (`src/core/connections/calendar-providers.ts` reads Google Calendar and
+  Microsoft Graph incrementally — deliberately not the `CalendarAdapter` in
+  `src/adapters/calendar`, which exists to *write* one booking into one
+  calendar. `calendar-sync.ts` turns what they return into the smallest true
+  shadow: which calendar, start, end, and whether it blocks. `title` and `raw`
+  stay null unless the account's `detailVisibility` is `full`, and the
+  decision is passed down as one argument so no path through the file can
+  store a detail that was not permitted. An `ignored` calendar is not
+  fetched at all and its stored events are erased when the owner ignores it,
+  because "stop looking" that leaves the last look on file is not what anyone
+  reads it as. A cursor is an optimisation that a provider is allowed to
+  refuse: a 410 falls back to a windowed pass in the same run, and a daily
+  full pass re-establishes the moving window a cursor cannot. Health is the
+  account row plus `connection.needsAttention`, which the sweep raises only
+  for a grant the refresh already gave up on — a transport wobble is not a
+  reconnect prompt — and it carries the provider's own words rather than
+  replacing them. `core.syncExternalCalendars` runs every quarter hour.
+  Writing this moved the token refresh into `oauth-core.ts` so mail and
+  calendars share one path and a rotated credential is never written twice.
+  Coverage in `tests/core/calendar-sync.test.ts`; the display and the
+  availability union are C4.13.)
 - [ ] **C4.13** Build unified calendar display and connect busy unions to the
   availability engine without leaking private event details.
 - [ ] **C4.14** Implement runtime playbook scheduling with timezone/DST,

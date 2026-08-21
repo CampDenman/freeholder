@@ -4,10 +4,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { providerJson, requestWithTimeout } from "@/adapters/mail/http";
-import { MailAdapterError } from "@/adapters/mail/types";
-import { connectedAccounts } from "@/core/connections/schema";
-import { encryptSecret, decryptSecret } from "@/core/connections/crypto";
 import {
   exchangeAuthorizationCode,
   fetchProviderIdentity,
@@ -26,13 +22,6 @@ import {
 } from "@/core/service";
 
 type OAuthProvider = "google" | "microsoft";
-type OAuthCredentials = {
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt: string;
-  tokenType: string;
-};
-
 const GOOGLE_SEND = "https://www.googleapis.com/auth/gmail.send";
 const MICROSOFT_SEND = "Mail.Send";
 const RETURN_TO = /^\/admin(?:\/|$)/;
@@ -94,14 +83,6 @@ function providerConfig(provider: OAuthProvider): {
 }
 
 /** The refresh path still parses a token response of its own. */
-type TokenPayload = {
-  access_token?: string;
-  refresh_token?: string;
-  expires_in?: number;
-  token_type?: string;
-  scope?: string;
-};
-
 function requirePerson(actor: Actor): Extract<Actor, { kind: "user" }> {
   if (actor.kind !== "user") {
     throw new ServiceError(
@@ -289,138 +270,15 @@ export const completeMailOAuth = defineService({
   },
 });
 
-export async function oauthAccessToken(
-  tx: Tx,
-  account: { id: string; provider: "google" | "microsoft" },
-): Promise<string> {
-  const [row] = await tx
-    .select({ credentials: connectedAccounts.credentials })
-    .from(connectedAccounts)
-    .where(eq(connectedAccounts.id, account.id))
-    .limit(1);
-  if (!row?.credentials) throw new Error("That mail connection has no credentials.");
-  const current = JSON.parse(
-    decryptSecret(row.credentials, account.id),
-  ) as Partial<OAuthCredentials>;
-  if (
-    current.accessToken &&
-    current.expiresAt &&
-    new Date(current.expiresAt).getTime() > Date.now() + 60_000
-  ) {
-    return current.accessToken;
-  }
-  if (!current.refreshToken) {
-    await persistRefreshFailure(account.id, row.credentials, {
-      status: "needs_reconnect",
-      lastError: "The provider did not issue a refresh token. Reconnect this account.",
-    });
-    throw new Error("That mail account needs to be reconnected.");
-  }
-  const provider = providerConfig(account.provider);
-  const body = new URLSearchParams({
-    client_id: provider.clientId,
-    client_secret: provider.clientSecret,
-    refresh_token: current.refreshToken,
-    grant_type: "refresh_token",
-    ...(account.provider === "microsoft"
-      ? { scope: provider.scopes.join(" ") }
-      : {}),
-  });
-  let token: TokenPayload;
-  try {
-    const response = await requestWithTimeout(globalThis.fetch, provider.tokenUrl, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body,
-    });
-    token = await providerJson<TokenPayload>(response, account.provider);
-  } catch (error) {
-    const revoked =
-      error instanceof MailAdapterError &&
-      error.providerCode?.toLowerCase() === "invalid_grant";
-    await persistRefreshFailure(
-      account.id,
-      row.credentials,
-      revoked
-        ? {
-            status: "needs_reconnect",
-            lastError:
-              "The provider revoked or expired this mail authorization. Reconnect this account.",
-          }
-        : {
-            lastError:
-              "The mail authorization could not be refreshed. Freeholder will retry without disabling the connection.",
-          },
-    );
-    throw error;
-  }
-  if (!token.access_token) throw new Error("The provider returned no refreshed access token.");
-  const next: OAuthCredentials = {
-    accessToken: token.access_token,
-    refreshToken: token.refresh_token ?? current.refreshToken,
-    expiresAt: new Date(Date.now() + (token.expires_in ?? 3600) * 1000).toISOString(),
-    tokenType: token.token_type ?? current.tokenType ?? "Bearer",
-  };
-  await persistRefreshSuccess(account.id, row.credentials, next);
-  return next.accessToken;
-}
-
 /**
- * Providers may rotate the refresh token as part of a successful exchange.
- * That effect cannot be rolled back with the caller's business transaction,
- * so the replacement credential must outlive that transaction as well. The
- * old encrypted value prevents a slower concurrent refresh from overwriting a
- * newer credential.
+ * A usable access token for a mail account.
+ *
+ * The refresh itself lives in the connections core, because a connected
+ * account is not a mail account: the same row now also carries calendar
+ * access (C4.11), and one refresh path is what keeps a rotated credential
+ * from being written twice.
  */
-async function persistRefreshSuccess(
-  accountId: string,
-  encryptedCredentials: string,
-  credentials: OAuthCredentials,
-): Promise<void> {
-  await db()
-    .update(connectedAccounts)
-    .set({
-      credentials: encryptSecret(JSON.stringify(credentials), accountId),
-      status: "active",
-      lastError: null,
-    })
-    .where(
-      and(
-        eq(connectedAccounts.id, accountId),
-        eq(connectedAccounts.credentials, encryptedCredentials),
-      ),
-    );
-}
+export { accessTokenForAccount as oauthAccessToken } from "@/core/connections/oauth-core";
 
-/**
- * Refresh failures have to outlive the transaction that attempted the send.
- * The send deliberately throws, so writing through that transaction would
- * roll the reconnect evidence back with it. This narrowly scoped independent
- * update touches only the account whose encrypted credential value we read;
- * a concurrent successful refresh changes that value and prevents a stale
- * failure from overwriting the recovered account.
- */
-async function persistRefreshFailure(
-  accountId: string,
-  encryptedCredentials: string,
-  failure: { status?: "needs_reconnect"; lastError: string },
-): Promise<void> {
-  try {
-    await db()
-      .update(connectedAccounts)
-      .set(failure)
-      .where(
-        and(
-          eq(connectedAccounts.id, accountId),
-          eq(connectedAccounts.credentials, encryptedCredentials),
-        ),
-      );
-  } catch {
-    // Preserve the provider error as the send failure. Database/doctor
-    // telemetry will expose a separate persistence outage without leaking
-    // credential or provider response detail into logs.
-    console.error("Mail OAuth refresh evidence could not be persisted.");
-  }
-}
 
 export default [beginMailOAuth, completeMailOAuth];

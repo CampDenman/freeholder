@@ -8,7 +8,7 @@ const MAX_RESPONSE_BYTES = 256 * 1024;
 export async function boundedText(response: Response): Promise<string> {
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
-    throw new MailAdapterError("The mail provider returned an oversized response.");
+    throw new MailAdapterError("The provider returned an oversized response.");
   }
   if (!response.body) return "";
   const reader = response.body.getReader();
@@ -21,7 +21,7 @@ export async function boundedText(response: Response): Promise<string> {
     bytes += value.byteLength;
     if (bytes > MAX_RESPONSE_BYTES) {
       await reader.cancel();
-      throw new MailAdapterError("The mail provider returned an oversized response.");
+      throw new MailAdapterError("The provider returned an oversized response.");
     }
     body += decoder.decode(value, { stream: true });
   }
@@ -52,7 +52,7 @@ export async function providerJson<T>(
     const providerCode =
       rawCode && /^[A-Za-z0-9_.-]{1,80}$/.test(rawCode) ? rawCode : undefined;
     throw new MailAdapterError(
-      `${provider} refused the mail request (HTTP ${response.status}).`,
+      `${provider} refused the request (HTTP ${response.status}).`,
       response.status === 408 || response.status === 429 || response.status >= 500,
       response.status,
       providerCode,
