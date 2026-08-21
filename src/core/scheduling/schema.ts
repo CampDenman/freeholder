@@ -21,10 +21,13 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  date,
   index,
   integer,
   pgTable,
+  smallint,
   text,
+  time,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -142,5 +145,99 @@ export const calendarMemberships = pgTable(
     index("calendar_memberships_service_idx").on(t.serviceOfferingId, t.priority),
     index("calendar_memberships_calendar_idx").on(t.calendarId),
     check("calendar_memberships_priority", sql`${t.priority} between 0 and 1000`),
+  ],
+);
+
+export const AVAILABILITY_KINDS = ["bookable", "on_call", "admin"] as const;
+export const EXCEPTION_KINDS = ["closed", "open", "reduced"] as const;
+
+/**
+ * Recurring open hours (MASTER.md §4.4, C6.02).
+ *
+ * Weekly by weekday, because that is how every business actually states its
+ * hours, with an optional effective range for the ones that change with the
+ * season. Anything that is not a repeating weekly pattern is an exception
+ * below rather than a second kind of rule — an owner who says "Tuesdays, 9 to
+ * 5, except the 24th" has said one rule and one exception, and modelling it
+ * that way is what keeps the editor readable.
+ *
+ * `kind` separates hours that customers may book from hours somebody is merely
+ * reachable in. §4.4 wants both: an on-call window is real availability to a
+ * person planning cover, and it is not a slot on a booking page.
+ */
+export const availabilityRules = pgTable(
+  "availability_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    calendarId: uuid("calendar_id")
+      .notNull()
+      .references(() => calendars.id, { onDelete: "cascade" }),
+    /** 0 = Sunday, matching Date#getDay and the opening-hours table (§4.10). */
+    weekday: smallint("weekday").notNull(),
+    starts: time("starts").notNull(),
+    ends: time("ends").notNull(),
+    /** Null at either end means "since always" and "until further notice". */
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    kind: text("kind", { enum: AVAILABILITY_KINDS }).notNull().default("bookable"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("availability_rules_calendar_idx").on(t.calendarId, t.weekday),
+    check("availability_rules_weekday", sql`${t.weekday} between 0 and 6`),
+    // Overnight hours are split into two rules, for the reason §4.10 splits
+    // them: a window that ends before it starts has to be special-cased by
+    // every reader, and one of them will forget.
+    check("availability_rules_order", sql`${t.ends} > ${t.starts}`),
+    check(
+      "availability_rules_effective_order",
+      sql`${t.effectiveFrom} is null or ${t.effectiveTo} is null
+          or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
+  ],
+);
+
+/**
+ * A specific date that overrides the pattern — holidays, a late start, an
+ * extra Saturday (§4.4).
+ *
+ * An exception always wins over a rule for the days it covers. That is the
+ * whole reason it exists: an owner writing "closed 24th to 2nd" has said
+ * something more specific than their Tuesday hours, and a resolver that merged
+ * the two would open on Christmas Day.
+ */
+export const availabilityExceptions = pgTable(
+  "availability_exceptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    calendarId: uuid("calendar_id")
+      .notNull()
+      .references(() => calendars.id, { onDelete: "cascade" }),
+    /** Inclusive at both ends: one day is the same date twice. */
+    startsOn: date("starts_on").notNull(),
+    endsOn: date("ends_on").notNull(),
+    kind: text("kind", { enum: EXCEPTION_KINDS }).notNull(),
+    /** Set for `open` and `reduced`; never for `closed`. */
+    starts: time("starts"),
+    ends: time("ends"),
+    /** Shown beside the date: "Boxing Day", "training", "late start". */
+    reason: text("reason"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("availability_exceptions_calendar_idx").on(t.calendarId, t.startsOn),
+    check("availability_exceptions_order", sql`${t.endsOn} >= ${t.startsOn}`),
+    // Closed means no times; anything else means both. A row that is half of
+    // each cannot be rendered, and guessing at it would be the platform
+    // deciding somebody's hours for them.
+    check(
+      "availability_exceptions_times",
+      sql`case when ${t.kind} = 'closed'
+           then ${t.starts} is null and ${t.ends} is null
+           else ${t.starts} is not null and ${t.ends} is not null
+                and ${t.ends} > ${t.starts} end`,
+    ),
   ],
 );
