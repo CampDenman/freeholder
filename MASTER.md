@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C4.18 (#165), plus this change for C6.01 (a person, a room and the business as one entity, so a service needing both is a query). C5 is complete, so the 2026-08-14 commerce deviation is discharged; C4.20–C4.23 (the builder's code lane and the catalogue) remain open alongside C6. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C6.01 (#166), plus this change for C6.02 (a weekly pattern, the days that break it, and open windows computed rather than stored). C5 is complete, so the 2026-08-14 commerce deviation is discharged; C4.20–C4.23 remain open alongside C6. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.02 availability rules, opening hours, exceptions, buffers, lead time, horizon and recurrence, with an admin editor. |
+| Current focus | C6.03 the availability resolver: compound resources, assignment pools, capacity, travel time and period caps. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4385,8 +4385,32 @@ payment, tax, inventory and reporting path, with no floating-point money.
   `/admin/calendars` is the workspace. `0085_calendars.sql`. Coverage in
   `tests/core/calendars.test.ts`; availability rules are C6.02 and the
   resolver C6.03.)
-- [ ] **C6.02** Build normalized availability rules, opening hours, exceptions,
+- [x] **C6.02** Build normalized availability rules, opening hours, exceptions,
   buffers, lead time, horizon and recurrence with an admin availability editor.
+  (`availability_rules` is the weekly pattern — weekday, hours, an optional
+  effective range for seasonal hours, and a `kind` that separates what
+  customers may book from hours somebody is merely reachable in, because §4.4
+  wants both and only one of them is a slot on a booking page.
+  `availability_exceptions` is the days that break it. **An exception always
+  wins over a rule**, and a `reduced` day replaces the pattern rather than
+  adding to it: an owner writing "closed the 24th to the 2nd" has said
+  something more specific than their Tuesday hours, and merging the two would
+  open on Christmas Day. Where somebody has written both a closure and an
+  opening for one day, the day shuts — a contradiction about being open
+  resolves the way that does not take a booking nobody can honour. §4.4's
+  "availability is computed, never stored" is why `openWindows` derives instant
+  ranges at request time and caches nothing; hours are stored as local times
+  and resolved against the calendar's own zone, so nine in the morning stays
+  nine across a clock change, which is asserted in both directions. Windows
+  that touch are merged so a slot straddling the join is not lost, and windows
+  of different kinds are not, because they mean different things to whoever
+  reads them. Buffers already live on `service_offerings` (C5.15) and lead
+  time and horizon on the calendar (C6.01), so this item adds neither twice.
+  The editor at `/admin/calendars/<id>` saves the week as a shape and takes
+  exceptions one at a time, matching how each is actually edited; an empty day
+  is a closed day rather than a row to delete. `0086_availability.sql`.
+  Coverage in `tests/core/availability.test.ts`; the resolver that subtracts
+  bookings from these windows is C6.03.)
 - [ ] **C6.03** Implement the availability resolver for compound resources,
   assignment pools/round-robin, capacity, travel time and daily/period caps.
 - [ ] **C6.04** Enforce no-overlap/exclusion constraints in Postgres and prove

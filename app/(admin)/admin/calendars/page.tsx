@@ -77,7 +77,12 @@ export default async function CalendarsPage({
               {active.map((calendar) => (
                 <li key={calendar.id} className="grid gap-3 rounded-md border border-rule p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{calendar.name}</span>
+                    <a
+                      href={`/admin/calendars/${calendar.id}`}
+                      className="font-medium underline"
+                    >
+                      {calendar.name}
+                    </a>
                     <Pill tone={KIND_TONES[calendar.kind] ?? "neutral"}>
                       {t(`calendars.kind.${calendar.kind}`)}
                     </Pill>
