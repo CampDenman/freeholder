@@ -33,6 +33,8 @@ export {
   calendarMemberships,
   availabilityRules,
   availabilityExceptions,
+  bookings,
+  bookingParticipants,
 } from "@/core/scheduling/schema";
 export {
   briefings,

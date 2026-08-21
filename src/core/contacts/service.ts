@@ -25,6 +25,7 @@ import {
   timelineEvents,
 } from "@/core/contacts/schema";
 import { applyCustomFieldPatch } from "@/core/contacts/custom-fields";
+import { bookings, bookingParticipants } from "@/core/scheduling/schema";
 import {
   captureContactRelationships,
   repointContactRelationships,
@@ -584,6 +585,67 @@ const references: ContactReference[] = [
           .where(inArray(timelineEvents.id, moved.map((row) => row.id)));
       }
       void prior;
+    },
+  },
+  {
+    // An appointment belongs to whoever the person turns out to be. Repointing
+    // rather than deleting is the whole reason the spine exists: a customer
+    // who booked under a second address kept the appointment either way.
+    table: "bookings",
+    repoint: (tx, duplicateId, survivingId) =>
+      tx
+        .update(bookings)
+        .set({ contactId: survivingId })
+        .where(eq(bookings.contactId, duplicateId)),
+    captureForUndo: async (tx, duplicateId, survivingId) =>
+      pointerCapture(
+        await tx
+          .select({ id: bookings.id, contactId: bookings.contactId })
+          .from(bookings)
+          .where(inArray(bookings.contactId, [duplicateId, survivingId])),
+      ),
+    restoreAfterUndo: async (tx, before, after, duplicateId) => {
+      const moved = z
+        .array(z.object({ id: z.string(), contactId: z.string().uuid().nullable() }))
+        .parse(before)
+        .filter((row) => row.contactId === duplicateId);
+      void after;
+      if (moved.length) {
+        await tx
+          .update(bookings)
+          .set({ contactId: duplicateId })
+          .where(inArray(bookings.id, moved.map((row) => row.id)));
+      }
+    },
+  },
+  {
+    // A guest on somebody else's booking, who turned out to be a contact the
+    // business already had. Nullable, so this repoints rather than deletes.
+    table: "booking_participants",
+    repoint: (tx, duplicateId, survivingId) =>
+      tx
+        .update(bookingParticipants)
+        .set({ contactId: survivingId })
+        .where(eq(bookingParticipants.contactId, duplicateId)),
+    captureForUndo: async (tx, duplicateId, survivingId) =>
+      pointerCapture(
+        await tx
+          .select({ id: bookingParticipants.id, contactId: bookingParticipants.contactId })
+          .from(bookingParticipants)
+          .where(inArray(bookingParticipants.contactId, [duplicateId, survivingId])),
+      ),
+    restoreAfterUndo: async (tx, before, after, duplicateId) => {
+      const moved = z
+        .array(z.object({ id: z.string(), contactId: z.string().uuid().nullable() }))
+        .parse(before)
+        .filter((row) => row.contactId === duplicateId);
+      void after;
+      if (moved.length) {
+        await tx
+          .update(bookingParticipants)
+          .set({ contactId: duplicateId })
+          .where(inArray(bookingParticipants.id, moved.map((row) => row.id)));
+      }
     },
   },
 ];
