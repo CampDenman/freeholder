@@ -17,6 +17,7 @@ import {
   runPlaybook,
   updatePlaybook,
 } from "@/core/agents/playbooks";
+import { setPlaybookSchedule } from "@/core/agents/playbook-schedule";
 import { ownerFacing } from "./action-helpers";
 
 export interface PlaybookActionState {
@@ -121,6 +122,34 @@ export async function togglePlaybookAction(form: FormData): Promise<void> {
   }
   revalidatePath(PLAYBOOKS);
   redirect(PLAYBOOKS);
+}
+
+/**
+ * Set when a playbook runs (C4.14).
+ *
+ * The refusal is shown rather than swallowed: "0 9 * * *" and "every morning"
+ * look equally reasonable to somebody typing one, and a schedule that silently
+ * did not save is a briefing that silently never arrives.
+ */
+export async function schedulePlaybookAction(form: FormData): Promise<void> {
+  const timezone = text(form, "timezone");
+  try {
+    await setPlaybookSchedule.call(
+      {
+        id: text(form, "id"),
+        cron: text(form, "cron"),
+        timezone: timezone || undefined,
+        catchUp: text(form, "catchUp") === "true",
+      },
+      await actor(),
+    );
+  } catch (error) {
+    const message =
+      error instanceof ServiceError ? ownerFacing(error.message) : "schedule";
+    redirect(`${PLAYBOOKS}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(PLAYBOOKS);
+  redirect(`${PLAYBOOKS}?saved=scheduled`);
 }
 
 export async function deletePlaybookAction(form: FormData): Promise<void> {

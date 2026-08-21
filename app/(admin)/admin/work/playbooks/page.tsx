@@ -10,8 +10,10 @@ import { parseParamsSchema } from "@/core/agents/playbook-params";
 import {
   deletePlaybookAction,
   runPlaybookAction,
+  schedulePlaybookAction,
   togglePlaybookAction,
 } from "../../../playbook-actions";
+import { currentBusiness } from "@/core/settings/read";
 import { PlaybookForms } from "./PlaybookForms";
 
 export const dynamic = "force-dynamic";
@@ -23,11 +25,18 @@ export default async function PlaybooksPage({
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("agents");
-  const [t, playbooks, query] = await Promise.all([
+  const [t, playbooks, query, business] = await Promise.all([
     getT(),
     listPlaybooks.call({}, actor),
     searchParams,
+    currentBusiness(),
   ]);
+  const timezone = business?.timezone ?? "UTC";
+  const when = new Intl.DateTimeFormat(business?.defaultLocale ?? "en", {
+    timeZone: timezone,
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 
   return (
     <div className="grid gap-6">
@@ -44,7 +53,9 @@ export default async function PlaybooksPage({
       ) : null}
       {query.error ? (
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
-          {t("work.playbooks.failed")}
+          {/* A schedule refusal says which part it could not read; a bare code
+              means the failure had no words of its own. */}
+          {query.error.includes(" ") ? query.error : t("work.playbooks.failed")}
         </p>
       ) : null}
 
@@ -81,10 +92,63 @@ export default async function PlaybooksPage({
                       {playbook.briefTemplate}
                     </pre>
                     {playbook.trigger === "schedule" && playbook.scheduleCron ? (
-                      <p className="font-mono text-xs text-ink-muted">
-                        {playbook.scheduleCron} — {t("work.playbooks.scheduleLater")}
-                      </p>
+                      <div className="grid gap-1 text-xs text-ink-muted">
+                        <p className="font-mono">
+                          {playbook.scheduleCron} · {playbook.timezone ?? timezone}
+                        </p>
+                        <p>
+                          {playbook.nextRunAt
+                            ? t("work.playbooks.nextRun", {
+                                when: when.format(new Date(playbook.nextRunAt)),
+                              })
+                            : t("work.playbooks.noNextRun")}
+                        </p>
+                        {playbook.lastOutcome ? (
+                          <p>
+                            {t("work.playbooks.lastOutcome", {
+                              outcome: playbook.lastOutcome,
+                            })}
+                          </p>
+                        ) : null}
+                      </div>
                     ) : null}
+
+                    <form
+                      action={schedulePlaybookAction}
+                      className="flex flex-wrap items-end gap-2 rounded-md border border-rule p-3"
+                    >
+                      <input type="hidden" name="id" value={playbook.id} />
+                      <label className="grid gap-1 text-sm">
+                        <span className="text-ink-muted">{t("work.playbooks.cron")}</span>
+                        <input
+                          name="cron"
+                          defaultValue={playbook.scheduleCron ?? ""}
+                          placeholder="0 7 * * 1-5"
+                          className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-sm"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-sm">
+                        <span className="text-ink-muted">{t("work.playbooks.timezone")}</span>
+                        <input
+                          name="timezone"
+                          defaultValue={playbook.timezone ?? ""}
+                          placeholder={timezone}
+                          className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          name="catchUp"
+                          value="true"
+                          defaultChecked={playbook.catchUp}
+                        />
+                        <span className="text-ink-muted">{t("work.playbooks.catchUp")}</span>
+                      </label>
+                      <Button type="submit" variant="quiet">
+                        {t("work.playbooks.schedule")}
+                      </Button>
+                    </form>
                     {playbook.trigger === "event" && playbook.eventPattern ? (
                       <p className="font-mono text-xs text-ink-muted">{playbook.eventPattern}</p>
                     ) : null}
