@@ -4028,17 +4028,96 @@ deployments are portable, testable and incapable of silently forking the truth.
   Evidence: `src/modules/builder/`, `/admin/builder`, generated API/MCP
   services, and `tests/core/builder-content-lane.test.ts` (including real
   Postgres migration, apply, attribution, rollback and stale-write coverage).
-- [ ] **C4.20** Implement the code lane: isolated worktree, budget/permission
+- [x] **C4.20** Implement the code lane: isolated worktree, budget/permission
   envelope, gates, preview environment, owner-readable diff and pull request.
-- [ ] **C4.21** Keep `builder.*` separately granted from workforce scopes and
+  (§37 settles what "isolated" means here: "the instance does not compile code
+  on the box that serves traffic, and a droplet is not a build server." So the
+  isolation is not a safer sandbox — it is that generated code is **never
+  executed on this machine at all**. It is data in a row, then a branch in the
+  owner's own repository, and the owner's CI is the preview environment. That
+  makes `src/modules/builder/code-gates.ts` the only thing standing between a
+  model's output and an owner's repository, so every gate is a stored refusal
+  with a reason rather than a silent filter, and all of them report at once —
+  an owner who fixes one refusal and immediately meets another learns the
+  process is adversarial. The load-bearing gate is the path one: everything
+  must live under `plugins/<name>/`, so a proposal cannot reach core, another
+  plugin, or the deploy configuration, whatever the model was asked and
+  whatever ended up in its context. The rest refuse a plugin the platform could
+  not load, a permission it cannot grant, a credential (naming the file and the
+  kind, never the value), an import outside the contract, a missing SPDX
+  header, a proposal too large to review, and a migration that drops or
+  truncates — §37's "if a change cannot be undone in one step, the builder
+  refuses it and says why". Gates run again at delivery, because a gate that
+  only ran once is a gate somebody can get past by editing the row. Delivery is
+  a pull request where a repository is connected and a `git apply`-able patch
+  where it is not, since a proposal must not be trapped inside an instance
+  because a token is missing; neither path writes a file or starts a process
+  here. Budget is the same visible monthly ceiling the structure lane spends,
+  reserved under the same advisory lock so two tabs cannot both spend the last
+  of it. `0088_builder_code_lane.sql`. Coverage in
+  `tests/core/builder-code-lane.test.ts`.)
+- [x] **C4.21** Keep `builder.*` separately granted from workforce scopes and
   prove content/customer input can never instruct either builder lane.
-- [ ] **C4.22** Expose the builder safely through admin, API and MCP and emit
+  (Both halves were already structurally true; this item is the proof, which is
+  what keeps them true. `tests/core/builder-authority.test.ts` walks the **real
+  registry** and asserts that no other family grants any `builder.*` service —
+  not `contacts.*`, not `agents.*`, and not all of them held at once — that the
+  one which does, does, and that no wildcard exists a key could hold instead,
+  since `permits()` matches an exact name or one family and `apikeys` refuses a
+  scope the registry does not know. The code lane adds a second door behind the
+  scope: an API key is refused even holding `builder.*`, because §37 reserves
+  writing code for a signed-in owner. For the injection half the argument is
+  structural rather than filtered: the owner's brief and the site's content
+  reach the adapter through **different parameters**, and the code lane's
+  system prompt is fixed text with nothing interpolated into it — there is
+  nothing to inject into, which is stronger than sanitising. The test hands the
+  adapter an "IGNORE ALL PREVIOUS INSTRUCTIONS" string and asserts the brief
+  arrives verbatim, the injection never reaches the instruction position, and
+  the prompt states the boundary it also enforces.)
+- [x] **C4.22** Expose the builder safely through admin, API and MCP and emit
   complete source/audit provenance through `/source`, including the running
   version, applied plugins, builder diff, license, and notices.
-- [ ] **C4.23** Add a federated catalogue for shareable agent/playbook
+  (The builder reaches admin, HTTP and MCP the way everything does — generated
+  from the service registry (§11), so the code lane's verbs became API routes
+  and MCP tools by existing, under the same permission checks and the same
+  audit row. "Safely" is C4.21's scope separation plus `agentCallable: false`
+  on every code-lane mutation. `platform.source` and the `/source` route emit
+  the running version, installed plugins with their licences and permissions,
+  third-party notices, and every builder change that actually landed — applied
+  structure proposals and delivered code proposals, each with the pull request
+  it became. Two judgements worth recording. It reports only what was
+  **applied**: a proposal nobody accepted did not change what this instance is.
+  And it is **not public**, which is a reading of the licence rather than an
+  oversight — Apache-2.0 does not require an operator to publish private
+  modifications merely because they run them over a network, so the route owes
+  the world nothing, while a map of an instance's plugins and changes is
+  exactly what somebody attacking it would want first.)
+- [x] **C4.23** Add a federated catalogue for shareable agent/playbook
   definitions with declared scopes, compatibility, provenance, preview and
   owner approval before installation; definitions remain data, never bundled
   credentials or ambient authority.
+  (Federated means no central registry anybody must be admitted to: a catalogue
+  is an HTTPS URL an owner chose to trust, and an instance follows several or
+  none — none being the default, because a platform shipping with a trusted
+  registry has chosen for its owner. **Definitions are data**, enforced by a
+  walk over the fetched document that refuses anything carrying a credential, a
+  bound connection or a named agent, at fetch *and* again at install; an author
+  who shipped one has misunderstood what they were publishing, so it is refused
+  outright rather than quietly stripped. Entries are cached rather than fetched
+  on view, and **approval is of specific bytes**: the install takes the
+  checksum the owner was shown and refuses if the catalogue has rewritten the
+  entry since, which is what makes a preview an approval rather than a
+  suggestion. Declared scopes and the brief in full are shown before anybody
+  approves; compatibility is checked against the running version so a
+  definition for a later Freeholder is refused with a reason instead of failing
+  at run time. Installing goes through `agents.importPlaybook`, the same door a
+  hand-written import uses, so it arrives disabled and pointed at nobody.
+  Provenance is **copied** onto the install rather than joined, because "where
+  did this come from?" is asked months later, usually about something
+  surprising, and must outlive the catalogue being unfollowed. A catalogue that
+  cannot be read is a state and not an exception — throwing would have rolled
+  back the row recording why it failed, which the test caught.
+  `0089_catalogue.sql`. Coverage in `tests/core/catalogue.test.ts`.)
 
 **C4 exit:** owners can delegate recurring work and product changes while
 permissions, budgets, untrusted input, approvals and rollback remain enforceable.

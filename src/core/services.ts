@@ -59,6 +59,8 @@ import designServices from "@/core/design/service";
 import pluginServices from "@/core/plugins/service";
 import importServices from "@/core/import/service";
 import portabilityServices from "@/core/portability/service";
+import provenanceServices from "@/core/provenance/service";
+import catalogueServices from "@/core/catalogue/service";
 import type { Service } from "@/core/service";
 import type { EventDeliveryContext } from "@/core/events";
 
@@ -118,6 +120,8 @@ const services: Service[] = [
   ...pluginServices,
   ...importServices,
   ...portabilityServices,
+  ...provenanceServices,
+  ...catalogueServices,
 ];
 
 export default services;
