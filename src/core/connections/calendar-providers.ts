@@ -40,6 +40,13 @@ export interface CalendarSyncPage {
    * documented way of saying "your cursor is too old, start again".
    */
   resyncRequired: boolean;
+  /**
+   * Every page the provider had was read. False when the page budget ran out
+   * first, which makes this a prefix of the truth and not the whole of it —
+   * the difference between "these are the events" and "these are some events",
+   * and the difference between a safe reconciliation and deleting real time.
+   */
+  complete: boolean;
 }
 
 export interface CalendarWindow {
@@ -183,7 +190,7 @@ const google: CalendarSyncClient = {
         body = await getJson<GoogleEventList>(url.toString(), accessToken, "Google");
       } catch (error) {
         if (input.syncToken && isStaleCursor(error)) {
-          return { events: [], resyncRequired: true };
+          return { events: [], resyncRequired: true, complete: false };
         }
         throw error;
       }
@@ -219,7 +226,7 @@ const google: CalendarSyncClient = {
       pageToken = body.nextPageToken;
       if (!pageToken) break;
     }
-    return { events, nextSyncToken, resyncRequired: false };
+    return { events, nextSyncToken, resyncRequired: false, complete: !pageToken };
   },
 };
 
@@ -302,7 +309,7 @@ const microsoft: CalendarSyncClient = {
         });
       } catch (error) {
         if (input.syncToken && isStaleCursor(error)) {
-          return { events: [], resyncRequired: true };
+          return { events: [], resyncRequired: true, complete: false };
         }
         throw error;
       }
@@ -336,7 +343,7 @@ const microsoft: CalendarSyncClient = {
       deltaLink = body["@odata.deltaLink"] ?? deltaLink;
       next = body["@odata.nextLink"];
     }
-    return { events, nextSyncToken: deltaLink, resyncRequired: false };
+    return { events, nextSyncToken: deltaLink, resyncRequired: false, complete: !next };
   },
 };
 

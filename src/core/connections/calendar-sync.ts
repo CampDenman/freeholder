@@ -233,14 +233,21 @@ export async function syncAccountCalendars(
       syncToken: stale ? null : calendar.syncToken,
       window,
     });
-    if (page.resyncRequired) {
+    const refused = page.resyncRequired;
+    if (refused) {
       page = await client.listEvents(accessToken, {
         externalId: calendar.externalId,
         syncToken: null,
         window,
       });
     }
-    const fullPass = stale || !calendar.syncToken || page.resyncRequired;
+    /**
+     * A pass that saw the whole window, and can therefore be trusted to say
+     * what is *not* there any more. An incremental pass reports only changes,
+     * and a pass that ran out of pages saw a prefix — treating either as the
+     * complete truth would delete time somebody is genuinely busy.
+     */
+    const fullPass = (stale || !calendar.syncToken || refused) && page.complete;
 
     const gone = page.events.filter((event) => event.cancelled).map((e) => e.externalId);
     const live = page.events.filter(

@@ -68,6 +68,11 @@ function at(iso: string): { dateTime: string } {
   return { dateTime: iso };
 }
 
+/** A start and an end, somewhere in the window, for filler nobody inspects. */
+function pair(): { start: { dateTime: string }; end: { dateTime: string } } {
+  return { start: at(soon(20)), end: at(soon(21)) };
+}
+
 /** Somewhere inside the sync window, whenever this test happens to run. */
 function soon(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 3_600_000).toISOString();
@@ -269,6 +274,39 @@ describe.runIf(hasDatabase)("external calendar sync", { timeout: 60_000 }, () =>
     // Rediscovery must not quietly undo the owner's decision.
     const [again] = await db().select().from(externalCalendars);
     expect(again?.role).toBe("ignored");
+  });
+
+  it("never deletes busy time on the strength of a page it could not finish", async () => {
+    await connectAccount();
+    vi.stubGlobal(
+      "fetch",
+      googleHolding({
+        events: [{ id: "event-1", start: at(soon(16)), end: at(soon(17)) }],
+      }),
+    );
+    await syncCalendars.call({ id: ACCOUNT }, OWNER);
+    expect(await storedEvents()).toHaveLength(1);
+
+    // Old enough to warrant a full pass, so reconciliation is on the table.
+    await db().update(externalCalendars).set({ lastSyncAt: null });
+
+    // A calendar so large the page budget runs out first. What came back is a
+    // prefix of the truth, and event-1 is simply further down it.
+    const endless = vi.fn(async (input: string | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/users/me/calendarList")) {
+        return Response.json({ items: [{ id: "primary", summary: "Work" }] });
+      }
+      return Response.json({
+        items: [{ id: `filler-${url.searchParams.get("pageToken") ?? "0"}`, ...pair() }],
+        nextPageToken: `page-${Number(url.searchParams.get("pageToken")?.split("-")[1] ?? 0) + 1}`,
+      });
+    });
+    vi.stubGlobal("fetch", endless);
+    await syncCalendars.call({ id: ACCOUNT }, OWNER);
+
+    const remaining = await storedEvents();
+    expect(remaining.map((event) => event.externalId)).toContain("event-1");
   });
 
   it("refuses when calendar reading is switched off for the connection", async () => {
