@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-18 |
-| Evidence snapshot | `main` through C4.09 (#156), plus this change for C4.10 (per-agent, per-connection grants with revocation history, cascading revocation from the provider, and the reconnect notice naming who is waiting). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.10 (#157), plus this change for C4.11 (one shared provider handshake, calendar consent on its own route, scopes that accumulate rather than replace, and purpose-bound OAuth state). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.11 Google and Microsoft OAuth with incremental calendar scopes and several accounts per provider. |
+| Current focus | C4.12 external calendar sync: tokens, busy-only default, optional details, health and privacy-preserving storage. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3826,8 +3826,24 @@ deployments are portable, testable and incapable of silently forking the truth.
   extended in `deploy/ownership-recovery.md`, including reviewing grants after
   restoring a database elsewhere. Coverage in
   `tests/core/connection-grants.test.ts`.)
-- [ ] **C4.11** Implement Google and Microsoft OAuth with incremental calendar
+- [x] **C4.11** Implement Google and Microsoft OAuth with incremental calendar
   scopes and several accounts per provider/person.
+  (`src/core/connections/oauth-core.ts` holds the handshake mail built in
+  C1.14 — endpoints, consent URL, code exchange, identity, account upsert,
+  capability — below both callers rather than written twice, and
+  `calendar-oauth.ts` asks for calendar scopes against its own callback route
+  so a code issued for a calendar cannot be redeemed as consent to send mail.
+  *Incremental* is enforced in the platform, not just requested from the
+  provider: `upsertConnectedAccount` unions scopes, so connecting a calendar
+  on the mailbox that already sends keeps sending, and reconnecting mail later
+  keeps the calendar — the same fix mail now benefits from. Read is the
+  default and editing is a separate scope and capability. Several accounts per
+  provider per person already followed from keying on
+  (provider, provider account id); a test pins it. `0081_connection_oauth_purpose.sql`
+  adds `purpose` and `access` to the OAuth state table, which the claim now
+  matches on — writing this test found that the mail flow could consume a
+  calendar state, now closed. Coverage in `tests/core/calendar-oauth.test.ts`;
+  the mail suites pass unchanged against the shared core.)
 - [ ] **C4.12** Sync external calendars with tokens, busy-only default,
   optional details, health/errors and privacy-preserving storage.
 - [ ] **C4.13** Build unified calendar display and connect busy unions to the
