@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C4.14 (#161), plus this change for C4.15 (a briefing assembled before anybody arrives, sections that come from contributors rather than a list, needs-me-first ordering, and hiding that hides a section without switching off the work). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.15 (#162), plus this change for C4.16 (the sections core and the modules actually contribute — including the failures that are deliberately silent everywhere else). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.16 core briefing contributors: appointments, enquiries, overdue invoices, agent failures, webhook failures, reconnects and updates. |
+| Current focus | C4.17 playbook and module contributions plus email, SMS and push delivery through notification preferences. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3942,8 +3942,32 @@ deployments are portable, testable and incapable of silently forking the truth.
   C4.16 and playbook/module delivery is C4.17; today the registry honestly
   returns none, which yields an empty briefing rather than a broken one.
   `0083_briefings.sql`. Coverage in `tests/core/briefing.test.ts`.)
-- [ ] **C4.16** Add core briefing contributors for appointments, enquiries,
+- [x] **C4.16** Add core briefing contributors for appointments, enquiries,
   overdue invoices, agent failures, webhook failures, reconnects and updates.
+  (`src/core/briefing/contributors.ts` holds the five core sections and the
+  modules hold their own — enquiries in `src/modules/forms/briefing.ts` and
+  overdue invoices in `src/modules/invoicing/briefing.ts`, each declared in its
+  manifest, because nothing in core should know enquiries exist and switching
+  the module off should take the section with it. Four of the seven are the
+  ones §42 calls "anything the platform itself is unhappy about": an agent
+  waiting on an approval, a task that failed, a webhook endpoint that paused
+  itself, a connected account that needs reconnecting. Each of those states is
+  deliberately silent everywhere else — nothing retries into a lockout and
+  nothing pages anybody — so this is the one place they surface, which is what
+  makes the briefing worth opening on a quiet day. The privacy rules travel
+  with the data rather than being restated: appointments read the same
+  business-shared, not-ignored calendars the busy union does, and an event
+  whose account does not allow detail is listed as "Busy" — a briefing is not
+  a way around a setting. A paused webhook is named by host, never by its
+  signed URL, because a briefing is read over somebody's shoulder. Overdue
+  invoices show what is still owed rather than what was billed. The update
+  section reads `pendingUpdate()`, one seam that C10.04's jittered signed-file
+  check will fill; until then it answers "none known", which is the same answer
+  an instance on the newest release gives, and the section is simply absent.
+  Coverage in `tests/core/briefing-contributors.test.ts`, plus a registry
+  assertion that every declared contributor resolves to a service that
+  actually exists — a section that silently never appears is the failure mode
+  this design would otherwise have.)
 - [ ] **C4.17** Add playbook/module contributions plus email, SMS and push
   delivery through notification preferences.
 - [ ] **C4.18** Add Gmail/Microsoft mail read and contact import as untrusted

@@ -71,13 +71,43 @@ vi.mock("@/core/briefing/registry", async (importOriginal) => {
 
 describe("the contributor registry", () => {
   it("reads contributors out of the manifests this instance actually has", async () => {
+    await ready();
     const { briefingContributors } =
       await vi.importActual<typeof BriefingRegistry>("@/core/briefing/registry");
     const found = await briefingContributors();
-    // Core's own sections are C4.16 and no module declares one yet, so today
-    // the honest answer is none — an empty briefing rather than a broken one,
-    // which is what an instance with every module switched off should get.
-    expect(found).toEqual([]);
+    const keys = found.map((entry) => entry.key);
+
+    // Core's own, all five of them.
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "briefing.appointments",
+        "briefing.agentAttention",
+        "briefing.reconnects",
+        "briefing.webhookFailures",
+        "briefing.update",
+      ]),
+    );
+    // And the module ones, which arrived by being declared in a manifest
+    // rather than by anything in core knowing enquiries or invoices exist.
+    expect(keys).toEqual(
+      expect.arrayContaining(["forms.briefingEnquiries", "invoicing.briefingOverdue"]),
+    );
+    expect(
+      found.filter((entry) => entry.source === "module").map((entry) => entry.key),
+    ).toEqual(["forms.briefingEnquiries", "invoicing.briefingOverdue"]);
+
+    // Core settles ties above modules: the platform being unhappy outranks
+    // anything a module has to report.
+    const lastCore = Math.max(
+      ...found.flatMap((entry, index) => (entry.source === "core" ? [index] : [])),
+    );
+    const firstModule = found.findIndex((entry) => entry.source === "module");
+    expect(lastCore).toBeLessThan(firstModule);
+
+    // Every declared contributor is a service that actually exists, or the
+    // section is a promise the briefing silently fails to keep.
+    const { getService } = await import("@/core/service");
+    for (const entry of found) expect(getService(entry.service)).toBeTruthy();
   });
 
   it("orders by what it costs the person to miss it", async () => {

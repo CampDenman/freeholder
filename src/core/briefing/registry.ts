@@ -59,13 +59,20 @@ export interface RegisteredContributor {
 }
 
 /**
- * Core's own contributors.
+ * Core's own contributors (C4.16), in the order they break ties.
  *
- * Empty here on purpose: C4.15 is the mechanism and C4.16 is what core has to
- * say. An empty registry produces an empty briefing rather than a broken one,
- * which is exactly what an instance with every module switched off should get.
+ * Severity decides the reading order; these positions only settle sections
+ * that share one. Core sits above modules because "a connection stopped
+ * working" outranks anything a module has to report — the platform being
+ * unhappy is the reason §42 says the briefing is worth opening on a quiet day.
  */
-const coreContributors: RegisteredContributor[] = [];
+const coreContributors: RegisteredContributor[] = [
+  { key: "briefing.appointments", service: "briefing.appointments", source: "core", position: 10 },
+  { key: "briefing.agentAttention", service: "briefing.agentAttention", source: "core", position: 20 },
+  { key: "briefing.reconnects", service: "briefing.reconnects", source: "core", position: 21 },
+  { key: "briefing.webhookFailures", service: "briefing.webhookFailures", source: "core", position: 22 },
+  { key: "briefing.update", service: "briefing.update", source: "core", position: 30 },
+];
 
 /**
  * Everything that may contribute, in the order a briefing lays them out.
