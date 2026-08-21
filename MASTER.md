@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C4.17 (#164), plus this change for C4.18 (a mailbox read for who is in it, through the one door into the spine, with no bodies and no subjects nobody shared). C4's connections, scheduling and briefing work is complete; C4.20–C4.23 (the builder's code lane and the catalogue) remain. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.18 (#165), plus this change for C6.01 (a person, a room and the business as one entity, so a service needing both is a query). C5 is complete, so the 2026-08-14 commerce deviation is discharged; C4.20–C4.23 (the builder's code lane and the catalogue) remain open alongside C6. C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.20 the builder's code lane: proposal, sandboxed build, tests and owner review. |
+| Current focus | C6.02 availability rules, opening hours, exceptions, buffers, lead time, horizon and recurrence, with an admin editor. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4359,8 +4359,32 @@ payment, tax, inventory and reporting path, with no floating-point money.
 
 #### Scheduling engine
 
-- [ ] **C6.01** Build calendars for business, users and resources with timezone,
+- [x] **C6.01** Build calendars for business, users and resources with timezone,
   capacity, ownership and sharing semantics plus an admin calendar workspace.
+  (`src/core/scheduling/` holds §4.4's `Calendar` and `CalendarMembership`.
+  The expensive assumption §4.4 warns about is settled by a `kind` column: a
+  person's calendar and the business's are different rows from day one, and a
+  booking will name a calendar rather than a user, so hiring somebody or buying
+  a second chair restructures nothing. **Resources are calendars too** — a room
+  and a therapist are one entity, which is what makes "this service needs both"
+  a `calendar_memberships` query rather than a feature; a test pins one service
+  drawing a `primary` and a `resource` at once. A partial unique index allows
+  exactly one business calendar, because a second is two answers to "when is
+  the business open"; a database check keeps `kind = 'person'` and having a
+  holder the same fact in both directions. Ownership is `user_id` and sharing
+  is the authority rules around it: an API key may not reshape calendars at
+  all, and the `scheduling` module is granted to the service-provider role
+  because somebody whose day is appointments needs the diary they appear in.
+  Archiving is the only removal — a calendar with a year of appointments behind
+  it is a record of what happened, so it leaves new work and stays readable,
+  and the business's own cannot be archived at all. Timezone is per calendar,
+  not per business (§4.9), because a second location abroad is a calendar.
+  `external_calendar_id` links a bookable calendar to the synced one whose busy
+  time blocks it, rather than duplicating §4.4's `sync_token` — C4.12 already
+  owns that cursor, and a second copy is a second thing to get out of step.
+  `/admin/calendars` is the workspace. `0085_calendars.sql`. Coverage in
+  `tests/core/calendars.test.ts`; availability rules are C6.02 and the
+  resolver C6.03.)
 - [ ] **C6.02** Build normalized availability rules, opening hours, exceptions,
   buffers, lead time, horizon and recurrence with an admin availability editor.
 - [ ] **C6.03** Implement the availability resolver for compound resources,
