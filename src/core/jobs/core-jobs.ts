@@ -354,6 +354,27 @@ export const runManagedAgents = defineJob({
   },
 });
 
+/**
+ * Scheduled playbooks (C4.14).
+ *
+ * One job for every schedule an owner has ever written, because playbooks are
+ * created at runtime and registering a pg-boss schedule per playbook would
+ * mean mutating the scheduler from a request handler. The work list is a
+ * range scan over one indexed timestamp, so a minute with nothing due costs
+ * one query and writes nothing.
+ */
+export const runPlaybooks = defineJob({
+  name: "core.runPlaybooks",
+  summary: "Start scheduled playbooks whose next run has come round.",
+  schedule: "* * * * *",
+  concurrency: 1,
+  leaseSeconds: 10 * 60,
+  handler: async () => {
+    const { runScheduledPlaybooks } = await import("@/core/agents/playbook-schedule");
+    return runScheduledPlaybooks();
+  },
+});
+
 /** An approval nobody answers lapses instead of sitting pending forever. */
 export const expireAgentApprovals = defineJob({
   name: "core.expireAgentApprovals",
@@ -510,6 +531,7 @@ export default [
   sweepMediaOrphans,
   expireCaptureSessions,
   expireAgentApprovals,
+  runPlaybooks,
   runManagedAgents,
   purgeExpiredMediaAssets,
   deliverNotifications,

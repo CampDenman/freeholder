@@ -36,12 +36,13 @@
     "doctor": "node scripts/doctor.mjs"
   },
   "dependencies": {
-    "@freeholder/plugin-kit": "workspace:*",
     "@formatjs/icu-messageformat-parser": "^3.5.15",
+    "@freeholder/plugin-kit": "workspace:*",
     "@phosphor-icons/react": "^2.1.10",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "aws4fetch": "^1.0.20",
+    "cron-parser": "5.6.2",
     "drizzle-orm": "^0.45.2",
     "intl-messageformat": "^11.2.12",
     "isbot": "^5.2.1",

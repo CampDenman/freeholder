@@ -2931,11 +2931,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C4.12 (#159), plus this change for C4.13 (one union of busy time carrying nothing but times, a week that is drawn to scale across a clock change, and every calendar that does *not* count listed with the reason). C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C4.13 (#160), plus this change for C4.14 (one scheduled job for every schedule an owner ever writes, a missed window that runs once rather than once per minute it was missed, and overlap refused with the reason shown). C1.27 stays dependency-blocked on remaining C5–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C4.14 runtime playbook scheduling: timezone/DST, `next_run_at`, catch-up policy, overlap refusal and outage-safe advancement. |
+| Current focus | C4.15 briefing entities: contributor registry, preassembly, needs-me-first ordering, read state and per-section preferences. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3890,8 +3890,32 @@ deployments are portable, testable and incapable of silently forking the truth.
   availability resolver (C6.03) consumes `externalBusyWindows` and needs no
   other door into this data. Coverage in `tests/core/calendar-busy.test.ts`
   and `tests/core/zoned.test.ts`.)
-- [ ] **C4.14** Implement runtime playbook scheduling with timezone/DST,
+- [x] **C4.14** Implement runtime playbook scheduling with timezone/DST,
   `next_run_at`, catch-up policy, overlap refusal and outage-safe advancement.
+  (One scheduled job — `core.runPlaybooks`, every minute — and the work list is
+  a range scan over `next_run_at`, because playbooks are written at runtime and
+  registering a pg-boss schedule per playbook would mean mutating the scheduler
+  from a request handler. `src/core/agents/playbook-schedule.ts` holds the
+  three rules that make that safe, each of them a documented way schedulers go
+  wrong. **A missed window runs once**: `next_run_at` is advanced to the next
+  occurrence *after now*, never incremented in a loop, so an instance down for
+  six hours returns to one overdue daily briefing rather than three hundred and
+  sixty — asserted directly. **Overlap is refused**, counting every non-terminal
+  task including the ones waiting on a person, and the owner is told what is
+  holding it ("still running from 07:00", or waiting for approval) rather than
+  finding a pile-up. **The advance happens in every branch**, refusals
+  included, or a refused window would be retried every minute for as long as
+  its reason lasted. Occurrences are computed in a named zone through
+  `cron-parser` (promoted from a transitive pg-boss dependency to a direct one
+  rather than hand-rolling DST arithmetic), so "every weekday at 07:00" is
+  12:00Z in March and 11:00Z in July. Writing this found that a playbook
+  created or imported as scheduled never received a `next_run_at` at all: it
+  looked scheduled, was switched on, and could not fire — now computed and
+  validated at the moment the schedule is written, which also replaced C4.08's
+  regex with a parser that says what it could not read. `0082` adds
+  `timezone`, `next_run_at`, `last_run_at`, `catch_up` and `last_outcome` with
+  a partial index on the due predicate. Coverage in
+  `tests/core/agents-schedule.test.ts`.)
 - [ ] **C4.15** Build briefing entities, contributor registry, preassembly,
   needs-me-first ordering, read state and per-section preferences.
 - [ ] **C4.16** Add core briefing contributors for appointments, enquiries,

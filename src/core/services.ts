@@ -14,6 +14,7 @@ import agentExecution from "@/core/agents/execution";
 import agentWrites from "@/core/agents/writes";
 import agentPlaybookServices from "@/core/agents/playbooks";
 import agentPlaybookEvents from "@/core/agents/playbook-events";
+import agentPlaybookSchedules from "@/core/agents/playbook-schedule";
 import apiKeyServices from "@/core/apikeys/service";
 import connectionServices from "@/core/connections/service";
 import connectionGrantServices from "@/core/connections/grants";
@@ -63,6 +64,7 @@ const services: Service[] = [
   ...agentWrites,
   ...agentPlaybookServices,
   ...agentPlaybookEvents,
+  ...agentPlaybookSchedules,
   ...apiKeyServices,
   ...connectionServices,
   ...connectionGrantServices,

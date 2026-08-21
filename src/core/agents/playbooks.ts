@@ -24,6 +24,7 @@ import {
   type ServiceContext,
 } from "@/core/service";
 import { agentPlaybooks, agentPlaybookVersions } from "@/core/agents/schema";
+import { assertSchedule, nextOccurrence, scheduleZone } from "@/core/agents/cron";
 import { createTask } from "@/core/agents/service";
 import {
   parseParamsSchema,
@@ -35,8 +36,6 @@ import {
 const AUTONOMY = ["suggest", "approve", "autonomous"] as const;
 const TRIGGERS = ["manual", "schedule", "event"] as const;
 
-/** Five fields, standard crontab. Runtime scheduling is C4.14. */
-const CRON = /^(\S+\s+){4}\S+$/;
 /** `contact.created`, or a family like `catalog.*`. */
 const EVENT_PATTERN = /^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9*]+)+$/;
 
@@ -60,6 +59,11 @@ const playbookRow = row({
   paramsSchema: z.unknown(),
   trigger: z.enum(TRIGGERS),
   scheduleCron: z.string().nullable(),
+  timezone: z.string().nullable(),
+  nextRunAt: timestamp.nullable(),
+  lastRunAt: timestamp.nullable(),
+  catchUp: z.boolean(),
+  lastOutcome: z.string().nullable(),
   eventPattern: z.string().nullable(),
   enabled: z.boolean(),
   version: z.number().int(),
@@ -96,19 +100,30 @@ const definition = {
   enabled: z.boolean().default(true),
 };
 
-/** A trigger has to carry what it needs to fire, or it never will. */
-function checkTrigger(input: {
+/**
+ * A trigger has to carry what it needs to fire, or it never will.
+ *
+ * For a schedule that means the first occurrence is computed here and stored
+ * (C4.14). A playbook that said "every weekday at seven" and sat with an empty
+ * `next_run_at` would be switched on, look scheduled, and never run — which is
+ * exactly the failure an owner cannot debug from the screen.
+ */
+async function checkTrigger(input: {
   trigger: "manual" | "schedule" | "event";
   scheduleCron?: string | null;
   eventPattern?: string | null;
-}): void {
+  timezone?: string | null;
+}): Promise<Date | null> {
   if (input.trigger === "schedule") {
-    if (!input.scheduleCron || !CRON.test(input.scheduleCron)) {
+    if (!input.scheduleCron) {
       throw new ServiceError(
         "validation",
         "A scheduled playbook needs a five-field cron expression, such as 0 9 * * 1.",
       );
     }
+    const timezone = await scheduleZone({ timezone: input.timezone ?? null });
+    assertSchedule(input.scheduleCron, timezone);
+    return nextOccurrence(input.scheduleCron, timezone, new Date());
   }
   if (input.trigger === "event") {
     if (!input.eventPattern || !EVENT_PATTERN.test(input.eventPattern)) {
@@ -118,6 +133,9 @@ function checkTrigger(input: {
       );
     }
   }
+  // A playbook that stops being scheduled stops having a next run, rather
+  // than keeping a timestamp nothing will ever read.
+  return null;
 }
 
 async function writeVersion(
@@ -204,13 +222,14 @@ export const createPlaybook = defineService({
   output: playbookRow,
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "write a playbook");
-    checkTrigger(input);
+    const nextRunAt = await checkTrigger(input);
     const { note, ...values } = input;
     const [created] = await ctx.tx
       .insert(agentPlaybooks)
       .values({
         ...values,
         paramsSchema: values.paramsSchema,
+        nextRunAt,
         version: 1,
       })
       .returning()
@@ -272,13 +291,20 @@ export const updatePlaybook = defineService({
       .limit(1);
     if (!before) throw new ServiceError("not_found", "No such playbook.");
 
-    checkTrigger({
-      trigger: changes.trigger ?? before.trigger,
-      scheduleCron:
-        changes.scheduleCron === undefined ? before.scheduleCron : changes.scheduleCron,
+    const scheduleCron =
+      changes.scheduleCron === undefined ? before.scheduleCron : changes.scheduleCron;
+    const trigger = changes.trigger ?? before.trigger;
+    const nextRunAt = await checkTrigger({
+      trigger,
+      scheduleCron,
       eventPattern:
         changes.eventPattern === undefined ? before.eventPattern : changes.eventPattern,
+      timezone: before.timezone,
     });
+    // An unchanged schedule keeps the cursor it was already counting down to;
+    // rewriting it here would push every window forward on every edit.
+    const scheduleChanged =
+      trigger !== before.trigger || scheduleCron !== before.scheduleCron;
 
     // Only the *wording* is versioned. Renaming a playbook or pausing it does
     // not change the instructions a past task was given, so it does not
@@ -292,7 +318,11 @@ export const updatePlaybook = defineService({
 
     const [updated] = await ctx.tx
       .update(agentPlaybooks)
-      .set({ ...changes, version })
+      .set({
+        ...changes,
+        version,
+        ...(scheduleChanged ? { nextRunAt } : {}),
+      })
       .where(eq(agentPlaybooks.id, id))
       .returning()
       .catch((error: unknown) => {
@@ -449,6 +479,24 @@ export async function runEventPlaybooks(
   return started;
 }
 
+/**
+ * Start a playbook because its schedule said so (C4.14).
+ *
+ * A scheduled run takes the playbook's declared parameter defaults; there is
+ * nobody at the keyboard to be asked, and a schedule that refused to run
+ * because a parameter was optional would be a schedule that never ran.
+ */
+export async function startScheduledPlaybook(
+  ctx: ServiceContext,
+  playbook: typeof agentPlaybooks.$inferSelect,
+): Promise<{ taskId: string; brief: string }> {
+  return startFromPlaybook(ctx, playbook, {
+    source: "schedule",
+    values: {},
+    sourceRef: `playbook:${playbook.id}@v${playbook.version}:schedule`,
+  });
+}
+
 export const exportPlaybook = defineService({
   name: "agents.exportPlaybook",
   summary: "A playbook as a portable document, with no credentials in it.",
@@ -496,7 +544,7 @@ export const importPlaybook = defineService({
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "import a playbook");
     const document = input.document;
-    checkTrigger(document);
+    await checkTrigger(document);
     // An imported playbook arrives switched off and unassigned. Somebody
     // else's instructions should not start running against this business's
     // data because a file was opened — the owner turns it on deliberately.

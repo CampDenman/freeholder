@@ -400,6 +400,23 @@ export const agentPlaybooks = pgTable(
       .notNull()
       .default("manual"),
     scheduleCron: text("schedule_cron"),
+    /**
+     * The zone the cron is read in (§4.9). Null means the business's own, so
+     * "every morning at 7" stays 7 in the morning across a clock change
+     * instead of drifting to 6 or 8 for half the year.
+     */
+    timezone: text("timezone"),
+    /**
+     * The whole schedule as one indexed timestamp (C4.14). Due is a range
+     * scan, not a cron parse per row per minute, and advancing it is how an
+     * outage stays an outage rather than becoming a stampede.
+     */
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    /** Whether a window missed while the instance was down runs late. */
+    catchUp: boolean("catch_up").notNull().default(false),
+    /** What happened last time, in the words the owner is shown. */
+    lastOutcome: text("last_outcome"),
     eventPattern: text("event_pattern"),
     enabled: boolean("enabled").notNull().default(true),
     /**
