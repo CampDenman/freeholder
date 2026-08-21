@@ -6,8 +6,14 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { providerJson, requestWithTimeout } from "@/adapters/mail/http";
 import { MailAdapterError } from "@/adapters/mail/types";
-import { connectedAccounts, connectionCapabilities } from "@/core/connections/schema";
+import { connectedAccounts } from "@/core/connections/schema";
 import { encryptSecret, decryptSecret } from "@/core/connections/crypto";
+import {
+  exchangeAuthorizationCode,
+  fetchProviderIdentity,
+  grantCapability,
+  upsertConnectedAccount,
+} from "@/core/connections/oauth-core";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { mailOauthStates, mailSenders } from "@/core/mail/schema";
@@ -87,6 +93,15 @@ function providerConfig(provider: OAuthProvider): {
   };
 }
 
+/** The refresh path still parses a token response of its own. */
+type TokenPayload = {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  token_type?: string;
+  scope?: string;
+};
+
 function requirePerson(actor: Actor): Extract<Actor, { kind: "user" }> {
   if (actor.kind !== "user") {
     throw new ServiceError(
@@ -139,90 +154,6 @@ export const beginMailOAuth = defineService({
   },
 });
 
-type TokenPayload = {
-  access_token?: string;
-  refresh_token?: string;
-  expires_in?: number;
-  token_type?: string;
-  scope?: string;
-};
-
-async function exchangeCode(
-  providerName: OAuthProvider,
-  code: string,
-): Promise<{ credentials: OAuthCredentials; scopes: string[] }> {
-  const provider = providerConfig(providerName);
-  const body = new URLSearchParams({
-    client_id: provider.clientId,
-    client_secret: provider.clientSecret,
-    code,
-    redirect_uri: callbackUrl(providerName),
-    grant_type: "authorization_code",
-  });
-  const response = await requestWithTimeout(globalThis.fetch, provider.tokenUrl, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body,
-  });
-  const token = await providerJson<TokenPayload>(response, providerName);
-  if (!token.access_token) {
-    throw new ServiceError("validation", "The mail provider returned no access token.");
-  }
-  const scopes = token.scope?.split(/\s+/).filter(Boolean) ?? provider.scopes;
-  const required = providerName === "google" ? GOOGLE_SEND : MICROSOFT_SEND;
-  if (!scopes.some((scope) => scope.toLowerCase() === required.toLowerCase())) {
-    throw new ServiceError(
-      "permission",
-      "Mail-send permission was not granted. Reconnect and approve sending mail.",
-    );
-  }
-  return {
-    scopes,
-    credentials: {
-      accessToken: token.access_token,
-      refreshToken: token.refresh_token,
-      expiresAt: new Date(Date.now() + (token.expires_in ?? 3600) * 1000).toISOString(),
-      tokenType: token.token_type ?? "Bearer",
-    },
-  };
-}
-
-async function providerIdentity(
-  provider: OAuthProvider,
-  accessToken: string,
-): Promise<{ id: string; email: string; name?: string }> {
-  const url =
-    provider === "google"
-      ? "https://openidconnect.googleapis.com/v1/userinfo"
-      : "https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName";
-  const response = await requestWithTimeout(globalThis.fetch, url, {
-    method: "GET",
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
-  const body = await providerJson<Record<string, unknown>>(response, provider);
-  const id = typeof body.sub === "string" ? body.sub : body.id;
-  const email =
-    typeof body.email === "string"
-      ? body.email
-      : typeof body.mail === "string"
-        ? body.mail
-        : body.userPrincipalName;
-  const name =
-    typeof body.name === "string"
-      ? body.name
-      : typeof body.displayName === "string"
-        ? body.displayName
-        : undefined;
-  const parsedEmail = typeof email === "string" ? z.email().safeParse(email) : null;
-  if (typeof id !== "string" || !parsedEmail?.success) {
-    throw new ServiceError(
-      "validation",
-      "The mail provider did not return an account id and email address.",
-    );
-  }
-  return { id, email: parsedEmail.data.toLowerCase(), name };
-}
-
 export const completeMailOAuth = defineService({
   name: "mail.completeOAuth",
   summary: "Finish a signed-in person's Gmail or Microsoft mail connection.",
@@ -264,6 +195,10 @@ export const completeMailOAuth = defineService({
           eq(mailOauthStates.tokenHash, hashState(input.state)),
           eq(mailOauthStates.userId, actor.userId),
           eq(mailOauthStates.provider, input.provider),
+          // Since C4.11 the table serves calendars too, so purpose is part of
+          // the match: a code issued for a calendar must not be redeemable
+          // here, where it would be recorded as consent to send mail.
+          eq(mailOauthStates.purpose, "mail"),
           isNull(mailOauthStates.consumedAt),
           gt(mailOauthStates.expiresAt, sql`now()`),
         ),
@@ -275,116 +210,43 @@ export const completeMailOAuth = defineService({
         "That mail connection has expired or does not belong to this session. Start again.",
       );
     }
-    const exchanged = await exchangeCode(input.provider, input.code);
-    const identity = await providerIdentity(
-      input.provider,
+    const provider = input.provider;
+    const required = provider === "google" ? GOOGLE_SEND : MICROSOFT_SEND;
+    const exchanged = await exchangeAuthorizationCode({
+      provider,
+      code: input.code,
+      redirectUri: callbackUrl(input.provider),
+      requiredScope: required,
+      requiredScopeMessage:
+        "Mail-send permission was not granted. Reconnect and approve sending mail.",
+    });
+    const identity = await fetchProviderIdentity(
+      provider,
       exchanged.credentials.accessToken,
     );
-    const provider = input.provider;
-    let [existing] = await ctx.tx
-      .select({ id: connectedAccounts.id, userId: connectedAccounts.userId })
-      .from(connectedAccounts)
-      .where(
-        and(
-          eq(connectedAccounts.provider, provider),
-          eq(connectedAccounts.providerAccountId, identity.id),
-        ),
-      )
-      .limit(1);
-    if (existing && existing.userId !== actor.userId) {
-      throw new ServiceError(
-        "conflict",
-        "That provider account is already connected to another Freeholder profile.",
-      );
-    }
-    let accountId = existing?.id ?? crypto.randomUUID();
-    if (existing) {
-      await ctx.tx
-        .update(connectedAccounts)
-        .set({
-          email: identity.email,
-          displayName: identity.name,
-          scopesGranted: exchanged.scopes,
-          credentials: encryptSecret(
-            JSON.stringify(exchanged.credentials),
-            accountId,
-          ),
-          status: "active",
-          lastError: null,
-        })
-        .where(eq(connectedAccounts.id, accountId));
-    } else {
-      const [inserted] = await ctx.tx
-        .insert(connectedAccounts)
-        .values({
-          id: accountId,
-          userId: actor.userId,
-          provider,
-          providerAccountId: identity.id,
-          email: identity.email,
-          displayName: identity.name,
-          kind: "business",
-          scopesGranted: exchanged.scopes,
-          credentials: encryptSecret(
-            JSON.stringify(exchanged.credentials),
-            accountId,
-          ),
-          status: "active",
-        })
-        .onConflictDoNothing()
-        .returning({ id: connectedAccounts.id, userId: connectedAccounts.userId });
-      if (!inserted) {
-        [existing] = await ctx.tx
-          .select({ id: connectedAccounts.id, userId: connectedAccounts.userId })
-          .from(connectedAccounts)
-          .where(
-            and(
-              eq(connectedAccounts.provider, provider),
-              eq(connectedAccounts.providerAccountId, identity.id),
-            ),
-          )
-          .limit(1);
-        if (!existing || existing.userId !== actor.userId) {
-          throw new ServiceError(
-            "conflict",
-            "That provider account is already connected to another Freeholder profile.",
-          );
-        }
-        accountId = existing.id;
-        await ctx.tx
-          .update(connectedAccounts)
-          .set({
-            email: identity.email,
-            displayName: identity.name,
-            scopesGranted: exchanged.scopes,
-            credentials: encryptSecret(
-              JSON.stringify(exchanged.credentials),
-              accountId,
-            ),
-            status: "active",
-            lastError: null,
-          })
-          .where(eq(connectedAccounts.id, accountId));
-      }
-    }
-    await ctx.tx
-      .insert(connectionCapabilities)
-      .values({
-        connectedAccountId: accountId,
-        capability: "mail_send",
-        enabled: true,
-        scopeString: provider === "google" ? GOOGLE_SEND : MICROSOFT_SEND,
-        grantedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [
-          connectionCapabilities.connectedAccountId,
-          connectionCapabilities.capability,
-        ],
-        set: { enabled: true, grantedAt: new Date() },
-      });
+    // Shared with the calendar flow since C4.11, which is also what makes
+    // this incremental: an account already connected for calendars keeps that
+    // access when it is connected for sending, and the other way round.
+    const stored = await upsertConnectedAccount(ctx, {
+      userId: actor.userId,
+      provider,
+      identity,
+      credentials: exchanged.credentials,
+      scopes: exchanged.scopes,
+    });
+    const accountId = stored.accountId;
+    await grantCapability(ctx, accountId, "mail_send", required);
 
     await lockTransactionalDefault(ctx.tx);
+    // A sender is an address. A provider that authenticated somebody without
+    // telling us which mailbox is not something to guess at.
+    if (!identity.email) {
+      throw new ServiceError(
+        "validation",
+        "The provider did not return an email address for that account. Reconnect and allow access to your profile.",
+      );
+    }
+    const senderEmail = identity.email;
     const [defaultSender] = await ctx.tx
       .select({ id: mailSenders.id })
       .from(mailSenders)
@@ -397,7 +259,7 @@ export const completeMailOAuth = defineService({
         purpose: "transactional",
         provider: mailProvider,
         connectedAccountId: accountId,
-        email: identity.email,
+        email: senderEmail,
         displayName: identity.name,
         verificationStatus: "verified",
         status: "active",
@@ -421,9 +283,9 @@ export const completeMailOAuth = defineService({
     ctx.queueEvent("mail.senderConnected", {
       id: sender!.id,
       provider: mailProvider,
-      email: identity.email,
+      email: senderEmail,
     });
-    return { senderId: sender!.id, email: identity.email, returnTo: state.returnTo };
+    return { senderId: sender!.id, email: senderEmail, returnTo: state.returnTo };
   },
 });
 

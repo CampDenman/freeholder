@@ -118,6 +118,20 @@ export const mailOauthStates = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     provider: text("provider", { enum: ["google", "microsoft"] }).notNull(),
+    /**
+     * What the person is connecting the account *for* (C4.11).
+     *
+     * A code issued for calendars must not be redeemable by the mail flow, so
+     * the claim matches on this as well as on the token hash. The table's
+     * name is historical — mail built this first and calendars reuse it
+     * exactly; renaming it waits for a major version, because §39.5 requires
+     * the previous release to keep reading the schema this one writes.
+     */
+    purpose: text("purpose", { enum: ["mail", "calendar"] })
+      .notNull()
+      .default("mail"),
+    /** Which calendar access was asked for, so completion can check it. */
+    access: text("access", { enum: ["read", "write"] }).notNull().default("read"),
     returnTo: text("return_to").notNull().default("/admin/settings"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
