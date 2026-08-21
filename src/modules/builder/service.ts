@@ -744,7 +744,10 @@ export const rollbackProposal = defineService({
   },
 });
 
+import codeLaneServices from "./code-service";
+
 export default [
+  ...codeLaneServices,
   builderStatus,
   propose,
   listProposals,

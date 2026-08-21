@@ -60,3 +60,76 @@ export const builderProposals = pgTable(
     ),
   ],
 );
+
+/**
+ * A code-lane proposal (MASTER.md §37, C4.20).
+ *
+ * Separate from `builder_proposals` because the two lanes differ in the thing
+ * that matters most: a structure proposal is a list of service calls this
+ * instance will make, and a code proposal is a set of files this instance will
+ * never run. Sharing one table would mean one `changes` column meaning two
+ * incompatible things, and a check constraint apologising for it.
+ *
+ * The files live here as data and are handed to the owner's repository. §37:
+ * "the instance does not compile code on the box that serves traffic."
+ */
+export const builderCodeProposals = pgTable(
+  "builder_code_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    brief: text("brief").notNull(),
+    /** Lowercase, hyphenated; the directory everything is confined to. */
+    pluginName: text("plugin_name").notNull(),
+    status: text("status", {
+      enum: ["ready", "refused", "delivered", "rejected"],
+    })
+      .notNull()
+      .default("ready"),
+    summary: text("summary").notNull(),
+    rationale: text("rationale").notNull(),
+    /** `[{ path, contents }]`, every path under `plugins/<name>/`. */
+    files: jsonb("files").notNull().default([]),
+    /** Every gate and its verdict, so a refusal is readable months later. */
+    gates: jsonb("gates").notNull().default([]),
+    /** File list, sizes and the permissions the plugin asks for. */
+    diff: jsonb("diff").notNull().default({}),
+    /** Where it went, when it went: a pull request or an exported patch. */
+    deliveredAs: text("delivered_as", { enum: ["pull_request", "patch"] }),
+    pullRequestUrl: text("pull_request_url"),
+    branch: text("branch"),
+    refusalReason: text("refusal_reason"),
+    model: text("model").notNull(),
+    provider: text("provider"),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    totalTokens: integer("total_tokens").notNull().default(0),
+    createdByActor: text("created_by_actor").notNull(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (table) => [
+    index("builder_code_proposals_status_idx").on(table.status, table.createdAt),
+    check(
+      "builder_code_proposals_status_valid",
+      sql`${table.status} in ('ready','refused','delivered','rejected')`,
+    ),
+    // A refusal says why, and a delivery says where. Neither is optional,
+    // because a row that recorded one without the other would be a proposal
+    // nobody can account for.
+    check(
+      "builder_code_proposals_refusal_reason",
+      sql`${table.status} <> 'refused' or ${table.refusalReason} is not null`,
+    ),
+    check(
+      "builder_code_proposals_delivery",
+      sql`${table.status} <> 'delivered'
+          or (${table.deliveredAs} is not null and ${table.deliveredAt} is not null)`,
+    ),
+    check(
+      "builder_code_proposals_usage_valid",
+      sql`${table.inputTokens} >= 0 and ${table.outputTokens} >= 0`,
+    ),
+    check("builder_code_proposals_files_valid", sql`jsonb_typeof(${table.files}) = 'array'`),
+  ],
+);

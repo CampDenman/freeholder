@@ -37,6 +37,11 @@ export {
   bookingParticipants,
 } from "@/core/scheduling/schema";
 export {
+  catalogueSources,
+  catalogueEntries,
+  catalogueInstalls,
+} from "@/core/catalogue/schema";
+export {
   briefings,
   briefingContributions,
   briefingPreferences,

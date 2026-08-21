@@ -617,6 +617,20 @@
       "when": 1787070100000,
       "tag": "0087_bookings",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1787070200000,
+      "tag": "0088_builder_code_lane",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1787070300000,
+      "tag": "0089_catalogue",
+      "breakpoints": true
     }
   ]
 }

@@ -181,6 +181,22 @@ const envSchema = z.object({
   BUILDER_MONTHLY_TOKEN_BUDGET: z.string().regex(/^\d+$/).default("250000"),
   /** Per-proposal output ceiling; the adapter never gets an open-ended call. */
   BUILDER_MAX_OUTPUT_TOKENS: z.string().regex(/^\d+$/).default("8000"),
+  /**
+   * The owner's own repository, for code-lane proposals (§37, C4.20).
+   *
+   * `owner/repo`. Absent means the builder still writes code proposals and
+   * still gates them; it hands them over as a patch instead of a pull request.
+   * A proposal must not be trapped inside an instance because a token is
+   * missing.
+   */
+  BUILDER_CODE_REPOSITORY: z
+    .string()
+    .trim()
+    .regex(/^[\w.-]+\/[\w.-]+$/)
+    .optional(),
+  /** A token that may open a pull request, and needs no other authority. */
+  BUILDER_CODE_TOKEN: z.string().trim().min(1).optional(),
+  BUILDER_CODE_BASE_BRANCH: z.string().trim().min(1).max(200).optional(),
 
   /**
    * Permits local-disk storage in production, against §18's mandate.
