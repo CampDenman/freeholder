@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.08 (#176) and the route-boot fix (#177), plus this change for C6.09 (what has to be true before a slot is confirmed). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.09 (#178), plus this change for C6.10 (hire, on the calendars the scheduling engine already has). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.10 rentals — equipment and space hire, where availability is a resource calendar and the catalogue is the price list. |
+| Current focus | C6.12 quotes — the pipeline from draft to accepted, and what an accepted quote becomes. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4764,8 +4764,35 @@ payment, tax, inventory and reporting path, with no floating-point money.
   from public to scoped-by-elevation, since a booking id appears in admin URLs
   and is not a credential. `0093_intake_waivers_reminders.sql`. Coverage in
   `tests/core/intake-waivers-reminders.test.ts`.)
-- [ ] **C6.10** Build rentals as resources plus catalog/inventory, availability,
+- [x] **C6.10** Build rentals as resources plus catalog/inventory, availability,
   pickup/return, deposits, late/damage state and order/payment convergence.
+  (**This module owns no availability, and that is the feature.** §4.2 settles
+  it in one sentence — "a rental is a bookable *thing* rather than a bookable
+  *person*, so it reuses the scheduling engine's resource calendars rather than
+  inventing a second availability model" — so `rental_terms.calendar_id` is
+  `not null`, reserving goes through `bookings.create`, and the exclusion
+  constraint that stops a massage room being double-booked stops the lens going
+  out twice (C6.04) with no rental-specific check anywhere in the path. A test
+  proves exactly that: two overlapping hires, the *database* refuses, and the
+  message that comes back is the booking layer's. Buffers widen the booking
+  rather than the hire, so a tripod that needs a day of cleaning is genuinely
+  unavailable for it. Pricing is the catalogue's too — `rentals.quote` asks
+  `catalog.resolvePrice`, so a price list, a break or a member rate applies to
+  hire exactly as to a sale, and there is no rental rate column to disagree
+  with it. What is left is what is genuinely different about handing an object
+  to somebody: a unit of hour/day/week rounded **up** (twenty-five hours is two
+  days, or a business hires out a fortnight for a week's money), a deposit, a
+  replacement value, and the four moments a booking has no concept of —
+  reserved, out, back, closed, with `overdue` swept onto a list an owner can
+  chase rather than computed on a screen nobody is looking at. **A hire is not
+  a payment**, the same line C6.08 drew: returns *decide* the late and damage
+  fees, split them into what goes back and what is still owed, and record the
+  decision; charging for a broken lens stays a deliberate act in invoicing.
+  `deposit_only` is held to the deposit — a business that said the deposit was
+  the remedy must not then send a bill — while `lost` is a replacement whatever
+  the policy says, because there is nothing left to inspect. `/admin/hire`,
+  ordered overdue-first. `0094_rentals.sql`. Coverage in
+  `tests/core/rentals.test.ts`.)
 - [x] **C6.11** Build events/classes with venue, sessions, seat inventory,
   tickets/passes, waitlists, schema.org Event, ICS and check-in.
   *(Evidence: `events` module — venue fields, sessions with capacity,
