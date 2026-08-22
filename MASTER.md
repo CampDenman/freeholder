@@ -2935,7 +2935,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.05 booking audiences — public, token, tags and sign-in — with their own hours, services, notice and horizon. |
+| Current focus | C6.06 ICS publish/import and Google/Microsoft booking write, cancellation and read-busy reconciliation. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4541,8 +4541,34 @@ payment, tax, inventory and reporting path, with no floating-point money.
   is really in the database, because a service-layer check that happened to
   pass every race would still be the wrong implementation. Coverage in
   `tests/core/booking-concurrency.test.ts`.)
-- [ ] **C6.05** Add booking audiences—public, token, tags and sign-in—with
+- [x] **C6.05** Add booking audiences—public, token, tags and sign-in—with
   separate hours, services, calendars, notice, horizon and buffers.
+  (§41's example is the specification: customers book during shop hours,
+  friends book any time, and the dentist appointment blocks both without
+  telling anybody it is a dentist appointment. A test asserts that sentence end
+  to end. The two rules it contains are separable and stay separate here:
+  **busy time unions regardless of audience** — that is the resolver's rule and
+  is not a setting — while **bookability is a property of the audience, not of
+  the calendar**, which is what `hours: any` means and why a friend is not
+  bound by shop hours. Membership is **proved, never asserted**: a bad token
+  falls back to the public audience rather than to the one it looks like it
+  names, because guessing generously is how a tokenised link stops meaning
+  anything. An audience given no services books nothing — empty meaning
+  "everything" is the default that hands a private link the whole catalogue the
+  first time somebody forgets to fill it in. Notice, horizon and buffers are
+  null-when-unstated rather than zero, so an audience overrides only what it
+  actually said. The token is a credential: it is never in the list, and is
+  handed over once through `audiences.link` behind a step-up, with rotation as
+  a one-column write. Ordering is the owner's, so somebody in two audiences
+  gets the one they put first. Removing an audience leaves appointments alone —
+  they are in somebody's diary, not a consequence of the audience existing.
+  **One honest limit:** a tagged audience is proved by a contact identity, and
+  a public request has none until the customer portal session arrives with C8;
+  `audienceFor` resolves tags correctly wherever a contact is known and is
+  tested that way, and the public path passes null rather than guessing from
+  whoever happens to be signed in. `/admin/calendars/audiences`.
+  `0090_booking_audiences.sql`. Coverage in
+  `tests/core/booking-audiences.test.ts`.)
 - [ ] **C6.06** Publish/import ICS and implement Google/Microsoft booking write,
   cancellation and read-busy reconciliation without general event sync.
 

@@ -37,6 +37,12 @@ export {
   bookingParticipants,
 } from "@/core/scheduling/schema";
 export {
+  bookingAudiences,
+  bookingAudienceHours,
+  bookingAudienceServices,
+  bookingAudienceCalendars,
+} from "@/core/scheduling/audience-schema";
+export {
   catalogueSources,
   catalogueEntries,
   catalogueInstalls,
