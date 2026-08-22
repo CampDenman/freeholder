@@ -396,6 +396,25 @@ export const importCalendarFeeds = defineJob({
 });
 
 /**
+ * Let waitlist offers nobody took up go, and pass the slot on (C6.08).
+ *
+ * The whole promise of a held offer is that it stops being held. An offer that
+ * nothing sweeps up sits on a seat indefinitely and the queue behind it never
+ * moves — which is worse than no waitlist, because the business believes it
+ * has one.
+ */
+export const expireWaitlistOffers = defineJob({
+  name: "core.expireWaitlistOffers",
+  summary: "Release lapsed waitlist offers and offer the slot to the next in line.",
+  schedule: "*/10 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { expireWaitlistOffers: expire } = await import("@/core/scheduling/waitlist");
+    return expire.call({}, { kind: "system" });
+  },
+});
+
+/**
  * Read connected mailboxes for who has been in touch (C4.18).
  *
  * Hourly, not by the minute: this is about who wrote to the business, and a
@@ -602,6 +621,7 @@ export default [
   syncExternalCalendars,
   importConnectedMail,
   importCalendarFeeds,
+  expireWaitlistOffers,
   submitIndexNow,
   deliverContributions,
   replyContributions,

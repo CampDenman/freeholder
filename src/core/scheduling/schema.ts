@@ -39,6 +39,7 @@ import { contacts } from "@/core/contacts/schema";
 import { businessLocations } from "@/core/locations/schema";
 import { externalCalendars } from "@/core/connections/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import type { CancellationTerms, StoredOutcome } from "@/core/scheduling/policy";
 
 export const CALENDAR_KINDS = ["person", "business", "resource"] as const;
 export const CALENDAR_STATUSES = ["active", "archived"] as const;
@@ -337,6 +338,34 @@ export const bookings = pgTable(
     rescheduledFromId: uuid("rescheduled_from_id"),
     /** Signed, so a customer moves their own appointment without an account. */
     rescheduleToken: text("reschedule_token"),
+    /**
+     * How many times this appointment has been moved (C6.08).
+     *
+     * Carried forward across a reschedule rather than counted by walking
+     * `rescheduledFromId`, because the chain can be walked only while every
+     * link survives, and a policy that stops being enforced after somebody
+     * tidies up old rows is not a policy.
+     */
+    rescheduleCount: integer("reschedule_count").notNull().default(0),
+    /**
+     * The cancellation terms as they stood when this was booked (C6.08).
+     *
+     * A snapshot, not a reference. §4.4: "the customer saw the terms before
+     * booking" — which is only true if editing the policy tomorrow does not
+     * silently change what somebody agreed to today. Null means no policy was
+     * attached, which is a free cancellation rather than an unknown one.
+     */
+    cancellationPolicy: jsonb("cancellation_policy").$type<CancellationTerms>(),
+    /**
+     * What the policy decided when this was cancelled or no-showed (C6.08).
+     *
+     * A record of the decision, not of a transaction: fee, refund due, and the
+     * sentence the customer is shown. **A booking is not a payment** (§4.4), so
+     * settling it is a deliberate money action in the invoicing module with the
+     * step-up that implies — never something a cancellation does to somebody's
+     * card on its way past.
+     */
+    cancellationOutcome: jsonb("cancellation_outcome").$type<StoredOutcome>(),
     intakeSubmissionId: uuid("intake_submission_id"),
     waiverId: uuid("waiver_id"),
     source: text("source", { enum: BOOKING_SOURCES }).notNull().default("admin"),
@@ -405,6 +434,87 @@ export const bookingParticipants = pgTable(
     check(
       "booking_participants_identified",
       sql`${t.contactId} is not null or ${t.name} is not null`,
+    ),
+  ],
+);
+
+export const WAITLIST_STATUSES = [
+  "waiting",
+  "offered",
+  "booked",
+  "expired",
+  "withdrawn",
+] as const;
+
+/**
+ * Who wants a full slot, in order (MASTER.md §4.4's `Waitlist`, C6.08).
+ *
+ * The window is a range rather than an exact time, because somebody who wants
+ * "any Tuesday afternoon" is the common case and forcing them to name a slot
+ * that is already full is asking them to guess.
+ *
+ * **An offer is held, not raced.** When a seat frees, the first person in line
+ * is moved to `offered` with a token and a deadline; the seat is theirs until
+ * the deadline passes, and only then does it pass to the next. The alternative
+ * — telling everybody at once — is a race the business always wins and the
+ * customer always loses, and it teaches people that the waitlist is a lottery.
+ */
+export const bookingWaitlist = pgTable(
+  "booking_waitlist",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    /** Untyped by a foreign key: catalog is a module and core may not depend on one. */
+    serviceOfferingId: uuid("service_offering_id"),
+    /** Null means "whoever is free", which is what most people actually want. */
+    calendarId: uuid("calendar_id").references(() => calendars.id, {
+      onDelete: "cascade",
+    }),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
+    seatCount: integer("seat_count").notNull().default(1),
+    status: text("status", { enum: WAITLIST_STATUSES }).notNull().default("waiting"),
+    /** The owner's ordering, so "first asked" is not "whoever the query returned". */
+    position: integer("position").notNull().default(0),
+    offeredAt: timestamp("offered_at", { withTimezone: true }),
+    /** After this the offer lapses and the seat passes to the next in line. */
+    offerExpiresAt: timestamp("offer_expires_at", { withTimezone: true }),
+    /** Signed, so somebody claims their offer without an account (§4.4). */
+    offerToken: text("offer_token"),
+    /** The slot they were offered, which may be narrower than their window. */
+    offerStartsAt: timestamp("offer_starts_at", { withTimezone: true }),
+    offerEndsAt: timestamp("offer_ends_at", { withTimezone: true }),
+    /** Set when the offer became a real appointment. */
+    bookingId: uuid("booking_id").references(() => bookings.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("booking_waitlist_queue_idx").on(
+      t.calendarId,
+      t.status,
+      t.position,
+      t.createdAt,
+    ),
+    index("booking_waitlist_contact_idx").on(t.contactId),
+    index("booking_waitlist_window_idx").on(t.windowStart, t.windowEnd),
+    uniqueIndex("booking_waitlist_offer_token_idx")
+      .on(t.offerToken)
+      .where(sql`${t.offerToken} is not null`),
+    check("booking_waitlist_order", sql`${t.windowEnd} > ${t.windowStart}`),
+    check("booking_waitlist_seats", sql`${t.seatCount} > 0`),
+    // An offer without a deadline is an indefinite hold on a seat, which is
+    // the failure mode this table exists to avoid.
+    check(
+      "booking_waitlist_offer_complete",
+      sql`${t.status} <> 'offered'
+        or (${t.offerToken} is not null and ${t.offerExpiresAt} is not null
+            and ${t.offerStartsAt} is not null and ${t.offerEndsAt} is not null)`,
     ),
   ],
 );

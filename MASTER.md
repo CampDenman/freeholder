@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.04 (#173), with C6.05 in review (#174) and this change for C6.06 (calendars in and out, without a second copy of every appointment). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.06 (#175), plus this change for C6.08 (groups, waitlists, and the terms a booking was made under). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.08 group bookings, waitlists and reschedule tokens — the appointment shapes that hold more than one person. |
+| Current focus | C6.09 intake forms, e-signed waivers and reminders — what has to be true before a slot is confirmed. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4678,9 +4678,39 @@ payment, tax, inventory and reporting path, with no floating-point money.
   differs. Coverage in `tests/core/bookings.test.ts`, including two real
   concurrent transactions racing for one slot where exactly one wins —
   C6.04 extends that proof.)
-- [ ] **C6.08** Add group bookings, waitlists/promotion, reschedule tokens,
+- [x] **C6.08** Add group bookings, waitlists/promotion, reschedule tokens,
   policy/deadline enforcement and cancellation/refund outcomes with admin
   waitlist, reschedule and refund controls.
+  (Four things that only work together, and each has one decision at its
+  centre. **The terms are snapshotted, not referenced.** §4.4 says "the
+  customer saw the terms before booking", which is only true while editing a
+  policy tomorrow cannot change what somebody agreed to today — so
+  `catalog.bookingTerms` offers them and core takes a copy onto the booking,
+  carried across a reschedule along with the count a reschedule limit is a
+  limit on. **An offer is held, not raced.** When a seat frees, it goes to the
+  first person in line with a token and a deadline and is *not free for anybody
+  else* until that passes; telling everybody at once is a race the business
+  always wins and the customer always loses, and it teaches people the waitlist
+  is a lottery. A job sweeps lapsed offers and passes the slot on, because a
+  held offer nothing releases sits on a seat forever. Offering runs on the
+  event bus for the same reason the upstream calendar write does (C6.06): the
+  seat is only genuinely free once the cancellation has committed. **A booking
+  is still not a payment.** Cancelling and no-showing *decide* — fee, refund
+  due, still owed, and the sentence the customer reads — and record the
+  decision; moving the money stays a step-up-guarded act in invoicing rather
+  than something a status change does to somebody's card on the way past. A
+  percentage is of what the appointment was invoiced for, not of what happened
+  to have been paid, or the fee would depend on how the business collected it.
+  **And the customer needs no login and no support email** (§4.4): the
+  reschedule token reaches `/portal/appointments/<token>`, shows their time in
+  both zones, names the terms, and moves or cancels the appointment under
+  those terms — the owner alone can override them, because a policy binds the
+  customer rather than the business. Building it closed the last hole in the
+  seat accounting: rescheduling into a full class was unchecked, since the
+  exclusion constraint deliberately does not fire on a calendar whose bookings
+  overlap by design. `/admin/calendars/waitlist`, guests and outcome on
+  `/admin/appointments/<id>`. `0092_waitlists_and_policy.sql`. Coverage in
+  `tests/core/waitlists-and-policy.test.ts`.)
 - [ ] **C6.09** Add intake forms, e-sign waivers/documents, reminders over
   consented channels and completion preconditions.
 - [ ] **C6.10** Build rentals as resources plus catalog/inventory, availability,

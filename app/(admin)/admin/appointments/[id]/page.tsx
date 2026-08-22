@@ -14,11 +14,15 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
 import { currentBusiness } from "@/core/settings/read";
+import { formatMoney } from "@/core/i18n";
 import { getBooking } from "@/core/scheduling/bookings";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
 import {
+  addGuestAction,
+  markGuestAction,
+  removeGuestAction,
   rescheduleBookingAction,
   setBookingStatusAction,
 } from "../../../booking-actions";
@@ -72,6 +76,11 @@ export default async function AppointmentPage({
     }).format(new Date(booking.startsAt));
   const differs = booking.timezoneAtBooking !== timezone;
   const canMove = ["requested", "confirmed", "in_progress"].includes(booking.status);
+  // Integer minor units all the way to the screen (§15.4). The currency comes
+  // from the invoice the outcome was decided against, so a business that
+  // trades in two never shows one appointment's fee in the other's.
+  const money = (minor: number, currency: string | null) =>
+    formatMoney(minor, currency ?? business?.baseCurrency ?? "GBP", locale);
 
   return (
     <div className="grid gap-6">
@@ -180,6 +189,13 @@ export default async function AppointmentPage({
                   className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
                 />
               </label>
+              {/* The policy binds the customer, not the business. An owner who
+                  agrees to move somebody as a favour should not have to cancel
+                  and rebook to do it. */}
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="overridePolicy" />
+                <span className="text-ink-muted">{t("appointments.override")}</span>
+              </label>
               <Button type="submit" variant="quiet">
                 {t("appointments.action.move")}
               </Button>
@@ -188,6 +204,151 @@ export default async function AppointmentPage({
           </CardBody>
         </Card>
       ) : null}
+
+      {/* Money is decided here and moved in the invoice. §4.4: a booking is not
+          a payment, so what the policy said is a record the owner acts on
+          rather than something a status change did to somebody's card. */}
+      {booking.cancellationOutcome ? (
+        <Card>
+          <CardHeader title={t("appointments.outcome")} />
+          <CardBody>
+            <p className="max-w-prose text-sm">{booking.cancellationOutcome.reason}</p>
+            <dl className="grid gap-2 text-sm">
+              <div className="flex gap-2">
+                <dt className="w-40 text-ink-muted">{t("appointments.field.policy")}</dt>
+                <dd>{booking.cancellationOutcome.policyName}</dd>
+              </div>
+              {booking.cancellationOutcome.feeMinor > 0 ? (
+                <div className="flex gap-2">
+                  <dt className="w-40 text-ink-muted">{t("appointments.field.fee")}</dt>
+                  <dd className="tabular-nums">
+                    {money(booking.cancellationOutcome.feeMinor, booking.cancellationOutcome.currency)}
+                  </dd>
+                </div>
+              ) : null}
+              {booking.cancellationOutcome.refundDueMinor > 0 ? (
+                <div className="flex gap-2">
+                  <dt className="w-40 text-ink-muted">{t("appointments.field.refundDue")}</dt>
+                  <dd className="tabular-nums">
+                    {money(
+                      booking.cancellationOutcome.refundDueMinor,
+                      booking.cancellationOutcome.currency,
+                    )}
+                  </dd>
+                </div>
+              ) : null}
+              {booking.cancellationOutcome.outstandingMinor > 0 ? (
+                <div className="flex gap-2">
+                  <dt className="w-40 text-ink-muted">{t("appointments.field.outstanding")}</dt>
+                  <dd className="tabular-nums">
+                    {money(
+                      booking.cancellationOutcome.outstandingMinor,
+                      booking.cancellationOutcome.currency,
+                    )}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+            {booking.invoiceId &&
+            (booking.cancellationOutcome.refundDueMinor > 0 ||
+              booking.cancellationOutcome.outstandingMinor > 0) ? (
+              <p className="max-w-prose text-sm text-ink-muted">
+                {t("appointments.settleHint")}{" "}
+                <a href={`/admin/invoices/${booking.invoiceId}`} className="underline">
+                  {t("appointments.openInvoice")}
+                </a>
+              </p>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader title={t("appointments.guests")} />
+        <CardBody>
+          {booking.participants.length === 0 ? (
+            <p className="max-w-prose text-sm text-ink-muted">{t("appointments.noGuests")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {booking.participants.map((guest) => (
+                <li
+                  key={guest.id}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-2"
+                >
+                  <span className="font-medium">
+                    {guest.name ?? t("appointments.aGuest")}
+                  </span>
+                  <Pill tone={guest.status === "no_show" ? "danger" : "neutral"}>
+                    {t(`appointments.guestStatus.${guest.status}`)}
+                  </Pill>
+                  {guest.seatCount > 1 ? (
+                    <span className="text-sm text-ink-muted tabular-nums">
+                      {t("appointments.seats", { count: String(guest.seatCount) })}
+                    </span>
+                  ) : null}
+                  {canMove
+                    ? ["attended", "no_show"].map((status) => (
+                        <form key={status} action={markGuestAction}>
+                          <input type="hidden" name="bookingId" value={booking.id} />
+                          <input type="hidden" name="id" value={guest.id} />
+                          <input type="hidden" name="status" value={status} />
+                          <Button type="submit" variant="quiet">
+                            {t(`appointments.guestAction.${status}`)}
+                          </Button>
+                        </form>
+                      ))
+                    : null}
+                  {canMove ? (
+                    <form action={removeGuestAction}>
+                      <input type="hidden" name="bookingId" value={booking.id} />
+                      <input type="hidden" name="id" value={guest.id} />
+                      <Button type="submit" variant="danger">
+                        {t("appointments.guestAction.remove")}
+                      </Button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canMove ? (
+            <form action={addGuestAction} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="bookingId" value={booking.id} />
+              <label className="grid gap-1 text-sm">
+                <span className="text-ink-muted">{t("appointments.field.guestName")}</span>
+                <input
+                  name="name"
+                  autoComplete="name"
+                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span className="text-ink-muted">{t("appointments.field.guestEmail")}</span>
+                <input
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span className="text-ink-muted">{t("appointments.field.seats")}</span>
+                <input
+                  type="number"
+                  name="seatCount"
+                  min={1}
+                  defaultValue={1}
+                  className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                />
+              </label>
+              <Button type="submit" variant="quiet">
+                {t("appointments.guestAction.add")}
+              </Button>
+            </form>
+          ) : null}
+          <p className="max-w-prose text-sm text-ink-muted">{t("appointments.guestHint")}</p>
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("appointments.details")} />
@@ -226,14 +387,24 @@ export default async function AppointmentPage({
                 </dd>
               </div>
             ) : null}
-            {booking.participants.length > 0 ? (
+            {/* The terms as they stood when this was booked, not as the
+                policy reads today — §4.4's "the customer saw the terms before
+                booking" is only true while those are different things. */}
+            {booking.cancellationPolicy ? (
               <div className="flex gap-2">
-                <dt className="w-40 text-ink-muted">{t("appointments.guests")}</dt>
-                <dd>
-                  {booking.participants
-                    .map((guest) => guest.name ?? t("appointments.aGuest"))
-                    .join(", ")}
+                <dt className="w-40 text-ink-muted">{t("appointments.field.policy")}</dt>
+                <dd className="max-w-prose">
+                  {t("appointments.policySummary", {
+                    name: booking.cancellationPolicy.name,
+                    hours: String(booking.cancellationPolicy.freeUntilHours),
+                  })}
                 </dd>
+              </div>
+            ) : null}
+            {booking.rescheduleCount > 0 ? (
+              <div className="flex gap-2">
+                <dt className="w-40 text-ink-muted">{t("appointments.field.moves")}</dt>
+                <dd className="tabular-nums">{booking.rescheduleCount}</dd>
               </div>
             ) : null}
           </dl>

@@ -25,7 +25,7 @@ import {
   timelineEvents,
 } from "@/core/contacts/schema";
 import { applyCustomFieldPatch } from "@/core/contacts/custom-fields";
-import { bookings, bookingParticipants } from "@/core/scheduling/schema";
+import { bookings, bookingParticipants, bookingWaitlist } from "@/core/scheduling/schema";
 import {
   captureContactRelationships,
   repointContactRelationships,
@@ -645,6 +645,39 @@ const references: ContactReference[] = [
           .update(bookingParticipants)
           .set({ contactId: duplicateId })
           .where(inArray(bookingParticipants.id, moved.map((row) => row.id)));
+      }
+    },
+  },
+  {
+    // Somebody waiting for a slot who turns out to be a contact the business
+    // already had. Their place in the queue is the whole value of the row, so
+    // this repoints rather than merging two entries into one — losing a
+    // position because an owner tidied up duplicates would be invisible and
+    // unfair in exactly the way a queue must never be.
+    table: "booking_waitlist",
+    repoint: (tx, duplicateId, survivingId) =>
+      tx
+        .update(bookingWaitlist)
+        .set({ contactId: survivingId })
+        .where(eq(bookingWaitlist.contactId, duplicateId)),
+    captureForUndo: async (tx, duplicateId, survivingId) =>
+      pointerCapture(
+        await tx
+          .select({ id: bookingWaitlist.id, contactId: bookingWaitlist.contactId })
+          .from(bookingWaitlist)
+          .where(inArray(bookingWaitlist.contactId, [duplicateId, survivingId])),
+      ),
+    restoreAfterUndo: async (tx, before, after, duplicateId) => {
+      const moved = z
+        .array(z.object({ id: z.string(), contactId: z.string().uuid().nullable() }))
+        .parse(before)
+        .filter((row) => row.contactId === duplicateId);
+      void after;
+      if (moved.length) {
+        await tx
+          .update(bookingWaitlist)
+          .set({ contactId: duplicateId })
+          .where(inArray(bookingWaitlist.id, moved.map((row) => row.id)));
       }
     },
   },

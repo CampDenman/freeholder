@@ -596,6 +596,55 @@ export const quoteServicePayment = defineService({
   },
 });
 
+/**
+ * The terms a booking is made under, for core to snapshot (C6.08).
+ *
+ * The seam runs this way round on purpose. Core scheduling may not import a
+ * module (§11), and a booking must nevertheless carry the cancellation terms
+ * the customer saw — so catalog *offers* them and core takes a copy at the
+ * moment of booking. Nothing here is a live reference: editing the policy
+ * afterwards changes what the next customer agrees to, never what the last
+ * one already did.
+ */
+export const bookingTerms = defineService({
+  name: "catalog.bookingTerms",
+  summary: "The cancellation terms attached to one service offering.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ serviceOfferingId: id }),
+  output: z
+    .object({
+      name: z.string(),
+      freeUntilHours: z.number().int(),
+      feeType: z.enum(CANCELLATION_FEE_TYPES),
+      feeValue: z.number().int().nullable(),
+      rescheduleLimit: z.number().int(),
+      noShowFeeMinor: z.number().int(),
+    })
+    .nullable(),
+  handler: async (input, ctx) => {
+    const [found] = await ctx.tx
+      .select({
+        name: cancellationPolicies.name,
+        freeUntilHours: cancellationPolicies.freeUntilHours,
+        feeType: cancellationPolicies.feeType,
+        feeValue: cancellationPolicies.feeValue,
+        rescheduleLimit: cancellationPolicies.rescheduleLimit,
+        noShowFeeMinor: cancellationPolicies.noShowFeeMinor,
+      })
+      .from(serviceOfferings)
+      .innerJoin(
+        cancellationPolicies,
+        eq(cancellationPolicies.id, serviceOfferings.cancellationPolicyId),
+      )
+      .where(eq(serviceOfferings.id, input.serviceOfferingId))
+      .limit(1);
+    // Null rather than an error: a service with no policy attached is a
+    // service somebody may cancel freely, not a misconfiguration.
+    return found ?? null;
+  },
+});
+
 export default [
   listCancellationPolicies,
   createCancellationPolicy,
@@ -606,4 +655,5 @@ export default [
   setPriceRule,
   removePriceRule,
   quoteServicePayment,
+  bookingTerms,
 ];
