@@ -18,12 +18,61 @@ import { env } from "@/core/env";
 /**
  * The hidden field's name.
  *
- * Named for something a bot's field-matcher wants to fill. Real people never
- * see it — it is hidden from layout *and* from assistive technology, and
- * marked `autocomplete="off"` so a browser's autofill does not helpfully
- * complete it and frame the visitor.
+ * It used to be `website_url`, which was a mistake worth explaining because
+ * the reasoning that produced it is so plausible: name the trap after
+ * something a bot's field-matcher wants to fill.
+ *
+ * The trouble is that a browser's autofill is also a field-matcher, and a far
+ * better one. Safari on iOS, 1Password, Bitwarden and Chrome all recognise
+ * "url" and "website" and will fill them from a saved card — and
+ * `autocomplete="off"` does not stop them, because it is advisory and iOS in
+ * particular ignores it. A real person accepting their own contact card would
+ * have had the trap filled *for* them and their enquiry flagged as spam.
+ *
+ * So the name is now one no heuristic reaches for: no url, website, email,
+ * name, address, phone, user or organisation in it, and nothing a password
+ * manager treats as a field worth completing. The attribute soup on the input
+ * itself (see `block.tsx`) is the belt to this braces.
  */
-export const HONEYPOT_FIELD = "website_url";
+export const HONEYPOT_FIELD = "entry_ref";
+
+/**
+ * Terms a browser or password manager matches on when deciding what to fill.
+ *
+ * Exported so the gate can assert the honeypot's name contains none of them,
+ * rather than a future maintainer having to remember why the name is odd.
+ */
+export const AUTOFILL_TERMS = [
+  "url",
+  "website",
+  "web",
+  "email",
+  "mail",
+  "name",
+  "user",
+  "login",
+  "pass",
+  "phone",
+  "tel",
+  "mobile",
+  "address",
+  "street",
+  "city",
+  "state",
+  "zip",
+  "postal",
+  "country",
+  "company",
+  "organization",
+  "organisation",
+  "title",
+  "card",
+  "cc",
+  "birthday",
+  "given",
+  "family",
+  "nickname",
+] as const;
 
 /** The signed timestamp field. */
 export const STAMP_FIELD = "form_stamp";

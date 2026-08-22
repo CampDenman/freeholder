@@ -1428,6 +1428,7 @@ normal tested extension rather than bespoke UI work.
    browser layout and interaction evidence.
 8. **Upgrade gate (§39.9):** boot the previous released image against a seeded database, apply the current build, assert health, data integrity and the smoke suite — then roll back and assert the old release still runs against the new schema. Auto-update is only as safe as the last time somebody proved an upgrade works, so it is proved on every PR.
 9. **Schema-compatibility gate (§39.5):** a migration that breaks readability by the previous release must declare it in its changeset. CI diffs the migration set against the last release and fails on an unlabelled breaking change — the expand-then-contract discipline is what makes rollback an image swap instead of a restore.
+10. **Autofill gate (§36.1):** fail any submit control disabled because an autofillable field looks empty, and any anti-bot honeypot a browser would fill. This gate exists because the bug it catches is invisible to the way software is tested and unavoidable given the way people behave — see §36.1 for the mechanism.
 
 These gates ARE the moat. Any contributor (human or agent) inherits the standards automatically.
 
@@ -2044,6 +2045,39 @@ Method: the most-installed plugins/apps on both ecosystems are a revealed-prefer
 **Explicitly out (the anti-roadmap):** dropshipping marketplaces, third-party analytics pixels as core, page-builder lock-in formats, anything that makes the owner's data someone else's product. *(Narrowed 2026-08-02: ad **networks** were listed here outright. §4.16 now ships owner-sold and house ad inventory with first-party counting, and permits a third-party network tag as a consent-gated creative kind. The line that mattered was never "no advertising" — it was that the owner's audience must not be silently rented to an ad network by default, which the consent gate and the off-by-default flag preserve.)* The WordPress lesson cuts both ways — install-count proves demand, but half those plugins exist to patch an incoherent core. Freeholder absorbs the coherence and leaves the patchwork behind.
 
 **Sequencing:** core absorptions land across v1.x in roughly the order listed (security/performance/anti-spam are v1.0 gates, not features); first-party plugins are the launch catalog for the plugin registry — seeding the ecosystem with high-demand examples that teach the plugin API by existing.
+
+
+### 36.1 Autofill is the normal path, not an edge case
+
+A form is filled by a browser more often than it is typed into, and almost
+always on a phone. iOS Safari's contact card, Keychain, 1Password, Bitwarden
+and Chrome all set `input.value` directly — which does **not** fire the event a
+framework listens for. The framework's own state stays empty while the person
+looking at the screen can plainly see their name and address in the boxes.
+
+Two rules follow, and both are machine-checked (§15.10) because neither
+survives good intentions:
+
+**Never disable a submit control because an autofillable field looks empty.**
+`disabled={busy}` — in-flight state only, never field contents. A button gated
+on `!form.email` stays grey over a form the person can see is complete; they
+tap it, nothing happens, and there is no error because no code ran. From their
+side that is indistinguishable from a broken site, and they are right. Validate
+inside the submit handler and say what is missing. Gating on a field no browser
+fills — a listing title, a page slug — is fine.
+
+**A honeypot must be named for something no filler recognises.**
+`autocomplete="off"` is advisory and iOS ignores it, so it cannot be the only
+defence. A trap called `website_url` gets completed from a saved card, and the
+visitor is flagged as a bot for accepting their own contact details. The name
+carries no autofill term, and the field carries the vendor opt-outs
+(`data-1p-ignore`, `data-lpignore`, `data-form-type="other"`) as well.
+
+The generalisable lesson, which is the part that matters beyond forms: **test
+conversion paths the way people use them** — autofilled, on a phone, through a
+password manager — not the way they are built. Typing into the form works
+perfectly. Every hand test, every test that types, and the entire development
+loop pass while the bug is live.
 
 ---
 
