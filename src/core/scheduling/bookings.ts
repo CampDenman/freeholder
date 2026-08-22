@@ -48,6 +48,11 @@ import {
   type StoredOutcome,
 } from "@/core/scheduling/policy";
 import {
+  cancelRemindersFor,
+  scheduleRemindersFor,
+} from "@/core/scheduling/reminders";
+import { outstandingFor } from "@/core/scheduling/requirements";
+import {
   defineService,
   getService,
   listServices,
@@ -414,6 +419,15 @@ export const setBookingStatus = defineService({
     id: z.uuid(),
     status: z.enum(BOOKING_STATUSES),
     reason: z.string().trim().max(500).nullish(),
+    /**
+     * Confirm it even though the intake or the waiver is outstanding.
+     *
+     * The owner's call, never a customer-facing one. Somebody who signed on
+     * paper in the shop has met the requirement in the way that matters, and a
+     * platform that refused to record that would be enforcing its own
+     * bookkeeping against the business it serves.
+     */
+    overrideRequirements: z.boolean().default(false),
   }),
   output: bookingRow,
   handler: async (input, ctx) => {
@@ -440,6 +454,25 @@ export const setBookingStatus = defineService({
       throw new ServiceError("validation", "Say why it was cancelled.");
     }
 
+    // §4.4: intake and a signed waiver come **before the slot is confirmed**,
+    // not before it is booked. Somebody who cannot hold a slot until they have
+    // signed something is somebody who leaves; the requested → confirmed step
+    // is exactly where the condition belongs, and it is the first thing to use
+    // the distinction the state machine already made.
+    if (input.status === "confirmed" && !input.overrideRequirements) {
+      const outstanding = await outstandingFor(ctx, booking);
+      if (!outstanding.ready) {
+        throw new ServiceError(
+          "conflict",
+          outstanding.intakeFormId && outstanding.waiverOutstanding
+            ? "The intake form and the waiver are both still outstanding."
+            : outstanding.intakeFormId
+              ? "The intake form has not been filled in yet."
+              : "The waiver has not been signed yet.",
+        );
+      }
+    }
+
     // §4.4: "Cancellation is policy-driven, not ad hoc." The decision is made
     // and recorded here; moving the money is a deliberate act in the invoicing
     // module, because a booking is not a payment.
@@ -459,6 +492,16 @@ export const setBookingStatus = defineService({
       })
       .where(eq(bookings.id, input.id))
       .returning();
+
+    // Reminders follow the appointment's life: scheduled when it becomes real,
+    // dropped when it stops being. Both inside the same transaction as the
+    // status change, because a reminder for an appointment that did not
+    // actually get confirmed is worse than none.
+    if (input.status === "confirmed") {
+      await scheduleRemindersFor(ctx, booking);
+    } else if (!HOLDING_STATUSES.includes(input.status as (typeof HOLDING_STATUSES)[number])) {
+      await cancelRemindersFor(ctx, booking.id);
+    }
 
     await recordOnTimeline(ctx, {
       contactId: booking.contactId,
@@ -604,6 +647,14 @@ export const rescheduleBooking = defineService({
         throw error;
       });
 
+    // The reminders belong to the appointment, not to the row. The old row is
+    // cancelled above, which drops its scheduled reminders; the new one gets
+    // its own, computed from where it actually is now.
+    await cancelRemindersFor(ctx, previous.id);
+    if (HOLDING_STATUSES.includes(moved!.status as (typeof HOLDING_STATUSES)[number])) {
+      await scheduleRemindersFor(ctx, moved!);
+    }
+
     await recordOnTimeline(ctx, {
       contactId: previous.contactId,
       bookingId: moved!.id,
@@ -650,6 +701,10 @@ const tokenView = row({
   /** Why not, when they may not. Shown instead of a dead button. */
   refusal: z.string().nullable(),
   policyName: z.string().nullable(),
+  /** The intake form still to fill in, so the page can link straight to it. */
+  intakeFormId: uuid.nullable(),
+  /** The signing link for an outstanding waiver, or null when there is none. */
+  waiverToken: z.string().nullable(),
 });
 
 async function tokenBooking(ctx: ServiceContext, token: string) {
@@ -668,6 +723,7 @@ async function tokenBooking(ctx: ServiceContext, token: string) {
 function tokenViewOf(
   booking: typeof bookings.$inferSelect,
   calendarName: string,
+  outstanding?: { intakeFormId: string | null; waiverToken: string | null },
 ): z.infer<typeof tokenView> {
   const terms = termsFrom(booking.cancellationPolicy);
   const live = HOLDING_STATUSES.includes(
@@ -696,7 +752,38 @@ function tokenViewOf(
     mayCancel: live,
     refusal: live ? (verdict.reason ?? null) : "This appointment is already closed.",
     policyName: booking.cancellationPolicy ? terms.name : null,
+    intakeFormId: outstanding?.intakeFormId ?? null,
+    waiverToken: outstanding?.waiverToken ?? null,
   };
+}
+
+/**
+ * What the customer still has to do, and the links that let them do it.
+ *
+ * The waiver's signing token is fetched here rather than shown in a list,
+ * because the person holding *this* booking link is exactly the person the
+ * waiver was issued to — handing them their own signing link is the whole
+ * point, and it is the only place in the product where that is true.
+ */
+async function outstandingForToken(
+  ctx: ServiceContext,
+  booking: {
+    id: string;
+    serviceOfferingId: string | null;
+    intakeSubmissionId: string | null;
+    waiverId: string | null;
+  },
+): Promise<{ intakeFormId: string | null; waiverToken: string | null }> {
+  const outstanding = await outstandingFor(ctx, booking);
+  let waiverToken: string | null = null;
+  if (outstanding.waiverOutstanding && listServices().has("contracts.signingLink")) {
+    const link = (await ctx.callAsSystem(getService("contracts.signingLink"), {
+      subjectType: "booking",
+      subjectId: booking.id,
+    })) as { token: string | null };
+    waiverToken = link.token;
+  }
+  return { intakeFormId: outstanding.intakeFormId, waiverToken };
 }
 
 export const bookingByToken = defineService({
@@ -710,7 +797,12 @@ export const bookingByToken = defineService({
   output: tokenView.nullable(),
   handler: async (input, ctx) => {
     const found = await tokenBooking(ctx, input.token);
-    return found ? tokenViewOf(found.booking, found.calendarName) : null;
+    if (!found) return null;
+    return tokenViewOf(
+      found.booking,
+      found.calendarName,
+      await outstandingForToken(ctx, found.booking),
+    );
   },
 });
 

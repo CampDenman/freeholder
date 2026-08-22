@@ -519,6 +519,53 @@ export const bookingWaitlist = pgTable(
   ],
 );
 
+export const REMINDER_CHANNELS = ["email", "sms"] as const;
+export const REMINDER_STATUSES = ["scheduled", "sent", "skipped", "failed"] as const;
+
+/**
+ * Scheduled notifications for an appointment (§4.4's `BookingReminder`, C6.09).
+ *
+ * Rows rather than a computed schedule, and the reason is auditability: an
+ * owner asking "was he reminded?" needs an answer, and a rule that says a
+ * reminder *would* have been sent is not one. Every attempt lands here with
+ * what happened — sent, skipped and why, or failed.
+ *
+ * **A reminder is transactional** (§4.14): a booking confirmation, a delivery
+ * notification and an OTP ride the existing relationship. What it must still
+ * respect is the mail suppression list, and — for SMS, which is a personal
+ * medium people *read* — an actual opt-in. Both are checked at send time
+ * rather than at schedule time, because consent can change in between and the
+ * later answer is the true one.
+ */
+export const bookingReminders = pgTable(
+  "booking_reminders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    channel: text("channel", { enum: REMINDER_CHANNELS }).notNull().default("email"),
+    /** How long before the appointment, which is what an owner configures. */
+    offsetMin: integer("offset_min").notNull(),
+    /** Computed from the offset at schedule time, and re-computed on a move. */
+    sendAt: timestamp("send_at", { withTimezone: true }).notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    status: text("status", { enum: REMINDER_STATUSES }).notNull().default("scheduled"),
+    /** Why it was not sent, in words an owner can act on. */
+    skipReason: text("skip_reason"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("booking_reminders_due_idx").on(t.status, t.sendAt),
+    // One reminder per booking, channel and offset. Confirming an appointment
+    // twice must not text somebody twice, and an upsert on this is what makes
+    // rescheduling a re-computation rather than a duplication.
+    uniqueIndex("booking_reminders_unique_idx").on(t.bookingId, t.channel, t.offsetMin),
+    check("booking_reminders_offset", sql`${t.offsetMin} between 0 and 43200`),
+  ],
+);
+
 export const BUSY_SOURCES = ["ics", "provider"] as const;
 
 /**

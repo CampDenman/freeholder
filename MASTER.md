@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.06 (#175), plus this change for C6.08 (groups, waitlists, and the terms a booking was made under). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.08 (#176) and the route-boot fix (#177), plus this change for C6.09 (what has to be true before a slot is confirmed). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.09 intake forms, e-signed waivers and reminders — what has to be true before a slot is confirmed. |
+| Current focus | C6.10 rentals — equipment and space hire, where availability is a resource calendar and the catalogue is the price list. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4717,8 +4717,53 @@ payment, tax, inventory and reporting path, with no floating-point money.
   overlap by design. `/admin/calendars/waitlist`, guests and outcome on
   `/admin/appointments/<id>`. `0092_waitlists_and_policy.sql`. Coverage in
   `tests/core/waitlists-and-policy.test.ts`.)
-- [ ] **C6.09** Add intake forms, e-sign waivers/documents, reminders over
+- [x] **C6.09** Add intake forms, e-sign waivers/documents, reminders over
   consented channels and completion preconditions.
+  (**The gate is on confirming, not on booking.** §4.4 asks for intake and a
+  signed waiver "before the slot is confirmed", and that word is the whole
+  design: somebody who cannot hold a slot until they have signed something is
+  somebody who leaves. They book, the slot is theirs, and the requirements are
+  what stands between `requested` and `confirmed` — the first use of a
+  distinction the state machine already made. The owner can override, because a
+  customer who signed on paper in the shop has met the requirement in the way
+  that matters and the platform must not enforce its bookkeeping against the
+  business it serves.
+  **A signature is evidence, and evidence does not change.** The new
+  `contracts` module holds §4.3's `Contract` as a *snapshot* — the words as
+  they were read, hashed, with the hash recomputed on every read rather than
+  trusted, because a stored hash nobody checks is a comment with a database
+  column. The signer types their own name (pre-filling it would make the
+  signature the business's), the address and user agent are read from the
+  request rather than accepted from the form, signing happens exactly once, and
+  the link is spent. C6.14 adds the authoring half — templates, variables,
+  countersignature, export — rendering into the same `bodySnapshot`, which is
+  why the snapshot is the half that shipped first.
+  **Requirements are read, never cached** — the opposite of the cancellation
+  policy, and deliberately: a policy is a promise made to the customer, so it
+  is snapshotted; a requirement is a condition the business sets for itself, so
+  adding an intake form tomorrow asks tomorrow's bookings for it rather than
+  quietly exempting everything already in the diary.
+  **Reminders are transactional** (§4.14: a booking confirmation "rides the
+  existing relationship"), and every attempt lands in a row — sent, skipped
+  with a reason, or failed — because "was she reminded?" is what an owner asks
+  when somebody does not turn up, and a rule that says a reminder *would* have
+  been sent is not an answer. Suppression is honoured as a recorded skip rather
+  than a retry. **An SMS reminder is refused, out loud**: §4.14 owns numbers,
+  registration, quiet hours and STOP handling, and sending a text without them
+  is sending one that cannot be stopped. Reminders are upserted on
+  (booking, channel, offset), so rescheduling re-computes rather than
+  duplicates.
+  The customer needs no login for any of it: `/portal/appointments/<token>`
+  lists what is outstanding, `/portal/appointments/<token>/intake` renders the
+  *same* form the rest of the site does — imported rather than reimplemented,
+  because a second copy of that markup is a second copy of the honeypot inside
+  it — and `/portal/agreements/<token>` is the whole waiver with the signature
+  below it. Writing the tests found that the requirement check was calling the
+  human-facing `contracts.list`, which refuses a system actor; it now asks a
+  purpose-built `contracts.signedFor`, and `contracts.signingLink` was tightened
+  from public to scoped-by-elevation, since a booking id appears in admin URLs
+  and is not a credential. `0093_intake_waivers_reminders.sql`. Coverage in
+  `tests/core/intake-waivers-reminders.test.ts`.)
 - [ ] **C6.10** Build rentals as resources plus catalog/inventory, availability,
   pickup/return, deposits, late/damage state and order/payment convergence.
 - [x] **C6.11** Build events/classes with venue, sessions, seat inventory,

@@ -18,7 +18,7 @@ import { HONEYPOT_FIELD, issueStamp, STAMP_FIELD } from "./antispam";
 import type { FormField } from "./fields";
 import type { Translate } from "@/core/i18n";
 
-interface Resolved {
+export interface Resolved {
   slug: string;
   name: string;
   fields: FormField[];
@@ -83,19 +83,33 @@ export const formBlock = defineBlock({
   },
 });
 
-function RenderedForm({
+/**
+ * One form, rendered.
+ *
+ * Exported because an intake form on a booking (C6.09) is the *same* form with
+ * a different destination, and a second copy of this markup would be a second
+ * copy of the honeypot below — which is the part that goes wrong silently. The
+ * caller supplies the action and any hidden fields the destination needs;
+ * everything about the form itself stays here.
+ */
+export function RenderedForm({
   form,
   failed,
   t,
+  action = submitPublicForm,
+  extraFields,
 }: {
   form: Resolved;
   failed: boolean;
   t: Translate;
+  action?: (form: FormData) => Promise<void>;
+  extraFields?: React.ReactNode;
 }) {
   return (
-    <form action={submitPublicForm} className="grid max-w-prose gap-4">
+    <form action={action} className="grid max-w-prose gap-4">
       <input type="hidden" name="form_slug" value={form.slug} />
       <input type="hidden" name={STAMP_FIELD} value={form.stamp} />
+      {extraFields}
 
       {failed ? (
         <p

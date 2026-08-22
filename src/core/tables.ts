@@ -36,6 +36,7 @@ export {
   bookings,
   bookingParticipants,
   bookingWaitlist,
+  bookingReminders,
   externalBusyBlocks,
 } from "@/core/scheduling/schema";
 export {

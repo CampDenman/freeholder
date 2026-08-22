@@ -52,6 +52,8 @@ import resolverServices from "@/core/scheduling/resolver-service";
 import audienceServices from "@/core/scheduling/audiences";
 import calendarFeedServices from "@/core/scheduling/ics-service";
 import waitlistServices from "@/core/scheduling/waitlist";
+import requirementServices from "@/core/scheduling/requirements";
+import reminderServices from "@/core/scheduling/reminders";
 import roleServices from "@/core/roles/service";
 import cspServices from "@/core/security/csp-reports";
 import seoServices from "@/core/seo/service";
@@ -116,6 +118,8 @@ const services: Service[] = [
   ...audienceServices,
   ...calendarFeedServices,
   ...waitlistServices,
+  ...requirementServices,
+  ...reminderServices,
   ...roleServices,
   ...cspServices,
   ...seoServices,
@@ -149,6 +153,7 @@ export async function onAnyEvent(
   const { startEventPlaybooks } = await import("@/core/agents/playbook-events");
   const { mirrorForBookingEvent } = await import("@/core/scheduling/writeback");
   const { offerForBookingEvent } = await import("@/core/scheduling/waitlist");
+  const { linkSignedWaiver } = await import("@/core/scheduling/requirements");
   await Promise.all([
     fanOut(eventName, payload, context?.eventId),
     fanOutEventNotification(eventName, payload, context?.eventId),
@@ -162,5 +167,8 @@ export async function onAnyEvent(
     // (C6.08). Offering it from inside the mutation would promise somebody a
     // slot that a rollback then un-frees.
     offerForBookingEvent(eventName, payload),
+    // Contracts must not know what a booking is (§11's dependency direction),
+    // so scheduling listens for the signature rather than contracts calling in.
+    linkSignedWaiver(eventName, payload),
   ]);
 }

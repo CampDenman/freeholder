@@ -58,6 +58,9 @@ const serviceOfferingRow = row({
   cancellationPolicyId: uuid.nullable(),
   intakeFormId: uuid.nullable(),
   waiverTemplateId: uuid.nullable(),
+  waiverTitle: z.string().nullable(),
+  waiverBody: z.string().nullable(),
+  reminderOffsetsMin: z.array(z.number().int()),
   capacity: z.number().int(),
   assignment: z.enum(SERVICE_ASSIGNMENTS),
   calendarIds: listed(uuid),
@@ -356,6 +359,20 @@ export const upsertServiceOffering = defineService({
     cancellationPolicyId: id.nullable().optional(),
     intakeFormId: id.nullable().optional(),
     waiverTemplateId: id.nullable().optional(),
+    /**
+     * The waiver this service asks for, in words (C6.09).
+     *
+     * The pre-template form of `waiverTemplateId` above. C6.14's templates
+     * render into exactly this, which is why the seam is a body rather than a
+     * second reference — and why a booking can require a waiver today.
+     */
+    waiverTitle: z.string().trim().min(1).max(200).nullable().optional(),
+    waiverBody: z.string().trim().min(1).max(100_000).nullable().optional(),
+    /** How long before the appointment to remind, in minutes (§4.4). */
+    reminderOffsetsMin: z
+      .array(z.number().int().min(0).max(43_200))
+      .max(6)
+      .optional(),
     capacity: z.number().int().min(1).max(10_000).default(1),
     assignment: z.enum(SERVICE_ASSIGNMENTS).default("specific"),
     calendarIds: z.array(id).default([]),
@@ -414,6 +431,17 @@ export const upsertServiceOffering = defineService({
       cancellationPolicyId: input.cancellationPolicyId ?? null,
       intakeFormId: input.intakeFormId ?? null,
       waiverTemplateId: null,
+      // A waiver needs both halves or neither: a body with no title has
+      // nothing to head the page a customer reads, and a title with no body
+      // is a requirement nobody can satisfy.
+      waiverTitle: input.waiverBody ? (input.waiverTitle ?? "Waiver") : null,
+      waiverBody: input.waiverBody ?? null,
+      // Sorted longest-notice first, so the list reads in the order the
+      // reminders actually go out, and deduped because two reminders at the
+      // same offset is one reminder and one mistake.
+      reminderOffsetsMin: [...new Set(input.reminderOffsetsMin ?? [1_440, 120])].sort(
+        (a, b) => b - a,
+      ),
       capacity: input.capacity,
       assignment: input.assignment,
       calendarIds: [],
@@ -645,6 +673,45 @@ export const bookingTerms = defineService({
   },
 });
 
+/**
+ * What has to be true before a slot is confirmed, and when to remind (C6.09).
+ *
+ * The same seam as `catalog.bookingTerms`, and the same direction: core
+ * scheduling may not import a module (§11), so catalog *offers* the
+ * requirements and core reads them through the registry. A `waiverBody` here
+ * is the pre-template form of §4.4's `waiver_template_id` — C6.14 renders a
+ * template into the same place, which is why the column holds words rather
+ * than a reference.
+ */
+export const bookingRequirements = defineService({
+  name: "catalog.bookingRequirements",
+  summary: "Intake, waiver and reminders configured on one service offering.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ serviceOfferingId: id }),
+  output: z
+    .object({
+      intakeFormId: uuid.nullable(),
+      waiverTitle: z.string().nullable(),
+      waiverBody: z.string().nullable(),
+      reminderOffsetsMin: z.array(z.number().int()),
+    })
+    .nullable(),
+  handler: async (input, ctx) => {
+    const [offering] = await ctx.tx
+      .select({
+        intakeFormId: serviceOfferings.intakeFormId,
+        waiverTitle: serviceOfferings.waiverTitle,
+        waiverBody: serviceOfferings.waiverBody,
+        reminderOffsetsMin: serviceOfferings.reminderOffsetsMin,
+      })
+      .from(serviceOfferings)
+      .where(eq(serviceOfferings.id, input.serviceOfferingId))
+      .limit(1);
+    return offering ?? null;
+  },
+});
+
 export default [
   listCancellationPolicies,
   createCancellationPolicy,
@@ -656,4 +723,5 @@ export default [
   removePriceRule,
   quoteServicePayment,
   bookingTerms,
+  bookingRequirements,
 ];
