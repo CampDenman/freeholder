@@ -107,9 +107,16 @@ function RenderedForm({
       ) : null}
 
       {/*
-        The honeypot: hidden from layout *and* from the accessibility tree,
-        autocomplete off so a browser does not helpfully fill it in and frame
-        the visitor, and out of the keyboard path.
+        The honeypot: hidden from layout *and* from the accessibility tree, and
+        out of the keyboard path.
+
+        The attributes matter more than they look. `autoComplete="off"` is
+        advisory and iOS Safari ignores it, so it cannot be the only defence —
+        the field's *name* carries none of the terms a filler matches on, and
+        the three vendor opt-outs below cover the password managers that make
+        their own decisions. Getting this wrong does not produce a visible bug:
+        it produces a real person's enquiry quietly marked as spam because
+        their phone helpfully filled in a box they could not see.
       */}
       <div className="hidden" aria-hidden="true">
         <label htmlFor={`${form.slug}-${HONEYPOT_FIELD}`}>
@@ -121,6 +128,10 @@ function RenderedForm({
           name={HONEYPOT_FIELD}
           tabIndex={-1}
           autoComplete="off"
+          data-1p-ignore=""
+          data-lpignore="true"
+          data-bwignore="true"
+          data-form-type="other"
         />
       </div>
 
