@@ -154,6 +154,7 @@ export async function onAnyEvent(
   const { mirrorForBookingEvent } = await import("@/core/scheduling/writeback");
   const { offerForBookingEvent } = await import("@/core/scheduling/waitlist");
   const { linkSignedWaiver } = await import("@/core/scheduling/requirements");
+  const { convertOnAccepted } = await import("@/modules/quotes/conversion");
   await Promise.all([
     fanOut(eventName, payload, context?.eventId),
     fanOutEventNotification(eventName, payload, context?.eventId),
@@ -170,5 +171,9 @@ export async function onAnyEvent(
     // Contracts must not know what a booking is (§11's dependency direction),
     // so scheduling listens for the signature rather than contracts calling in.
     linkSignedWaiver(eventName, payload),
+    // An accepted quote becomes work once the acceptance has committed
+    // (C6.13). Converting inside it would mean a brief failure in invoicing
+    // rolled back the fact that the customer said yes.
+    convertOnAccepted(eventName, payload),
   ]);
 }

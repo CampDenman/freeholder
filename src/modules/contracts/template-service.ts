@@ -34,8 +34,17 @@ import { renderTemplate, templateVariable, variablesIn } from "./templates";
 
 const id = z.string().uuid();
 
+/**
+ * A person, or the platform acting for one.
+ *
+ * `permission: "scoped"` already refuses anonymous and unscoped callers. The
+ * system actor passes so an accepted quote can issue the agreement its
+ * conversion plan named (C6.13) — elevation from a caller that has already
+ * established authority, which is the same reasoning C6.09 arrived at the
+ * hard way.
+ */
 function requirePerson(actor: Actor): void {
-  if (actor.kind !== "user") {
+  if (actor.kind !== "user" && actor.kind !== "system") {
     throw new ServiceError("permission", "Sign in to manage templates.");
   }
 }

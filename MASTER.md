@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.14 (#181), plus this change for C6.15 (projects: the record a job lives in). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.15 (#182), plus this change for C6.13 (an accepted quote becoming the job). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.13 conversion — turning an accepted quote into a project, its agreement, its bookings and its invoices in one transaction. |
+| Current focus | C6.16 time entries — hours against a project or a booking, and one step from tracked to invoiced. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4836,8 +4836,42 @@ payment, tax, inventory and reporting path, with no floating-point money.
   list; columns are now named one by one. `/admin/quotes`,
   `/portal/quotes/<token>`. `0095_quotes.sql`. Coverage in
   `tests/core/quotes.test.ts`.)
-- [ ] **C6.13** Convert accepted quotes atomically into contracts, projects,
+- [x] **C6.13** Convert accepted quotes atomically into contracts, projects,
   bookings and invoices as configured, without copied customer identities.
+  (**Without copied customer identities** is the phrase the item chose to
+  emphasise and the one the test proves by *counting*: after a conversion there
+  is exactly one contact row, and the project, the agreement, the appointment
+  and both invoices all carry its id. Nothing here calls `contacts.create`,
+  nothing re-resolves an email, and nothing invents a "billing contact" — this
+  is the moment a system is most tempted to, because four modules each want a
+  customer and each has a way of making one. The single subtlety is
+  `bookings.create`, which takes an email because it was written for a stranger
+  arriving on the public site: the conversion *reads* the known contact's
+  address rather than inventing one, and `contacts.resolve` behind it returns
+  the existing row.
+  **Atomically**: one transaction produces all of it or none of it, because a
+  half-converted quote — an invoice with no job to explain it, or a job with no
+  invoice — is the worst state to leave an owner in. But **not the same
+  transaction as the acceptance**: the customer's click must survive whatever
+  happens next, and converting inside it would mean a brief failure in
+  invoicing rolled back the fact that they said yes. So acceptance commits, the
+  bus delivers `quote.accepted`, and conversion runs in its own all-or-nothing
+  transaction — C6.06's shape, for C6.06's reason.
+  **As configured** is a per-quote plan, because a kitchen refit and a one-hour
+  consultation are not the same job even in one business. Bookings carry times
+  the *owner* supplied: a quote holds a price and a scope but never a date, and
+  a conversion that invented one would put a fiction in somebody's diary.
+  Invoices are drafts with the tax treatment left to the owner at issue —
+  guessing one on somebody's behalf is the single thing an accounting system
+  must not do — and the balance carries the accepted lines one for one rather
+  than an "as quoted" summary that loses what was agreed at the moment it
+  starts mattering. Converting twice is refused outright, since a second
+  conversion is a second invoice for one job: the kind of mistake an owner
+  hears about from a customer rather than from a screen. Writing the end-to-end
+  test found `requirePerson` in `projects.*` and `contracts.*` refusing the
+  system actor — the same bug C6.09 hit, and both now admit elevation with the
+  reasoning recorded at the guard. `0098_quote_conversion.sql`. Coverage in
+  `tests/core/quote-conversion.test.ts`.)
 - [x] **C6.14** Build contract/waiver templates, variables, click/e-sign,
   signer identity, immutable evidence, countersignature and document export.
   **Taken ahead of C6.13 deliberately** (2026-08-22): C6.13 converts an
