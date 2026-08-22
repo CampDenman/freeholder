@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.09 (#178), plus this change for C6.10 (hire, on the calendars the scheduling engine already has). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.10 (#179), plus this change for C6.12 (quotes: a sequence of offers rather than one that gets edited). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.12 quotes — the pipeline from draft to accepted, and what an accepted quote becomes. |
+| Current focus | C6.13 conversion — turning an accepted quote into contracts, projects, bookings and invoices in one transaction. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4804,8 +4804,38 @@ payment, tax, inventory and reporting path, with no floating-point money.
 
 #### Quotes, contracts, projects, and time
 
-- [ ] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
+- [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
   reject state with versioned line items, public tokens and owner alerts.
+  (**A quote is a sequence of offers, not one offer that gets edited.** Line
+  items carry the version they belong to, revising writes a new set and leaves
+  the old one readable, and `quotes.version` says which is live — so "but you
+  quoted me £4,000" is answerable from the database rather than from anybody's
+  memory. That is the whole reason a quote is a document rather than a message,
+  and it is enforced rather than encouraged: `quotes.setItems` **refuses** once
+  the quote has been sent and tells the owner to revise instead, because a
+  silently edited price is the failure this design exists to make impossible.
+  **Acceptance freezes what was accepted.** §4.3's optional lines make the
+  total a function of what the customer chose, so the snapshot — version,
+  chosen lines, totals and the name they typed — is taken at the moment they
+  say yes; recomputing later from rows since revised would answer a different
+  question. An accepted quote cannot be revised at all, and the honest move is
+  a new one. **The token is the authorisation and survives a revision**, so
+  the link already in somebody's inbox opens the latest version rather than
+  stranding them — but it is spent at acceptance, because an offer that has
+  become an agreement is no longer an offer. It also survives a *decline*,
+  deliberately: a revision is the usual reply to "too expensive". `viewed` is
+  a mutation the page calls rather than a side-effect of reading, so opening a
+  quote in the admin never marks it and no cache can fabricate an owner's
+  first signal that the offer landed. A customer's question moves it to
+  `negotiating` and carries `proposedChanges` **without applying them** — a
+  counter-offer is a message, and only the owner turns one into a revision,
+  which is what keeps the price the business's to set. Expiry is swept onto a
+  list *and* re-checked at acceptance, so an hourly job never decides whether
+  a price still stands. Writing the tests found `quotes.list` spreading the
+  whole record through a loose object and carrying the view token into every
+  list; columns are now named one by one. `/admin/quotes`,
+  `/portal/quotes/<token>`. `0095_quotes.sql`. Coverage in
+  `tests/core/quotes.test.ts`.)
 - [ ] **C6.13** Convert accepted quotes atomically into contracts, projects,
   bookings and invoices as configured, without copied customer identities.
 - [ ] **C6.14** Build contract/waiver templates, variables, click/e-sign,

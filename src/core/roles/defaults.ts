@@ -45,6 +45,7 @@ const ADMIN_MODULES = [
   "mail",
   "media",
   "platform",
+  "quotes",
   "rentals",
   "roles",
   "scheduling",

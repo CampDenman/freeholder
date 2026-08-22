@@ -451,6 +451,25 @@ export const markOverdueHires = defineJob({
 });
 
 /**
+ * Let quotes past their validity lapse (C6.12).
+ *
+ * A swept status rather than a computed one: an expired quote is something an
+ * owner follows up, and a flag that exists only while somebody is looking at
+ * the right screen is not a list. Acceptance re-checks the date itself, so an
+ * hourly job never decides whether a price still stands.
+ */
+export const expireQuotes = defineJob({
+  name: "core.expireQuotes",
+  summary: "Lapse quotes whose validity date has passed.",
+  schedule: "17 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { expireQuotes: expire } = await import("@/modules/quotes/service");
+    return expire.call({}, { kind: "system" });
+  },
+});
+
+/**
  * Read connected mailboxes for who has been in touch (C4.18).
  *
  * Hourly, not by the minute: this is about who wrote to the business, and a
@@ -660,6 +679,7 @@ export default [
   expireWaitlistOffers,
   sendBookingReminders,
   markOverdueHires,
+  expireQuotes,
   submitIndexNow,
   deliverContributions,
   replyContributions,
