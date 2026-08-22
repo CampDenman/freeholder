@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.10 (#179), plus this change for C6.12 (quotes: a sequence of offers rather than one that gets edited). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.12 (#180), plus this change for C6.14 (templates, countersignature and export). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.13 conversion — turning an accepted quote into contracts, projects, bookings and invoices in one transaction. |
+| Current focus | C6.15 projects — the record that links a contact, a quote, an agreement, the bookings and the invoices into one job. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4838,8 +4838,40 @@ payment, tax, inventory and reporting path, with no floating-point money.
   `tests/core/quotes.test.ts`.)
 - [ ] **C6.13** Convert accepted quotes atomically into contracts, projects,
   bookings and invoices as configured, without copied customer identities.
-- [ ] **C6.14** Build contract/waiver templates, variables, click/e-sign,
+- [x] **C6.14** Build contract/waiver templates, variables, click/e-sign,
   signer identity, immutable evidence, countersignature and document export.
+  **Taken ahead of C6.13 deliberately** (2026-08-22): C6.13 converts an
+  accepted quote into contracts, projects, bookings and invoices, and
+  *projects* are C6.15 — so conversion could not be built without either
+  inventing them early or checking a box with half its targets missing. C6.14
+  and C6.15 are both unblocked; C6.13 follows once it has all four.
+  (The authoring half of C6.09's signing half, and it deliberately changes
+  nothing about what a signature is: `contracts.issueFromTemplate` renders a
+  body and then calls the same `contracts.issue` a hand-typed waiver does, so
+  there is one path that produces a signable document and one definition of
+  "signed". **Variables are replaced, never evaluated.** `{{customer_name}}`
+  is a lookup rather than an expression, because a template language with
+  logic in it is one somebody can be talked into running and the output is a
+  document a court may read. Substitution is a **single pass** for a reason a
+  test states outright: replacing one variable at a time means a *value*
+  containing `{{...}}` gets substituted on the next pass, so a customer whose
+  company name contains braces could otherwise reach into the contract. An
+  unsupplied variable is **left visible** rather than blanked — "Dear ," is
+  wrong only to the person receiving it, while `{{customer_name}}` is wrong to
+  whoever proofreads it. **Templates are versioned, never edited**, as quotes
+  are (C6.12): a document issued last month keeps pointing at the version it
+  came from, and retiring a template archives it rather than deleting the row
+  a stored document names. **The customer signs first** — countersigning an
+  unsigned document would produce something the business has agreed to and the
+  customer has not, which is an offer and therefore a quote. The
+  countersignature hash chains the customer's signature hash *and* the body
+  hash, so it cannot be moved to another document. Export is plain text with
+  the evidence appended: a PDF renderer is a dependency, a font licence and a
+  layout engine, and none of those make a document more true — what makes it
+  true is that the words, the hashes, the signer and the times are all there
+  and independently checkable, in a format that will still open in thirty
+  years. `/admin/agreements`. `0096_contract_templates.sql`. Coverage in
+  `tests/core/contract-templates.test.ts`.)
 - [ ] **C6.15** Build project/work records linking contacts, services, quotes,
   contracts, bookings, tasks, files, outcomes and invoices.
 - [ ] **C6.16** Build time entries against projects/bookings, rate resolution,

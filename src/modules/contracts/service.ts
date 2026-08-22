@@ -568,7 +568,10 @@ registerContactPrivacySource({
   },
 });
 
+import templateServices from "./template-service";
+
 export default [
+  ...templateServices,
   issueContract,
   contractByToken,
   signedForSubject,

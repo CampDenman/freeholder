@@ -17,11 +17,67 @@
 // export. It renders into `bodySnapshot` rather than replacing it: the
 // snapshot is the seam, and it is deliberately the half that shipped first.
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const CONTRACT_KINDS = ["waiver", "agreement"] as const;
+
+/**
+ * A reusable document an owner writes once (§4.3's `template_id`, C6.14).
+ *
+ * Templates are **versioned rather than edited in place**, for the same reason
+ * a quote is (C6.12): an issued document points at the version it came from,
+ * and an owner tightening their terms next month must not change what that
+ * points to. Editing publishes a new version; the old one stays readable
+ * because documents issued from it still name it.
+ */
+export const contractTemplates = pgTable(
+  "contract_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    kind: text("kind", { enum: CONTRACT_KINDS }).notNull().default("waiver"),
+    version: integer("version").notNull().default(1),
+    title: text("title").notNull(),
+    /** The words, with `{{variables}}` the renderer substitutes. */
+    body: text("body").notNull(),
+    /** What each variable means, and what to put there when nothing supplies it. */
+    variables: jsonb("variables").notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Whether a person on the business's side signs too.
+     *
+     * Countersignature is not decoration: a mutual agreement that only one
+     * party signed is not an agreement, and which documents need it is the
+     * owner's call rather than the platform's.
+     */
+    requiresCountersignature: boolean("requires_countersignature")
+      .notNull()
+      .default(false),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("contract_templates_name_version_idx").on(t.name, t.version),
+    index("contract_templates_kind_idx").on(t.kind, t.archivedAt),
+    check("contract_templates_version", sql`${t.version} > 0`),
+    check("contract_templates_name", sql`char_length(${t.name}) between 1 and 120`),
+    check("contract_templates_body", sql`char_length(${t.body}) > 0`),
+  ],
+);
 export const CONTRACT_STATUSES = ["issued", "signed", "declined", "void"] as const;
 
 export const contractDocuments = pgTable(
@@ -41,8 +97,10 @@ export const contractDocuments = pgTable(
      */
     subjectType: text("subject_type").notNull(),
     subjectId: uuid("subject_id"),
-    /** Reserved for C6.14's templates; null while the body is typed by hand. */
-    templateId: uuid("template_id"),
+    /** The template version this was rendered from, when it came from one. */
+    templateId: uuid("template_id").references(() => contractTemplates.id, {
+      onDelete: "set null",
+    }),
     kind: text("kind", { enum: CONTRACT_KINDS }).notNull().default("waiver"),
     title: text("title").notNull(),
     /** The words they read. Copied at issue, never edited afterwards. */
@@ -68,6 +126,24 @@ export const contractDocuments = pgTable(
      */
     signatureHash: text("signature_hash"),
     declineReason: text("decline_reason"),
+    /**
+     * The business's own signature, where the template asks for one (C6.14).
+     *
+     * A mutual agreement that only one party signed is not an agreement. The
+     * document is not *complete* until both are on it, which is why this is a
+     * separate set of columns rather than a second row in the same shape: the
+     * countersignature belongs to this document, not beside it.
+     */
+    countersignedAt: timestamp("countersigned_at", { withTimezone: true }),
+    countersignerUserId: uuid("countersigner_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    countersignerName: text("countersigner_name"),
+    countersignatureHash: text("countersignature_hash"),
+    /** Set from the template at issue, so the document knows its own rules. */
+    requiresCountersignature: boolean("requires_countersignature")
+      .notNull()
+      .default(false),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
