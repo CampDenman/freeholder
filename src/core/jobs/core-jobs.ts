@@ -376,6 +376,26 @@ export const runPlaybooks = defineJob({
 });
 
 /**
+ * Refresh what somebody else's published calendar is blocking (C6.06).
+ *
+ * The path that works with no adapter at all: an owner who connected nothing
+ * still has their other diary respected, because every calendar publishes one
+ * of these. A feed that cannot be read leaves the last good answer in place —
+ * an unreachable calendar is not an empty one.
+ */
+export const importCalendarFeeds = defineJob({
+  name: "core.importCalendarFeeds",
+  summary: "Fetch subscribed .ics feeds and refresh the time they block.",
+  schedule: "*/20 * * * *",
+  concurrency: 1,
+  leaseSeconds: 10 * 60,
+  handler: async () => {
+    const { importIcsFeeds } = await import("@/core/scheduling/ics-service");
+    return importIcsFeeds();
+  },
+});
+
+/**
  * Read connected mailboxes for who has been in touch (C4.18).
  *
  * Hourly, not by the minute: this is about who wrote to the business, and a
@@ -581,6 +601,7 @@ export default [
   pruneOldNotifications,
   syncExternalCalendars,
   importConnectedMail,
+  importCalendarFeeds,
   submitIndexNow,
   deliverContributions,
   replyContributions,

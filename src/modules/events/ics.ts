@@ -1,27 +1,12 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // RFC 5545 calendar export for a published event.
-
-function fold(line: string): string {
-  if (line.length <= 75) return line;
-  const parts: string[] = [];
-  let remaining = line;
-  parts.push(remaining.slice(0, 75));
-  remaining = remaining.slice(75);
-  while (remaining.length) {
-    parts.push(` ${remaining.slice(0, 74)}`);
-    remaining = remaining.slice(74);
-  }
-  return parts.join("\r\n");
-}
-
-function escapeText(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
-}
-
-function stamp(date: Date): string {
-  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-}
+//
+// The folding, escaping and timestamp rules moved to `@/core/ics` when
+// scheduling needed them too (C6.06). Two copies of a line-folding algorithm
+// is two chances to fold at the wrong column, and the bug that produces is a
+// file which opens fine in the one client the author happened to test.
+import { escapeText, fold, stamp } from "@/core/ics";
 
 export function renderEventIcs(input: {
   uid: string;

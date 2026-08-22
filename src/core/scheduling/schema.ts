@@ -87,6 +87,22 @@ export const calendars = pgTable(
     minNoticeMin: integer("min_notice_min").notNull().default(120),
     /** Burnout is a scheduling bug, so the ceiling is a column. */
     maxPerDay: integer("max_per_day"),
+    /**
+     * The unguessable half of this calendar's subscribable feed URL (C6.06).
+     *
+     * A feed is a credential: anyone holding the address reads the diary. It
+     * is a column rather than a derivation so revoking one is rotating a value
+     * rather than changing what the calendar is.
+     */
+    icsToken: text("ics_token"),
+    /**
+     * An .ics feed whose events block this calendar (§4.4).
+     *
+     * The path that works with no adapter at all: an owner with no Google
+     * account still gets their other diary respected, because every calendar
+     * on earth publishes one of these.
+     */
+    icsImportUrl: text("ics_import_url"),
     status: text("status", { enum: CALENDAR_STATUSES }).notNull().default("active"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
@@ -326,6 +342,15 @@ export const bookings = pgTable(
     source: text("source", { enum: BOOKING_SOURCES }).notNull().default("admin"),
     notes: text("notes"),
     cancellationReason: text("cancellation_reason"),
+    /**
+     * The event this booking became on an upstream calendar (C6.06).
+     *
+     * §41 keeps general two-way sync out of v1: Freeholder writes the bookings
+     * it made and reads busy time, and this column is the whole of "the ones
+     * it made". Null means it was never written upstream, which is the normal
+     * state for a calendar nobody connected.
+     */
+    providerEventRef: text("provider_event_ref"),
     /** Anything a later feature wants, without another migration. */
     meta: jsonb("meta"),
     createdAt: createdAtColumn(),
@@ -381,5 +406,54 @@ export const bookingParticipants = pgTable(
       "booking_participants_identified",
       sql`${t.contactId} is not null or ${t.name} is not null`,
     ),
+  ],
+);
+
+export const BUSY_SOURCES = ["ics", "provider"] as const;
+
+/**
+ * Time imported from somewhere else, against a Freeholder calendar
+ * (MASTER.md §4.4's `ExternalBusyBlock`, C6.06).
+ *
+ * §4.4: "Never shown to customers, always respected."
+ *
+ * Distinct from C4.12's `external_events`, and the difference is which key
+ * they hang from. Those belong to a *connected account* and arrive through
+ * OAuth; these belong to a *calendar* and arrive from a URL anybody can
+ * publish. §4.4 is explicit that the ICS path works with no adapter at all, so
+ * it cannot be modelled as a degenerate connected account — an owner with no
+ * Google account still gets their diary respected.
+ */
+export const externalBusyBlocks = pgTable(
+  "external_busy_blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    calendarId: uuid("calendar_id")
+      .notNull()
+      .references(() => calendars.id, { onDelete: "cascade" }),
+    /** The upstream UID, so a re-fetch updates rather than duplicates. */
+    sourceRef: text("source_ref").notNull(),
+    source: text("source", { enum: BUSY_SOURCES }).notNull().default("ics"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    /** False for a transparent event: on the calendar, not blocking. */
+    busy: boolean("busy").notNull().default(true),
+    /**
+     * Set when this block is the shadow of a booking Freeholder itself wrote
+     * to the upstream calendar (C6.06's reconciliation).
+     *
+     * Without it the appointment blocks twice — once as the booking and once
+     * as its own reflection — and rescheduling collides with its ghost.
+     */
+    bookingId: uuid("booking_id").references(() => bookings.id, {
+      onDelete: "set null",
+    }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("external_busy_blocks_ref_idx").on(t.calendarId, t.sourceRef),
+    index("external_busy_blocks_window_idx").on(t.calendarId, t.startsAt, t.endsAt),
+    check("external_busy_blocks_order", sql`${t.endsAt} > ${t.startsAt}`),
   ],
 );

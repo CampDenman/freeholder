@@ -326,6 +326,13 @@ export async function syncAccountCalendars(
       .where(eq(externalCalendars.id, calendar.id));
   }
 
+  // Claim the events that are Freeholder's own bookings looking back at it
+  // (C6.06). Without this an appointment blocks its hour twice and cannot be
+  // moved, because the exclusion constraint is quite right that something
+  // already occupies it.
+  const { reconcileMirroredBookings } = await import("@/core/scheduling/writeback");
+  await reconcileMirroredBookings(tx);
+
   await tx
     .update(connectedAccounts)
     .set({ lastSyncAt: now, lastError: null })
