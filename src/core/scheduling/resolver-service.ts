@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm";
 import { uuid } from "@/core/contract";
 import { calendars } from "@/core/scheduling/schema";
 import { resolveSlots } from "@/core/scheduling/resolver";
+import { audienceFor, audienceMayBook } from "@/core/scheduling/audiences";
 import { currentBusiness } from "@/core/settings/read";
 import { defineService, getService, ServiceError } from "@/core/service";
 
@@ -92,6 +93,13 @@ export const availableSlots = defineService({
     /** 15-minute increments, or on the hour only. */
     granularityMin: z.number().int().min(5).max(240).optional(),
     limit: z.number().int().min(1).max(500).default(200),
+    /**
+     * The tokenised link a caller arrived by, if any (C6.05).
+     *
+     * Proof, not a claim: an unrecognised token falls back to whatever public
+     * audience exists rather than to the one it looks like it names.
+     */
+    audienceToken: z.string().trim().min(8).max(200).optional(),
   }),
   output: z.array(
     z.object({
@@ -127,14 +135,43 @@ export const availableSlots = defineService({
 
     const shape = await offeringShape(input.productId);
     const business = await currentBusiness().catch(() => null);
+
+    // §41: bookability is a property of the audience, not of the calendar.
+    // The same calendar answers differently for a customer and for a friend,
+    // and busy time is subtracted from both.
+    const audience = await audienceFor(ctx.tx, {
+      token: input.audienceToken ?? null,
+      // A tagged audience is proved by a contact identity, and a public
+      // request has none until the customer portal session arrives with C8.
+      // Passing null rather than guessing is the point: the alternative is a
+      // tag audience that resolves for whoever happens to be signed in, which
+      // is the opposite of what a tag means. `audienceFor` resolves tags
+      // correctly wherever a contact *is* known, and is tested that way.
+      contactId: null,
+      signedIn: ctx.actor.kind === "user",
+    });
+    if (!audience) {
+      // Not an error: an instance that takes no public bookings is a
+      // legitimate configuration, and the honest answer is no times.
+      return [];
+    }
+    if (!(await audienceMayBook(ctx.tx, audience.id, input.serviceOfferingId))) {
+      // Also not an error, and deliberately indistinguishable from a fully
+      // booked week: telling an anonymous caller that a service exists but is
+      // not for them is a disclosure nobody asked for.
+      return [];
+    }
+
     return resolveSlots(ctx.tx, {
       serviceOfferingId: input.serviceOfferingId,
       from: input.from,
       to: input.to,
       timezone: business?.timezone ?? "UTC",
       durationMin: shape.durationMin,
-      bufferBeforeMin: shape.bufferBeforeMin,
-      bufferAfterMin: shape.bufferAfterMin,
+      // The audience overrides the service where it has said something. Null
+      // means it has not, rather than meaning zero.
+      bufferBeforeMin: audience.bufferBeforeMin ?? shape.bufferBeforeMin,
+      bufferAfterMin: audience.bufferAfterMin ?? shape.bufferAfterMin,
       travelTimeMin: shape.travelTimeMin,
       capacity: shape.capacity,
       assignment: shape.assignment,
@@ -142,6 +179,12 @@ export const availableSlots = defineService({
       preferredCalendarId: input.preferredCalendarId,
       seats: input.seats,
       maxSlots: input.limit,
+      audienceHours:
+        audience.hours === "custom"
+          ? { mode: "custom", rules: audience.customHours }
+          : { mode: audience.hours },
+      noticeOverrideMin: audience.minNoticeMin ?? undefined,
+      horizonOverrideDays: audience.bookingHorizonDays ?? undefined,
     });
   },
 });

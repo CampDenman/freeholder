@@ -37,7 +37,7 @@ import {
   externalCalendars,
   externalEvents,
 } from "@/core/connections/schema";
-import { zonedDate } from "@/core/i18n/zoned";
+import { zonedDate, zonedInstant } from "@/core/i18n/zoned";
 import type { Tx } from "@/core/service";
 
 export interface Slot {
@@ -74,6 +74,23 @@ export interface SlotRequest {
   /** Now, injectable so a test is not at the mercy of the clock. */
   now?: Date;
   maxSlots?: number;
+  /**
+   * Hours imposed by the audience rather than by the calendar (C6.05).
+   *
+   * §41: bookability is a property of the audience, not of the calendar. A
+   * friend booking at 8pm on Sunday is not constrained by shop hours — so
+   * `any` opens the whole range and `custom` replaces the calendar's pattern.
+   * Busy time is subtracted either way, because that rule is not an hours
+   * rule and a booking system that can double-book its owner is worse than
+   * none.
+   */
+  /** An audience's own notice and horizon, where it has stated one (C6.05). */
+  noticeOverrideMin?: number;
+  horizonOverrideDays?: number;
+  audienceHours?:
+    | { mode: "calendar" }
+    | { mode: "any" }
+    | { mode: "custom"; rules: readonly { weekday: number; starts: string; ends: string }[] };
 }
 
 interface Busy {
@@ -169,6 +186,102 @@ function* startsIn(
   for (; cursor + duration <= window.endsAt.getTime(); cursor += step) {
     yield new Date(cursor);
   }
+}
+
+/**
+ * The open windows a request should be cut into slots from.
+ *
+ * The calendar's own pattern unless the audience has said otherwise, which is
+ * where §41's "bookability is per audience" actually bites: two people asking
+ * about the same calendar on the same day get different windows, and the same
+ * busy time subtracted from both.
+ */
+async function windowsFor(
+  tx: Tx,
+  request: SlotRequest,
+  member: { calendarId: string; timezone: string },
+): Promise<OpenWindow[]> {
+  const hours = request.audienceHours ?? { mode: "calendar" as const };
+  if (hours.mode === "calendar") {
+    return openWindows(tx, {
+      calendarId: member.calendarId,
+      timezone: member.timezone,
+      from: request.from,
+      to: request.to,
+      kinds: ["bookable"],
+    });
+  }
+
+  const days = eachDay(request.from, request.to);
+  if (hours.mode === "any") {
+    // Midnight to midnight in the calendar's own zone, so "any time" is a real
+    // day rather than 24 hours from wherever the server thinks midnight is.
+    return days.map((day) => ({
+      startsAt: zonedInstant(member.timezone, day),
+      endsAt: zonedInstant(member.timezone, addCalendarDays(day, 1)),
+      kind: "bookable" as const,
+    }));
+  }
+
+  const windows: OpenWindow[] = [];
+  for (const day of days) {
+    const weekday = new Date(
+      Date.UTC(day.year, day.month - 1, day.day),
+    ).getUTCDay();
+    for (const rule of hours.rules.filter((candidate) => candidate.weekday === weekday)) {
+      const [fromHour, fromMinute] = rule.starts.split(":").map(Number) as [number, number];
+      const [toHour, toMinute] = rule.ends.split(":").map(Number) as [number, number];
+      windows.push({
+        startsAt: zonedInstant(member.timezone, {
+          ...day,
+          hour: fromHour,
+          minute: fromMinute,
+        }),
+        endsAt: zonedInstant(member.timezone, { ...day, hour: toHour, minute: toMinute }),
+        kind: "bookable",
+      });
+    }
+  }
+  return windows.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+}
+
+interface DayParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+function eachDay(from: string, to: string): DayParts[] {
+  const parse = (value: string): DayParts => {
+    const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+    return { year, month, day };
+  };
+  const start = parse(from);
+  const end = parse(to);
+  const found: DayParts[] = [];
+  const last = Date.UTC(end.year, end.month - 1, end.day);
+  for (
+    let cursor = Date.UTC(start.year, start.month - 1, start.day);
+    cursor <= last && found.length < 400;
+    cursor += 86_400_000
+  ) {
+    const at = new Date(cursor);
+    found.push({
+      year: at.getUTCFullYear(),
+      month: at.getUTCMonth() + 1,
+      day: at.getUTCDate(),
+    });
+  }
+  return found;
+}
+
+function addCalendarDays(date: DayParts, days: number): DayParts {
+  const moved = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
+  return {
+    year: moved.getUTCFullYear(),
+    month: moved.getUTCMonth() + 1,
+    day: moved.getUTCDate(),
+  };
 }
 
 /**
@@ -273,15 +386,18 @@ export async function resolveSlots(tx: Tx, request: SlotRequest): Promise<Slot[]
   const found: Slot[] = [];
 
   for (const member of candidates) {
-    const earliest = new Date(now.getTime() + member.minNoticeMin * 60_000);
-    const latest = new Date(now.getTime() + member.bookingHorizonDays * 86_400_000);
+    // The audience's terms where it has stated them, the calendar's otherwise.
+    // A friend booking at short notice is the audience overriding the
+    // calendar, which is exactly what §41 means by bookability being per
+    // audience.
+    const noticeMin = request.noticeOverrideMin ?? member.minNoticeMin;
+    const horizonDays = request.horizonOverrideDays ?? member.bookingHorizonDays;
+    const earliest = new Date(now.getTime() + noticeMin * 60_000);
+    const latest = new Date(now.getTime() + horizonDays * 86_400_000);
 
-    const windows = await openWindows(tx, {
+    const windows = await windowsFor(tx, request, {
       calendarId: member.calendarId,
       timezone: member.timezone,
-      from: request.from,
-      to: request.to,
-      kinds: ["bookable"],
     });
 
     for (const window of windows) {
