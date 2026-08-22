@@ -659,6 +659,13 @@
       "when": 1787070700000,
       "tag": "0093_intake_waivers_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1787070800000,
+      "tag": "0094_rentals",
+      "breakpoints": true
     }
   ]
 }

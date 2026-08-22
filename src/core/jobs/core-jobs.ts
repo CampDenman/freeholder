@@ -433,6 +433,24 @@ export const sendBookingReminders = defineJob({
 });
 
 /**
+ * Mark hires that have not come back (C6.10).
+ *
+ * Its own status rather than a computed one, because "overdue" is something an
+ * owner acts on — a list to chase, a fee that is accruing — and a derived flag
+ * that exists only while somebody is looking at the right screen is not a list.
+ */
+export const markOverdueHires = defineJob({
+  name: "core.markOverdueHires",
+  summary: "Move hires past their return time into overdue.",
+  schedule: "*/30 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { markOverdue } = await import("@/modules/rentals/service");
+    return markOverdue.call({}, { kind: "system" });
+  },
+});
+
+/**
  * Read connected mailboxes for who has been in touch (C4.18).
  *
  * Hourly, not by the minute: this is about who wrote to the business, and a
@@ -641,6 +659,7 @@ export default [
   importCalendarFeeds,
   expireWaitlistOffers,
   sendBookingReminders,
+  markOverdueHires,
   submitIndexNow,
   deliverContributions,
   replyContributions,
