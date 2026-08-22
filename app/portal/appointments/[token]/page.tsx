@@ -100,6 +100,39 @@ export default async function MyAppointmentPage({
           </p>
         ) : null}
 
+        {/* §4.4: intake and a waiver come before the slot is *confirmed*, not
+            before it is booked — so this is a to-do list on an appointment
+            somebody already holds, rather than a wall in front of one. */}
+        {booking.intakeFormId || booking.waiverToken ? (
+          <Card>
+            <CardHeader title={t("myBooking.needed")} />
+            <CardBody>
+              <ul className="grid list-none gap-2 p-0 text-sm">
+                {booking.intakeFormId ? (
+                  <li>
+                    <a
+                      href={`/portal/appointments/${token}/intake`}
+                      className="underline"
+                    >
+                      {t("myBooking.intake")}
+                    </a>
+                  </li>
+                ) : null}
+                {booking.waiverToken ? (
+                  <li>
+                    <a
+                      href={`/portal/agreements/${booking.waiverToken}`}
+                      className="underline"
+                    >
+                      {t("myBooking.waiver")}
+                    </a>
+                  </li>
+                ) : null}
+              </ul>
+            </CardBody>
+          </Card>
+        ) : null}
+
         {/* The terms are named where somebody can see them before acting, not
             only in the confirmation email they have long since deleted. */}
         {booking.policyName ? (

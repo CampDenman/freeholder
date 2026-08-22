@@ -65,6 +65,54 @@ export async function moveMyAppointmentAction(form: FormData): Promise<void> {
   redirect(`/portal/appointments/moved?id=${encodeURIComponent(movedTo)}`);
 }
 
+/**
+ * The intake form, filled in by the customer for their own appointment.
+ *
+ * Two steps rather than one, and deliberately so: `forms.submit` records the
+ * answers exactly as any other form's would — same validation, same honeypot,
+ * same route onto the spine — and only then is the submission attached to the
+ * booking. Teaching `forms.submit` about bookings would make the forms module
+ * depend on scheduling for one caller's convenience, which is the direction
+ * §11 does not allow.
+ *
+ * A submission that records but fails to attach is the safe half to lose: the
+ * answers are on the spine, and the customer is told plainly rather than
+ * shown a success page for something the business will not see attached.
+ */
+export async function submitIntakeAction(form: FormData): Promise<void> {
+  const bookingToken = text(form, "bookingToken");
+  const here = `/portal/appointments/${encodeURIComponent(bookingToken)}`;
+  const rawSlug = form.get("form_slug");
+  const slug = typeof rawSlug === "string" ? rawSlug : "";
+
+  const values: Record<string, unknown> = {};
+  for (const [key, value] of form.entries()) {
+    if (key === "form_slug" || key === "bookingToken") continue;
+    // A checkbox posts "on" when ticked and nothing at all when not, which is
+    // not what a boolean field's validator expects.
+    values[key] = value === "on" ? true : value;
+  }
+
+  try {
+    const { submitForm } = await import("@/modules/forms/service");
+    const { attachIntakeByToken } = await import("@/core/scheduling/requirements");
+    const submitted = await submitForm.call(
+      { slug, values, sourceUrl: `${here}/intake` },
+      { kind: "anonymous" },
+    );
+    await attachIntakeByToken.call(
+      { token: bookingToken, submissionId: submitted.submissionId },
+      { kind: "anonymous" },
+    );
+  } catch (error) {
+    const message =
+      error instanceof ServiceError ? error.message : "That could not be sent.";
+    redirect(`${here}/intake?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(here);
+  redirect(`${here}?saved=intake`);
+}
+
 export async function cancelMyAppointmentAction(form: FormData): Promise<void> {
   const token = text(form, "token");
   const here = `/portal/appointments/${encodeURIComponent(token)}`;

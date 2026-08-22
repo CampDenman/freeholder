@@ -16,15 +16,20 @@ import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primit
 import { currentBusiness } from "@/core/settings/read";
 import { formatMoney } from "@/core/i18n";
 import { getBooking } from "@/core/scheduling/bookings";
+import { bookingRequirements } from "@/core/scheduling/requirements";
+import { listBookingReminders } from "@/core/scheduling/reminders";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
 import {
   addGuestAction,
+  addReminderAction,
+  issueWaiverAction,
   markGuestAction,
   removeGuestAction,
   rescheduleBookingAction,
   setBookingStatusAction,
+  stopReminderAction,
 } from "../../../booking-actions";
 
 export const dynamic = "force-dynamic";
@@ -58,10 +63,12 @@ export default async function AppointmentPage({
 }) {
   const actor = await requireStaffActor("scheduling");
   const { id } = await params;
-  const [t, business, booking, query] = await Promise.all([
+  const [t, business, booking, requirements, reminders, query] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(getBooking.call({ id }, actor)),
+    domainOrNull(bookingRequirements.call({ id }, actor)),
+    domainOrNull(listBookingReminders.call({ bookingId: id }, actor)),
     searchParams,
   ]);
   if (!booking) notFound();
@@ -124,6 +131,15 @@ export default async function AppointmentPage({
                   <form key={next} action={setBookingStatusAction}>
                     <input type="hidden" name="id" value={booking.id} />
                     <input type="hidden" name="status" value={next} />
+                    {/* Somebody who signed on paper in the shop has met the
+                        requirement in the way that matters. The platform must
+                        not enforce its bookkeeping against the business. */}
+                    {next === "confirmed" && requirements && !requirements.ready ? (
+                      <label className="mb-1 flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="overrideRequirements" />
+                        <span className="text-ink-muted">{t("appointments.override")}</span>
+                      </label>
+                    ) : null}
                     <Button type="submit" variant="quiet">
                       {t(`appointments.action.${next}`)}
                     </Button>
@@ -259,6 +275,97 @@ export default async function AppointmentPage({
                 </a>
               </p>
             ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {/* §4.4: intake and a signed waiver come before the slot is *confirmed*.
+          The screen says what is outstanding rather than hiding the confirm
+          button, because a button that vanishes teaches nobody anything. */}
+      {requirements && !requirements.ready ? (
+        <Card>
+          <CardHeader title={t("appointments.requirements")} />
+          <CardBody>
+            <ul className="grid list-none gap-2 p-0 text-sm">
+              {requirements.intakeFormId ? (
+                <li>{t("appointments.intakeOutstanding")}</li>
+              ) : null}
+              {requirements.waiverOutstanding ? (
+                <li>{t("appointments.waiverOutstanding")}</li>
+              ) : null}
+            </ul>
+            {requirements.waiverOutstanding ? (
+              <form action={issueWaiverAction}>
+                <input type="hidden" name="bookingId" value={booking.id} />
+                <Button type="submit" variant="quiet">
+                  {t("appointments.issueWaiver")}
+                </Button>
+              </form>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {canMove ? (
+        <Card>
+          <CardHeader title={t("appointments.reminders")} />
+          <CardBody>
+            {(reminders ?? []).length === 0 ? (
+              <p className="max-w-prose text-sm text-ink-muted">
+                {t("appointments.noReminders")}
+              </p>
+            ) : (
+              <ul className="grid list-none gap-2 p-0">
+                {(reminders ?? []).map((reminder) => (
+                  <li
+                    key={reminder.id}
+                    className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-2 text-sm"
+                  >
+                    <span className="tabular-nums">
+                      {new Intl.DateTimeFormat(locale, {
+                        timeZone: timezone,
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      }).format(new Date(reminder.sendAt))}
+                    </span>
+                    <Pill tone={reminder.status === "failed" ? "danger" : "neutral"}>
+                      {t(`appointments.reminderStatus.${reminder.status}`)}
+                    </Pill>
+                    {/* Why it was not sent, in words an owner can act on —
+                        "was she reminded?" deserves a real answer. */}
+                    {reminder.skipReason ? (
+                      <span className="text-ink-muted">{reminder.skipReason}</span>
+                    ) : null}
+                    {reminder.status === "scheduled" ? (
+                      <form action={stopReminderAction}>
+                        <input type="hidden" name="bookingId" value={booking.id} />
+                        <input type="hidden" name="id" value={reminder.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("appointments.reminderStop")}
+                        </Button>
+                      </form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form action={addReminderAction} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="bookingId" value={booking.id} />
+              <label className="grid gap-1 text-sm">
+                <span className="text-ink-muted">{t("appointments.field.reminder")}</span>
+                <input
+                  type="number"
+                  name="offsetMin"
+                  min={0}
+                  step={30}
+                  defaultValue={1440}
+                  className="w-28 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                />
+              </label>
+              <Button type="submit" variant="quiet">
+                {t("appointments.reminderAdd")}
+              </Button>
+            </form>
           </CardBody>
         </Card>
       ) : null}

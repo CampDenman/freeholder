@@ -644,6 +644,27 @@ export const serviceOfferings = pgTable(
      * so scheduling can attach later without a catalog rewrite.
      */
     waiverTemplateId: uuid("waiver_template_id"),
+    /**
+     * The waiver this service asks for, in words (C6.09).
+     *
+     * The pre-template form of `waiverTemplateId` above, and deliberately so:
+     * a booking cannot require a waiver until something can hold one, and
+     * C6.14's templates render into exactly this shape rather than replacing
+     * it. Null means the service asks for no waiver, which is most of them.
+     */
+    waiverTitle: text("waiver_title"),
+    waiverBody: text("waiver_body"),
+    /**
+     * How long before the appointment to remind, in minutes (§4.4, C6.09).
+     *
+     * A list rather than a single figure, because the reminder that works is
+     * the day before *and* the hour before, and an owner who wants one of them
+     * should not have to give up the other. Empty means no reminders.
+     */
+    reminderOffsetsMin: integer("reminder_offsets_min")
+      .array()
+      .notNull()
+      .default(sql`'{1440,120}'`),
     capacity: integer("capacity").notNull().default(1),
     assignment: text("assignment", { enum: SERVICE_ASSIGNMENTS })
       .notNull()

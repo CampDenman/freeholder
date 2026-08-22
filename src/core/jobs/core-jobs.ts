@@ -415,6 +415,24 @@ export const expireWaitlistOffers = defineJob({
 });
 
 /**
+ * Send the appointment reminders that have come due (C6.09).
+ *
+ * Every five minutes, because a reminder is only worth sending near the time
+ * it was meant for — an hour-before reminder that arrives forty minutes late
+ * has become a different message.
+ */
+export const sendBookingReminders = defineJob({
+  name: "core.sendBookingReminders",
+  summary: "Send appointment reminders that are due, and record what happened.",
+  schedule: "*/5 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { sendDueReminders } = await import("@/core/scheduling/reminders");
+    return sendDueReminders();
+  },
+});
+
+/**
  * Read connected mailboxes for who has been in touch (C4.18).
  *
  * Hourly, not by the minute: this is about who wrote to the business, and a
@@ -622,6 +640,7 @@ export default [
   importConnectedMail,
   importCalendarFeeds,
   expireWaitlistOffers,
+  sendBookingReminders,
   submitIndexNow,
   deliverContributions,
   replyContributions,

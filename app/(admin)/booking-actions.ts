@@ -23,6 +23,11 @@ import {
   setWaitlistPosition,
   withdrawFromWaitlist,
 } from "@/core/scheduling/waitlist";
+import { issueBookingWaiver } from "@/core/scheduling/requirements";
+import {
+  addBookingReminder,
+  cancelBookingReminder,
+} from "@/core/scheduling/reminders";
 import { zonedInstant } from "@/core/i18n/zoned";
 import { ownerFacing } from "./action-helpers";
 
@@ -100,6 +105,9 @@ export async function setBookingStatusAction(form: FormData): Promise<void> {
         id,
         status: status as "confirmed" | "in_progress" | "completed" | "no_show" | "cancelled",
         reason: text(form, "reason") || undefined,
+        // The owner's own override: somebody who signed on paper in the shop
+        // has met the requirement in the way that matters.
+        overrideRequirements: text(form, "overrideRequirements") === "on",
       },
       await actor(),
     );
@@ -187,6 +195,50 @@ export async function markGuestAction(form: FormData): Promise<void> {
   }
   revalidatePath(`${APPOINTMENTS}/${bookingId}`);
   redirect(`${APPOINTMENTS}/${bookingId}?saved=guest`);
+}
+
+export async function issueWaiverAction(form: FormData): Promise<void> {
+  const bookingId = text(form, "bookingId");
+  let outcome: string;
+  try {
+    const issued = await issueBookingWaiver.call({ id: bookingId }, await actor());
+    // "This service asks for no waiver" is an answer, not a failure. Telling
+    // the owner what happened is the whole point of pressing the button.
+    outcome = issued.contractId ? "waiver" : (issued.reason ?? "none");
+  } catch (error) {
+    refused(error, `${APPOINTMENTS}/${bookingId}`, "That waiver could not be sent.");
+  }
+  revalidatePath(`${APPOINTMENTS}/${bookingId}`);
+  redirect(`${APPOINTMENTS}/${bookingId}?saved=${encodeURIComponent(outcome)}`);
+}
+
+export async function addReminderAction(form: FormData): Promise<void> {
+  const bookingId = text(form, "bookingId");
+  try {
+    await addBookingReminder.call(
+      {
+        bookingId,
+        channel: text(form, "channel") === "sms" ? "sms" : "email",
+        offsetMin: Number(text(form, "offsetMin")) || 60,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, `${APPOINTMENTS}/${bookingId}`, "That reminder could not be added.");
+  }
+  revalidatePath(`${APPOINTMENTS}/${bookingId}`);
+  redirect(`${APPOINTMENTS}/${bookingId}?saved=reminder`);
+}
+
+export async function stopReminderAction(form: FormData): Promise<void> {
+  const bookingId = text(form, "bookingId");
+  try {
+    await cancelBookingReminder.call({ id: text(form, "id") }, await actor());
+  } catch (error) {
+    refused(error, `${APPOINTMENTS}/${bookingId}`, "That reminder could not be stopped.");
+  }
+  revalidatePath(`${APPOINTMENTS}/${bookingId}`);
+  redirect(`${APPOINTMENTS}/${bookingId}?saved=reminder`);
 }
 
 const WAITLIST = "/admin/calendars/waitlist";
