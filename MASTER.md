@@ -4633,7 +4633,13 @@ payment, tax, inventory and reporting path, with no floating-point money.
   blocking. Building it also found that two branches had picked the same
   migration `when`, which Drizzle silently skips forever rather than failing;
   `tests/core/migration-journal.test.ts` now refuses a journal that would do
-  that.)
+  that. **And it found a hole in the registry gate itself**: `registry-
+  completeness` claimed to check "every service defined anywhere under `src/`"
+  while actually scanning four filenames, so a service in `ics-service.ts` was
+  invisible to the check that exists so nobody has to remember. The gate now
+  reads every `.ts` file, which immediately named this change's own two feed
+  services and `invoicing.processPaymentProviderEvents` — the payment webhook
+  handler, defined and never registered since C5.)
 
 #### Bookings, rentals, and events
 

@@ -40,7 +40,17 @@ async function serviceModules(root: string): Promise<string[]> {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(path);
-      } else if (/^(service|services|execution|reset)\.ts$/.test(entry.name)) {
+      } else if (/\.ts$/.test(entry.name) && !/\.(d|test|spec)\.ts$/.test(entry.name)) {
+        // Every source file, not a list of filenames. The gate used to check
+        // four names — `service.ts`, `services.ts`, `execution.ts`, `reset.ts`
+        // — which made the *filename* load-bearing: a service defined in
+        // `ics-service.ts` was invisible to the check that exists precisely so
+        // nobody has to remember. C6.06 shipped two unregistered public
+        // services through that gap, and the gap is the bug, not the file.
+        //
+        // `.tsx` is left out deliberately: a service is a server object and a
+        // component file is a render, so importing every screen here would
+        // trade a real check for a great deal of React.
         found.push(path);
       }
     }

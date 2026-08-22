@@ -824,6 +824,11 @@ export const reconcilePaymentProviders = defineService({
 });
 
 export default [
+  // Registered even though the webhook route holds a direct reference: a
+  // service that boot has never heard of has no audit entry, no OpenAPI row
+  // and no truncation between tests, and "the route imports it" is not the
+  // same thing as the registry knowing it exists.
+  processPaymentProviderEvents,
   listPaymentProviders,
   beginPaymentCheckout,
   completePaymentCheckout,
