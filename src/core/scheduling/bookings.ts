@@ -37,8 +37,20 @@ import {
 } from "@/core/scheduling/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
+  cancellationOutcome,
+  cancellationTerms,
+  mayReschedule,
+  noShowOutcome,
+  storedOutcome,
+  termsFrom,
+  type BookingMoney,
+  type CancellationTerms,
+  type StoredOutcome,
+} from "@/core/scheduling/policy";
+import {
   defineService,
   getService,
+  listServices,
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
@@ -69,6 +81,9 @@ const bookingRow = row({
   exclusive: z.boolean(),
   invoiceId: uuid.nullable(),
   rescheduledFromId: uuid.nullable(),
+  rescheduleCount: z.number().int(),
+  cancellationPolicy: cancellationTerms.nullable(),
+  cancellationOutcome: storedOutcome.nullable(),
   intakeSubmissionId: uuid.nullable(),
   waiverId: uuid.nullable(),
   source: z.enum(BOOKING_SOURCES),
@@ -148,6 +163,98 @@ async function lockCalendarForSeating(
   await ctx.tx.execute(
     sql`select id from ${calendars} where ${calendars.id} = ${calendarId} for update`,
   );
+}
+
+/**
+ * The cancellation terms to write onto a booking, taken once (C6.08).
+ *
+ * Core may not import a module (§11), so the terms are asked for through the
+ * registry and copied. Catalog being switched off is not an error — it is an
+ * instance that sells time without a catalogue, and its bookings simply cancel
+ * freely. The call is `callAsSystem` because a customer booking on the public
+ * site has no permission to read the catalogue's configuration, and the terms
+ * are nevertheless part of what they are agreeing to.
+ */
+async function termsForOffering(
+  ctx: ServiceContext,
+  serviceOfferingId: string | null,
+): Promise<CancellationTerms | null> {
+  if (!serviceOfferingId) return null;
+  if (!listServices().has("catalog.bookingTerms")) return null;
+  const found = (await ctx.callAsSystem(getService("catalog.bookingTerms"), {
+    serviceOfferingId,
+  })) as CancellationTerms | null;
+  return found ?? null;
+}
+
+/**
+ * What has been invoiced and paid against an appointment (C6.08).
+ *
+ * Read from invoicing rather than duplicated here. Two records of what
+ * somebody paid is one record too many: the moment they disagree, the wrong
+ * one is the one somebody is looking at. An instance with the module switched
+ * off, or a free consultation with no invoice at all, has nothing to read and
+ * cancels at no charge, which is the correct answer rather than a fallback.
+ */
+async function moneyFor(
+  ctx: ServiceContext,
+  invoiceId: string | null,
+): Promise<BookingMoney & { currency: string | null }> {
+  const nothing = { valueMinor: 0, paidMinor: 0, currency: null };
+  if (!invoiceId) return nothing;
+  if (!listServices().has("invoicing.get")) return nothing;
+  try {
+    const bundle = (await ctx.callAsSystem(getService("invoicing.get"), {
+      id: invoiceId,
+    })) as { invoice: { totalMinor: number; paidMinor: number; currency: string } };
+    return {
+      valueMinor: bundle.invoice.totalMinor,
+      paidMinor: bundle.invoice.paidMinor,
+      currency: bundle.invoice.currency,
+    };
+  } catch {
+    // An invoice that has been voided or deleted leaves the appointment with a
+    // dangling id. Cancelling it must still work — refusing would trap the
+    // booking in a state nobody can leave.
+    return nothing;
+  }
+}
+
+/**
+ * Apply the terms this appointment was booked under, and record what they say.
+ *
+ * Deliberately produces a *record* rather than a transaction. §4.4 is explicit
+ * that a booking is not a payment: refunding a card is money leaving the
+ * business, which is a step-up-guarded act in the invoicing module and not
+ * something a status change performs on its way past. What is stored here is
+ * the decision — fee, refund due, still owed, and the sentence the customer is
+ * shown — so the owner's refund control has something to act on and the
+ * customer has something to be told.
+ */
+async function decideOutcome(
+  ctx: ServiceContext,
+  booking: { startsAt: Date; invoiceId: string | null; cancellationPolicy: unknown },
+  kind: "cancelled" | "no_show",
+): Promise<StoredOutcome> {
+  const terms = termsFrom(booking.cancellationPolicy);
+  const money = await moneyFor(ctx, booking.invoiceId);
+  const decided =
+    kind === "no_show"
+      ? noShowOutcome({ terms, money })
+      : cancellationOutcome({ terms, startsAt: booking.startsAt, now: new Date(), money });
+  return storedOutcome.parse({
+    free: decided.free,
+    feeMinor: decided.feeMinor,
+    refundDueMinor: decided.refundDueMinor,
+    outstandingMinor: decided.outstandingMinor,
+    forfeitsDeposit: decided.forfeitsDeposit,
+    paidMinor: money.paidMinor,
+    valueMinor: money.valueMinor,
+    currency: money.currency,
+    policyName: terms.name,
+    reason: decided.reason,
+    decidedAt: new Date().toISOString(),
+  });
 }
 
 /** The seats already held on a shared calendar for an overlapping window. */
@@ -256,6 +363,10 @@ export const createBooking = defineService({
         locationDetail: input.locationDetail ?? null,
         capacityUsed: input.capacityUsed,
         exclusive,
+        // Snapshotted, never referenced: §4.4's "the customer saw the terms
+        // before booking" is only true while editing the policy later cannot
+        // change what somebody already agreed to (C6.08).
+        cancellationPolicy: await termsForOffering(ctx, input.serviceOfferingId ?? null),
         rescheduleToken: randomBytes(24).toString("base64url"),
         source: input.source,
         notes: input.notes ?? null,
@@ -329,12 +440,21 @@ export const setBookingStatus = defineService({
       throw new ServiceError("validation", "Say why it was cancelled.");
     }
 
+    // §4.4: "Cancellation is policy-driven, not ad hoc." The decision is made
+    // and recorded here; moving the money is a deliberate act in the invoicing
+    // module, because a booking is not a payment.
+    const outcome =
+      input.status === "cancelled" || input.status === "no_show"
+        ? await decideOutcome(ctx, booking, input.status)
+        : null;
+
     const [updated] = await ctx.tx
       .update(bookings)
       .set({
         status: input.status,
         cancellationReason:
           input.status === "cancelled" ? (input.reason ?? null) : booking.cancellationReason,
+        ...(outcome ? { cancellationOutcome: outcome } : {}),
         updatedAt: sql`now()`,
       })
       .where(eq(bookings.id, input.id))
@@ -344,13 +464,17 @@ export const setBookingStatus = defineService({
       contactId: booking.contactId,
       bookingId: booking.id,
       eventType: `booking.${input.status}`,
-      payload: input.reason ? { reason: input.reason } : {},
+      payload: {
+        ...(input.reason ? { reason: input.reason } : {}),
+        ...(outcome ? { outcome } : {}),
+      },
     });
     ctx.setSubject("booking", booking.id);
     ctx.queueEvent(`booking.${input.status}`, {
       id: booking.id,
       contactId: booking.contactId,
       calendarId: booking.calendarId,
+      ...(outcome ? { outcome } : {}),
     });
     return updated!;
   },
@@ -369,6 +493,14 @@ export const rescheduleBooking = defineService({
     endsAt: z.iso.datetime(),
     calendarId: z.uuid().optional(),
     reason: z.string().trim().max(500).nullish(),
+    /**
+     * Move it regardless of the policy — the owner's own override.
+     *
+     * The policy binds the customer, not the business: an owner who agrees to
+     * move somebody's appointment as a favour should not have to cancel and
+     * rebook to do it. Never settable from a customer-facing path.
+     */
+    overridePolicy: z.boolean().default(false),
   }),
   output: bookingRow,
   handler: async (input, ctx) => {
@@ -384,12 +516,41 @@ export const rescheduleBooking = defineService({
         "Only an appointment that is still going ahead can be moved.",
       );
     }
+    if (!input.overridePolicy) {
+      const verdict = mayReschedule({
+        terms: termsFrom(previous.cancellationPolicy),
+        rescheduleCount: previous.rescheduleCount,
+        startsAt: previous.startsAt,
+        now: new Date(),
+      });
+      if (!verdict.allowed) throw new ServiceError("conflict", verdict.reason!);
+    }
     const startsAt = new Date(input.startsAt);
     const endsAt = new Date(input.endsAt);
     if (endsAt <= startsAt) {
       throw new ServiceError("validation", "An appointment ends after it starts.");
     }
     const calendar = await bookableCalendar(ctx, input.calendarId ?? previous.calendarId);
+
+    // A shared calendar's seats are counted the same way here as when the
+    // booking was made. Without it, moving into a full class is the one door
+    // left open in the seat accounting — the exclusion constraint deliberately
+    // does not fire on a calendar whose bookings overlap by design (C6.04).
+    if (calendar.capacityDefault > 1) {
+      await lockCalendarForSeating(ctx, calendar.id);
+      const taken = await seatsTaken(ctx, {
+        calendarId: calendar.id,
+        startsAt,
+        endsAt,
+        excludeId: previous.id,
+      });
+      if (taken + previous.capacityUsed > calendar.capacityDefault) {
+        throw new ServiceError(
+          "conflict",
+          `Only ${calendar.capacityDefault - taken} place(s) left at that time.`,
+        );
+      }
+    }
 
     // The old row is released first, so moving an appointment by an hour does
     // not collide with itself.
@@ -420,6 +581,12 @@ export const rescheduleBooking = defineService({
         exclusive: calendar.capacityDefault <= 1,
         invoiceId: previous.invoiceId,
         rescheduledFromId: previous.id,
+        // Carried, not recounted. The terms are the ones the customer agreed
+        // to, and the count is what a reschedule limit is a limit on — walking
+        // `rescheduledFromId` instead would stop enforcing the moment somebody
+        // tidied up an old row.
+        rescheduleCount: previous.rescheduleCount + 1,
+        cancellationPolicy: previous.cancellationPolicy,
         rescheduleToken: randomBytes(24).toString("base64url"),
         intakeSubmissionId: previous.intakeSubmissionId,
         waiverId: previous.waiverId,
@@ -457,6 +624,156 @@ export const rescheduleBooking = defineService({
   },
 });
 
+/**
+ * The customer's own appointment, found by the link they were sent (C6.08).
+ *
+ * §4.4: "Customers reschedule through a signed `reschedule_token` link, with
+ * **no login and no support email**." The token is the authorisation, which is
+ * why this is public — a session would mean the link worked only for customers
+ * who happened to have an account, which is the support email again wearing a
+ * different hat.
+ *
+ * What comes back is deliberately narrow: their time, their service, and what
+ * the policy lets them do. The owner's notes are not theirs to read.
+ */
+const tokenView = row({
+  id: uuid,
+  startsAt: timestamp,
+  endsAt: timestamp,
+  timezoneAtBooking: z.string(),
+  status: z.enum(BOOKING_STATUSES),
+  calendarId: uuid,
+  calendarName: z.string(),
+  locationDetail: z.string().nullable(),
+  mayReschedule: z.boolean(),
+  mayCancel: z.boolean(),
+  /** Why not, when they may not. Shown instead of a dead button. */
+  refusal: z.string().nullable(),
+  policyName: z.string().nullable(),
+});
+
+async function tokenBooking(ctx: ServiceContext, token: string) {
+  const [found] = await ctx.tx
+    .select({
+      booking: bookings,
+      calendarName: calendars.name,
+    })
+    .from(bookings)
+    .innerJoin(calendars, eq(calendars.id, bookings.calendarId))
+    .where(eq(bookings.rescheduleToken, token))
+    .limit(1);
+  return found ?? null;
+}
+
+function tokenViewOf(
+  booking: typeof bookings.$inferSelect,
+  calendarName: string,
+): z.infer<typeof tokenView> {
+  const terms = termsFrom(booking.cancellationPolicy);
+  const live = HOLDING_STATUSES.includes(
+    booking.status as (typeof HOLDING_STATUSES)[number],
+  );
+  const verdict = mayReschedule({
+    terms,
+    rescheduleCount: booking.rescheduleCount,
+    startsAt: booking.startsAt,
+    now: new Date(),
+  });
+  return {
+    id: booking.id,
+    startsAt: booking.startsAt,
+    endsAt: booking.endsAt,
+    timezoneAtBooking: booking.timezoneAtBooking,
+    status: booking.status,
+    calendarId: booking.calendarId,
+    calendarName,
+    locationDetail: booking.locationDetail,
+    mayReschedule: live && verdict.allowed,
+    // Cancelling is always allowed while the appointment is still going ahead.
+    // The policy decides what it *costs*, not whether somebody is permitted to
+    // stop attending — refusing that would be holding people to an appointment
+    // they have told you they cannot make.
+    mayCancel: live,
+    refusal: live ? (verdict.reason ?? null) : "This appointment is already closed.",
+    policyName: booking.cancellationPolicy ? terms.name : null,
+  };
+}
+
+export const bookingByToken = defineService({
+  name: "bookings.byToken",
+  summary: "One appointment, for the customer holding its link.",
+  kind: "query",
+  permission: "public",
+  mcpExclude: true,
+  agentCallable: false,
+  input: z.object({ token: z.string().trim().min(16).max(200) }),
+  output: tokenView.nullable(),
+  handler: async (input, ctx) => {
+    const found = await tokenBooking(ctx, input.token);
+    return found ? tokenViewOf(found.booking, found.calendarName) : null;
+  },
+});
+
+export const rescheduleByToken = defineService({
+  name: "bookings.rescheduleByToken",
+  summary: "Let the customer move their own appointment.",
+  kind: "mutation",
+  permission: "public",
+  mcpExclude: true,
+  agentCallable: false,
+  writeClass: "blocks",
+  input: z.object({
+    token: z.string().trim().min(16).max(200),
+    startsAt: z.iso.datetime(),
+    endsAt: z.iso.datetime(),
+  }),
+  output: tokenView,
+  handler: async (input, ctx) => {
+    const found = await tokenBooking(ctx, input.token);
+    if (!found) throw new ServiceError("not_found", "That link is no longer valid.");
+    const moved = (await ctx.callAsSystem(getService("bookings.reschedule"), {
+      id: found.booking.id,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      reason: "Moved by the customer.",
+      // Never overridden from here. The override is the owner's, and a
+      // customer-facing path that could set it would make the policy advisory.
+      overridePolicy: false,
+    })) as typeof bookings.$inferSelect;
+    return tokenViewOf(moved, found.calendarName);
+  },
+});
+
+export const cancelByToken = defineService({
+  name: "bookings.cancelByToken",
+  summary: "Let the customer cancel their own appointment.",
+  kind: "mutation",
+  permission: "public",
+  mcpExclude: true,
+  agentCallable: false,
+  writeClass: "blocks",
+  input: z.object({
+    token: z.string().trim().min(16).max(200),
+    reason: z.string().trim().min(1).max(500).default("Cancelled by the customer."),
+  }),
+  output: z.object({ id: uuid, outcome: storedOutcome.nullable() }),
+  handler: async (input, ctx) => {
+    const found = await tokenBooking(ctx, input.token);
+    if (!found) throw new ServiceError("not_found", "That link is no longer valid.");
+    const cancelled = (await ctx.callAsSystem(getService("bookings.setStatus"), {
+      id: found.booking.id,
+      status: "cancelled",
+      reason: input.reason,
+    })) as typeof bookings.$inferSelect;
+    // The terms are told to them plainly at the moment they cancel, which is
+    // the one moment somebody actually reads them.
+    return {
+      id: cancelled.id,
+      outcome: storedOutcome.nullable().parse(cancelled.cancellationOutcome ?? null),
+    };
+  },
+});
+
 export const listBookings = defineService({
   name: "bookings.list",
   summary: "Appointments in a window, by calendar or by customer.",
@@ -470,12 +787,17 @@ export const listBookings = defineService({
     statuses: z.array(z.enum(BOOKING_STATUSES)).min(1).optional(),
     limit: z.number().int().min(1).max(500).default(200),
   }),
+  // A list, not a set of full records. The policy snapshot and the
+  // cancellation outcome are read on the one appointment somebody opened —
+  // carrying two JSON blobs per row through a day's diary buys nothing.
   output: listed(
-    bookingRow.extend({
-      contactName: z.string().nullable(),
-      contactEmail: z.string().nullable(),
-      calendarName: z.string(),
-    }),
+    bookingRow
+      .omit({ cancellationPolicy: true, cancellationOutcome: true })
+      .extend({
+        contactName: z.string().nullable(),
+        contactEmail: z.string().nullable(),
+        calendarName: z.string(),
+      }),
   ),
   handler: async (input, ctx) => {
     const filters = [
@@ -505,6 +827,7 @@ export const listBookings = defineService({
         exclusive: bookings.exclusive,
         invoiceId: bookings.invoiceId,
         rescheduledFromId: bookings.rescheduledFromId,
+        rescheduleCount: bookings.rescheduleCount,
         intakeSubmissionId: bookings.intakeSubmissionId,
         waiverId: bookings.waiverId,
         source: bookings.source,
@@ -638,6 +961,99 @@ export const addBookingParticipant = defineService({
   },
 });
 
+export const removeBookingParticipant = defineService({
+  name: "bookings.removeParticipant",
+  summary: "Take somebody out of a group booking and give the seat back.",
+  kind: "mutation",
+  permission: "scoped",
+  agentCallable: false,
+  writeClass: "blocks",
+  input: z.object({ id: z.uuid() }),
+  output: z.object({ id: uuid, bookingId: uuid, seatsReleased: z.number().int() }),
+  handler: async (input, ctx) => {
+    const [participant] = await ctx.tx
+      .select()
+      .from(bookingParticipants)
+      .where(eq(bookingParticipants.id, input.id))
+      .limit(1);
+    if (!participant) throw new ServiceError("not_found", "That guest is not on this booking.");
+
+    const [booking] = await ctx.tx
+      .select({ id: bookings.id, capacityUsed: bookings.capacityUsed })
+      .from(bookings)
+      .where(eq(bookings.id, participant.bookingId))
+      .limit(1);
+    if (!booking) throw new ServiceError("not_found", "No such appointment.");
+
+    await ctx.tx
+      .delete(bookingParticipants)
+      .where(eq(bookingParticipants.id, participant.id));
+    // The seat goes back to the calendar. Never below one: the booking itself
+    // is somebody, and a party of zero holding no time is a row that quietly
+    // stops appearing in the seat count while still occupying a slot.
+    await ctx.tx
+      .update(bookings)
+      .set({
+        capacityUsed: Math.max(1, booking.capacityUsed - participant.seatCount),
+        updatedAt: sql`now()`,
+      })
+      .where(eq(bookings.id, booking.id));
+
+    ctx.setSubject("booking", booking.id);
+    // A freed seat on a shared calendar is exactly what somebody is waiting
+    // for. The event carries it; the waitlist decides what to do with it.
+    ctx.queueEvent("booking.seatsReleased", {
+      id: booking.id,
+      seats: participant.seatCount,
+    });
+    return {
+      id: participant.id,
+      bookingId: booking.id,
+      seatsReleased: participant.seatCount,
+    };
+  },
+});
+
+export const setParticipantStatus = defineService({
+  name: "bookings.setParticipantStatus",
+  summary: "Mark who turned up to a class.",
+  kind: "mutation",
+  permission: "scoped",
+  agentCallable: false,
+  writeClass: "write",
+  input: z.object({ id: z.uuid(), status: z.enum(PARTICIPANT_STATUSES) }),
+  output: row({
+    id: uuid,
+    bookingId: uuid,
+    status: z.enum(PARTICIPANT_STATUSES),
+  }),
+  handler: async (input, ctx) => {
+    const [updated] = await ctx.tx
+      .update(bookingParticipants)
+      .set({ status: input.status, updatedAt: sql`now()` })
+      .where(eq(bookingParticipants.id, input.id))
+      .returning({
+        id: bookingParticipants.id,
+        bookingId: bookingParticipants.bookingId,
+        status: bookingParticipants.status,
+        contactId: bookingParticipants.contactId,
+      });
+    if (!updated) throw new ServiceError("not_found", "That guest is not on this booking.");
+    // A guest with a contact gets it on their own timeline; a named guest with
+    // no row in the spine has nowhere to put it, which is the honest answer
+    // rather than inventing a contact for somebody who gave no email address.
+    if (updated.contactId) {
+      await recordOnTimeline(ctx, {
+        contactId: updated.contactId,
+        bookingId: updated.bookingId,
+        eventType: `booking.participant.${input.status}`,
+      });
+    }
+    ctx.setSubject("booking", updated.bookingId);
+    return updated;
+  },
+});
+
 /**
  * What an appointment means for the person's own data (§30).
  *
@@ -697,7 +1113,12 @@ export default [
   createBooking,
   setBookingStatus,
   rescheduleBooking,
+  bookingByToken,
+  rescheduleByToken,
+  cancelByToken,
   listBookings,
   getBooking,
   addBookingParticipant,
+  removeBookingParticipant,
+  setParticipantStatus,
 ];

@@ -11,10 +11,18 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
+  addBookingParticipant,
   createBooking,
+  removeBookingParticipant,
   rescheduleBooking,
   setBookingStatus,
+  setParticipantStatus,
 } from "@/core/scheduling/bookings";
+import {
+  offerWaitlistSlot,
+  setWaitlistPosition,
+  withdrawFromWaitlist,
+} from "@/core/scheduling/waitlist";
 import { zonedInstant } from "@/core/i18n/zoned";
 import { ownerFacing } from "./action-helpers";
 
@@ -115,6 +123,9 @@ export async function rescheduleBookingAction(form: FormData): Promise<void> {
         startsAt,
         endsAt: new Date(new Date(startsAt).getTime() + minutes * 60_000).toISOString(),
         reason: text(form, "reason") || undefined,
+        // The policy binds the customer, not the business. An owner who agrees
+        // to move somebody as a favour should not have to cancel and rebook.
+        overridePolicy: text(form, "overridePolicy") === "on",
       },
       await actor(),
     );
@@ -127,4 +138,106 @@ export async function rescheduleBookingAction(form: FormData): Promise<void> {
   // redirect is outside the try: Next signals it by throwing, and catching
   // that would turn a successful move into a failure message.
   redirect(`${APPOINTMENTS}/${movedId}?saved=moved`);
+}
+
+export async function addGuestAction(form: FormData): Promise<void> {
+  const bookingId = text(form, "bookingId");
+  try {
+    await addBookingParticipant.call(
+      {
+        bookingId,
+        // "And my sister" is a real thing to book, and she has no email
+        // address — so neither field is required on its own.
+        email: text(form, "email") || undefined,
+        name: text(form, "name") || undefined,
+        seatCount: Number(text(form, "seatCount")) || 1,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, `${APPOINTMENTS}/${bookingId}`, "That guest could not be added.");
+  }
+  revalidatePath(`${APPOINTMENTS}/${bookingId}`);
+  redirect(`${APPOINTMENTS}/${bookingId}?saved=guest`);
+}
+
+export async function removeGuestAction(form: FormData): Promise<void> {
+  const bookingId = text(form, "bookingId");
+  try {
+    await removeBookingParticipant.call({ id: text(form, "id") }, await actor());
+  } catch (error) {
+    refused(error, `${APPOINTMENTS}/${bookingId}`, "That guest could not be removed.");
+  }
+  revalidatePath(`${APPOINTMENTS}/${bookingId}`);
+  redirect(`${APPOINTMENTS}/${bookingId}?saved=guest`);
+}
+
+export async function markGuestAction(form: FormData): Promise<void> {
+  const bookingId = text(form, "bookingId");
+  try {
+    await setParticipantStatus.call(
+      {
+        id: text(form, "id"),
+        status: text(form, "status") as "registered" | "attended" | "no_show",
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, `${APPOINTMENTS}/${bookingId}`, "That could not be marked.");
+  }
+  revalidatePath(`${APPOINTMENTS}/${bookingId}`);
+  redirect(`${APPOINTMENTS}/${bookingId}?saved=guest`);
+}
+
+const WAITLIST = "/admin/calendars/waitlist";
+
+export async function offerWaitlistAction(form: FormData): Promise<void> {
+  const timezone = text(form, "timezone") || "UTC";
+  const minutes = Number(text(form, "durationMin")) || 60;
+  const back = `${WAITLIST}?calendarId=${encodeURIComponent(text(form, "calendarId"))}`;
+  let outcome: string;
+  try {
+    const startsAt = instant(text(form, "startsAt"), timezone);
+    const offered = await offerWaitlistSlot.call(
+      {
+        calendarId: text(form, "calendarId"),
+        startsAt,
+        endsAt: new Date(new Date(startsAt).getTime() + minutes * 60_000).toISOString(),
+        entryId: text(form, "entryId") || undefined,
+      },
+      await actor(),
+    );
+    // "Nobody wanted it" is an answer, not a failure — telling the owner their
+    // offer went nowhere is the whole point of pressing the button.
+    outcome = offered.offered ? "offered" : (offered.reason ?? "none");
+  } catch (error) {
+    refused(error, back, "That slot could not be offered.");
+  }
+  revalidatePath(WAITLIST);
+  redirect(`${back}&saved=${encodeURIComponent(outcome)}`);
+}
+
+export async function withdrawWaitlistAction(form: FormData): Promise<void> {
+  const back = `${WAITLIST}?calendarId=${encodeURIComponent(text(form, "calendarId"))}`;
+  try {
+    await withdrawFromWaitlist.call({ id: text(form, "id") }, await actor());
+  } catch (error) {
+    refused(error, back, "That entry could not be removed.");
+  }
+  revalidatePath(WAITLIST);
+  redirect(`${back}&saved=withdrawn`);
+}
+
+export async function moveWaitlistAction(form: FormData): Promise<void> {
+  const back = `${WAITLIST}?calendarId=${encodeURIComponent(text(form, "calendarId"))}`;
+  try {
+    await setWaitlistPosition.call(
+      { id: text(form, "id"), position: Number(text(form, "position")) || 0 },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, back, "That entry could not be moved.");
+  }
+  revalidatePath(WAITLIST);
+  redirect(`${back}&saved=moved`);
 }

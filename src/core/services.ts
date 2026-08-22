@@ -51,6 +51,7 @@ import bookingServices from "@/core/scheduling/bookings";
 import resolverServices from "@/core/scheduling/resolver-service";
 import audienceServices from "@/core/scheduling/audiences";
 import calendarFeedServices from "@/core/scheduling/ics-service";
+import waitlistServices from "@/core/scheduling/waitlist";
 import roleServices from "@/core/roles/service";
 import cspServices from "@/core/security/csp-reports";
 import seoServices from "@/core/seo/service";
@@ -114,6 +115,7 @@ const services: Service[] = [
   ...resolverServices,
   ...audienceServices,
   ...calendarFeedServices,
+  ...waitlistServices,
   ...roleServices,
   ...cspServices,
   ...seoServices,
@@ -146,6 +148,7 @@ export async function onAnyEvent(
   const { fanOutEventNotification } = await import("@/core/notifications/service");
   const { startEventPlaybooks } = await import("@/core/agents/playbook-events");
   const { mirrorForBookingEvent } = await import("@/core/scheduling/writeback");
+  const { offerForBookingEvent } = await import("@/core/scheduling/waitlist");
   await Promise.all([
     fanOut(eventName, payload, context?.eventId),
     fanOutEventNotification(eventName, payload, context?.eventId),
@@ -155,5 +158,9 @@ export async function onAnyEvent(
     // write cannot be rolled back, so it must not happen inside a transaction
     // that might still fail.
     mirrorForBookingEvent(eventName, payload),
+    // A freed seat is only genuinely free once the cancellation has committed
+    // (C6.08). Offering it from inside the mutation would promise somebody a
+    // slot that a rollback then un-frees.
+    offerForBookingEvent(eventName, payload),
   ]);
 }

@@ -52,6 +52,14 @@ export default async function CalendarsPage({
       <div>
         <h1 className="text-xl font-bold tracking-tight">{t("calendars.title")}</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("calendars.intro")}</p>
+        <p className="mt-2 flex flex-wrap gap-4 text-sm">
+          <a href="/admin/calendars/audiences" className="underline">
+            {t("audiences.title")}
+          </a>
+          <a href="/admin/calendars/waitlist" className="underline">
+            {t("waitlist.title")}
+          </a>
+        </p>
       </div>
 
       {query.saved ? (
