@@ -37,3 +37,30 @@ export function violates(error: unknown, constraint: string): boolean {
   }
   return false;
 }
+
+/**
+ * Postgres refusing a write because somebody else got there first.
+ *
+ * Three SQLSTATEs mean the same thing to the person who lost, and which one
+ * arrives depends on timing rather than on anything they did:
+ *
+ *   - `23P01` — an exclusion constraint refused an overlap outright;
+ *   - `40001` — the transaction could not be serialised against a concurrent
+ *     one and must be retried;
+ *   - `40P01` — two transactions deadlocked and Postgres chose a victim.
+ *
+ * A caller that translates only the first gets a friendly sentence most of the
+ * time and a page of SQL the rest of it, which is the worst of both: the bug
+ * is invisible in every test that happens not to hit the other two. Whatever
+ * the code, the honest answer is the same — the thing you wanted was taken
+ * while you were taking it.
+ */
+export function lostARace(error: unknown): boolean {
+  const codes = new Set(["23P01", "40001", "40P01"]);
+  for (let current: unknown = error, hops = 0; current && hops < MAX_DEPTH; hops++) {
+    const candidate = current as { code?: unknown; cause?: unknown };
+    if (typeof candidate.code === "string" && codes.has(candidate.code)) return true;
+    current = candidate.cause;
+  }
+  return false;
+}
