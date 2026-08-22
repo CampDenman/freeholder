@@ -1079,7 +1079,10 @@ registerContactPrivacySource({
   },
 });
 
+import conversionServices from "./conversion";
+
 export default [
+  ...conversionServices,
   createQuote,
   setQuoteItems,
   sendQuote,

@@ -44,8 +44,18 @@ const slug = z
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use lower-case words separated by hyphens.")
   .max(120);
 
+/**
+ * A person, or the platform acting for one.
+ *
+ * `permission: "scoped"` already refuses anonymous and unscoped callers, so
+ * what this adds is a plain sentence for somebody whose session has expired.
+ * **The system actor passes**, deliberately: an accepted quote turning itself
+ * into a job (C6.13) is elevation from a caller that has already established
+ * authority, and refusing it there is exactly the bug that made C6.09's
+ * confirm gate fail with "Sign in to manage agreements."
+ */
 function requirePerson(actor: Actor): void {
-  if (actor.kind !== "user") {
+  if (actor.kind !== "user" && actor.kind !== "system") {
     throw new ServiceError("permission", "Sign in to manage projects.");
   }
 }

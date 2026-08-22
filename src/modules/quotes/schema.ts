@@ -95,6 +95,20 @@ export const quotes = pgTable(
      * answer a different question from the one they said yes to.
      */
     acceptedSnapshot: jsonb("accepted_snapshot"),
+    /**
+     * What accepting this should set in motion (C6.13).
+     *
+     * Per quote rather than per instance, because a kitchen refit and a
+     * one-hour consultation are not the same job even in the same business.
+     */
+    conversionPlan: jsonb("conversion_plan"),
+    /**
+     * When it became work.
+     *
+     * The guard against converting twice, which would produce a second invoice
+     * for one job — the kind of mistake an owner discovers from a customer.
+     */
+    convertedAt: timestamp("converted_at", { withTimezone: true }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
