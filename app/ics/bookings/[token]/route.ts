@@ -9,6 +9,7 @@
 //
 // It carries less than the owner's feed: when, where, and which calendar. Not
 // the notes, which the owner wrote for themselves.
+import { ready } from "@/core/runtime";
 import { getService } from "@/core/service";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,11 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ token: string }> },
 ): Promise<Response> {
+  // Boot before the registry is asked for anything. A route module can be the
+  // first thing a cold process runs, and `getService` on an empty registry
+  // throws rather than answering — which is a 500 on a feed a calendar app
+  // polls, for a token that is perfectly valid.
+  await ready();
   const { token } = await context.params;
   const feed = (await getService("bookings.ics").call({ token }, { kind: "anonymous" })) as
     | { body: string }

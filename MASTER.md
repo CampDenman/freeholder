@@ -4639,7 +4639,13 @@ payment, tax, inventory and reporting path, with no floating-point money.
   invisible to the check that exists so nobody has to remember. The gate now
   reads every `.ts` file, which immediately named this change's own two feed
   services and `invoicing.processPaymentProviderEvents` — the payment webhook
-  handler, defined and never registered since C5.)
+  handler, defined and never registered since C5. **A second half of the same
+  bug survived to production and was caught by smoke-testing the deployed
+  route**: registering a service is not enough if the route never boots the
+  registry, and `getService` on an empty one throws — so a valid feed token
+  answered 500. Both `/ics` routes and `/source` now `await ready()`, and
+  `tests/core/route-boot.test.ts` refuses a route that names `getService`
+  without it.)
 
 #### Bookings, rentals, and events
 

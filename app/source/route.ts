@@ -14,11 +14,15 @@
 // instance's plugins and changes, handing it to an anonymous caller would be
 // giving an attacker their first reconnaissance step for free.
 import { actorFromRequest } from "@/core/http/actor";
+import { ready } from "@/core/runtime";
 import { getService, ServiceError } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
+  // Boot before the registry is asked for anything: a cold process starts with
+  // an empty one, and `getService` on it throws rather than answering.
+  await ready();
   const url = new URL(request.url);
   const headers = {
     "content-type": "application/json; charset=utf-8",
