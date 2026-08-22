@@ -95,7 +95,7 @@ export default async function QuotesPage({
                   <span className="text-sm text-ink-muted">
                     {quote.contactName ?? quote.contactEmail ?? ""}
                   </span>
-                  <span className="ml-auto text-sm tabular-nums">
+                  <span className="ms-auto text-sm tabular-nums">
                     {money(quote.totalMinor, quote.currency)}
                   </span>
                   {quote.version > 1 ? (
