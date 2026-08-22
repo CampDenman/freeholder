@@ -52,6 +52,7 @@ const ADMIN_MODULES = [
   "scheduling",
   "seo",
   "settings",
+  "time",
   "webhooks",
 ];
 

@@ -736,7 +736,10 @@ registerContactPrivacySource({
   },
 });
 
+import timeServices from "./time-service";
+
 export default [
+  ...timeServices,
   createProject,
   updateProject,
   linkToProject,

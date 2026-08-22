@@ -7,3 +7,4 @@ export {
   projectOutcomes,
   projectFiles,
 } from "./schema";
+export { timeEntries, timeRates } from "./time-schema";
