@@ -23,6 +23,7 @@ import { users } from "@/core/auth/schema";
 import { bookings } from "@/core/scheduling/schema";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
+import { lostARace } from "@/core/db/errors";
 import { createCalendar } from "@/core/scheduling/service";
 import { createBooking, rescheduleBooking } from "@/core/scheduling/bookings";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -251,6 +252,22 @@ describe.runIf(hasDatabase)("nobody gets double-booked", { timeout: 120_000 }, (
     expect(
       survivors.some((booking) => booking.startsAt.toISOString() === NINE),
     ).toBe(true);
+  });
+
+  it("says the same thing however Postgres refuses the race", () => {
+    // Which of these arrives depends on timing rather than on anything the
+    // person did. Translating only the exclusion constraint gives a friendly
+    // sentence most of the time and a page of SQL the rest of it — and CI
+    // found exactly that, having passed locally five runs out of five.
+    for (const code of ["23P01", "40001", "40P01"]) {
+      expect(lostARace({ code }), `${code} is losing a race`).toBe(true);
+      // Through drizzle's wrapper, which is where it actually arrives.
+      expect(lostARace({ message: "Failed query", cause: { code } })).toBe(true);
+    }
+    // Everything else still reaches the caller as itself.
+    for (const other of [{ code: "23505" }, { code: "23502" }, {}, null]) {
+      expect(lostARace(other)).toBe(false);
+    }
   });
 
   it("has the exclusion constraint the database is meant to be carrying", async () => {

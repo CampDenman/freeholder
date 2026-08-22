@@ -24,7 +24,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { violates } from "@/core/db/errors";
+import { lostARace, violates } from "@/core/db/errors";
 import { contacts, timelineEvents } from "@/core/contacts/schema";
 import {
   bookings,
@@ -262,9 +262,11 @@ export const createBooking = defineService({
       })
       .returning()
       .catch((error: unknown) => {
-        if (violates(error, "bookings_no_overlap")) {
-          // The database refused, which is the point: two concurrent requests
-          // for the last slot must not both succeed.
+        // The constraint by name, and the whole family of concurrency
+        // refusals besides. Which one arrives depends on timing rather than on
+        // anything the person did, and translating only the first gives a
+        // friendly sentence most of the time and raw SQL the rest of it.
+        if (violates(error, "bookings_no_overlap") || lostARace(error)) {
           throw new ServiceError(
             "conflict",
             "That time was taken while you were booking it. Choose another.",
@@ -426,7 +428,7 @@ export const rescheduleBooking = defineService({
       })
       .returning()
       .catch((error: unknown) => {
-        if (violates(error, "bookings_no_overlap")) {
+        if (violates(error, "bookings_no_overlap") || lostARace(error)) {
           throw new ServiceError(
             "conflict",
             "That time is taken. Choose another and the appointment stays where it is.",
