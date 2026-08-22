@@ -84,6 +84,7 @@ export interface AdminNavLabels {
   calendar: string;
   calendars: string;
   appointments: string;
+  projects: string;
   quotes: string;
   agreements: string;
   hire: string;
@@ -124,6 +125,7 @@ const LINKS = [
   { href: "/admin/calendar", key: "calendar", module: "connections", Icon: CalendarBlank },
   { href: "/admin/appointments", key: "appointments", module: "scheduling", Icon: CalendarBlank },
   { href: "/admin/calendars", key: "calendars", module: "scheduling", Icon: CalendarBlank },
+  { href: "/admin/projects", key: "projects", module: "projects", Icon: Kanban },
   { href: "/admin/quotes", key: "quotes", module: "quotes", Icon: Receipt },
   { href: "/admin/agreements", key: "agreements", module: "contracts", Icon: Signature },
   { href: "/admin/hire", key: "hire", module: "rentals", Icon: Package },
