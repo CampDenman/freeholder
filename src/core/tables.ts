@@ -35,6 +35,7 @@ export {
   availabilityExceptions,
   bookings,
   bookingParticipants,
+  externalBusyBlocks,
 } from "@/core/scheduling/schema";
 export {
   bookingAudiences,

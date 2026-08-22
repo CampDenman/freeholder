@@ -50,6 +50,7 @@ import availabilityServices from "@/core/scheduling/availability-service";
 import bookingServices from "@/core/scheduling/bookings";
 import resolverServices from "@/core/scheduling/resolver-service";
 import audienceServices from "@/core/scheduling/audiences";
+import calendarFeedServices from "@/core/scheduling/ics-service";
 import roleServices from "@/core/roles/service";
 import cspServices from "@/core/security/csp-reports";
 import seoServices from "@/core/seo/service";
@@ -112,6 +113,7 @@ const services: Service[] = [
   ...bookingServices,
   ...resolverServices,
   ...audienceServices,
+  ...calendarFeedServices,
   ...roleServices,
   ...cspServices,
   ...seoServices,
@@ -143,9 +145,15 @@ export async function onAnyEvent(
   const { fanOut } = await import("@/core/webhooks/service");
   const { fanOutEventNotification } = await import("@/core/notifications/service");
   const { startEventPlaybooks } = await import("@/core/agents/playbook-events");
+  const { mirrorForBookingEvent } = await import("@/core/scheduling/writeback");
   await Promise.all([
     fanOut(eventName, payload, context?.eventId),
     fanOutEventNotification(eventName, payload, context?.eventId),
     startEventPlaybooks(eventName, payload),
+    // Writing a booking to somebody's Google calendar is a consequence of the
+    // booking having committed, not part of making it (C6.06). An upstream
+    // write cannot be rolled back, so it must not happen inside a transaction
+    // that might still fail.
+    mirrorForBookingEvent(eventName, payload),
   ]);
 }

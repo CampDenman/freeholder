@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.02 (#167), plus this change for C6.07 (appointments, and a database that refuses to double-book them). C5 is complete, so the 2026-08-14 commerce deviation is discharged; C4.20–C4.23 remain open alongside C6. C1.27 stays dependency-blocked on remaining C5–C9 items. |
+| Evidence snapshot | `main` through C6.04 (#173), with C6.05 in review (#174) and this change for C6.06 (calendars in and out, without a second copy of every appointment). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.06 ICS publish/import and Google/Microsoft booking write, cancellation and read-busy reconciliation. |
+| Current focus | C6.08 group bookings, waitlists and reschedule tokens — the appointment shapes that hold more than one person. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4603,8 +4603,43 @@ payment, tax, inventory and reporting path, with no floating-point money.
   whoever happens to be signed in. `/admin/calendars/audiences`.
   `0090_booking_audiences.sql`. Coverage in
   `tests/core/booking-audiences.test.ts`.)
-- [ ] **C6.06** Publish/import ICS and implement Google/Microsoft booking write,
+- [x] **C6.06** Publish/import ICS and implement Google/Microsoft booking write,
   cancellation and read-busy reconciliation without general event sync.
+  (Two paths that must not add up to the same hour twice. The ICS path is text
+  and needs no adapter at all (§4.4): `src/core/ics.ts` renders and parses the
+  parts of RFC 5545 this platform emits — folded on **octets**, because the
+  75-limit is bytes on the wire and an emoji in a title is four of them — and
+  `src/core/scheduling/ics-service.ts` gives every calendar a subscribable feed
+  behind a rotatable token, every customer their own appointment as an
+  attachment, and every owner the ability to block time from somebody else's
+  published feed over HTTPS only. The provider path
+  (`src/core/connections/calendar-write.ts`) writes only the bookings
+  Freeholder made, to the account the busy time is already read from, and only
+  where the calendar is marked `bookable` **and** the owner switched
+  `calendar_write` on — §41's line held exactly, not a general event sync.
+  **The subtle part is the reflection**: an appointment written to Google comes
+  back through C4.12's sync as busy time on the same calendar, so the resolver
+  would see it twice and rescheduling would collide with a ghost the exclusion
+  constraint is quite right about. Every upstream write records what it wrote,
+  `reconcileMirroredBookings` claims the reflection by the provider's own id
+  when it arrives — never by title, which would claim a customer's unrelated
+  appointment the first time two were named the same — and the resolver ignores
+  a claimed one. Mirroring runs on the event bus rather than inside the
+  mutation, because an upstream write cannot be rolled back and a booking that
+  failed afterwards would leave a real event on somebody's real calendar.
+  Coverage in `tests/core/ics-and-writeback.test.ts`, including a booking that
+  does not block its own hour twice, a cancelled appointment that tells a
+  subscribed client to remove it, and a removed feed that forgets what it was
+  blocking. Building it also found that two branches had picked the same
+  migration `when`, which Drizzle silently skips forever rather than failing;
+  `tests/core/migration-journal.test.ts` now refuses a journal that would do
+  that. **And it found a hole in the registry gate itself**: `registry-
+  completeness` claimed to check "every service defined anywhere under `src/`"
+  while actually scanning four filenames, so a service in `ics-service.ts` was
+  invisible to the check that exists so nobody has to remember. The gate now
+  reads every `.ts` file, which immediately named this change's own two feed
+  services and `invoicing.processPaymentProviderEvents` — the payment webhook
+  handler, defined and never registered since C5.)
 
 #### Bookings, rentals, and events
 

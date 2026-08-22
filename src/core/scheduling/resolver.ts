@@ -24,12 +24,13 @@
 // needing a therapist *and* a room offers a slot only where both are free. A
 // resolver that picked the person first and then looked for a room would offer
 // slots it cannot honour, which is worse than offering fewer.
-import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { openWindows, type OpenWindow } from "@/core/scheduling/availability";
 import {
   bookings,
   calendars,
   calendarMemberships,
+  externalBusyBlocks,
   HOLDING_STATUSES,
 } from "@/core/scheduling/schema";
 import {
@@ -141,12 +142,34 @@ async function busyFor(
         eq(connectedAccounts.sharedWithBusiness, true),
         sql`${externalCalendars.role} <> 'ignored'`,
         eq(externalEvents.busy, true),
+        // A synced event that is one of our own bookings looking back at us
+        // (C6.06). The booking above already blocks the hour; counting the
+        // reflection too would let an appointment collide with its own ghost
+        // when somebody tries to move it.
+        isNull(externalEvents.bookingId),
         gte(externalEvents.endsAt, window.from),
         lte(externalEvents.startsAt, window.to),
       ),
     );
 
-  return [...booked, ...external].sort(
+  // §4.4's `ExternalBusyBlock`: time imported from a feed rather than through
+  // a connected account. "Never shown to customers, always respected" — and
+  // the ICS path works with no adapter at all, so an owner who connected
+  // nothing still has their other diary honoured.
+  const imported = await tx
+    .select({ startsAt: externalBusyBlocks.startsAt, endsAt: externalBusyBlocks.endsAt })
+    .from(externalBusyBlocks)
+    .where(
+      and(
+        eq(externalBusyBlocks.calendarId, calendarId),
+        eq(externalBusyBlocks.busy, true),
+        isNull(externalBusyBlocks.bookingId),
+        gte(externalBusyBlocks.endsAt, window.from),
+        lte(externalBusyBlocks.startsAt, window.to),
+      ),
+    );
+
+  return [...booked, ...external, ...imported].sort(
     (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
   );
 }
