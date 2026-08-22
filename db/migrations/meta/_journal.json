@@ -680,6 +680,13 @@
       "when": 1787071000000,
       "tag": "0096_contract_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1787071100000,
+      "tag": "0097_projects",
+      "breakpoints": true
     }
   ]
 }

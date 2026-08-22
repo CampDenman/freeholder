@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.12 (#180), plus this change for C6.14 (templates, countersignature and export). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.14 (#181), plus this change for C6.15 (projects: the record a job lives in). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.15 projects — the record that links a contact, a quote, an agreement, the bookings and the invoices into one job. |
+| Current focus | C6.13 conversion — turning an accepted quote into a project, its agreement, its bookings and its invoices in one transaction. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4872,8 +4872,41 @@ payment, tax, inventory and reporting path, with no floating-point money.
   and independently checkable, in a format that will still open in thirty
   years. `/admin/agreements`. `0096_contract_templates.sql`. Coverage in
   `tests/core/contract-templates.test.ts`.)
-- [ ] **C6.15** Build project/work records linking contacts, services, quotes,
+- [x] **C6.15** Build project/work records linking contacts, services, quotes,
   contracts, bookings, tasks, files, outcomes and invoices.
+  (**This is the same entity C8.01 will publish, not a second one.** §4.7's
+  `Project` already carries `client_contact_id`, `services[]` and
+  `occurred_on` — operational facts — because a case study *is* a job that got
+  finished. Two tables would fork exactly the way the contact spine exists to
+  prevent: the wedding in the portfolio and the wedding in the diary would stop
+  being the same wedding the first time somebody edited one. So C6.15 builds
+  the working half and C8.01 adds the publishing half (blocks, cover, SEO,
+  featured) to the same row, which is what lets a business decide *after* the
+  job whether it becomes a case study.
+  **It links rather than copies.** Every attachment is a pointer, so the
+  invoice on a project *is* the invoice in the ledger and the booking *is* the
+  one in the diary — a project holding its own total would be a second answer
+  to what the customer owes, and the first thing anybody would do is quote the
+  wrong one. The link table is polymorphic and its ids are untyped, so the
+  module `requires: ["core"]` alone: it attaches quotes, agreements, bookings,
+  invoices and hires while importing none of them, installs on an instance with
+  half of those switched off, and lets C6.13 add a kind without a dependency
+  appearing. `projects.forSubject` is the reverse lookup, so an invoice screen
+  says "part of the Henderson kitchen" without invoicing learning what a
+  project is.
+  Smaller decisions worth the reading: the client is nullable because internal
+  work is real work; `clientDisplayName` exists so "a Fortune 500 retailer" is
+  a first-class option rather than a fib; the slug is set once and never
+  updated, because it is the address C8.01 publishes at (§5); `completedAt` is
+  stamped by the platform rather than typed, since a completion date somebody
+  can edit is one nothing can be reported from; an outcome's `method` sits
+  beside its claim because §4.7's point is that a business which cannot say how
+  it measured something is making it up, and the screen says so out loud when
+  it is blank; and before/after is a **pairing** enforced in both directions —
+  neither half can exist without the other's key, because retrofitting that
+  means asking an owner to re-upload work they have already filed.
+  `/admin/projects`. `0097_projects.sql`. Coverage in
+  `tests/core/projects.test.ts`.)
 - [ ] **C6.16** Build time entries against projects/bookings, rate resolution,
   billable review and one-step conversion to invoice lines.
 - [ ] **C6.17** Build manual invoicing, recurring/payment-plan schedules,
