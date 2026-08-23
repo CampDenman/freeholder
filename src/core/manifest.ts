@@ -102,6 +102,8 @@ export default defineModule({
       "contact.dataRequestVerified",
       "contact.dataRequestCompleted",
       "contact.dataErased",
+      "task.created",
+      "task.completed",
       "job.cancelled",
       "job.retried",
       "job.deadLettersRedriven",

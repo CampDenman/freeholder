@@ -91,6 +91,7 @@ export {
   mergeCandidates,
   timelineEvents,
 } from "@/core/contacts/schema";
+export { tasks } from "@/core/tasks/schema";
 export { auditLog } from "@/core/events/schema";
 export {
   assets,

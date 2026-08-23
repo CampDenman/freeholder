@@ -132,6 +132,7 @@ export default async function AdminLayout({
               calendars: t("calendars.title"),
               appointments: t("appointments.title"),
               pipeline: t("pipeline.title"),
+              tasks: t("tasks.title"),
               projects: t("projects.title"),
               time: t("time.title"),
               quotes: t("quotes.title"),

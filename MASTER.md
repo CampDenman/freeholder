@@ -177,7 +177,10 @@ freeholder/
 │
 └── platform/                # Operate & extend
     ├── admin                # The admin app shell: dashboards, CRUD for everything
-    ├── crm                  # Pipelines & deals, tasks, notes, segments, consent, imports, duplicate queue
+    ├── crm                  # Pipelines & deals, notes, segments, consent, imports, duplicate queue
+    │                        # (tasks live in core/tasks: §4.14 attaches them to
+    │                        # five entities across four modules, so no module
+    │                        # should have to depend on another to have one)
     ├── inbox                # The human surface over core/messaging: one thread per contact, every channel, assignable
     ├── automations          # Visual trigger → condition → action over spine events; modules contribute verbs
     ├── portal               # Customer portal: their quotes, invoices, bookings, galleries, files, messages
@@ -2964,12 +2967,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.16 (#184), with C6.17 in review (#185) closing C6, plus this change for C7.01. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Last reconciled | 2026-08-22 |
+| Evidence snapshot | `main` through C7.01 (#186), with C6 closed by C6.17 (#185), plus this change for C7.02. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.02 tasks attachable to anything — the second of the CRM depth block. |
+| Current focus | C7.03 notes with mentions, pinning and timeline projection. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5068,8 +5071,29 @@ equipment, classes and expertise without double-booking or duplicated records.
   JavaScript — one small form per card — because a board an owner cannot use on
   a phone with a bad connection is not a board. `/admin/pipeline`.
   `0101_pipelines.sql`. Coverage in `tests/core/pipelines.test.ts`.)
-- [ ] **C7.02** Build tasks attachable to any entity, assignment, due/reminder,
+- [x] **C7.02** Build tasks attachable to any entity, assignment, due/reminder,
   priority, recurrence, completion and briefing/notification integration.
+  (One work list, and it lives in `core/tasks` rather than the CRM module: §4.14
+  attaches a task to a contact, deal, invoice, booking or project — five owners
+  across four modules — and putting it inside any one of them would make every
+  other module depend on that one to have a to-do list. §11's tree is updated to
+  match. The subject is a nullable pair, so "ring the accountant" is a real task
+  about nothing, and it is resolved rather than trusted: creating a task looks
+  the subject up, refuses if it is not there, and takes `contact_id` from it, so
+  a task about an *invoice* reaches the customer's timeline without the timeline
+  knowing what an invoice is. C6.15's `project_tasks` rows were copied in and
+  `projects.addTask` now writes through `tasks.create`, so a project's checklist
+  and "what am I meant to be doing today" cannot disagree; the old table is left
+  in place because the schema-compat gate is right that dropping it in the same
+  release would break rollback, and the contract half is one `DROP TABLE` later.
+  Recurrence advances on completion and never on a clock, reusing C6.17's
+  cadence arithmetic — now `core/dates/cadence` — so a fortnight away leaves one
+  chore rather than fourteen; cancelling does not recur. Reminders are claimed in
+  the `update … returning` that finds them, so two workers cannot send the same
+  nudge twice, and an unassigned one is skipped rather than broadcast because the
+  briefing already carries it. `briefing.tasks` reports only what is late or due
+  today and only the person's own or nobody's. `/admin/tasks`, no JavaScript.
+  `0102_tasks.sql`. Coverage in `tests/core/tasks.test.ts`.)
 - [ ] **C7.03** Build notes with mentions, pinning, visibility, edit history and
   entity/contact timeline projection.
 - [ ] **C7.04** Build the canonical segment query model, static/dynamic modes,

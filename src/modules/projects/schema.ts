@@ -145,45 +145,16 @@ export const projectLinks = pgTable(
   ],
 );
 
-export const TASK_STATUSES = ["todo", "doing", "blocked", "done"] as const;
-
-/**
- * The work inside the work.
- *
- * Deliberately thin: a list with an order, a state and somebody's name on it.
- * A project tracker with dependencies, burndown and sub-tasks is a different
- * product, and an owner who needs one already has it open in another tab —
- * what they do not have is those tasks sitting beside the quote, the bookings
- * and the invoice for the same job.
- */
-export const projectTasks = pgTable(
-  "project_tasks",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
-    title: text("title").notNull(),
-    status: text("status", { enum: TASK_STATUSES }).notNull().default("todo"),
-    assigneeUserId: uuid("assignee_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    dueOn: date("due_on"),
-    position: integer("position").notNull().default(0),
-    doneAt: timestamp("done_at", { withTimezone: true }),
-    createdAt: createdAtColumn(),
-    updatedAt: updatedAtColumn(),
-  },
-  (t) => [
-    index("project_tasks_project_idx").on(t.projectId, t.position),
-    index("project_tasks_assignee_idx").on(t.assigneeUserId, t.status),
-    check("project_tasks_title", sql`char_length(${t.title}) between 1 and 300`),
-    check(
-      "project_tasks_done_has_time",
-      sql`${t.status} <> 'done' or ${t.doneAt} is not null`,
-    ),
-  ],
-);
+// The checklist moved to core's `tasks` in C7.02, and the definition went with
+// it: a table this file still declared would be a second answer to "what is on
+// the list", and `registry-completeness` is right to insist that every table a
+// schema file names is a table the platform actually uses.
+//
+// `project_tasks` still exists in the database. `0102_tasks.sql` copied its
+// rows across and stopped writing to it, but dropping it in the same release
+// that stopped using it is what the schema-compat gate refuses — the previous
+// release still selects from it, and a rollback would find it gone. The
+// contract half is one `DROP TABLE project_tasks` in a later release.
 
 /**
  * The measurable claim, if there is one (§4.7's `ProjectOutcome`).

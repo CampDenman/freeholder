@@ -3,7 +3,6 @@
 export {
   projects,
   projectLinks,
-  projectTasks,
   projectOutcomes,
   projectFiles,
 } from "./schema";
