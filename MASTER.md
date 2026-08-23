@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.16 (#184), plus this change for C6.17 — **which closes C6**. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C6.16 (#184), with C6.17 in review (#185) closing C6, plus this change for C7.01. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.01 — the first of the marketing and audience block, now that C6's engines are complete. |
+| Current focus | C7.02 tasks attachable to anything — the second of the CRM depth block. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5029,8 +5029,45 @@ equipment, classes and expertise without double-booking or duplicated records.
 
 #### CRM as the daily work surface
 
-- [ ] **C7.01** Build configurable lifecycle and deal pipelines, stages,
+- [x] **C7.01** Build configurable lifecycle and deal pipelines, stages,
   kanban/list views, ownership, probability, loss reasons and transition events.
+  (§4.1 sets two constraints and they shape everything. **"A deal is
+  optional"** — a retail store never opens one — so the module is genuinely
+  inert: nothing is seeded at boot, core creates no deals, and opening one
+  before a pipeline exists says "set up a sales pipeline" rather than inventing
+  a board the owner never chose. `crm.installDefaults` offers §4.1's ladder
+  (Subscriber → Lead → Prospect → Customer → Repeat → Advocate, and Enquiry →
+  Quoted → Negotiating → Won/Lost) at the moment somebody decides they want it.
+  **"The hardcoded lifecycle_stage becomes a definable pipeline"** is the
+  delicate half, because `contacts.lifecycleStage` is a spine column that price
+  lists, segments and reports already read — two independently editable notions
+  of what stage somebody is at would be exactly the fork the contact spine
+  exists to prevent. So there is one write path and one direction of
+  derivation: the owner's fine stage lives in `contact_stages` and is the
+  truth, **every lifecycle stage declares which coarse value it derives**
+  (enforced — a lifecycle stage without one is refused, because the spine value
+  would go stale the first time anybody used it), and `crm.moveContactStage`
+  writes both. Nothing edits the enum independently and every existing reader
+  keeps working. "Advocate" derives `repeat`, which is the honest nearest
+  truth rather than a new enum value nothing else understands.
+  Probability sits on the **stage** as well as the deal, because "what is my
+  pipeline worth" is a question about where things sit and an owner who must
+  price every deal by hand will not; the deal's own figure is null unless it is
+  unusual, so nothing holds a copy to keep in step. A stage that means "lost"
+  refuses the move without a reason — §4.1 says the reason is the only thing a
+  lost deal is still worth, and the moment it is lost is the only moment
+  anybody knows it — and reopening clears `closedAt` so a deal is not
+  permanently stamped with the day it was briefly lost. Deleting a stage that
+  has anything in it is refused rather than silently moving things nowhere
+  anybody chose. On a merge the survivor **keeps its own stage** rather than
+  inheriting the duplicate's, which would drag somebody backwards down the
+  ladder. Transitions are service-layer events that write the timeline and
+  queue `deal.moved`/`won`/`lost` and `contact.stageChanged`, so §4.1's
+  "entered Prospect → send case-study sequence" hangs off an event rather than
+  a branch inside the service. The board is a kanban that works with no
+  JavaScript — one small form per card — because a board an owner cannot use on
+  a phone with a bad connection is not a board. `/admin/pipeline`.
+  `0101_pipelines.sql`. Coverage in `tests/core/pipelines.test.ts`.)
 - [ ] **C7.02** Build tasks attachable to any entity, assignment, due/reminder,
   priority, recurrence, completion and briefing/notification integration.
 - [ ] **C7.03** Build notes with mentions, pinning, visibility, edit history and
