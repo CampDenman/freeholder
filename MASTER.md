@@ -2971,11 +2971,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.04 (#189), plus this change for C7.05. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.05 (#191), plus this change for C7.06. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.06 saved views with durable URL and state semantics. |
+| Current focus | C7.07 CSV import as map → validate → dry-run → commit → reversible. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5184,8 +5184,31 @@ equipment, classes and expertise without double-booking or duplicated records.
   profile. `/admin/scoring` shows every rule in full; the contact page shows the
   number and every reason for it. `0105_scoring.sql`. Coverage in
   `tests/core/scoring.test.ts`.)
-- [ ] **C7.06** Build saved views with filters/columns/sort, ownership/sharing
-  and durable URL/state semantics across major admin entities.
+- [x] **C7.06** Build saved views with filters/columns/sort, ownership/sharing
+  and durable URL/state semantics across major admin entities. (The durable-URL
+  half was already decided, at the top of the contacts list: "filtering is a GET
+  form reading searchParams, not client state — it works before JavaScript
+  loads, the back button behaves, and a filtered view is a URL somebody can
+  bookmark or send to their bookkeeper." So **a saved view is a named URL**, not
+  a second filtering mechanism: saving captures the parameters already in the
+  address bar, opening one is an ordinary link, and the back button, a bookmark,
+  a pasted link and a saved view are the same thing. Arriving at a list with no
+  parameters *redirects* to the person's default rather than rendering it
+  silently, so the address bar never disagrees with the page. Columns ride in
+  the query string too, derived from the stored choice, so a link carries them
+  as faithfully as the filters. **Shared means visible, never editable** — a
+  saved filter a colleague can quietly redefine answers a different question the
+  next time it opens — and making somebody else's shared view your default takes
+  a private copy rather than writing to their row. **A default is per person**,
+  enforced by a partial unique index, because two people want different first
+  screens. An unknown filter is kept and ignored rather than refusing to load,
+  so a view outlives a renamed parameter. The entity registry is the usual seam:
+  core declares contacts and tasks, the quotes module declares its own, and a
+  module switched off takes its views with it instead of leaving a dead entry.
+  Wired on `/admin/contacts` (with the column picker, the only list here that is
+  a real table), `/admin/tasks`, and `/admin/quotes` — which also gained the
+  status filter it needed to have state worth saving. `0106_saved_views.sql`.
+  Coverage in `tests/core/saved-views.test.ts`.)
 - [ ] **C7.07** Build CSV import as map → validate → dry-run diff → commit →
   audit → reversible batch, always using contact resolution.
 

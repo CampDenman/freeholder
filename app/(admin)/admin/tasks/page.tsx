@@ -17,6 +17,9 @@ import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primit
 import { currentBusiness } from "@/core/settings/read";
 import { CADENCES, listTasks, TASK_PRIORITIES } from "@/core/tasks/service";
 import { listRoleUsers } from "@/core/roles/service";
+import { defaultView, meaningfulParams, toQueryString } from "@/core/views/service";
+import { redirect } from "next/navigation";
+import { ViewBar } from "../ViewBar";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -45,6 +48,16 @@ export default async function TasksPage({
   const actor = await requireStaffActor("crm");
   const query = await searchParams;
   const mine = query.view === "mine";
+  const applied = meaningfulParams(query);
+
+  // Nothing asked for: open whatever this person keeps as their first screen,
+  // by navigating to it (C7.06). Rendering it silently would leave the address
+  // bar disagreeing with the page.
+  if (Object.keys(applied).length === 0) {
+    const preferred = await defaultView.call({ entity: "tasks" }, actor);
+    const preset = preferred ? toQueryString(preferred.filters) : "";
+    if (preset) redirect(`/admin/tasks?${preset}`);
+  }
   const [t, business, open, staff] = await Promise.all([
     getT(),
     currentBusiness(),
@@ -181,6 +194,10 @@ export default async function TasksPage({
           </a>
         </p>
       </div>
+
+      {/* The same bar as every other list: a saved view here is a named URL
+          exactly as it is on contacts (C7.06). */}
+      <ViewBar actor={actor} entity="tasks" params={applied} />
 
       {query.saved ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">

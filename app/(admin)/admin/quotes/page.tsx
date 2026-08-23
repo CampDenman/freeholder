@@ -11,7 +11,10 @@ import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primit
 import { formatMoney } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { listContacts } from "@/core/contacts/service";
-import { listQuotes } from "@/modules/quotes/service";
+import { listQuotes, QUOTE_STATUSES } from "@/modules/quotes/service";
+import { defaultView, meaningfulParams, toQueryString } from "@/core/views/service";
+import { redirect } from "next/navigation";
+import { ViewBar } from "../ViewBar";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -36,15 +39,26 @@ const ORDER = ["negotiating", "viewed", "sent", "draft", "accepted", "declined",
 export default async function QuotesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; status?: string }>;
 }) {
   const actor = await requireStaffActor("quotes");
-  const [t, business, quotes, people, query] = await Promise.all([
+  const query = await searchParams;
+  const applied = meaningfulParams(query);
+
+  // Nothing asked for: open this person's kept first screen by navigating to
+  // it, so the address bar always describes the page (C7.06).
+  if (Object.keys(applied).length === 0) {
+    const preferred = await defaultView.call({ entity: "quotes" }, actor);
+    const preset = preferred ? toQueryString(preferred.filters) : "";
+    if (preset) redirect(`/admin/quotes?${preset}`);
+  }
+
+  const status = QUOTE_STATUSES.find((one) => one === query.status);
+  const [t, business, quotes, people] = await Promise.all([
     getT(),
     currentBusiness(),
-    domainOrNull(listQuotes.call({ limit: 100 }, actor)),
+    domainOrNull(listQuotes.call({ status, limit: 100 }, actor)),
     domainOrNull(listContacts.call({ limit: 100 }, actor)),
-    searchParams,
   ]);
 
   const locale = business?.defaultLocale ?? "en";
@@ -59,6 +73,31 @@ export default async function QuotesPage({
         <h1 className="text-xl font-bold tracking-tight">{t("quotes.title")}</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("quotes.intro")}</p>
       </div>
+
+      {/* Filtering is a GET form and a saved view is a named URL, so the two
+          are the same mechanism (C7.06). */}
+      <ViewBar actor={actor} entity="quotes" params={applied} />
+
+      <form method="get" className="flex flex-wrap items-end gap-3">
+        <label className="grid gap-1 text-sm">
+          <span className="text-ink-muted">{t("quotes.filter.status")}</span>
+          <select
+            name="status"
+            defaultValue={status ?? ""}
+            className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+          >
+            <option value="">{t("quotes.filter.any")}</option>
+            {QUOTE_STATUSES.map((one) => (
+              <option key={one} value={one}>
+                {t(`quote.status.${one}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button type="submit" variant="quiet">
+          {t("quotes.filter.apply")}
+        </Button>
+      </form>
 
       {query.saved ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
