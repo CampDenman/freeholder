@@ -230,9 +230,42 @@ export const replyToConversation = defineService({
         subject: thread.subject ?? "Re: your message",
         text: input.body,
       });
+    } else if (thread.replyChannel === "sms" || thread.replyChannel === "mms") {
+      // C7.10's adapter. `messaging.sendSms` records the message itself, with
+      // what the carrier charged, so this returns early rather than recording a
+      // second one.
+      const [number] = await ctx.tx
+        .select({ phone: contacts.phone })
+        .from(contacts)
+        .where(eq(contacts.id, thread.contactId))
+        .limit(1);
+      if (!number?.phone) {
+        throw new ServiceError(
+          "validation",
+          "There is no number for this person, so there is nowhere to send a reply.",
+        );
+      }
+      const sent = (await ctx.call(getService("messaging.sendSms"), {
+        contactId: thread.contactId,
+        conversationId: thread.id,
+        to: number.phone,
+        body: input.body,
+        // A reply to somebody who wrote in rides the existing relationship,
+        // which is what §4.14 means by transactional.
+        purpose: "transactional",
+        idempotencyKey: `reply:${thread.id}:${Date.now()}`,
+      })) as { sent: boolean; reason: string | null; messageId: string | null };
+      if (!sent.sent || !sent.messageId) {
+        throw new ServiceError("conflict", sent.reason ?? "The message could not be sent.");
+      }
+      if (input.close) {
+        await ctx.call(getService("conversations.setStatus"), { id: thread.id, status: "closed" });
+      }
+      ctx.setSubject("conversation", thread.id);
+      return { id: sent.messageId, channel: thread.replyChannel };
     } else {
-      // C7.10 brings the SMS adapter, C7.15 chat and social. Until then the
-      // honest answer is that this cannot be sent from here.
+      // C7.15 brings chat and social. Until then the honest answer is that
+      // this cannot be sent from here.
       throw new ServiceError(
         "validation",
         `Replying by ${thread.replyChannel} is not connected yet, so nothing would reach them.`,

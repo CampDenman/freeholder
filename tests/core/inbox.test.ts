@@ -142,12 +142,18 @@ describe.runIf(hasDatabase)("inbox", { timeout: 90_000 }, () => {
   });
 
   // The rule that keeps a thread honest: nothing goes in it that did not go out.
+  //
+  // C7.10 gave the SMS branch a real adapter, so the refusal on an instance with
+  // no provider configured is now the adapter's own sentence rather than the
+  // generic one — more useful, and the reason this test names the behaviour it
+  // cares about instead of a message. What must not change is that the refusal
+  // happens and nothing is written.
   it("refuses to reply on a channel nothing can send on yet", async () => {
     const one = await thread({ channel: "sms", phone: "+447700900123", email: undefined });
     const refused = await failure(
       replyToConversation.call({ id: one.id, body: "On my way" }, OWNER),
     );
-    expect(refused.message).toContain("not connected yet");
+    expect(refused.message).toMatch(/not configured|not connected yet/);
     // And nothing was recorded, so the thread does not claim words the customer
     // never saw.
     const [after] = await db()
@@ -155,6 +161,16 @@ describe.runIf(hasDatabase)("inbox", { timeout: 90_000 }, () => {
       .from(conversations)
       .where(eq(conversations.id, one.id));
     expect(after!.messageCount).toBe(1);
+  });
+
+  // A channel that genuinely has no sender at all, as distinct from one whose
+  // provider is simply unconfigured. C7.15 is what changes this.
+  it("refuses to reply on a channel with no sender at all", async () => {
+    const one = await thread({ channel: "chat" });
+    const refused = await failure(
+      replyToConversation.call({ id: one.id, body: "Hello" }, OWNER),
+    );
+    expect(refused.message).toContain("not connected yet");
   });
 
   it("refuses to reply to somebody with no address", async () => {

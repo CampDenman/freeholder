@@ -136,6 +136,7 @@ export default async function AdminLayout({
               segments: t("segments.title"),
               scoring: t("scoring.title"),
               inbox: t("inbox.title"),
+              messaging: t("messaging.title"),
               projects: t("projects.title"),
               time: t("time.title"),
               quotes: t("quotes.title"),

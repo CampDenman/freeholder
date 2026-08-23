@@ -2980,11 +2980,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.07 (#193), with C7.08 in review (#194), plus this change for C7.09. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.08 (#194), with C7.09 in review (#195), plus this change for C7.10. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.10 SMS adapter contract and one production adapter. |
+| Current focus | C7.11 10DLC/toll-free registration states and unsupported-send prevention. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5307,8 +5307,41 @@ equipment, classes and expertise without double-booking or duplicated records.
   the URL like every other list (C7.06). `/admin/inbox`, no JavaScript, with the
   checkboxes and the action bar in one form. `0109_inbox_search.sql`. Coverage
   in `tests/core/inbox.test.ts`.)
-- [ ] **C7.10** Build SMS adapter contract and at least one production adapter,
-  number provisioning/health and country/capability metadata.
+- [x] **C7.10** Build SMS adapter contract and at least one production adapter,
+  number provisioning/health and country/capability metadata. (The adapter
+  transports; core decides — §4.14 puts consent, quiet hours and who may be
+  messaged in the service layer precisely so no code path can skip them, and a
+  provider SDK invited into the domain is how such a path appears. **Twilio** is
+  the production adapter, chosen because it reaches most countries a small
+  business operates in and because its webhook signature is verifiable without a
+  vendor SDK — an adapter needing a 40MB dependency to check an HMAC cannot ship
+  on a $6 droplet. Its scheme is unusual enough to be spelled out at the call
+  site: the full request URL, then every POSTed parameter sorted by key,
+  concatenated as key+value with no separators, HMAC-SHA1. The exact bytes are
+  verified, never a re-encoded form, and the public URL is configured rather
+  than inferred because behind a proxy those differ and the mismatch is the
+  commonest cause of a webhook that "randomly" fails. **Capabilities are per
+  number, not per provider**: the same account holds a long code that cannot
+  send pictures and a toll-free number that can. **Health is stored with the
+  moment it was checked and with whether the check itself worked** — §4.14 names
+  "an unregistered number silently filtered by carriers" as the commonest way an
+  SMS launch fails, and that failure wearing a green tick is exactly what an
+  unverified "healthy" is, so `health_unknown` is a column and the screen shows
+  three states rather than two. **Numbers are imported, never bought**: buying
+  spends the owner's money on a vendor's terms in a country with its own rules
+  about who may hold one. Sending picks a number by purpose — transactional and
+  marketing stay apart because consent does — and skips any that failed its last
+  check. Cost and segments land on the message in integer minor units (§15.4),
+  because SMS is the one channel where an owner spends real money by accident. A
+  send records `queued` and the carrier's callback records what actually
+  happened, with its own error code verbatim. Inbound goes through
+  `conversations.record` like every other channel, so a text from a stranger
+  becomes a real contact on a thread with their email (C7.08) — which is why
+  that item came first. The webhook boundary verifies before any database
+  effect, and maps a bad signature to 400 (never retry a forgery) and a
+  transient failure to 503 (never drop a customer's text). C7.09's reply now
+  sends by SMS instead of refusing. `/admin/messaging`, `/api/sms/webhooks/twilio`.
+  `0110_messaging_numbers.sql`. Coverage in `tests/core/sms.test.ts`.)
 - [ ] **C7.11** Track 10DLC/toll-free/alphanumeric registration states and
   prevent unsupported/unapproved sending with actionable setup guidance.
 - [ ] **C7.12** Enforce per-purpose/channel consent, STOP/START/HELP before all
