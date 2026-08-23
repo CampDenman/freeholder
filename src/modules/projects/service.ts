@@ -23,16 +23,19 @@ import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { isUniqueViolation } from "@/core/db";
-import { defineService, ServiceError, type Actor } from "@/core/service";
+import { defineService, getService, ServiceError, type Actor } from "@/core/service";
+// The checklist is the platform's one task list (C7.02), not a second one.
+// C6.15 shipped `project_tasks` before that table existed; these services keep
+// their names and their shape and write through core, so a project's list and
+// "what am I meant to be doing today" can never disagree.
+import { TASK_STATUSES, tasks as coreTasks } from "@/core/tasks/schema";
 import {
   PROJECT_FILE_ROLES,
   PROJECT_LINK_KINDS,
   PROJECT_STATUSES,
-  TASK_STATUSES,
   projectFiles,
   projectLinks,
   projectOutcomes,
-  projectTasks,
   projects,
 } from "./schema";
 
@@ -108,6 +111,34 @@ const taskRow = row({
   position: z.number().int(),
   doneAt: timestamp.nullable(),
 });
+
+/**
+ * A core task seen from a project's side.
+ *
+ * The project screens ask for a date rather than a moment, so the day is what
+ * comes back — the checklist means "by Friday", not "by 09:00 on Friday".
+ */
+function asProjectTask(task: {
+  id: string;
+  subjectId: string | null;
+  title: string;
+  status: (typeof TASK_STATUSES)[number];
+  assigneeUserId: string | null;
+  dueAt: Date | null;
+  position: number;
+  completedAt: Date | null;
+}) {
+  return {
+    id: task.id,
+    projectId: task.subjectId!,
+    title: task.title,
+    status: task.status,
+    assigneeUserId: task.assigneeUserId,
+    dueOn: task.dueAt ? task.dueAt.toISOString().slice(0, 10) : null,
+    position: task.position,
+    doneAt: task.completedAt,
+  };
+}
 
 const outcomeRow = row({
   id: uuid,
@@ -364,24 +395,20 @@ export const addTask = defineService({
   output: taskRow,
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const [last] = await ctx.tx
-      .select({ position: projectTasks.position })
-      .from(projectTasks)
-      .where(eq(projectTasks.projectId, input.projectId))
-      .orderBy(desc(projectTasks.position))
-      .limit(1);
-    const [created] = await ctx.tx
-      .insert(projectTasks)
-      .values({
-        projectId: input.projectId,
-        title: input.title,
-        assigneeUserId: input.assigneeUserId ?? null,
-        dueOn: input.dueOn ?? null,
-        position: (last?.position ?? -1) + 1,
-      })
-      .returning();
+    // Through core, in this transaction: the position, the contact the task is
+    // really about, and the event all come from one place rather than being
+    // re-derived here and drifting.
+    const created = await ctx.call(getService("tasks.create"), {
+      subjectType: "project",
+      subjectId: input.projectId,
+      title: input.title,
+      assigneeUserId: input.assigneeUserId ?? null,
+      // A checklist date is a day. Midday UTC rather than midnight, so a
+      // business either side of the line still sees the day it typed.
+      dueAt: input.dueOn ? `${input.dueOn}T12:00:00.000Z` : null,
+    });
     ctx.setSubject("project", input.projectId);
-    return created!;
+    return asProjectTask(created as Parameters<typeof asProjectTask>[0]);
   },
 });
 
@@ -395,21 +422,13 @@ export const setTaskStatus = defineService({
   output: taskRow,
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const [updated] = await ctx.tx
-      .update(projectTasks)
-      .set({
-        status: input.status,
-        // Set on the way in and cleared on the way out, so "done on" is always
-        // the moment it was actually marked rather than the first time it ever
-        // was.
-        doneAt: input.status === "done" ? new Date() : null,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(projectTasks.id, input.id))
-      .returning();
-    if (!updated) throw new ServiceError("not_found", "That task is not here.");
-    ctx.setSubject("project", updated.projectId);
-    return updated;
+    const result = (await ctx.call(getService("tasks.setStatus"), {
+      id: input.id,
+      status: input.status,
+    })) as { task: Parameters<typeof asProjectTask>[0] };
+    const task = asProjectTask(result.task);
+    ctx.setSubject("project", task.projectId);
+    return task;
   },
 });
 
@@ -423,13 +442,10 @@ export const removeTask = defineService({
   output: row({ id: uuid }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const [removed] = await ctx.tx
-      .delete(projectTasks)
-      .where(eq(projectTasks.id, input.id))
-      .returning({ id: projectTasks.id, projectId: projectTasks.projectId });
-    if (!removed) throw new ServiceError("not_found", "That task is not here.");
-    ctx.setSubject("project", removed.projectId);
-    return { id: removed.id };
+    const removed = (await ctx.call(getService("tasks.remove"), { id: input.id })) as {
+      id: string;
+    };
+    return removed;
   },
 });
 
@@ -572,18 +588,20 @@ export const listProjects = defineService({
     if (rows.length > 0) {
       const grouped = await ctx.tx
         .select({
-          projectId: projectTasks.projectId,
+          projectId: coreTasks.subjectId,
           open: sql<number>`count(*)::int`,
         })
-        .from(projectTasks)
+        .from(coreTasks)
         .where(
           and(
-            inArray(projectTasks.projectId, rows.map((r) => r.project.id)),
-            sql`${projectTasks.status} <> 'done'`,
+            eq(coreTasks.subjectType, "project"),
+            inArray(coreTasks.subjectId, rows.map((r) => r.project.id)),
+            // Cancelled counts as off the list: it is not outstanding work.
+            sql`${coreTasks.status} not in ('done', 'cancelled')`,
           ),
         )
-        .groupBy(projectTasks.projectId);
-      for (const entry of grouped) counts.set(entry.projectId, entry.open);
+        .groupBy(coreTasks.subjectId);
+      for (const entry of grouped) counts.set(entry.projectId!, entry.open);
     }
 
     return rows.map(({ project, contactName }) => ({
@@ -627,9 +645,9 @@ export const getProject = defineService({
         .orderBy(asc(projectLinks.kind), asc(projectLinks.createdAt)),
       ctx.tx
         .select()
-        .from(projectTasks)
-        .where(eq(projectTasks.projectId, input.id))
-        .orderBy(asc(projectTasks.position)),
+        .from(coreTasks)
+        .where(and(eq(coreTasks.subjectType, "project"), eq(coreTasks.subjectId, input.id)))
+        .orderBy(asc(coreTasks.position)),
       ctx.tx
         .select()
         .from(projectOutcomes)
@@ -641,7 +659,14 @@ export const getProject = defineService({
         .where(eq(projectFiles.projectId, input.id))
         .orderBy(asc(projectFiles.position)),
     ]);
-    return { ...found.project, contactName: found.contactName, links, tasks, outcomes, files };
+    return {
+      ...found.project,
+      contactName: found.contactName,
+      tasks: tasks.map(asProjectTask),
+      links,
+      outcomes,
+      files,
+    };
   },
 });
 

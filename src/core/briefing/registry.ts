@@ -78,6 +78,10 @@ export interface RegisteredContributor {
  */
 const coreContributors: RegisteredContributor[] = [
   { key: "briefing.appointments", service: "briefing.appointments", source: "core", position: 10 },
+  // What the person themselves owes, above the platform's own complaints: a
+  // task that was due yesterday is the one thing on the page they can finish
+  // this morning (C7.02).
+  { key: "briefing.tasks", service: "briefing.tasks", source: "core", position: 15 },
   { key: "briefing.agentAttention", service: "briefing.agentAttention", source: "core", position: 20 },
   { key: "briefing.reconnects", service: "briefing.reconnects", source: "core", position: 21 },
   { key: "briefing.webhookFailures", service: "briefing.webhookFailures", source: "core", position: 22 },

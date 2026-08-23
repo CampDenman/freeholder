@@ -24,6 +24,9 @@ import { z } from "zod";
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
+// The cadence arithmetic moved to core when C7.02's recurring tasks needed it;
+// re-exported here because it is still what this module's tests name.
+import { advance, nextAfter } from "@/core/dates/cadence";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { db } from "@/core/db";
@@ -68,57 +71,7 @@ const scheduleRow = row({
   occurrences: z.number().int(),
 });
 
-/**
- * One step of a cadence from a given moment.
- *
- * Calendar arithmetic rather than a fixed number of days: a monthly retainer
- * billed on the 31st should land on the 30th in April rather than drifting a
- * day earlier every other month, which is what adding 30 days would do.
- */
-export function advance(
-  from: Date,
-  cadence: (typeof SCHEDULE_CADENCES)[number],
-  intervalCount: number,
-): Date {
-  const next = new Date(from.getTime());
-  if (cadence === "weekly") {
-    next.setUTCDate(next.getUTCDate() + 7 * intervalCount);
-    return next;
-  }
-  const months =
-    cadence === "monthly" ? intervalCount : cadence === "quarterly" ? 3 * intervalCount : 12 * intervalCount;
-  const day = next.getUTCDate();
-  // Move to the first before adding months, so a 31st never rolls into the
-  // next month on its way past February, then clamp back to the last real day.
-  next.setUTCDate(1);
-  next.setUTCMonth(next.getUTCMonth() + months);
-  const lastDay = new Date(
-    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
-  ).getUTCDate();
-  next.setUTCDate(Math.min(day, lastDay));
-  return next;
-}
-
-/**
- * The next occurrence strictly after `now`.
- *
- * Loops the cadence forward rather than adding one step, so a schedule that
- * fell three months behind resumes at the next real date rather than raising
- * three invoices and then still being behind. The bound is a guard against a
- * pathological interval rather than a business rule.
- */
-export function nextAfter(
-  from: Date,
-  now: Date,
-  cadence: (typeof SCHEDULE_CADENCES)[number],
-  intervalCount: number,
-): Date {
-  let next = advance(from, cadence, intervalCount);
-  for (let step = 0; step < 1_000 && next <= now; step++) {
-    next = advance(next, cadence, intervalCount);
-  }
-  return next;
-}
+export { advance, nextAfter };
 
 export const createSchedule = defineService({
   name: "invoicing.createSchedule",

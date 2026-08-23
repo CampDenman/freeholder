@@ -494,6 +494,25 @@ export const runInvoiceRoutines = defineJob({
 });
 
 /**
+ * Nudge whoever asked to be nudged (C7.02).
+ *
+ * Every ten minutes rather than hourly, because a reminder is a promise about
+ * a time: somebody who asked to be told at nine wants it at nine, not at the
+ * top of whichever hour comes next. The sweep claims its work in the statement
+ * that finds it, so running often costs nothing and sends nothing twice.
+ */
+export const sendTaskReminders = defineJob({
+  name: "core.sendTaskReminders",
+  summary: "Tell people about the tasks they asked to be reminded of.",
+  schedule: "*/10 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { sendTaskReminders: send } = await import("@/core/tasks/service");
+    return send();
+  },
+});
+
+/**
  * Read connected mailboxes for who has been in touch (C4.18).
  *
  * Hourly, not by the minute: this is about who wrote to the business, and a
@@ -705,6 +724,7 @@ export default [
   markOverdueHires,
   runInvoiceRoutines,
   expireQuotes,
+  sendTaskReminders,
   submitIndexNow,
   deliverContributions,
   replyContributions,
