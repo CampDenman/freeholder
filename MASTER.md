@@ -177,10 +177,11 @@ freeholder/
 │
 └── platform/                # Operate & extend
     ├── admin                # The admin app shell: dashboards, CRUD for everything
-    ├── crm                  # Pipelines & deals, notes, segments, consent, imports, duplicate queue
-    │                        # (tasks live in core/tasks: §4.14 attaches them to
-    │                        # five entities across four modules, so no module
-    │                        # should have to depend on another to have one)
+    ├── crm                  # Pipelines & deals, segments, consent, imports, duplicate queue
+    │                        # (tasks and notes live in core/tasks and core/notes:
+    │                        # §4.14 attaches both to five entities across four
+    │                        # modules, so no module should have to depend on
+    │                        # another to hold one)
     ├── inbox                # The human surface over core/messaging: one thread per contact, every channel, assignable
     ├── automations          # Visual trigger → condition → action over spine events; modules contribute verbs
     ├── portal               # Customer portal: their quotes, invoices, bookings, galleries, files, messages
@@ -2968,11 +2969,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.01 (#186), with C6 closed by C6.17 (#185), plus this change for C7.02. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.01 (#186), with C7.02 in review (#187), plus this change for C7.03. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.03 notes with mentions, pinning and timeline projection. |
+| Current focus | C7.04 the canonical segment query model — the one definition of "who". |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5094,8 +5095,30 @@ equipment, classes and expertise without double-booking or duplicated records.
   briefing already carries it. `briefing.tasks` reports only what is late or due
   today and only the person's own or nobody's. `/admin/tasks`, no JavaScript.
   `0102_tasks.sql`. Coverage in `tests/core/tasks.test.ts`.)
-- [ ] **C7.03** Build notes with mentions, pinning, visibility, edit history and
-  entity/contact timeline projection.
+- [x] **C7.03** Build notes with mentions, pinning, visibility, edit history and
+  entity/contact timeline projection. (A note is usually the only record of what
+  somebody agreed on a phone call, and every decision follows from that. **An
+  edit files the previous body as a revision**, because a record that can be
+  silently rewritten is not evidence; nothing in the service can overwrite a
+  body without leaving what it said behind, and deleting a note takes its
+  history with it. **Visibility is three states**: `team`, the author's own
+  `private`, and `shared` with the customer — two would force an owner to
+  either hide a note from a colleague or show it to the client. Private is
+  enforced in the *query*, so it holds for the API, exports and every surface
+  nobody has built yet, and a colleague editing or reading the history of one
+  gets "not here" rather than a refusal that confirms it exists. **Mentions are
+  recorded, not parsed from the body**, so renaming somebody never rewrites a
+  note and a mention survives the text changing around it; only the newly
+  mentioned are told, and mentioning somebody in a private note is refused
+  rather than silently never delivered. `team` and `shared` notes project onto
+  the contact timeline whatever they were attached to; `private` ones do not.
+  Unlike a task, erasure **deletes** a note and its revisions — a task is the
+  business's record of work it had to do, a note is what somebody wrote about a
+  person. `NotesPanel` is one component for all seven subjects rather than seven
+  copies of the visibility rule; it is mounted on the contact record and works
+  without JavaScript. §4.14's subject list and its resolver moved to
+  `core/subjects` the moment notes became the second caller. §11's tree updated.
+  `0103_notes.sql`. Coverage in `tests/core/notes.test.ts`.)
 - [ ] **C7.04** Build the canonical segment query model, static/dynamic modes,
   preview/count, explainability and reuse by pricing, campaigns, automation and
   reporting.

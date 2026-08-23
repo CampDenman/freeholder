@@ -45,27 +45,16 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { CADENCES } from "@/core/dates/cadence";
+import { SUBJECT_KINDS } from "@/core/subjects";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 /**
- * What a task can be about.
- *
- * A closed list rather than free text, so a stale subject type is a failing
- * parse rather than a row nobody can render. Adding a kind is one line here
- * and one case in the service's link resolver.
+ * What a task can be about — the shared list, so a note and a task can attach
+ * to exactly the same things (C7.03).
  */
-export const TASK_SUBJECTS = [
-  "contact",
-  "deal",
-  "quote",
-  "invoice",
-  "booking",
-  "project",
-  "contract",
-  "order",
-] as const;
+export const TASK_SUBJECTS = SUBJECT_KINDS;
 
 /**
  * Four levels, because three is not enough and five is a taxonomy.
