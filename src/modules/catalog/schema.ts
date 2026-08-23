@@ -20,6 +20,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { contacts } from "@/core/contacts/schema";
+import { segments } from "@/core/segments/schema";
 import { assets } from "@/core/media/schema";
 import { taxCategories } from "@/modules/invoicing/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -426,6 +427,17 @@ export const priceLists = pgTable(
     customerGroupId: uuid("customer_group_id").references(() => customerGroups.id, {
       onDelete: "restrict",
     }),
+    /**
+     * Who this list is for, as a segment (§4.14, C7.04).
+     *
+     * `customer_group_id` above says the same thing in a poorer language — one
+     * tag and one lifecycle stage — and it is exactly the second answer to
+     * "who" that §4.14 warns about. A segment can say "customers in Ontario who
+     * bought twice", which is what a wholesale list actually means. The old
+     * column stays for now because the previous release still reads it; a list
+     * may name either, and a list naming both must satisfy both.
+     */
+    segmentId: uuid("segment_id").references(() => segments.id, { onDelete: "restrict" }),
     contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "restrict" }),
     startsAt: timestamp("starts_at", { withTimezone: true }),
     endsAt: timestamp("ends_at", { withTimezone: true }),
@@ -437,6 +449,7 @@ export const priceLists = pgTable(
   (t) => [
     index("price_lists_resolve_idx").on(t.currency, t.active, t.kind, t.priority),
     index("price_lists_group_idx").on(t.customerGroupId),
+    index("price_lists_segment_idx").on(t.segmentId),
     index("price_lists_contact_idx").on(t.contactId),
     check("price_lists_name_valid", sql`char_length(${t.name}) between 1 and 120`),
     check("price_lists_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),

@@ -47,6 +47,7 @@ import mediaServices from "@/core/media/service";
 import notificationServices from "@/core/notifications/service";
 import taskServices from "@/core/tasks/service";
 import noteServices from "@/core/notes/service";
+import segmentServices from "@/core/segments/service";
 import schedulingServices from "@/core/scheduling/service";
 import availabilityServices from "@/core/scheduling/availability-service";
 import bookingServices from "@/core/scheduling/bookings";
@@ -93,6 +94,7 @@ const services: Service[] = [
   ...calendarBusyServices,
   ...taskServices,
   ...noteServices,
+  ...segmentServices,
   ...briefingServices,
   ...briefingContributorServices,
   ...briefingPlaybookSection,

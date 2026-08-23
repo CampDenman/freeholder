@@ -85,6 +85,10 @@ import procurementServices, {
   setVariantStockPolicy,
   subscribeBackInStock,
 } from "./procurement";
+// Imported for its side effect: registering what a segment may ask about
+// commerce (C7.04). A shop instance can segment on orders; an instance with
+// this module switched off has no such field, which is the honest answer.
+import "./segment-fields";
 import shippingServices, {
   addShippingRateBand,
   createDeliveryWindow,

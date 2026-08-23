@@ -104,6 +104,8 @@ export default defineModule({
       "contact.dataErased",
       "task.created",
       "note.written",
+      "segment.saved",
+      "segment.captured",
       "task.completed",
       "job.cancelled",
       "job.retried",
