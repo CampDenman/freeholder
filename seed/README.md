@@ -29,6 +29,8 @@ seed/
 │   └── content.ts            # Med Spa Edition — Your Med Spa, no Lumière fiction
 ├── plastic-surgery/
 │   └── content.ts            # Plastic Surgery Edition — placeholder practice, no Renata Cole
+├── dental/ … general-business/
+│   └── content.ts            # Remaining certified WeVibeSites Industry Editions
 └── select.ts                 # FREEHOLDER_EDITION selects an industry pack
 ```
 
