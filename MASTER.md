@@ -861,14 +861,23 @@ are strict enough to belong in the spine instead of a plugin.
 | Entity | Purpose | Key fields |
 |---|---|---|
 | `MessagingNumber` | A number the business sends and receives on. | provider, e164, country, kind (long_code/toll_free/short_code/10dlc), capabilities (sms/mms), registration (jsonb: brand, campaign, status, submitted_at), assigned_to_calendar_id (nullable), default_for (transactional/marketing/support), status |
-| `Conversation` | One thread with one person on one channel. Threads into the §30 inbox. | contact_id, channel (sms/mms/email/chat/social), number_id, subject, status (open/snoozed/closed), assignee_user_id, last_inbound_at, last_outbound_at, unread |
-| `Message` | One message either way. | conversation_id, direction (inbound/outbound), body, media_asset_ids[], template_id, sent_by (user/system/automation/agent), provider_ref, segments, cost_cents, at |
+| `Conversation` | One thread with one person. Threads into the §30 inbox. | contact_id, reply_channel (form/email/sms/mms/chat/assistant/social — how a reply goes out, not what the thread is limited to), number_id, thread_key, subject, status (open/snoozed/closed), assignee_user_id, last_inbound_at, last_outbound_at, unread, message_count |
+| `Message` | One message either way. | conversation_id, contact_id, direction (inbound/outbound), **channel** (how *this* message arrived; never changes), body, media_asset_ids[], template_id, sent_by (contact/user/system/automation/agent), provider_ref, segments, cost_minor, cost_currency, occurred_at |
 | `MessageDelivery` | What the carrier said happened. | message_id, status (queued/sent/delivered/failed/undelivered/read), error_code, error_text, at |
 | `KeywordRule` | Inbound words that mean something. | keyword, match (exact/prefix), action (opt_out/opt_in/help/auto_reply/tag/route/booking_confirm), reply_body, active |
 | `MessagingWindow` | When a person may be messaged, in their own timezone. | scope (global/segment/contact), quiet_from, quiet_to, timezone_source (contact/business), max_per_day, applies_to (marketing/transactional/all) |
 
 **Rules:**
 
+- **A message has a channel; a conversation has a reply channel.** This
+  resolves what were two readings of the same section: the entity row used to
+  say a conversation was "on one channel", while the §4.14 inbox rule says a
+  form submission, the email reply to it and a text about the same job "belong
+  in one conversation". Both are protecting something real — the second wants
+  one thread per person, the first wants replying to have one unambiguous
+  route. So the channel a message arrived on is a fact about that message and
+  never changes, while the channel a reply would use is a fact about the thread
+  and follows the last thing that happened. (Settled 2026-08-23, C7.08.)
 - **An inbound message resolves to a Contact, always.** The phone number is
   normalised to E.164 and passed to `contacts.resolve` (never `create`) through
   `ctx.callAsSystem`, so a text from an unknown number produces a real contact
@@ -2971,11 +2980,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.06 (#192), plus this change for C7.07. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.06 (#192), with C7.07 in review (#193), plus this change for C7.08. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.08 canonical conversations threaded by contact — the messaging half of C7. |
+| Current focus | C7.09 inbox workflows: assign, snooze, close, search, bulk. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5243,8 +5252,35 @@ equipment, classes and expertise without double-booking or duplicated records.
 
 #### Conversations and messaging
 
-- [ ] **C7.08** Build canonical conversations/messages/deliveries threaded by
+- [x] **C7.08** Build canonical conversations/messages/deliveries threaded by
   contact across form, email, SMS/MMS, chat, assistant and social sources.
+  (Building this first meant settling a contradiction inside §4.14: its entity
+  row called a conversation "one thread with one person on one channel", while
+  its own inbox rule says a form submission, the email reply to it and a text
+  about the same job "belong in one conversation". Both protect something real,
+  so the resolution keeps both — **a message carries the channel it arrived on
+  and never changes; a conversation carries the channel a reply would use, and
+  that follows the last thing that happened.** §4.14's entity rows and rules are
+  amended in the same change to say so. Everything else follows: an inbound
+  message resolves to a contact *always*, through `contacts.resolve` and never
+  `create`, including a text from an unknown number — matched on the number
+  first, then keyed on a reserved non-routable placeholder address so nobody
+  mistakes it for something deliverable. Threading is by contact first and
+  provider thread id second, with a fourteen-day window, because a reply three
+  days later is the same conversation and one three months later is a new
+  subject. Ingest is idempotent on `provider_ref` — every provider retries, and
+  a duplicate is a duplicate in the inbox *and* on the bill — and the unique
+  index is the guard rather than a read-then-write. An inbound message reopens a
+  closed thread, because the alternative is a customer talking to a closed door;
+  an outbound one deliberately does not clear `unread`, because replying to one
+  of three waiting messages does not mean the other two were read. Delivery is a
+  table of observed events with the provider's own codes kept verbatim, unique
+  per message and status. Cost is integer minor units with its currency beside
+  it. The forms module now records a submission as an inbound `form` message, so
+  the threading claim is exercised by a real source rather than only by a test.
+  C7.09 builds the inbox workflows on this, C7.10 the SMS adapter, C7.12
+  consent. `/admin/contacts/[id]` shows the thread. `0108_conversations.sql`.
+  Coverage in `tests/core/conversations.test.ts`.)
 - [ ] **C7.09** Build assign/snooze/close/unread/search/filter/bulk workflows,
   reply context and one unified inbox without reimplementing a mail client.
 - [ ] **C7.10** Build SMS adapter contract and at least one production adapter,

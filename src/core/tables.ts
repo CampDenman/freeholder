@@ -97,6 +97,7 @@ export { segments, segmentMembers } from "@/core/segments/schema";
 export { scoringRules, contactScoreAwards } from "@/core/scoring/schema";
 export { savedViews } from "@/core/views/schema";
 export { contactImports, contactImportRows } from "@/core/import/contacts-schema";
+export { conversations, messages, messageDeliveries } from "@/core/messaging/schema";
 export { auditLog } from "@/core/events/schema";
 export {
   assets,

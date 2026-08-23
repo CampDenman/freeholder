@@ -14,7 +14,7 @@
 import { z } from "zod";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService, ServiceError } from "@/core/service";
+import { defineService, getService, ServiceError } from "@/core/service";
 import { isUniqueViolation } from "@/core/db";
 import {
   registerContactReference,
@@ -555,6 +555,22 @@ export const submitForm = defineService({
           subjectId: submission!.id,
           payload: { form: form.slug, name: form.name },
         });
+        // A submission is an inbound message on the `form` channel (C7.08).
+        // §4.14: a form submission, the email reply to it and a text about the
+        // same job belong in one conversation — which only holds if the
+        // submission is *in* the conversation rather than beside it. Elevated
+        // because this path is anonymous by definition.
+        await ctx.callAsSystem(getService("conversations.record"), {
+          contactId,
+          direction: "inbound",
+          channel: "form",
+          subject: form.name,
+          sentBy: "contact",
+          // Whatever they actually wrote, falling back to a readable summary of
+          // the answers: a thread whose first message is "[object Object]" is
+          // worse than no thread.
+          body: messageFrom(fields, data) || summarise(fields, data),
+        });
       }
       ctx.queueEvent("forms.submitted", {
         formId: form.id,
@@ -572,6 +588,44 @@ export const submitForm = defineService({
 });
 
 /* --------------------------------------------------------------- reviewing */
+
+/**
+ * The words the person actually typed (C7.08).
+ *
+ * The longest text answer, because that is what a message field is: a contact
+ * form's "how can we help" box is always the longest thing on it, and picking
+ * by label would break the moment somebody renames it.
+ */
+function messageFrom(fields: FormField[], data: Record<string, unknown>): string {
+  let longest = "";
+  for (const field of fields) {
+    if (field.kind !== "multiline" && field.kind !== "text") continue;
+    const value = data[field.key];
+    if (typeof value === "string" && value.trim().length > longest.length) {
+      longest = value.trim();
+    }
+  }
+  return longest;
+}
+
+/** Everything they answered, when none of it was prose. */
+function summarise(fields: FormField[], data: Record<string, unknown>): string {
+  const lines = fields
+    .map((field) => {
+      const value = data[field.key];
+      // Only what a form field can actually hold. Anything else would render as
+      // "[object Object]", which is worse in a conversation than leaving it out.
+      const written =
+        typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+          ? String(value)
+          : Array.isArray(value)
+            ? value.filter((one) => typeof one === "string").join(", ")
+            : "";
+      return written === "" ? null : `${field.label}: ${written}`;
+    })
+    .filter((line): line is string => line !== null);
+  return lines.join("\n") || "(no answers)";
+}
 
 export const listSubmissions = defineService({
   name: "forms.listSubmissions",
