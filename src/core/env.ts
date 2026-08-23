@@ -221,6 +221,16 @@ const envSchema = z.object({
   FREEHOLDER_SEED_DEMO: z.enum(["0", "1"]).optional(),
 
   /**
+   * Which seed pack `demo.install` writes when seeding is on.
+   *
+   * Unset keeps Aurora Coast Photography, which the SEO gate and contributor
+   * first-run still prove. `law-firm` and `fishing-charter` are WeVibeSites
+   * Industry Edition packs: placeholder identity, no live-client brand, no
+   * New Vibe City fiction.
+   */
+  FREEHOLDER_EDITION: z.enum(["law-firm", "fishing-charter"]).optional(),
+
+  /**
    * Whether this process runs background jobs.
    *
    * On by default wherever a database is configured, because §18's Tier-1

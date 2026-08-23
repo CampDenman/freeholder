@@ -34,22 +34,12 @@ import {
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
 import { createForm } from "@/modules/forms/service";
 import { setTranslation } from "@/core/i18n/service";
-import {
-  BUSINESS,
-  footer,
-  FORMS,
-  HOURS,
-  LOCATION,
-  header,
-  IMAGES,
-  PAGES,
-  TRANSLATIONS,
-  type ImageSlot,
-} from "../../../seed/demo/content";
+import { selectedSeedPack } from "../../../seed/select";
 
 export const installDemo = defineService({
   name: "demo.install",
-  summary: "Fill an empty instance with the Aurora Coast demo business.",
+  summary:
+    "Fill an empty instance with the selected seed pack (photography by default; Law Firm or Fishing Charter when FREEHOLDER_EDITION is set).",
   kind: "mutation",
   // Owner rather than staff: this rewrites the business profile, which is the
   // instance's identity. `system` reaches it through ctx.callAsSystem at boot
@@ -77,15 +67,16 @@ export const installDemo = defineService({
       );
     }
 
+    const pack = selectedSeedPack();
+    const { BUSINESS, LOCATION, HOURS, IMAGES, FORMS, PAGES, TRANSLATIONS, header, footer } =
+      pack;
+
     await ctx.callAsSystem(updateBusiness, BUSINESS);
 
     // Images first: the pages reference them by id, and a page written with a
     // dangling assetId would render a hole rather than fail loudly.
-    const assets = {} as Record<ImageSlot, string>;
-    for (const [slot, image] of Object.entries(IMAGES) as [
-      ImageSlot,
-      (typeof IMAGES)[ImageSlot],
-    ][]) {
+    const assets = {} as Record<string, string>;
+    for (const [slot, image] of Object.entries(IMAGES)) {
       // Encoded here rather than committed as binaries: a repository people
       // fork should not carry megabytes of stock photography, and sharp turns
       // the vector into a real JPEG the media pipeline treats like any upload.
@@ -157,13 +148,13 @@ export const installDemo = defineService({
         ? await ctx.callAsSystem(updatePage, {
             id: priorId,
             title: page.title,
-            blocks: page.blocks(assets),
+            blocks: page.blocks(assets as never),
             seo: page.seo,
           })
         : await ctx.callAsSystem(createPage, {
             slug: page.slug,
             title: page.title,
-            blocks: page.blocks(assets),
+            blocks: page.blocks(assets as never),
             seo: page.seo,
           });
       if (input.publish) {
@@ -187,7 +178,7 @@ export const installDemo = defineService({
         fields: {
           title: translation.title,
           seo: translation.seo,
-          blocks: translation.blocks(assets),
+          blocks: translation.blocks(assets as never),
         },
       });
     }
