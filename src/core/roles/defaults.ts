@@ -33,6 +33,7 @@ const ADMIN_MODULES = [
   "connections",
   "contacts",
   "contracts",
+  "crm",
   "contribute",
   "demo",
   "events",

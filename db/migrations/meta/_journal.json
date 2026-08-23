@@ -708,6 +708,13 @@
       "when": 1787071400000,
       "tag": "0100_recurring_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1787071500000,
+      "tag": "0101_pipelines",
+      "breakpoints": true
     }
   ]
 }
