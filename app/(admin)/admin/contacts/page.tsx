@@ -14,6 +14,14 @@ import { CONTACT_STAGES } from "./contactLabels";
 import { requireStaffActor } from "../guard";
 import { currentBusiness } from "@/core/settings/read";
 import { hasModuleAccess } from "@/core/service";
+import { redirect } from "next/navigation";
+import {
+  defaultView,
+  meaningfulParams,
+  toQueryString,
+  viewEntity,
+} from "@/core/views/service";
+import { ViewBar } from "../ViewBar";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +58,31 @@ export default async function ContactsPage({
   const stage = one("stage");
   const tag = one("tag");
   const offset = Math.max(0, Number(one("offset")) || 0);
+  const applied = meaningfulParams(params);
+
+  // Arriving with nothing asked for: open whatever this person keeps as their
+  // first screen, by *navigating* to it (C7.06). Rendering it silently would
+  // leave the address bar disagreeing with the page, which is the whole thing
+  // durable URL state exists to avoid.
+  if (Object.keys(applied).length === 0) {
+    const preferred = await defaultView.call({ entity: "contacts" }, actor);
+    const query = preferred ? toQueryString(preferred.filters) : "";
+    if (query) redirect(`/admin/contacts?${query}`);
+  }
+
+  // Which columns to show. `columns` in the URL rather than only on a saved
+  // view, so a chosen set is as linkable as a chosen filter — the same rule the
+  // rest of this screen already follows.
+  const entity = viewEntity("contacts");
+  const requested = one("columns")
+    .split(",")
+    .map((key) => key.trim())
+    .filter(Boolean);
+  const known = new Set((entity?.columns ?? []).map((column) => column.key));
+  const chosen = requested.filter((key) => known.has(key));
+  const shown = new Set(chosen.length > 0 ? chosen : (entity?.defaultColumns ?? []));
+  // The name carries the link; a row nobody can open is not a shorter row.
+  shown.add("name");
 
   const [business, t, result, tags] = await Promise.all([
     currentBusiness(),
@@ -118,6 +151,10 @@ export default async function ContactsPage({
           ) : null}
         </div>
       </div>
+
+      {/* Saved views sit above the filter form, because a kept view is just a
+          shortcut to filling that form in (C7.06). */}
+      <ViewBar actor={actor} entity="contacts" params={applied} />
 
       <form
         method="get"
@@ -195,42 +232,65 @@ export default async function ContactsPage({
             <table className="w-full min-w-2xl border-collapse text-sm">
               <thead>
                 <tr className="border-b border-rule bg-surface-muted text-start">
-                  <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
-                    {t("contacts.column.name")}
-                  </th>
-                  <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
-                    {t("contacts.column.email")}
-                  </th>
-                  <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
-                    {t("contacts.column.stage")}
-                  </th>
-                  <th className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted">
-                    {t("contacts.column.added")}
-                  </th>
+                  {(entity?.columns ?? [])
+                    .filter((column) => shown.has(column.key))
+                    .map((column) => (
+                      <th
+                        key={column.key}
+                        className="px-4 py-2.5 text-start font-mono text-xs font-medium text-ink-muted"
+                      >
+                        {t(`contacts.column.${column.key}`)}
+                      </th>
+                    ))}
                 </tr>
               </thead>
               <tbody>
                 {result.rows.map((contact) => (
                   <tr key={contact.id} className="border-b border-rule last:border-b-0">
-                    <td className="px-4 py-2.5">
-                      <a
-                        href={`/admin/contacts/${contact.id}`}
-                        className="font-medium underline decoration-rule underline-offset-2"
-                      >
-                        {contact.name}
-                      </a>
-                    </td>
-                    <td className="px-4 py-2.5 text-ink-muted">
-                      {contact.email ?? t("common.emptyValue")}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Pill tone={STAGE_TONE[contact.lifecycleStage]}>
-                        {t(`contacts.stage.${contact.lifecycleStage}`)}
-                      </Pill>
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-ink-muted tabular-nums">
-                      {formatDateTime(contact.createdAt, timezone, locale)}
-                    </td>
+                    {shown.has("name") ? (
+                      <td className="px-4 py-2.5">
+                        <a
+                          href={`/admin/contacts/${contact.id}`}
+                          className="font-medium underline decoration-rule underline-offset-2"
+                        >
+                          {contact.name}
+                        </a>
+                      </td>
+                    ) : null}
+                    {shown.has("email") ? (
+                      <td className="px-4 py-2.5 text-ink-muted">
+                        {contact.email ?? t("common.emptyValue")}
+                      </td>
+                    ) : null}
+                    {shown.has("stage") ? (
+                      <td className="px-4 py-2.5">
+                        <Pill tone={STAGE_TONE[contact.lifecycleStage]}>
+                          {t(`contacts.stage.${contact.lifecycleStage}`)}
+                        </Pill>
+                      </td>
+                    ) : null}
+                    {shown.has("added") ? (
+                      <td className="px-4 py-2.5 font-mono text-xs text-ink-muted tabular-nums">
+                        {formatDateTime(contact.createdAt, timezone, locale)}
+                      </td>
+                    ) : null}
+                    {shown.has("phone") ? (
+                      <td className="px-4 py-2.5 text-ink-muted">
+                        {contact.phone ?? t("common.emptyValue")}
+                      </td>
+                    ) : null}
+                    {shown.has("country") ? (
+                      <td className="px-4 py-2.5 text-ink-muted">
+                        {contact.country ?? t("common.emptyValue")}
+                      </td>
+                    ) : null}
+                    {shown.has("tags") ? (
+                      <td className="px-4 py-2.5 text-ink-muted">
+                        {contact.tags.length > 0
+                          ? contact.tags.join(", ")
+                          : t("common.emptyValue")}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

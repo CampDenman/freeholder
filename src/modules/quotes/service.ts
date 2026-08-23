@@ -20,6 +20,9 @@
 // function of what the customer chose, so the snapshot is taken at the moment
 // they say yes; recomputing later from rows somebody has since revised would
 // answer a different question.
+// Imported for its side effect: the quotes list becomes something a saved
+// view can be kept of (C7.06).
+import "./view-entity";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
@@ -43,6 +46,10 @@ import {
   quoteSequences,
   quotes,
 } from "./schema";
+
+// Re-exported so a screen can render the status choices without importing a
+// schema file: outside core, the service layer is the only door (§15.5).
+export { QUOTE_STATUSES } from "./schema";
 
 const id = z.string().uuid();
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
