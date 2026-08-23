@@ -694,6 +694,13 @@
       "when": 1787071200000,
       "tag": "0098_quote_conversion",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1787071300000,
+      "tag": "0099_time_entries",
+      "breakpoints": true
     }
   ]
 }

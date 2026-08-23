@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.15 (#182), plus this change for C6.13 (an accepted quote becoming the job). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.13 (#183), plus this change for C6.16 (hours worked, billed once). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.16 time entries — hours against a project or a booking, and one step from tracked to invoiced. |
+| Current focus | C6.17 manual invoicing, recurring and payment-plan schedules — the last of C6. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4941,8 +4941,44 @@ payment, tax, inventory and reporting path, with no floating-point money.
   means asking an owner to re-upload work they have already filed.
   `/admin/projects`. `0097_projects.sql`. Coverage in
   `tests/core/projects.test.ts`.)
-- [ ] **C6.16** Build time entries against projects/bookings, rate resolution,
+- [x] **C6.16** Build time entries against projects/bookings, rate resolution,
   billable review and one-step conversion to invoice lines.
+  (§4.13 makes the case in one sentence — a time entry is "the difference
+  between an owner billing what they worked and billing what they remember" —
+  and three properties are what make that true rather than aspirational.
+  **The rate is resolved at the entry and frozen there.** Putting a rate up in
+  March must not re-price February's work, and reading the rate when the
+  invoice is raised would do exactly that: silently, and in the business's
+  favour, which is the worst direction for a mistake like this to run. A test
+  changes the rate and checks the old entry did not move while a new one did.
+  Resolution is most-specific-wins across three scopes — project, then person,
+  then business — because the two real cases are a senior charging more than a
+  junior *and* a particular job being charged a particular rate, and a business
+  with both should not have to choose. No rate configured is not an error;
+  plenty of work is unbillable, and a zero rate is an entry the owner prices by
+  hand.
+  **An hour is billed once.** `invoiceId` is set when an entry becomes a line
+  and never cleared, so the review list is a query rather than anybody's
+  memory, and `time.invoice` refuses the whole list — before writing anything —
+  if any entry is already invoiced, still running, marked unbillable, or
+  belongs to a different customer from the rest. One invoice is for one
+  customer: splitting the list silently, or picking one of them, would both be
+  worse than saying so. An invoiced entry can no longer be edited or deleted,
+  because the customer may already have the invoice and the honest move is a
+  credit note.
+  **The timer cannot double-count**: one running entry per person, enforced by
+  a partial unique index rather than by the screen, since two would mean the
+  same hour charged to two jobs. Stopping rounds **up** to the owner's
+  increment — a business that bills in fifteens is saying a twenty-minute call
+  costs thirty, and rounding down would quietly give the work away.
+  Writing the tests found a real defect: the rate table's unique index treated
+  two NULL scope ids as distinct, so every change to the business-wide rate
+  inserted a second row instead of updating, the upsert never fired, and
+  resolution returned whichever row the query reached first. It is
+  `NULLS NOT DISTINCT` now, written in the migration because Drizzle has no
+  expression for it — the same arrangement `0087`'s exclusion constraint uses.
+  `/admin/time`. `0099_time_entries.sql`. Coverage in
+  `tests/core/time-entries.test.ts`.)
 - [ ] **C6.17** Build manual invoicing, recurring/payment-plan schedules,
   overdue state, reminders, receipts and accounting-ready audit.
 
