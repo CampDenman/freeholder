@@ -53,6 +53,7 @@ import viewServices from "@/core/views/service";
 import contactImportServices from "@/core/import/contacts-service";
 import messagingServices from "@/core/messaging/service";
 import inboxServices from "@/core/messaging/inbox";
+import smsServices from "@/core/messaging/sms";
 import schedulingServices from "@/core/scheduling/service";
 import availabilityServices from "@/core/scheduling/availability-service";
 import bookingServices from "@/core/scheduling/bookings";
@@ -105,6 +106,7 @@ const services: Service[] = [
   ...contactImportServices,
   ...messagingServices,
   ...inboxServices,
+  ...smsServices,
   ...briefingServices,
   ...briefingContributorServices,
   ...briefingPlaybookSection,

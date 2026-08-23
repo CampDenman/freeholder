@@ -104,6 +104,14 @@ const envSchema = z.object({
   SES_SNS_TOPIC_ARN: z.string().optional(),
 
   /** Hosted payments. The checked-in adapter choice remains in config. */
+  // Twilio SMS (C7.10). Secrets in the environment, everything else about a
+  // number in the database (§17). `TWILIO_WEBHOOK_URL` is the public URL Twilio
+  // was configured to call: it is part of the signed string, so it has to be
+  // what Twilio used rather than what this process thinks it is.
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional(),
+  TWILIO_WEBHOOK_URL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   /** Kept only during Stripe endpoint-secret rotation. */
