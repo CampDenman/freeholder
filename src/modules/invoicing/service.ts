@@ -12,7 +12,10 @@ export { quoteTax } from "./tax-service";
 
 import briefingContributors from "@/modules/invoicing/briefing";
 
+import recurringServices from "./recurring-service";
+
 export default [
+  ...recurringServices,
   ...briefingContributors,
   ...taxServices,
   ...invoiceServices,

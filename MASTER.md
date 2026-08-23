@@ -2965,11 +2965,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-21 |
-| Evidence snapshot | `main` through C6.13 (#183), plus this change for C6.16 (hours worked, billed once). C4 and C5 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C6–C9 items. |
+| Evidence snapshot | `main` through C6.16 (#184), plus this change for C6.17 — **which closes C6**. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C6.17 manual invoicing, recurring and payment-plan schedules — the last of C6. |
+| Current focus | C7.01 — the first of the marketing and audience block, now that C6's engines are complete. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4979,8 +4979,48 @@ payment, tax, inventory and reporting path, with no floating-point money.
   expression for it — the same arrangement `0087`'s exclusion constraint uses.
   `/admin/time`. `0099_time_entries.sql`. Coverage in
   `tests/core/time-entries.test.ts`.)
-- [ ] **C6.17** Build manual invoicing, recurring/payment-plan schedules,
+- [x] **C6.17** Build manual invoicing, recurring/payment-plan schedules,
   overdue state, reminders, receipts and accounting-ready audit.
+  (Four of the six were already standing and were verified rather than
+  rebuilt: manual invoicing is `invoicing.createDraft` with `sourceType:
+  "manual"` behind `/admin/invoices/new` (C5.05); payment-plan schedules are
+  `invoicing.createPaymentPlan` and its installments (C5.08); receipts are
+  `invoicing.receipt` (C5.24); and the accounting-ready audit is
+  `invoicing.reconciliation` over `money_state_events`, which already refuses
+  when a recorded `paidMinor` disagrees with the payments behind it.
+  The three genuine gaps are built here. **Recurring schedules are not payment
+  plans** (C5.08), and the distinction is the whole design: a plan splits *one* invoice
+  into installments, while a schedule raises a *new* invoice each period — the
+  retainer client owes £500 every month, and each month is its own debt with
+  its own due date, its own receipt and its own overdue clock. Modelling that
+  as a plan would make twelve months of a retainer one enormous permanently
+  part-paid invoice and the aged-debtors report meaningless. Lines are a
+  snapshot per occurrence, so raising the retainer in March does not re-issue
+  February; an occurrence produces a **draft** unless the owner explicitly
+  turned auto-issue on, because an invoice going to a customer with nobody
+  looking is the one automation that cannot be taken back; and the cadence
+  advances to the next occurrence **after now** rather than one step per missed
+  period — C4.14's rule, so an instance that was off for a fortnight does not
+  wake up and send a fortnight of invoices. Cadence arithmetic is calendar
+  rather than day-count, so a retainer billed on the 31st lands on the 30th in
+  April instead of drifting a day earlier every other month.
+  **Overdue was a status nothing ever set.** `invoicing.markOverdue` existed
+  per invoice and no sweep called it, so an invoice went past its date at
+  midnight and stayed `sent` until somebody pressed something. The sweep calls
+  the existing per-invoice service for each one rather than issuing a bulk
+  UPDATE, because that service owns the state machine, takes the row lock and
+  writes the money-state event — a second implementation would be a second
+  opinion about what "overdue" does to a ledger.
+  **Reminders** carry signed offsets from the due date (−3 before, +7 after),
+  so a re-dated invoice re-computes rather than keeping a stale absolute date,
+  and are upserted per (invoice, offset) so re-issuing moves them rather than
+  doubling them. A paid invoice is **never** chased, decided at send time
+  rather than schedule time — somebody paying yesterday is exactly the case a
+  scheduled reminder gets wrong, and the one customers remember. All three run
+  on one hourly job, because billing what recurs, marking what is late and
+  nudging what is unpaid are one thought. `/admin/invoices/recurring` and the
+  chasing panel on each invoice. `0100_recurring_invoices.sql`. Coverage in
+  `tests/core/recurring-invoices.test.ts`.)
 
 **C6 exit:** the same availability and money engines can sell time, spaces,
 equipment, classes and expertise without double-booking or duplicated records.

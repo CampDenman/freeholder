@@ -470,6 +470,30 @@ export const expireQuotes = defineJob({
 });
 
 /**
+ * Raise the recurring invoices that are due, and chase the overdue (C6.17).
+ *
+ * Three separate things on one schedule because they are one thought: bill
+ * what recurs, mark what has gone past its date, and nudge what is unpaid. An
+ * invoice that goes overdue at midnight and stays "sent" until somebody
+ * presses something is not an accounts-receivable system.
+ */
+export const runInvoiceRoutines = defineJob({
+  name: "core.runInvoiceRoutines",
+  summary: "Raise recurring invoices, mark overdue ones, and send reminders.",
+  schedule: "23 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { runSchedules, markInvoicesOverdue, sendDueInvoiceReminders } = await import(
+      "@/modules/invoicing/recurring-service"
+    );
+    const raised = await runSchedules.call({}, { kind: "system" });
+    const overdue = await markInvoicesOverdue.call({}, { kind: "system" });
+    const reminded = await sendDueInvoiceReminders();
+    return { ...raised, ...overdue, reminded };
+  },
+});
+
+/**
  * Read connected mailboxes for who has been in touch (C4.18).
  *
  * Hourly, not by the minute: this is about who wrote to the business, and a
@@ -679,6 +703,7 @@ export default [
   expireWaitlistOffers,
   sendBookingReminders,
   markOverdueHires,
+  runInvoiceRoutines,
   expireQuotes,
   submitIndexNow,
   deliverContributions,

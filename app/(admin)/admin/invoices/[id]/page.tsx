@@ -16,6 +16,8 @@ import {
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { invoiceAction } from "../../../invoice-actions";
+import { scheduleRemindersAction } from "../../../recurring-actions";
+import { listInvoiceReminders } from "@/modules/invoicing/recurring-service";
 import { requireStaffActor } from "../../guard";
 import { formatPpm, invoiceTone, money, quantityFromMicros } from "../format";
 import { domainOrNull } from "../../../read-helpers";
@@ -36,10 +38,13 @@ export default async function InvoiceDetailPage({
     if (error instanceof ServiceError && error.code === "not_found") notFound();
     throw error;
   });
-  const [contact, business, t] = await Promise.all([
+  const [contact, business, t, reminders] = await Promise.all([
     domainOrNull(getContact.call({ id: bundle.invoice.contactId }, actor)),
     currentBusiness(),
     getT(),
+    // Empty rather than null on failure: chasing is a detail on this page, and
+    // an unreadable reminder list must not take the invoice down with it.
+    listInvoiceReminders.call({ invoiceId: id }, actor).catch(() => []),
   ]);
   const canManage = hasModuleAccess(actor, "invoicing", "manage");
   const stepUpValid = actor.kind === "user" && actor.security?.stepUpValid !== false;
@@ -169,6 +174,62 @@ export default async function InvoiceDetailPage({
               <div className="self-end"><Button type="submit">{t("invoices.issue")}</Button></div>
             </form>
             <p className="mt-3 text-xs text-ink-muted">{t("invoices.issueHint")}</p>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {/* Chasing, before and after the date. Offsets rather than absolute days
+          so a re-dated invoice re-computes, and a paid one is never chased —
+          decided at send time, because somebody paying yesterday is exactly
+          the case a scheduled reminder gets wrong (C6.17). */}
+      {canManage && invoice.dueAt && !["paid", "void", "refunded"].includes(invoice.status) ? (
+        <Card>
+          <CardHeader title={t("recurring.chase")} />
+          <CardBody>
+            {reminders.length > 0 ? (
+              <ul className="grid list-none gap-1 p-0 text-sm">
+                {reminders.map((reminder) => (
+                  <li key={reminder.id} className="flex flex-wrap gap-3">
+                    <span className="text-ink-muted">
+                      {reminder.offsetDays < 0
+                        ? t("recurring.before", { days: String(-reminder.offsetDays) })
+                        : t("recurring.after", { days: String(reminder.offsetDays) })}
+                    </span>
+                    <Pill tone={reminder.status === "failed" ? "danger" : "neutral"}>
+                      {t(`recurring.reminder.${reminder.status}`)}
+                    </Pill>
+                    {reminder.skipReason ? (
+                      <span className="text-ink-muted">{reminder.skipReason}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-ink-muted">{t("recurring.noChasing")}</p>
+            )}
+            <form action={scheduleRemindersAction} className="mt-3 grid gap-2">
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                {[-3, 1, 7, 14].map((offset) => (
+                  <label key={offset} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="offsetDays"
+                      value={offset}
+                      defaultChecked={reminders.some((one) => one.offsetDays === offset)}
+                    />
+                    <span className="text-ink-muted">
+                      {offset < 0
+                        ? t("recurring.before", { days: String(-offset) })
+                        : t("recurring.after", { days: String(offset) })}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div>
+                <Button type="submit" variant="quiet">{t("recurring.action.chase")}</Button>
+              </div>
+            </form>
           </CardBody>
         </Card>
       ) : null}
