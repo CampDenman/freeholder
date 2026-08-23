@@ -2971,11 +2971,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.05 (#191), plus this change for C7.06. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.06 (#192), plus this change for C7.07. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.07 CSV import as map → validate → dry-run → commit → reversible. |
+| Current focus | C7.08 canonical conversations threaded by contact — the messaging half of C7. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5209,8 +5209,37 @@ equipment, classes and expertise without double-booking or duplicated records.
   a real table), `/admin/tasks`, and `/admin/quotes` — which also gained the
   status filter it needed to have state worth saving. `0106_saved_views.sql`.
   Coverage in `tests/core/saved-views.test.ts`.)
-- [ ] **C7.07** Build CSV import as map → validate → dry-run diff → commit →
-  audit → reversible batch, always using contact resolution.
+- [x] **C7.07** Build CSV import as map → validate → dry-run diff → commit →
+  audit → reversible batch, always using contact resolution. (Each step has a
+  characteristic way of going wrong and the design answers each one. **Parsing:**
+  a contact export is exactly the file with a company name containing a comma,
+  an address containing a newline and a byte-order mark from Excel, so the
+  parser is a written state machine rather than a `split(",")` — each of those
+  corruptions would land in the spine. The delimiter is guessed from the header
+  line only, so a comma inside somebody's address cannot vote. **Mapping:** the
+  header guess is a starting point an owner corrects, never a decision; a wrong
+  one puts a phone number in the name column and that propagates through every
+  email the business sends. A second column cannot claim a field the first
+  already has, a mapping with no email column is refused because every row would
+  silently be skipped, and a column mapped to a custom field that does not exist
+  is refused *by name* at this step rather than blowing up halfway through the
+  commit — a spreadsheet must not be able to invent a typed field. **Dry run:**
+  the same code decides each row in both passes, reading the same stored rows, so
+  the preview is a promise rather than an estimate. `skip` is separate from
+  `error` because a trailing blank row is the commonest thing in any export and
+  calling it a mistake buries the real ones; a repeated address inside one file
+  is an update rather than a second person. **Commit:** every row goes through
+  `contacts.resolve`, so an import cannot mint a second record for somebody the
+  business already knows and the spine's own rules apply — first-touch `source`
+  is not rewritten, a customer is not demoted. **Reversal:** each applied row
+  keeps what it overwrote, so undoing is restoring stored values rather than
+  recomputing them from a file that may have changed; contacts the import created
+  are deleted only when nothing else references them, asked of Postgres's own
+  catalogue rather than of a hand-maintained list, and anybody who has since
+  ordered, booked or been quoted is kept and counted so the owner is told. The
+  ledger survives the undo, because "what did that file do" is asked a week
+  later. `/admin/imports/contacts`. `0107_contact_imports.sql`. Coverage in
+  `tests/core/contact-import.test.ts`.)
 
 #### Conversations and messaging
 

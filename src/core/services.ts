@@ -50,6 +50,7 @@ import noteServices from "@/core/notes/service";
 import segmentServices from "@/core/segments/service";
 import scoringServices from "@/core/scoring/service";
 import viewServices from "@/core/views/service";
+import contactImportServices from "@/core/import/contacts-service";
 import schedulingServices from "@/core/scheduling/service";
 import availabilityServices from "@/core/scheduling/availability-service";
 import bookingServices from "@/core/scheduling/bookings";
@@ -99,6 +100,7 @@ const services: Service[] = [
   ...segmentServices,
   ...scoringServices,
   ...viewServices,
+  ...contactImportServices,
   ...briefingServices,
   ...briefingContributorServices,
   ...briefingPlaybookSection,

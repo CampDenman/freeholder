@@ -129,6 +129,9 @@ export default async function ContactsPage({
           <a href="/admin/contacts/privacy" className="text-sm text-ink-muted">
             {t("privacy.title")}
           </a>
+          <a href="/admin/imports/contacts" className="text-sm text-ink-muted">
+            {t("contactImports.title")}
+          </a>
           <a href="/admin/contacts/duplicates" className="text-sm text-ink-muted">
             {t("contacts.duplicates.title")}
           </a>
