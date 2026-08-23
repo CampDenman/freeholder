@@ -2971,11 +2971,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.03 (#188), plus this change for C7.04. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.04 (#189), plus this change for C7.05. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.05 transparent lead scoring, with no black-box path. |
+| Current focus | C7.06 saved views with durable URL and state semantics. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5154,8 +5154,36 @@ equipment, classes and expertise without double-booking or duplicated records.
   `/admin/segments` previews a count before anything is saved and answers "why
   is this person in it", with no JavaScript. §11's tree updated.
   `0104_segments.sql`. Coverage in `tests/core/segments.test.ts`.)
-- [ ] **C7.05** Build transparent scoring rules with decay, reason display,
-  stage actions and no black-box scoring path.
+- [x] **C7.05** Build transparent scoring rules with decay, reason display,
+  stage actions and no black-box scoring path. (§4.14 asks that "an owner must
+  be able to read why someone is a 40", and the schema answers it by omission:
+  **there is no score column anywhere.** A score is the sum of an award ledger,
+  computed when somebody asks, and `scoring.why` lists the same rows — so the
+  number and its reasons are one computation and cannot drift, which a cached
+  scalar guarantees they eventually would. **Decay is stated per rule and frozen
+  per award**: an owner who lowers a rule from 20 to 10 in March has changed
+  what future behaviour is worth, not what somebody did in January. It is linear
+  to zero rather than a cliff, because a score that drops overnight for a reason
+  nobody witnessed is a score nobody trusts, and each award rounds on its own so
+  the rows on screen add up to the total on screen. **Rules fire after commit**,
+  from the bus, because scoring is a consequence of something having happened —
+  awarding inside the mutation would let a scoring bug roll back a quote
+  acceptance — and a partial unique index on the outbox event id makes a bus
+  redelivery cost nothing instead of doubling somebody. `max_awards` caps
+  repeats, so one determined visitor does not become the hottest lead in the
+  business. **Stage actions** are two shapes in one table: a rule that advances
+  on firing, and a threshold rule that fires when the total crosses a line; both
+  go through `core/contacts/lifecycle`, which is **forward-only**, so opening an
+  email can never demote a customer. That module is a new seam: core may not
+  import a module (§11) yet has to respect C7.01's rule that
+  `crm.moveContactStage` is the single write path for a lifecycle, so core asks
+  whatever advancer is registered and the CRM registers one — with no CRM
+  installed the fallback writes the enum, which is right because there is no
+  fine stage to keep in step. Deleting a rule keeps the points it gave and the
+  name it had. Erasure deletes the ledger, because a score is a behavioural
+  profile. `/admin/scoring` shows every rule in full; the contact page shows the
+  number and every reason for it. `0105_scoring.sql`. Coverage in
+  `tests/core/scoring.test.ts`.)
 - [ ] **C7.06** Build saved views with filters/columns/sort, ownership/sharing
   and durable URL/state semantics across major admin entities.
 - [ ] **C7.07** Build CSV import as map → validate → dry-run diff → commit →

@@ -19,6 +19,7 @@ import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
+import { registerLifecycleAdvancer } from "@/core/contacts/lifecycle";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
   defineService,
@@ -728,6 +729,43 @@ export const lifecycleBoard = defineService({
  * and one pointing at a contact that no longer exists is revenue nobody is
  * following up.
  */
+/**
+ * How this instance moves somebody along the lifecycle (C7.05).
+ *
+ * Core's scoring has to advance people — §4.14's "quote accepted →
+ * auto-advance" — and core may not import a module (§11). So the direction is
+ * inverted: core asks whatever is registered, and this is the CRM's answer.
+ *
+ * It resolves the owner's own stage for the coarse value and moves them through
+ * `crm.moveContactStage`, which is the one write path that keeps the board and
+ * the spine enum in step (C7.01). Returning `false` when no stage derives the
+ * value hands the job back to core's fallback: an instance with pipelines
+ * installed but nothing meaning "repeat" should still see the enum advance,
+ * because refusing to advance somebody is a worse answer than advancing them
+ * without a board position.
+ */
+registerLifecycleAdvancer(async (ctx, contactId, stage) => {
+  const [target] = await ctx.tx
+    .select({ id: pipelineStages.id })
+    .from(pipelineStages)
+    .innerJoin(pipelines, eq(pipelines.id, pipelineStages.pipelineId))
+    .where(
+      and(
+        eq(pipelines.kind, "lifecycle"),
+        isNull(pipelines.archivedAt),
+        eq(pipelineStages.lifecycleStage, stage),
+      ),
+    )
+    .orderBy(desc(pipelines.isDefault), asc(pipelineStages.position))
+    .limit(1);
+  if (!target) return false;
+  await ctx.callAsSystem(getService("crm.moveContactStage"), {
+    contactId,
+    stageId: target.id,
+  });
+  return true;
+});
+
 registerContactReference({
   table: "deals",
   repoint: (tx, duplicateId, survivingId) =>

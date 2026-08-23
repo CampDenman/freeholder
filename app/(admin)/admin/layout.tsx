@@ -134,6 +134,7 @@ export default async function AdminLayout({
               pipeline: t("pipeline.title"),
               tasks: t("tasks.title"),
               segments: t("segments.title"),
+              scoring: t("scoring.title"),
               projects: t("projects.title"),
               time: t("time.title"),
               quotes: t("quotes.title"),
