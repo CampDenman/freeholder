@@ -36,6 +36,9 @@ import { contacts } from "@/core/contacts/schema";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
 import { CADENCES, nextAfter } from "@/core/dates/cadence";
+// The subject list and its resolver are shared with notes (C7.03); two copies
+// would drift the first time somebody added a kind to one of them.
+import { subjectContact, subjectHref } from "@/core/subjects";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { briefingContribution } from "@/core/briefing/registry";
@@ -44,7 +47,6 @@ import {
   getService,
   ServiceError,
   type Actor,
-  type Tx,
 } from "@/core/service";
 import {
   TASK_PRIORITIES,
@@ -61,64 +63,12 @@ export { CADENCES } from "@/core/dates/cadence";
 
 const id = z.string().uuid();
 
-type TaskSubject = (typeof TASK_SUBJECTS)[number];
-
 function requirePerson(actor: Actor): void {
   // System passes, as everywhere else in this module: an accepted quote
   // raising "prepare the deposit invoice" is elevation from a caller that has
   // already established authority (C6.09, C6.13).
   if (actor.kind !== "user" && actor.kind !== "system") {
     throw new ServiceError("permission", "Sign in to manage tasks.");
-  }
-}
-
-/**
- * Where each subject lives, and where a person goes to look at it.
- *
- * A literal map over a closed list rather than an import of every module: the
- * CRM should not have to depend on invoicing to hold a task about an invoice,
- * and a module that is switched off should make its tasks unresolvable rather
- * than make the whole table unreadable. The table names are constants in this
- * file and the keys come from `TASK_SUBJECTS`, so nothing user-supplied ever
- * reaches the query.
- */
-const SUBJECTS: Record<TaskSubject, { table: string; href: (id: string) => string }> = {
-  contact: { table: "contacts", href: (id) => `/admin/contacts/${id}` },
-  deal: { table: "deals", href: () => "/admin/pipeline" },
-  quote: { table: "quotes", href: (id) => `/admin/quotes/${id}` },
-  invoice: { table: "invoices", href: (id) => `/admin/invoices/${id}` },
-  booking: { table: "bookings", href: (id) => `/admin/appointments/${id}` },
-  project: { table: "projects", href: (id) => `/admin/projects/${id}` },
-  contract: { table: "contract_documents", href: (id) => `/admin/agreements/${id}` },
-  order: { table: "orders", href: (id) => `/admin/orders/${id}` },
-};
-
-/**
- * The contact a subject is about, or null.
- *
- * `contacts` answers with itself; everything else carries a `contact_id`. A
- * missing table means the module is switched off, and a task against a subject
- * nobody can load is refused rather than stored — a to-do pointing at nothing
- * is a row that can never be rendered and never be closed with confidence.
- */
-async function subjectContact(
-  tx: Tx,
-  subjectType: TaskSubject,
-  subjectId: string,
-): Promise<string | null> {
-  const { table } = SUBJECTS[subjectType];
-  const column = subjectType === "contact" ? "id" : "contact_id";
-  try {
-    const rows = (await tx.execute(
-      sql`select ${sql.raw(column)} as contact_id from ${sql.raw(table)} where id = ${subjectId} limit 1`,
-    )) as unknown as Array<{ contact_id: string | null }>;
-    if (rows.length === 0) throw new ServiceError("not_found", "That is not here to attach to.");
-    return rows[0]!.contact_id ?? null;
-  } catch (error) {
-    if (error instanceof ServiceError) throw error;
-    // The module that owns this subject is not installed. Say so plainly
-    // rather than storing a task nothing can open.
-    throw new ServiceError("validation", "That part of the system is switched off.");
   }
 }
 
@@ -449,7 +399,7 @@ export const listTasks = defineService({
       assigneeEmail,
       href:
         task.subjectType && task.subjectId
-          ? SUBJECTS[task.subjectType].href(task.subjectId)
+          ? subjectHref(task.subjectType, task.subjectId)
           : null,
     }));
   },

@@ -26,6 +26,7 @@ import { listOrganizations } from "@/core/contacts/organizations";
 import { listCustomFields } from "@/core/contacts/custom-fields";
 import { listRelationships } from "@/core/contacts/relationships";
 import { RelationshipPanel } from "./RelationshipPanel";
+import { NotesPanel } from "../../NotesPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -289,6 +290,17 @@ export default async function ContactDetailPage({
           })}
         />
       ) : null}
+
+      {/* Notes above the timeline: what somebody wrote about this person is
+          what you want before you read what happened to them (C7.03). */}
+      <NotesPanel
+        actor={actor}
+        subjectType="contact"
+        subjectId={contact.id}
+        returnTo={`/admin/contacts/${contact.id}`}
+        locale={locale}
+        timezone={timezone}
+      />
 
       <Card>
         <CardHeader
