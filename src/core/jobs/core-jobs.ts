@@ -494,6 +494,24 @@ export const runInvoiceRoutines = defineJob({
 });
 
 /**
+ * Bring back the conversations whose snooze has run out (C7.09).
+ *
+ * Every five minutes, because a snooze is a promise about a time and "back
+ * within the hour" is not what somebody means when they choose nine tomorrow
+ * morning. The sweep is one indexed update, so running it often costs nothing.
+ */
+export const wakeSnoozedThreads = defineJob({
+  name: "core.wakeSnoozedThreads",
+  summary: "Reopen conversations whose snooze has expired.",
+  schedule: "*/5 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { wakeSnoozedConversations } = await import("@/core/messaging/inbox");
+    return wakeSnoozedConversations();
+  },
+});
+
+/**
  * Nudge whoever asked to be nudged (C7.02).
  *
  * Every ten minutes rather than hourly, because a reminder is a promise about
@@ -725,6 +743,7 @@ export default [
   runInvoiceRoutines,
   expireQuotes,
   sendTaskReminders,
+  wakeSnoozedThreads,
   submitIndexNow,
   deliverContributions,
   replyContributions,

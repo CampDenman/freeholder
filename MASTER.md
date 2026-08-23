@@ -2980,11 +2980,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.06 (#192), with C7.07 in review (#193), plus this change for C7.08. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.07 (#193), with C7.08 in review (#194), plus this change for C7.09. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.09 inbox workflows: assign, snooze, close, search, bulk. |
+| Current focus | C7.10 SMS adapter contract and one production adapter. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5281,8 +5281,32 @@ equipment, classes and expertise without double-booking or duplicated records.
   C7.09 builds the inbox workflows on this, C7.10 the SMS adapter, C7.12
   consent. `/admin/contacts/[id]` shows the thread. `0108_conversations.sql`.
   Coverage in `tests/core/conversations.test.ts`.)
-- [ ] **C7.09** Build assign/snooze/close/unread/search/filter/bulk workflows,
+- [x] **C7.09** Build assign/snooze/close/unread/search/filter/bulk workflows,
   reply context and one unified inbox without reimplementing a mail client.
+  ("Without reimplementing a mail client" is the design brief, not a caveat: a
+  mail client holds everything you ever received, while this makes sure nothing
+  waiting on a person is forgotten. So there are no folders, no labels and no
+  rich compose — four verbs and a search. **Snoozing is a promise to be
+  interrupted later**, so the wake-up is a job on a five-minute schedule and the
+  thread comes back *unread*, which is the state it would have been in had
+  nobody snoozed it; snoozing into the past is refused because it would return
+  on the next sweep, which is not what anybody means by later. **A reply goes
+  out on the channel the thread says** — C7.09's reply context — so the person
+  who texted gets a text without anybody choosing; a channel with nothing able
+  to send on it is **refused outright** rather than recorded and never
+  delivered, because words in a thread the customer never saw are worse than an
+  error, and a reply to a placeholder SMS address is refused for the same
+  reason. **Bulk is the same services in a loop**, not a second implementation:
+  a bulk snooze is refused for a past date exactly as a single one is, and there
+  is a test proving it, because a bulk action that skipped the rules is how an
+  inbox ends up with threads in states nothing else expects. Search is trigram
+  rather than full text — an owner types a fragment they half remember, and
+  stemmed word matching finds none of those — over what was said, who said it
+  and the subject, with the last message shown as the preview so a list of
+  threads reads as a list of things rather than a list of names. Filters live in
+  the URL like every other list (C7.06). `/admin/inbox`, no JavaScript, with the
+  checkboxes and the action bar in one form. `0109_inbox_search.sql`. Coverage
+  in `tests/core/inbox.test.ts`.)
 - [ ] **C7.10** Build SMS adapter contract and at least one production adapter,
   number provisioning/health and country/capability metadata.
 - [ ] **C7.11** Track 10DLC/toll-free/alphanumeric registration states and
