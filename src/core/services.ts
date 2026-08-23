@@ -48,6 +48,7 @@ import notificationServices from "@/core/notifications/service";
 import taskServices from "@/core/tasks/service";
 import noteServices from "@/core/notes/service";
 import segmentServices from "@/core/segments/service";
+import scoringServices from "@/core/scoring/service";
 import schedulingServices from "@/core/scheduling/service";
 import availabilityServices from "@/core/scheduling/availability-service";
 import bookingServices from "@/core/scheduling/bookings";
@@ -95,6 +96,7 @@ const services: Service[] = [
   ...taskServices,
   ...noteServices,
   ...segmentServices,
+  ...scoringServices,
   ...briefingServices,
   ...briefingContributorServices,
   ...briefingPlaybookSection,
@@ -161,6 +163,7 @@ export async function onAnyEvent(
   const { offerForBookingEvent } = await import("@/core/scheduling/waitlist");
   const { linkSignedWaiver } = await import("@/core/scheduling/requirements");
   const { convertOnAccepted } = await import("@/modules/quotes/conversion");
+  const { scoreForEvent } = await import("@/core/scoring/service");
   await Promise.all([
     fanOut(eventName, payload, context?.eventId),
     fanOutEventNotification(eventName, payload, context?.eventId),
@@ -181,5 +184,10 @@ export async function onAnyEvent(
     // (C6.13). Converting inside it would mean a brief failure in invoicing
     // rolled back the fact that the customer said yes.
     convertOnAccepted(eventName, payload),
+    // Points are a consequence of something having happened (C7.05), so they
+    // are awarded here rather than inside the mutation: a scoring bug must not
+    // be able to roll back a quote acceptance. The outbox id is what makes a
+    // redelivery cost nothing instead of doubling somebody's score.
+    scoreForEvent(eventName, payload, context?.eventId),
   ]);
 }

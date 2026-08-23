@@ -27,6 +27,7 @@ import { listCustomFields } from "@/core/contacts/custom-fields";
 import { listRelationships } from "@/core/contacts/relationships";
 import { RelationshipPanel } from "./RelationshipPanel";
 import { NotesPanel } from "../../NotesPanel";
+import { ScorePanel } from "../../ScorePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -290,6 +291,11 @@ export default async function ContactDetailPage({
           })}
         />
       ) : null}
+
+      {/* The score, then its reasons, then the notes, then the timeline: a
+          number, why it is that number, what people said, and what happened
+          (C7.05). */}
+      <ScorePanel actor={actor} contactId={contact.id} locale={locale} timezone={timezone} />
 
       {/* Notes above the timeline: what somebody wrote about this person is
           what you want before you read what happened to them (C7.03). */}
