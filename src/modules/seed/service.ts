@@ -39,7 +39,7 @@ import { selectedSeedPack } from "../../../seed/select";
 export const installDemo = defineService({
   name: "demo.install",
   summary:
-    "Fill an empty instance with the selected seed pack (photography by default; Law Firm or Fishing Charter when FREEHOLDER_EDITION is set).",
+    "Fill an empty instance with the selected seed pack (photography by default; a WeVibeSites Industry Edition when FREEHOLDER_EDITION is set).",
   kind: "mutation",
   // Owner rather than staff: this rewrites the business profile, which is the
   // instance's identity. `system` reaches it through ctx.callAsSystem at boot
