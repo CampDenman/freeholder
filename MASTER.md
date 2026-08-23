@@ -579,6 +579,29 @@ structure a search engine and a skim-reading human can both follow.
 | `Form` | Definable forms. | name, fields (jsonb schema), destination (contact_create/update), notify, automation_trigger |
 | `FormSubmission` | Responses → linked/creating contacts. | form_id, contact_id, data (jsonb), source_url |
 | `Redirect`, `SeoSetting` | 301s, sitewide schema.org config, sitemap inclusion rules. | — |
+| `HelpArticle` | A help-centre entry. Same block body as a page, because it is one. | title, slug, category_id, blocks (jsonb), status, locale, seo (jsonb), helpful_yes, helpful_no, updated_at |
+| `HelpCategory` | How the help centre is arranged. | name, slug, position, description |
+
+*(Help centre added 2026-08-23: C8.09 referenced it and found two passing
+mentions.)*
+
+**The help centre is the CMS, not a second CMS.** A `HelpArticle` is a `Page`
+with a category and a helpfulness counter — same block editor, same locale
+variants, same SEO treatment, same publish flow. A business that has to learn a
+second editor to answer "what are your opening hours" will not write the second
+article, and the platform will have shipped a knowledge base nobody fills in.
+
+Three rules the shape encodes:
+
+- **Search is the same trigram search the inbox uses** (C7.09), over title and
+  body. Somebody looking for help types a fragment of the problem, not a
+  stemmed keyword.
+- **Helpfulness is two counters and no comment box.** "Did this help — yes/no"
+  is answerable by somebody who is already frustrated; a free-text box is a
+  support queue nobody staffed, and an unanswered one is worse than none.
+- **Articles are indexable by default and say so.** A help centre is often the
+  most-linked part of a small business's site, and hiding it from search to
+  keep the marketing pages "clean" throws away the traffic that converts best.
 
 ### 4.7 Growth
 
@@ -1445,6 +1468,49 @@ normal tested extension rather than bespoke UI work.
 9. **Schema-compatibility gate (§39.5):** a migration that breaks readability by the previous release must declare it in its changeset. CI diffs the migration set against the last release and fails on an unlabelled breaking change — the expand-then-contract discipline is what makes rollback an image swap instead of a restore.
 10. **Autofill gate (§36.1):** fail any submit control disabled because an autofillable field looks empty, and any anti-bot honeypot a browser would fill. This gate exists because the bug it catches is invisible to the way software is tested and unavoidable given the way people behave — see §36.1 for the mechanism.
 
+11. **Performance-budget gate (§15.1):** fail a build that regresses any budget
+    in §15.1 by more than 10% against the previous release, measured on the
+    seeded medium dataset. A budget nobody measures is a wish.
+
+### 15.1 The performance budgets, defined
+
+*(Added 2026-08-23. C11.11 said "meet defined performance budgets" and nothing
+defined them, which makes the item uncompletable. These are the definitions.)*
+
+Measured on the **seeded medium dataset** — 5,000 contacts, 20,000 messages,
+2,000 orders, 500 products, 10,000 assets — on the reference Tier-1 target (§21's
+$6 droplet, 1 vCPU / 1GB). The small droplet is the point: a budget met only on
+a developer's laptop is a budget that fails the people this platform is for.
+
+| Surface | Budget | Why this number |
+|---|---|---|
+| Public page, LCP | ≤ 2.5s p75 | Core Web Vitals "good". It is a ranking input, and §5 makes SEO structural. |
+| Public page, INP | ≤ 200ms p75 | Same standard, same reason. |
+| Public page, CLS | ≤ 0.1 p75 | Same. |
+| Public page, server render | ≤ 300ms p95 | What is left of the LCP budget after a real network. |
+| Admin list (any) | ≤ 800ms p95 | The threshold where a list stops feeling like a list. |
+| Admin detail | ≤ 1s p95 | — |
+| Editor first paint | ≤ 2s p95 | It is the screen owners live in. |
+| Editor keystroke → preview | ≤ 100ms p95 | Above this, typing feels broken rather than slow. |
+| Search (inbox, contacts, help) | ≤ 500ms p95 | — |
+| Report generation | ≤ 5s p95, or async with progress | Beyond five seconds a person leaves; anything slower must not pretend to be synchronous. |
+| Job queue latency | ≤ 30s p95 from enqueue to start | A reminder that fires late is a reminder that failed. |
+| Migration, medium dataset | ≤ 60s total | The update window an owner will actually accept (§39.6). |
+| Cold boot to serving | ≤ 20s | Replit and a restarted droplet both pay this on every deploy. |
+
+Three rules about the numbers themselves:
+
+- **p95 and p75 are chosen deliberately.** Web Vitals are p75 by definition;
+  everything server-side is p95, because the tail is where a small instance
+  actually lives and an average hides it entirely.
+- **A budget may be raised only with a written reason in the same PR**, in the
+  table above. Silently relaxing a budget is how a platform gets slow without
+  anybody deciding it should.
+- **Large-dataset behaviour is bounded, not budgeted.** At 100,000 contacts a
+  list must still paginate, stream and stay correct; it need not stay under
+  800ms. Promising a fixed time at unbounded scale is a promise that gets
+  quietly broken.
+
 These gates ARE the moat. Any contributor (human or agent) inherits the standards automatically.
 
 ---
@@ -2026,6 +2092,71 @@ Sharing isn't a buttons plugin; it's a property of every entity with a public fa
 - **In the box v1:** branded home (colors/logo/fonts pulled from instance settings), browse services & products, book with push-notification reminders, view/pay invoices, client galleries (the killer feature — proofing and favoriting from a phone is where clients actually live), portal messages, newsletter content, push notifications for the moments that matter (booking confirmed, gallery ready, invoice due, back-in-stock).
 - **Always submission-ready:** `npx freeholder-app init` reads the instance URL → pulls branding, generates icons/splash from the logo, writes store metadata (descriptions from the business profile, screenshots auto-captured from seeded content) → `eas build` produces store-submittable binaries. The CI matrix builds the app against the demo instance on every release, so "ready for submission" is a tested property, not a promise. Store-listing checklists (Apple review quirks, Play data-safety forms) ship as docs with the honest caveat that review outcomes are the stores' call.
 - **Owner companion (v2):** same codebase, admin mode — today's-bookings glance, tap-to-invoice, respond to messages, approve reviews. One app, role-gated, since the SDK already enforces permissions.
+
+### 35.1 What the app is allowed to be
+
+*(Added 2026-08-23. C10.12–C10.18 referenced this section for seven checklist
+items and found three paragraphs. What follows is the missing half: the rules
+that decide what the app may hold, how it signs in, and what it does with no
+signal. Written before the code, because each of these is a decision that is
+expensive to reverse once a binary is in a store.)*
+
+**The app is a client, never a second implementation.** Every screen calls the
+generated SDK (§28) against the instance's own API. There is no mobile-only
+endpoint, no mobile-only business rule, and no mobile-only notion of a customer.
+This is not tidiness: a rule that exists only in the app is a rule that stops
+being true the moment somebody uses the website instead, and the store review
+cycle means the app is always the copy that is weeks out of date.
+
+**Instance discovery is the first screen and it is honest.** The app is
+white-label but not single-tenant-compiled: it asks for the business's address,
+fetches `/.well-known/freeholder` for the name, branding and contract version,
+and refuses an instance whose contract is newer than the binary understands —
+with the store link to update, not a broken screen. A customer whose photographer
+moved domains types the new one; nobody reinstalls.
+
+**Auth is the portal's, unchanged.** Magic link and password (§13's KISS auth),
+with the token in the platform keychain and never in JavaScript-reachable
+storage. Biometric unlock guards *re-opening* the app, never the login itself —
+a fingerprint is a convenience over a held session, not an authentication
+factor the server knows about, and treating it as one is how apps end up
+trusting a device instead of a person.
+
+**Offline is read-through, write-never.** The app caches what it has already
+been shown — the gallery you were proofing, the invoice you were about to pay,
+today's bookings — and shows it with the time it was fetched. It does **not**
+queue writes. A booking made offline is a booking against availability that may
+no longer exist; a payment queued offline is a payment somebody believes they
+made. The one exception is media capture (C10.18), which is genuinely a queue of
+files rather than a queue of decisions, and which says plainly what has and has
+not been uploaded.
+
+**Push is a notification channel, not a second notification system.** The device
+token is a `NotificationDelivery` channel like email and SMS (§30), registered
+against the contact, subject to the same per-topic preferences, and revoked when
+the session ends. A push that says something the platform would not have emailed
+is a bug. Tokens expire and are re-registered on every launch; a token that a
+provider reports as unregistered is deleted rather than retried, because
+retrying a dead token forever is how a push budget disappears.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `DeviceToken` | One app install that may be pushed to. | contact_id, platform (ios/android), token, app_version, contract_version, last_seen_at, revoked_at |
+
+**What the app deliberately does not do.** No in-app purchase of anything the
+platform sells — the stores take 15–30% of digital goods and Freeholder's whole
+argument is that the business keeps its money, so digital sales are web
+checkout, which is what the store rules permit for goods consumed outside the
+app. No background location. No analytics SDK: first-party analytics (§4.7)
+already answers what the business needs, and a third-party SDK in a customer's
+pocket is a privacy claim the owner would have to make on somebody else's
+behalf.
+
+**"Submission-ready" is a tested property.** The CI matrix builds against the
+demo instance on every release and fails on a contract the app cannot parse, a
+missing store asset, or a privacy manifest that does not match the permissions
+the binary actually requests. Review *outcomes* remain the stores' call, and the
+docs say so.
 
 ---
 
