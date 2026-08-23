@@ -30,3 +30,4 @@ export {
   taxRegistrations,
   taxZones,
 } from "./schema";
+export { invoiceSchedules, invoiceReminders } from "./recurring-schema";
