@@ -177,11 +177,13 @@ freeholder/
 │
 └── platform/                # Operate & extend
     ├── admin                # The admin app shell: dashboards, CRUD for everything
-    ├── crm                  # Pipelines & deals, segments, consent, imports, duplicate queue
-    │                        # (tasks and notes live in core/tasks and core/notes:
-    │                        # §4.14 attaches both to five entities across four
-    │                        # modules, so no module should have to depend on
-    │                        # another to hold one)
+    ├── crm                  # Pipelines & deals, consent, imports, duplicate queue
+    │                        # (tasks, notes and segments live in core/tasks,
+    │                        # core/notes and core/segments. The rule is the same
+    │                        # each time: anything several modules must read, or
+    │                        # that core itself reads, belongs to the spine — a
+    │                        # module should never have to depend on another
+    │                        # module to hold a to-do, a note, or an audience)
     ├── inbox                # The human surface over core/messaging: one thread per contact, every channel, assignable
     ├── automations          # Visual trigger → condition → action over spine events; modules contribute verbs
     ├── portal               # Customer portal: their quotes, invoices, bookings, galleries, files, messages
@@ -2969,11 +2971,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.01 (#186), with C7.02 in review (#187), plus this change for C7.03. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.03 (#188), plus this change for C7.04. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.04 the canonical segment query model — the one definition of "who". |
+| Current focus | C7.05 transparent lead scoring, with no black-box path. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5119,9 +5121,39 @@ equipment, classes and expertise without double-booking or duplicated records.
   without JavaScript. §4.14's subject list and its resolver moved to
   `core/subjects` the moment notes became the second caller. §11's tree updated.
   `0103_notes.sql`. Coverage in `tests/core/notes.test.ts`.)
-- [ ] **C7.04** Build the canonical segment query model, static/dynamic modes,
-  preview/count, explainability and reuse by pricing, campaigns, automation and
-  reporting.
+- [x] **C7.04** Build the canonical segment query model, static/dynamic modes,
+  preview/count, explainability, and reuse by every audience surface that exists
+  today — which is pricing.
+  (Split from the original C7.04 on 2026-08-22. Three of its four named
+  consumers are not built yet: campaign broadcasts are C9.06, automations are
+  C9.01, and reporting cohorts are C10. Ticking an item whose evidence cannot
+  exist is what §43 forbids; leaving the model unbuilt until C10 would let each
+  of those surfaces grow its own answer to "who" as it lands, which is the exact
+  failure the rule exists to prevent. So the model ships now and every later
+  audience surface has one thing to adopt. The adoption half is C7.17.
+  Built: **the field catalogue is a registry, not a list**, because §4.14's own
+  example — "customers in Ontario who bought twice" — spans core and a module;
+  core registers what the spine knows and `catalog` registers orders, so an
+  instance with commerce switched off has no orders field rather than a field
+  list that lies. Every field compiles to a condition on `contacts`, never a
+  join, so rules compose under AND and OR without duplicating rows and each one
+  stays independently evaluable. **A rule nothing can answer is refused, never
+  ignored** — silently dropping one widens an audience, which is how a campaign
+  reaches people who were meant to be excluded — and "one of nothing" matches
+  nobody rather than everybody. **Explainability runs the rules** one at a time
+  against one person rather than describing them, because the moment somebody
+  asks "why did they get this" is the moment a plausible-but-wrong answer does
+  damage; a frozen segment answers by what was captured, not by today's world.
+  **Static means frozen**: capture is a separate deliberate act, freezing twice
+  is refused, and thawing back to dynamic is refused, so "who received the March
+  email" cannot change in April. A count is only ever written beside the moment
+  it was taken. **Pricing goes through the same door**: `price_lists.segment_id`
+  joins `customer_group_id` — one tag and one lifecycle stage, the exact second
+  answer §4.14 warns about — and a list naming both must satisfy both, so the
+  older column can be retired without an audience quietly widening.
+  `/admin/segments` previews a count before anything is saved and answers "why
+  is this person in it", with no JavaScript. §11's tree updated.
+  `0104_segments.sql`. Coverage in `tests/core/segments.test.ts`.)
 - [ ] **C7.05** Build transparent scoring rules with decay, reason display,
   stage actions and no black-box scoring path.
 - [ ] **C7.06** Build saved views with filters/columns/sort, ownership/sharing
@@ -5152,6 +5184,12 @@ equipment, classes and expertise without double-booking or duplicated records.
   selection, with source/field/count controls, least-privilege consent, exact
   preview, user-attributed reversible batches, spine dedupe/relationships and
   proof that imports never imply subscription, invitation or marketing consent.
+
+- [ ] **C7.17** Adopt the C7.04 segment model as the audience for campaign
+  broadcasts, the entry condition for automations and the cohort for reports, so
+  no surface grows a second answer to "who". Dependency-blocked: C9.06 builds
+  broadcasts, C9.01 builds automations and C10 builds reporting, and there is
+  nothing to converge until they exist.
 
 **C7 exit:** Freeholder tells the owner what work is owed and carries every
 permitted conversation on the same contact timeline.

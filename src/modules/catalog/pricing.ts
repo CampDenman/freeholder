@@ -6,11 +6,12 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
+import { segments } from "@/core/segments/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { decimalToMinor } from "@/adapters/payments/currency";
 import { assertPositiveMinor } from "@/modules/invoicing/money";
-import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { defineService, getService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { PRICE_BREAK_MODES, PRICE_LIST_KINDS } from "./contract";
 import { applyPriceBreaks, assertBands, type PriceBand } from "./price-breaks";
 import {
@@ -40,6 +41,7 @@ const priceListRow = row({
   currency: z.string(),
   kind: z.enum(PRICE_LIST_KINDS),
   customerGroupId: uuid.nullable(),
+  segmentId: uuid.nullable(),
   contactId: uuid.nullable(),
   startsAt: timestamp.nullable(),
   endsAt: timestamp.nullable(),
@@ -233,6 +235,8 @@ export const createPriceList = defineService({
     currency,
     kind: z.enum(PRICE_LIST_KINDS).default("retail"),
     customerGroupId: id.optional(),
+    /** Who it is for, in the one language the whole platform uses (C7.04). */
+    segmentId: id.optional(),
     contactId: id.optional(),
     startsAt: z.coerce.date().optional(),
     endsAt: z.coerce.date().optional(),
@@ -257,6 +261,15 @@ export const createPriceList = defineService({
         .from(customerGroups)
         .where(eq(customerGroups.id, input.customerGroupId));
       if (!group) throw new ServiceError("not_found", "That customer group is not here.");
+    }
+    if (input.segmentId) {
+      // Checked here rather than left to the foreign key, so an owner gets a
+      // sentence instead of a constraint name.
+      const [segment] = await ctx.tx
+        .select({ id: segments.id })
+        .from(segments)
+        .where(eq(segments.id, input.segmentId));
+      if (!segment) throw new ServiceError("not_found", "That segment is not here.");
     }
     const [created] = await ctx.tx.insert(priceLists).values(input).returning();
     ctx.setSubject("priceList", created!.id);
@@ -404,6 +417,30 @@ async function contactQualifies(
   return true;
 }
 
+/**
+ * Whether this shopper is in the list's segment (§4.14, C7.04).
+ *
+ * Through the one segment service rather than a copy of the query here: a price
+ * list and a campaign asking "is this person a wholesale customer" must get the
+ * same answer, and two implementations of that question is the failure §4.14
+ * names outright. Elevated because an anonymous shopper may not read segments
+ * yet is entitled to the price their segment earns them.
+ */
+async function inSegment(
+  ctx: ServiceContext,
+  segmentId: string,
+  contactId: string | undefined,
+): Promise<boolean> {
+  // No contact is no membership: an anonymous basket cannot be in a list that
+  // is defined by who somebody is.
+  if (!contactId) return false;
+  const result = (await ctx.callAsSystem(getService("segments.contains"), {
+    id: segmentId,
+    contactId,
+  })) as { member: boolean };
+  return result.member;
+}
+
 function rank(kind: (typeof PRICE_LIST_KINDS)[number]): number {
   if (kind === "contract") return 400;
   if (kind === "wholesale" || kind === "member") return 300;
@@ -441,6 +478,10 @@ export const resolvePrice = defineService({
       if (list.kind === "contract" && list.contactId !== input.contactId) continue;
       const group = list.customerGroupId ? groupById.get(list.customerGroupId) : undefined;
       if (list.customerGroupId && !(await contactQualifies(ctx, group, input.contactId))) continue;
+      // The segment is the richer of the two audiences (C7.04). A list naming
+      // both must satisfy both, which is the only reading that cannot quietly
+      // widen an audience while the older column is still being retired.
+      if (list.segmentId && !(await inSegment(ctx, list.segmentId, input.contactId))) continue;
       qualified.push(list);
     }
     qualified.sort((left, right) => rank(right.kind) - rank(left.kind) || right.priority - left.priority || left.name.localeCompare(right.name));

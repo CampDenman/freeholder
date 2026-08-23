@@ -93,6 +93,7 @@ export {
 } from "@/core/contacts/schema";
 export { tasks } from "@/core/tasks/schema";
 export { notes, noteRevisions } from "@/core/notes/schema";
+export { segments, segmentMembers } from "@/core/segments/schema";
 export { auditLog } from "@/core/events/schema";
 export {
   assets,

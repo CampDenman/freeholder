@@ -87,6 +87,7 @@ export interface AdminNavLabels {
   appointments: string;
   pipeline: string;
   tasks: string;
+  segments: string;
   projects: string;
   time: string;
   quotes: string;
@@ -131,6 +132,7 @@ const LINKS = [
   { href: "/admin/calendars", key: "calendars", module: "scheduling", Icon: CalendarBlank },
   { href: "/admin/pipeline", key: "pipeline", module: "crm", Icon: Kanban },
   { href: "/admin/tasks", key: "tasks", module: "crm", Icon: ClipboardText },
+  { href: "/admin/segments", key: "segments", module: "crm", Icon: UsersThree },
   { href: "/admin/projects", key: "projects", module: "projects", Icon: Kanban },
   { href: "/admin/time", key: "time", module: "time", Icon: Clock },
   { href: "/admin/quotes", key: "quotes", module: "quotes", Icon: Receipt },
