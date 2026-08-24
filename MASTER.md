@@ -3111,11 +3111,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.08 (#194), with C7.09 in review (#195), plus this change for C7.10. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `main` through C7.10 (#196), plus this change for C7.11. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.11 10DLC/toll-free registration states and unsupported-send prevention. |
+| Current focus | C7.12 per-purpose consent and STOP/START/HELP before all else. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5473,8 +5473,38 @@ equipment, classes and expertise without double-booking or duplicated records.
   transient failure to 503 (never drop a customer's text). C7.09's reply now
   sends by SMS instead of refusing. `/admin/messaging`, `/api/sms/webhooks/twilio`.
   `0110_messaging_numbers.sql`. Coverage in `tests/core/sms.test.ts`.)
-- [ ] **C7.11** Track 10DLC/toll-free/alphanumeric registration states and
+- [x] **C7.11** Track 10DLC/toll-free/alphanumeric registration states and
   prevent unsupported/unapproved sending with actionable setup guidance.
+  (§4.14 names the failure this exists for — "an unregistered number silently
+  filtered by carriers is the most common way an SMS launch fails" — and the
+  reason it is so common decides the whole design: an unregistered US number
+  does **not** bounce. The carrier accepts the message, returns a success, bills
+  the account, and drops it somewhere the sender cannot see, so every signal a
+  normal integration relies on says it went out. The only defence is knowing the
+  rules before sending. **What a number must be registered for is therefore
+  derived from country and kind, never stored** — a stored requirement is one an
+  owner could clear, and carrier policy is not theirs to waive. Only *how far
+  along* each registration is gets recorded, by the owner, because the platform
+  cannot submit a 10DLC brand on somebody's behalf: that is an identity claim
+  with legal weight, made in the provider's own console. The rules — 10DLC for
+  US long codes, verification for US and Canadian toll-free numbers, sender IDs
+  against a country allow-list — sit in one function with one test file and a
+  comment saying they are 2026 carrier policy and will change, so when they do
+  there is one place to correct and the correction shows up in a diff. The
+  allow-list is deliberate: the honest default for a country nobody has checked
+  is "we do not know", and an allow-list fails towards refusing to send rather
+  than towards sending into a filter. **Required and not approved means refused**
+  at `senderFor`, not warned — a warning somebody clicks past reproduces the
+  failure exactly — and the refusal names the actual thing to go and do rather
+  than "no usable number", which would send an owner to check credentials that
+  are already correct. `whyNothingCanSend` distinguishes no numbers, all
+  switched off, all unhealthy and blocked-on-registration, because those are
+  four different problems with four different fixes. A rejection carries its
+  reason, since "rejected" alone is unactionable, and the first submission date
+  survives later updates because "how long has this been in review" is the
+  question owners actually ask. `/admin/messaging` shows all of it.
+  `0111_number_registrations.sql`. Coverage in
+  `tests/core/sms-registration.test.ts`.)
 - [ ] **C7.12** Enforce per-purpose/channel consent, STOP/START/HELP before all
   other processing, localized keywords and global opt-out propagation.
 - [ ] **C7.13** Enforce recipient-timezone quiet hours, frequency caps and

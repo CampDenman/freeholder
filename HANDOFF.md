@@ -3,7 +3,7 @@ Copyright (C) 2026 Tony Aly
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Handoff — 2026-08-23
+# Handoff — 2026-08-24
 
 Written for whoever picks this up next, human or agent. `MASTER.md` remains the
 only source of truth for product, architecture and status; this document is a
@@ -36,25 +36,29 @@ the live number — it is the only count that is not a guess.
 | C7.06 | Saved views | #192 |
 | C7.07 | CSV contact import, reversible | #193 |
 | C7.08 | Canonical conversations | #194 |
+| C7.09 | The inbox — four verbs and a search | #195 |
+| C7.10 | SMS adapter contract + Twilio | #196 |
+| — | Spec gaps filled, handoff rewritten | #197 |
+| — | `@formatjs/icu-messageformat-parser` patch | #85 |
+| — | `pg-boss` 12.26.2 → 12.27.0 | #79 |
 
 ### In review
 
 | PR | Item | State |
 |---|---|---|
-| #195 | C7.09 — the inbox | CI running, verified locally |
-| #196 | C7.10 — SMS adapter + Twilio | stacked on #195, verified locally |
-
-**Before anything else:** check both, restack `#196` onto `main` after `#195`
-merges (`git rebase --onto origin/main <c7.09-head>`), and merge in order.
+| #199 | C7.11 — registration states | CI running; verified locally (106 tests across 9 files) |
 
 ### Next item
 
-**C7.11** — 10DLC / toll-free / alphanumeric registration states, and refusing
-to send on an unapproved number with actionable setup guidance. It builds
-directly on the `messaging_numbers` row and the three-state health model C7.10
-landed, and it is the other half of the "silently filtered by carriers" failure
-that shaped that item. §4.14's *"Registration is part of setup, not a surprise"*
-is the paragraph to read first.
+**C7.12** — per-purpose, per-channel consent, with STOP / START / HELP handled
+before anything else sees the message, localized keywords, and an opt-out that
+propagates across every channel rather than only the number it arrived on.
+
+§4.14 is unusually firm here and worth reading before writing anything:
+*"Honouring an opt-out is not a feature to be configured."* The consent record
+already exists (`consent_records`, §30) — this is about making the send path
+incapable of skipping it, which means the check belongs where `senderFor` is,
+not where a screen is.
 
 ---
 
@@ -194,7 +198,26 @@ than recording a message that never leaves. Words sitting in a thread the
 customer never saw are worse than an error somebody can act on. C7.10 turned the
 SMS case from a refusal into a send; C7.15 owes the same for chat and social.
 
-### 4.7 Contact import reverses by asking Postgres, not the merge list
+### 4.7 Carrier registration is derived, never stored
+
+`requirementsFor(country, kind)` in `core/messaging/registration.ts` is a pure
+function, and nothing writes what a number *needs* — only how far along each
+registration has got. A stored requirement is one an owner could clear, and
+carrier policy is not theirs to waive.
+
+The rules are US and Canadian carrier policy **as of 2026 and they will change**.
+They sit in that one function with one test file precisely so the correction is
+one diff. The sender-ID country list is an allow-list rather than a deny-list:
+the honest default for a country nobody has checked is "we do not know", and an
+allow-list fails towards refusing to send rather than towards sending into a
+silent filter.
+
+The refusal happens in `senderFor`, so it covers every send path rather than a
+screen. It refuses rather than warns, because the failure being prevented is a
+message that looks sent and is not — and a warning somebody clicks past
+reproduces that exactly.
+
+### 4.8 Contact import reverses by asking Postgres, not the merge list
 
 `hasOtherHistory` queries `pg_constraint` for every column referencing
 `contacts.id`, because the merge list says which tables repoint and *how*, not
@@ -271,7 +294,38 @@ evidence notes as C7.08 did.
 
 ---
 
-## 7. Things I would check early
+## 7. Open pull requests, and what is actually true about them
+
+At the time of writing, nine PRs are open and **none of them is simply "ready"**.
+The important discovery: a green tick on a Dependabot PR proved nothing, because
+they had all last run on **2026-08-21**, before C7.01–C7.10 added ~15,000 lines,
+three core modules, an adapter and a dozen migrations.
+
+I rebased eight of them onto current `main` to get honest evidence. All eight
+then passed — including both **major** bumps (TypeScript 6, `@types/jsdom` 30).
+Two have since merged (#85, #79).
+
+| PR | State | What to do |
+|---|---|---|
+| #86, #87, #88, #80, #108, #109, #83 | fresh CI green, now `BEHIND` again | Merge one at a time: `gh pr update-branch <n> --rebase`, wait for CI, `gh pr merge <n> --squash`. The repo requires up-to-date branches, so this is inherently serial |
+| #110 (Next 16.3.1) | **failing, genuinely** | Turbopack reads `@img/sharp-libvips-linux-x64` as a file when it is a directory and the build dies. Upstream regression — leave it |
+| #198 (seed packs) | another session's | Last *completed* run failed; a newer one was in progress. Not ours to land |
+
+Two notes worth carrying:
+
+- **Serial merging is a feature here, not just a constraint.** Each PR is rebased
+  and re-verified immediately before it merges, so whichever lands second is
+  tested against the first. #109 and #108 were each verified against `main` in
+  isolation — TypeScript 6 with typescript-eslint 8.65, and 8.67 with TypeScript
+  5.9.3 — a combination neither run covered. The rebase-before-merge cycle closes
+  that gap by construction.
+- **`pg-boss` 12.27.0 was read, not just tested.** It is a runtime dependency and
+  the release is entirely about schema-name handling. Freeholder uses
+  `schema: "pgboss"` — bare and already lower-case — which the release notes put
+  squarely in the unaffected case, and derived values (notify channel, advisory
+  lock key) stay byte-identical so rolling upgrades still coordinate.
+
+## 8. Things I would check early
 
 - **`RESTART_HANDOFF.md`** is untracked scratch in the repo root. It is not this
   file. Leave it alone or delete it; never stage it.
