@@ -232,11 +232,32 @@ const envSchema = z.object({
    * Which seed pack `demo.install` writes when seeding is on.
    *
    * Unset keeps Aurora Coast Photography, which the SEO gate and contributor
-   * first-run still prove. `law-firm` and `fishing-charter` are WeVibeSites
-   * Industry Edition packs: placeholder identity, no live-client brand, no
-   * New Vibe City fiction.
+   * first-run still prove. WeVibeSites Industry Edition packs use placeholder
+   * identity, no live-client brand, and no New Vibe City fiction.
    */
-  FREEHOLDER_EDITION: z.enum(["law-firm", "fishing-charter"]).optional(),
+  FREEHOLDER_EDITION: z.enum([
+    "law-firm",
+    "fishing-charter",
+    "talent",
+    "med-spa",
+    "plastic-surgery",
+    "dental",
+    "hvac",
+    "plumber",
+    "electrical",
+    "restaurant",
+    "florist",
+    "hotel",
+    "roofing",
+    "mortgage",
+    "wealth-management",
+    "grocery-market",
+    "news-media",
+    "newspaper",
+    "venture-capital",
+    "real-estate",
+    "general-business",
+  ]).optional(),
 
   /**
    * Whether this process runs background jobs.
