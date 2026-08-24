@@ -41,6 +41,14 @@ import {
   type Tx,
 } from "@/core/service";
 import { NUMBER_KINDS, NUMBER_PURPOSES, messagingNumbers } from "./numbers-schema";
+import {
+  maySend,
+  overallState,
+  REGISTRATION_KINDS,
+  REGISTRATION_STATES,
+  requirementsFor,
+  type RegistrationRecord,
+} from "./registration";
 
 const id = z.string().uuid();
 
@@ -69,6 +77,7 @@ const numberRow = row({
   healthProblem: z.string().nullable(),
   providerStatus: z.string().nullable(),
   healthCheckedAt: timestamp.nullable(),
+  registrations: z.unknown(),
 });
 
 /** The adapter an instance is actually configured for, or the refusing one. */
@@ -270,7 +279,16 @@ async function senderFor(
   const usable = rows.filter((number) => {
     const capabilities = number.capabilities;
     if (needsMms && capabilities.mms === false) return false;
-    return capabilities.sms !== false;
+    if (capabilities.sms === false) return false;
+    // §4.14, C7.11: an unregistered number does not bounce. The carrier accepts
+    // the message, bills for it, and drops it somewhere the sender cannot see —
+    // so the check has to happen here, before sending, rather than by reading a
+    // failure that never arrives.
+    return maySend({
+      country: number.country,
+      kind: number.kind,
+      registrations: number.registrations as RegistrationRecord[],
+    }).allowed;
   });
   const preferred =
     usable.find((number) => number.purpose === purpose) ?? usable[0] ?? null;
@@ -310,10 +328,10 @@ export const sendSms = defineService({
     }
     const sender = await senderFor(ctx.tx, input.purpose, input.mediaUrls.length > 0);
     if (!sender) {
-      throw new ServiceError(
-        "validation",
-        "No usable number is set up to send from. Import your numbers and check their health.",
-      );
+      // Say *why*, not just "no". A blocked registration is a form somebody has
+      // to fill in, and an owner told only "no usable number" will check the
+      // credentials they already set up correctly.
+      throw new ServiceError("validation", await whyNothingCanSend(ctx.tx));
     }
 
     let result;
@@ -484,11 +502,206 @@ export const applySmsEvents = defineService({
   },
 });
 
+/**
+ * Why nothing can send, in words an owner can act on.
+ *
+ * The commonest reasons are different problems with different fixes — no
+ * numbers at all, none healthy, or one blocked on a registration form — and a
+ * single message covering all three sends people to check the thing that is
+ * already right.
+ */
+export async function whyNothingCanSend(tx: Tx): Promise<string> {
+  const rows = await tx.select().from(messagingNumbers);
+  if (rows.length === 0) {
+    return "No numbers are set up yet. Read your numbers in from your provider first.";
+  }
+  const active = rows.filter((number) => number.active);
+  if (active.length === 0) {
+    return "Every number is switched off. Turn one back on to send from it.";
+  }
+  const unhealthy = active.filter((number) => !number.healthy);
+  if (unhealthy.length === active.length) {
+    return (
+      unhealthy[0]?.healthProblem ??
+      "No number passed its last health check. Check them again, and fix what the provider reports."
+    );
+  }
+  const blocked = active
+    .filter((number) => number.healthy)
+    .map((number) =>
+      maySend({
+        country: number.country,
+        kind: number.kind,
+        registrations: number.registrations as RegistrationRecord[],
+      }),
+    )
+    .filter((verdict) => !verdict.allowed);
+  if (blocked.length > 0 && blocked[0]?.problem) return blocked[0].problem;
+  return "No usable number is set up to send from. Read your numbers in and check their health.";
+}
+
+/**
+ * What each number still has to be registered for (§4.14, C7.11).
+ *
+ * The requirement is derived here rather than read from the row, so an owner
+ * cannot clear it and a rule change reaches every existing number at once.
+ */
+export const numberRegistrations = defineService({
+  name: "messaging.registrations",
+  summary: "What each number must be registered for, and how far along it is.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: listed(
+    row({
+      id: uuid,
+      e164: z.string(),
+      country: z.string().nullable(),
+      kind: z.enum(NUMBER_KINDS),
+      state: z.enum(REGISTRATION_STATES),
+      canSend: z.boolean(),
+      problem: z.string().nullable(),
+      required: listed(
+        row({
+          kind: z.enum(REGISTRATION_KINDS),
+          guidance: z.string(),
+          state: z.enum(REGISTRATION_STATES),
+          brand: z.string().nullable(),
+          campaign: z.string().nullable(),
+          providerRef: z.string().nullable(),
+          reason: z.string().nullable(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (_input, ctx) => {
+    const rows = await ctx.tx
+      .select()
+      .from(messagingNumbers)
+      .orderBy(asc(messagingNumbers.e164));
+    return rows.map((number) => {
+      const stored = number.registrations as RegistrationRecord[];
+      const shape = { country: number.country, kind: number.kind, registrations: stored };
+      const verdict = maySend(shape);
+      return {
+        id: number.id,
+        e164: number.e164,
+        country: number.country,
+        kind: number.kind,
+        state: overallState(shape),
+        canSend: verdict.allowed,
+        problem: verdict.problem,
+        required: requirementsFor(shape).map((requirement) => {
+          const record = stored.find((one) => one.kind === requirement.kind);
+          return {
+            kind: requirement.kind,
+            guidance: requirement.guidance,
+            state: record?.state ?? "not_started",
+            brand: record?.brand ?? null,
+            campaign: record?.campaign ?? null,
+            providerRef: record?.providerRef ?? null,
+            reason: record?.reason ?? null,
+          };
+        }),
+      };
+    });
+  },
+});
+
+/**
+ * Record where a registration has got to.
+ *
+ * Owner-entered, because the platform cannot submit a 10DLC brand on somebody's
+ * behalf — that is an identity claim with legal weight, made in the provider's
+ * own console. What the platform *can* do is remember what was said and refuse
+ * to send until it says approved, which is the whole of §4.14's rule.
+ *
+ * Recording a registration that is not required is refused: it would put a form
+ * in front of an owner that nobody asked them to fill in.
+ */
+export const setRegistration = defineService({
+  name: "messaging.setRegistration",
+  summary: "Record how far a number's registration has got.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({
+    id,
+    kind: z.enum(REGISTRATION_KINDS),
+    state: z.enum(REGISTRATION_STATES),
+    brand: z.string().trim().max(200).nullish(),
+    campaign: z.string().trim().max(200).nullish(),
+    providerRef: z.string().trim().max(200).nullish(),
+    reason: z.string().trim().max(1_000).nullish(),
+  }),
+  output: numberRow,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const [number] = await ctx.tx
+      .select()
+      .from(messagingNumbers)
+      .where(eq(messagingNumbers.id, input.id))
+      .limit(1);
+    if (!number) throw new ServiceError("not_found", "That number is not here.");
+
+    const required = requirementsFor({ country: number.country, kind: number.kind });
+    if (!required.some((requirement) => requirement.kind === input.kind)) {
+      throw new ServiceError(
+        "validation",
+        "That registration is not needed for this number, so there is nothing to record.",
+      );
+    }
+
+    const now = new Date().toISOString();
+    const stored = (number.registrations as RegistrationRecord[]).filter(
+      (one) => one.kind !== input.kind,
+    );
+    const previous = (number.registrations as RegistrationRecord[]).find(
+      (one) => one.kind === input.kind,
+    );
+    stored.push({
+      kind: input.kind,
+      state: input.state,
+      brand: input.brand ?? previous?.brand ?? null,
+      campaign: input.campaign ?? previous?.campaign ?? null,
+      providerRef: input.providerRef ?? previous?.providerRef ?? null,
+      // The moment it was first submitted survives later updates: "how long has
+      // this been in review" is the question an owner actually asks.
+      submittedAt:
+        input.state === "submitted" && !previous?.submittedAt
+          ? now
+          : (previous?.submittedAt ?? null),
+      decidedAt:
+        input.state === "approved" || input.state === "rejected"
+          ? now
+          : (previous?.decidedAt ?? null),
+      // A rejection with no reason is unactionable, so a reason given once is
+      // kept until the state changes away from rejected.
+      reason: input.state === "rejected" ? (input.reason ?? previous?.reason ?? null) : null,
+    });
+
+    const [updated] = await ctx.tx
+      .update(messagingNumbers)
+      .set({ registrations: stored, updatedAt: sql`now()` })
+      .where(eq(messagingNumbers.id, input.id))
+      .returning();
+    ctx.setSubject("messagingNumber", updated!.id);
+    ctx.queueEvent("messaging.registrationChanged", {
+      id: updated!.id,
+      kind: input.kind,
+      state: input.state,
+    });
+    return updated!;
+  },
+});
+
 export default [
   listMessagingNumbers,
   importMessagingNumbers,
   updateMessagingNumber,
   checkNumberHealth,
+  numberRegistrations,
+  setRegistration,
   sendSms,
   applySmsEvents,
 ];

@@ -74,6 +74,33 @@ export const messagingNumbers = pgTable(
     healthProblem: text("health_problem"),
     providerStatus: text("provider_status"),
     healthCheckedAt: timestamp("health_checked_at", { withTimezone: true }),
+    /**
+     * What this number is registered for, and how far along each one is (§4.14,
+     * C7.11).
+     *
+     * A list rather than a single status because a US toll-free number can need
+     * verification while a long code beside it needs a 10DLC brand *and*
+     * campaign, and collapsing them loses which one an owner has to chase.
+     *
+     * What is *required* is never stored — it is derived from country and kind
+     * in `registration.ts`. A stored requirement is one an owner could clear,
+     * and the whole point is that carrier policy is not theirs to waive.
+     */
+    registrations: jsonb("registrations")
+      .notNull()
+      .default([])
+      .$type<
+        Array<{
+          kind: string;
+          state: string;
+          brand?: string | null;
+          campaign?: string | null;
+          providerRef?: string | null;
+          submittedAt?: string | null;
+          decidedAt?: string | null;
+          reason?: string | null;
+        }>
+      >(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

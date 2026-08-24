@@ -18,7 +18,7 @@
 import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
 import { currentBusiness } from "@/core/settings/read";
-import { listMessagingNumbers } from "@/core/messaging/sms";
+import { listMessagingNumbers, numberRegistrations } from "@/core/messaging/sms";
 import { formatDateTime } from "@/core/i18n";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
@@ -26,6 +26,7 @@ import { domainOrNull } from "../../read-helpers";
 import {
   checkNumbersAction,
   importNumbersAction,
+  setRegistrationAction,
   updateNumberAction,
 } from "../../messaging-actions";
 
@@ -40,10 +41,11 @@ export default async function MessagingPage({
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("crm", "manage");
-  const [t, business, numbers, query] = await Promise.all([
+  const [t, business, numbers, registrations, query] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(listMessagingNumbers.call({}, actor)),
+    domainOrNull(numberRegistrations.call({}, actor)),
     searchParams,
   ]);
 
@@ -117,6 +119,111 @@ export default async function MessagingPage({
                   {number.healthProblem ? (
                     <p className="text-sm text-danger">{number.healthProblem}</p>
                   ) : null}
+
+                  {/* §4.14: registration status is surfaced here because an
+                      unregistered number silently filtered by carriers is the
+                      most common way an SMS launch fails — and the whole shape
+                      of that failure is that nothing else tells you. What is
+                      *required* is derived from country and kind, so it cannot
+                      be dismissed; only how far along it is can be recorded. */}
+                  {(() => {
+                    const registration = (registrations ?? []).find(
+                      (one) => one.id === number.id,
+                    );
+                    if (!registration || registration.required.length === 0) return null;
+                    return (
+                      <div className="grid gap-2 rounded-md border border-rule p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Pill tone={registration.canSend ? "success" : "danger"}>
+                            {registration.canSend
+                              ? t("messaging.reg.ready")
+                              : t("messaging.reg.blocked")}
+                          </Pill>
+                          <span className="text-sm font-medium">
+                            {t("messaging.reg.title")}
+                          </span>
+                        </div>
+                        {registration.problem ? (
+                          <p className="max-w-prose text-sm text-ink-muted">
+                            {registration.problem}
+                          </p>
+                        ) : null}
+                        {registration.required.map((requirement) => (
+                          <form
+                            key={requirement.kind}
+                            action={setRegistrationAction}
+                            className="flex flex-wrap items-end gap-3"
+                          >
+                            <input type="hidden" name="id" value={number.id} />
+                            <input type="hidden" name="kind" value={requirement.kind} />
+                            <span className="text-sm">
+                              {t(`messaging.reg.kind.${requirement.kind}`)}
+                            </span>
+                            <label className="grid gap-1 text-sm">
+                              <span className="text-ink-muted">
+                                {t("messaging.reg.state")}
+                              </span>
+                              <select
+                                name="state"
+                                defaultValue={requirement.state}
+                                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                              >
+                                {[
+                                  "not_started",
+                                  "submitted",
+                                  "in_review",
+                                  "approved",
+                                  "rejected",
+                                  "expired",
+                                ].map((state) => (
+                                  <option key={state} value={state}>
+                                    {t(`messaging.reg.state.${state}`)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            {requirement.kind === "10dlc" ? (
+                              <>
+                                <label className="grid gap-1 text-sm">
+                                  <span className="text-ink-muted">
+                                    {t("messaging.reg.brand")}
+                                  </span>
+                                  <input
+                                    name="brand"
+                                    defaultValue={requirement.brand ?? ""}
+                                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                                  />
+                                </label>
+                                <label className="grid gap-1 text-sm">
+                                  <span className="text-ink-muted">
+                                    {t("messaging.reg.campaign")}
+                                  </span>
+                                  <input
+                                    name="campaign"
+                                    defaultValue={requirement.campaign ?? ""}
+                                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                                  />
+                                </label>
+                              </>
+                            ) : null}
+                            <label className="grid gap-1 text-sm">
+                              <span className="text-ink-muted">
+                                {t("messaging.reg.reason")}
+                              </span>
+                              <input
+                                name="reason"
+                                defaultValue={requirement.reason ?? ""}
+                                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                              />
+                            </label>
+                            <Button type="submit" variant="quiet">
+                              {t("messaging.action.save")}
+                            </Button>
+                          </form>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <form action={updateNumberAction} className="flex flex-wrap items-end gap-3">
                     <input type="hidden" name="id" value={number.id} />
                     <label className="grid gap-1">

@@ -53,6 +53,7 @@ export default defineModule({
       "conversation.reopened",
       "conversation.bulk",
       "messaging.numbersImported",
+      "messaging.registrationChanged",
       "message.received",
       "message.sent",
       "message.undelivered",

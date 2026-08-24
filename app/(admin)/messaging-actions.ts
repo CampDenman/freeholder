@@ -12,6 +12,7 @@ import { ServiceError } from "@/core/service";
 import {
   checkNumberHealth,
   importMessagingNumbers,
+  setRegistration,
   updateMessagingNumber,
 } from "@/core/messaging/sms";
 import { ownerFacing } from "./action-helpers";
@@ -72,4 +73,39 @@ export async function updateNumberAction(form: FormData): Promise<void> {
   }
   revalidatePath(MESSAGING);
   redirect(`${MESSAGING}?saved=number`);
+}
+
+/**
+ * Record how far a registration has got (C7.11).
+ *
+ * Owner-entered, because the platform cannot submit a 10DLC brand on somebody's
+ * behalf — that is an identity claim with legal weight, made in the provider's
+ * own console. What it can do is remember what was said and refuse to send
+ * until it says approved.
+ */
+export async function setRegistrationAction(form: FormData): Promise<void> {
+  try {
+    await setRegistration.call(
+      {
+        id: text(form, "id"),
+        kind: text(form, "kind") as "10dlc" | "toll_free_verification" | "sender_id",
+        state: (text(form, "state") || "not_started") as
+          | "not_required"
+          | "not_started"
+          | "submitted"
+          | "in_review"
+          | "approved"
+          | "rejected"
+          | "expired",
+        brand: text(form, "brand") || null,
+        campaign: text(form, "campaign") || null,
+        reason: text(form, "reason") || null,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, "That registration could not be recorded.");
+  }
+  revalidatePath(MESSAGING);
+  redirect(`${MESSAGING}?saved=registration`);
 }
