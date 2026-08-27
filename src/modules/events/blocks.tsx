@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from "zod";
 import { defineBlock } from "@/modules/cms/blocks/types";
-import { registerBlock } from "@/modules/cms/blocks/registry";
 
 export const eventsIndex = defineBlock({
   type: "eventsIndex",
@@ -78,7 +77,6 @@ export const eventDetail = defineBlock({
   },
 });
 
-registerBlock(eventsIndex as never);
-registerBlock(eventDetail as never);
+// Registration happens once, in boot, from the manifest's `blocks` entry.
 
 export default [eventsIndex, eventDetail];

@@ -15,6 +15,7 @@
 // is exactly what a second bundle does.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ready } from "@/core/runtime";
+import type * as RegistryModule from "@/modules/cms/blocks/registry";
 
 const REGISTRY = "@/modules/cms/blocks/registry";
 
@@ -26,13 +27,13 @@ describe("the block registry across module graphs", () => {
   it("shows a module's blocks to a second copy of the registry", async () => {
     // Graph one: boot, which is what registers module-contributed blocks.
     await ready();
-    const first = await import(REGISTRY);
+    const first = (await import(REGISTRY)) as typeof RegistryModule;
     expect(first.blockTypes()).toContain("portfolioIndex");
 
     // Graph two: a fresh evaluation that never booted, the way a page render
     // bundle never runs instrumentation's copy of anything.
     vi.resetModules();
-    const second = await import(REGISTRY);
+    const second = (await import(REGISTRY)) as typeof RegistryModule;
     expect(second).not.toBe(first);
 
     expect(second.blockTypes()).toContain("portfolioIndex");
@@ -42,7 +43,7 @@ describe("the block registry across module graphs", () => {
   it("validates a module block from a graph that never booted", async () => {
     await ready();
     vi.resetModules();
-    const { parseBlockTree } = await import(REGISTRY);
+    const { parseBlockTree } = (await import(REGISTRY)) as typeof RegistryModule;
 
     // The exact shape that failed: a built-in first, a module block second.
     // Before the fix this threw on blocks[1] while blocks[0] passed, because
@@ -61,7 +62,7 @@ describe("the block registry across module graphs", () => {
 
   it("still refuses a block type nobody registered", async () => {
     await ready();
-    const { parseBlockTree } = await import(REGISTRY);
+    const { parseBlockTree } = (await import(REGISTRY)) as typeof RegistryModule;
     // The guarantee the sharing must not erode: an unknown block is refused
     // rather than dropped, so disabling a plugin cannot silently delete a
     // section on the next save.
@@ -77,7 +78,7 @@ describe("registering the same block from two graphs", () => {
   });
 
   it("treats a second graph's copy of one module as the same registration", async () => {
-    const { registerBlock, getBlock } = await import(REGISTRY);
+    const { registerBlock, getBlock } = (await import(REGISTRY)) as typeof RegistryModule;
     const shape = { type: "twoGraphProbe", labelKey: "x", contexts: ["page"] };
     // Two equal-but-not-identical objects, which is exactly what two bundles
     // of the same module produce.
@@ -87,7 +88,7 @@ describe("registering the same block from two graphs", () => {
   });
 
   it("still refuses two different modules claiming one type", async () => {
-    const { registerBlock } = await import(REGISTRY);
+    const { registerBlock } = (await import(REGISTRY)) as typeof RegistryModule;
     const shape = { type: "contestedProbe", labelKey: "x", contexts: ["page"] };
     registerBlock({ ...shape } as never, "moduleOne");
     // The guarantee that must survive: whichever module loaded last would
