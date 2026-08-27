@@ -18,6 +18,13 @@ import { sendMail } from "@/core/mail/service";
 import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
 import { assets } from "@/core/media/schema";
+import {
+  isRasterImage,
+  pickRendition,
+  publicRenditions,
+  watermarkedRenditions,
+  type VariantSet,
+} from "@/core/media/variants";
 import { isUniqueViolation } from "@/core/db";
 import {
   defineService,
@@ -271,6 +278,101 @@ async function hashSecret(
   return hashPassword(secret);
 }
 
+/**
+ * A gallery is looked at on a screen. 1600px is the widest rendition either
+ * ladder builds, so asking for it means "the best rendition there is".
+ */
+const SERVE_WIDTH = 1600;
+
+interface Delivery {
+  storageKey: string;
+  filename: string;
+  mime: string;
+  bytes: number;
+}
+
+/** A rendition is a different format; the name a client saves must say so. */
+function renditionName(filename: string, format: string): string {
+  return `${filename.replace(/\.[^.]+$/, "") || "file"}.${format}`;
+}
+
+/**
+ * Which stored object a gallery hands over for one asset, or null when the
+ * policy cannot be honoured.
+ *
+ * Null is the important case. A watermarked gallery whose asset has no marked
+ * rendition must refuse rather than fall back to the master: falling back is
+ * indistinguishable, from the client's side, from the owner never having asked
+ * for a watermark, and it is the exact file the mark exists to withhold. The
+ * same applies to `web_res` on a raster image with no renditions.
+ */
+function deliverableFor(
+  asset: typeof assets.$inferSelect,
+  gallery: {
+    watermark: boolean;
+    downloadPolicy: (typeof GALLERY_DOWNLOAD_POLICIES)[number];
+  },
+  purpose: "view" | "download",
+): Delivery | null {
+  const variants = (asset.variants ?? {}) as VariantSet;
+  const master: Delivery = {
+    storageKey: asset.storageKey,
+    filename: asset.filename,
+    mime: asset.mime,
+    bytes: asset.bytes,
+  };
+
+  if (gallery.watermark) {
+    // Watermark outranks resolution. An owner who asks for both a mark and
+    // full-resolution files is asking for two incompatible things, and the
+    // safe reading of that is the marked file.
+    const marked = pickRendition(watermarkedRenditions(variants), SERVE_WIDTH);
+    if (!marked) return null;
+    return {
+      storageKey: marked.key,
+      filename: renditionName(asset.filename, "webp"),
+      mime: "image/webp",
+      bytes: marked.bytes,
+    };
+  }
+
+  const web = pickRendition(
+    publicRenditions(variants).flatMap(([, renditions]) => renditions),
+    SERVE_WIDTH,
+  );
+
+  if (purpose === "view") {
+    // Viewing always prefers a rendition when one exists — it is smaller and
+    // the client is looking at it on a screen — and the master is a correct
+    // fallback because an unwatermarked gallery is not withholding anything.
+    if (!web) return master;
+    return {
+      storageKey: web.key,
+      filename: renditionName(asset.filename, "webp"),
+      mime: "image/webp",
+      bytes: web.bytes,
+    };
+  }
+
+  if (gallery.downloadPolicy === "web_res") {
+    if (web) {
+      return {
+        storageKey: web.key,
+        filename: renditionName(asset.filename, "webp"),
+        mime: "image/webp",
+        bytes: web.bytes,
+      };
+    }
+    // There is no web resolution of a PDF or a video, so the master is what
+    // "web-sized" means for them. A raster image with no renditions is a
+    // different story: the master is the full-resolution file the owner
+    // declined to hand over.
+    return isRasterImage(asset.mime) ? null : master;
+  }
+
+  return master;
+}
+
 function itemAllowed(
   item: { canView: boolean; canDownload: boolean },
   guest: { canView: boolean; canDownload: boolean } | null,
@@ -284,7 +386,11 @@ function itemAllowed(
 
 async function liveItems(
   ctx: ServiceContext,
-  gallery: { id: string; downloadPolicy: (typeof GALLERY_DOWNLOAD_POLICIES)[number] },
+  gallery: {
+    id: string;
+    downloadPolicy: (typeof GALLERY_DOWNLOAD_POLICIES)[number];
+    watermark: boolean;
+  },
   guest: { canView: boolean; canDownload: boolean } | null,
 ) {
   const rows = await ctx.tx
@@ -305,7 +411,9 @@ async function liveItems(
       position: row.item.position,
       canView: true,
       canDownload:
-        gallery.downloadPolicy !== "none" && itemAllowed(row.item, guest, "download"),
+        gallery.downloadPolicy !== "none" &&
+        itemAllowed(row.item, guest, "download") &&
+        deliverableFor(row.asset, gallery, "download") !== null,
       filename: row.asset.filename,
       altText: row.asset.altText,
       mime: row.asset.mime,
@@ -1037,7 +1145,11 @@ export const downloadGalleryItem = defineService({
     if (!row || row.asset.status !== "ready") {
       throw new ServiceError("not_found", "That file is not in this gallery.");
     }
-    if (gallery.downloadPolicy === "none" || !itemAllowed(row.item, guest, "download")) {
+    const delivery =
+      gallery.downloadPolicy === "none" || !itemAllowed(row.item, guest, "download")
+        ? null
+        : deliverableFor(row.asset, gallery, "download");
+    if (!delivery) {
       await logAccess(ctx, {
         galleryId: gallery.id,
         contactId: session.contactId,
@@ -1080,13 +1192,7 @@ export const downloadGalleryItem = defineService({
       assetId: row.asset.id,
     });
     ctx.setSubject("gallery", gallery.id);
-    return {
-      assetId: row.asset.id,
-      storageKey: row.asset.storageKey,
-      filename: row.asset.filename,
-      mime: row.asset.mime,
-      bytes: row.asset.bytes,
-    };
+    return { assetId: row.asset.id, ...delivery };
   },
 });
 
@@ -1104,6 +1210,7 @@ export const viewGalleryItem = defineService({
     storageKey: z.string(),
     filename: z.string(),
     mime: z.string(),
+    bytes: z.number().int(),
   }).nullable(),
   handler: async (input, ctx) => {
     const { gallery, guest } = await loadSession(ctx, input.sessionToken);
@@ -1115,12 +1222,11 @@ export const viewGalleryItem = defineService({
       .limit(1);
     if (!found || found.asset.status !== "ready") return null;
     if (!itemAllowed(found.item, guest, "view")) return null;
-    return {
-      assetId: found.asset.id,
-      storageKey: found.asset.storageKey,
-      filename: found.asset.filename,
-      mime: found.asset.mime,
-    };
+    // Null when a watermarked gallery has nothing marked to show: the page
+    // renders a gap rather than the unmarked original.
+    const delivery = deliverableFor(found.asset, gallery, "view");
+    if (!delivery) return null;
+    return { assetId: found.asset.id, ...delivery };
   },
 });
 

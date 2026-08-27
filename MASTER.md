@@ -3132,11 +3132,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-27 |
-| Evidence snapshot | Working branch `feat/c8.03-client-galleries` (from the C7.12–C8.02 landing) implements C8.03 private client galleries, then audits and corrects them: session-scoped bytes, a durable download limit, secret rotation that closes the sessions it opened, and a guest magic link that can actually be sent. Next product item is C8.04. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `feat/c8.03-client-galleries` (PR #208) implements C8.03 private client galleries and then audits and corrects them: session-scoped bytes, a durable download limit, secret rotation that closes the sessions it opened, and a guest magic link that can actually be sent. `feat/c8.04-gallery-variants` stacks on it: C8.04 is decomposed from the old eight-capability item and delivered — watermarked renditions and a `download_policy` that is finally read. Next product item is C8.05. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.04 watermarked variants and a `download_policy` that decides whether a client receives a rendition or the master. |
+| Current focus | C8.05 gallery proofing: `GallerySelection` favorites, selects and rejects with per-asset comments, on the contact spine. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5749,16 +5749,37 @@ permitted conversation on the same contact timeline.
   durable download limit, secret rotation, session ownership and invite
   delivery. Changesets `client-galleries.md` and
   `client-gallery-delivery-audit.md`.)
-- [ ] **C8.04** Render watermarked variants, and make `download_policy` decide
+- [x] **C8.04** Render watermarked variants, and make `download_policy` decide
   what a client actually receives: `web_res` a rendition, `full_res` the
   master, and `watermark` a marked rendition for what a proof gallery shows
   and hands over.
-  (§36's responsive AVIF/WebP ladder already exists in
-  `src/core/media/variants.ts` and runs on upload; what is missing is a
-  watermarked rendition and any code that reads `download_policy` at all —
-  C8.03 stores both choices and honours neither, so `web_res` currently
-  hands over the master. Proofing renders on top of this, so it comes
-  first.)
+  (`src/core/media/watermark.ts` builds marked renditions beside §36's
+  existing AVIF/WebP ladder on upload. The mark is `design.logoAssetId`
+  when the brand has a logo and the business name otherwise, so no new
+  setting exists and first boot and seed/demo both mark. WebP at 800/1600:
+  a proof is looked at, not printed, and AVIF encoding is absent from some
+  libvips builds. A mark that cannot be drawn — no fontconfig, a damaged
+  file — yields no rendition and never fails the upload.
+  `Asset.variants` gains the `watermarked` key §4.5 names; because it nests,
+  three existing readers of the raw object had to be corrected, and one of
+  them was SQL: `resolveSource` would have served proofs as public
+  `<picture>` sources, `purgeStoredAsset` would have thrown, and the
+  `freeholder_inventory_legacy_asset` trigger failed with "cannot extract
+  elements from an object" (migration `0120_watermarked_variant_inventory`
+  now takes only array values and descends into `watermarked`).
+  `deliverableFor` in the galleries service is the single place policy is
+  read: watermark outranks `full_res`, and a watermarked gallery with no
+  mark — or `web_res` on a raster image with no rendition — refuses rather
+  than falling back to the master, which would be indistinguishable from
+  never having asked. `liveItems` reports `canDownload: false` for those, so
+  no dead link is offered. `media.backfillWatermarks` and its nightly job
+  mark the library that predates the feature, recording an empty marked set
+  for files it can never mark so the batch converges. Nine tests in
+  `tests/core/media-watermark.test.ts` — including a mark that must raise
+  pixel spread on a flat field, so a blank overlay fails — and five more in
+  `tests/core/client-galleries.test.ts` covering web_res, full_res, the
+  watermark precedence and both refusals. Changesets
+  `watermarked-proof-renditions.md` and `gallery-download-policy.md`.)
 - [ ] **C8.05** Add gallery proofing: `GallerySelection` favorites, selects and
   rejects with per-asset comments, on the contact spine, from the client
   surface and the phone.

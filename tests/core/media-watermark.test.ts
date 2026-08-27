@@ -12,7 +12,10 @@
 //   4. Purge takes the marks with it.
 //   5. A mark that cannot be drawn yields no rendition rather than a broken
 //      one, and never fails the upload.
-import { describe, expect, it } from "vitest";
+//   6. Images that predate watermarking get marks, and unmarkable ones stop
+//      being retried.
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import sharp from "sharp";
 import {
   allRenditionKeys,
@@ -23,6 +26,13 @@ import {
   type BuiltRendition,
 } from "@/core/media/variants";
 import { buildWatermarked } from "@/core/media/watermark";
+import { backfillWatermarks } from "@/core/media/service";
+import { assets } from "@/core/media/schema";
+import { storage } from "@/adapters/storage";
+import { db } from "@/core/db";
+import { ready } from "@/core/runtime";
+import { updateBusiness } from "@/core/settings/service";
+import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const FACTS = { width: 2000, height: 1200 };
 
@@ -173,5 +183,62 @@ describe("watermarked proof renditions", () => {
     const clean = toVariantSet([rendition({ key: "clean.800.webp" })]);
     expect(withWatermarked(clean, [])).toBe(clean);
     expect(watermarkedRenditions(clean)).toEqual([]);
+  });
+});
+
+describe.runIf(hasDatabase)("backfilling marks onto an existing library", { timeout: 90_000 }, () => {
+  beforeEach(async () => {
+    await ready();
+    await truncateSpine();
+    await updateBusiness.call(
+      { name: "Hearth & Pine", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver" },
+      OWNER,
+    );
+  }, 60_000);
+  afterAll(closeDb);
+
+  async function storedImage(filename: string, body: Uint8Array<ArrayBuffer>) {
+    const key = `test/${crypto.randomUUID()}.jpg`;
+    await storage().put(key, body, "image/jpeg");
+    const [created] = await db()
+      .insert(assets)
+      .values({
+        kind: "image",
+        storageKey: key,
+        filename,
+        mime: "image/jpeg",
+        legacyBytes: body.byteLength,
+        bytes: body.byteLength,
+        status: "ready",
+      })
+      .returning();
+    return created!;
+  }
+
+  it("marks an image uploaded before watermarking existed", async () => {
+    const asset = await storedImage("legacy.jpg", await flatImage());
+    const result = await backfillWatermarks.call({ limit: 10 }, { kind: "system" });
+    expect(result.marked).toBe(1);
+
+    const [after] = await db().select().from(assets).where(eq(assets.id, asset.id));
+    const marked = watermarkedRenditions(after!.variants as never);
+    // Without this the first owner to tick "watermark" on last year's work
+    // gets an empty grid, because serving refuses to fall back to the master.
+    expect(marked.length).toBeGreaterThan(0);
+    expect(marked[0]!.key).toContain(".wm.");
+  });
+
+  it("stops retrying an image it can never mark", async () => {
+    const asset = await storedImage("broken.jpg", new Uint8Array([1, 2, 3, 4]));
+    const first = await backfillWatermarks.call({ limit: 10 }, { kind: "system" });
+    expect(first.skipped).toBe(1);
+
+    const [after] = await db().select().from(assets).where(eq(assets.id, asset.id));
+    // An empty marked set, not an absent one: the next batch has to move past
+    // this file rather than picking it up forever and starving the queue.
+    expect((after!.variants as Record<string, unknown>).watermarked).toEqual({});
+
+    const second = await backfillWatermarks.call({ limit: 10 }, { kind: "system" });
+    expect(second.marked + second.skipped).toBe(0);
   });
 });

@@ -49,6 +49,7 @@ import captureServices from "./capture";
 import {
   allRenditionKeys,
   buildRenditions,
+  isRasterImage,
   publicRenditions,
   readImageFacts,
   toVariantSet,
@@ -1475,6 +1476,87 @@ export const authorizeObjectDelivery = defineService({
   },
 });
 
+/**
+ * Add the marks that did not exist when a photograph was uploaded (C8.04).
+ *
+ * Watermarked renditions are built on upload, which leaves every image
+ * already in the library unmarked — and a gallery that refuses to serve an
+ * unmarked file would render an empty grid the first time an owner ticks
+ * "watermark" on work they delivered last year. This walks that backlog a
+ * batch at a time.
+ *
+ * An image that cannot be marked records an empty `watermarked` set rather
+ * than nothing, so the next batch moves past it instead of retrying the
+ * same unmarkable file forever.
+ */
+export const backfillWatermarks = defineService({
+  name: "media.backfillWatermarks",
+  summary: "Add missing watermarked renditions to images already in the library.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({ limit: z.number().int().min(1).max(100).default(20) }),
+  output: row({ marked: z.number().int(), skipped: z.number().int() }),
+  handler: async (input, ctx) => {
+    const mark = await watermarkMark(ctx.tx);
+    if (!mark) return { marked: 0, skipped: 0 };
+    const candidates = await ctx.tx
+      .select()
+      .from(assets)
+      .where(
+        and(
+          eq(assets.kind, "image"),
+          eq(assets.status, "ready"),
+          sql`not (${assets.variants} ? 'watermarked')`,
+        ),
+      )
+      .limit(input.limit);
+
+    let marked = 0;
+    let skipped = 0;
+    for (const asset of candidates) {
+      const set = asset.variants as VariantSet;
+      const body = isRasterImage(asset.mime)
+        ? await storage().get(asset.storageKey)
+        : undefined;
+      const facts = body ? await readImageFacts(body) : undefined;
+      const built =
+        body && facts
+          ? await buildWatermarked(body, facts, mark, (format, width) =>
+              `${asset.storageKey}.wm.${width}.${format}`,
+            )
+          : [];
+      if (!built.length) {
+        await ctx.tx
+          .update(assets)
+          .set({ variants: { ...set, watermarked: {} } })
+          .where(eq(assets.id, asset.id));
+        skipped += 1;
+        continue;
+      }
+      await putTrackedObjects(
+        built.map((rendition) => ({
+          key: rendition.key,
+          body: rendition.body,
+          contentType: rendition.contentType,
+          role: "variant" as const,
+        })),
+      );
+      await attachObjects(
+        ctx.tx,
+        built.map((rendition) => rendition.key),
+        asset.id,
+      );
+      await ctx.tx
+        .update(assets)
+        .set({ variants: withWatermarked(set, built) })
+        .where(eq(assets.id, asset.id));
+      marked += 1;
+    }
+    return { marked, skipped };
+  },
+});
+
 export const setAltText = defineService({
   name: "media.setAltText",
   summary: "Describe an image for people who cannot see it.",
@@ -2338,6 +2420,7 @@ export default [
   resolveAsset,
   authorizeAssetDownload,
   authorizeObjectDelivery,
+  backfillWatermarks,
   assetUsage,
   altTextSuggestionState,
   listAltTextSuggestionStates,
