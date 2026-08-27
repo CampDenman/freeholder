@@ -170,6 +170,7 @@ export function renderRobots(origin: string): string {
     "Disallow: /login",
     "Disallow: /preview",
     "Disallow: /portal",
+    "Disallow: /g/",
     "Disallow: /api/",
     "Disallow: /checkout",
     "Disallow: /cart",

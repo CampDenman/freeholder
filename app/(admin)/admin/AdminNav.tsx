@@ -92,6 +92,7 @@ export interface AdminNavLabels {
   inbox: string;
   messaging: string;
   projects: string;
+  galleries: string;
   time: string;
   quotes: string;
   agreements: string;
@@ -140,6 +141,7 @@ const LINKS = [
   { href: "/admin/segments", key: "segments", module: "crm", Icon: UsersThree },
   { href: "/admin/scoring", key: "scoring", module: "crm", Icon: Gauge },
   { href: "/admin/projects", key: "projects", module: "projects", Icon: Kanban },
+  { href: "/admin/galleries", key: "galleries", module: "galleries", Icon: ImageIcon },
   { href: "/admin/time", key: "time", module: "time", Icon: Clock },
   { href: "/admin/quotes", key: "quotes", module: "quotes", Icon: Receipt },
   { href: "/admin/agreements", key: "agreements", module: "contracts", Icon: Signature },

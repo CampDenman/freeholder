@@ -834,6 +834,13 @@
       "when": 1787846400000,
       "tag": "0118_project_portfolios",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1787932800000,
+      "tag": "0119_client_galleries",
+      "breakpoints": true
     }
   ]
 }
