@@ -22,6 +22,8 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { pages } from "@/modules/cms/schema";
+import type { BlockNode } from "@/modules/cms/blocks/types";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, getService, ServiceError, type Actor } from "@/core/service";
 // The checklist is the platform's one task list (C7.02), not a second one.
@@ -32,10 +34,14 @@ import { TASK_STATUSES, tasks as coreTasks } from "@/core/tasks/schema";
 import {
   PROJECT_FILE_ROLES,
   PROJECT_LINK_KINDS,
+  PROJECT_PUBLICATION_STATUSES,
   PROJECT_STATUSES,
+  PROJECT_CONSENT_METHODS,
+  TESTIMONIAL_STATUSES,
   projectFiles,
   projectLinks,
   projectOutcomes,
+  projectTestimonials,
   projects,
 } from "./schema";
 
@@ -91,6 +97,17 @@ const projectRow = row({
   occurredOn: z.string().nullable(),
   completedAt: timestamp.nullable(),
   notes: z.string().nullable(),
+  blocks: z.unknown(),
+  coverAssetId: uuid.nullable(),
+  featured: z.boolean(),
+  seo: z.unknown(),
+  publicationStatus: z.enum(PROJECT_PUBLICATION_STATUSES),
+  publishedAt: timestamp.nullable(),
+  publicPageId: uuid.nullable(),
+  clientConsentGivenAt: timestamp.nullable(),
+  clientConsentMethod: z.enum(PROJECT_CONSENT_METHODS).nullable(),
+  clientConsentNote: z.string().nullable(),
+  version: z.number().int(),
 });
 
 const linkRow = row({
@@ -158,6 +175,22 @@ const fileRow = row({
   pairKey: z.string().nullable(),
   caption: z.string().nullable(),
   position: z.number().int(),
+});
+
+const testimonialRow = row({
+  id: uuid,
+  projectId: uuid,
+  contactId: uuid,
+  displayName: z.string(),
+  role: z.string().nullable(),
+  body: z.string(),
+  rating: z.number().int().nullable(),
+  assetId: uuid.nullable(),
+  consentGivenAt: timestamp,
+  consentMethod: z.enum(PROJECT_CONSENT_METHODS),
+  consentNote: z.string().nullable(),
+  status: z.enum(TESTIMONIAL_STATUSES),
+  displayLocations: z.array(z.string()),
 });
 
 export const createProject = defineService({
@@ -285,6 +318,7 @@ export const updateProject = defineService({
         ...(input.startedOn !== undefined ? { startedOn: input.startedOn ?? null } : {}),
         ...(input.occurredOn !== undefined ? { occurredOn: input.occurredOn ?? null } : {}),
         ...(input.notes !== undefined ? { notes: input.notes ?? null } : {}),
+        version: existing.version + 1,
         // Stamped by the platform rather than typed, and only on the way in.
         // A completion date somebody can edit is a completion date nothing can
         // be reported from.
@@ -527,25 +561,36 @@ export const attachFile = defineService({
       .where(eq(projectFiles.projectId, input.projectId))
       .orderBy(desc(projectFiles.position))
       .limit(1);
-    const [attached] = await ctx.tx
-      .insert(projectFiles)
-      .values({
-        projectId: input.projectId,
-        assetId: input.assetId,
-        role: input.role,
-        pairKey: input.pairKey ?? null,
-        caption: input.caption ?? null,
-        position: (last?.position ?? -1) + 1,
-      })
-      .onConflictDoUpdate({
-        target: [projectFiles.projectId, projectFiles.assetId, projectFiles.role],
-        set: {
+    let attached: typeof projectFiles.$inferSelect | undefined;
+    try {
+      [attached] = await ctx.tx
+        .insert(projectFiles)
+        .values({
+          projectId: input.projectId,
+          assetId: input.assetId,
+          role: input.role,
           pairKey: input.pairKey ?? null,
           caption: input.caption ?? null,
-          updatedAt: sql`now()`,
-        },
-      })
-      .returning();
+          position: (last?.position ?? -1) + 1,
+        })
+        .onConflictDoUpdate({
+          target: [projectFiles.projectId, projectFiles.assetId, projectFiles.role],
+          set: {
+            pairKey: input.pairKey ?? null,
+            caption: input.caption ?? null,
+            updatedAt: sql`now()`,
+          },
+        })
+        .returning();
+    } catch (error) {
+      if (isUniqueViolation(error, "project_files_pair_role_idx")) {
+        throw new ServiceError(
+          "conflict",
+          `That pair already has a ${input.role} image. Remove it before choosing another.`,
+        );
+      }
+      throw error;
+    }
     ctx.setSubject("project", input.projectId);
     return attached!;
   },
@@ -625,6 +670,7 @@ export const getProject = defineService({
       tasks: listed(taskRow),
       outcomes: listed(outcomeRow),
       files: listed(fileRow),
+      testimonials: listed(testimonialRow),
     })
     .nullable(),
   handler: async (input, ctx) => {
@@ -637,7 +683,7 @@ export const getProject = defineService({
       .limit(1);
     if (!found) return null;
 
-    const [links, tasks, outcomes, files] = await Promise.all([
+    const [links, tasks, outcomes, files, testimonials] = await Promise.all([
       ctx.tx
         .select()
         .from(projectLinks)
@@ -658,6 +704,11 @@ export const getProject = defineService({
         .from(projectFiles)
         .where(eq(projectFiles.projectId, input.id))
         .orderBy(asc(projectFiles.position)),
+      ctx.tx
+        .select()
+        .from(projectTestimonials)
+        .where(eq(projectTestimonials.projectId, input.id))
+        .orderBy(asc(projectTestimonials.createdAt)),
     ]);
     return {
       ...found.project,
@@ -666,6 +717,7 @@ export const getProject = defineService({
       links,
       outcomes,
       files,
+      testimonials,
     };
   },
 });
@@ -727,6 +779,34 @@ registerContactReference({
   },
 });
 
+registerContactReference({
+  table: "project_testimonials",
+  repoint: (tx, duplicateId, survivingId) =>
+    tx
+      .update(projectTestimonials)
+      .set({ contactId: survivingId })
+      .where(eq(projectTestimonials.contactId, duplicateId)),
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({ id: projectTestimonials.id, contactId: projectTestimonials.contactId })
+      .from(projectTestimonials)
+      .where(inArray(projectTestimonials.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
+    const moved = z
+      .array(z.object({ id: z.string().uuid(), contactId: z.string().uuid() }))
+      .parse(beforeState)
+      .filter((testimonial) => testimonial.contactId === duplicateId);
+    if (moved.length) {
+      await tx
+        .update(projectTestimonials)
+        .set({ contactId: duplicateId })
+        .where(inArray(projectTestimonials.id, moved.map((testimonial) => testimonial.id)));
+    }
+  },
+});
+
 /**
  * What a project means for the person's own data (§30).
  *
@@ -745,6 +825,41 @@ registerContactPrivacySource({
       .where(eq(projects.contactId, contactId))
       .orderBy(asc(projects.createdAt)),
   erase: async (tx, contactId) => {
+    const affectedProjects = await tx
+      .select({ id: projects.id, publicPageId: projects.publicPageId })
+      .from(projects)
+      .where(eq(projects.contactId, contactId));
+    const pageIds = affectedProjects
+      .map((project) => project.publicPageId)
+      .filter((pageId): pageId is string => pageId !== null);
+    if (pageIds.length) {
+      // A snapshot may contain the public client name. Privacy erasure takes
+      // the whole case study offline and scrubs both its live and working CMS
+      // copies in the same transaction.
+      const projectIds = new Set(affectedProjects.map((project) => project.id));
+      const snapshots = await tx.select().from(pages).where(inArray(pages.id, pageIds));
+      for (const page of snapshots) {
+        const scrub = (input: unknown): BlockNode[] => {
+          if (!Array.isArray(input)) return [];
+          return (input as BlockNode[]).map((block) =>
+            block.type === "projectCaseStudy" &&
+            projectIds.has(typeof block.props.projectId === "string" ? block.props.projectId : "")
+              ? { ...block, props: { ...block.props, clientDisplayName: null } }
+              : block,
+          );
+        };
+        await tx
+          .update(pages)
+          .set({
+            status: "draft",
+            publishedAt: null,
+            blocks: scrub(page.blocks),
+            workingBlocks: scrub(page.workingBlocks ?? page.blocks),
+            updatedAt: sql`now()`,
+          })
+          .where(eq(pages.id, page.id));
+      }
+    }
     const rows = await tx
       .update(projects)
       .set({
@@ -753,6 +868,11 @@ registerContactPrivacySource({
         // as surely as their contact record is.
         clientDisplayName: null,
         notes: null,
+        clientConsentGivenAt: null,
+        clientConsentMethod: null,
+        clientConsentNote: null,
+        publicationStatus: "draft",
+        publishedAt: null,
         updatedAt: sql`now()`,
       })
       .where(eq(projects.contactId, contactId))
@@ -761,10 +881,74 @@ registerContactPrivacySource({
   },
 });
 
+function withoutTestimonials(blocks: unknown, ids: Set<string>): BlockNode[] {
+  if (!Array.isArray(blocks)) return [];
+  return (blocks as BlockNode[]).map((block) => {
+    if (block.type !== "projectCaseStudy") return block;
+    const testimonials = Array.isArray(block.props.testimonials)
+      ? block.props.testimonials.filter(
+          (entry) =>
+            typeof entry !== "object" ||
+            entry === null ||
+            !ids.has((entry as { id?: string }).id ?? ""),
+        )
+      : [];
+    return { ...block, props: { ...block.props, testimonials } };
+  });
+}
+
+registerContactPrivacySource({
+  scope: "contact.projectTestimonials",
+  tables: ["project_testimonials", "pages"],
+  exportData: (tx, contactId) =>
+    tx
+      .select()
+      .from(projectTestimonials)
+      .where(eq(projectTestimonials.contactId, contactId))
+      .orderBy(asc(projectTestimonials.createdAt)),
+  erase: async (tx, contactId) => {
+    const rows = await tx
+      .select({ id: projectTestimonials.id, projectId: projectTestimonials.projectId })
+      .from(projectTestimonials)
+      .where(eq(projectTestimonials.contactId, contactId));
+    if (!rows.length) return { affected: 0 };
+    const ids = new Set(rows.map((testimonial) => testimonial.id));
+    const projectIds = [...new Set(rows.map((testimonial) => testimonial.projectId))];
+    const linked = await tx
+      .select({ publicPageId: projects.publicPageId })
+      .from(projects)
+      .where(inArray(projects.id, projectIds));
+    const pageIds = linked
+      .map((project) => project.publicPageId)
+      .filter((pageId): pageId is string => pageId !== null);
+    if (pageIds.length) {
+      const snapshots = await tx.select().from(pages).where(inArray(pages.id, pageIds));
+      for (const page of snapshots) {
+        await tx
+          .update(pages)
+          .set({
+            blocks: withoutTestimonials(page.blocks, ids),
+            workingBlocks: withoutTestimonials(page.workingBlocks ?? page.blocks, ids),
+            updatedAt: sql`now()`,
+          })
+          .where(eq(pages.id, page.id));
+      }
+    }
+    await tx
+      .delete(projectTestimonials)
+      .where(eq(projectTestimonials.contactId, contactId));
+    return { affected: rows.length };
+  },
+});
+
 import timeServices from "./time-service";
+import publishingServices from "./publishing-service";
+import portfolioServices from "./portfolio-service";
 
 export default [
   ...timeServices,
+  ...publishingServices,
+  ...portfolioServices,
   createProject,
   updateProject,
   linkToProject,

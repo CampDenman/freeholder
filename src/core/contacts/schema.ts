@@ -80,6 +80,13 @@ export const contacts = pgTable(
     name: text("name").notNull(),
     email: text("email"),
     phone: text("phone"),
+    /** Carrier-observed reachability for the current `phone` value. */
+    phoneStatus: text("phone_status", { enum: ["unknown", "valid", "invalid"] })
+      .notNull()
+      .default("unknown"),
+    phoneInvalidAt: timestamp("phone_invalid_at", { withTimezone: true }),
+    phoneInvalidReason: text("phone_invalid_reason"),
+    phoneInvalidProviderCode: text("phone_invalid_provider_code"),
     orgId: uuid("org_id").references(() => organizations.id, {
       onDelete: "set null",
     }),
@@ -127,6 +134,16 @@ export const contacts = pgTable(
         else regexp_replace(${t.phone}, '[^0-9]', '', 'g')
       end)`,
     ),
+    check(
+      "contacts_phone_state_consistent",
+      sql`(${t.phoneStatus} = 'invalid' and ${t.phoneInvalidAt} is not null)
+        or (${t.phoneStatus} <> 'invalid' and ${t.phoneInvalidAt} is null
+          and ${t.phoneInvalidReason} is null and ${t.phoneInvalidProviderCode} is null)`,
+    ),
+    check(
+      "contacts_phone_status_allowed",
+      sql`${t.phoneStatus} in ('unknown', 'valid', 'invalid')`,
+    ),
   ],
 );
 
@@ -142,7 +159,7 @@ export const contactRelationships = pgTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     kind: text("kind", {
-      enum: ["household", "employer", "referred_by", "partner", "guardian"],
+      enum: ["household", "employer", "referred_by", "partner", "guardian", "contact_book"],
     }).notNull(),
     since: date("since", { mode: "string" }),
     notes: text("notes"),

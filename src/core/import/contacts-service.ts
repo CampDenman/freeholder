@@ -29,7 +29,7 @@
 import { z } from "zod";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { contacts } from "@/core/contacts/schema";
+import { contactRelationships, contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
@@ -64,6 +64,13 @@ function requirePerson(actor: Actor): string {
   return actor.userId;
 }
 
+/** Trusted composition may validate/apply a customer-owned staged batch. */
+function requirePersonOrSystem(actor: Actor): void {
+  if (actor.kind !== "user" && actor.kind !== "system") {
+    throw new ServiceError("permission", "Sign in to import contacts.");
+  }
+}
+
 const importRow = row({
   id: uuid,
   filename: z.string(),
@@ -71,6 +78,10 @@ const importRow = row({
   headers: z.array(z.string()),
   mapping: z.array(z.string()),
   source: z.string(),
+  sourceKind: z.enum(["owner_csv", "google", "microsoft", "vcard", "csv", "device"]),
+  signupFlow: z.enum(["portal_account"]).nullable(),
+  subjectContactId: uuid.nullable(),
+  allowedFields: z.array(z.string()),
   status: z.enum(CONTACT_IMPORT_STATUSES),
   counts: z.unknown(),
   error: z.string().nullable(),
@@ -89,6 +100,7 @@ const rowRow = row({
   changes: z.unknown(),
   contactId: uuid.nullable(),
   created: z.boolean(),
+  relationshipId: uuid.nullable(),
 });
 
 /** The contact fields an import may set, as they are stored. */
@@ -317,7 +329,7 @@ export const mapContactImport = defineService({
   }),
   output: importRow,
   handler: async (input, ctx) => {
-    requirePerson(ctx.actor);
+    requirePersonOrSystem(ctx.actor);
     const batch = await loadImport(ctx.tx, input.id);
     if (batch.status === "committed" || batch.status === "reverted") {
       throw new ServiceError(
@@ -434,7 +446,7 @@ export const commitContactImport = defineService({
   input: z.object({ id }),
   output: importRow,
   handler: async (input, ctx) => {
-    requirePerson(ctx.actor);
+    requirePersonOrSystem(ctx.actor);
     const batch = await loadImport(ctx.tx, input.id);
     if (batch.status !== "validated") {
       throw new ServiceError(
@@ -485,6 +497,33 @@ export const commitContactImport = defineService({
       if (before) updated += 1;
       else created += 1;
 
+      let relationshipId: string | null = null;
+      if (batch.subjectContactId && batch.subjectContactId !== resolved.contact.id) {
+        const [existingRelationship] = await ctx.tx
+          .select({ id: contactRelationships.id })
+          .from(contactRelationships)
+          .where(
+            and(
+              eq(contactRelationships.fromContactId, batch.subjectContactId),
+              eq(contactRelationships.toContactId, resolved.contact.id),
+              eq(contactRelationships.kind, "contact_book"),
+            ),
+          )
+          .limit(1);
+        if (!existingRelationship) {
+          const relationship = (await ctx.callAsSystem(
+            getService("contacts.createRelationship"),
+            {
+              fromContactId: batch.subjectContactId,
+              toContactId: resolved.contact.id,
+              kind: "contact_book",
+              notes: `Created by contact import ${batch.id}.`,
+            },
+          )) as { id: string };
+          relationshipId = relationship.id;
+        }
+      }
+
       await ctx.tx
         .update(contactImportRows)
         .set({
@@ -501,12 +540,20 @@ export const commitContactImport = defineService({
                 timezone: before.timezone,
                 tags: before.tags,
                 customFields: before.customFields,
-              }
+            }
             : null,
+          relationshipId,
           appliedAt: new Date(),
           updatedAt: sql`now()`,
         })
         .where(eq(contactImportRows.id, line.id));
+    }
+
+    if (batch.signupFlow) {
+      // Exact email matches resolve in the spine. We also rebuild the
+      // explainable same-name/phone queue for human review; customer imports
+      // never receive authority to merge a pair automatically.
+      await ctx.callAsSystem(getService("contacts.scanDuplicates"), {});
     }
 
     const [done] = await ctx.tx
@@ -548,7 +595,7 @@ export const revertContactImport = defineService({
     kept: z.number().int(),
   }),
   handler: async (input, ctx) => {
-    requirePerson(ctx.actor);
+    requirePersonOrSystem(ctx.actor);
     const batch = await loadImport(ctx.tx, input.id);
     if (batch.status !== "committed") {
       throw new ServiceError("conflict", "That import has not been applied.");
@@ -570,6 +617,15 @@ export const revertContactImport = defineService({
     let kept = 0;
     for (const line of rows) {
       if (!line.contactId) continue;
+      if (line.relationshipId) {
+        await ctx.tx
+          .delete(contactRelationships)
+          .where(eq(contactRelationships.id, line.relationshipId));
+        await ctx.tx
+          .update(contactImportRows)
+          .set({ relationshipId: null, updatedAt: sql`now()` })
+          .where(eq(contactImportRows.id, line.id));
+      }
       if (line.created) {
         if (await hasOtherHistory(ctx.tx, line.contactId)) {
           kept += 1;
@@ -763,6 +819,35 @@ registerContactReference({
   },
 });
 
+/** The portal member who supplied a signup batch remains the same person after a merge. */
+registerContactReference({
+  table: "contact_imports",
+  repoint: (tx, duplicateId, survivingId) =>
+    tx
+      .update(contactImports)
+      .set({ subjectContactId: survivingId })
+      .where(eq(contactImports.subjectContactId, duplicateId)),
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({ id: contactImports.id, subjectContactId: contactImports.subjectContactId })
+      .from(contactImports)
+      .where(inArray(contactImports.subjectContactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
+    const moved = z
+      .array(z.object({ id: z.string().uuid(), subjectContactId: z.string().uuid().nullable() }))
+      .parse(beforeState)
+      .filter((batch) => batch.subjectContactId === duplicateId);
+    if (moved.length) {
+      await tx
+        .update(contactImports)
+        .set({ subjectContactId: duplicateId })
+        .where(inArray(contactImports.id, moved.map((batch) => batch.id)));
+    }
+  },
+});
+
 /**
  * What an import's ledger means for the person's own data (§30).
  *
@@ -795,6 +880,35 @@ registerContactPrivacySource({
       })
       .where(eq(contactImportRows.contactId, contactId))
       .returning({ id: contactImportRows.id });
+    return { affected: cleared.length };
+  },
+});
+
+registerContactPrivacySource({
+  scope: "contact.signupImports",
+  tables: ["contact_imports"],
+  exportData: async (tx, contactId) => {
+    const batches = await tx
+      .select()
+      .from(contactImports)
+      .where(eq(contactImports.subjectContactId, contactId))
+      .orderBy(asc(contactImports.createdAt));
+    const ids = batches.map((batch) => batch.id);
+    const rows = ids.length
+      ? await tx
+          .select()
+          .from(contactImportRows)
+          .where(inArray(contactImportRows.importId, ids))
+          .orderBy(asc(contactImportRows.lineNumber))
+      : [];
+    return { batches, rows };
+  },
+  erase: async (tx, contactId) => {
+    const cleared = await tx
+      .update(contactImports)
+      .set({ subjectContactId: null, updatedAt: sql`now()` })
+      .where(eq(contactImports.subjectContactId, contactId))
+      .returning({ id: contactImports.id });
     return { affected: cleared.length };
   },
 });

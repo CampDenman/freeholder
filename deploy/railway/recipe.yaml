@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
 name: railway
+schema: freeholder-deploy-recipe/v1
 tier: 1
 maintainers: ["@tonyaly"]
 freeholder_min_version: "0.0.0"
@@ -12,7 +13,22 @@ provides:
 estimated_monthly_cost_usd: { min: 10, typical: 25 }
 limits:
   - "Media MUST live in S3-compatible object storage"
+artifacts:
+  - .railway/railway.ts
+required_environment:
+  - APP_URL
+  - SESSION_SECRET
+  - CREDENTIAL_KEY
+operations:
+  install: "railway config plan && railway config apply"
+  verify: "pnpm doctor --url $FREEHOLDER_URL --email $FREEHOLDER_EMAIL --password $FREEHOLDER_PASSWORD"
+  backup: "railway run pg_dump --format=custom --no-owner --no-privileges --file freeholder.dump $DATABASE_URL"
+  restore: "railway run pg_restore --no-owner --no-privileges --dbname $DATABASE_URL freeholder.dump"
+  migrate-in: "railway run pg_restore --no-owner --no-privileges --dbname $DATABASE_URL freeholder.dump && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
+  migrate-out: "railway run pg_dump --format=custom --no-owner --no-privileges --file freeholder.dump $DATABASE_URL && pnpm ownership:export -- --output ownership-export && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
+  update: "FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:$FREEHOLDER_IMAGE_TAG railway config plan && FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:$FREEHOLDER_IMAGE_TAG railway config apply"
+  rollback: "FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:$PREVIOUS_FREEHOLDER_IMAGE_TAG railway config plan && FREEHOLDER_IMAGE=ghcr.io/campdenman/freeholder:$PREVIOUS_FREEHOLDER_IMAGE_TAG railway config apply"
 update:
   strategy: image-swap
   rollback: redeploy the previous image
-tested_on: "2026-08-18"
+tested_on: "2026-08-25"

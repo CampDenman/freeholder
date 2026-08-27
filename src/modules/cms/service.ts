@@ -100,6 +100,8 @@ export { draftPageTranslation, pageTranslationReport } from "./translation-workf
 import { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
 export { previewEmail, testSendEmail } from "./email-service";
 import { previewEmail, testSendEmail } from "./email-service";
+export { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
+import { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
 import { analyzeAccessibility, publishA11yMessage } from "./a11y-hints";
 import { budgetMessage } from "./budgets";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
@@ -1474,6 +1476,9 @@ export default [
   pageTranslationReport,
   previewEmail,
   testSendEmail,
+  previewSms,
+  sendSmsTemplate,
+  testSendSms,
   listRevisions,
   pageAuthorSummary,
   restoreRevision,

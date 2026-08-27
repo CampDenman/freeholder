@@ -94,6 +94,13 @@ export default async function ThreadPage({
         </p>
       ) : null}
 
+      {thread.assistantEscalatedAt && !thread.assistantEscalationResolvedAt ? (
+        <aside className="grid max-w-prose gap-1 rounded-md border border-warning bg-warning-soft px-4 py-3 text-sm text-warning">
+          <p className="font-semibold">{t("inbox.assistantNeedsYou")}</p>
+          {thread.assistantEscalationReason ? <p>{thread.assistantEscalationReason}</p> : null}
+        </aside>
+      ) : null}
+
       {/* The four verbs, in one row, so working a thread is one screen. */}
       <div className="flex flex-wrap items-end gap-3 rounded-md border border-rule p-3 text-sm">
         <form action={assignConversationAction} className="flex items-end gap-2">

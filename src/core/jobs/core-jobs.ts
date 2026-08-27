@@ -704,6 +704,79 @@ export const pruneOldNotifications = defineJob({
   },
 });
 
+/**
+ * Acknowledge STOP/START/HELP only after the consent transaction commits.
+ * Provider downtime may delay these words, but it can never roll back the
+ * opt-out itself. The queue and provider delivery key both deduplicate retries.
+ */
+export const sendSmsComplianceReply = defineJob({
+  name: "core.sendSmsComplianceReply",
+  summary: "Send the mandatory acknowledgement for an SMS compliance word.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 4,
+  handler: async (data) => {
+    if (
+      typeof data.contactId !== "string" ||
+      typeof data.to !== "string" ||
+      typeof data.body !== "string" ||
+      typeof data.idempotencyKey !== "string" ||
+      !data.policyException ||
+      typeof data.policyException !== "object"
+    ) {
+      throw new Error("core.sendSmsComplianceReply received incomplete message data");
+    }
+    const { sendSms } = await import("@/core/messaging/sms");
+    return sendSms.call(
+      {
+        contactId: data.contactId,
+        to: data.to,
+        body: data.body,
+        purpose: "support",
+        idempotencyKey: data.idempotencyKey,
+        policyException: data.policyException as {
+          kind: "customer_requested_reply";
+          referenceId: string;
+        },
+      },
+      { kind: "system" },
+    );
+  },
+});
+
+/** Owner keyword replies are durable and happen only after inbound commit. */
+export const sendSmsKeywordReply = defineJob({
+  name: "core.sendSmsKeywordReply",
+  summary: "Send the configured response for an applied inbound SMS keyword.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 4,
+  handler: async (data) => {
+    if (
+      typeof data.contactId !== "string" ||
+      typeof data.to !== "string" ||
+      typeof data.body !== "string" ||
+      typeof data.idempotencyKey !== "string" ||
+      typeof data.referenceId !== "string"
+    ) {
+      throw new Error("core.sendSmsKeywordReply received incomplete message data");
+    }
+    const { sendSms } = await import("@/core/messaging/sms");
+    return sendSms.call(
+      {
+        contactId: data.contactId,
+        to: data.to,
+        body: data.body,
+        purpose: "support",
+        idempotencyKey: data.idempotencyKey,
+        policyException: {
+          kind: "customer_requested_reply",
+          referenceId: data.referenceId,
+        },
+      },
+      { kind: "system" },
+    );
+  },
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
@@ -747,4 +820,6 @@ export default [
   submitIndexNow,
   deliverContributions,
   replyContributions,
+  sendSmsComplianceReply,
+  sendSmsKeywordReply,
 ];

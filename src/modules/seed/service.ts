@@ -34,12 +34,11 @@ import {
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
 import { createForm } from "@/modules/forms/service";
 import { setTranslation } from "@/core/i18n/service";
-import { selectedSeedPack } from "../../../seed/select";
+import * as demo from "../../../seed/demo/content";
 
 export const installDemo = defineService({
   name: "demo.install",
-  summary:
-    "Fill an empty instance with the selected seed pack (photography by default; a WeVibeSites Industry Edition when FREEHOLDER_EDITION is set).",
+  summary: "Fill an empty instance with the Aurora Coast Photography demo.",
   kind: "mutation",
   // Owner rather than staff: this rewrites the business profile, which is the
   // instance's identity. `system` reaches it through ctx.callAsSystem at boot
@@ -67,7 +66,7 @@ export const installDemo = defineService({
       );
     }
 
-    const pack = selectedSeedPack();
+    const pack = demo;
     const { BUSINESS, LOCATION, HOURS, IMAGES, FORMS, PAGES, TRANSLATIONS, header, footer } =
       pack;
 

@@ -12,6 +12,7 @@
 // loses a customer's text forever or leaves a provider hammering a broken
 // instance for a day, so the mapping below is explicit rather than incidental.
 import { smsAdapter } from "./sms";
+import type { SmsInboundMedia, SmsProviderEvent } from "@/adapters/sms";
 import { AdapterError } from "@/adapters/types";
 import { getService, ServiceError } from "@/core/service";
 import { ready } from "@/core/runtime";
@@ -50,10 +51,43 @@ export function smsWebhookRoute(provider: string) {
       const headers = Object.fromEntries(
         [...request.headers.entries()].map(([key, value]) => [key.toLowerCase(), value]),
       );
-      const events = await smsAdapter(provider).verifyWebhook({ headers, body, receivedAt });
+      const adapter = smsAdapter(provider);
+      const events = await adapter.verifyWebhook({ headers, body, receivedAt });
+      const hydrated: SmsProviderEvent[] = [];
+      for (const event of events) {
+        if (!event.mediaUrls?.length) {
+          hydrated.push(event);
+          continue;
+        }
+        if (!adapter.downloadMedia) {
+          throw new AdapterError(
+            "sms",
+            adapter.id,
+            "unavailable",
+            "This SMS provider cannot import inbound media.",
+          );
+        }
+        const media: SmsInboundMedia[] = [];
+        let totalBytes = 0;
+        for (const url of event.mediaUrls) {
+          const downloaded = await adapter.downloadMedia(url);
+          totalBytes += downloaded.bytes.byteLength;
+          if (totalBytes > 25 * 1024 * 1024) {
+            throw new AdapterError(
+              "sms",
+              adapter.id,
+              "invalid_request",
+              "That picture message contains more than 25 MB of media.",
+            );
+          }
+          media.push(downloaded);
+        }
+        const { mediaUrls: _providerUrls, ...trusted } = event;
+        hydrated.push({ ...trusted, media });
+      }
 
       await getService("messaging.applySmsEvents").call(
-        { events: [...events] },
+        { events: hydrated },
         { kind: "system" },
       );
 

@@ -226,9 +226,7 @@ export const runDuePlaybooks = defineService({
   name: "agents.runDuePlaybooks",
   summary: "Start the scheduled playbooks whose time has come.",
   kind: "mutation",
-  permission: "public",
-  mcpExclude: true,
-  agentCallable: false,
+  permission: "system",
   input: z.object({}),
   output: z.object({
     started: z.number().int(),

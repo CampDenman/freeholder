@@ -164,6 +164,14 @@ describe("the S3 adapter", () => {
     );
   });
 
+  it("supports providers that require virtual-hosted bucket URLs", async () => {
+    const storage = createS3Storage({ ...config, addressingStyle: "virtual" });
+    const url = new URL(await storage.url("2026/07/photo.jpg"));
+    expect(url.origin).toBe("https://freeholder-media.sfo3.digitaloceanspaces.com");
+    expect(url.pathname).toBe("/2026/07/photo.jpg");
+    expect(url.searchParams.get("X-Amz-Signature")).toBeTruthy();
+  });
+
   it("serves a public bucket from a CDN when one is configured", async () => {
     const storage = createS3Storage({
       ...config,

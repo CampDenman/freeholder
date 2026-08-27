@@ -34,7 +34,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { contacts } from "@/core/contacts/schema";
+import { contactRelationships, contacts } from "@/core/contacts/schema";
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
@@ -55,6 +55,16 @@ export const CONTACT_IMPORT_STATUSES = [
  * blanks.
  */
 export const CONTACT_IMPORT_OUTCOMES = ["create", "update", "unchanged", "skip", "error"] as const;
+
+export const SIGNUP_CONTACT_IMPORT_SOURCES = [
+  "google",
+  "microsoft",
+  "vcard",
+  "csv",
+  "device",
+] as const;
+export const SIGNUP_CONTACT_IMPORT_FIELDS = ["email", "name", "phone"] as const;
+export const SIGNUP_CONTACT_IMPORT_FLOWS = ["portal_account"] as const;
 
 export const contactImports = pgTable(
   "contact_imports",
@@ -79,6 +89,19 @@ export const contactImports = pgTable(
      * silently produces contacts nobody can trace.
      */
     source: text("source").notNull().default("import"),
+    sourceKind: text("source_kind", {
+      enum: ["owner_csv", ...SIGNUP_CONTACT_IMPORT_SOURCES],
+    })
+      .notNull()
+      .default("owner_csv"),
+    /** Present only when this is the optional, owner-enabled signup step. */
+    signupFlow: text("signup_flow", { enum: SIGNUP_CONTACT_IMPORT_FLOWS }),
+    /** The new portal member whose own address book supplied these people. */
+    subjectContactId: uuid("subject_contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    /** Policy snapshot: the exact fields this batch was allowed to carry. */
+    allowedFields: text("allowed_fields").array().notNull().default(sql`'{}'`),
     status: text("status", { enum: CONTACT_IMPORT_STATUSES }).notNull().default("mapping"),
     /** The dry-run summary: how many of each outcome, computed before commit. */
     counts: jsonb("counts").notNull().default({}),
@@ -135,6 +158,10 @@ export const contactImportRows = pgTable(
     created: boolean("created").notNull().default(false),
     /** What the contact looked like before, so the batch can be undone. */
     beforeState: jsonb("before_state"),
+    /** Only a relationship created by this row is recorded and later undone. */
+    relationshipId: uuid("relationship_id").references(() => contactRelationships.id, {
+      onDelete: "set null",
+    }),
     appliedAt: timestamp("applied_at", { withTimezone: true }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
@@ -143,8 +170,68 @@ export const contactImportRows = pgTable(
     index("contact_import_rows_import_idx").on(t.importId, t.lineNumber),
     index("contact_import_rows_outcome_idx").on(t.importId, t.outcome),
     index("contact_import_rows_contact_idx").on(t.contactId),
+    index("contact_import_rows_relationship_idx").on(t.relationshipId),
     // One row per line per import. A commit that ran twice would otherwise
     // double the ledger and make the revert restore the wrong state.
     uniqueIndex("contact_import_rows_line_idx").on(t.importId, t.lineNumber),
+  ],
+);
+
+/**
+ * Owner-set envelope around the post-account import. Missing rows and
+ * `enabled=false` both mean off; there is no permissive fallback.
+ */
+export const signupContactImportPolicies = pgTable(
+  "signup_contact_import_policies",
+  {
+    flow: text("flow", { enum: SIGNUP_CONTACT_IMPORT_FLOWS }).primaryKey(),
+    enabled: boolean("enabled").notNull().default(false),
+    allowedSources: text("allowed_sources")
+      .array()
+      .notNull()
+      .default(sql`ARRAY['csv','vcard','device']::text[]`),
+    allowedFields: text("allowed_fields")
+      .array()
+      .notNull()
+      .default(sql`ARRAY['email','name','phone']::text[]`),
+    maxContacts: integer("max_contacts").notNull().default(100),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    check("signup_contact_import_policy_max", sql`${t.maxContacts} between 1 and 500`),
+    check(
+      "signup_contact_import_policy_sources",
+      sql`${t.allowedSources} <@ ARRAY['google','microsoft','vcard','csv','device']::text[]`,
+    ),
+    check(
+      "signup_contact_import_policy_fields",
+      sql`${t.allowedFields} <@ ARRAY['email','name','phone']::text[] and ${t.allowedFields} @> ARRAY['email']::text[]`,
+    ),
+  ],
+);
+
+export const signupContactImportChoices = pgTable(
+  "signup_contact_import_choices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    flow: text("flow", { enum: SIGNUP_CONTACT_IMPORT_FLOWS }).notNull(),
+    status: text("status", { enum: ["pending", "skipped", "completed"] })
+      .notNull()
+      .default("pending"),
+    importId: uuid("import_id").references(() => contactImports.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("signup_contact_import_choice_user_flow_idx").on(t.userId, t.flow),
+    index("signup_contact_import_choice_import_idx").on(t.importId),
   ],
 );

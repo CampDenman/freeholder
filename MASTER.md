@@ -87,6 +87,14 @@ One button exports everything — database, media, and a human-readable archive 
 - **Freeholder-authored code, SDK, deploy tooling, and templates**: Apache-2.0. Use it, self-host it, modify it, host it for clients, and build commercial products on it subject to the license's notice and attribution conditions.
 - **Third-party material**: retains its own license and notices; the bundled fonts, for example, remain under the SIL Open Font License.
 
+### Distribution boundary
+
+This repository ships the generic Freeholder product and one fictional demo
+fixture. Industry-specific website packs, agency content/themes and proprietary
+delivery add-ons belong in downstream products or external plugin registries,
+not in Freeholder core. The extension seams remain public; private catalogue
+content does not.
+
 ### Contributing
 
 Start with the architecture (§2–§8) and the build contract (§9–§16). Translations are the easiest first PR — locale catalogs live in `/locales`. The CI gates enforce the SEO, i18n, and money-handling standards automatically, so you can't accidentally ship a regression to the things that matter most.
@@ -1237,7 +1245,7 @@ freeholder/                          # Apache-2.0
 │
 ├── locales/                         # ICU MessageFormat catalogs: en.json, fr.json, es.json…
 ├── db/migrations/
-├── seed/                            # demo packs: Aurora Coast Photography (default), Law Firm, Fishing Charter
+├── seed/                            # Aurora Coast Photography demo fixture
 ├── scripts/                         # setup, seed, doctor (env checks), export
 ├── tests/
 │
@@ -1297,7 +1305,7 @@ export default defineModule({
 
 This is what keeps §37 honest, too. A builder that can add a page is doing a database write inside the service layer, with validation, audit and one-click revert; a builder that could add a *route* would be writing code on the box that serves traffic, which §37 explicitly forbids.
 
-**The service registry is the single choke point.** Admin UI, HTTP API, and MCP all call `services.quotes.send(...)`. Every service method: validates with Zod, checks permissions from session/API-key scopes, executes in a transaction, emits TimelineEvents, writes AuditLog. A service method that skips any of these fails code review — this is the invariant that makes the platform agent-safe.
+**The service registry is the single choke point.** Admin UI, HTTP API, and MCP all call `services.quotes.send(...)`. Every service method: validates with Zod, checks permissions from session/API-key scopes, executes in a transaction, emits TimelineEvents, writes AuditLog. A service method that skips any of these fails code review — this is the invariant that makes the platform agent-safe. Services declared with `permission: "system"` remain registry-addressable for jobs, listeners and transaction-sharing composition, but are excluded from HTTP, OpenAPI, SDK, MCP resources/tools and API-key scope selection; direct calls admit only the system actor and an external name probe receives the same 404 as an unknown service.
 
 **Background work crosses that same transaction boundary.** A service calls
 `ctx.queueJob(...)`; pg-boss inserts the job through the caller's Drizzle
@@ -1661,9 +1669,13 @@ Tiers are printed in the recipe index and in `create-freeholder`'s target picker
 
 ## 20. Tier-1 Recipe: Replit
 
-**Who it's for:** the vibe-coding on-ramp. Fork → Run → live. Zero terminal.
+**Who it's for:** the vibe-coding on-ramp. Import → provision built-in data
+services → Run → publish. No terminal is required for the first deploy.
 
-**Provisioning:** Replit template repo (published to the template gallery) with `.replit`, `replit.nix`, and PostgreSQL + Object Storage declared. Forking provisions both automatically; `DATABASE_URL` and object-storage credentials are injected by the platform.
+**Provisioning:** Replit template repo (published to the template gallery) with
+`.replit` and `replit.nix`. The owner creates Replit PostgreSQL and Object
+Storage from the workspace tools; Replit injects `DATABASE_URL` and default
+bucket access, and the checked-in recipe names every remaining Secret.
 
 **Mapping:**
 
@@ -1676,7 +1688,9 @@ Tiers are printed in the recipe index and in `create-freeholder`'s target picker
 | Domains | Replit Deployments custom domain + automatic TLS |
 | Secrets | Replit Secrets pane — `.env.example` mirrors exactly what to paste |
 
-**Run button =** `npm run start:replit` → migrate → seed-if-empty → serve. First visit hits `/setup`.
+**Run button =** `pnpm start:replit` → migrate → seed-if-empty → serve. First
+visit hits `/setup`; the checked-in `[deployment]` build/run commands are the
+production path.
 
 **Honest limits (in the recipe README):** dev workspace sleeps (Deployments don't — deploy for production); single-region. Media is already in Replit Object Storage per the mandate, so graduating to DigitalOcean later is the standard migration path (§23) — a bucket sync, not a rescue. Replit is the best *first* home and a fine *forever* home for low-traffic businesses; the recipe says both plainly.
 
@@ -1733,17 +1747,23 @@ The generator never hides steps behind magic — it prints what it did and what 
 
 Migration is not a docs page; it's part of a recipe's definition of done (§18 migration mandate). The mechanism: config is declarative, export is total (§14), and — thanks to the storage mandate — media already lives in object storage, so most migrations are **export archive → provision target from recipe → import → bucket-to-bucket storage sync (rclone script included) → DNS repoint**, with expected downtime measured in minutes.
 
-**The migration matrix** (published in the recipe index, kept honest by CI):
+**The migration matrix** has six Tier-1 targets: Replit, DigitalOcean App
+Platform, DigitalOcean Droplet, Railway, Render and Docker self-hosting. All 30
+directed non-self pairs run through the database restore/export drill in CI;
+the recipe index and `deploy/migration-runbook.md` publish the same matrix.
 
-| From \ To | Replit | DO App Platform | DO Droplet |
-|---|---|---|---|
-| **Replit** | — | ✅ CI round-trip | ✅ CI round-trip |
-| **DO App Platform** | ✅ CI round-trip | — | ✅ script (shared Spaces bucket: repoint, no copy) |
-| **DO Droplet** | ✅ CI round-trip | ✅ script (shared Spaces bucket: repoint, no copy) | — |
-
-- **Tier-1 pairs:** CI performs the actual export/import round-trip on every release — the promise is executed, not asserted. Note the DO↔DO cells: because both flavors mandate Spaces, media doesn't move at all; migration is a database restore and a config change.
+- **Tier-1 pairs:** CI performs a real custom-format `pg_dump`/`pg_restore`,
+  every-table fingerprint comparison, ownership export and media-inventory
+  generation under all 30 pair labels on every release. The runtime recipe
+  matrix separately boots the published image once per target against
+  PostgreSQL and MinIO, claims the seeded instance and runs canonical Doctor.
+  `scripts/media-transfer.mjs` copies each manifest object across S3/Replit
+  boundaries and reads it back to compare size and SHA-256. For DO↔DO moves
+  using the same Spaces bucket, media may be repointed instead of copied.
 - **Tier-2 recipes:** must ship `migrate.md` to/from every Tier-1 target to be approved; maintainer re-verifies per release, and the matrix marks last-verified dates.
-- `scripts/migrate.ts` drives the common path (export → integrity check → import → storage sync → post-import doctor run) so the human steps are provisioning and DNS, nothing else.
+- The shared runbook drives export → integrity check → database restore →
+  byte-verified storage transfer → target export/Doctor → DNS. Human judgment
+  remains at provisioning, write quiescence, comparison signoff and cutover.
 
 "Start on Replit, graduate to DigitalOcean, never lose a byte" is the growth story — the mandates make it a tested property of the system rather than a hope.
 
@@ -1920,18 +1940,19 @@ mapping is exactly the second source of truth "generated, never hand-maintained
 twice" exists to forbid. It would drift, and the drift gate could not catch it,
 because there would be nothing to compare against.
 
-Under RPC the projection is total: a service exists, therefore its endpoint
-exists, therefore its OpenAPI entry exists, and all three are the same object.
+Under RPC the external projection is total: a non-system service exists,
+therefore its endpoint exists, therefore its OpenAPI entry exists, and all
+three are the same object. `permission: "system"` marks the deliberate
+registry-only exception for schedulers, event listeners and composed helper
+services; it can never be overridden into an HTTP, SDK or MCP surface.
 The cost is real and accepted — no resource URLs, no HTTP caching semantics per
 resource, and `GET`/`POST` are the only verbs (a query gets both, a mutation
 gets `POST` only, so nothing that changes data is reachable by a prefetch).
 
-**Responses are not yet described.** `ServiceDef` carries an input schema and no
-output schema, so the generated spec says a response is an object and stops.
-Describing a shape the code does not enforce would be worse than describing
-none — and it is the one place the "impossible to drift" claim does not yet
-hold. Optional output schemas on services close it, and should land before the
-SDK is generated from this.
+**Responses are described and enforced.** `ServiceDef.output` is required by
+the completeness gate, checked after handlers in development/tests, and is the
+schema OpenAPI publishes for a successful response. The contract therefore
+describes the same input and output shapes the service wrapper enforces.
 
 **Change discipline:** semver on the platform; additive changes flow freely; breaking changes require a deprecation window (old shape served with `Deprecation` headers + changelog entry auto-assembled from conventional commits). The generated diff between two OpenAPI versions *is* the migration guide's skeleton.
 
@@ -3110,12 +3131,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-22 |
-| Evidence snapshot | `main` through C7.10 (#196), plus this change for C7.11. C4, C5 and C6 are complete, so the 2026-08-14 commerce deviation is discharged. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Last reconciled | 2026-08-27 |
+| Evidence snapshot | Working branch `chore/remove-proprietary-site-packs` holds the open-source demo-only boundary, the C3 executable six-target portability re-audit, C7.12–C7.16 messaging consent through signup contact import, and C8.01–C8.02 case studies and public portfolios. Next product item is C8.03. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C7.12 per-purpose consent and STOP/START/HELP before all else. |
+| Current focus | C8.03 private client galleries with PIN/magic-link/login access, scoped guests, expiry, per-asset permissions and access audit. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3755,7 +3776,8 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C3.06** Generate human reference docs and `llms.txt` contract sections
   from the same schemas; add a drift/completeness gate over all projections.
   (`contractProjections` / `humanReference` / `llmsContractSection`;
-  `/llms-full.txt`; OpenAPI paths === registry. Coverage in
+  `/llms-full.txt`; OpenAPI paths === external registry projection, while
+  system services remain internal. Coverage in
   `tests/core/contract-projections.test.ts`.)
 - [x] **C3.07** Add webhook subscriptions, delivery inspection/replay, schema
   versioning, endpoint rotation and explicit sensitive-field redaction.
@@ -3811,20 +3833,34 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C3.16** Provide working recipes for Replit, DigitalOcean App Platform,
   DigitalOcean Droplet, Railway, Render and bare Docker Compose with Postgres
   and S3-compatible storage.
-  (`deploy/{replit,digitalocean-app,digitalocean-droplet,railway,render,docker-selfhost}`.
-  Coverage in `tests/core/recipes.test.ts`.)
+  (Current platform artifacts: `.replit`/`replit.nix`, `.do/app.yaml`,
+  `deploy/digitalocean-droplet/cloud-init.yaml`, `.railway/railway.ts`,
+  `render.yaml`, and `deploy/docker-selfhost/compose.yaml`. Every recipe binds
+  PostgreSQL, private S3-compatible storage, health checks and secret inputs;
+  `scripts/recipe-matrix.sh` boots the built image for all six target contracts
+  against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.
+  Parsed/current-IaC coverage in `tests/core/recipes.test.ts`.)
 - [x] **C3.17** Give every Tier-1 recipe install, verify, backup, restore,
   migrate-in, migrate-out, update and rollback steps; continuously test matrix.
-  (`recipe.yaml` update/rollback; `migrate.md` for every pair; `RECIPE_STEPS`.
-  Coverage in `tests/core/recipes.test.ts`.)
+  (Every parsed `recipe.yaml` carries executable `install`, `verify`, `backup`,
+  `restore`, `migrate-in`, `migrate-out`, `update`, and `rollback` commands;
+  target READMEs and `deploy/migration-runbook.md` specify execution, cutover,
+  failure recovery and all 30 directed pairs. `scripts/recipe-matrix.sh` is a
+  CI runtime gate, not a filename assertion. Coverage in
+  `tests/core/recipes.test.ts`.)
 - [x] **C3.18** Build one-command full export of normalized data, media manifest,
   human-readable archive, configuration and checksums without exporting secrets.
   (`pnpm ownership:export`; `platform.export`; `EXPORT_FORMAT`. Coverage in
   `tests/core/ownership-export.test.ts` and `tests/core/portability.test.ts`.)
 - [x] **C3.19** Prove round-trip migration between every Tier-1 pair while
   preserving IDs, money, timestamps, media, locales and public URLs.
-  (`buildLogicalArchive` / `applyLogicalArchive` / `tier1Pairs`. Coverage in
-  `tests/core/portability.test.ts`.)
+  (`pnpm ownership:drill` dumps a source PostgreSQL database once, restores it
+  into a fresh database for all 30 directed pairs, and compares every table's
+  canonical fingerprints before producing the ownership export/media
+  inventory. `pnpm media:transfer` then copies every manifest object between S3
+  and Replit storage and verifies target byte length plus SHA-256. Both are
+  exercised in CI; contracts in `tests/core/portability.test.ts` and transfer
+  behavior in `tests/core/media-transfer.test.ts`.)
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
   (`platform.version` / `platform.compatibility`; `/api/health` `version`;
@@ -5505,24 +5541,105 @@ equipment, classes and expertise without double-booking or duplicated records.
   question owners actually ask. `/admin/messaging` shows all of it.
   `0111_number_registrations.sql`. Coverage in
   `tests/core/sms-registration.test.ts`.)
-- [ ] **C7.12** Enforce per-purpose/channel consent, STOP/START/HELP before all
+- [x] **C7.12** Enforce per-purpose/channel consent, STOP/START/HELP before all
   other processing, localized keywords and global opt-out propagation.
-- [ ] **C7.13** Enforce recipient-timezone quiet hours, frequency caps and
+  (`messaging.sendSms` checks immutable affirmative SMS evidence before the
+  adapter for marketing sends and verifies that evidence belongs to the actual
+  destination; transactional/support remain named relationship exceptions.
+  English/French/Spanish STOP/START/HELP are exact, accent-insensitive reserved
+  words consumed before conversation events or owner rules. STOP appends
+  withdrawals for email/SMS/push, START restores SMS only, carrier retries are
+  idempotent in `sms_compliance_events`, and localized acknowledgements queue
+  only after the consent transaction commits. Compliance evidence participates
+  in contact merge/undo, privacy export and erasure. Coverage in
+  `tests/core/sms-consent.test.ts` plus the SMS/conversation/privacy/merge
+  regression suites.)
+- [x] **C7.13** Enforce recipient-timezone quiet hours, frequency caps and
   explicit transactional exceptions in the service layer.
-- [ ] **C7.14** Add templates/locale variables, two-way keywords, booking
+  (`messaging.evaluateSmsPolicy` is the one pre-adapter decision used by
+  `messaging.sendSms`. `messaging_windows` supports global, canonical C7.04
+  segment and contact scopes; recipient timezone wins with business timezone
+  fallback. A protected 21:00–08:00 baseline and marketing daily/weekly caps
+  fail safe even if seed data is absent. Marketing can never bypass a rule;
+  only a system actor may attach one of four named transactional exceptions,
+  with its supporting reference stored on the message. Contact-scoped policy
+  participates in merge/undo, privacy export and erasure. Coverage in
+  `tests/core/sms-policy.test.ts` plus the messaging/privacy/merge regression
+  group.)
+- [x] **C7.14** Add templates/locale variables, two-way keywords, booking
   actions, MMS via media, delivery receipts, invalid-number state and cost.
-- [ ] **C7.15** Add site live chat, assistant escalation and WhatsApp/Messenger
+  (`0114_messaging_keywords_templates_mms.sql`; SMS joins email in the same
+  preset/locale `content_templates` table with declared locked variables,
+  English fallback, contact-locale/timezone rendering, segment preview and
+  test-send-to-linked-self; protected multilingual carrier words always run
+  before owner exact/prefix `KeywordRule` actions, whose idempotent evidence
+  ledger supports consent, replies, tags, routing and ambiguity-safe booking
+  confirmation; Twilio downloads inbound media only from its configured origin
+  with authenticated bounded requests before ordinary `core/media` validation,
+  scanning, storage and `media_asset_ids`, while outbound MMS accepts ready
+  library assets rather than arbitrary URLs; delivery callbacks retain status,
+  carrier code, segments and integer-minor-unit cost, hard-invalid 21211/21614
+  evidence marks only the exact number sent and blocks retries until the phone
+  is corrected or proven by a new inbound; merge/undo and privacy sources,
+  system-only webhook projection, 53 focused messaging/template tests plus 47
+  cross-cutting contract/merge/privacy/MCP tests, and changeset
+  `sms-templates-keywords-mms.md`)
+- [x] **C7.15** Add site live chat, assistant escalation and WhatsApp/Messenger
   deep links while preserving contact threads and consent boundaries.
-- [ ] **C7.16** Let owners opt selected signup flows into a skippable post-
+  (`0115_site_live_chat.sql`; the existing block now starts a canonical
+  Contact conversation and continues through a cookie-bound `/api/chat`
+  transport, while the database stores only the bearer hash and tags every
+  visible message to that exact session so email, SMS and earlier chats in the
+  shared thread cannot leak. Owner replies reach the active browser and refuse
+  when none exists; a final reply remains readable after closure. Connected
+  assistants speak with `assistant` channel/agent authorship and can raise an
+  explicit owner-visible handoff whose reason remains evidence and resolves on
+  human reply. WhatsApp `wa.me` and Messenger `m.me` links are validated HTTPS
+  navigation only: following them creates no Contact, message, subscription or
+  consent. The public UI follows the site's own design tokens, remains usable
+  without JavaScript for start/follow-up, and ships matching en/es/fr copy.
+  Merge/undo and privacy erasure cover session rows; cross-site cookie writes,
+  unknown/expired bearers, stale sessions and oversized/rate-limited messages
+  fail closed. 23 focused chat/inbox tests and a 132-test contract/i18n/
+  migration/merge/privacy/API regression group pass; production Next compile
+  and the 9,351-file/191,375,423-byte standalone boundary pass; changeset
+  `site-live-chat.md`.)
+- [x] **C7.16** Let owners opt selected signup flows into a skippable post-
   signup contact import from Google/Microsoft, vCard, CSV and supported device
   selection, with source/field/count controls, least-privilege consent, exact
   preview, user-attributed reversible batches, spine dedupe/relationships and
   proof that imports never imply subscription, invitation or marketing consent.
+  (Migration `0116_signup_contact_import` adds an off-by-default, owner-only
+  policy for the currently available `portal_account` signup flow, durable
+  skip/completion choices, source/field/count snapshots on C7.07 batches and a
+  per-row relationship undo reference. The portal offer appears only after a
+  newly linked account and never blocks that completed account; it supports
+  bounded CSV/vCard parsing, the browser Contact Picker where available, and
+  Google People/Microsoft Graph selection. OAuth asks only
+  `contacts.readonly`/`Contacts.Read`; provider field masks come from the
+  owner policy, credentials remain user-owned and can be disconnected from the
+  privacy-facing surface. Every source stages the same exact stored dry run
+  before Contacts are written. Commit is attributed to the portal user, uses
+  `contacts.resolve`, refreshes the human duplicate queue and records a neutral
+  `contact_book` edge rather than inventing a household/partner meaning. Undo
+  removes only import-created edges and uses the existing history-safe restore/
+  delete ledger. Merge and privacy registries cover both the imported contact
+  and the supplying contact. 15 focused tests prove the off default, staff
+  refusal, policy enforcement, source parsing/provider field masks, preview,
+  isolation, attribution, spine resolution, relationship and undo behaviour,
+  skip/account survival, complete provider selection/disconnection, read-only
+  scopes, and zero consent, newsletter
+  subscription, staff-invitation or message rows; 163 surrounding importer,
+  relationship, OAuth, magic-link, privacy, API/contract, merge/schema,
+  migration and en/es/fr RTL tests pass. Full-repository lint and typecheck
+  pass; production Next compilation includes both portal routes and the OAuth
+  callback, and the 9,479-file/193,623,512-byte standalone boundary reports no
+  source or environment leakage; changeset `signup-contact-import.md`.)
 
 - [ ] **C7.17** Adopt the C7.04 segment model as the audience for campaign
   broadcasts, the entry condition for automations and the cohort for reports, so
   no surface grows a second answer to "who". Dependency-blocked: C9.06 builds
-  broadcasts, C9.01 builds automations and C10 builds reporting, and there is
+  broadcasts, C9.01 builds automations and C9.08 builds reporting, and there is
   nothing to converge until they exist.
 
 **C7 exit:** Freeholder tells the owner what work is owed and carries every
@@ -5530,10 +5647,72 @@ permitted conversation on the same contact timeline.
 
 ### 43.13 C8 — Content proof, galleries, portal, reviews, and knowledge
 
-- [ ] **C8.01** Build projects/case studies with services, outcomes, metrics,
+- [x] **C8.01** Build projects/case studies with services, outcomes, metrics,
   before/after pairs, contact-backed testimonials and reciprocal public links.
-- [ ] **C8.02** Build public portfolios and collections using CMS templates,
-  filters, sharing, structured data, sitemaps and accessible media.
+  (The operational C6.15 `Project` remains the single record: migration
+  `0117_project_case_studies.sql` adds its typed case-study blocks, cover,
+  featured/SEO/publication state, immutable public address, client-publication
+  permission evidence and compare-and-swap version rather than inventing a
+  portfolio twin. `projects.publish` takes an explicit reviewed snapshot into
+  the existing CMS at `/portfolio/{slug}`; later block/settings edits stay
+  private until another publish, and unpublish leaves both the job and its
+  draft intact. Publication is structurally refused until the job is complete,
+  contact-linked work has recorded permission, at least one linked catalog row
+  is an active public **service**, every outcome/metric states how it was
+  measured, every public asset is a ready image, and every pair key has exactly
+  one before plus one after (also protected from duplicate halves by a partial
+  unique index). `ProjectEditor` reuses the typed CMS block palette/renderer;
+  the admin adds cover/SEO/featured settings, media roles/pairs, services and
+  metrics without JSON or copied product data. `project_testimonials` requires
+  a real Contact plus consent method/time, supports draft/published/withdrawn
+  state and optional rating/display locations, participates in contact merge,
+  export and erasure, and removes withdrawn words from an already-live CMS
+  snapshot immediately. Erasing a named client scrubs both live/working
+  snapshots and takes the page offline in the same transaction. The generated
+  `projectCaseStudy` block renders service links, measured outcomes, semantic
+  before/after figures, other media and consented testimony; service templates
+  now bind live product details *as well as* booking, and that block queries
+  `projects.publicForService`, so `/products/{service}` and
+  `/portfolio/{project}` link to one another without catalog owning a second
+  relationship. Five focused PostgreSQL tests cover every publication
+  interlock, the complete snapshot, reciprocal anonymous lookup, draft
+  isolation, immediate withdrawal and privacy erasure; 74 project, catalog,
+  CMS layout/template, i18n, registry, merge and privacy regressions pass, as
+  do full-repository lint and TypeScript. The production build includes
+  `/admin/projects/[id]`, `/preview/project/[id]` and the public CMS catch-all;
+  its 9,813-file/199,105,198-byte standalone boundary reports no source or
+  environment leakage. Changeset `project-case-studies.md`.)
+- [x] **C8.02** Build public portfolios and collections using CMS templates,
+  filters, sharing, structured data, sitemaps and accessible media. (Migration
+  `0118_project_portfolios.sql` adds normalized `project_collections` and
+  many-to-many ordered membership, so one published project can support
+  portfolio, service, industry and seasonal arguments without copying it.
+  Publishing the first case study creates and publishes the RIBA root
+  `/portfolio`, adds it to existing site navigation, and binds the owner-
+  editable `portfolio.index`, `portfolio.collection` and `project.case-study`
+  CMS templates; every generated surface includes the standard share block.
+  The public index offers service, collection and text filters using one
+  anonymous service, while filtered URLs inherit the existing noindex and
+  clean canonical policy. Collections have accessible no-JavaScript admin
+  forms for curation, ordering, covers and explicit publish/unpublish, and
+  publication refuses empty collections or public images that are not ready
+  and meaningfully labelled. Public cards, facets and CreativeWork facts are
+  read from the last published CMS snapshot—not the mutable operational
+  project—so draft title, summary, featured, media or service edits cannot
+  leak before republish; a project taken offline also disappears from live
+  collection rendering and empty collection facets. Projects emit
+  `CreativeWork` with absolute accessible images, occurrence date and linked
+  catalog services; collections emit `CollectionPage`; the entity registry
+  and CMS sitemap classify `/portfolio/{project}` and
+  `/portfolio/collections-{slug}` separately. Four focused PostgreSQL tests
+  prove automatic template/index publication, snapshot isolation, normalized
+  curation, service/collection/text filtering, collection snapshots, sitemap
+  kinds and alt-text refusal. A bounded 10-file regression pass is green at
+  102 tests across projects, CMS, SEO, locales, the migration journal and
+  registries, with full lint, TypeScript and licensing also clean. The
+  production build includes both collection admin routes and reports 9,858
+  files / 201,458,835 bytes with no source or environment leakage. Changeset
+  `public-project-portfolios.md`.)
 - [ ] **C8.03** Build private client galleries with PIN/magic-link/login access,
   scoped guests, expiry, per-asset permissions and access audit.
 - [ ] **C8.04** Add proofing, favorites/selects, comments, approval rounds,

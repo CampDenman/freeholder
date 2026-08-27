@@ -64,6 +64,8 @@ jobs:
         run: pnpm ownership:drill
       - name: Build
         run: pnpm build
+      - name: Standalone artifact boundary
+        run: pnpm artifact:check
       # C1.21/C1.22 are deliberately separate from the jsdom unit helpers:
       # Chromium supplies real layout, focus, navigation and Server Action
       # behaviour. The serial suites reset only the disposable CI database.
@@ -112,6 +114,25 @@ jobs:
             console.log(`booted ${h.modules} modules, ${h.services} services, ${h.listeners} listeners`);
           ' "$health"
           docker rm -f freeholder-ci >/dev/null
+      - name: Tier-1 recipe runtime matrix (Postgres + MinIO + Doctor)
+        run: |
+          docker run -d --name freeholder-minio --network host \
+            -e MINIO_ROOT_USER=freeholder-ci \
+            -e MINIO_ROOT_PASSWORD=freeholder-ci-secret \
+            minio/minio:RELEASE.2025-07-23T15-54-02Z server /data --address :9000
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:9000/minio/health/live && break
+            sleep 1
+          done
+          docker run --rm --network host --entrypoint /bin/sh \
+            minio/mc:RELEASE.2025-07-21T05-28-08Z -c \
+            'mc alias set local http://127.0.0.1:9000 freeholder-ci freeholder-ci-secret && mc mb --ignore-existing local/freeholder-recipe-gate'
+          bash scripts/recipe-matrix.sh
+        env:
+          CI_IMAGE: freeholder:ci
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
       # §15.2, against the seeded demo site inside the built image.
       # The doctrine in §5 is "enforced structurally" — this is the structure.
       - name: SEO gate (§15.2)

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Disposable pg_dump/pg_restore and ownership-export rehearsal (C1.23).
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -11,7 +11,22 @@ import postgres from "postgres";
 import {
   createOwnershipExport,
   databaseFingerprint,
-} from "./ownership-export.mjs";
+} from "../src/core/portability/ownership-export.mjs";
+
+export const TIER1_TARGETS = [
+  "replit",
+  "digitalocean-app",
+  "digitalocean-droplet",
+  "railway",
+  "render",
+  "docker-selfhost",
+];
+
+export function tier1Pairs() {
+  return TIER1_TARGETS.flatMap((from) =>
+    TIER1_TARGETS.filter((to) => to !== from).map((to) => [from, to]),
+  );
+}
 
 function argument(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
@@ -104,6 +119,7 @@ export async function runOwnershipDrill({
   sourceDatabaseUrl,
   configPath = path.resolve("freeholder.config.ts"),
   environment = process.env,
+  pairs = [["source", "restore"]],
 }) {
   const guarded = guardedDrillUrl(sourceDatabaseUrl);
   // The restore is on the same server, not merely the same hostname. Libpq
@@ -118,21 +134,13 @@ export async function runOwnershipDrill({
   }
   const suffix = `${process.pid}_${randomBytes(4).toString("hex")}`;
   const safeSourceName = guarded.database.replace(/[^a-zA-Z0-9_]/g, "_");
-  const restoredName = `${safeSourceName}_restore_${suffix}`.slice(0, 63);
-  if (!/^[a-zA-Z0-9_]+$/.test(restoredName)) {
-    throw new Error("The generated restore database name was not a safe identifier.");
-  }
-  const restoredUrl = databaseUrl(guarded.url, restoredName);
   const adminUrl = databaseUrl(guarded.url, "postgres");
   const temporary = await mkdtemp(path.join(tmpdir(), "freeholder-ownership-drill-"));
   const dump = path.join(temporary, "database.dump");
-  const exportDirectory = path.join(temporary, "logical-export");
   const admin = postgres(adminUrl, { max: 1, prepare: false });
+  const restoredNames = [];
 
   try {
-    await terminateAndDrop(admin, restoredName);
-    await admin.unsafe(`create database "${restoredName}"`);
-
     await command("pg_dump", [
       "--format=custom",
       "--no-owner",
@@ -141,40 +149,60 @@ export async function runOwnershipDrill({
       dump,
       guarded.url.toString(),
     ]);
-    await command("pg_restore", [
-      "--no-owner",
-      "--no-privileges",
-      "--dbname",
-      restoredUrl,
-      dump,
-    ]);
+    const sourceFingerprint = await databaseFingerprint(guarded.url.toString());
+    const configContents = await readFile(configPath, "utf8");
+    let lastExport;
 
-    const [sourceFingerprint, restoredFingerprint] = await Promise.all([
-      databaseFingerprint(guarded.url.toString()),
-      databaseFingerprint(restoredUrl),
-    ]);
-    compareFingerprints(sourceFingerprint, restoredFingerprint);
-
-    const exported = await createOwnershipExport({
-      databaseUrl: restoredUrl,
-      outputDirectory: exportDirectory,
-      configPath,
-      environment,
-    });
-    if (exported.manifest.tableCount !== restoredFingerprint.length) {
-      throw new Error(
-        `Logical export covered ${exported.manifest.tableCount} of ${restoredFingerprint.length} restored tables.`,
-      );
+    for (const [index, [from, to]] of pairs.entries()) {
+      const pairName = `${from}_${to}`.replace(/[^a-zA-Z0-9_]/g, "_");
+      const restoredName = `${safeSourceName}_${pairName}_${index}_${suffix}`.slice(0, 63);
+      if (!/^[a-zA-Z0-9_]+$/.test(restoredName)) {
+        throw new Error("The generated restore database name was not a safe identifier.");
+      }
+      restoredNames.push(restoredName);
+      const restoredUrl = databaseUrl(guarded.url, restoredName);
+      await terminateAndDrop(admin, restoredName);
+      await admin.unsafe(`create database "${restoredName}"`);
+      try {
+        await command("pg_restore", [
+          "--no-owner",
+          "--no-privileges",
+          "--dbname",
+          restoredUrl,
+          dump,
+        ]);
+        const restoredFingerprint = await databaseFingerprint(restoredUrl);
+        compareFingerprints(sourceFingerprint, restoredFingerprint);
+        lastExport = await createOwnershipExport({
+          databaseUrl: restoredUrl,
+          outputDirectory: path.join(temporary, `logical-export-${index}`),
+          configuration: {
+            filename: path.basename(configPath),
+            contents: configContents,
+          },
+          environment,
+        });
+        if (lastExport.manifest.tableCount !== restoredFingerprint.length) {
+          throw new Error(
+            `${from}->${to}: logical export covered ${lastExport.manifest.tableCount} of ${restoredFingerprint.length} restored tables.`,
+          );
+        }
+      } finally {
+        await terminateAndDrop(admin, restoredName);
+      }
     }
     return {
-      tables: restoredFingerprint.length,
-      rows: restoredFingerprint.reduce((sum, item) => sum + item.rows, 0),
-      assets: exported.manifest.media.assetCount,
-      objects: exported.manifest.media.objectCount,
+      pairs: pairs.length,
+      tables: sourceFingerprint.length,
+      rows: sourceFingerprint.reduce((sum, item) => sum + item.rows, 0),
+      assets: lastExport?.manifest.media.assetCount ?? 0,
+      objects: lastExport?.manifest.media.objectCount ?? 0,
     };
   } finally {
     try {
-      await terminateAndDrop(admin, restoredName);
+      for (const restoredName of restoredNames) {
+        await terminateAndDrop(admin, restoredName);
+      }
     } finally {
       await admin.end().catch(() => undefined);
       await rm(temporary, { recursive: true, force: true });
@@ -189,9 +217,13 @@ async function main() {
       process.env.TEST_DATABASE_URL ??
       (process.env.CI ? process.env.DATABASE_URL : undefined),
   );
-  const result = await runOwnershipDrill({ sourceDatabaseUrl });
+  const allPairs = process.argv.includes("--all-pairs");
+  const result = await runOwnershipDrill({
+    sourceDatabaseUrl,
+    pairs: allPairs ? tier1Pairs() : undefined,
+  });
   console.log(
-    `ownership drill: pg_dump/restore and secret-safe export matched ${result.tables} tables, ${result.rows} rows, ${result.assets} assets and ${result.objects} media objects`,
+    `ownership drill: ${result.pairs} pair(s) matched ${result.tables} tables, ${result.rows} rows, ${result.assets} assets and ${result.objects} media objects after pg_dump/restore and secret-safe export`,
   );
 }
 

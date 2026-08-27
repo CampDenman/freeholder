@@ -60,22 +60,14 @@ export function ensureBoundEntityBlock(
   bind: LayoutBindings,
 ): BlockNode[] {
   if (entityType === "product" || entityType === "service") {
-    if (nodes.some((node) => node.type === "productDetail" || node.type === "booking")) {
-      return nodes;
-    }
-    if (entityType === "service") {
-      return [
-        ...nodes,
-        {
-          id: "bound-booking",
-          type: "booking",
-          props: { slug: bind.slug ?? "session", ctaHref: "/contact" },
-        },
-      ];
-    }
-    if (bind.productId && bind.slug) {
-      return [
-        ...nodes,
+    let bound = nodes;
+    // Service pages need both the booking surface and the live entity facts.
+    // The latter also carries C8.01's reciprocal links to published work;
+    // treating either block as a substitute for the other silently removed
+    // proof from every default service template, because it already booked.
+    if (bind.productId && bind.slug && !bound.some((node) => node.type === "productDetail")) {
+      bound = [
+        ...bound,
         {
           id: "bound-product",
           type: "productDetail",
@@ -83,6 +75,19 @@ export function ensureBoundEntityBlock(
         },
       ];
     }
+    if (entityType === "service") {
+      if (!bound.some((node) => node.type === "booking")) {
+        bound = [
+          ...bound,
+          {
+            id: "bound-booking",
+            type: "booking",
+            props: { slug: bind.slug ?? "session", ctaHref: "/contact" },
+          },
+        ];
+      }
+    }
+    return bound;
   }
   if (entityType === "location" && bind.locationId && !nodes.some((node) => node.type === "nap")) {
     return [

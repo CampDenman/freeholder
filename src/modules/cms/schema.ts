@@ -243,7 +243,7 @@ export const contentComments = pgTable(
   ],
 );
 
-export const TEMPLATE_KINDS = ["page", "post", "product", "service", "email"] as const;
+export const TEMPLATE_KINDS = ["page", "post", "product", "service", "email", "sms"] as const;
 export const TEMPLATE_PRESETS = [
   "creator",
   "service-business",
@@ -271,6 +271,8 @@ export const contentTemplates = pgTable(
     name: text("name").notNull(),
     locale: text("locale").notNull().default("en"),
     blocks: jsonb("blocks").notNull().default([]),
+    /** Locked render slots declared by this email/SMS template. */
+    variables: text("variables").array().notNull().default([]),
     origin: text("origin", { enum: ["system", "owner"] })
       .notNull()
       .default("system"),

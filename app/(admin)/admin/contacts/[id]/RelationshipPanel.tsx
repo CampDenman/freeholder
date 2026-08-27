@@ -20,7 +20,14 @@ import {
   Select,
 } from "@/ui/primitives";
 
-const KINDS = ["household", "employer", "referred_by", "partner", "guardian"] as const;
+const KINDS = [
+  "household",
+  "employer",
+  "referred_by",
+  "partner",
+  "guardian",
+  "contact_book",
+] as const;
 
 interface RelationshipRow {
   id: string;

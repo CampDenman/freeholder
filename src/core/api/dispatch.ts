@@ -20,7 +20,7 @@
 // transaction, rate limits, audit and CSRF are all the same code the admin
 // screens go through. A route that reimplemented any of that would be exactly
 // the "second door with different locks" §2 principle 7 warns about.
-import { getService, ServiceError, type Service } from "@/core/service";
+import { getExternalService, ServiceError, type Service } from "@/core/service";
 import { serviceRoute } from "@/core/http/route";
 import { errorResponse } from "@/core/http/respond";
 import { actorFromRequest } from "@/core/http/actor";
@@ -67,7 +67,7 @@ function resolve(name: string): Service {
   // getService throws a not_found ServiceError, which the responder already
   // maps to 404 — an unknown service and an unknown URL should not answer
   // differently, because to a caller they are the same mistake.
-  return getService(name);
+  return getExternalService(name);
 }
 
 /**

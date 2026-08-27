@@ -16,9 +16,7 @@ const startPlaybooksForEvent = defineService({
   kind: "mutation",
   // The bus is not a person and holds no key; this runs as system, and the
   // work it creates is marked untrusted because a payload is not an owner.
-  permission: "public",
-  mcpExclude: true,
-  agentCallable: false,
+  permission: "system",
   input: z.object({
     eventName: z.string().min(1).max(120),
     payload: z.record(z.string(), z.unknown()).default({}),

@@ -52,7 +52,10 @@ import {
   conversations,
   messageDeliveries,
   messages,
+  siteChatSessions,
 } from "./schema";
+import { MESSAGE_PURPOSES } from "./purpose";
+import { SMS_POLICY_EXCEPTION_KINDS } from "./policy";
 
 export {
   CONVERSATION_STATUSES,
@@ -84,6 +87,9 @@ const conversationRow = row({
   lastInboundAt: timestamp.nullable(),
   lastOutboundAt: timestamp.nullable(),
   unread: z.boolean(),
+  assistantEscalatedAt: timestamp.nullable(),
+  assistantEscalationReason: z.string().nullable(),
+  assistantEscalationResolvedAt: timestamp.nullable(),
   messageCount: z.number().int(),
   updatedAt: timestamp,
 });
@@ -94,11 +100,17 @@ const messageRow = row({
   contactId: uuid,
   direction: z.enum(MESSAGE_DIRECTIONS),
   channel: z.enum(MESSAGE_CHANNELS),
+  purpose: z.enum(MESSAGE_PURPOSES).nullable(),
+  policyException: z.enum(SMS_POLICY_EXCEPTION_KINDS).nullable(),
+  policyExceptionRef: z.string().nullable(),
   body: z.string(),
   mediaAssetIds: z.array(uuid),
+  chatSessionId: uuid.nullable(),
+  templateId: uuid.nullable(),
   sentBy: z.enum(MESSAGE_AUTHORS),
   sentByUserId: uuid.nullable(),
   providerRef: z.string().nullable(),
+  recipientAddress: z.string().nullable(),
   segments: z.number().int().nullable(),
   costMinor: z.number().int().nullable(),
   costCurrency: z.string().nullable(),
@@ -138,13 +150,20 @@ export const recordMessage = defineService({
       name: z.string().trim().max(200).optional(),
       direction: z.enum(MESSAGE_DIRECTIONS),
       channel: z.enum(MESSAGE_CHANNELS),
+      purpose: z.enum(MESSAGE_PURPOSES).optional(),
+      policyException: z.enum(SMS_POLICY_EXCEPTION_KINDS).optional(),
+      policyExceptionRef: z.string().trim().max(300).optional(),
       body: z.string().trim().min(1).max(100_000),
       subject: z.string().trim().max(500).optional(),
       mediaAssetIds: z.array(id).max(20).default([]),
+      /** Public chat visibility boundary; only chat workflows may set it. */
+      chatSessionId: id.optional(),
+      templateId: id.optional(),
       sentBy: z.enum(MESSAGE_AUTHORS).optional(),
       sentByUserId: id.optional(),
       /** The provider's id, which makes a retried webhook a no-op. */
       providerRef: z.string().trim().max(300).optional(),
+      recipientAddress: z.string().trim().max(320).optional(),
       /** The provider's name for the thread, if it has one. */
       threadKey: z.string().trim().max(300).optional(),
       /** Put it in this thread rather than working one out. */
@@ -156,12 +175,22 @@ export const recordMessage = defineService({
       occurredAt: z.iso.datetime().optional(),
     })
     .refine(
+      (input) => Boolean(input.policyException) === Boolean(input.policyExceptionRef),
+      "A messaging policy exception needs both its kind and supporting reference.",
+    )
+    .refine(
       (input) => Boolean(input.contactId ?? input.email ?? input.phone),
       "Say who the message is with.",
     ),
   output: row({ conversation: conversationRow, message: messageRow, duplicate: z.boolean() }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
+    if (input.policyException && ctx.actor.kind !== "system") {
+      throw new ServiceError(
+        "permission",
+        "Only a trusted system workflow may record a messaging policy exception.",
+      );
+    }
 
     // Idempotency first, before anything is resolved or opened: a retried
     // webhook must not create a contact, a thread, or a second row.
@@ -181,7 +210,7 @@ export const recordMessage = defineService({
       }
     }
 
-    const contactId = input.contactId ?? (await resolveThem(ctx, input));
+    const contactId = input.contactId ?? (await resolveMessageContact(ctx, input));
     const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
     const conversation = await threadFor(ctx, {
       contactId,
@@ -193,6 +222,27 @@ export const recordMessage = defineService({
       occurredAt,
     });
 
+    if (input.chatSessionId) {
+      if (input.channel !== "chat" && input.channel !== "assistant") {
+        throw new ServiceError("validation", "Only chat messages may belong to a site-chat session.");
+      }
+      const [session] = await ctx.tx
+        .select({
+          contactId: siteChatSessions.contactId,
+          conversationId: siteChatSessions.conversationId,
+        })
+        .from(siteChatSessions)
+        .where(eq(siteChatSessions.id, input.chatSessionId))
+        .limit(1);
+      if (
+        !session ||
+        session.contactId !== contactId ||
+        session.conversationId !== conversation.id
+      ) {
+        throw new ServiceError("conflict", "That chat session does not belong to this conversation.");
+      }
+    }
+
     const inbound = input.direction === "inbound";
     const write = async () => {
       const [row] = await ctx.tx
@@ -202,12 +252,18 @@ export const recordMessage = defineService({
           contactId,
           direction: input.direction,
           channel: input.channel,
+          purpose: input.purpose ?? null,
+          policyException: input.policyException ?? null,
+          policyExceptionRef: input.policyExceptionRef ?? null,
           body: input.body,
           mediaAssetIds: input.mediaAssetIds,
+          chatSessionId: input.chatSessionId ?? null,
+          templateId: input.templateId ?? null,
           sentBy: input.sentBy ?? (inbound ? "contact" : "user"),
           sentByUserId:
             input.sentByUserId ?? (ctx.actor.kind === "user" && !inbound ? ctx.actor.userId : null),
           providerRef: input.providerRef ?? null,
+          recipientAddress: input.recipientAddress ?? null,
           segments: input.segments ?? null,
           costMinor: input.costMinor ?? null,
           costCurrency: input.costCurrency ?? null,
@@ -283,7 +339,7 @@ export const recordMessage = defineService({
  * an anonymous door — a form, a carrier webhook. §4.14 applies the spine rule to
  * a new channel; this is the line that does it.
  */
-async function resolveThem(
+export async function resolveMessageContact(
   ctx: ServiceContext,
   input: { email?: string; phone?: string; name?: string; channel: string },
 ): Promise<string> {
@@ -302,10 +358,22 @@ async function resolveThem(
   // has to be matched on the number first, and only then handed to resolve with
   // a placeholder address it can key on.
   const phone = input.phone!;
+  const rawDigits = phone.replace(/\D/g, "");
+  const normalizedPhone =
+    rawDigits.length === 11 && rawDigits.startsWith("1")
+      ? rawDigits.slice(1)
+      : rawDigits;
   const [known] = await ctx.tx
     .select({ id: contacts.id })
     .from(contacts)
-    .where(eq(contacts.phone, phone))
+    // This is the exact expression behind contacts_normalized_phone_idx. A
+    // webhook arrives as E.164 while an owner may have typed punctuation, and
+    // exact text equality would create a second person before applying STOP.
+    .where(sql`(case
+      when regexp_replace(${contacts.phone}, '[^0-9]', '', 'g') ~ '^1[0-9]{10}$'
+        then substring(regexp_replace(${contacts.phone}, '[^0-9]', '', 'g') from 2)
+      else regexp_replace(${contacts.phone}, '[^0-9]', '', 'g')
+    end) = ${normalizedPhone}`)
     .limit(1);
   if (known) return known.id;
 

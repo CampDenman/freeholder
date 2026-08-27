@@ -43,6 +43,7 @@ import {
 import { contacts } from "@/core/contacts/schema";
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { MESSAGE_PURPOSES } from "./purpose";
 
 /**
  * Every door a message can come through (§4.14, C7.08).
@@ -114,6 +115,13 @@ export const conversations = pgTable(
     lastOutboundAt: timestamp("last_outbound_at", { withTimezone: true }),
     /** Waiting on somebody here. Set by an inbound message, cleared by reading. */
     unread: boolean("unread").notNull().default(false),
+    /** The assistant explicitly asked a person to take over this thread. */
+    assistantEscalatedAt: timestamp("assistant_escalated_at", { withTimezone: true }),
+    assistantEscalationReason: text("assistant_escalation_reason"),
+    /** Kept separately so the handoff remains visible as evidence after resolution. */
+    assistantEscalationResolvedAt: timestamp("assistant_escalation_resolved_at", {
+      withTimezone: true,
+    }),
     messageCount: integer("message_count").notNull().default(0),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
@@ -136,6 +144,55 @@ export const conversations = pgTable(
       "conversations_snoozed_has_time",
       sql`${t.status} <> 'snoozed' or ${t.snoozedUntil} is not null`,
     ),
+    check(
+      "conversations_assistant_escalation_reason",
+      sql`${t.assistantEscalationReason} is null or char_length(${t.assistantEscalationReason}) <= 1000`,
+    ),
+    check(
+      "conversations_assistant_escalation_state",
+      sql`${t.assistantEscalationResolvedAt} is null or ${t.assistantEscalatedAt} is not null`,
+    ),
+  ],
+);
+
+/**
+ * One browser's bounded window onto a canonical Contact conversation.
+ *
+ * The raw bearer token never reaches the database. Messages carry this id so
+ * the visitor can read exactly this session, not email/SMS/history that happens
+ * to share the same Contact thread.
+ */
+export const siteChatSessions = pgTable(
+  "site_chat_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    locale: text("locale").notNull().default("en"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("site_chat_sessions_token_idx").on(t.tokenHash),
+    index("site_chat_sessions_contact_idx").on(t.contactId, t.createdAt),
+    index("site_chat_sessions_conversation_idx").on(t.conversationId, t.createdAt),
+    uniqueIndex("site_chat_sessions_one_open_idx")
+      .on(t.conversationId)
+      .where(sql`closed_at is null`),
+    check("site_chat_sessions_token_hash", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "site_chat_sessions_expiry",
+      sql`${t.expiresAt} > ${t.createdAt}`,
+    ),
+    check("site_chat_sessions_locale", sql`char_length(${t.locale}) between 2 and 35`),
   ],
 );
 
@@ -153,12 +210,22 @@ export const messages = pgTable(
     direction: text("direction", { enum: MESSAGE_DIRECTIONS }).notNull(),
     /** How *this* message arrived or went. Never changes. */
     channel: text("channel", { enum: MESSAGE_CHANNELS }).notNull(),
+    /** Why it was sent. Inbound messages have no purpose. */
+    purpose: text("purpose", { enum: MESSAGE_PURPOSES }),
+    /** A system-only reason that deliberately crossed recipient quiet hours. */
+    policyException: text("policy_exception"),
+    /** The booking/security/support record that justifies the exception. */
+    policyExceptionRef: text("policy_exception_ref"),
     body: text("body").notNull(),
     /** MMS and attachments come from `core/media` — one library, one pipeline. */
     mediaAssetIds: uuid("media_asset_ids")
       .array()
       .notNull()
       .default(sql`'{}'`),
+    /** Limits a public chat bearer to the messages created in its own session. */
+    chatSessionId: uuid("chat_session_id").references(() => siteChatSessions.id, {
+      onDelete: "set null",
+    }),
     templateId: uuid("template_id"),
     sentBy: text("sent_by", { enum: MESSAGE_AUTHORS }).notNull(),
     sentByUserId: uuid("sent_by_user_id").references(() => users.id, {
@@ -166,6 +233,8 @@ export const messages = pgTable(
     }),
     /** The provider's id for this message. The idempotency key for ingest. */
     providerRef: text("provider_ref"),
+    /** The exact outbound address, so a later hard failure cannot poison a changed number. */
+    recipientAddress: text("recipient_address"),
     /**
      * What it cost, in integer minor units (§15.4).
      *
@@ -184,6 +253,7 @@ export const messages = pgTable(
   (t) => [
     index("messages_conversation_idx").on(t.conversationId, t.occurredAt),
     index("messages_contact_idx").on(t.contactId, t.occurredAt),
+    index("messages_chat_session_idx").on(t.chatSessionId, t.occurredAt),
     // One message per provider reference. Every provider retries its webhooks,
     // and a duplicate here is a duplicate in somebody's inbox and in the bill.
     uniqueIndex("messages_provider_ref_idx")
@@ -191,11 +261,50 @@ export const messages = pgTable(
       .where(sql`provider_ref is not null`),
     check("messages_body", sql`char_length(${t.body}) between 1 and 100000`),
     check("messages_cost", sql`${t.costMinor} is null or ${t.costMinor} >= 0`),
+    check(
+      "messages_recipient_address_length",
+      sql`${t.recipientAddress} is null or char_length(${t.recipientAddress}) <= 320`,
+    ),
+    check(
+      "messages_policy_exception_pair",
+      sql`(${t.policyException} is null and ${t.policyExceptionRef} is null)
+        or (${t.policyException} is not null and ${t.policyExceptionRef} is not null)`,
+    ),
     // A cost with no currency is a number nobody can add up (§15.4).
     check(
       "messages_cost_currency",
       sql`${t.costMinor} is null or ${t.costCurrency} is not null`,
     ),
+  ],
+);
+
+export const SMS_COMPLIANCE_INTENTS = ["stop", "start", "help"] as const;
+
+/**
+ * A carrier control word is compliance evidence, not an inbox message.
+ *
+ * Keeping it separate lets STOP take effect before a message event, automation,
+ * or human inbox sees anything. The provider reference is the idempotency guard
+ * because carriers retry the same webhook until they receive a success.
+ */
+export const smsComplianceEvents = pgTable(
+  "sms_compliance_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    providerRef: text("provider_ref").notNull(),
+    intent: text("intent", { enum: SMS_COMPLIANCE_INTENTS }).notNull(),
+    keyword: text("keyword").notNull(),
+    locale: text("locale").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("sms_compliance_events_provider_ref_idx").on(t.providerRef),
+    index("sms_compliance_events_contact_idx").on(t.contactId, t.occurredAt),
+    check("sms_compliance_events_keyword", sql`char_length(${t.keyword}) between 1 and 100`),
   ],
 );
 
@@ -235,5 +344,90 @@ export const messageDeliveries = pgTable(
     // One report per message per status. Providers resend the same callback,
     // and a doubled "delivered" turns a history into noise.
     uniqueIndex("message_deliveries_once_idx").on(t.messageId, t.status),
+  ],
+);
+
+export const KEYWORD_MATCH_KINDS = ["exact", "prefix"] as const;
+export const KEYWORD_ACTIONS = [
+  "opt_out",
+  "opt_in",
+  "help",
+  "auto_reply",
+  "tag",
+  "route",
+  "booking_confirm",
+] as const;
+
+/** Owner rules run only after the non-configurable STOP/START/HELP vocabulary. */
+export const keywordRules = pgTable(
+  "keyword_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    keyword: text("keyword").notNull(),
+    normalizedKeyword: text("normalized_keyword").notNull(),
+    match: text("match", { enum: KEYWORD_MATCH_KINDS }).notNull().default("exact"),
+    action: text("action", { enum: KEYWORD_ACTIONS }).notNull(),
+    /** Tag text or a routing user id, depending on `action`. */
+    actionValue: text("action_value"),
+    replyBody: text("reply_body"),
+    /** BCP-47 language, or `*` for every contact locale. */
+    locale: text("locale").notNull().default("*"),
+    active: boolean("active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("keyword_rules_match_idx").on(t.normalizedKeyword, t.match, t.locale),
+    index("keyword_rules_active_idx").on(t.active, t.locale),
+    check("keyword_rules_keyword_length", sql`char_length(${t.keyword}) between 1 and 100`),
+    check(
+      "keyword_rules_action_value",
+      sql`(${t.action} in ('tag', 'route') and ${t.actionValue} is not null)
+        or (${t.action} not in ('tag', 'route') and ${t.actionValue} is null)`,
+    ),
+    check("keyword_rules_match_allowed", sql`${t.match} in ('exact', 'prefix')`),
+    check(
+      "keyword_rules_action_allowed",
+      sql`${t.action} in ('opt_out','opt_in','help','auto_reply','tag','route','booking_confirm')`,
+    ),
+    check(
+      "keyword_rules_reply_required",
+      sql`${t.action} not in ('help', 'auto_reply') or ${t.replyBody} is not null`,
+    ),
+  ],
+);
+
+/** Idempotency and human-readable evidence for one applied owner keyword. */
+export const keywordRuleEvents = pgTable(
+  "keyword_rule_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    providerRef: text("provider_ref").notNull(),
+    ruleId: uuid("rule_id").references(() => keywordRules.id, { onDelete: "set null" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    action: text("action", { enum: KEYWORD_ACTIONS }).notNull(),
+    outcome: text("outcome", { enum: ["applied", "refused", "noop"] }).notNull(),
+    detail: text("detail"),
+    bookingId: uuid("booking_id"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("keyword_rule_events_provider_idx").on(t.providerRef),
+    index("keyword_rule_events_contact_idx").on(t.contactId, t.createdAt),
+    index("keyword_rule_events_rule_idx").on(t.ruleId, t.createdAt),
+    check(
+      "keyword_rule_events_action_allowed",
+      sql`${t.action} in ('opt_out','opt_in','help','auto_reply','tag','route','booking_confirm')`,
+    ),
+    check(
+      "keyword_rule_events_outcome_allowed",
+      sql`${t.outcome} in ('applied','refused','noop')`,
+    ),
   ],
 );

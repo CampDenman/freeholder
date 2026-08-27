@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
 name: replit
+schema: freeholder-deploy-recipe/v1
 tier: 1
 maintainers: ["@tonyaly"]
 freeholder_min_version: "0.0.0"
@@ -14,7 +15,25 @@ limits:
   - "Media MUST live in Replit Object Storage (§18)"
   - "Dev workspaces sleep; use a Deployment for production"
   - "Single region"
+artifacts:
+  - .replit
+  - replit.nix
+required_environment:
+  - DATABASE_URL
+  - APP_URL
+  - SESSION_SECRET
+  - CREDENTIAL_KEY
+  - REPLIT_BUCKET_ID
+operations:
+  install: "corepack enable && pnpm install --frozen-lockfile && pnpm build"
+  verify: "pnpm doctor --url $FREEHOLDER_URL --email $FREEHOLDER_EMAIL --password $FREEHOLDER_PASSWORD"
+  backup: "pg_dump --format=custom --no-owner --no-privileges --file freeholder.dump $DATABASE_URL"
+  restore: "pg_restore --no-owner --no-privileges --dbname $DATABASE_URL freeholder.dump"
+  migrate-in: "pg_restore --no-owner --no-privileges --dbname $DATABASE_URL freeholder.dump && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
+  migrate-out: "pg_dump --format=custom --no-owner --no-privileges --file freeholder.dump $DATABASE_URL && pnpm ownership:export -- --output ownership-export && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
+  update: "corepack enable && pnpm install --frozen-lockfile && pnpm build"
+  rollback: "git switch --detach $PREVIOUS_FREEHOLDER_TAG && pnpm install --frozen-lockfile && pnpm build"
 update:
   strategy: image-swap
   rollback: pin the previous sha tag and redeploy
-tested_on: "2026-08-18"
+tested_on: "2026-08-25"

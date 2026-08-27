@@ -1,4 +1,9 @@
-# Migrate: DigitalOcean droplet
+# Migrate to or from a DigitalOcean Droplet
 
-Ownership export → provision this droplet recipe → import → Spaces sync → DNS.
-Covers every Tier-1 pair: Replit, App Platform, Railway, Render, Docker.
+Target: `digitalocean-droplet`
+
+Follow the complete [Tier-1 migration runbook](../migration-runbook.md). Restore
+through `docker compose exec -T db pg_restore`; port 5432 must remain private.
+Sync media to Spaces rather than droplet disk, run the restore rehearsal in
+`verify.md`, and repoint DNS only after Caddy serves the final hostname. Roll
+back by restoring DNS and the previous digest-pinned `FREEHOLDER_IMAGE`.

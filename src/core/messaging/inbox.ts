@@ -46,7 +46,13 @@ import {
   type Actor,
   type Tx,
 } from "@/core/service";
-import { CONVERSATION_STATUSES, MESSAGE_CHANNELS, conversations } from "./schema";
+import {
+  CONVERSATION_STATUSES,
+  MESSAGE_CHANNELS,
+  conversations,
+  siteChatSessions,
+} from "./schema";
+import { activeSiteChatSession, closeSiteChatSessions } from "./chat";
 
 const id = z.string().uuid();
 
@@ -65,6 +71,9 @@ const threadRow = row({
   snoozedUntil: timestamp.nullable(),
   assigneeUserId: uuid.nullable(),
   unread: z.boolean(),
+  assistantEscalatedAt: timestamp.nullable(),
+  assistantEscalationReason: z.string().nullable(),
+  assistantEscalationResolvedAt: timestamp.nullable(),
   messageCount: z.number().int(),
   lastInboundAt: timestamp.nullable(),
   lastOutboundAt: timestamp.nullable(),
@@ -177,6 +186,7 @@ export const setConversationStatus = defineService({
       .where(eq(conversations.id, input.id))
       .returning();
     if (!updated) throw new ServiceError("not_found", "That conversation is not here.");
+    if (input.status === "closed") await closeSiteChatSessions(ctx.tx, updated.id);
     ctx.setSubject("conversation", updated.id);
     ctx.queueEvent(input.status === "closed" ? "conversation.closed" : "conversation.reopened", {
       id: updated.id,
@@ -263,9 +273,42 @@ export const replyToConversation = defineService({
       }
       ctx.setSubject("conversation", thread.id);
       return { id: sent.messageId, channel: thread.replyChannel };
+    } else if (thread.replyChannel === "chat") {
+      const session = await activeSiteChatSession(ctx.tx, thread.id);
+      if (!session) {
+        throw new ServiceError(
+          "conflict",
+          "That site chat has ended, so this reply no longer has a browser to reach.",
+        );
+      }
+      const recorded = (await ctx.call(getService("conversations.record"), {
+        conversationId: thread.id,
+        contactId: thread.contactId,
+        direction: "outbound",
+        channel: "chat",
+        body: input.body,
+        sentBy: "user",
+        chatSessionId: session.id,
+      })) as { message: { id: string } };
+      await ctx.tx
+        .update(siteChatSessions)
+        .set({ lastMessageAt: sql`now()`, updatedAt: sql`now()` })
+        .where(eq(siteChatSessions.id, session.id));
+      await ctx.tx
+        .update(conversations)
+        .set({
+          assistantEscalationResolvedAt: thread.assistantEscalatedAt ? sql`now()` : null,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(conversations.id, thread.id));
+      if (input.close) {
+        await ctx.call(getService("conversations.setStatus"), { id: thread.id, status: "closed" });
+      }
+      ctx.setSubject("conversation", thread.id);
+      return { id: recorded.message.id, channel: "chat" as const };
     } else {
-      // C7.15 brings chat and social. Until then the honest answer is that
-      // this cannot be sent from here.
+      // Social is a visitor-facing deep link in C7.15, not a provider inbox.
+      // Recording an owner reply here would claim delivery that did not occur.
       throw new ServiceError(
         "validation",
         `Replying by ${thread.replyChannel} is not connected yet, so nothing would reach them.`,

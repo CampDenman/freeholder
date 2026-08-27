@@ -29,6 +29,7 @@ import {
   resetGuidance,
   startGuidance,
 } from "@/core/guidance/service";
+import { getSignupContactImportOffer } from "@/core/import/signup-contact-service";
 
 export interface MagicLinkState {
   sent?: boolean;
@@ -132,6 +133,28 @@ export async function confirmMagicLinkAction(
     secure,
     maxAge: 0,
   });
+  if (result.linked) {
+    try {
+      const offer = await getSignupContactImportOffer.call(
+        {},
+        {
+          kind: "user",
+          userId: result.userId,
+          role: "customer",
+          grants: [],
+          sessionId: result.sessionId,
+        },
+      );
+      if (offer.enabled && offer.decision === null) {
+        redirect(localizeCustomerHref("/portal/contact-import", result.locale, result));
+      }
+    } catch (error) {
+      // Account creation is already complete. An optional offer being
+      // unavailable must never turn a successful signup into a failed one.
+      if (typeof error === "object" && error !== null && "digest" in error) throw error;
+      console.error("post-signup contact import offer could not be read", error);
+    }
+  }
   redirect(localizeCustomerHref("/portal/login", result.locale, result));
 }
 

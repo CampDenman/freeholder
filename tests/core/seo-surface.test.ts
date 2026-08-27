@@ -18,6 +18,8 @@ import {
 } from "@/core/seo/indexnow";
 import {
   articleJsonLd,
+  collectionPageJsonLd,
+  creativeWorkJsonLd,
   productJsonLd,
   serviceJsonLd,
 } from "@/core/seo/jsonld";
@@ -67,6 +69,9 @@ describe("the public entity registry", () => {
     expect(kindFromSlug("locations/courtenay")).toBe("location");
     expect(kindFromSlug("shop/print-set")).toBe("product");
     expect(kindFromSlug("blog/a-clear-day")).toBe("article");
+    expect(kindFromSlug("portfolio")).toBe("section");
+    expect(kindFromSlug("portfolio/courtyard-studio")).toBe("project");
+    expect(kindFromSlug("portfolio/collections-hospitality")).toBe("collection");
     expect(priorityFromSlug("")).toBe(1);
     expect(priorityFromSlug("services")).toBe(0.8);
     expect(priorityFromSlug("services/weddings")).toBe(0.5);
@@ -131,6 +136,29 @@ describe("JSON-LD builders for products, services and articles", () => {
       headline: "A clear day",
       author: { "@type": "Person", name: "Ada" },
     });
+  });
+
+  it("describes portfolio work and curated collections", () => {
+    expect(
+      creativeWorkJsonLd({
+        name: "Courtyard studio",
+        url: "https://example.test/portfolio/courtyard-studio",
+        dateCreated: "2026-07-15",
+        images: [{ url: "https://example.test/media/studio.jpg", caption: "Sunlit studio" }],
+        services: [{ name: "Architecture", url: "https://example.test/products/architecture" }],
+      }),
+    ).toMatchObject({
+      "@type": "CreativeWork",
+      dateCreated: "2026-07-15",
+      image: [{ "@type": "ImageObject", contentUrl: "https://example.test/media/studio.jpg" }],
+      about: [{ "@type": "Service", name: "Architecture" }],
+    });
+    expect(
+      collectionPageJsonLd({
+        name: "Hospitality",
+        url: "https://example.test/portfolio/collections-hospitality",
+      }),
+    ).toMatchObject({ "@type": "CollectionPage", name: "Hospitality" });
   });
 });
 

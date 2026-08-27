@@ -48,7 +48,15 @@ export default async function ProjectsPage({
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">{t("projects.title")}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-bold tracking-tight">{t("projects.title")}</h1>
+          <a
+            href="/admin/projects/collections"
+            className="rounded-md border border-rule px-4 py-2 text-sm font-semibold text-ink"
+          >
+            {t("projects.collections.manage")}
+          </a>
+        </div>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("projects.intro")}</p>
       </div>
 

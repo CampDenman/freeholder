@@ -108,6 +108,10 @@ const contactRow = row({
   name: z.string(),
   email: z.string().nullable(),
   phone: z.string().nullable(),
+  phoneStatus: z.enum(["unknown", "valid", "invalid"]),
+  phoneInvalidAt: timestamp.nullable(),
+  phoneInvalidReason: z.string().nullable(),
+  phoneInvalidProviderCode: z.string().nullable(),
   orgId: uuid.nullable(),
   source: z.string().nullable(),
   tags: z.array(z.string()),
@@ -259,6 +263,12 @@ function incomingChanges(
   ] as const) {
     const value = input[field];
     if (value && !existing[field]) changes[field] = value;
+  }
+  if (changes.phone) {
+    changes.phoneStatus = "unknown";
+    changes.phoneInvalidAt = null;
+    changes.phoneInvalidReason = null;
+    changes.phoneInvalidProviderCode = null;
   }
   if (input.source && !existing.source) changes.source = input.source;
 
@@ -716,6 +726,10 @@ const contactSnapshotSchema = z.object({
   name: z.string(),
   email: z.string().nullable(),
   phone: z.string().nullable(),
+  phoneStatus: z.enum(["unknown", "valid", "invalid"]),
+  phoneInvalidAt: z.string().datetime().nullable(),
+  phoneInvalidReason: z.string().nullable(),
+  phoneInvalidProviderCode: z.string().nullable(),
   orgId: z.string().uuid().nullable(),
   source: z.string().nullable(),
   tags: z.array(z.string()),
@@ -733,6 +747,7 @@ type ContactSnapshot = z.infer<typeof contactSnapshotSchema>;
 function contactSnapshot(row: ContactRow): ContactSnapshot {
   return {
     ...row,
+    phoneInvalidAt: row.phoneInvalidAt?.toISOString() ?? null,
     customFields: row.customFields as Record<string, unknown>,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -742,6 +757,7 @@ function contactSnapshot(row: ContactRow): ContactSnapshot {
 function contactSnapshotValues(snapshot: ContactSnapshot) {
   return {
     ...snapshot,
+    phoneInvalidAt: snapshot.phoneInvalidAt ? new Date(snapshot.phoneInvalidAt) : null,
     createdAt: new Date(snapshot.createdAt),
     updatedAt: new Date(snapshot.updatedAt),
   };
@@ -884,6 +900,18 @@ export const mergeContacts = defineService({
       userId: keep(surviving.userId, duplicate.userId),
       email: keep(surviving.email, duplicate.email),
       phone: keep(surviving.phone, duplicate.phone),
+      phoneStatus: surviving.phone
+        ? surviving.phoneStatus
+        : duplicate.phone
+          ? duplicate.phoneStatus
+          : "unknown" as const,
+      phoneInvalidAt: surviving.phone ? surviving.phoneInvalidAt : duplicate.phoneInvalidAt,
+      phoneInvalidReason: surviving.phone
+        ? surviving.phoneInvalidReason
+        : duplicate.phoneInvalidReason,
+      phoneInvalidProviderCode: surviving.phone
+        ? surviving.phoneInvalidProviderCode
+        : duplicate.phoneInvalidProviderCode,
       orgId: keep(surviving.orgId, duplicate.orgId),
       source: keep(surviving.source, duplicate.source),
       preferredLocale: keep(
@@ -1136,6 +1164,14 @@ export const updateContact = defineService({
     await ensureOrganization(ctx.tx, requested.orgId);
     const changes = {
       ...requested,
+      ...(requested.phone !== undefined && requested.phone !== existing.phone
+        ? {
+            phoneStatus: "unknown" as const,
+            phoneInvalidAt: null,
+            phoneInvalidReason: null,
+            phoneInvalidProviderCode: null,
+          }
+        : {}),
       customFields:
         requested.customFields === undefined
           ? undefined

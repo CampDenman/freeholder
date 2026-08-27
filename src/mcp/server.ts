@@ -27,7 +27,11 @@
 import { actorFromRequest } from "@/core/http/actor";
 import { CONTRACT, PLATFORM_VERSION } from "@/core/platform";
 import { ready } from "@/core/runtime";
-import { listServices, ServiceError, type Actor } from "@/core/service";
+import {
+  listExternalServices,
+  ServiceError,
+  type Actor,
+} from "@/core/service";
 import { hiddenFromMcp, serviceForTool, toolsFor } from "@/mcp/tools";
 
 /** The revision this implements. Echoed back when a client asks for it. */
@@ -250,7 +254,7 @@ function listResources() {
       uri: "freeholder://contract/services",
       name: "Services",
       mimeType: "application/json",
-      description: "Registered services with kind, permission and MCP visibility.",
+      description: "External services with kind, permission and MCP visibility.",
     },
   ];
 }
@@ -261,7 +265,7 @@ function readResource(request: JsonRpcRequest, actor: Actor) {
     return failure(request.id, INVALID_PARAMS, "A resource uri is required.");
   }
   if (uri === "freeholder://contract/services") {
-    const services = [...listServices().values()].map((service) => ({
+    const services = [...listExternalServices().values()].map((service) => ({
       name: service.def.name,
       kind: service.def.kind,
       permission: service.def.permission,

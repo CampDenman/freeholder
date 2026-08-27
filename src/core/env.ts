@@ -49,6 +49,8 @@ const envSchema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Use virtual for providers such as Railway that reject path-style URLs. */
+  S3_ADDRESSING_STYLE: z.enum(["path", "virtual"]).optional(),
   /** Serve from a CDN or custom domain instead of the bucket host. */
   S3_PUBLIC_BASE_URL: z.string().url().optional(),
   /** "true" only if the bucket really is world-readable. Default: private. */
@@ -227,37 +229,6 @@ const envSchema = z.object({
    * instance.
    */
   FREEHOLDER_SEED_DEMO: z.enum(["0", "1"]).optional(),
-
-  /**
-   * Which seed pack `demo.install` writes when seeding is on.
-   *
-   * Unset keeps Aurora Coast Photography, which the SEO gate and contributor
-   * first-run still prove. WeVibeSites Industry Edition packs use placeholder
-   * identity, no live-client brand, and no New Vibe City fiction.
-   */
-  FREEHOLDER_EDITION: z.enum([
-    "law-firm",
-    "fishing-charter",
-    "talent",
-    "med-spa",
-    "plastic-surgery",
-    "dental",
-    "hvac",
-    "plumber",
-    "electrical",
-    "restaurant",
-    "florist",
-    "hotel",
-    "roofing",
-    "mortgage",
-    "wealth-management",
-    "grocery-market",
-    "news-media",
-    "newspaper",
-    "venture-capital",
-    "real-estate",
-    "general-business",
-  ]).optional(),
 
   /**
    * Whether this process runs background jobs.

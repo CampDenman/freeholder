@@ -5,6 +5,7 @@ import { z } from "zod";
 import { formatMoney } from "@/core/i18n";
 import { ShareCopyButton } from "@/ui/ShareCopyButton";
 import { submitInboundAction } from "../../../../app/(public)/inbound-actions";
+import { SiteChatClient } from "./SiteChatClient";
 import { defineBlock } from "./types";
 import { socialEmbed } from "./social";
 
@@ -380,38 +381,111 @@ export const siteChat = defineBlock({
   type: "siteChat",
   labelKey: "cms.block.siteChat",
   contexts: ["page"],
-  schema: z.object({}),
+  schema: z.object({
+    whatsappPhone: z.string().trim().regex(/^\+?[1-9][0-9\s().-]{6,24}$/).optional(),
+    messengerUsername: z.string().trim().regex(/^[A-Za-z0-9._-]{2,100}$/).optional(),
+    openingMessage: z.string().trim().max(500).optional(),
+  }),
   starter: () => ({}),
-  render: ({ ctx }) => {
+  fieldHints: {
+    openingMessage: { control: "multiline" },
+  },
+  render: ({ props, ctx }) => {
+    const links = [
+      props.whatsappPhone
+        ? {
+            href: whatsappDeepLink(props.whatsappPhone, props.openingMessage),
+            label: ctx.t("cms.chat.whatsapp"),
+          }
+        : null,
+      props.messengerUsername
+        ? {
+            href: messengerDeepLink(props.messengerUsername),
+            label: ctx.t("cms.chat.messenger"),
+          }
+        : null,
+    ].filter((link): link is { href: string; label: string } => link !== null);
+    const deepLinks = links.length ? (
+      <div className="grid max-w-prose gap-2 border-s-2 border-rule ps-3 text-sm">
+        <p className="text-ink-muted">{ctx.t("cms.chat.otherApps")}</p>
+        <div className="flex flex-wrap gap-3">
+          {links.map((link) => (
+            <a key={link.href} href={link.href} target="_blank" rel="noreferrer" className="font-semibold underline">
+              {link.label}
+            </a>
+          ))}
+        </div>
+        <p className="text-xs text-ink-muted">{ctx.t("cms.chat.consentNote")}</p>
+      </div>
+    ) : null;
     if (ctx.query?.chatted === "1") {
       return (
-        <p role="status" className="max-w-prose rounded-md border border-rule bg-success-soft px-4 py-3 text-sm text-success">
-          {ctx.t("cms.inbound.chatThanks")}
-        </p>
+        <div className="grid gap-4">
+          <SiteChatClient
+            locale={ctx.locale}
+            labels={{
+              loading: ctx.t("cms.chat.loading"),
+              ended: ctx.t("cms.chat.ended"),
+              escalated: ctx.t("cms.chat.escalated"),
+              message: ctx.t("cms.inbound.message"),
+              send: ctx.t("cms.inbound.sendChat"),
+              sending: ctx.t("cms.chat.sending"),
+              end: ctx.t("cms.chat.end"),
+              fromYou: ctx.t("cms.chat.fromYou"),
+              fromBusiness: ctx.t("cms.chat.fromBusiness"),
+              fromAssistant: ctx.t("cms.chat.fromAssistant"),
+              failed: ctx.t("cms.chat.failed"),
+            }}
+          />
+          {deepLinks}
+        </div>
       );
     }
     return (
-      <form action={submitInboundAction} className="grid max-w-prose gap-3">
-        <input type="hidden" name="kind" value="chat" />
-        <InboundFields t={ctx.t} />
-        <button type="submit" className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">
-          {ctx.t("cms.inbound.sendChat")}
-        </button>
-      </form>
+      <div className="grid gap-4">
+        {ctx.query?.inboundError === "1" ? (
+          <p role="alert" className="max-w-prose rounded-md border border-danger bg-danger-soft px-4 py-3 text-sm text-danger">
+            {ctx.t("cms.chat.failed")}
+          </p>
+        ) : null}
+        <form action={submitInboundAction} className="grid max-w-prose gap-3">
+          <input type="hidden" name="kind" value="chat" />
+          <label aria-hidden="true" className="absolute -start-[10000px] h-px w-px overflow-hidden">
+            <span>{ctx.t("cms.chat.leaveBlank")}</span>
+            <input type="text" name="entry_ref" tabIndex={-1} autoComplete="off" />
+          </label>
+          <InboundFields t={ctx.t} />
+          <button type="submit" className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">
+            {ctx.t("cms.inbound.sendChat")}
+          </button>
+        </form>
+        {deepLinks}
+      </div>
     );
   },
 });
+
+/** External-app links only: following one never writes a Contact or consent row. */
+export function whatsappDeepLink(phone: string, openingMessage?: string): string {
+  const digits = phone.replace(/\D/g, "");
+  const query = openingMessage ? `?text=${encodeURIComponent(openingMessage)}` : "";
+  return `https://wa.me/${digits}${query}`;
+}
+
+export function messengerDeepLink(username: string): string {
+  return `https://m.me/${encodeURIComponent(username)}`;
+}
 
 function InboundFields({ t }: { t: (key: string) => string }) {
   return (
     <>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.name")}</span>
-        <input type="text" name="name" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+        <input type="text" name="name" autoComplete="name" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.email")}</span>
-        <input type="email" name="email" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+        <input type="email" name="email" autoComplete="email" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.message")}</span>

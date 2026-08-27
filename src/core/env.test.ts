@@ -54,7 +54,6 @@ describe("env", () => {
         S3_ENDPOINT: "",
         MAIL_ADAPTER: "",
         FREEHOLDER_SEED_DEMO: "",
-        FREEHOLDER_EDITION: "",
       },
       () => {
         const parsed = env();
@@ -62,7 +61,6 @@ describe("env", () => {
         expect(parsed.S3_ENDPOINT).toBeUndefined();
         expect(parsed.MAIL_ADAPTER).toBeUndefined();
         expect(parsed.FREEHOLDER_SEED_DEMO).toBeUndefined();
-        expect(parsed.FREEHOLDER_EDITION).toBeUndefined();
       },
     );
   });

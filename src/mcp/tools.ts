@@ -42,6 +42,9 @@ import { listServices, permits, type Actor, type Service } from "@/core/service"
 const EXCLUDED_FAMILIES = new Set(["auth", "apikeys", "invitations"]);
 
 export function hiddenFromMcp(service: Service): boolean {
+  // Internal orchestration never becomes an agent capability. This check is
+  // first so `mcpExclude: false` cannot accidentally override the boundary.
+  if (service.def.permission === "system") return true;
   if (service.def.mcpExclude === true) return true;
   if (service.def.mcpExclude === false) return false;
   return EXCLUDED_FAMILIES.has(service.def.name.split(".")[0]!);

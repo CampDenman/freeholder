@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
 name: digitalocean-droplet
+schema: freeholder-deploy-recipe/v1
 tier: 1
 maintainers: ["@tonyaly"]
 freeholder_min_version: "0.1.0"
@@ -14,7 +15,32 @@ limits:
   - "Media MUST live in Spaces (§18 storage mandate) — the droplet holds compute and the database, never the archive"
   - "One box: Postgres shares the droplet, so a rebuild restores from pg_dump rather than failing over"
   - "Jobs run in the web process until core/jobs lands; long work will need a second container"
+artifacts:
+  - deploy/digitalocean-droplet/infra/compose.yml
+  - deploy/digitalocean-droplet/infra/cloud-init.yml
+  - deploy/digitalocean-droplet/infra/Caddyfile
+  - deploy/digitalocean-droplet/infra/backup.sh
+required_environment:
+  - POSTGRES_PASSWORD
+  - SESSION_SECRET
+  - CREDENTIAL_KEY
+  - APP_URL
+  - FREEHOLDER_DOMAIN
+  - S3_BUCKET
+  - S3_ENDPOINT
+  - S3_REGION
+  - S3_ACCESS_KEY_ID
+  - S3_SECRET_ACCESS_KEY
+operations:
+  install: "docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d"
+  verify: "pnpm doctor --url $FREEHOLDER_URL --email $FREEHOLDER_EMAIL --password $FREEHOLDER_PASSWORD"
+  backup: "deploy/digitalocean-droplet/infra/backup.sh"
+  restore: "docker compose -f deploy/digitalocean-droplet/infra/compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump"
+  migrate-in: "docker compose -f deploy/digitalocean-droplet/infra/compose.yml exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
+  migrate-out: "docker compose -f deploy/digitalocean-droplet/infra/compose.yml exec -T db pg_dump --format=custom --no-owner --no-privileges -U freeholder freeholder > freeholder.dump && pnpm ownership:export -- --output ownership-export && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
+  update: "docker compose -f deploy/digitalocean-droplet/infra/compose.yml pull && docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d"
+  rollback: "FREEHOLDER_IMAGE=$PREVIOUS_FREEHOLDER_IMAGE docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d"
 update:
   strategy: image-swap
   rollback: compose pull the previous sha tag
-tested_on: "2026-07-28"
+tested_on: "2026-08-25"

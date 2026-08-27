@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
 name: render
+schema: freeholder-deploy-recipe/v1
 tier: 1
 maintainers: ["@tonyaly"]
 freeholder_min_version: "0.0.0"
@@ -12,7 +13,27 @@ provides:
 estimated_monthly_cost_usd: { min: 14, typical: 28 }
 limits:
   - "Media MUST live in S3-compatible object storage"
+artifacts:
+  - render.yaml
+required_environment:
+  - APP_URL
+  - SESSION_SECRET
+  - CREDENTIAL_KEY
+  - S3_BUCKET
+  - S3_ENDPOINT
+  - S3_REGION
+  - S3_ACCESS_KEY_ID
+  - S3_SECRET_ACCESS_KEY
+operations:
+  install: "render blueprints validate render.yaml"
+  verify: "pnpm doctor --url $FREEHOLDER_URL --email $FREEHOLDER_EMAIL --password $FREEHOLDER_PASSWORD"
+  backup: "pg_dump --format=custom --no-owner --no-privileges --file freeholder.dump $DATABASE_URL"
+  restore: "pg_restore --no-owner --no-privileges --dbname $DATABASE_URL freeholder.dump"
+  migrate-in: "pg_restore --no-owner --no-privileges --dbname $DATABASE_URL freeholder.dump && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
+  migrate-out: "pg_dump --format=custom --no-owner --no-privileges --file freeholder.dump $DATABASE_URL && pnpm ownership:export -- --output ownership-export && pnpm media:transfer -- --manifest ownership-export/media-manifest.json"
+  update: "render deploys create $RENDER_SERVICE_ID --image ghcr.io/campdenman/freeholder:$FREEHOLDER_IMAGE_TAG --wait"
+  rollback: "render deploys create $RENDER_SERVICE_ID --image ghcr.io/campdenman/freeholder:$PREVIOUS_FREEHOLDER_IMAGE_TAG --wait"
 update:
   strategy: image-swap
   rollback: redeploy the previous image
-tested_on: "2026-08-18"
+tested_on: "2026-08-25"

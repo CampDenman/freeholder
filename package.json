@@ -16,7 +16,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/standalone-artifact-gate.mjs --scrub",
     "start": "next start",
+    "start:replit": "next dev",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -27,11 +29,13 @@
     "db:migrate": "drizzle-kit migrate",
     "plan:check": "node scripts/plan-gate.mjs",
     "dependency:audit": "node scripts/dependency-audit.mjs",
+    "artifact:check": "node scripts/standalone-artifact-gate.mjs",
     "changelog:gate": "node scripts/changelog-gate.mjs",
     "license:check": "node scripts/license-headers.mjs",
     "license:fix": "node scripts/license-headers.mjs --fix",
     "ownership:export": "node scripts/ownership-export.mjs",
-    "ownership:drill": "node scripts/ownership-drill.mjs",
+    "ownership:drill": "node scripts/ownership-drill.mjs --all-pairs",
+    "media:transfer": "node scripts/media-transfer.mjs",
     "packages:build": "pnpm -r --filter './packages/*' build",
     "doctor": "node scripts/doctor.mjs"
   },
@@ -39,6 +43,7 @@
     "@formatjs/icu-messageformat-parser": "^3.5.15",
     "@freeholder/plugin-kit": "workspace:*",
     "@phosphor-icons/react": "^2.1.10",
+    "@replit/object-storage": "^1.0.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "aws4fetch": "^1.0.20",
@@ -70,9 +75,11 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.7.0",
     "jsdom": "^30.0.1",
+    "railway": "^3.11.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yaml": "^2.9.0"
   }
 }

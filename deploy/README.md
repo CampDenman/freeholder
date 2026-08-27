@@ -64,6 +64,12 @@ whole story, which is the point.
 
 ## Operational runbooks
 
+- [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
+  database/media restore, update and rollback acceptance for every Tier-1
+  target.
+- [`migration-runbook.md`](migration-runbook.md) — the 30 directed Tier-1
+  moves, downtime/cutover/rollback rules and ID, money, timestamp, media,
+  locale and public-URL verification.
 - [`ownership-recovery.md`](ownership-recovery.md) — database backup and
   scratch restore, complete logical export, media inventory, configuration and
   credential-key recovery, rotation, retention and erasure evidence.
@@ -99,7 +105,4 @@ whole story, which is the point.
 
 - arm64 images. `linux/amd64` covers the current DigitalOcean recipe; ARM wants
   native runners rather than QEMU emulation.
-- Replit and the other target recipes remain completion work (`MASTER.md`
-  C3.16).
-- Per-target migration and the validation matrix remain C3.17–C3.19.
 - Target-specific update/rollback remains C10.10.

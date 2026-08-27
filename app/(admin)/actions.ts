@@ -791,6 +791,7 @@ const RELATIONSHIP_KINDS = [
   "referred_by",
   "partner",
   "guardian",
+  "contact_book",
 ] as const;
 
 function relationshipKindOf(form: FormData): (typeof RELATIONSHIP_KINDS)[number] {

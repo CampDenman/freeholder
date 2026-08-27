@@ -127,7 +127,7 @@ export const mailOauthStates = pgTable(
      * exactly; renaming it waits for a major version, because §39.5 requires
      * the previous release to keep reading the schema this one writes.
      */
-    purpose: text("purpose", { enum: ["mail", "calendar", "mail_read"] })
+    purpose: text("purpose", { enum: ["mail", "calendar", "mail_read", "signup_contacts"] })
       .notNull()
       .default("mail"),
     /** Which calendar access was asked for, so completion can check it. */
@@ -141,7 +141,10 @@ export const mailOauthStates = pgTable(
     index("mail_oauth_states_expiry_idx").on(t.expiresAt),
     check("mail_oauth_states_hash_format", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
     check("mail_oauth_states_provider_allowed", sql`${t.provider} in ('google', 'microsoft')`),
-    check("mail_oauth_states_admin_return", sql`${t.returnTo} ~ '^/admin(/|$)'`),
+    check(
+      "mail_oauth_states_safe_return",
+      sql`${t.returnTo} ~ '^/(admin|portal/contact-import)(/|$|\\?)'`,
+    ),
     check("mail_oauth_states_expiry_order", sql`${t.expiresAt} > ${t.createdAt}`),
     check(
       "mail_oauth_states_consumed_order",

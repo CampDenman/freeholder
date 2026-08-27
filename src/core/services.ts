@@ -51,9 +51,11 @@ import segmentServices from "@/core/segments/service";
 import scoringServices from "@/core/scoring/service";
 import viewServices from "@/core/views/service";
 import contactImportServices from "@/core/import/contacts-service";
+import signupContactImportServices from "@/core/import/signup-contact-service";
 import messagingServices from "@/core/messaging/service";
 import inboxServices from "@/core/messaging/inbox";
 import smsServices from "@/core/messaging/sms";
+import chatServices from "@/core/messaging/chat";
 import schedulingServices from "@/core/scheduling/service";
 import availabilityServices from "@/core/scheduling/availability-service";
 import bookingServices from "@/core/scheduling/bookings";
@@ -104,9 +106,11 @@ const services: Service[] = [
   ...scoringServices,
   ...viewServices,
   ...contactImportServices,
+  ...signupContactImportServices,
   ...messagingServices,
   ...inboxServices,
   ...smsServices,
+  ...chatServices,
   ...briefingServices,
   ...briefingContributorServices,
   ...briefingPlaybookSection,

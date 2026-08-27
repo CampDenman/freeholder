@@ -1,13 +1,21 @@
 # Docker Compose (Tier 1)
 
-Bare Docker: the published image, Postgres, and S3-compatible storage. MinIO
-is only the local-dev profile.
+This recipe runs the published image and PostgreSQL 16. Production media must
+use a private S3-compatible store; local disk is not a durable Tier-1 target.
 
 ## Install
 
-```bash
-cp deploy/docker-selfhost/.env.example .env
-docker compose -f deploy/docker-selfhost/infra/compose.yml up -d
-```
+Copy `deploy/docker-selfhost/.env.example` to
+`deploy/docker-selfhost/.env`, fill every required value, then run the
+`install` operation in `recipe.yaml`. Compose waits for PostgreSQL health,
+restarts both services, and exposes only the app on port 3000.
 
-Open `/setup`.
+## Operate
+
+- Use `verify.md` plus the recipe's `verify` command after each change.
+- Use `backup` and `restore` for the database and `pnpm media:transfer` for
+  object bytes. Rehearse restore into a scratch database.
+- Set `FREEHOLDER_IMAGE` to a digest, run `update`, and retain the former digest
+  as `PREVIOUS_FREEHOLDER_IMAGE` for `rollback`.
+- Use `migrate.md` for any provider move. Never use `.env.example` as a live
+  environment file.

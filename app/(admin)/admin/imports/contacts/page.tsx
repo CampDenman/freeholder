@@ -10,10 +10,18 @@ import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
 import { currentBusiness } from "@/core/settings/read";
 import { listContactImports } from "@/core/import/contacts-service";
+import { getSignupContactImportPolicy } from "@/core/import/signup-contact-service";
+import {
+  SIGNUP_CONTACT_IMPORT_FIELDS,
+  SIGNUP_CONTACT_IMPORT_SOURCES,
+} from "@/core/import/contacts-schema";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
-import { beginContactImportAction } from "../../../contact-import-actions";
+import {
+  beginContactImportAction,
+  setSignupContactImportPolicyAction,
+} from "../../../contact-import-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -32,11 +40,14 @@ export default async function ContactImportsPage({
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("contacts", "manage");
-  const [t, business, batches, query] = await Promise.all([
+  const [t, business, batches, query, signupPolicy] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(listContactImports.call({}, actor)),
     searchParams,
+    actor.kind === "user" && actor.role === "owner"
+      ? getSignupContactImportPolicy.call({}, actor)
+      : Promise.resolve(null),
   ]);
 
   const locale = business?.defaultLocale ?? "en";
@@ -59,6 +70,84 @@ export default async function ContactImportsPage({
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
           {query.error.includes(" ") ? query.error : t("contactImports.failed")}
         </p>
+      ) : null}
+
+      {query.saved === "signup-policy" ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("contactImports.signup.saved")}
+        </p>
+      ) : null}
+
+      {actor.kind === "user" && actor.role === "owner" ? (
+        <Card>
+          <CardHeader title={t("contactImports.signup.title")} />
+          <CardBody>
+            <p className="max-w-prose text-sm text-ink-muted">
+              {t("contactImports.signup.intro")}
+            </p>
+            <form action={setSignupContactImportPolicyAction} className="grid gap-5">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  name="enabled"
+                  defaultChecked={signupPolicy?.enabled ?? false}
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong className="block">{t("contactImports.signup.enable")}</strong>
+                  <span className="text-ink-muted">{t("contactImports.signup.enableHint")}</span>
+                </span>
+              </label>
+              <fieldset className="grid gap-2">
+                <legend className="text-sm font-semibold">{t("contactImports.signup.sources")}</legend>
+                <div className="flex flex-wrap gap-4">
+                  {SIGNUP_CONTACT_IMPORT_SOURCES.map((source) => (
+                    <label key={source} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="allowedSource"
+                        value={source}
+                        defaultChecked={signupPolicy?.allowedSources.includes(source) ?? ["csv", "vcard", "device"].includes(source)}
+                      />
+                      {t(`contactImports.signup.source.${source}`)}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset className="grid gap-2">
+                <legend className="text-sm font-semibold">{t("contactImports.signup.fields")}</legend>
+                <div className="flex flex-wrap gap-4">
+                  {SIGNUP_CONTACT_IMPORT_FIELDS.map((field) => (
+                    <label key={field} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="allowedField"
+                        value={field}
+                        disabled={field === "email"}
+                        defaultChecked={signupPolicy?.allowedFields.includes(field) ?? true}
+                      />
+                      {t(`contactImports.signup.field.${field}`)}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-ink-muted">{t("contactImports.signup.emailRequired")}</p>
+              </fieldset>
+              <label className="grid max-w-48 gap-1 text-sm">
+                <span className="font-semibold">{t("contactImports.signup.maximum")}</span>
+                <input
+                  type="number"
+                  name="maxContacts"
+                  min={1}
+                  max={500}
+                  required
+                  defaultValue={signupPolicy?.maxContacts ?? 100}
+                  className="rounded-md border border-rule bg-field px-3 py-2"
+                />
+              </label>
+              <div><Button type="submit">{t("contactImports.signup.save")}</Button></div>
+            </form>
+          </CardBody>
+        </Card>
       ) : null}
 
       <Card>

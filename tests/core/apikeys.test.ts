@@ -149,6 +149,17 @@ describe.runIf(hasDatabase)("minting a key", () => {
     ).resolves.toHaveProperty("token");
   });
 
+  it("refuses an internal service name as a grantable capability", async () => {
+    const error = await failure(
+      createApiKey.call(
+        { name: "Scheduler", scopes: ["briefing.assemble"] },
+        OWNER,
+      ),
+    );
+    expect(error.code).toBe("validation");
+    expect(error.message).toContain("briefing.assemble");
+  });
+
   it("refuses a second live key with the same name", async () => {
     await createApiKey.call({ name: "Zapier", scopes: [] }, OWNER);
     const error = await failure(
@@ -303,6 +314,10 @@ describe.runIf(hasDatabase)("what an owner sees", () => {
     // The summary is what the admin screen shows beside each checkbox, and it
     // comes from the service rather than from a second list to maintain.
     expect(contacts.services.every((s) => s.summary.length > 0)).toBe(true);
+
+    const briefing = areas.find((area) => area.area === "briefing")!;
+    expect(briefing.services.some((s) => s.name === "briefing.today")).toBe(true);
+    expect(briefing.services.some((s) => s.name === "briefing.assemble")).toBe(false);
   });
 
   it("says the same thing for a key that is already revoked as for one that never existed", async () => {
