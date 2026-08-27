@@ -61,7 +61,7 @@ async function wireManifest(
     }
     const { registerBlock } = await import("@/modules/cms/blocks/registry");
     for (const block of exported) {
-      registerBlock(block as Parameters<typeof registerBlock>[0]);
+      registerBlock(block as Parameters<typeof registerBlock>[0], manifest.name);
       report.blocks.push((block as { type: string }).type);
     }
   }
