@@ -590,7 +590,7 @@ structure a search engine and a skim-reading human can both follow.
 | `HelpArticle` | A help-centre entry. Same block body as a page, because it is one. | title, slug, category_id, blocks (jsonb), status, locale, seo (jsonb), helpful_yes, helpful_no, updated_at |
 | `HelpCategory` | How the help centre is arranged. | name, slug, position, description |
 
-*(Help centre added 2026-08-23: C8.09 referenced it and found two passing
+*(Help centre added 2026-08-23: C8.12 referenced it and found two passing
 mentions.)*
 
 **The help centre is the CMS, not a second CMS.** A `HelpArticle` is a `Page`
@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.04 proofing, selects, comments, approval rounds, watermarking, download policies, archive delivery and notifications. |
+| Current focus | C8.04 watermarked variants and a `download_policy` that decides whether a client receives a rendition or the master. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5749,21 +5749,37 @@ permitted conversation on the same contact timeline.
   durable download limit, secret rotation, session ownership and invite
   delivery. Changesets `client-galleries.md` and
   `client-gallery-delivery-audit.md`.)
-- [ ] **C8.04** Add proofing, favorites/selects, comments, approval rounds,
-  watermarking, download policies, archive/package delivery and notifications.
-- [ ] **C8.05** Add print/digital gallery sales through catalog/cart/orders and
+- [ ] **C8.04** Render watermarked variants, and make `download_policy` decide
+  what a client actually receives: `web_res` a rendition, `full_res` the
+  master, and `watermark` a marked rendition for what a proof gallery shows
+  and hands over.
+  (§36's responsive AVIF/WebP ladder already exists in
+  `src/core/media/variants.ts` and runs on upload; what is missing is a
+  watermarked rendition and any code that reads `download_policy` at all —
+  C8.03 stores both choices and honours neither, so `web_res` currently
+  hands over the master. Proofing renders on top of this, so it comes
+  first.)
+- [ ] **C8.05** Add gallery proofing: `GallerySelection` favorites, selects and
+  rejects with per-asset comments, on the contact spine, from the client
+  surface and the phone.
+- [ ] **C8.06** Add approval rounds over a selection set — the owner finalizes,
+  the client sees the round's state, and a reopened round keeps its history.
+- [ ] **C8.07** Add archive/package delivery of a finished gallery and the
+  notifications that carry it: gallery ready, selection submitted, round
+  approved.
+- [ ] **C8.08** Add print/digital gallery sales through catalog/cart/orders and
   preserve asset/product/selection provenance.
-- [ ] **C8.06** Build review requests after purchases/bookings, moderation,
+- [ ] **C8.09** Build review requests after purchases/bookings, moderation,
   replies, photo/video media, incentives, review-wall blocks and
   `AggregateRating` rules that never misrepresent hidden reviews.
-- [ ] **C8.07** Build the customer portal shell with magic-link/password auth,
+- [ ] **C8.10** Build the customer portal shell with magic-link/password auth,
   profile, locale, consent/preferences, sessions and accessible navigation.
-- [ ] **C8.08** Add portal quotes/contracts/invoices/payments, bookings/events/
+- [ ] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
   rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
   referrals and messages using the same services as admin.
-- [ ] **C8.09** Build a CMS-backed help centre/knowledge base with categories,
+- [ ] **C8.12** Build a CMS-backed help centre/knowledge base with categories,
   search, locale variants, feedback, SEO and owner editing.
-- [ ] **C8.10** Build documents/files shared to contacts/projects/portal with
+- [ ] **C8.13** Build documents/files shared to contacts/projects/portal with
   versioning, access rules, expiry, download audit and export.
 
 **C8 exit:** the business can prove, deliver and support its work while each

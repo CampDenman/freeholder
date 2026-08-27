@@ -302,7 +302,7 @@ export const TESTIMONIAL_STATUSES = ["draft", "published", "withdrawn"] as const
 /**
  * A project quote backed by the Contact spine, never pasted anonymous praise.
  *
- * C8.06 later broadens reviews and display walls. This table is deliberately
+ * C8.09 later broadens reviews and display walls. This table is deliberately
  * the narrower proof attached to work: who said it, which work it describes,
  * and the permission that lets the business repeat it publicly.
  */

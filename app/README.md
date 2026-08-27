@@ -24,7 +24,7 @@ verified WebAuthn assertion before issuing the session and CSRF cookies.
 
 Customer identity proof and Contact-to-User linking are complete. The full
 customer portal shell and its order, booking, invoice, gallery and preference
-surfaces remain completion targets in `MASTER.md` C8.07–C8.08.
+surfaces remain completion targets in `MASTER.md` C8.10–C8.11.
 
 Rule: no business logic here, ever — route handlers call the service layer.
 No framework imports below `app/` (lint-enforced in CI).
