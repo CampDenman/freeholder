@@ -30,6 +30,12 @@ jobs:
           --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/freeholder_test
+      # `next build` prerenders pages, and prerendering calls env(), which
+      # refuses to resolve in production without a session secret. A build is
+      # not a running instance and this value signs nothing: it exists so the
+      # Build step can render, exactly as vitest.config.ts supplies a
+      # deterministic one because CI has no real secret to give.
+      SESSION_SECRET: ci-build-only-not-a-real-secret-0000000000
     steps:
       - uses: actions/checkout@v4
         with:
