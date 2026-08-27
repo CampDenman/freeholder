@@ -8,9 +8,23 @@ import path from "node:path";
 // Next 16/Turbopack splits this route-rich application into thousands of small
 // server chunks. File count is still bounded to catch a traced repository or
 // dependency explosion, but it needs headroom above the clean-build baseline
-// (9,351 at C7.15). Bytes and forbidden roots remain the stronger boundaries.
+// (9,351 at C7.15). Forbidden roots remain the strongest boundary.
+//
+// These are tripwires for a traced repository or a dependency explosion, not
+// a size budget: the number to catch is a doubling, not a percent of drift.
+// The old 200 MiB byte cap was below the real artifact and had never been
+// enforced, because the Build step had never run to completion in CI — a
+// failing Test step short-circuited the job every time. The moment it did
+// run it failed at 217,722,370 bytes.
+//
+// The baseline is also platform-dependent, which is the trap worth naming:
+// the same commit measures ~205 MB on a Windows developer machine and
+// ~218 MB on CI's Linux runner, because the native image binaries differ. A
+// cap set from a local build is therefore a cap that passes locally and
+// fails in CI. 320 MiB sits about 1.5x above the Linux baseline, which still
+// catches the failure mode this exists for.
 const MAX_FILES = 12_000;
-const MAX_BYTES = 200 * 1024 * 1024;
+const MAX_BYTES = 320 * 1024 * 1024;
 const STANDALONE = path.resolve(".next", "standalone");
 const FORBIDDEN_ROOTS = new Set([
   "app",
