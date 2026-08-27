@@ -47,13 +47,18 @@ import {
 } from "@/core/media/validation";
 import captureServices from "./capture";
 import {
+  allRenditionKeys,
   buildRenditions,
+  publicRenditions,
   readImageFacts,
   toVariantSet,
-  type Rendition,
+  withWatermarked,
   type VariantFormat,
   type VariantSet,
 } from "@/core/media/variants";
+import { buildWatermarked, type WatermarkMark } from "@/core/media/watermark";
+import { designSettings } from "@/core/design/schema";
+import { businessProfile } from "@/core/settings/schema";
 
 const assetRow = row({
   id: uuid,
@@ -382,6 +387,36 @@ interface CreateAssetInput {
   uploadId?: string;
 }
 
+/**
+ * The mark this install stamps proofs with: the brand logo when one is set,
+ * the business name otherwise (C8.04). Undefined before setup has named the
+ * business — there is nothing to mark with yet, and an unnamed watermark is
+ * worse than none.
+ */
+async function watermarkMark(tx: Tx): Promise<WatermarkMark | undefined> {
+  const [business] = await tx
+    .select({ name: businessProfile.name })
+    .from(businessProfile)
+    .limit(1);
+  if (!business?.name) return undefined;
+  const [design] = await tx
+    .select({ logoAssetId: designSettings.logoAssetId })
+    .from(designSettings)
+    .limit(1);
+  let logo: Uint8Array<ArrayBuffer> | undefined;
+  if (design?.logoAssetId) {
+    const [asset] = await tx
+      .select({ storageKey: assets.storageKey })
+      .from(assets)
+      .where(eq(assets.id, design.logoAssetId))
+      .limit(1);
+    // A missing logo object falls through to the name rather than failing:
+    // the upload is not the place to discover a broken brand setting.
+    if (asset) logo = (await storage().get(asset.storageKey)) ?? undefined;
+  }
+  return { logo, text: business.name };
+}
+
 async function createAssetFromStoredOriginal(
   input: CreateAssetInput,
   ctx: ServiceContext,
@@ -414,6 +449,28 @@ async function createAssetFromStoredOriginal(
     );
     trackedKeys.push(...built.map((rendition) => rendition.key));
     variants = toVariantSet(built);
+
+    // Marked renditions are built here, with the ladder, so serving a proof
+    // is a key lookup rather than an image job on the client's first view.
+    const mark = await watermarkMark(ctx.tx);
+    const marked = mark
+      ? await buildWatermarked(body, facts, mark, (format, width) =>
+          `${input.key}.wm.${width}.${format}`,
+        )
+      : [];
+    if (marked.length) {
+      await putTrackedObjects(
+        marked.map((rendition) => ({
+          key: rendition.key,
+          body: rendition.body,
+          contentType: rendition.contentType,
+          role: "variant" as const,
+          uploadId: input.uploadId,
+        })),
+      );
+      trackedKeys.push(...marked.map((rendition) => rendition.key));
+      variants = withWatermarked(variants, marked);
+    }
   }
 
   const [asset] = await ctx.tx
@@ -1264,11 +1321,9 @@ export const resolveImage = defineService({
     const store = storage();
     const variants = asset.variants as VariantSet;
     const sources: ResolvedSource[] = [];
-    for (const [format, renditions] of Object.entries(variants) as [
-      VariantFormat,
-      Rendition[],
-    ][]) {
-      if (!renditions?.length) continue;
+    // publicRenditions, not Object.entries: a watermarked rendition is stored
+    // on the same row and must never become a source on a public page.
+    for (const [format, renditions] of publicRenditions(variants)) {
       const entries = await Promise.all(
         renditions.map(async (r) => `${await store.url(r.key)} ${r.width}w`),
       );
@@ -2018,9 +2073,7 @@ async function purgeStoredAsset(tx: Tx, asset: typeof assets.$inferSelect) {
   const keys = new Set(inventory.map((row) => row.key));
   keys.add(asset.storageKey);
   const variants = asset.variants as VariantSet;
-  for (const renditions of Object.values(variants)) {
-    for (const rendition of renditions ?? []) keys.add(rendition.key);
-  }
+  for (const key of allRenditionKeys(variants)) keys.add(key);
   for (const key of keys) await storage().delete(key);
   await tx.delete(assets).where(eq(assets.id, asset.id));
   return { assetId: asset.id, objects: keys.size };
