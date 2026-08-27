@@ -3132,7 +3132,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-27 |
-| Evidence snapshot | Working branch `feat/c8.03-client-galleries` (from the C7.12–C8.02 landing) implements C8.03 private client galleries. Next product item is C8.04. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | Working branch `feat/c8.03-client-galleries` (from the C7.12–C8.02 landing) implements C8.03 private client galleries, then audits and corrects them: session-scoped bytes, a durable download limit, secret rotation that closes the sessions it opened, and a guest magic link that can actually be sent. Next product item is C8.04. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
@@ -5728,11 +5728,27 @@ permitted conversation on the same contact timeline.
   invalidates the duplicate's sessions. Erasure unlinks the person and
   revokes credentials; the gallery row stays. `/g/{slug}` is noindexed and
   `robots.txt` disallows `/g/`. Watermark and download_policy columns exist
-  for C8.04; the watermark pipeline and `GallerySelection` wait. Ten focused
-  PostgreSQL tests in `tests/core/client-galleries.test.ts` cover expiry,
-  hashed secrets, magic-link revoke, login, per-asset ceilings, spine
-  resolve, audit, merge, erasure and robots. Changeset
-  `client-galleries.md`.)
+  for C8.04; the watermark pipeline and `GallerySelection` wait. **Delivery
+  is session-scoped, not key-scoped**: the public item shape carries no
+  object key, and both bytes routes (`/g/{slug}/view/{item}` and
+  `/g/{slug}/download/{item}`) go through `galleries.viewItem` /
+  `galleries.downloadItem`, because `/media/{key}` authorizes any ready
+  object for anyone holding the key and so outlives expiry, revoke and the
+  per-asset flag. Rotating the PIN or changing the access mode deletes the
+  sessions it opened. `limit_n` counts the gallery's download log rather
+  than the session, so unlocking again is not a fresh allowance, and
+  `download_policy: none` makes every item report `canDownload: false`. A
+  guest invitation is emailed with its link and the link is shown once to
+  the owner, so a magic link can actually be sent; an undeliverable address
+  reports `delivers: false` rather than refusing the guest. A wrong PIN is
+  audited against the gallery with no contact, because nobody knows who
+  typed it. Sixteen focused PostgreSQL tests in
+  `tests/core/client-galleries.test.ts` cover expiry, hashed secrets,
+  magic-link revoke, login, per-asset ceilings, spine resolve, audit,
+  merge, erasure, robots, keyless delivery, view-only galleries, the
+  durable download limit, secret rotation, session ownership and invite
+  delivery. Changesets `client-galleries.md` and
+  `client-gallery-delivery-audit.md`.)
 - [ ] **C8.04** Add proofing, favorites/selects, comments, approval rounds,
   watermarking, download policies, archive/package delivery and notifications.
 - [ ] **C8.05** Add print/digital gallery sales through catalog/cart/orders and

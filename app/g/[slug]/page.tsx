@@ -12,8 +12,8 @@ import {
   viewGallerySession,
 } from "@/modules/galleries/service";
 import { getT } from "../../i18n";
+import { GALLERY_SESSION_COOKIE } from "@/modules/galleries/cookies";
 import {
-  GALLERY_SESSION_COOKIE,
   openGalleryWithLoginAction,
   redeemGalleryGuestAction,
   unlockGalleryAction,
@@ -47,11 +47,14 @@ export default async function ClientGalleryPage({
   if (!lock) notFound();
 
   const sessionToken = jar.get(GALLERY_SESSION_COOKIE)?.value;
-  const opened = sessionToken
+  const session = sessionToken
     ? await viewGallerySession
         .call({ sessionToken }, { kind: "anonymous" })
         .catch(() => null)
     : null;
+  // The cookie holds one session. It opens this gallery or none: a session
+  // for another gallery must not render here under this address.
+  const opened = session?.gallery.slug === slug ? session : null;
 
   if (opened) {
     return (
@@ -66,7 +69,7 @@ export default async function ClientGalleryPage({
               {opened.items.map((item) => (
                 <li key={item.id} className="grid gap-2">
                   <img
-                    src={`/media/${item.storageKey}`}
+                    src={`/g/${slug}/view/${item.id}`}
                     alt={item.altText || item.filename || ""}
                     className="w-full rounded-md border border-rule bg-surface"
                   />

@@ -14,6 +14,9 @@ import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { sendMail } from "@/core/mail/service";
+import { businessProfile } from "@/core/settings/schema";
+import { env } from "@/core/env";
 import { assets } from "@/core/media/schema";
 import { isUniqueViolation } from "@/core/db";
 import {
@@ -80,6 +83,57 @@ function now(): Date {
   return new Date();
 }
 
+/**
+ * Send the link, and report whether it went. A suppressed address or an
+ * unconfigured mailbox is news for the owner, not a reason to refuse to
+ * create the guest: the admin screen shows the link so it can be handed over
+ * some other way.
+ */
+async function sendGuestInvite(
+  tx: Tx,
+  input: {
+    to: string;
+    site: string;
+    title: string;
+    link: string;
+    expiresAt: Date | null;
+    idempotencyKey: string;
+  },
+): Promise<boolean> {
+  try {
+    const sent = await sendMail(
+      tx,
+      {
+        to: input.to,
+        subject: `${input.title} — your private gallery`,
+        text: [
+          `${input.site} has shared the gallery "${input.title}" with you.`,
+          "",
+          "Open it here:",
+          input.link,
+          "",
+          input.expiresAt
+            ? `This private link stops working ${input.expiresAt.toISOString()}.`
+            : "This link is private to you. Please do not forward it.",
+        ].join("\n"),
+      },
+      { requestedBy: "system", idempotencyKey: input.idempotencyKey },
+    );
+    return sent.delivers;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The address a guest is actually sent. `/g/{slug}` renders the lock screen
+ * with a redeem button rather than opening on GET: a link that mutates when
+ * a mail scanner follows it is a link that is spent before it arrives.
+ */
+function guestLink(slug: string, token: string): string {
+  return `${env().APP_URL.replace(/\/+$/, "")}/g/${slug}?token=${encodeURIComponent(token)}`;
+}
+
 function isExpired(at: Date | null | undefined): boolean {
   return Boolean(at && at.getTime() <= Date.now());
 }
@@ -116,7 +170,6 @@ const itemRow = row({
   canDownload: z.boolean(),
   filename: z.string().optional(),
   altText: z.string().nullable().optional(),
-  storageKey: z.string().optional(),
   mime: z.string().optional(),
   status: z.string().optional(),
 });
@@ -231,7 +284,7 @@ function itemAllowed(
 
 async function liveItems(
   ctx: ServiceContext,
-  galleryId: string,
+  gallery: { id: string; downloadPolicy: (typeof GALLERY_DOWNLOAD_POLICIES)[number] },
   guest: { canView: boolean; canDownload: boolean } | null,
 ) {
   const rows = await ctx.tx
@@ -241,7 +294,7 @@ async function liveItems(
     })
     .from(galleryItems)
     .innerJoin(assets, eq(assets.id, galleryItems.assetId))
-    .where(eq(galleryItems.galleryId, galleryId))
+    .where(eq(galleryItems.galleryId, gallery.id))
     .orderBy(asc(galleryItems.position));
   return rows
     .filter((row) => row.asset.status === "ready" && itemAllowed(row.item, guest, "view"))
@@ -251,10 +304,10 @@ async function liveItems(
       assetId: row.item.assetId,
       position: row.item.position,
       canView: true,
-      canDownload: itemAllowed(row.item, guest, "download"),
+      canDownload:
+        gallery.downloadPolicy !== "none" && itemAllowed(row.item, guest, "download"),
       filename: row.asset.filename,
       altText: row.asset.altText,
-      storageKey: row.asset.storageKey,
       mime: row.asset.mime,
       status: row.asset.status,
     }));
@@ -439,6 +492,11 @@ export const updateGallery = defineService({
       })
       .where(eq(galleries.id, gallery.id))
       .returning();
+    if (access !== gallery.access || secretHash !== gallery.secretHash) {
+      // A changed door closes the ones already open: a session issued under
+      // the old PIN is exactly what rotating the PIN is meant to end.
+      await ctx.tx.delete(gallerySessions).where(eq(gallerySessions.galleryId, gallery.id));
+    }
     ctx.setSubject("gallery", gallery.id);
     return publicGallery(updated!);
   },
@@ -471,7 +529,7 @@ export const getGallery = defineService({
   output: galleryRow.extend({ items: listed(itemRow) }),
   handler: async (input, ctx) => {
     const gallery = await loadGallery(ctx, input.id);
-    const items = await liveItems(ctx, gallery.id, null);
+    const items = await liveItems(ctx, gallery, null);
     return { ...publicGallery(gallery), items };
   },
 });
@@ -593,13 +651,14 @@ export const inviteGalleryGuest = defineService({
     canDownload: z.boolean().default(false),
     expiresAt: z.iso.datetime().nullish(),
   }),
-  output: guestRow.extend({ token: z.string() }),
+  output: guestRow.extend({
+    token: z.string(),
+    link: z.string(),
+    delivers: z.boolean(),
+  }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
     const gallery = await loadGallery(ctx, input.galleryId);
-    if (input.role === "partner" && ctx.actor.kind !== "user" && ctx.actor.kind !== "system") {
-      throw new ServiceError("permission", "Only the owner can invite a partner.");
-    }
     const resolved = await ctx.call(resolveContact, {
       email: input.email,
       name: input.name,
@@ -649,6 +708,20 @@ export const inviteGalleryGuest = defineService({
         .returning();
       guest = created!;
     }
+    const link = guestLink(gallery.slug, token);
+    const [business] = await ctx.tx
+      .select({ name: businessProfile.name })
+      .from(businessProfile)
+      .limit(1);
+    const site = business?.name ?? "this Freeholder site";
+    const sent = await sendGuestInvite(ctx.tx, {
+      to: resolved.contact.email ?? input.email,
+      site,
+      title: gallery.title,
+      link,
+      expiresAt: guest.expiresAt,
+      idempotencyKey: `gallery-guest:${guest.id}:${tokenHash.slice(0, 32)}`,
+    });
     ctx.setSubject("gallery", gallery.id);
     await ctx.emitTimeline({
       contactId: resolved.contact.id,
@@ -667,6 +740,8 @@ export const inviteGalleryGuest = defineService({
       contactName: resolved.contact.name,
       contactEmail: resolved.contact.email,
       token,
+      link,
+      delivers: sent,
     };
   },
 });
@@ -805,7 +880,9 @@ export const unlockGallery = defineService({
       return denyUnlock(ctx, gallery.id, null);
     }
     const ok = await verifyPassword(input.secret, gallery.secretHash);
-    if (!ok) return denyUnlock(ctx, gallery.id, gallery.contactId);
+    // The audit records that the gallery refused someone. It does not record
+    // that the client was refused: a wrong PIN is anonymous by definition.
+    if (!ok) return denyUnlock(ctx, gallery.id, null);
     const token = await issueSession(ctx, gallery, gallery.contactId, null);
     await logAccess(ctx, { galleryId: gallery.id, contactId: gallery.contactId, action: "view" });
     ctx.setSubject("gallery", gallery.id);
@@ -814,7 +891,7 @@ export const unlockGallery = defineService({
       ok: true as const,
       sessionToken: token,
       gallery: publicGallery(gallery),
-      items: await liveItems(ctx, gallery.id, null),
+      items: await liveItems(ctx, gallery, null),
     };
   },
 });
@@ -829,7 +906,7 @@ export const redeemGalleryGuest = defineService({
   rateLimit: {
     limit: 20,
     windowSeconds: 15 * 60,
-    subject: () => "gallery-guest",
+    subject: (input) => `gallery-guest:${hashGalleryToken("guest", input.token)}`,
     message: "Too many tries. Wait a few minutes and try again.",
   },
   output: unlockResult,
@@ -855,7 +932,7 @@ export const redeemGalleryGuest = defineService({
       ok: true as const,
       sessionToken: token,
       gallery: publicGallery(gallery),
-      items: await liveItems(ctx, gallery.id, guest),
+      items: await liveItems(ctx, gallery, guest),
     };
   },
 });
@@ -909,7 +986,7 @@ export const openGalleryWithLogin = defineService({
       ok: true as const,
       sessionToken: token,
       gallery: publicGallery(gallery),
-      items: await liveItems(ctx, gallery.id, guest ?? null),
+      items: await liveItems(ctx, gallery, guest ?? null),
     };
   },
 });
@@ -927,7 +1004,7 @@ export const viewGallerySession = defineService({
       ok: true as const,
       sessionToken: input.sessionToken,
       gallery: publicGallery(gallery),
-      items: await liveItems(ctx, gallery.id, guest),
+      items: await liveItems(ctx, gallery, guest),
     };
   },
 });
@@ -970,7 +1047,16 @@ export const downloadGalleryItem = defineService({
       throw new ServiceError("permission", "That file cannot be downloaded.");
     }
     if (gallery.downloadPolicy === "limit_n") {
-      const next = session.downloadsUsed + 1;
+      const [taken] = await ctx.tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(galleryAccessLogs)
+        .where(
+          and(
+            eq(galleryAccessLogs.galleryId, gallery.id),
+            eq(galleryAccessLogs.action, "download"),
+          ),
+        );
+      const next = (taken?.count ?? 0) + 1;
       if (next > (gallery.downloadLimit ?? 0)) {
         await logAccess(ctx, {
           galleryId: gallery.id,
@@ -980,9 +1066,11 @@ export const downloadGalleryItem = defineService({
         });
         throw new ServiceError("permission", "This gallery's download limit has been reached.");
       }
+      // The limit is the gallery's; this column only records what this
+      // session took, which is what the owner sees per visit.
       await ctx.tx
         .update(gallerySessions)
-        .set({ downloadsUsed: next })
+        .set({ downloadsUsed: session.downloadsUsed + 1 })
         .where(eq(gallerySessions.id, session.id));
     }
     await logAccess(ctx, {
@@ -998,6 +1086,40 @@ export const downloadGalleryItem = defineService({
       filename: row.asset.filename,
       mime: row.asset.mime,
       bytes: row.asset.bytes,
+    };
+  },
+});
+
+export const viewGalleryItem = defineService({
+  name: "galleries.viewItem",
+  summary: "Authorize one gallery image for a live session.",
+  kind: "query",
+  permission: "public",
+  input: z.object({
+    sessionToken: z.string().min(20).max(200),
+    itemId: id,
+  }),
+  output: row({
+    assetId: uuid,
+    storageKey: z.string(),
+    filename: z.string(),
+    mime: z.string(),
+  }).nullable(),
+  handler: async (input, ctx) => {
+    const { gallery, guest } = await loadSession(ctx, input.sessionToken);
+    const [found] = await ctx.tx
+      .select({ item: galleryItems, asset: assets })
+      .from(galleryItems)
+      .innerJoin(assets, eq(assets.id, galleryItems.assetId))
+      .where(and(eq(galleryItems.id, input.itemId), eq(galleryItems.galleryId, gallery.id)))
+      .limit(1);
+    if (!found || found.asset.status !== "ready") return null;
+    if (!itemAllowed(found.item, guest, "view")) return null;
+    return {
+      assetId: found.asset.id,
+      storageKey: found.asset.storageKey,
+      filename: found.asset.filename,
+      mime: found.asset.mime,
     };
   },
 });
@@ -1226,6 +1348,7 @@ export default [
   redeemGalleryGuest,
   openGalleryWithLogin,
   viewGallerySession,
+  viewGalleryItem,
   downloadGalleryItem,
   galleryBySlug,
   expireGallerySessions,

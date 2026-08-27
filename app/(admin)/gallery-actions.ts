@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import { GALLERY_INVITE_COOKIE } from "@/modules/galleries/cookies";
 import {
   addGalleryItem,
   createGallery,
@@ -67,7 +68,8 @@ export async function updateGalleryAction(form: FormData): Promise<void> {
       {
         id,
         title: text(form, "title") || undefined,
-        access: text(form, "access") as "pin" | "password" | "login" | "",
+        // An absent field means "leave it alone", not "set it to nothing".
+        access: (text(form, "access") || undefined) as "pin" | "password" | "login" | undefined,
         secret: text(form, "secret") || undefined,
         expiresAt: text(form, "expiresAt")
           ? new Date(text(form, "expiresAt")).toISOString()
@@ -120,7 +122,7 @@ export async function inviteGalleryGuestAction(form: FormData): Promise<void> {
   const galleryId = text(form, "galleryId");
   const path = `${GALLERIES}/${galleryId}`;
   try {
-    await inviteGalleryGuest.call(
+    const guest = await inviteGalleryGuest.call(
       {
         galleryId,
         email: text(form, "email"),
@@ -130,11 +132,20 @@ export async function inviteGalleryGuestAction(form: FormData): Promise<void> {
       },
       await actor(),
     );
+    (await cookies()).set(GALLERY_INVITE_COOKIE, guest.link, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: GALLERIES,
+      // Long enough to read and copy, short enough that a shared screen
+      // does not keep handing the link out.
+      maxAge: 300,
+    });
   } catch (error) {
     refused(error, path, "That guest could not be invited.");
   }
   revalidatePath(path);
-  redirect(`${path}?saved=1`);
+  redirect(`${path}?invited=1`);
 }
 
 export async function revokeGalleryGuestAction(form: FormData): Promise<void> {

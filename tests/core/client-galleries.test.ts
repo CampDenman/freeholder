@@ -15,6 +15,12 @@
 //   9. Erasure unlinks the person without deleting the business's gallery.
 //  10. Client galleries are not a public CMS/sitemap surface.
 //  11. Invites call contacts.resolve, never contacts.create.
+//  12. The bytes come through the session; the object key never leaves it.
+//  13. The download policy is part of the ceiling, not page decoration.
+//  14. A download limit counts the gallery, not the session holding it.
+//  15. Rotating the secret closes the sessions the old one opened.
+//  16. A session opens the gallery it was issued for and no other.
+//  17. An invite carries a link that can actually be sent.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
@@ -39,6 +45,7 @@ import {
   unlockGallery,
   updateGallery,
   updateGalleryItem,
+  viewGalleryItem,
   viewGallerySession,
 } from "@/modules/galleries/service";
 import { galleries, galleryAccessLogs, galleryGuests } from "@/modules/galleries/schema";
@@ -321,5 +328,152 @@ describe.runIf(hasDatabase)("private client galleries", { timeout: 90_000 }, () 
     expect(lock).toMatchObject({ slug: gallery.slug, access: "pin", expired: false });
     expect(kindFromSlug(`g/${gallery.slug}`)).not.toBe("project");
     expect(renderRobots("https://example.test")).toContain("Disallow: /g/");
+  });
+
+  it("hands out no object key, so a private file is not a public /media URL", async () => {
+    const client = await person();
+    const file = await image("proof.jpg");
+    const gallery = await createGallery.call(
+      {
+        contactId: client.id,
+        title: "Keyless proofs",
+        access: "pin",
+        secret: "2468",
+        downloadPolicy: "full_res",
+      },
+      OWNER,
+    );
+    const item = await addGalleryItem.call({ galleryId: gallery.id, assetId: file.id }, OWNER);
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+    // /media/{key} authorizes any ready object for anyone holding the key,
+    // with no expiry and no revoke. A private gallery must never print one.
+    expect(JSON.stringify(opened.items)).not.toContain(file.storageKey);
+    expect(Object.keys(opened.items[0]!)).not.toContain("storageKey");
+
+    const authorized = await viewGalleryItem.call(
+      { sessionToken: opened.sessionToken, itemId: item.id },
+      ANONYMOUS,
+    );
+    expect(authorized).toMatchObject({ assetId: file.id, storageKey: file.storageKey });
+    await updateGallery.call(
+      { id: gallery.id, expiresAt: new Date(Date.now() - 1_000).toISOString() },
+      OWNER,
+    );
+    expect(
+      (await failure(
+        viewGalleryItem.call({ sessionToken: opened.sessionToken, itemId: item.id }, ANONYMOUS),
+      )).message,
+    ).toContain("no longer available");
+  });
+
+  it("offers no download at all when the gallery is view-only", async () => {
+    const client = await person();
+    const file = await image("view-only.jpg");
+    const gallery = await createGallery.call(
+      { contactId: client.id, title: "View only", access: "pin", secret: "2468" },
+      OWNER,
+    );
+    const item = await addGalleryItem.call({ galleryId: gallery.id, assetId: file.id }, OWNER);
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+    // The item says "downloadable"; the gallery says "no". The lower of the
+    // two is what the client is told, so the page cannot offer a dead link.
+    expect(opened.items[0]!.canDownload).toBe(false);
+    expect(
+      (await failure(
+        downloadGalleryItem.call({ sessionToken: opened.sessionToken, itemId: item.id }, ANONYMOUS),
+      )).message,
+    ).toContain("cannot be downloaded");
+  });
+
+  it("counts a download limit against the gallery, not the session", async () => {
+    const client = await person();
+    const file = await image("limited.jpg");
+    const gallery = await createGallery.call(
+      {
+        contactId: client.id,
+        title: "One download",
+        access: "pin",
+        secret: "2468",
+        downloadPolicy: "limit_n",
+        downloadLimit: 1,
+      },
+      OWNER,
+    );
+    const item = await addGalleryItem.call({ galleryId: gallery.id, assetId: file.id }, OWNER);
+    const first = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(first);
+    await downloadGalleryItem.call({ sessionToken: first.sessionToken, itemId: item.id }, ANONYMOUS);
+
+    // Unlocking again used to hand out a fresh allowance, which is the same
+    // as having no limit at all.
+    const second = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(second);
+    expect(
+      (await failure(
+        downloadGalleryItem.call({ sessionToken: second.sessionToken, itemId: item.id }, ANONYMOUS),
+      )).message,
+    ).toContain("download limit");
+  });
+
+  it("closes the sessions the old secret opened when the secret is rotated", async () => {
+    const client = await person();
+    const gallery = await createGallery.call(
+      { contactId: client.id, title: "Rotated proofs", access: "pin", secret: "2468" },
+      OWNER,
+    );
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+    await updateGallery.call({ id: gallery.id, secret: "1357" }, OWNER);
+    // A leaked PIN is why an owner rotates it. Leaving the sessions it opened
+    // alive for a week makes the rotation a gesture.
+    expect(
+      (await failure(viewGallerySession.call({ sessionToken: opened.sessionToken }, ANONYMOUS))).message,
+    ).toContain("That did not work");
+    expect(await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS)).toEqual({
+      ok: false,
+    });
+    const reopened = await unlockGallery.call({ slug: gallery.slug, secret: "1357" }, ANONYMOUS);
+    expect(reopened.ok).toBe(true);
+  });
+
+  it("names the gallery a session belongs to, so one cookie cannot open another", async () => {
+    const client = await person();
+    const first = await createGallery.call(
+      { contactId: client.id, title: "Spring proofs", access: "pin", secret: "2468" },
+      OWNER,
+    );
+    const second = await createGallery.call(
+      { contactId: client.id, title: "Autumn proofs", access: "pin", secret: "1357" },
+      OWNER,
+    );
+    const opened = await unlockGallery.call({ slug: first.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+    const read = await viewGallerySession.call({ sessionToken: opened.sessionToken }, ANONYMOUS);
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error("expected the session to read");
+    // The page renders whichever gallery the session names, so the session
+    // has to name it. One cookie holds one gallery, not the last one opened.
+    expect(read.gallery.slug).toBe(first.slug);
+    expect(read.gallery.slug).not.toBe(second.slug);
+  });
+
+  it("gives an invite a link that opens the gallery", async () => {
+    const client = await person();
+    const gallery = await createGallery.call(
+      { contactId: client.id, title: "Sendable proofs", access: "login" },
+      OWNER,
+    );
+    const guest = await inviteGalleryGuest.call(
+      { galleryId: gallery.id, email: "partner@example.test", role: "partner" },
+      OWNER,
+    );
+    // A magic link nobody can send is not magic-link access.
+    expect(guest.link).toContain(`/g/${gallery.slug}?token=`);
+    expect(guest.link).toContain(encodeURIComponent(guest.token));
+    const opened = await redeemGalleryGuest.call({ token: guest.token }, ANONYMOUS);
+    openedSession(opened);
+    expect(opened.gallery.id).toBe(gallery.id);
   });
 });

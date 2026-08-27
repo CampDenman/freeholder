@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // One private gallery (C8.03). Forms and links only.
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { Button, Card, CardBody, CardHeader } from "@/ui/primitives";
 import { listAssets } from "@/core/media/service";
@@ -13,6 +14,7 @@ import {
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
+import { GALLERY_INVITE_COOKIE } from "@/modules/galleries/cookies";
 import {
   addGalleryItemAction,
   inviteGalleryGuestAction,
@@ -24,29 +26,42 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
+/**
+ * `datetime-local` is local wall-clock, and the action parses what comes back
+ * the same way. Rendering UTC into it moves the expiry by the offset every
+ * time the form is saved without being touched.
+ */
+function localInput(value: Date | null): string {
+  if (!value) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
 export default async function GalleryEditorPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; invited?: string }>;
 }) {
   const { id } = await params;
   const actor = await requireStaffActor("galleries");
-  const [t, gallery, guests, log, library, query] = await Promise.all([
+  const [t, gallery, guests, log, library, query, jar] = await Promise.all([
     getT(),
     domainOrNull(getGallery.call({ id }, actor)),
     domainOrNull(listGalleryGuests.call({ galleryId: id }, actor)),
     domainOrNull(listGalleryAccess.call({ galleryId: id }, actor)),
     domainOrNull(listAssets.call({ limit: 100 }, actor)),
     searchParams,
+    cookies(),
   ]);
   if (!gallery) notFound();
 
   const publicHref = `/g/${gallery.slug}`;
-  const expiresValue = gallery.expiresAt
-    ? new Date(gallery.expiresAt).toISOString().slice(0, 16)
-    : "";
+  const expiresValue = localInput(gallery.expiresAt ? new Date(gallery.expiresAt) : null);
+  // Set by the invite action and short-lived. The raw token is gone after
+  // that request, so this is the owner's one chance to copy the link.
+  const inviteLink = query.invited ? jar.get(GALLERY_INVITE_COOKIE)?.value : undefined;
 
   return (
     <div className="grid gap-6">
@@ -69,6 +84,19 @@ export default async function GalleryEditorPage({
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
           {t("galleries.saved")}
         </p>
+      ) : null}
+      {inviteLink ? (
+        <div className="grid gap-2 rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          <p>{t("galleries.invited")}</p>
+          <label className="grid gap-1">
+            <span>{t("galleries.guestLink")}</span>
+            <input
+              readOnly
+              value={inviteLink}
+              className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+            />
+          </label>
+        </div>
       ) : null}
       {query.error ? (
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">

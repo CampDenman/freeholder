@@ -3,8 +3,8 @@
 // Gallery downloads go through the session, not the public media door (C8.03).
 import { cookies } from "next/headers";
 import { storage } from "@/adapters/storage";
+import { GALLERY_SESSION_COOKIE } from "@/modules/galleries/cookies";
 import { downloadGalleryItem } from "@/modules/galleries/service";
-import { GALLERY_SESSION_COOKIE } from "../../../actions";
 
 export const dynamic = "force-dynamic";
 
