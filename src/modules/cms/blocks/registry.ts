@@ -52,7 +52,7 @@ import {
   tip,
 } from "./surfaces";
 
-const BUILT_IN: BlockDefinition<z.ZodType, never>[] = [
+const definitions: BlockDefinition<z.ZodType, never>[] = [
   heading,
   text,
   image,
@@ -92,50 +92,7 @@ const BUILT_IN: BlockDefinition<z.ZodType, never>[] = [
   adSlot,
 ] as unknown as BlockDefinition<z.ZodType, never>[];
 
-/**
- * Registry state lives on `globalThis`, not in this module's scope.
- *
- * ── The bug this exists for ──────────────────────────────────────────────
- *
- * The bundler compiles the app into several module graphs, and each one gets
- * its own copy of this file. `src/core/runtime.ts` documents the first time
- * that bit: boot ran in `instrumentation.ts`'s graph and request handling
- * got a second, empty service registry. The fix there was to make boot a
- * precondition every graph satisfies for itself.
- *
- * That fix cannot reach this registry. `validateBlocks` is synchronous, so
- * it can never `await ready()`; it reads whatever copy of this module its
- * caller was compiled into. Built-in blocks survived that because they are
- * a literal in every copy. Blocks a module contributes did not, because
- * they arrive by mutating state at boot — so a published page using one
- * rendered as "no block type is registered", in the standalone build only.
- *
- * Anchoring the state to a `Symbol.for` key makes every copy of this module
- * read and write one store, which is what the code always assumed.
- */
-interface RegistryState {
-  definitions: BlockDefinition<z.ZodType, never>[];
-  byType: Map<string, BlockDefinition<z.ZodType, never>>;
-  /** Which module contributed each type, so a re-register can be judged. */
-  owners: Map<string, string>;
-}
-
-const REGISTRY_KEY = Symbol.for("freeholder.cms.block-registry");
-
-function state(): RegistryState {
-  const host = globalThis as unknown as Record<symbol, RegistryState | undefined>;
-  const existing = host[REGISTRY_KEY];
-  if (existing) return existing;
-  // Seeded from the built-ins, which are identical in every copy, so whichever
-  // graph gets here first produces the same starting point.
-  const created: RegistryState = {
-    definitions: [...BUILT_IN],
-    byType: new Map(BUILT_IN.map((d) => [d.type, d])),
-    owners: new Map(),
-  };
-  host[REGISTRY_KEY] = created;
-  return created;
-}
+const byType = new Map(definitions.map((d) => [d.type, d]));
 
 /**
  * Add a block type from a module (§11's `blocks` manifest entry, §24).
@@ -146,38 +103,24 @@ function state(): RegistryState {
  * still fail: silently letting the second win would route an owner's existing
  * content at whichever module happened to load last.
  */
-export function registerBlock(
-  definition: BlockDefinition<z.ZodType, never>,
-  owner?: string,
-): void {
-  const { definitions, byType, owners } = state();
+export function registerBlock(definition: BlockDefinition<z.ZodType, never>): void {
   const existing = byType.get(definition.type);
   if (existing === definition) return;
   if (existing) {
-    // The state is shared across module graphs but the *definitions* are
-    // not: every graph compiles its own copy of the contributing module,
-    // so the second graph to boot arrives with an equal-but-not-identical
-    // object. That is one module registering once, seen twice, and it must
-    // not look like a conflict.
-    if (owner && owners.get(definition.type) === owner) return;
-    // Two genuinely different modules claiming one type still fails.
-    // Letting the second win would route an owner's existing content at
-    // whichever module happened to load last.
     throw new Error(
       `block type "${definition.type}" is registered twice, by two different definitions`,
     );
   }
   definitions.push(definition);
   byType.set(definition.type, definition);
-  if (owner) owners.set(definition.type, owner);
 }
 
 export function blockTypes(): string[] {
-  return [...state().byType.keys()];
+  return [...byType.keys()];
 }
 
 export function getBlock(type: string): BlockDefinition<z.ZodType, never> | undefined {
-  return state().byType.get(type);
+  return byType.get(type);
 }
 
 export interface PaletteEntry {
@@ -196,7 +139,7 @@ export interface PaletteEntry {
  * changes"). The editor knows about *fields*, never about headings or FAQs.
  */
 export function paletteFor(context: BlockContext): PaletteEntry[] {
-  return state().definitions
+  return definitions
     .filter((d) => d.contexts.includes(context))
     .map((d) => ({
       type: d.type,
@@ -244,7 +187,7 @@ export function parseBlockTree(
       throw new BlockValidationError(`${at}: missing a block type`);
     }
 
-    const definition = state().byType.get(node.type);
+    const definition = byType.get(node.type);
     if (!definition) {
       // Refused rather than dropped. Silently discarding an unknown block is
       // how an owner loses a section by disabling the plugin that drew it —
@@ -310,7 +253,7 @@ export function collectJsonLd(nodes: BlockNode[]): Record<string, unknown>[] {
   const found: Record<string, unknown>[] = [];
   const walk = (list: BlockNode[]) => {
     for (const node of list) {
-      const definition = state().byType.get(node.type);
+      const definition = byType.get(node.type);
       const emitted = definition?.jsonLd?.(node.props);
       if (emitted) found.push(emitted);
       if (!node.children) continue;
