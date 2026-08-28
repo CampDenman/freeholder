@@ -21,6 +21,9 @@ export default defineModule({
       "gallery.guestInvited",
       "gallery.guestRevoked",
       "gallery.selected",
+      "gallery.roundSubmitted",
+      "gallery.roundApproved",
+      "gallery.roundReopened",
     ],
   },
 });

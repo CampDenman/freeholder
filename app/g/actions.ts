@@ -12,6 +12,7 @@ import {
   openGalleryWithLogin,
   redeemGalleryGuest,
   setGallerySelection,
+  submitGalleryRound,
   unlockGallery,
 } from "@/modules/galleries/service";
 
@@ -139,5 +140,14 @@ export async function clearGallerySelectionAction(form: FormData): Promise<void>
       { sessionToken: token, itemId: text(form, "itemId") },
       { kind: "anonymous" },
     );
+  });
+}
+
+/** The client sends their choices to the owner (C8.06). */
+export async function submitGalleryRoundAction(form: FormData): Promise<void> {
+  const slug = text(form, "slug");
+  await proof(slug, async () => {
+    const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value ?? "";
+    return submitGalleryRound.call({ sessionToken: token }, { kind: "anonymous" });
   });
 }

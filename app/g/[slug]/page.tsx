@@ -18,6 +18,7 @@ import {
   openGalleryWithLoginAction,
   redeemGalleryGuestAction,
   setGallerySelectionAction,
+  submitGalleryRoundAction,
   unlockGalleryAction,
 } from "../actions";
 
@@ -64,6 +65,12 @@ export default async function ClientGalleryPage({
   // Keyed by asset because a selection is about the photograph, not the row
   // that happens to carry it into this gallery.
   const marks = new Map((opened?.selections ?? []).map((s) => [s.assetId, s]));
+  // Reopening opens a fresh round, so the note explaining why lives on the
+  // round that was decided rather than the one now in play.
+  const sentBack =
+    opened?.round?.state === "open" && opened.lastDecided?.state === "reopened"
+      ? opened.lastDecided
+      : null;
 
   if (opened) {
     return (
@@ -71,6 +78,25 @@ export default async function ClientGalleryPage({
         <SkipLink target="main">{t("a11y.skipToContent")}</SkipLink>
         <main id="main-content" tabIndex={-1} className="grid gap-6">
           <h1 className="text-2xl font-bold tracking-tight">{opened.gallery.title}</h1>
+          {/* Where the conversation stands. A client who has sent their
+              choices needs to know they landed; one whose round came back
+              needs to know what to look at again. */}
+          {opened.round?.state === "submitted" ? (
+            <p className="rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink-muted">
+              {t("galleries.round.submitted")}
+            </p>
+          ) : null}
+          {opened.round?.state === "approved" ? (
+            <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+              {t("galleries.round.approved")}
+            </p>
+          ) : null}
+          {sentBack ? (
+            <div className="grid gap-1 rounded-md border border-rule bg-surface px-3 py-2 text-sm">
+              <p className="text-ink-muted">{t("galleries.round.reopened")}</p>
+              {sentBack.note ? <p>“{sentBack.note}”</p> : null}
+            </div>
+          ) : null}
           {opened.items.length === 0 ? (
             <p className="text-sm text-ink-muted">{t("galleries.items.empty")}</p>
           ) : (
@@ -137,6 +163,12 @@ export default async function ClientGalleryPage({
               })}
             </ul>
           )}
+          {opened.items.length > 0 && (opened.round?.state ?? "open") === "open" ? (
+            <form action={submitGalleryRoundAction}>
+              <input type="hidden" name="slug" value={slug} />
+              <Button type="submit">{t("galleries.round.submit")}</Button>
+            </form>
+          ) : null}
         </main>
       </div>
     );
