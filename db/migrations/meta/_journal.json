@@ -848,6 +848,13 @@
       "when": 1788019200000,
       "tag": "0120_watermarked_variant_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1788105600000,
+      "tag": "0121_gallery_selections",
+      "breakpoints": true
     }
   ]
 }

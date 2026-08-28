@@ -38,10 +38,12 @@ import {
   GALLERY_ACCESS_MODES,
   GALLERY_DOWNLOAD_POLICIES,
   GALLERY_GUEST_ROLES,
+  GALLERY_SELECTION_KINDS,
   galleries,
   galleryAccessLogs,
   galleryGuests,
   galleryItems,
+  gallerySelections,
   gallerySessions,
 } from "./schema";
 import { hashGalleryToken, newGalleryToken } from "./tokens";
@@ -192,6 +194,17 @@ const guestRow = row({
   canDownload: z.boolean(),
   expiresAt: timestamp.nullable(),
   revokedAt: timestamp.nullable(),
+});
+
+const selectionRow = row({
+  id: uuid,
+  galleryId: uuid,
+  contactId: uuid.nullable(),
+  assetId: uuid,
+  kind: z.enum(GALLERY_SELECTION_KINDS),
+  comment: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
 });
 
 const logRow = row({
@@ -419,6 +432,31 @@ async function liveItems(
       mime: row.asset.mime,
       status: row.asset.status,
     }));
+}
+
+/**
+ * What this person has already said about this gallery.
+ *
+ * Scoped to the session's contact rather than the gallery: a partner guest
+ * proofing alongside the client sees their own marks, not the client's, so
+ * neither is nudged by the other's opinion before giving one.
+ */
+async function selectionsFor(
+  ctx: ServiceContext,
+  galleryId: string,
+  contactId: string | null,
+) {
+  if (!contactId) return [];
+  return ctx.tx
+    .select()
+    .from(gallerySelections)
+    .where(
+      and(
+        eq(gallerySelections.galleryId, galleryId),
+        eq(gallerySelections.contactId, contactId),
+      ),
+    )
+    .orderBy(asc(gallerySelections.createdAt));
 }
 
 async function issueSession(
@@ -941,6 +979,8 @@ const unlocked = z.object({
     expiresAt: true,
   }),
   items: listed(itemRow),
+  /** This person's own marks, so the surface can render what they chose. */
+  selections: listed(selectionRow),
 });
 const unlockResult = z.union([unlocked, z.object({ ok: z.literal(false) })]);
 
@@ -1000,6 +1040,7 @@ export const unlockGallery = defineService({
       sessionToken: token,
       gallery: publicGallery(gallery),
       items: await liveItems(ctx, gallery, null),
+      selections: await selectionsFor(ctx, gallery.id, gallery.contactId),
     };
   },
 });
@@ -1041,6 +1082,7 @@ export const redeemGalleryGuest = defineService({
       sessionToken: token,
       gallery: publicGallery(gallery),
       items: await liveItems(ctx, gallery, guest),
+      selections: await selectionsFor(ctx, gallery.id, guest.contactId),
     };
   },
 });
@@ -1095,6 +1137,7 @@ export const openGalleryWithLogin = defineService({
       sessionToken: token,
       gallery: publicGallery(gallery),
       items: await liveItems(ctx, gallery, guest ?? null),
+      selections: await selectionsFor(ctx, gallery.id, contactId),
     };
   },
 });
@@ -1107,12 +1150,13 @@ export const viewGallerySession = defineService({
   input: z.object({ sessionToken: z.string().min(20).max(200) }),
   output: unlocked,
   handler: async (input, ctx) => {
-    const { gallery, guest } = await loadSession(ctx, input.sessionToken);
+    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken);
     return {
       ok: true as const,
       sessionToken: input.sessionToken,
       gallery: publicGallery(gallery),
       items: await liveItems(ctx, gallery, guest),
+      selections: await selectionsFor(ctx, gallery.id, session.contactId),
     };
   },
 });
@@ -1227,6 +1271,160 @@ export const viewGalleryItem = defineService({
     const delivery = deliverableFor(found.asset, gallery, "view");
     if (!delivery) return null;
     return { assetId: found.asset.id, ...delivery };
+  },
+});
+
+/**
+ * Say something about one photograph (C8.05).
+ *
+ * The session carries who is speaking, so proofing needs no second login and
+ * a magic-link guest can proof from a phone without an account. A person with
+ * no contact behind their session cannot proof: an opinion nobody owns is not
+ * one the owner can act on, and the spine is how it gets owned.
+ *
+ * Changing your mind updates the row rather than adding one, so the owner
+ * never has to reconcile two answers from the same person about one frame.
+ */
+export const setGallerySelection = defineService({
+  name: "galleries.setSelection",
+  summary: "Mark a gallery photograph as a favourite, a select or a reject.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({
+    sessionToken: z.string().min(20).max(200),
+    itemId: id,
+    kind: z.enum(GALLERY_SELECTION_KINDS),
+    comment: z.string().trim().max(2000).nullish(),
+  }),
+  output: selectionRow,
+  handler: async (input, ctx) => {
+    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken);
+    if (!session.contactId) {
+      throw new ServiceError("permission", "This gallery cannot record a choice for you.");
+    }
+    const [found] = await ctx.tx
+      .select({ item: galleryItems, asset: assets })
+      .from(galleryItems)
+      .innerJoin(assets, eq(assets.id, galleryItems.assetId))
+      .where(and(eq(galleryItems.id, input.itemId), eq(galleryItems.galleryId, gallery.id)))
+      .limit(1);
+    if (!found || found.asset.status !== "ready") {
+      throw new ServiceError("not_found", "That file is not in this gallery.");
+    }
+    // Proofing follows the view ceiling: a frame the guest cannot see is not
+    // one they can have an opinion about.
+    if (!itemAllowed(found.item, guest, "view")) {
+      throw new ServiceError("permission", "That file is not in this gallery.");
+    }
+    const comment = input.comment?.length ? input.comment : null;
+    const [saved] = await ctx.tx
+      .insert(gallerySelections)
+      .values({
+        galleryId: gallery.id,
+        contactId: session.contactId,
+        assetId: found.asset.id,
+        kind: input.kind,
+        comment,
+      })
+      .onConflictDoUpdate({
+        target: [
+          gallerySelections.galleryId,
+          gallerySelections.contactId,
+          gallerySelections.assetId,
+        ],
+        set: { kind: input.kind, comment, updatedAt: new Date() },
+      })
+      .returning();
+    ctx.setSubject("gallery", gallery.id);
+    await ctx.emitTimeline({
+      contactId: session.contactId,
+      eventType: "gallery.selected",
+      subjectType: "gallery",
+      subjectId: gallery.id,
+      payload: { assetId: found.asset.id, kind: input.kind },
+    });
+    ctx.queueEvent("gallery.selected", {
+      id: gallery.id,
+      assetId: found.asset.id,
+      kind: input.kind,
+    });
+    return saved!;
+  },
+});
+
+/** Take a mark back. Undoing is not a fourth opinion. */
+export const clearGallerySelection = defineService({
+  name: "galleries.clearSelection",
+  summary: "Remove this person's mark from a gallery photograph.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({
+    sessionToken: z.string().min(20).max(200),
+    itemId: id,
+  }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const { session, gallery } = await loadSession(ctx, input.sessionToken);
+    if (!session.contactId) return { ok: true as const };
+    const [found] = await ctx.tx
+      .select({ assetId: galleryItems.assetId })
+      .from(galleryItems)
+      .where(and(eq(galleryItems.id, input.itemId), eq(galleryItems.galleryId, gallery.id)))
+      .limit(1);
+    if (!found) return { ok: true as const };
+    await ctx.tx
+      .delete(gallerySelections)
+      .where(
+        and(
+          eq(gallerySelections.galleryId, gallery.id),
+          eq(gallerySelections.contactId, session.contactId),
+          eq(gallerySelections.assetId, found.assetId),
+        ),
+      );
+    ctx.setSubject("gallery", gallery.id);
+    return { ok: true as const };
+  },
+});
+
+/**
+ * Everything everyone has said about this gallery, for the owner.
+ *
+ * Unlike the client's own view this is not scoped to one person: deciding what
+ * to deliver means seeing that the client chose a frame their partner
+ * rejected.
+ */
+export const listGallerySelections = defineService({
+  name: "galleries.listSelections",
+  summary: "What the client and guests chose in one gallery.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ galleryId: id }),
+  output: listed(
+    selectionRow.extend({
+      contactName: z.string().nullable().optional(),
+      filename: z.string().nullable().optional(),
+    }),
+  ),
+  handler: async (input, ctx) => {
+    await loadGallery(ctx, input.galleryId);
+    const rows = await ctx.tx
+      .select({
+        selection: gallerySelections,
+        contactName: contacts.name,
+        filename: assets.filename,
+      })
+      .from(gallerySelections)
+      .leftJoin(contacts, eq(contacts.id, gallerySelections.contactId))
+      .leftJoin(assets, eq(assets.id, gallerySelections.assetId))
+      .where(eq(gallerySelections.galleryId, input.galleryId))
+      .orderBy(desc(gallerySelections.updatedAt));
+    return rows.map((row) => ({
+      ...row.selection,
+      contactName: row.contactName,
+      filename: row.filename,
+    }));
   },
 });
 
@@ -1385,6 +1583,79 @@ registerContactReference({
 });
 
 registerContactReference({
+  table: "gallery_selections",
+  // One opinion per person per photograph is a unique index, and merging two
+  // people who both marked the same frame would violate it. The survivor's
+  // own mark wins: it is the more recent statement of the same person's
+  // view, and inventing a merge of "favorite" and "reject" would be putting
+  // words in their mouth.
+  repoint: async (tx, duplicateId, survivingId) => {
+    const duplicates = await tx
+      .select()
+      .from(gallerySelections)
+      .where(eq(gallerySelections.contactId, duplicateId));
+    for (const selection of duplicates) {
+      const [survivor] = await tx
+        .select({ id: gallerySelections.id })
+        .from(gallerySelections)
+        .where(
+          and(
+            eq(gallerySelections.galleryId, selection.galleryId),
+            eq(gallerySelections.contactId, survivingId),
+            eq(gallerySelections.assetId, selection.assetId),
+          ),
+        )
+        .limit(1);
+      if (survivor) {
+        await tx.delete(gallerySelections).where(eq(gallerySelections.id, selection.id));
+      } else {
+        await tx
+          .update(gallerySelections)
+          .set({ contactId: survivingId })
+          .where(eq(gallerySelections.id, selection.id));
+      }
+    }
+  },
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({
+        id: gallerySelections.id,
+        galleryId: gallerySelections.galleryId,
+        contactId: gallerySelections.contactId,
+        assetId: gallerySelections.assetId,
+        kind: gallerySelections.kind,
+        comment: gallerySelections.comment,
+      })
+      .from(gallerySelections)
+      .where(inArray(gallerySelections.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
+    const rows = z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          galleryId: z.string().uuid(),
+          contactId: z.string().uuid(),
+          assetId: z.string().uuid(),
+          kind: z.enum(GALLERY_SELECTION_KINDS),
+          comment: z.string().nullable(),
+        }),
+      )
+      .parse(beforeState)
+      .filter((selection) => selection.contactId === duplicateId);
+    for (const selection of rows) {
+      // Re-inserted rather than repointed: a colliding row was deleted by the
+      // merge, so there may be nothing left to move back.
+      await tx
+        .insert(gallerySelections)
+        .values(selection)
+        .onConflictDoNothing();
+    }
+  },
+});
+
+registerContactReference({
   table: "gallery_sessions",
   // A bearer for the duplicate identity must not silently become a credential
   // for the survivor. Invalidate it by deletion, same as customer magic links.
@@ -1409,7 +1680,13 @@ registerContactReference({
 
 registerContactPrivacySource({
   scope: "contact.galleries",
-  tables: ["galleries", "gallery_guests", "gallery_access_logs", "gallery_sessions"],
+  tables: [
+    "galleries",
+    "gallery_guests",
+    "gallery_access_logs",
+    "gallery_sessions",
+    "gallery_selections",
+  ],
   exportData: async (tx, contactId) => {
     const owned = await tx.select().from(galleries).where(eq(galleries.contactId, contactId));
     const guests = await tx.select().from(galleryGuests).where(eq(galleryGuests.contactId, contactId));
@@ -1417,7 +1694,11 @@ registerContactPrivacySource({
       .select()
       .from(galleryAccessLogs)
       .where(eq(galleryAccessLogs.contactId, contactId));
-    return { galleries: owned, guests, logs };
+    const selections = await tx
+      .select()
+      .from(gallerySelections)
+      .where(eq(gallerySelections.contactId, contactId));
+    return { galleries: owned, guests, logs, selections };
   },
   erase: async (tx, contactId) => {
     // The gallery is the business's delivery record. The person goes; the
@@ -1434,6 +1715,12 @@ registerContactPrivacySource({
       .update(galleryAccessLogs)
       .set({ contactId: null })
       .where(eq(galleryAccessLogs.contactId, contactId));
+    // The choice stays, the chooser goes: the owner still knows which frames
+    // were selected for delivery, and no longer knows whose taste that was.
+    await tx
+      .update(gallerySelections)
+      .set({ contactId: null })
+      .where(eq(gallerySelections.contactId, contactId));
     return { affected: owned.length };
   },
 });
@@ -1455,6 +1742,9 @@ export default [
   openGalleryWithLogin,
   viewGallerySession,
   viewGalleryItem,
+  setGallerySelection,
+  clearGallerySelection,
+  listGallerySelections,
   downloadGalleryItem,
   galleryBySlug,
   expireGallerySessions,

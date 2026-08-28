@@ -38,6 +38,7 @@ export const GALLERY_DOWNLOAD_POLICIES = [
 ] as const;
 export const GALLERY_GUEST_ROLES = ["client", "partner"] as const;
 export const GALLERY_ACCESS_ACTIONS = ["view", "download", "denied"] as const;
+export const GALLERY_SELECTION_KINDS = ["favorite", "select", "reject"] as const;
 
 export const galleries = pgTable(
   "galleries",
@@ -215,6 +216,58 @@ export const galleryAccessLogs = pgTable(
     check(
       "gallery_access_logs_action",
       sql`${t.action} in ('view', 'download', 'denied')`,
+    ),
+  ],
+);
+
+/**
+ * What the client said about one photograph (MASTER.md §4.5, C8.05).
+ *
+ * Keyed on the asset rather than the gallery item because §4.5 keys it that
+ * way, and because the opinion is about the photograph: re-adding a removed
+ * item should not lose the fact that the client had already rejected it.
+ *
+ * `contactId` is nullable so privacy erasure can unlink the person and leave
+ * the owner's record of which work was chosen — the same trade the gallery row
+ * and the access log make. Postgres treats NULLs as distinct in a unique
+ * index, so erasing two people who both chose one photograph does not collide.
+ */
+export const gallerySelections = pgTable(
+  "gallery_selections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    galleryId: uuid("gallery_id")
+      .notNull()
+      .references(() => galleries.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: GALLERY_SELECTION_KINDS }).notNull(),
+    /** The client's note on this frame. Null is "chose, said nothing". */
+    comment: text("comment"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    // One opinion per person per photograph. Changing your mind is an update,
+    // not a second row, so the owner never has to reconcile two answers.
+    uniqueIndex("gallery_selections_unique_idx").on(
+      t.galleryId,
+      t.contactId,
+      t.assetId,
+    ),
+    index("gallery_selections_gallery_idx").on(t.galleryId, t.kind),
+    index("gallery_selections_contact_idx").on(t.contactId),
+    check(
+      "gallery_selections_kind",
+      sql`${t.kind} in ('favorite', 'select', 'reject')`,
+    ),
+    check(
+      "gallery_selections_comment",
+      sql`${t.comment} is null or char_length(${t.comment}) between 1 and 2000`,
     ),
   ],
 );

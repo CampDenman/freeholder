@@ -10,6 +10,7 @@ import {
   getGallery,
   listGalleryAccess,
   listGalleryGuests,
+  listGallerySelections,
 } from "@/modules/galleries/service";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
@@ -46,11 +47,12 @@ export default async function GalleryEditorPage({
 }) {
   const { id } = await params;
   const actor = await requireStaffActor("galleries");
-  const [t, gallery, guests, log, library, query, jar] = await Promise.all([
+  const [t, gallery, guests, log, selections, library, query, jar] = await Promise.all([
     getT(),
     domainOrNull(getGallery.call({ id }, actor)),
     domainOrNull(listGalleryGuests.call({ galleryId: id }, actor)),
     domainOrNull(listGalleryAccess.call({ galleryId: id }, actor)),
+    domainOrNull(listGallerySelections.call({ galleryId: id }, actor)),
     domainOrNull(listAssets.call({ limit: 100 }, actor)),
     searchParams,
     cookies(),
@@ -284,6 +286,35 @@ export default async function GalleryEditorPage({
             </label>
             <Button type="submit">{t("galleries.action.invite")}</Button>
           </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("galleries.selections")} />
+        <CardBody>
+          {!selections || selections.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("galleries.selections.empty")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {selections.map((selection) => (
+                <li
+                  key={selection.id}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm"
+                >
+                  <span className="font-medium">
+                    {t(`galleries.proof.${selection.kind}`)}
+                  </span>
+                  <span>{selection.filename ?? selection.assetId}</span>
+                  <span className="text-ink-muted">
+                    {selection.contactName ?? t("galleries.selections.empty")}
+                  </span>
+                  {selection.comment ? (
+                    <span className="text-ink-muted">“{selection.comment}”</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </CardBody>
       </Card>
 
