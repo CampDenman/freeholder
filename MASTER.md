@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.07 archive/package delivery of a finished gallery and the notifications that carry it: gallery ready, selection submitted, round approved. |
+| Current focus | C8.08 print/digital gallery sales through catalog/cart/orders, preserving asset/product/selection provenance. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5837,9 +5837,44 @@ permitted conversation on the same contact timeline.
   approve and send-back both refuse a round nobody submitted. Nine tests in
   `tests/core/gallery-rounds.test.ts`, including that reading twice creates
   nothing. EN/FR/ES. Changeset `gallery-approval-rounds.md`.)
-- [ ] **C8.07** Add archive/package delivery of a finished gallery and the
+- [x] **C8.07** Add archive/package delivery of a finished gallery and the
   notifications that carry it: gallery ready, selection submitted, round
   approved.
+  (Migration `0123_gallery_archives.sql`, one row per gallery, replaced when
+  rebuilt: a client wants "the download", not every version the owner ever
+  produced. `src/modules/galleries/archive.ts` writes the ZIP rather than a
+  dependency doing it — §36 puts the media pipeline among the things
+  Freeholder absorbs, and the subset a delivery archive needs (local header,
+  central directory, end record) is small and stable. Entries are STORED:
+  a gallery is JPEG and WebP, already compressed, so deflating costs CPU
+  across every file and returns close to nothing.
+  Three things the format forces. Two photographs can share a filename and a
+  ZIP holding one path twice extracts as one file, silently delivering fewer
+  images than the client chose, so `uniqueNames` disambiguates. Entry names
+  are stripped of separators, because a name carrying a slash is a traversal
+  in somebody's unzip. The classic 4 GiB / 65,535-entry ceilings are not
+  raised: `zipCeilingExceeded` refuses rather than writing an archive that
+  unzips wrong, and ZIP64 waits for the first owner who needs it.
+  Packaging goes through the same `deliverableFor` a single file does, so a
+  watermarked gallery packages marked renditions and a `web_res` gallery
+  packages renditions — an archive that ignored the policy would be the hole
+  every per-file check exists to close. A view-only gallery packages
+  nothing; a missing object fails loudly rather than shipping a short
+  archive. `galleries.buildArchive` is system-only and runs from a job,
+  because a wedding gallery is gigabytes and the client asking must not hold
+  an HTTP connection open; asking twice while one builds is the same request
+  rather than a queue. `/g/{slug}/archive` serves it through the session, and
+  the object key never reaches the browser.
+  All three notifications go through `notifications.create` via
+  `ctx.callAsSystem`, so they respect preferences and quiet hours instead of
+  mailing directly: gallery ready to the client when packaging finishes,
+  selection submitted to the owner who set the gallery up, round approved to
+  the client. Nine tests in `tests/core/gallery-archive.test.ts`, including a
+  round-trip through a reader written independently of the writer — asserting
+  with the code that produced the bytes proves only self-consistency. The
+  container was also verified against an outside implementation
+  (PowerShell `Expand-Archive`) during development. EN/FR/ES. Changeset
+  `gallery-archive-delivery.md`.)
 - [ ] **C8.08** Add print/digital gallery sales through catalog/cart/orders and
   preserve asset/product/selection provenance.
 - [ ] **C8.09** Build review requests after purchases/bookings, moderation,

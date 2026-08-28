@@ -339,3 +339,47 @@ export const galleryRounds = pgTable(
     ),
   ],
 );
+
+/**
+ * The packaged gallery, ready to hand over (C8.07).
+ *
+ * One row per gallery, replaced when rebuilt: a client wants "the download",
+ * not a list of every version the owner ever produced. What was agreed is
+ * kept by the rounds; this is just the bytes.
+ *
+ * Built by a job rather than in the request. A wedding gallery is gigabytes,
+ * and the client asking for it must not be holding an HTTP connection open
+ * while it is assembled.
+ */
+export const GALLERY_ARCHIVE_STATES = ["building", "ready", "failed"] as const;
+
+export const galleryArchives = pgTable(
+  "gallery_archives",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    galleryId: uuid("gallery_id")
+      .notNull()
+      .references(() => galleries.id, { onDelete: "cascade" }),
+    state: text("state", { enum: GALLERY_ARCHIVE_STATES }).notNull().default("building"),
+    storageKey: text("storage_key"),
+    bytes: integer("bytes"),
+    fileCount: integer("file_count"),
+    /** Why it could not be built, in words the owner can act on. */
+    error: text("error"),
+    builtAt: timestamp("built_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("gallery_archives_gallery_idx").on(t.galleryId),
+    check(
+      "gallery_archives_state",
+      sql`${t.state} in ('building', 'ready', 'failed')`,
+    ),
+    // A ready archive has bytes to serve. A building one does not yet.
+    check(
+      "gallery_archives_ready",
+      sql`(${t.state} = 'ready' and ${t.storageKey} is not null and ${t.builtAt} is not null) or (${t.state} <> 'ready' and ${t.storageKey} is null)`,
+    ),
+  ],
+);

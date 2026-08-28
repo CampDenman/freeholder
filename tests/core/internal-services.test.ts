@@ -27,6 +27,7 @@ const INTERNAL = [
   "briefing.update",
   "briefing.webhookFailures",
   "forms.briefingEnquiries",
+  "galleries.buildArchive",
   "galleries.expireSessions",
   "invoicing.briefingOverdue",
   "mail.recordProviderEvent",
