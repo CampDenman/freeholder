@@ -22,6 +22,11 @@ const PRIVATE = [
   /^\/login/,
   /^\/preview/,
   /^\/portal/,
+  // A client gallery is a private delivery: PIN-gated, noindexed, and
+  // disallowed in robots.txt. It carries no canonical or description
+  // because it is not a public page, so crawling one would report the
+  // absence of exactly the things it is right not to have.
+  /^\/g\//,
   /^\/api\//,
   /^\/checkout/,
   /^\/cart/,

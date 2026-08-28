@@ -3132,11 +3132,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-27 |
-| Evidence snapshot | Working branch `chore/remove-proprietary-site-packs` holds the open-source demo-only boundary, the C3 executable six-target portability re-audit, C7.12–C7.16 messaging consent through signup contact import, and C8.01–C8.02 case studies and public portfolios. Next product item is C8.03. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | Working branch `feat/c8.03-client-galleries` (from the C7.12–C8.02 landing) implements C8.03 private client galleries, then audits and corrects them: session-scoped bytes, a durable download limit, secret rotation that closes the sessions it opened, and a guest magic link that can actually be sent. Next product item is C8.04. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.03 private client galleries with PIN/magic-link/login access, scoped guests, expiry, per-asset permissions and access audit. |
+| Current focus | C8.04 proofing, selects, comments, approval rounds, watermarking, download policies, archive delivery and notifications. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5713,8 +5713,42 @@ permitted conversation on the same contact timeline.
   production build includes both collection admin routes and reports 9,858
   files / 201,458,835 bytes with no source or environment leakage. Changeset
   `public-project-portfolios.md`.)
-- [ ] **C8.03** Build private client galleries with PIN/magic-link/login access,
+- [x] **C8.03** Build private client galleries with PIN/magic-link/login access,
   scoped guests, expiry, per-asset permissions and access audit.
+  (New `galleries` module — not media, not projects, not the C2.23 `proof`
+  plugin. Public proof-of-work stays on Project; `kind` includes `portfolio`
+  because §4.5 names it, but create/list/public paths only complete
+  `client_delivery`. Migration `0119_client_galleries.sql` adds galleries,
+  items with per-asset view/download ceilings, guests (Contact-backed,
+  owner-invited partners), hashed session tokens and an append-only access
+  log. PIN/password use scrypt; guest/session tokens are HMAC of high-entropy
+  random. Expiry is enforced in the service, including already-open sessions.
+  Guests cannot exceed item permissions. Automated invites call
+  `contacts.resolve`. Merge repoints galleries, guests and logs and
+  invalidates the duplicate's sessions. Erasure unlinks the person and
+  revokes credentials; the gallery row stays. `/g/{slug}` is noindexed and
+  `robots.txt` disallows `/g/`. Watermark and download_policy columns exist
+  for C8.04; the watermark pipeline and `GallerySelection` wait. **Delivery
+  is session-scoped, not key-scoped**: the public item shape carries no
+  object key, and both bytes routes (`/g/{slug}/view/{item}` and
+  `/g/{slug}/download/{item}`) go through `galleries.viewItem` /
+  `galleries.downloadItem`, because `/media/{key}` authorizes any ready
+  object for anyone holding the key and so outlives expiry, revoke and the
+  per-asset flag. Rotating the PIN or changing the access mode deletes the
+  sessions it opened. `limit_n` counts the gallery's download log rather
+  than the session, so unlocking again is not a fresh allowance, and
+  `download_policy: none` makes every item report `canDownload: false`. A
+  guest invitation is emailed with its link and the link is shown once to
+  the owner, so a magic link can actually be sent; an undeliverable address
+  reports `delivers: false` rather than refusing the guest. A wrong PIN is
+  audited against the gallery with no contact, because nobody knows who
+  typed it. Sixteen focused PostgreSQL tests in
+  `tests/core/client-galleries.test.ts` cover expiry, hashed secrets,
+  magic-link revoke, login, per-asset ceilings, spine resolve, audit,
+  merge, erasure, robots, keyless delivery, view-only galleries, the
+  durable download limit, secret rotation, session ownership and invite
+  delivery. Changesets `client-galleries.md` and
+  `client-gallery-delivery-audit.md`.)
 - [ ] **C8.04** Add proofing, favorites/selects, comments, approval rounds,
   watermarking, download policies, archive/package delivery and notifications.
 - [ ] **C8.05** Add print/digital gallery sales through catalog/cart/orders and

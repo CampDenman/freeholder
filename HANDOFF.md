@@ -53,9 +53,9 @@ its cleanup was denied and it is outside both repositories.
 
 ### Next item
 
-**C8.03** — build private client galleries with PIN/magic-link/login access,
-scoped guests, expiry, per-asset permissions and access audit. The user asked
-to stop before beginning this item, so no C8.03 implementation is in progress.
+**C8.04** — proofing, favorites/selects, comments, approval rounds,
+watermarking, download policies, archive/package delivery and notifications.
+C8.03 private client galleries are implemented on `feat/c8.03-client-galleries`.
 C7.17 remains explicitly dependency-owned by C9.01/C9.06/C9.08 and should be
 checked only when those audience consumers exist.
 
