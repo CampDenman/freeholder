@@ -47,13 +47,19 @@ import {
 } from "@/core/media/validation";
 import captureServices from "./capture";
 import {
+  allRenditionKeys,
   buildRenditions,
+  isRasterImage,
+  publicRenditions,
   readImageFacts,
   toVariantSet,
-  type Rendition,
+  withWatermarked,
   type VariantFormat,
   type VariantSet,
 } from "@/core/media/variants";
+import { buildWatermarked, type WatermarkMark } from "@/core/media/watermark";
+import { designSettings } from "@/core/design/schema";
+import { businessProfile } from "@/core/settings/schema";
 
 const assetRow = row({
   id: uuid,
@@ -382,6 +388,36 @@ interface CreateAssetInput {
   uploadId?: string;
 }
 
+/**
+ * The mark this install stamps proofs with: the brand logo when one is set,
+ * the business name otherwise (C8.04). Undefined before setup has named the
+ * business — there is nothing to mark with yet, and an unnamed watermark is
+ * worse than none.
+ */
+async function watermarkMark(tx: Tx): Promise<WatermarkMark | undefined> {
+  const [business] = await tx
+    .select({ name: businessProfile.name })
+    .from(businessProfile)
+    .limit(1);
+  if (!business?.name) return undefined;
+  const [design] = await tx
+    .select({ logoAssetId: designSettings.logoAssetId })
+    .from(designSettings)
+    .limit(1);
+  let logo: Uint8Array<ArrayBuffer> | undefined;
+  if (design?.logoAssetId) {
+    const [asset] = await tx
+      .select({ storageKey: assets.storageKey })
+      .from(assets)
+      .where(eq(assets.id, design.logoAssetId))
+      .limit(1);
+    // A missing logo object falls through to the name rather than failing:
+    // the upload is not the place to discover a broken brand setting.
+    if (asset) logo = (await storage().get(asset.storageKey)) ?? undefined;
+  }
+  return { logo, text: business.name };
+}
+
 async function createAssetFromStoredOriginal(
   input: CreateAssetInput,
   ctx: ServiceContext,
@@ -414,6 +450,28 @@ async function createAssetFromStoredOriginal(
     );
     trackedKeys.push(...built.map((rendition) => rendition.key));
     variants = toVariantSet(built);
+
+    // Marked renditions are built here, with the ladder, so serving a proof
+    // is a key lookup rather than an image job on the client's first view.
+    const mark = await watermarkMark(ctx.tx);
+    const marked = mark
+      ? await buildWatermarked(body, facts, mark, (format, width) =>
+          `${input.key}.wm.${width}.${format}`,
+        )
+      : [];
+    if (marked.length) {
+      await putTrackedObjects(
+        marked.map((rendition) => ({
+          key: rendition.key,
+          body: rendition.body,
+          contentType: rendition.contentType,
+          role: "variant" as const,
+          uploadId: input.uploadId,
+        })),
+      );
+      trackedKeys.push(...marked.map((rendition) => rendition.key));
+      variants = withWatermarked(variants, marked);
+    }
   }
 
   const [asset] = await ctx.tx
@@ -1264,11 +1322,9 @@ export const resolveImage = defineService({
     const store = storage();
     const variants = asset.variants as VariantSet;
     const sources: ResolvedSource[] = [];
-    for (const [format, renditions] of Object.entries(variants) as [
-      VariantFormat,
-      Rendition[],
-    ][]) {
-      if (!renditions?.length) continue;
+    // publicRenditions, not Object.entries: a watermarked rendition is stored
+    // on the same row and must never become a source on a public page.
+    for (const [format, renditions] of publicRenditions(variants)) {
       const entries = await Promise.all(
         renditions.map(async (r) => `${await store.url(r.key)} ${r.width}w`),
       );
@@ -1417,6 +1473,87 @@ export const authorizeObjectDelivery = defineService({
       )
       .limit(1);
     return object ?? null;
+  },
+});
+
+/**
+ * Add the marks that did not exist when a photograph was uploaded (C8.04).
+ *
+ * Watermarked renditions are built on upload, which leaves every image
+ * already in the library unmarked — and a gallery that refuses to serve an
+ * unmarked file would render an empty grid the first time an owner ticks
+ * "watermark" on work they delivered last year. This walks that backlog a
+ * batch at a time.
+ *
+ * An image that cannot be marked records an empty `watermarked` set rather
+ * than nothing, so the next batch moves past it instead of retrying the
+ * same unmarkable file forever.
+ */
+export const backfillWatermarks = defineService({
+  name: "media.backfillWatermarks",
+  summary: "Add missing watermarked renditions to images already in the library.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({ limit: z.number().int().min(1).max(100).default(20) }),
+  output: row({ marked: z.number().int(), skipped: z.number().int() }),
+  handler: async (input, ctx) => {
+    const mark = await watermarkMark(ctx.tx);
+    if (!mark) return { marked: 0, skipped: 0 };
+    const candidates = await ctx.tx
+      .select()
+      .from(assets)
+      .where(
+        and(
+          eq(assets.kind, "image"),
+          eq(assets.status, "ready"),
+          sql`not (${assets.variants} ? 'watermarked')`,
+        ),
+      )
+      .limit(input.limit);
+
+    let marked = 0;
+    let skipped = 0;
+    for (const asset of candidates) {
+      const set = asset.variants as VariantSet;
+      const body = isRasterImage(asset.mime)
+        ? await storage().get(asset.storageKey)
+        : undefined;
+      const facts = body ? await readImageFacts(body) : undefined;
+      const built =
+        body && facts
+          ? await buildWatermarked(body, facts, mark, (format, width) =>
+              `${asset.storageKey}.wm.${width}.${format}`,
+            )
+          : [];
+      if (!built.length) {
+        await ctx.tx
+          .update(assets)
+          .set({ variants: { ...set, watermarked: {} } })
+          .where(eq(assets.id, asset.id));
+        skipped += 1;
+        continue;
+      }
+      await putTrackedObjects(
+        built.map((rendition) => ({
+          key: rendition.key,
+          body: rendition.body,
+          contentType: rendition.contentType,
+          role: "variant" as const,
+        })),
+      );
+      await attachObjects(
+        ctx.tx,
+        built.map((rendition) => rendition.key),
+        asset.id,
+      );
+      await ctx.tx
+        .update(assets)
+        .set({ variants: withWatermarked(set, built) })
+        .where(eq(assets.id, asset.id));
+      marked += 1;
+    }
+    return { marked, skipped };
   },
 });
 
@@ -2018,9 +2155,7 @@ async function purgeStoredAsset(tx: Tx, asset: typeof assets.$inferSelect) {
   const keys = new Set(inventory.map((row) => row.key));
   keys.add(asset.storageKey);
   const variants = asset.variants as VariantSet;
-  for (const renditions of Object.values(variants)) {
-    for (const rendition of renditions ?? []) keys.add(rendition.key);
-  }
+  for (const key of allRenditionKeys(variants)) keys.add(key);
   for (const key of keys) await storage().delete(key);
   await tx.delete(assets).where(eq(assets.id, asset.id));
   return { assetId: asset.id, objects: keys.size };
@@ -2285,6 +2420,7 @@ export default [
   resolveAsset,
   authorizeAssetDownload,
   authorizeObjectDelivery,
+  backfillWatermarks,
   assetUsage,
   altTextSuggestionState,
   listAltTextSuggestionStates,

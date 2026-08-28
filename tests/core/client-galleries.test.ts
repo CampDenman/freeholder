@@ -21,6 +21,8 @@
 //  15. Rotating the secret closes the sessions the old one opened.
 //  16. A session opens the gallery it was issued for and no other.
 //  17. An invite carries a link that can actually be sent.
+//  18. `download_policy` decides what the client receives (C8.04).
+//  19. A watermarked gallery serves the mark or nothing — never the master.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
@@ -86,11 +88,12 @@ describe.runIf(hasDatabase)("private client galleries", { timeout: 90_000 }, () 
     if (!opened.ok) throw new Error("expected the gallery to open");
   }
 
-  async function image(filename: string) {
+  async function image(filename: string, variants: Record<string, unknown> = {}) {
     const [created] = await db()
       .insert(assets)
       .values({
         kind: "image",
+        variants,
         storageKey: `test/${crypto.randomUUID()}.jpg`,
         filename,
         mime: "image/jpeg",
@@ -475,5 +478,132 @@ describe.runIf(hasDatabase)("private client galleries", { timeout: 90_000 }, () 
     const opened = await redeemGalleryGuest.call({ token: guest.token }, ANONYMOUS);
     openedSession(opened);
     expect(opened.gallery.id).toBe(gallery.id);
+  });
+
+  const WEB = { webp: [{ width: 1600, height: 1000, bytes: 512, key: "web.1600.webp" }] };
+  const MARKED = {
+    ...WEB,
+    watermarked: { webp: [{ width: 1600, height: 1000, bytes: 400, key: "proof.wm.1600.webp" }] },
+  };
+
+  async function galleryWith(
+    client: { id: string },
+    title: string,
+    options: { downloadPolicy?: "none" | "web_res" | "full_res"; watermark?: boolean },
+  ) {
+    return createGallery.call(
+      {
+        contactId: client.id,
+        title,
+        access: "pin",
+        secret: "2468",
+        downloadPolicy: options.downloadPolicy ?? "full_res",
+        watermark: options.watermark ?? false,
+      },
+      OWNER,
+    );
+  }
+
+  it("serves a web rendition, not the master, when the policy says web-sized", async () => {
+    const client = await person();
+    const file = await image("web.jpg", WEB);
+    const gallery = await galleryWith(client, "Web sized", { downloadPolicy: "web_res" });
+    const item = await addGalleryItem.call(
+      { galleryId: gallery.id, assetId: file.id },
+      OWNER,
+    );
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+    const taken = await downloadGalleryItem.call(
+      { sessionToken: opened.sessionToken, itemId: item.id },
+      ANONYMOUS,
+    );
+    // The whole point of the policy: the master never leaves.
+    expect(taken.storageKey).toBe("web.1600.webp");
+    expect(taken.storageKey).not.toBe(file.storageKey);
+    expect(taken.mime).toBe("image/webp");
+    expect(taken.filename).toBe("web.webp");
+  });
+
+  it("refuses a web-sized download of an image that has no rendition", async () => {
+    const client = await person();
+    const file = await image("bare.jpg");
+    const gallery = await galleryWith(client, "No rendition", { downloadPolicy: "web_res" });
+    const item = await addGalleryItem.call({ galleryId: gallery.id, assetId: file.id }, OWNER);
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+    // Falling back to the master here would hand over the full-resolution
+    // file the owner declined to give, and look identical to success.
+    expect(opened.items[0]!.canDownload).toBe(false);
+    expect(
+      (await failure(
+        downloadGalleryItem.call({ sessionToken: opened.sessionToken, itemId: item.id }, ANONYMOUS),
+      )).message,
+    ).toContain("cannot be downloaded");
+  });
+
+  it("serves the master when the policy says original files", async () => {
+    const client = await person();
+    const file = await image("full.jpg", WEB);
+    const gallery = await galleryWith(client, "Originals", { downloadPolicy: "full_res" });
+    const item = await addGalleryItem.call({ galleryId: gallery.id, assetId: file.id }, OWNER);
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+    const taken = await downloadGalleryItem.call(
+      { sessionToken: opened.sessionToken, itemId: item.id },
+      ANONYMOUS,
+    );
+    expect(taken.storageKey).toBe(file.storageKey);
+    expect(taken.mime).toBe("image/jpeg");
+  });
+
+  it("serves the mark, not the master, when the gallery is watermarked", async () => {
+    const client = await person();
+    const file = await image("proof.jpg", MARKED);
+    const gallery = await galleryWith(client, "Marked proofs", {
+      downloadPolicy: "full_res",
+      watermark: true,
+    });
+    const item = await addGalleryItem.call({ galleryId: gallery.id, assetId: file.id }, OWNER);
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+
+    // Watermark outranks full_res: asking for both is asking for two
+    // incompatible things, and the marked file is the safe reading.
+    const taken = await downloadGalleryItem.call(
+      { sessionToken: opened.sessionToken, itemId: item.id },
+      ANONYMOUS,
+    );
+    expect(taken.storageKey).toBe("proof.wm.1600.webp");
+
+    const shown = await viewGalleryItem.call(
+      { sessionToken: opened.sessionToken, itemId: item.id },
+      ANONYMOUS,
+    );
+    expect(shown?.storageKey).toBe("proof.wm.1600.webp");
+    expect(shown?.storageKey).not.toBe(file.storageKey);
+  });
+
+  it("shows nothing rather than the original when a marked gallery has no mark", async () => {
+    const client = await person();
+    const file = await image("unmarked.jpg", WEB);
+    const gallery = await galleryWith(client, "Mark missing", {
+      downloadPolicy: "full_res",
+      watermark: true,
+    });
+    const item = await addGalleryItem.call({ galleryId: gallery.id, assetId: file.id }, OWNER);
+    const opened = await unlockGallery.call({ slug: gallery.slug, secret: "2468" }, ANONYMOUS);
+    openedSession(opened);
+    // A gap in the grid is the honest outcome. Falling back to the master
+    // would be indistinguishable from never having asked for a watermark.
+    expect(
+      await viewGalleryItem.call({ sessionToken: opened.sessionToken, itemId: item.id }, ANONYMOUS),
+    ).toBeNull();
+    expect(opened.items[0]!.canDownload).toBe(false);
+    expect(
+      (await failure(
+        downloadGalleryItem.call({ sessionToken: opened.sessionToken, itemId: item.id }, ANONYMOUS),
+      )).message,
+    ).toContain("cannot be downloaded");
   });
 });

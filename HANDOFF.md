@@ -53,9 +53,14 @@ its cleanup was denied and it is outside both repositories.
 
 ### Next item
 
-**C8.04** — proofing, favorites/selects, comments, approval rounds,
-watermarking, download policies, archive/package delivery and notifications.
-C8.03 private client galleries are implemented on `feat/c8.03-client-galleries`.
+**C8.04** — watermarked variants and a `download_policy` that decides whether
+a client receives a rendition or the master. §36's responsive AVIF/WebP
+ladder already exists in `src/core/media/variants.ts`. The old C8.04
+bundled eight capabilities and was decomposed into C8.04–C8.07 (variants,
+proofing, approval rounds, archive delivery and notifications); the rest of
+C8 renumbered to C8.08–C8.13 because plan-gate IDs are two digits and
+contiguous. C8.03 private client galleries are implemented, then audited and
+corrected, on `feat/c8.03-client-galleries` (PR #208).
 C7.17 remains explicitly dependency-owned by C9.01/C9.06/C9.08 and should be
 checked only when those audience consumers exist.
 
@@ -294,7 +299,7 @@ words for its eleven items.
 | Gap | Items affected | Filled with |
 |---|---|---|
 | Mobile app had 208 words for 7 items | C10.12–C10.18 | **§35.1** — what the app may hold, discovery, auth, offline (read-through, write-never), push as a notification channel with a `DeviceToken` entity, and what it deliberately does not do (no in-app purchase, no analytics SDK) |
-| Help centre had 2 passing mentions | C8.09 | **§4.6** — `HelpArticle` / `HelpCategory` as CMS entities, plus the three rules (trigram search, two counters and no comment box, indexable by default) |
+| Help centre had 2 passing mentions | C8.12 | **§4.6** — `HelpArticle` / `HelpCategory` as CMS entities, plus the three rules (trigram search, two counters and no comment box, indexable by default) |
 | "Defined performance budgets" defined nowhere | C11.11 | **§15.1** — thirteen budgets with numbers, the dataset and hardware they are measured on, why each number, and the rule that raising one needs a written reason |
 
 That last one mattered most: C11.11 was literally uncompletable, because it

@@ -594,6 +594,22 @@ export const purgeExpiredMediaAssets = defineJob({
   },
 });
 
+/**
+ * Marks for the images that predate watermarking (C8.04). A batch at a time,
+ * off-peak: a library of thousands converges over a few nights rather than
+ * pinning a CPU the first time an owner enables the feature.
+ */
+export const backfillMediaWatermarks = defineJob({
+  name: "core.backfillMediaWatermarks",
+  summary: "Add missing watermarked renditions to images already in the library.",
+  schedule: "41 4 * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { backfillWatermarks } = await import("@/core/media/service");
+    return backfillWatermarks.call({ limit: 50 }, { kind: "system" });
+  },
+});
+
 /** Immediate external notification work, also swept after a crash. */
 export const deliverNotifications = defineJob({
   name: "core.deliverNotifications",
@@ -803,6 +819,7 @@ export default [
   assembleBriefings,
   runManagedAgents,
   purgeExpiredMediaAssets,
+  backfillMediaWatermarks,
   deliverNotifications,
   deliverNotificationDigests,
   escalateNotifications,

@@ -590,7 +590,7 @@ structure a search engine and a skim-reading human can both follow.
 | `HelpArticle` | A help-centre entry. Same block body as a page, because it is one. | title, slug, category_id, blocks (jsonb), status, locale, seo (jsonb), helpful_yes, helpful_no, updated_at |
 | `HelpCategory` | How the help centre is arranged. | name, slug, position, description |
 
-*(Help centre added 2026-08-23: C8.09 referenced it and found two passing
+*(Help centre added 2026-08-23: C8.12 referenced it and found two passing
 mentions.)*
 
 **The help centre is the CMS, not a second CMS.** A `HelpArticle` is a `Page`
@@ -3132,11 +3132,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-08-27 |
-| Evidence snapshot | Working branch `feat/c8.03-client-galleries` (from the C7.12–C8.02 landing) implements C8.03 private client galleries, then audits and corrects them: session-scoped bytes, a durable download limit, secret rotation that closes the sessions it opened, and a guest magic link that can actually be sent. Next product item is C8.04. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Evidence snapshot | `feat/c8.03-client-galleries` (PR #208) implements C8.03 private client galleries and then audits and corrects them: session-scoped bytes, a durable download limit, secret rotation that closes the sessions it opened, and a guest magic link that can actually be sent. `feat/c8.04-gallery-variants` stacks on it: C8.04 is decomposed from the old eight-capability item and delivered — watermarked renditions and a `download_policy` that is finally read. Next product item is C8.05. C1.27 stays dependency-blocked on remaining C7–C9 items. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.04 proofing, selects, comments, approval rounds, watermarking, download policies, archive delivery and notifications. |
+| Current focus | C8.05 gallery proofing: `GallerySelection` favorites, selects and rejects with per-asset comments, on the contact spine. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5749,21 +5749,58 @@ permitted conversation on the same contact timeline.
   durable download limit, secret rotation, session ownership and invite
   delivery. Changesets `client-galleries.md` and
   `client-gallery-delivery-audit.md`.)
-- [ ] **C8.04** Add proofing, favorites/selects, comments, approval rounds,
-  watermarking, download policies, archive/package delivery and notifications.
-- [ ] **C8.05** Add print/digital gallery sales through catalog/cart/orders and
+- [x] **C8.04** Render watermarked variants, and make `download_policy` decide
+  what a client actually receives: `web_res` a rendition, `full_res` the
+  master, and `watermark` a marked rendition for what a proof gallery shows
+  and hands over.
+  (`src/core/media/watermark.ts` builds marked renditions beside §36's
+  existing AVIF/WebP ladder on upload. The mark is `design.logoAssetId`
+  when the brand has a logo and the business name otherwise, so no new
+  setting exists and first boot and seed/demo both mark. WebP at 800/1600:
+  a proof is looked at, not printed, and AVIF encoding is absent from some
+  libvips builds. A mark that cannot be drawn — no fontconfig, a damaged
+  file — yields no rendition and never fails the upload.
+  `Asset.variants` gains the `watermarked` key §4.5 names; because it nests,
+  three existing readers of the raw object had to be corrected, and one of
+  them was SQL: `resolveSource` would have served proofs as public
+  `<picture>` sources, `purgeStoredAsset` would have thrown, and the
+  `freeholder_inventory_legacy_asset` trigger failed with "cannot extract
+  elements from an object" (migration `0120_watermarked_variant_inventory`
+  now takes only array values and descends into `watermarked`).
+  `deliverableFor` in the galleries service is the single place policy is
+  read: watermark outranks `full_res`, and a watermarked gallery with no
+  mark — or `web_res` on a raster image with no rendition — refuses rather
+  than falling back to the master, which would be indistinguishable from
+  never having asked. `liveItems` reports `canDownload: false` for those, so
+  no dead link is offered. `media.backfillWatermarks` and its nightly job
+  mark the library that predates the feature, recording an empty marked set
+  for files it can never mark so the batch converges. Nine tests in
+  `tests/core/media-watermark.test.ts` — including a mark that must raise
+  pixel spread on a flat field, so a blank overlay fails — and five more in
+  `tests/core/client-galleries.test.ts` covering web_res, full_res, the
+  watermark precedence and both refusals. Changesets
+  `watermarked-proof-renditions.md` and `gallery-download-policy.md`.)
+- [ ] **C8.05** Add gallery proofing: `GallerySelection` favorites, selects and
+  rejects with per-asset comments, on the contact spine, from the client
+  surface and the phone.
+- [ ] **C8.06** Add approval rounds over a selection set — the owner finalizes,
+  the client sees the round's state, and a reopened round keeps its history.
+- [ ] **C8.07** Add archive/package delivery of a finished gallery and the
+  notifications that carry it: gallery ready, selection submitted, round
+  approved.
+- [ ] **C8.08** Add print/digital gallery sales through catalog/cart/orders and
   preserve asset/product/selection provenance.
-- [ ] **C8.06** Build review requests after purchases/bookings, moderation,
+- [ ] **C8.09** Build review requests after purchases/bookings, moderation,
   replies, photo/video media, incentives, review-wall blocks and
   `AggregateRating` rules that never misrepresent hidden reviews.
-- [ ] **C8.07** Build the customer portal shell with magic-link/password auth,
+- [ ] **C8.10** Build the customer portal shell with magic-link/password auth,
   profile, locale, consent/preferences, sessions and accessible navigation.
-- [ ] **C8.08** Add portal quotes/contracts/invoices/payments, bookings/events/
+- [ ] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
   rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
   referrals and messages using the same services as admin.
-- [ ] **C8.09** Build a CMS-backed help centre/knowledge base with categories,
+- [ ] **C8.12** Build a CMS-backed help centre/knowledge base with categories,
   search, locale variants, feedback, SEO and owner editing.
-- [ ] **C8.10** Build documents/files shared to contacts/projects/portal with
+- [ ] **C8.13** Build documents/files shared to contacts/projects/portal with
   versioning, access rules, expiry, download audit and export.
 
 **C8 exit:** the business can prove, deliver and support its work while each

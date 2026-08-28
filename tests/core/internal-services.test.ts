@@ -30,6 +30,7 @@ const INTERNAL = [
   "galleries.expireSessions",
   "invoicing.briefingOverdue",
   "mail.recordProviderEvent",
+  "media.backfillWatermarks",
   "media.purgeExpired",
   "media.registerStoredOriginal",
   "messaging.applySmsEvents",
