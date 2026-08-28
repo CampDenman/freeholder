@@ -3,80 +3,120 @@ Copyright (C) 2026 Tony Aly
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Handoff — 2026-08-26
+# Handoff — 2026-08-28
 
 Written for whoever picks this up next, human or agent. `MASTER.md` remains the
 only source of truth for product, architecture and status; this document is a
 snapshot of *where the work is* and *what is worth knowing that the code does
 not say out loud*. If the two ever disagree, MASTER wins and this file is stale.
 
-*This replaces the C5-era delivery log that lived here. That log had become a
-second record of what shipped — the thing CLAUDE.md forbids — and every one of
-the 31 checklist items it described is now covered by an evidence note in §43,
-which is the record that is actually kept up to date. Nothing was lost; the
-detail simply lives in one place now instead of two.*
-
 ---
 
 ## 1. Where things stand
 
-**Plan gate: 184 of 271 checked, 87 open.** Run `node scripts/plan-gate.mjs` for
+**Plan gate: 189 of 274 checked, 85 open.** Run `node scripts/plan-gate.mjs` for
 the live number — it is the only count that is not a guess.
 
-### Current working branch
+### Landed on `main`
 
-The branch is `chore/remove-proprietary-site-packs`, based on `origin/main` at
-`56e0baa`. It is not committed or pushed yet. It contains:
+Five PRs merged on 2026-08-27/28, each green across all eighteen CI steps:
 
-- the removal of 21 proprietary industry packs from this open-source repo and
-  an exact-hash copy under the private WeVibeSites
-  `freeholder-editions/` overlay;
-- C7.12 mandatory multilingual SMS consent/control words;
-- C7.13 recipient-local quiet hours and frequency policy;
-- C7.14 SMS templates, keywords, MMS, delivery/cost and invalid-number state;
-- C7.15 bearer-isolated live chat, assistant handoff and consent-neutral
-  WhatsApp/Messenger deep links.
-- C7.16 owner-controlled, skippable post-signup contact import from Google,
-  Microsoft, vCard, CSV and supported device selection, with exact preview,
-  user-attributed undo and no implied marketing permission.
-- C8.01 CMS-snapshotted project case studies with client publication consent,
-  public catalog-service links, substantiated metrics, enforced before/after
-  pairs, contact-backed testimonials and reciprocal service-page proof.
-- C8.02 CMS-template-backed public portfolio and curated collection pages with
-  normalized many-to-many membership, service/collection/text filtering,
-  draft-isolated public snapshots, accessible media enforcement, sharing,
-  `CreativeWork`/`CollectionPage` data and sitemap classification.
+- **#207** C7.12–C8.02, plus the CI repair described below
+- **#208** C8.03 private client galleries, and an audit of them
+- **#209** C8.04 watermarked variants and a `download_policy` that is read
+- **#210** C8.05 client proofing (`GallerySelection`)
+- **#211** C8.06 approval rounds *(in flight at the time of writing)*
 
-`RESTART_HANDOFF.md` is pre-existing untracked scratch. Do not modify or stage
-it. The temporary `C:\tmp\wevibesites-freeholder-editions.zip` may still exist;
-its cleanup was denied and it is outside both repositories.
+`feat/c8.07-archive-delivery` holds C8.07 — archive delivery and its
+notifications — committed and locally verified, awaiting #211.
+
+### The CI pipeline was not running
+
+This is the thing most worth knowing. **Twelve of the eighteen CI steps had
+never once executed.** A failure at step 12 (`Test`) short-circuited the job,
+so everything after it — Build, the artifact boundary, the browser gate, the
+deploy recipes, the SEO and upgrade gates — had been decorative for a long
+time. Fixing one failure only ever revealed the next:
+
+1. `galleries.expireSessions` was missing from the reviewed system-service
+   inventory in `tests/core/internal-services.test.ts`. **Any new**
+   **`permission: "system"` service must be added there** or CI fails.
+2. The Build step had no `SESSION_SECRET`. `next build` prerenders, and
+   prerendering calls `env()`, which refuses to resolve in production without
+   one. It is now a build-only value in the workflow's job env.
+3. The standalone artifact cap was 200 MiB and the artifact is larger. Note
+   the trap: the baseline is **platform-dependent** — the same commit measures
+   ~205 MB on Windows and ~218 MB on CI's Linux, because the native image
+   binaries differ. A cap calibrated locally passes locally and fails in CI.
+4. The browser gate's fixture registered one module's blocks by hand, and
+   C8.02 added a portfolio index to a seeded template. It now registers every
+   module's block list. `ready()` cannot be used there: boot resolves modules
+   through dynamic `@/` imports and Playwright only rewrites static ones.
+5. The Tier-1 recipe gate asked Doctor a privileged question with a
+   half-authenticated session. An owner holding the wildcard grant makes
+   two-factor mandatory, so `permits()` refuses every scoped service until the
+   session is enrolled; `doctor.mjs --enroll-totp` is the fix, and
+   `public-gates.sh` had been doing it all along.
+6. The same gate then exited on Doctor's status code rather than its verdict.
+   `env.appUrl` fails in a throwaway container and should: it is a production
+   build on localhost. It now reasons about *which* checks failed.
+
+**Do not calibrate any of these limits from a local run.** Docker is not
+installed on the development machine, so the recipe, SEO and upgrade gates
+cannot be exercised locally at all; CI is the only place they run.
 
 ### Next item
 
-**C8.04** — watermarked variants and a `download_policy` that decides whether
-a client receives a rendition or the master. §36's responsive AVIF/WebP
-ladder already exists in `src/core/media/variants.ts`. The old C8.04
-bundled eight capabilities and was decomposed into C8.04–C8.07 (variants,
-proofing, approval rounds, archive delivery and notifications); the rest of
-C8 renumbered to C8.08–C8.13 because plan-gate IDs are two digits and
-contiguous. C8.03 private client galleries are implemented, then audited and
-corrected, on `feat/c8.03-client-galleries` (PR #208).
-C7.17 remains explicitly dependency-owned by C9.01/C9.06/C9.08 and should be
-checked only when those audience consumers exist.
+**C8.08** — print/digital gallery sales through catalog/cart/orders,
+preserving asset/product/selection provenance. C8.05's selections and C8.06's
+approved rounds are the natural input: what the client chose is what they buy.
 
-The current cold production build passes at 9,858 standalone files /
-201,458,835 bytes and includes both project-collection admin routes; the
-artifact gate finds no source or environment leakage. C8.02 has 4 focused
-PostgreSQL tests and a bounded 102-test project/CMS/SEO/i18n/migration/registry
-regression set green, plus full lint, typecheck and licensing. The unbounded
-`pnpm test` process was stopped after an extended silent run and is not claimed
-as evidence. C8.01's 5 focused tests and 74 surrounding regressions remain the
-prior milestone evidence. The in-app browser pass could not start because this
-workstation's Codex Windows browser sandbox helper is missing. A separate local
-development-server attempt also encountered the pre-existing development
-database's duplicate `contacts_name_search_idx`; the isolated test database
-migrates through 0118 cleanly. Do not conflate that stale dev database with the
-feature or production build.
+`RESTART_HANDOFF.md` is pre-existing untracked scratch. Do not modify or stage
+it.
+
+### Deploying freeholder.ai
+
+Not wired up, and worth stating plainly so nobody assumes otherwise. Merging
+to `main` publishes a signed container image (`publish-image.yml`) — that is a
+release artifact, **not** a deployment. Nothing in this repository puts code
+onto the server.
+
+What is known: `freeholder.ai` resolves to `143.198.54.199`, the
+`freeholder-prod` droplet in DigitalOcean's `sfo3`, under the `campdenman`
+doctl context — consistent with `S3_REGION=sfo3` and the `freeholder-media`
+bucket. The intended home for a deploy pipeline is the in-house Forgejo at
+`forge.paradisemodern.com:2222`, **not** GitHub, because this repository is
+public and a deploy script carries host addresses that are not secrets.
+`../paradisemodern/.forgejo/workflows/` is the working model.
+
+Two things block it: no `freeholder` repository exists on that forge
+(push-to-create is disabled for organizations and the API needs a token), and
+nobody has recorded how the app actually runs on that droplet — Docker
+Compose, systemd, what terminates TLS. `remote-deploy.sh` is 173 lines of
+assumptions about exactly those things, so it must not be copied blind.
+
+### Evidence, and what is not evidence
+
+The five merged PRs each passed all eighteen CI steps, which is the only
+claim worth making: it covers lint, typecheck, the full suite, the
+ownership drill, the build, the artifact boundary, the browser gate, both
+deploy-recipe steps, the Tier-1 matrix, SEO, schema compatibility and the
+changelog gate.
+
+Locally, `pnpm test` takes long enough that it is usually run in shards
+(`--shard=1/8` … `8/8`); a full local run is roughly 45 minutes and a full CI
+run roughly 90. **Do not run two suites at once against the same database** —
+`truncateSpine` will truncate the other run's fixtures and produce failures
+that look like real bugs. That happened during this work and cost an hour
+chasing a duplicate-key error that was self-inflicted.
+
+The browser a11y gate *can* be run locally without Docker, and is worth doing
+before pushing anything that touches an admin screen:
+
+```
+npm run build
+npx playwright test tests/browser/accessibility.spec.ts --config playwright.a11y.config.ts
+```
 
 ---
 
