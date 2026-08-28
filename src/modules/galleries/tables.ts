@@ -8,4 +8,5 @@ export {
   galleryAccessLogs,
   gallerySelections,
   galleryRounds,
+  galleryArchives,
 } from "./schema";

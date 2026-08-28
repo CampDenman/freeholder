@@ -24,6 +24,8 @@ export default defineModule({
       "gallery.roundSubmitted",
       "gallery.roundApproved",
       "gallery.roundReopened",
+      "gallery.archiveRequested",
+      "gallery.ready",
     ],
   },
 });

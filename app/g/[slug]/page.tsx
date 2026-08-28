@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { Button, Card, CardBody, CardHeader } from "@/ui/primitives";
 import { SkipLink } from "@/ui/SkipLink";
 import {
+  galleryArchiveState,
   galleryBySlug,
   viewGallerySession,
 } from "@/modules/galleries/service";
@@ -17,6 +18,7 @@ import {
   clearGallerySelectionAction,
   openGalleryWithLoginAction,
   redeemGalleryGuestAction,
+  requestGalleryArchiveAction,
   setGallerySelectionAction,
   submitGalleryRoundAction,
   unlockGalleryAction,
@@ -70,6 +72,13 @@ export default async function ClientGalleryPage({
   const sentBack =
     opened?.round?.state === "open" && opened.lastDecided?.state === "reopened"
       ? opened.lastDecided
+      : null;
+  // Only worth asking about once the gallery can actually hand files over.
+  const archive =
+    opened && opened.gallery.downloadPolicy !== "none" && sessionToken
+      ? await galleryArchiveState
+          .call({ sessionToken }, { kind: "anonymous" })
+          .catch(() => null)
       : null;
 
   if (opened) {
@@ -168,6 +177,29 @@ export default async function ClientGalleryPage({
               <input type="hidden" name="slug" value={slug} />
               <Button type="submit">{t("galleries.round.submit")}</Button>
             </form>
+          ) : null}
+          {opened.gallery.downloadPolicy !== "none" && opened.items.length > 0 ? (
+            <div className="grid gap-2">
+              <h2 className="text-lg font-semibold">{t("galleries.archive")}</h2>
+              {archive?.state === "building" ? (
+                <p className="text-sm text-ink-muted">{t("galleries.archive.building")}</p>
+              ) : null}
+              {archive?.state === "failed" ? (
+                <p className="text-sm text-danger">{t("galleries.archive.failed")}</p>
+              ) : null}
+              {archive?.state === "ready" ? (
+                <a href={`/g/${slug}/archive`} className="text-sm underline">
+                  {t("galleries.archive.get")}
+                </a>
+              ) : (
+                <form action={requestGalleryArchiveAction}>
+                  <input type="hidden" name="slug" value={slug} />
+                  <Button type="submit" variant="quiet">
+                    {t("galleries.archive.request")}
+                  </Button>
+                </form>
+              )}
+            </div>
           ) : null}
         </main>
       </div>

@@ -11,6 +11,7 @@ import {
   clearGallerySelection,
   openGalleryWithLogin,
   redeemGalleryGuest,
+  requestGalleryArchive,
   setGallerySelection,
   submitGalleryRound,
   unlockGallery,
@@ -149,5 +150,14 @@ export async function submitGalleryRoundAction(form: FormData): Promise<void> {
   await proof(slug, async () => {
     const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value ?? "";
     return submitGalleryRound.call({ sessionToken: token }, { kind: "anonymous" });
+  });
+}
+
+/** The client asks for the whole gallery as one download (C8.07). */
+export async function requestGalleryArchiveAction(form: FormData): Promise<void> {
+  const slug = text(form, "slug");
+  await proof(slug, async () => {
+    const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value ?? "";
+    return requestGalleryArchive.call({ sessionToken: token }, { kind: "anonymous" });
   });
 }

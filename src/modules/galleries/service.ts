@@ -38,17 +38,22 @@ import {
   GALLERY_ACCESS_MODES,
   GALLERY_DOWNLOAD_POLICIES,
   GALLERY_GUEST_ROLES,
+  GALLERY_ARCHIVE_STATES,
   GALLERY_ROUND_STATES,
   GALLERY_SELECTION_KINDS,
   galleries,
   galleryAccessLogs,
   galleryGuests,
   galleryItems,
+  galleryArchives,
   galleryRounds,
   gallerySelections,
   gallerySessions,
 } from "./schema";
 import { hashGalleryToken, newGalleryToken } from "./tokens";
+import { buildZip, uniqueNames, zipCeilingExceeded } from "./archive";
+import { storage } from "@/adapters/storage";
+import { getService } from "@/core/service";
 
 const id = z.string().uuid();
 const slug = z
@@ -228,6 +233,22 @@ const roundRow = row({
   createdAt: timestamp,
   updatedAt: timestamp,
 });
+
+const archiveRow = row({
+  id: uuid,
+  galleryId: uuid,
+  state: z.enum(GALLERY_ARCHIVE_STATES),
+  bytes: z.number().int().nullable(),
+  fileCount: z.number().int().nullable(),
+  error: z.string().nullable(),
+  builtAt: timestamp.nullable(),
+});
+
+/** The stored object is never named to the client; the route serves it. */
+function publicArchive(archive: typeof galleryArchives.$inferSelect) {
+  const { storageKey: _storageKey, createdAt: _c, updatedAt: _u, ...rest } = archive;
+  return rest;
+}
 
 const logRow = row({
   id: uuid,
@@ -1590,6 +1611,19 @@ export const submitGalleryRound = defineService({
       subjectId: gallery.id,
       payload: { sequence: round.sequence, chosen: chosen.length },
     });
+    // Selection submitted: the owner is the one waiting on this. Only the
+    // person who set the gallery up is named on it, so a gallery seeded
+    // without a user simply has nobody to tell.
+    if (gallery.createdByUserId) {
+      await ctx.callAsSystem(getService("notifications.create"), {
+        recipient: { kind: "user", id: gallery.createdByUserId },
+        topic: "gallery.selection-submitted",
+        title: "A client sent their gallery choices",
+        body: `${gallery.title}: round ${round.sequence}, ${chosen.length} chosen.`,
+        href: `/admin/galleries/${gallery.id}`,
+        idempotencyKey: `gallery-submitted:${round.id}`,
+      });
+    }
     ctx.queueEvent("gallery.roundSubmitted", {
       id: gallery.id,
       roundId: round.id,
@@ -1636,6 +1670,16 @@ export const approveGalleryRound = defineService({
         subjectType: "gallery",
         subjectId: gallery.id,
         payload: { sequence: round.sequence },
+      });
+    }
+    // Round approved: the client has been waiting to hear.
+    if (gallery.contactId) {
+      await ctx.callAsSystem(getService("notifications.create"), {
+        recipient: { kind: "contact", id: gallery.contactId },
+        topic: "gallery.round-approved",
+        title: "Your gallery choices were approved",
+        body: `${gallery.title}: round ${round.sequence} is agreed.`,
+        idempotencyKey: `gallery-approved:${round.id}`,
       });
     }
     ctx.queueEvent("gallery.roundApproved", {
@@ -1721,6 +1765,205 @@ export const listGalleryRounds = defineService({
       .where(eq(galleryRounds.galleryId, input.galleryId))
       .orderBy(desc(galleryRounds.sequence))
       .then((rows) => rows.map(shapeRound));
+  },
+});
+
+/**
+ * Ask for the gallery as one download (C8.07).
+ *
+ * Marks it building and returns; a job does the work. A wedding gallery is
+ * gigabytes, and the client asking must not be holding a connection open
+ * while it is assembled.
+ */
+export const requestGalleryArchive = defineService({
+  name: "galleries.requestArchive",
+  summary: "Ask for this gallery as a single download.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({ sessionToken: z.string().min(20).max(200) }),
+  output: archiveRow,
+  handler: async (input, ctx) => {
+    const { gallery } = await loadSession(ctx, input.sessionToken);
+    if (gallery.downloadPolicy === "none") {
+      throw new ServiceError("permission", "This gallery is view-only.");
+    }
+    const [existing] = await ctx.tx
+      .select()
+      .from(galleryArchives)
+      .where(eq(galleryArchives.galleryId, gallery.id))
+      .limit(1);
+    // Asking twice while one is building is the same request, not a queue.
+    if (existing?.state === "building") return publicArchive(existing);
+    const [queued] = await ctx.tx
+      .insert(galleryArchives)
+      .values({ galleryId: gallery.id, state: "building" })
+      .onConflictDoUpdate({
+        target: galleryArchives.galleryId,
+        set: {
+          state: "building",
+          storageKey: null,
+          bytes: null,
+          fileCount: null,
+          error: null,
+          builtAt: null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    ctx.setSubject("gallery", gallery.id);
+    ctx.queueEvent("gallery.archiveRequested", { id: gallery.id });
+    return publicArchive(queued!);
+  },
+});
+
+/**
+ * Package one gallery. System-only: it reads every deliverable file.
+ *
+ * Contents follow the same policy the single-file download follows, through
+ * `deliverableFor` — a watermarked gallery packages marked renditions, and a
+ * `web_res` gallery packages renditions rather than masters. An archive that
+ * ignored the policy would be the hole every per-file check exists to close.
+ */
+export const buildGalleryArchive = defineService({
+  name: "galleries.buildArchive",
+  summary: "Package a gallery's deliverable files into one download.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({ galleryId: id }),
+  output: archiveRow,
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind !== "system") {
+      throw new ServiceError("permission", "Only trusted platform work packages a gallery.");
+    }
+    const gallery = await loadGallery(ctx, input.galleryId);
+    const rows = await ctx.tx
+      .select({ item: galleryItems, asset: assets })
+      .from(galleryItems)
+      .innerJoin(assets, eq(assets.id, galleryItems.assetId))
+      .where(eq(galleryItems.galleryId, gallery.id))
+      .orderBy(asc(galleryItems.position));
+
+    const deliverable = rows
+      .filter((row) => row.asset.status === "ready")
+      .map((row) => ({
+        row,
+        delivery: deliverableFor(row.asset, gallery, "download"),
+      }))
+      .filter(
+        (entry): entry is typeof entry & { delivery: NonNullable<typeof entry.delivery> } =>
+          entry.delivery !== null && entry.row.item.canDownload,
+      );
+
+    const fail = async (message: string) => {
+      const [failed] = await ctx.tx
+        .update(galleryArchives)
+        .set({ state: "failed", error: message, storageKey: null, updatedAt: new Date() })
+        .where(eq(galleryArchives.galleryId, gallery.id))
+        .returning();
+      return publicArchive(failed!);
+    };
+
+    if (deliverable.length === 0) {
+      return fail("There is nothing in this gallery that can be downloaded.");
+    }
+
+    const names = uniqueNames(deliverable.map((entry) => entry.delivery.filename));
+    const store = storage();
+    const entries = [];
+    for (const [index, entry] of deliverable.entries()) {
+      const body = await store.get(entry.delivery.storageKey);
+      // A missing object is the owner's problem to see, not something to
+      // paper over by delivering an archive quietly short of files.
+      if (!body) return fail(`A file in this gallery is missing: ${entry.delivery.filename}`);
+      entries.push({
+        name: names[index]!,
+        body,
+        modifiedAt: entry.row.asset.createdAt,
+      });
+    }
+
+    if (zipCeilingExceeded(entries)) {
+      return fail(
+        "This gallery is too large for a single download. Deliver it in parts.",
+      );
+    }
+
+    const zip = buildZip(entries);
+    const key = `${gallery.slug}-${zip.sha256.slice(0, 12)}.zip`;
+    await store.put(key, zip.body, "application/zip");
+    const [ready] = await ctx.tx
+      .update(galleryArchives)
+      .set({
+        state: "ready",
+        storageKey: key,
+        bytes: zip.bytes,
+        fileCount: zip.entries,
+        error: null,
+        builtAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(galleryArchives.galleryId, gallery.id))
+      .returning();
+
+    // Gallery ready: the client asked for this, so they hear about it.
+    if (gallery.contactId) {
+      await ctx.callAsSystem(getService("notifications.create"), {
+        recipient: { kind: "contact", id: gallery.contactId },
+        topic: "gallery.ready",
+        title: "Your gallery is ready to download",
+        body: `${gallery.title} is packaged and waiting.`,
+        idempotencyKey: `gallery-ready:${gallery.id}:${zip.sha256.slice(0, 16)}`,
+      });
+    }
+    ctx.setSubject("gallery", gallery.id);
+    ctx.queueEvent("gallery.ready", { id: gallery.id, bytes: zip.bytes });
+    return publicArchive(ready!);
+  },
+});
+
+/** Where the packaging has got to, for the client's own gallery. */
+export const galleryArchiveState = defineService({
+  name: "galleries.archiveState",
+  summary: "Whether this gallery has been packaged yet.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ sessionToken: z.string().min(20).max(200) }),
+  output: archiveRow.nullable(),
+  handler: async (input, ctx) => {
+    const { gallery } = await loadSession(ctx, input.sessionToken);
+    const [archive] = await ctx.tx
+      .select()
+      .from(galleryArchives)
+      .where(eq(galleryArchives.galleryId, gallery.id))
+      .limit(1);
+    return archive ? publicArchive(archive) : null;
+  },
+});
+
+/** The bytes, through the session, exactly as a single file is served. */
+export const downloadGalleryArchive = defineService({
+  name: "galleries.downloadArchive",
+  summary: "Download the packaged gallery.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ sessionToken: z.string().min(20).max(200) }),
+  output: row({ storageKey: z.string(), filename: z.string(), bytes: z.number().int() }).nullable(),
+  handler: async (input, ctx) => {
+    const { gallery } = await loadSession(ctx, input.sessionToken);
+    if (gallery.downloadPolicy === "none") return null;
+    const [archive] = await ctx.tx
+      .select()
+      .from(galleryArchives)
+      .where(eq(galleryArchives.galleryId, gallery.id))
+      .limit(1);
+    if (archive?.state !== "ready" || !archive.storageKey) return null;
+    return {
+      storageKey: archive.storageKey,
+      filename: `${gallery.slug}.zip`,
+      bytes: archive.bytes ?? 0,
+    };
   },
 });
 
@@ -2098,6 +2341,10 @@ export default [
   approveGalleryRound,
   reopenGalleryRound,
   listGalleryRounds,
+  requestGalleryArchive,
+  buildGalleryArchive,
+  galleryArchiveState,
+  downloadGalleryArchive,
   downloadGalleryItem,
   galleryBySlug,
   expireGallerySessions,
