@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.05 gallery proofing: `GallerySelection` favorites, selects and rejects with per-asset comments, on the contact spine. |
+| Current focus | C8.06 approval rounds over a selection set: the owner finalizes, the client sees the round's state, and a reopened round keeps its history. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5780,9 +5780,34 @@ permitted conversation on the same contact timeline.
   `tests/core/client-galleries.test.ts` covering web_res, full_res, the
   watermark precedence and both refusals. Changesets
   `watermarked-proof-renditions.md` and `gallery-download-policy.md`.)
-- [ ] **C8.05** Add gallery proofing: `GallerySelection` favorites, selects and
+- [x] **C8.05** Add gallery proofing: `GallerySelection` favorites, selects and
   rejects with per-asset comments, on the contact spine, from the client
   surface and the phone.
+  (Migration `0121_gallery_selections.sql` adds `gallery_selections` with
+  §4.5's shape. Keyed on the asset rather than the gallery item, as §4.5
+  keys it: the opinion is about the photograph, so removing and re-adding an
+  item does not lose that the client had already rejected it. One opinion
+  per person per photograph is a unique index, so changing your mind is an
+  update and the owner never reconciles two answers.
+  `galleries.setSelection` / `clearSelection` read the speaker from the C8.03
+  session, so a magic-link guest proofs from a phone with no account and no
+  second login; a session with no contact behind it cannot proof, because an
+  opinion nobody owns is not one the owner can act on. Proofing follows the
+  view ceiling — an unviewable frame takes no opinion. The client surface is
+  forms and buttons, no script, so proofing survives a bad phone connection;
+  `aria-pressed` carries the current mark. A guest sees their own marks and
+  not the client's, so neither is nudged before giving an opinion, while
+  `galleries.listSelections` shows the owner everyone's together because
+  deciding what to deliver means seeing that the client chose a frame their
+  partner rejected.
+  Merge keeps one opinion per frame and the survivor's wins — inventing a
+  merge of favourite and reject would put words in their mouth — and undo
+  re-inserts what the collision deleted. Erasure nulls the contact and keeps
+  the choice: the owner still knows which frames were chosen, and no longer
+  knows whose taste that was. Seven tests in
+  `tests/core/gallery-proofing.test.ts` cover the mark, the replacement, the
+  guest's separate view, the view ceiling, undo, merge and erasure. EN/FR/ES.
+  Changeset `gallery-proofing.md`.)
 - [ ] **C8.06** Add approval rounds over a selection set — the owner finalizes,
   the client sees the round's state, and a reopened round keeps its history.
 - [ ] **C8.07** Add archive/package delivery of a finished gallery and the

@@ -8,8 +8,10 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { GALLERY_SESSION_COOKIE } from "@/modules/galleries/cookies";
 import {
+  clearGallerySelection,
   openGalleryWithLogin,
   redeemGalleryGuest,
+  setGallerySelection,
   unlockGallery,
 } from "@/modules/galleries/service";
 
@@ -86,4 +88,56 @@ export async function openGalleryWithLoginAction(form: FormData): Promise<void> 
       await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value),
     ),
   );
+}
+
+/**
+ * Proofing from the client surface (C8.05).
+ *
+ * The session cookie carries who is speaking, so a magic-link guest can proof
+ * from a phone without an account. Redirecting back to the gallery rather than
+ * returning JSON keeps the whole flow working without JavaScript.
+ */
+async function proof(
+  slug: string,
+  attempt: () => Promise<unknown>,
+): Promise<void> {
+  let failure: string | null = null;
+  try {
+    const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value;
+    if (!token) failure = "That did not work. Nothing has changed.";
+    else await attempt();
+  } catch (error) {
+    if (isRedirect(error)) throw error;
+    failure = messageFor(error);
+  }
+  if (failure) redirect(`/g/${slug}?error=${encodeURIComponent(failure)}`);
+  redirect(`/g/${slug}`);
+}
+
+export async function setGallerySelectionAction(form: FormData): Promise<void> {
+  const slug = text(form, "slug");
+  await proof(slug, async () => {
+    const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value ?? "";
+    const comment = text(form, "comment");
+    return setGallerySelection.call(
+      {
+        sessionToken: token,
+        itemId: text(form, "itemId"),
+        kind: text(form, "kind") as "favorite" | "select" | "reject",
+        comment: comment || null,
+      },
+      { kind: "anonymous" },
+    );
+  });
+}
+
+export async function clearGallerySelectionAction(form: FormData): Promise<void> {
+  const slug = text(form, "slug");
+  await proof(slug, async () => {
+    const token = (await cookies()).get(GALLERY_SESSION_COOKIE)?.value ?? "";
+    return clearGallerySelection.call(
+      { sessionToken: token, itemId: text(form, "itemId") },
+      { kind: "anonymous" },
+    );
+  });
 }

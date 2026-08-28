@@ -20,6 +20,7 @@ export default defineModule({
       "gallery.denied",
       "gallery.guestInvited",
       "gallery.guestRevoked",
+      "gallery.selected",
     ],
   },
 });

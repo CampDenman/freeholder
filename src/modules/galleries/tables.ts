@@ -6,4 +6,5 @@ export {
   galleryGuests,
   gallerySessions,
   galleryAccessLogs,
+  gallerySelections,
 } from "./schema";

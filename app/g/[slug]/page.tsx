@@ -14,12 +14,17 @@ import {
 import { getT } from "../../i18n";
 import { GALLERY_SESSION_COOKIE } from "@/modules/galleries/cookies";
 import {
+  clearGallerySelectionAction,
   openGalleryWithLoginAction,
   redeemGalleryGuestAction,
+  setGallerySelectionAction,
   unlockGalleryAction,
 } from "../actions";
 
 export const dynamic = "force-dynamic";
+
+/** §4.5's three verdicts, in the order a client works through them. */
+const PROOF_KINDS = ["favorite", "select", "reject"] as const;
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -56,6 +61,10 @@ export default async function ClientGalleryPage({
   // for another gallery must not render here under this address.
   const opened = session?.gallery.slug === slug ? session : null;
 
+  // Keyed by asset because a selection is about the photograph, not the row
+  // that happens to carry it into this gallery.
+  const marks = new Map((opened?.selections ?? []).map((s) => [s.assetId, s]));
+
   if (opened) {
     return (
       <div className="mx-auto grid max-w-5xl gap-6 p-6">
@@ -66,20 +75,66 @@ export default async function ClientGalleryPage({
             <p className="text-sm text-ink-muted">{t("galleries.items.empty")}</p>
           ) : (
             <ul className="grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
-              {opened.items.map((item) => (
-                <li key={item.id} className="grid gap-2">
-                  <img
-                    src={`/g/${slug}/view/${item.id}`}
-                    alt={item.altText || item.filename || ""}
-                    className="w-full rounded-md border border-rule bg-surface"
-                  />
-                  {item.canDownload ? (
-                    <a href={`/g/${slug}/download/${item.id}`} className="text-sm underline">
-                      {t("galleries.action.download")}
-                    </a>
-                  ) : null}
-                </li>
-              ))}
+              {opened.items.map((item) => {
+                const mark = marks.get(item.assetId);
+                return (
+                  <li key={item.id} className="grid gap-2">
+                    <img
+                      src={`/g/${slug}/view/${item.id}`}
+                      alt={item.altText || item.filename || ""}
+                      className="w-full rounded-md border border-rule bg-surface"
+                    />
+                    {/* Buttons rather than a script: a client proofing on a
+                        phone with a bad connection still gets to choose. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {PROOF_KINDS.map((kind) => (
+                        <form key={kind} action={setGallerySelectionAction}>
+                          <input type="hidden" name="slug" value={slug} />
+                          <input type="hidden" name="itemId" value={item.id} />
+                          <input type="hidden" name="kind" value={kind} />
+                          <Button
+                            type="submit"
+                            variant={mark?.kind === kind ? "primary" : "quiet"}
+                            aria-pressed={mark?.kind === kind}
+                          >
+                            {t(`galleries.proof.${kind}`)}
+                          </Button>
+                        </form>
+                      ))}
+                      {mark ? (
+                        <form action={clearGallerySelectionAction}>
+                          <input type="hidden" name="slug" value={slug} />
+                          <input type="hidden" name="itemId" value={item.id} />
+                          <Button type="submit" variant="quiet">
+                            {t("galleries.proof.clear")}
+                          </Button>
+                        </form>
+                      ) : null}
+                    </div>
+                    <form action={setGallerySelectionAction} className="grid gap-1">
+                      <input type="hidden" name="slug" value={slug} />
+                      <input type="hidden" name="itemId" value={item.id} />
+                      <input type="hidden" name="kind" value={mark?.kind ?? "favorite"} />
+                      <label className="grid gap-1 text-sm">
+                        <span className="text-ink-muted">{t("galleries.proof.comment")}</span>
+                        <input
+                          name="comment"
+                          defaultValue={mark?.comment ?? ""}
+                          className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        />
+                      </label>
+                      <Button type="submit" variant="quiet">
+                        {t("galleries.proof.saveComment")}
+                      </Button>
+                    </form>
+                    {item.canDownload ? (
+                      <a href={`/g/${slug}/download/${item.id}`} className="text-sm underline">
+                        {t("galleries.action.download")}
+                      </a>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </main>
