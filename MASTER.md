@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.06 approval rounds over a selection set: the owner finalizes, the client sees the round's state, and a reopened round keeps its history. |
+| Current focus | C8.07 archive/package delivery of a finished gallery and the notifications that carry it: gallery ready, selection submitted, round approved. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5808,8 +5808,35 @@ permitted conversation on the same contact timeline.
   `tests/core/gallery-proofing.test.ts` cover the mark, the replacement, the
   guest's separate view, the view ceiling, undo, merge and erasure. EN/FR/ES.
   Changeset `gallery-proofing.md`.)
-- [ ] **C8.06** Add approval rounds over a selection set — the owner finalizes,
+- [x] **C8.06** Add approval rounds over a selection set — the owner finalizes,
   the client sees the round's state, and a reopened round keeps its history.
+  (Migration `0122_gallery_rounds.sql`. §4.5 names no entity for this, so the
+  shape follows the line: a round is one pass of "the client chooses, the
+  owner decides", numbered from 1 per gallery.
+  Sending a round back **opens the next one** rather than flipping this one
+  to `open` again — a status field that reverts is what loses the history
+  the item asks for. The reopened round keeps its snapshot, its note and its
+  decision time, and `galleries.listRounds` reads the whole sequence.
+  `snapshot` freezes what was submitted, because selections stay editable
+  (C8.05) and a round reading them live would rewrite its own history the
+  next time the client changed their mind. It records asset, verdict and
+  comment and deliberately no contact id: an identity buried in jsonb is one
+  `contacts.merge` cannot repoint, and `gallery_selections` already carries
+  whose opinion each was. `submitted_by_contact_id` is the one identity
+  column, and it is repointed on merge and nulled on erasure — the round and
+  its snapshot stay, because what was agreed is the owner's record of the
+  job.
+  A round opens on first submit, not at gallery creation, so a gallery
+  delivered without proofing carries none. `currentRound` is read-only and
+  `openRound` is mutation-only: every path that shows a client their gallery
+  is a query, and a query that inserts would have made an anonymous page
+  load create records. The client surface shows the round's state and the
+  owner's note when one comes back — the note lives on the decided round,
+  not the fresh one, so `lastDecided` travels with the session. Submitting
+  refuses an empty set and refuses a second send while one is waiting;
+  approve and send-back both refuse a round nobody submitted. Nine tests in
+  `tests/core/gallery-rounds.test.ts`, including that reading twice creates
+  nothing. EN/FR/ES. Changeset `gallery-approval-rounds.md`.)
 - [ ] **C8.07** Add archive/package delivery of a finished gallery and the
   notifications that carry it: gallery ready, selection submitted, round
   approved.

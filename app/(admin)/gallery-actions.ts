@@ -11,9 +11,11 @@ import { ServiceError } from "@/core/service";
 import { GALLERY_INVITE_COOKIE } from "@/modules/galleries/cookies";
 import {
   addGalleryItem,
+  approveGalleryRound,
   createGallery,
   inviteGalleryGuest,
   removeGalleryItem,
+  reopenGalleryRound,
   revokeGalleryGuest,
   updateGallery,
 } from "@/modules/galleries/service";
@@ -155,6 +157,36 @@ export async function revokeGalleryGuestAction(form: FormData): Promise<void> {
     await revokeGalleryGuest.call({ id: text(form, "id") }, await actor());
   } catch (error) {
     refused(error, path, "That guest could not be revoked.");
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
+}
+
+export async function approveGalleryRoundAction(form: FormData): Promise<void> {
+  const galleryId = text(form, "galleryId");
+  const path = `${GALLERIES}/${galleryId}`;
+  try {
+    await approveGalleryRound.call(
+      { galleryId, note: text(form, "note") || null },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, path, "That round could not be approved.");
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
+}
+
+export async function reopenGalleryRoundAction(form: FormData): Promise<void> {
+  const galleryId = text(form, "galleryId");
+  const path = `${GALLERIES}/${galleryId}`;
+  try {
+    await reopenGalleryRound.call(
+      { galleryId, note: text(form, "note") || null },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, path, "That round could not be sent back.");
   }
   revalidatePath(path);
   redirect(`${path}?saved=1`);

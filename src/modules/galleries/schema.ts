@@ -17,6 +17,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -268,6 +269,73 @@ export const gallerySelections = pgTable(
     check(
       "gallery_selections_comment",
       sql`${t.comment} is null or char_length(${t.comment}) between 1 and 2000`,
+    ),
+  ],
+);
+
+/**
+ * One pass of "the client chooses, the owner decides" (C8.06).
+ *
+ * A round is the unit of agreement over a selection set. The client submits,
+ * the owner approves or sends it back, and sending it back opens the next
+ * round rather than editing this one — which is what makes the history real
+ * instead of a status field that forgets.
+ *
+ * `snapshot` freezes what was submitted, because selections stay editable: a
+ * round that read live selections would rewrite its own history the moment the
+ * client changed their mind in the next round. It holds asset, verdict and
+ * comment and deliberately no contact id — an identity buried in jsonb is one
+ * `contacts.merge` cannot repoint, and the spine already records whose opinion
+ * each selection was.
+ */
+export const GALLERY_ROUND_STATES = [
+  "open",
+  "submitted",
+  "approved",
+  "reopened",
+] as const;
+
+export const galleryRounds = pgTable(
+  "gallery_rounds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    galleryId: uuid("gallery_id")
+      .notNull()
+      .references(() => galleries.id, { onDelete: "cascade" }),
+    /** 1, 2, 3 — the client and the owner both count rounds out loud. */
+    sequence: integer("sequence").notNull(),
+    state: text("state", { enum: GALLERY_ROUND_STATES }).notNull().default("open"),
+    /** Who submitted it. Null after erasure, or while still open. */
+    submittedByContactId: uuid("submitted_by_contact_id").references(
+      () => contacts.id,
+      { onDelete: "set null" },
+    ),
+    /** The owner's word when approving or sending it back. */
+    note: text("note"),
+    /** What was submitted, frozen. */
+    snapshot: jsonb("snapshot").notNull().default([]),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("gallery_rounds_sequence_idx").on(t.galleryId, t.sequence),
+    index("gallery_rounds_gallery_idx").on(t.galleryId, t.state),
+    index("gallery_rounds_contact_idx").on(t.submittedByContactId),
+    check("gallery_rounds_sequence", sql`${t.sequence} >= 1`),
+    check(
+      "gallery_rounds_state",
+      sql`${t.state} in ('open', 'submitted', 'approved', 'reopened')`,
+    ),
+    // A decided round has to say when. A round that is still open must not.
+    check(
+      "gallery_rounds_decided",
+      sql`(${t.state} in ('approved', 'reopened') and ${t.decidedAt} is not null) or (${t.state} in ('open', 'submitted') and ${t.decidedAt} is null)`,
+    ),
+    check(
+      "gallery_rounds_submitted",
+      sql`(${t.state} = 'open' and ${t.submittedAt} is null) or (${t.state} <> 'open' and ${t.submittedAt} is not null)`,
     ),
   ],
 );

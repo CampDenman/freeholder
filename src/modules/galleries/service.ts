@@ -38,11 +38,13 @@ import {
   GALLERY_ACCESS_MODES,
   GALLERY_DOWNLOAD_POLICIES,
   GALLERY_GUEST_ROLES,
+  GALLERY_ROUND_STATES,
   GALLERY_SELECTION_KINDS,
   galleries,
   galleryAccessLogs,
   galleryGuests,
   galleryItems,
+  galleryRounds,
   gallerySelections,
   gallerySessions,
 } from "./schema";
@@ -203,6 +205,26 @@ const selectionRow = row({
   assetId: uuid,
   kind: z.enum(GALLERY_SELECTION_KINDS),
   comment: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
+const snapshotEntry = z.object({
+  assetId: uuid,
+  kind: z.enum(GALLERY_SELECTION_KINDS),
+  comment: z.string().nullable(),
+});
+
+const roundRow = row({
+  id: uuid,
+  galleryId: uuid,
+  sequence: z.number().int(),
+  state: z.enum(GALLERY_ROUND_STATES),
+  submittedByContactId: uuid.nullable(),
+  note: z.string().nullable(),
+  snapshot: z.array(snapshotEntry),
+  submittedAt: timestamp.nullable(),
+  decidedAt: timestamp.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -457,6 +479,71 @@ async function selectionsFor(
       ),
     )
     .orderBy(asc(gallerySelections.createdAt));
+}
+
+/**
+ * The round in play, or null when nothing has been submitted yet.
+ *
+ * Read-only on purpose. Every path that shows a client their gallery is a
+ * query, and a query that inserts a row is a read with a side effect —
+ * here it would have meant an anonymous page load creating records.
+ */
+async function currentRound(ctx: ServiceContext, galleryId: string) {
+  const [existing] = await ctx.tx
+    .select()
+    .from(galleryRounds)
+    .where(eq(galleryRounds.galleryId, galleryId))
+    .orderBy(desc(galleryRounds.sequence))
+    .limit(1);
+  return existing ?? null;
+}
+
+/**
+ * A round's `snapshot` column is jsonb, which drizzle types as unknown.
+ * Parsing it here means every caller gets the shape the output schema
+ * already promises, instead of each surface casting for itself.
+ */
+function shapeRound<T extends { snapshot: unknown }>(round: T) {
+  return { ...round, snapshot: z.array(snapshotEntry).parse(round.snapshot) };
+}
+
+/**
+ * The last round the owner decided.
+ *
+ * Reopening opens a *new* round, so the note explaining why lives on the
+ * previous one. Without this the client would be told to look again and
+ * never told what at.
+ */
+async function lastDecidedRound(ctx: ServiceContext, galleryId: string) {
+  const [decided] = await ctx.tx
+    .select()
+    .from(galleryRounds)
+    .where(
+      and(
+        eq(galleryRounds.galleryId, galleryId),
+        inArray(galleryRounds.state, ["approved", "reopened"]),
+      ),
+    )
+    .orderBy(desc(galleryRounds.sequence))
+    .limit(1);
+  return decided ?? null;
+}
+
+/**
+ * The round in play, opened if the gallery has none. Mutations only.
+ *
+ * Created on first submit rather than at gallery creation: a gallery
+ * delivered without ever being proofed should not carry an empty round
+ * forever, and the first submit is the first moment a round means anything.
+ */
+async function openRound(ctx: ServiceContext, galleryId: string) {
+  const existing = await currentRound(ctx, galleryId);
+  if (existing) return existing;
+  const [created] = await ctx.tx
+    .insert(galleryRounds)
+    .values({ galleryId, sequence: 1, state: "open" })
+    .returning();
+  return created!;
 }
 
 async function issueSession(
@@ -981,6 +1068,10 @@ const unlocked = z.object({
   items: listed(itemRow),
   /** This person's own marks, so the surface can render what they chose. */
   selections: listed(selectionRow),
+  /** Where the approval conversation stands, which the client must see. */
+  round: roundRow.nullable(),
+  /** The last decided round, which carries the owner's note. */
+  lastDecided: roundRow.nullable(),
 });
 const unlockResult = z.union([unlocked, z.object({ ok: z.literal(false) })]);
 
@@ -1041,6 +1132,8 @@ export const unlockGallery = defineService({
       gallery: publicGallery(gallery),
       items: await liveItems(ctx, gallery, null),
       selections: await selectionsFor(ctx, gallery.id, gallery.contactId),
+      round: await currentRound(ctx, gallery.id),
+      lastDecided: await lastDecidedRound(ctx, gallery.id),
     };
   },
 });
@@ -1083,6 +1176,8 @@ export const redeemGalleryGuest = defineService({
       gallery: publicGallery(gallery),
       items: await liveItems(ctx, gallery, guest),
       selections: await selectionsFor(ctx, gallery.id, guest.contactId),
+      round: await currentRound(ctx, gallery.id),
+      lastDecided: await lastDecidedRound(ctx, gallery.id),
     };
   },
 });
@@ -1138,6 +1233,8 @@ export const openGalleryWithLogin = defineService({
       gallery: publicGallery(gallery),
       items: await liveItems(ctx, gallery, guest ?? null),
       selections: await selectionsFor(ctx, gallery.id, contactId),
+      round: await currentRound(ctx, gallery.id),
+      lastDecided: await lastDecidedRound(ctx, gallery.id),
     };
   },
 });
@@ -1157,6 +1254,8 @@ export const viewGallerySession = defineService({
       gallery: publicGallery(gallery),
       items: await liveItems(ctx, gallery, guest),
       selections: await selectionsFor(ctx, gallery.id, session.contactId),
+      round: await currentRound(ctx, gallery.id),
+      lastDecided: await lastDecidedRound(ctx, gallery.id),
     };
   },
 });
@@ -1428,6 +1527,203 @@ export const listGallerySelections = defineService({
   },
 });
 
+/**
+ * The client says "these are my choices" (C8.06).
+ *
+ * Freezes the selection set into the round, because selections stay editable
+ * afterwards and a round that read them live would rewrite its own history
+ * the next time the client changed their mind.
+ */
+export const submitGalleryRound = defineService({
+  name: "galleries.submitRound",
+  summary: "Submit this round's choices for the owner to decide.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({ sessionToken: z.string().min(20).max(200) }),
+  output: roundRow,
+  handler: async (input, ctx) => {
+    const { session, gallery } = await loadSession(ctx, input.sessionToken);
+    if (!session.contactId) {
+      throw new ServiceError("permission", "This gallery cannot record a choice for you.");
+    }
+    const round = await openRound(ctx, gallery.id);
+    if (round.state !== "open") {
+      throw new ServiceError(
+        "conflict",
+        "This round has already been sent. Wait for a reply before sending again.",
+      );
+    }
+    const chosen = await ctx.tx
+      .select()
+      .from(gallerySelections)
+      .where(eq(gallerySelections.galleryId, gallery.id))
+      .orderBy(asc(gallerySelections.createdAt));
+    if (chosen.length === 0) {
+      throw new ServiceError(
+        "validation",
+        "Mark at least one photograph before sending your choices.",
+      );
+    }
+    const [saved] = await ctx.tx
+      .update(galleryRounds)
+      .set({
+        state: "submitted",
+        submittedByContactId: session.contactId,
+        submittedAt: new Date(),
+        // Everyone's marks, not just this person's: the owner decides on the
+        // whole set, and a partner's reject is part of what they are judging.
+        snapshot: chosen.map((selection) => ({
+          assetId: selection.assetId,
+          kind: selection.kind,
+          comment: selection.comment,
+        })),
+        updatedAt: new Date(),
+      })
+      .where(eq(galleryRounds.id, round.id))
+      .returning();
+    ctx.setSubject("gallery", gallery.id);
+    await ctx.emitTimeline({
+      contactId: session.contactId,
+      eventType: "gallery.roundSubmitted",
+      subjectType: "gallery",
+      subjectId: gallery.id,
+      payload: { sequence: round.sequence, chosen: chosen.length },
+    });
+    ctx.queueEvent("gallery.roundSubmitted", {
+      id: gallery.id,
+      roundId: round.id,
+      sequence: round.sequence,
+    });
+    return saved!;
+  },
+});
+
+/** The owner finalizes. Approving ends the round and the conversation. */
+export const approveGalleryRound = defineService({
+  name: "galleries.approveRound",
+  summary: "Approve the round the client submitted.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({ galleryId: id, note: z.string().trim().max(2000).nullish() }),
+  output: roundRow,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const gallery = await loadGallery(ctx, input.galleryId);
+    const round = await currentRound(ctx, gallery.id);
+    if (round?.state !== "submitted") {
+      throw new ServiceError(
+        "conflict",
+        "There is nothing submitted to approve.",
+      );
+    }
+    const [saved] = await ctx.tx
+      .update(galleryRounds)
+      .set({
+        state: "approved",
+        note: input.note?.length ? input.note : null,
+        decidedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(galleryRounds.id, round.id))
+      .returning();
+    ctx.setSubject("gallery", gallery.id);
+    if (gallery.contactId) {
+      await ctx.emitTimeline({
+        contactId: gallery.contactId,
+        eventType: "gallery.roundApproved",
+        subjectType: "gallery",
+        subjectId: gallery.id,
+        payload: { sequence: round.sequence },
+      });
+    }
+    ctx.queueEvent("gallery.roundApproved", {
+      id: gallery.id,
+      roundId: round.id,
+      sequence: round.sequence,
+    });
+    return saved!;
+  },
+});
+
+/**
+ * The owner sends it back, and the next round opens.
+ *
+ * The reopened round keeps its snapshot, its note and its decision time. A
+ * status field flipped back to `open` would lose exactly the thing an
+ * approval round exists to record: what was asked for, and what was said
+ * about it.
+ */
+export const reopenGalleryRound = defineService({
+  name: "galleries.reopenRound",
+  summary: "Send the round back to the client and open the next one.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({ galleryId: id, note: z.string().trim().max(2000).nullish() }),
+  output: roundRow,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const gallery = await loadGallery(ctx, input.galleryId);
+    const round = await currentRound(ctx, gallery.id);
+    if (round?.state !== "submitted") {
+      throw new ServiceError(
+        "conflict",
+        "There is nothing submitted to send back.",
+      );
+    }
+    await ctx.tx
+      .update(galleryRounds)
+      .set({
+        state: "reopened",
+        note: input.note?.length ? input.note : null,
+        decidedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(galleryRounds.id, round.id));
+    const [next] = await ctx.tx
+      .insert(galleryRounds)
+      .values({ galleryId: gallery.id, sequence: round.sequence + 1, state: "open" })
+      .returning();
+    ctx.setSubject("gallery", gallery.id);
+    if (gallery.contactId) {
+      await ctx.emitTimeline({
+        contactId: gallery.contactId,
+        eventType: "gallery.roundReopened",
+        subjectType: "gallery",
+        subjectId: gallery.id,
+        payload: { sequence: next!.sequence },
+      });
+    }
+    ctx.queueEvent("gallery.roundReopened", {
+      id: gallery.id,
+      roundId: next!.id,
+      sequence: next!.sequence,
+    });
+    return next!;
+  },
+});
+
+/** Every round this gallery has been through, newest first. */
+export const listGalleryRounds = defineService({
+  name: "galleries.listRounds",
+  summary: "The approval history of one gallery.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ galleryId: id }),
+  output: listed(roundRow),
+  handler: async (input, ctx) => {
+    await loadGallery(ctx, input.galleryId);
+    return ctx.tx
+      .select()
+      .from(galleryRounds)
+      .where(eq(galleryRounds.galleryId, input.galleryId))
+      .orderBy(desc(galleryRounds.sequence))
+      .then((rows) => rows.map(shapeRound));
+  },
+});
+
 export const galleryBySlug = defineService({
   name: "galleries.publicBySlug",
   summary: "The lock screen facts for a gallery, never its files.",
@@ -1656,6 +1952,48 @@ registerContactReference({
 });
 
 registerContactReference({
+  table: "gallery_rounds",
+  // Who submitted a round is a plain attribution with no uniqueness to
+  // violate, so this repoints rather than reconciling. The snapshot alongside
+  // it holds no contact id precisely so there is nothing here that a merge
+  // could silently miss.
+  repoint: (tx, duplicateId, survivingId) =>
+    tx
+      .update(galleryRounds)
+      .set({ submittedByContactId: survivingId })
+      .where(eq(galleryRounds.submittedByContactId, duplicateId)),
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({
+        id: galleryRounds.id,
+        submittedByContactId: galleryRounds.submittedByContactId,
+      })
+      .from(galleryRounds)
+      .where(
+        inArray(galleryRounds.submittedByContactId, [duplicateId, survivingId]),
+      ),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
+    const moved = z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          submittedByContactId: z.string().uuid(),
+        }),
+      )
+      .parse(beforeState)
+      .filter((round) => round.submittedByContactId === duplicateId);
+    if (moved.length) {
+      await tx
+        .update(galleryRounds)
+        .set({ submittedByContactId: duplicateId })
+        .where(inArray(galleryRounds.id, moved.map((round) => round.id)));
+    }
+  },
+});
+
+registerContactReference({
   table: "gallery_sessions",
   // A bearer for the duplicate identity must not silently become a credential
   // for the survivor. Invalidate it by deletion, same as customer magic links.
@@ -1686,6 +2024,7 @@ registerContactPrivacySource({
     "gallery_access_logs",
     "gallery_sessions",
     "gallery_selections",
+    "gallery_rounds",
   ],
   exportData: async (tx, contactId) => {
     const owned = await tx.select().from(galleries).where(eq(galleries.contactId, contactId));
@@ -1698,7 +2037,11 @@ registerContactPrivacySource({
       .select()
       .from(gallerySelections)
       .where(eq(gallerySelections.contactId, contactId));
-    return { galleries: owned, guests, logs, selections };
+    const rounds = await tx
+      .select()
+      .from(galleryRounds)
+      .where(eq(galleryRounds.submittedByContactId, contactId));
+    return { galleries: owned, guests, logs, selections, rounds };
   },
   erase: async (tx, contactId) => {
     // The gallery is the business's delivery record. The person goes; the
@@ -1721,6 +2064,12 @@ registerContactPrivacySource({
       .update(gallerySelections)
       .set({ contactId: null })
       .where(eq(gallerySelections.contactId, contactId));
+    // The round stays and its snapshot with it: what was agreed is the
+    // owner's record of the job. Only the name on the submission goes.
+    await tx
+      .update(galleryRounds)
+      .set({ submittedByContactId: null })
+      .where(eq(galleryRounds.submittedByContactId, contactId));
     return { affected: owned.length };
   },
 });
@@ -1745,6 +2094,10 @@ export default [
   setGallerySelection,
   clearGallerySelection,
   listGallerySelections,
+  submitGalleryRound,
+  approveGalleryRound,
+  reopenGalleryRound,
+  listGalleryRounds,
   downloadGalleryItem,
   galleryBySlug,
   expireGallerySessions,

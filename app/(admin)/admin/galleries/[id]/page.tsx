@@ -10,6 +10,7 @@ import {
   getGallery,
   listGalleryAccess,
   listGalleryGuests,
+  listGalleryRounds,
   listGallerySelections,
 } from "@/modules/galleries/service";
 import { getT } from "../../../../i18n";
@@ -18,7 +19,9 @@ import { domainOrNull } from "../../../read-helpers";
 import { GALLERY_INVITE_COOKIE } from "@/modules/galleries/cookies";
 import {
   addGalleryItemAction,
+  approveGalleryRoundAction,
   inviteGalleryGuestAction,
+  reopenGalleryRoundAction,
   removeGalleryItemAction,
   revokeGalleryGuestAction,
   updateGalleryAction,
@@ -47,12 +50,13 @@ export default async function GalleryEditorPage({
 }) {
   const { id } = await params;
   const actor = await requireStaffActor("galleries");
-  const [t, gallery, guests, log, selections, library, query, jar] = await Promise.all([
+  const [t, gallery, guests, log, selections, rounds, library, query, jar] = await Promise.all([
     getT(),
     domainOrNull(getGallery.call({ id }, actor)),
     domainOrNull(listGalleryGuests.call({ galleryId: id }, actor)),
     domainOrNull(listGalleryAccess.call({ galleryId: id }, actor)),
     domainOrNull(listGallerySelections.call({ galleryId: id }, actor)),
+    domainOrNull(listGalleryRounds.call({ galleryId: id }, actor)),
     domainOrNull(listAssets.call({ limit: 100 }, actor)),
     searchParams,
     cookies(),
@@ -286,6 +290,55 @@ export default async function GalleryEditorPage({
             </label>
             <Button type="submit">{t("galleries.action.invite")}</Button>
           </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("galleries.rounds")} />
+        <CardBody>
+          {!rounds || rounds.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("galleries.rounds.empty")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {rounds.map((round) => (
+                <li
+                  key={round.id}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm"
+                >
+                  <span className="font-medium">
+                    {t("galleries.round.number", { n: round.sequence })}
+                  </span>
+                  <span>{t(`galleries.round.state.${round.state}`)}</span>
+                  <span className="text-ink-muted">
+                    {t("galleries.round.chosen", { n: round.snapshot.length })}
+                  </span>
+                  {round.note ? <span className="text-ink-muted">“{round.note}”</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {rounds?.some((round) => round.state === "submitted") ? (
+            <form action={approveGalleryRoundAction} className="mt-3 grid gap-2 sm:flex sm:items-end">
+              <input type="hidden" name="galleryId" value={gallery.id} />
+              <label className="grid flex-1 gap-1 text-sm">
+                <span className="text-ink-muted">{t("galleries.round.note")}</span>
+                <input
+                  name="note"
+                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                />
+              </label>
+              <div className="flex gap-2">
+                <Button type="submit">{t("galleries.round.approve")}</Button>
+                <Button
+                  type="submit"
+                  variant="quiet"
+                  formAction={reopenGalleryRoundAction}
+                >
+                  {t("galleries.round.reopen")}
+                </Button>
+              </div>
+            </form>
+          ) : null}
         </CardBody>
       </Card>
 
