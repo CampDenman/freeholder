@@ -14,6 +14,8 @@ export const PUBLIC_ENTITY_KINDS = [
   "newsletter",
   "article",
   "service",
+  "project",
+  "collection",
 ] as const;
 
 export type PublicEntityKind = (typeof PUBLIC_ENTITY_KINDS)[number];
@@ -41,6 +43,9 @@ export function kindFromSlug(slug: string): PublicEntityKind {
   if (root === "newsletters" && leaf) return "newsletter";
   if ((root === "blog" || root === "journal") && leaf) return "article";
   if (root === "services" && leaf) return "service";
+  if (root === "portfolio" && leaf) {
+    return leaf.startsWith("collections-") ? "collection" : "project";
+  }
   return segments.length === 1 ? "section" : "page";
 }
 

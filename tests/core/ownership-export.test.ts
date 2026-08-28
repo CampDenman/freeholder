@@ -16,7 +16,7 @@ import {
   credentialKeyFingerprint,
   isSecretColumn,
   type MediaManifest,
-} from "../../scripts/ownership-export.mjs";
+} from "@/core/portability/ownership-export.mjs";
 import {
   guardedDrillUrl,
   runOwnershipDrill,
@@ -162,10 +162,14 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
       const output = path.join(parent, "export");
       const credentialKey = Buffer.alloc(32, 9).toString("hex");
       try {
+        const configPath = path.resolve("freeholder.config.ts");
         const result = await createOwnershipExport({
           databaseUrl: process.env.DATABASE_URL!,
           outputDirectory: output,
-          configPath: path.resolve("freeholder.config.ts"),
+          configuration: {
+            filename: path.basename(configPath),
+            contents: await readFile(configPath, "utf8"),
+          },
           environment: {
             NODE_ENV: "test",
             APP_URL:

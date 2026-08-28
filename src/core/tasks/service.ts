@@ -416,9 +416,7 @@ export const briefingTasks = defineService({
   name: "briefing.tasks",
   summary: "Tasks that are due today or already late.",
   kind: "query",
-  permission: "public",
-  mcpExclude: true,
-  agentCallable: false,
+  permission: "system",
   input: z.object({
     userId: z.uuid(),
     onDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

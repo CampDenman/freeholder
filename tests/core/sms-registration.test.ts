@@ -23,6 +23,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
 import { messagingNumbers } from "@/core/messaging/numbers-schema";
 import { maySend, overallState, requirementsFor } from "@/core/messaging/registration";
 import { db } from "@/core/db";
@@ -34,6 +35,14 @@ import {
   whyNothingCanSend,
 } from "@/core/messaging/sms";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+
+function daytimeTimezone(): string {
+  let offset = 12 - new Date().getUTCHours();
+  if (offset > 12) offset -= 24;
+  if (offset < -12) offset += 24;
+  if (offset === 0) return "UTC";
+  return offset > 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
+}
 
 describe("what a number must be registered for", () => {
   it("wants 10DLC for a US long code", () => {
@@ -270,8 +279,25 @@ describe.runIf(hasDatabase)("registration and sending", { timeout: 90_000 }, () 
   // And the refusal that does happen with no provider is still the right one.
   it("refuses at the provider when there is no provider at all", async () => {
     await number({ country: "GB" });
+    const [contact] = await db()
+      .insert(contacts)
+      .values({
+        name: "Carrier Test",
+        email: "carrier-test@example.test",
+        phone: "+447700900100",
+        timezone: daytimeTimezone(),
+      })
+      .returning();
     const refused = await failure(
-      sendSms.call({ to: "+447700900100", body: "Hello", idempotencyKey: "k9" }, OWNER),
+      sendSms.call(
+        {
+          contactId: contact!.id,
+          to: "+447700900100",
+          body: "Hello",
+          idempotencyKey: "k9",
+        },
+        OWNER,
+      ),
     );
     expect(refused.message).toContain("not configured");
   });

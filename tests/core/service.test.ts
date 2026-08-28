@@ -9,7 +9,9 @@ import { z } from "zod";
 import {
   actorString,
   defineService,
+  getExternalService,
   getService,
+  listExternalServices,
   listServices,
   permits,
   redact,
@@ -88,6 +90,21 @@ describe("permits() — the authorization matrix", () => {
   it("lets system through anything — it is the platform itself", () => {
     expect(permits(SYSTEM, "scoped", "x.y")).toBe(true);
     expect(permits(SYSTEM, "public", "x.y")).toBe(true);
+    expect(permits(SYSTEM, "system", "x.y")).toBe(true);
+  });
+
+  it("reserves system services for the platform even from wildcard keys", () => {
+    expect(permits(ANON, "system", "briefing.assemble")).toBe(false);
+    expect(
+      permits(
+        user("owner", [{ module: "*", access: "manage" }]),
+        "system",
+        "briefing.assemble",
+      ),
+    ).toBe(false);
+    expect(
+      permits(agent(["*", "briefing.*"]), "system", "briefing.assemble"),
+    ).toBe(false);
   });
 
   it("admits anonymous callers only to public services", () => {
@@ -244,6 +261,14 @@ describe("the registry", () => {
     input: z.object({}),
     handler: async () => null,
   });
+  const internal = defineService({
+    name: "registry.internal",
+    summary: "Trusted composition only.",
+    kind: "mutation",
+    permission: "system",
+    input: z.object({}),
+    handler: async () => null,
+  });
 
   beforeEach(() => {
     resetRegistryForTests();
@@ -253,6 +278,21 @@ describe("the registry", () => {
     registerService(one);
     expect(getService("registry.one")).toBe(one);
     expect(listServices().size).toBe(1);
+  });
+
+  it("keeps system services registered for composition but off external projections", () => {
+    registerService(one);
+    registerService(internal);
+    expect(getService("registry.internal")).toBe(internal);
+    expect(listServices().size).toBe(2);
+    expect([...listExternalServices().keys()]).toEqual(["registry.one"]);
+    let refusal: unknown;
+    try {
+      getExternalService("registry.internal");
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toMatchObject({ code: "not_found" });
   });
 
   it("accepts the same service twice, because boot is a precondition", () => {

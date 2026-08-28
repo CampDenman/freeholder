@@ -3,11 +3,11 @@
 // Every machine projection of the registry, from one function (C3.06).
 import { buildOpenApi } from "@/core/api/openapi";
 import { PLATFORM_VERSION } from "@/core/platform";
-import { listServices } from "@/core/service";
+import { listExternalServices } from "@/core/service";
 import { hiddenFromMcp, toolName } from "@/mcp/tools";
 
 export function contractProjections() {
-  const services = [...listServices().values()].sort((a, b) =>
+  const services = [...listExternalServices().values()].sort((a, b) =>
     a.def.name.localeCompare(b.def.name),
   );
   const names = services.map((service) => service.def.name);

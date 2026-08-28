@@ -27,6 +27,13 @@ describe("layout bindings", () => {
       slug: "prints",
     });
     expect(withProduct.some((node) => node.type === "productDetail")).toBe(true);
+
+    const withService = ensureBoundEntityBlock(bound, "service", {
+      productId: "00000000-0000-4000-8000-000000000003",
+      slug: "consultation",
+    });
+    expect(withService.some((node) => node.type === "productDetail")).toBe(true);
+    expect(withService.some((node) => node.type === "booking")).toBe(true);
   });
 });
 

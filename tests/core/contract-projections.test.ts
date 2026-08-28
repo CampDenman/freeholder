@@ -37,6 +37,8 @@ describe.runIf(hasDatabase)("contract projections (C3.02, C3.06)", () => {
       expect(names).toContain(tool.replace(/_/g, "."));
     }
     expect(mcpTools).not.toContain("auth_login");
+    expect(names).not.toContain("briefing.assemble");
+    expect(names).not.toContain("agents.startEventPlaybooks");
     expect(humanReference()).toContain("contacts.create");
     expect(llmsContractSection()).toContain("/api/openapi.json");
   });

@@ -43,6 +43,8 @@ export class AdapterError extends Error {
     readonly code: AdapterErrorCode,
     message: string,
     readonly retryable = false,
+    /** Provider-native code, safe to persist and classify without parsing prose. */
+    readonly providerCode?: string,
   ) {
     super(message);
     this.name = "AdapterError";

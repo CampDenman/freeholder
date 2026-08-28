@@ -163,7 +163,14 @@ export default async function ContactDetailPage({
     save: t("common.saveChanges"),
     remove: t("contacts.relationships.remove"),
   };
-  for (const kind of ["household", "employer", "referred_by", "partner", "guardian"] as const) {
+  for (const kind of [
+    "household",
+    "employer",
+    "referred_by",
+    "partner",
+    "guardian",
+    "contact_book",
+  ] as const) {
     relationshipLabels[`kind.${kind}`] = t(`contacts.relationships.kind.${kind}`);
     relationshipLabels[`create.${kind}`] = t(`contacts.relationships.create.${kind}`);
     for (const direction of ["peer", "outgoing", "incoming"] as const) {

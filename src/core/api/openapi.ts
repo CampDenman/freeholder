@@ -18,7 +18,7 @@
 // rather than a guessed shape. The completeness gate refuses that gap.
 import { z } from "zod";
 import { CONTRACT, PLATFORM_VERSION, WEBHOOK_SCHEMA_VERSION } from "@/core/platform";
-import { listServices, type Service } from "@/core/service";
+import { listExternalServices, type Service } from "@/core/service";
 import { API_BASE } from "@/core/api/dispatch";
 
 export interface OpenApiOptions {
@@ -140,14 +140,14 @@ function outputSchema(service: Service): unknown {
 }
 
 /**
- * Everything this instance can do, as OpenAPI 3.1.
+ * Everything an external caller may ask this instance to do, as OpenAPI 3.1.
  *
  * Built from the registry at request time rather than at build time, because
  * §28's point is that *this* instance's contract reflects *its* enabled
  * modules and plugins — including one installed an hour ago.
  */
 export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
-  const services = [...listServices().values()].sort((a, b) =>
+  const services = [...listExternalServices().values()].sort((a, b) =>
     a.def.name.localeCompare(b.def.name),
   );
 

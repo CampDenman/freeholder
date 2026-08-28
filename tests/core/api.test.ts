@@ -11,7 +11,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { coerceQuery, dispatch } from "@/core/api/dispatch";
 import { buildOpenApi } from "@/core/api/openapi";
-import { listServices } from "@/core/service";
+import { listExternalServices } from "@/core/service";
 import { ready } from "@/core/runtime";
 import { createApiKey } from "@/core/apikeys/service";
 import { users } from "@/core/auth/schema";
@@ -101,6 +101,24 @@ describe.runIf(hasDatabase)("calling a service over HTTP", () => {
     // tell somebody probing which half of the name they got right.
     const response = await get("contacts.doesNotExist");
     expect(response.status).toBe(404);
+  });
+
+  it("treats internal orchestration as a missing endpoint", async () => {
+    const anonymous = await post("briefing.assemble", {
+      userId: OWNER.userId,
+    });
+    expect(anonymous.status).toBe(404);
+
+    const key = await createApiKey.call(
+      { name: "Briefing key", scopes: ["briefing.*"] },
+      OWNER,
+    );
+    const scoped = await post(
+      "briefing.assemble",
+      { userId: OWNER.userId },
+      { authorization: `Bearer ${key.token}` },
+    );
+    expect(scoped.status).toBe(404);
   });
 
   it("refuses to change data through a GET", async () => {
@@ -224,12 +242,12 @@ describe.runIf(hasDatabase)("the published contract", () => {
     };
   };
 
-  it("describes every service the instance has, and nothing else", async () => {
+  it("describes every external service the instance has, and nothing else", async () => {
     // The equivalence §28 rests on. A service added tomorrow is in the spec
     // tomorrow because there is no list to update.
     const document = await spec();
     const described = Object.keys(document.paths).sort();
-    const registered = [...listServices().keys()]
+    const registered = [...listExternalServices().keys()]
       .map((name) => `/api/v1/${name}`)
       .sort();
     expect(described).toEqual(registered);
@@ -239,7 +257,7 @@ describe.runIf(hasDatabase)("the published contract", () => {
     // The whole claim: the request body in the document is generated from
     // `service.def.input`, so it cannot describe a shape the API would reject.
     const document = await spec();
-    const service = listServices().get("contacts.create")!;
+    const service = listExternalServices().get("contacts.create")!;
     const fromRegistry = z.toJSONSchema(service.def.input, { io: "input" }) as Record<
       string,
       unknown
@@ -280,6 +298,25 @@ describe.runIf(hasDatabase)("the published contract", () => {
     for (const [path, operations] of Object.entries(document.paths)) {
       const operation = operations.post ?? operations.get!;
       expect({ path, tagged: operation.tags.length }).toEqual({ path, tagged: 1 });
+    }
+  });
+
+  it("does not publish internal orchestration as HTTP endpoints", async () => {
+    const document = await spec();
+    for (const name of [
+      "briefing.assemble",
+      "briefing.appointments",
+      "briefing.tasks",
+      "forms.briefingEnquiries",
+      "invoicing.briefingOverdue",
+      "agents.startEventPlaybooks",
+      "agents.runDuePlaybooks",
+      "notifications.create",
+      "mail.recordProviderEvent",
+      "media.purgeExpired",
+    ]) {
+      expect(document.paths).not.toHaveProperty(`/api/v1/${name}`);
+      expect(listExternalServices().has(name)).toBe(false);
     }
   });
 

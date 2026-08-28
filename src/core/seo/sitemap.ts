@@ -26,7 +26,9 @@ export interface SitemapEntry {
     | "event"
     | "newsletter"
     | "article"
-    | "service";
+    | "service"
+    | "project"
+    | "collection";
   /** 0–1. Browse pages outrank leaves when set. */
   priority?: number;
 }

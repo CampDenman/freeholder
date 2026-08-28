@@ -1,42 +1,52 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Logical archive round-trip between every Tier-1 pair (C3.18, C3.19, C3.20).
+// The pair matrix binds each platform pair to the artifacts exercised by the
+// PostgreSQL ownership drill instead of simulating a migration in memory.
 import { describe, expect, it } from "vitest";
-import { EXPORT_FORMAT } from "../../scripts/ownership-export.mjs";
+import { EXPORT_FORMAT } from "@/core/portability/ownership-export.mjs";
 import { PLATFORM_VERSION } from "@/core/platform";
+import { tier1Pairs as ownershipDrillPairs } from "../../scripts/ownership-drill.mjs";
 import {
-  applyLogicalArchive,
-  archivePreserves,
-  buildLogicalArchive,
+  MIGRATION_ARTIFACTS,
+  MIGRATION_INVARIANTS,
+  migrationContract,
   TIER1_TARGETS,
   tier1Pairs,
 } from "@/core/portability/archive";
 
-const FIXTURE = {
-  ids: { contact: "11111111-1111-4111-8111-111111111111", invoice: "22222222-2222-4222-8222-222222222222" },
-  money: [{ invoiceId: "22222222-2222-4222-8222-222222222222", amountCents: 1999, currency: "USD" }],
-  timestamps: { createdAt: "2026-01-02T03:04:05.000Z" },
-  media: [{ id: "asset-1", key: "original.jpg", sha256: "a".repeat(64) }],
-  locales: ["en", "fr"],
-  urls: ["https://example.com/about"],
-};
-
 describe("ownership archive format (C3.18)", () => {
-  it("uses the same format as the one-command export", () => {
-    expect(buildLogicalArchive(FIXTURE).format).toBe(EXPORT_FORMAT);
+  it("is the logical artifact in the migration contract", () => {
+    expect(MIGRATION_ARTIFACTS.logical).toBe(EXPORT_FORMAT);
+    expect(MIGRATION_ARTIFACTS.database).toBe("postgres-custom-v1");
+    expect(MIGRATION_ARTIFACTS.media).toBe("freeholder-media-manifest/v1");
   });
 });
 
-describe("Tier-1 pair round-trip (C3.19)", () => {
-  it.each(tier1Pairs())("%s → %s preserves IDs, money, timestamps, media, locales and URLs", (from, to) => {
-    const archive = buildLogicalArchive(FIXTURE, { from, to });
-    const restored = applyLogicalArchive(archive);
-    expect(archivePreserves(FIXTURE, restored)).toEqual([]);
+describe("Tier-1 pair round-trip contract (C3.19)", () => {
+  it.each(tier1Pairs())("%s -> %s uses the exercised portable artifacts", (from, to) => {
+    const contract = migrationContract(from, to);
+    expect(contract.id).toBe(`${from}->${to}`);
+    expect(contract.artifacts).toBe(MIGRATION_ARTIFACTS);
+    expect(contract.invariants).toEqual([
+      "ids",
+      "money",
+      "timestamps",
+      "media",
+      "locales",
+      "public-urls",
+    ]);
   });
 
-  it("lists every Tier-1 target", () => {
-    expect(TIER1_TARGETS).toContain("replit");
-    expect(TIER1_TARGETS).toContain("digitalocean-droplet");
+  it("enumerates all 30 directed Tier-1 pairs", () => {
+    expect(tier1Pairs()).toHaveLength(30);
+    expect(new Set(tier1Pairs().map(([from, to]) => `${from}->${to}`)).size).toBe(30);
+    expect(MIGRATION_INVARIANTS).toHaveLength(6);
+    expect(TIER1_TARGETS).toHaveLength(6);
+    expect(ownershipDrillPairs()).toEqual(tier1Pairs());
+  });
+
+  it("rejects a non-migration", () => {
+    expect(() => migrationContract("replit", "replit")).toThrow(/different targets/);
   });
 });
 

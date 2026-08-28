@@ -14,7 +14,11 @@ export const TEMPLATE_KEYS = [
   "post.article",
   "product.default",
   "service.default",
+  "portfolio.index",
+  "portfolio.collection",
+  "project.case-study",
   "email.transactional",
+  "sms.transactional",
 ] as const;
 
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
@@ -24,6 +28,7 @@ export interface SeedTemplate {
   kind: TemplateKind;
   name: string;
   blocks: BlockNode[];
+  variables: string[];
 }
 
 function heading(id: string, text: string, level: 1 | 2 = 1): BlockNode {
@@ -157,12 +162,14 @@ export function seedTemplates(preset: TemplatePreset): SeedTemplate[] {
       kind: "page",
       name: "Blank page",
       blocks: [heading(`${preset}-blank-h1`, "Untitled page")],
+      variables: [],
     },
     {
       key: "page.landing",
       kind: "page",
       name: "Landing page",
       blocks: landingChildren,
+      variables: [],
     },
     {
       key: "post.article",
@@ -172,6 +179,7 @@ export function seedTemplates(preset: TemplatePreset): SeedTemplate[] {
         heading(`${preset}-post-h1`, copy.postTitle),
         body(`${preset}-post-body`, copy.postBody),
       ],
+      variables: [],
     },
     {
       key: "product.default",
@@ -181,6 +189,7 @@ export function seedTemplates(preset: TemplatePreset): SeedTemplate[] {
         heading(`${preset}-product-h1`, copy.productTitle),
         body(`${preset}-product-body`, copy.productBody),
       ],
+      variables: [],
     },
     {
       key: "service.default",
@@ -195,6 +204,63 @@ export function seedTemplates(preset: TemplatePreset): SeedTemplate[] {
           props: { slug: "session", ctaHref: "/contact" },
         },
       ],
+      variables: [],
+    },
+    {
+      key: "portfolio.index",
+      kind: "page",
+      name: "Portfolio index",
+      blocks: [
+        heading(`${preset}-portfolio-h1`, "Our work"),
+        { id: `${preset}-portfolio-index`, type: "portfolioIndex", props: {} },
+        { id: `${preset}-portfolio-share`, type: "share", props: { label: "Share" } },
+      ],
+      variables: [],
+    },
+    {
+      key: "portfolio.collection",
+      kind: "page",
+      name: "Portfolio collection",
+      blocks: [
+        heading(`${preset}-collection-h1`, "Selected work"),
+        {
+          id: `${preset}-collection-projects`,
+          type: "portfolioCollection",
+          props: {
+            collectionId: "00000000-0000-4000-8000-000000000000",
+            description: null,
+            projects: [],
+          },
+        },
+        { id: `${preset}-collection-share`, type: "share", props: { label: "Share" } },
+      ],
+      variables: [],
+    },
+    {
+      key: "project.case-study",
+      kind: "page",
+      name: "Project case study",
+      blocks: [
+        heading(`${preset}-project-h1`, "Project"),
+        {
+          id: `${preset}-project-facts`,
+          type: "projectCaseStudy",
+          props: {
+            projectId: "00000000-0000-4000-8000-000000000000",
+            summary: null,
+            clientDisplayName: null,
+            occurredOn: null,
+            coverAssetId: null,
+            featured: false,
+            services: [],
+            outcomes: [],
+            media: [],
+            testimonials: [],
+          },
+        },
+        { id: `${preset}-project-share`, type: "share", props: { label: "Share" } },
+      ],
+      variables: [],
     },
     {
       key: "email.transactional",
@@ -204,6 +270,19 @@ export function seedTemplates(preset: TemplatePreset): SeedTemplate[] {
         heading(`${preset}-email-h1`, copy.emailTitle),
         body(`${preset}-email-body`, copy.emailBody),
       ],
+      variables: ["contact.first_name", "contact.email", "business.name"],
+    },
+    {
+      key: "sms.transactional",
+      kind: "sms",
+      name: "Transactional text message",
+      blocks: [
+        body(
+          `${preset}-sms-body`,
+          "Hello {{contact.first_name}} — this is a message from {{business.name}}.",
+        ),
+      ],
+      variables: ["contact.first_name", "business.name", "booking.starts_at_local"],
     },
   ];
 }

@@ -27,6 +27,8 @@ import { resolveRedirect } from "@/core/seo/service";
 import {
   articleJsonLd,
   breadcrumbJsonLd,
+  collectionPageJsonLd,
+  creativeWorkJsonLd,
   eventJsonLd,
   humanizeSegment,
   organizationJsonLd,
@@ -420,6 +422,32 @@ async function entityJsonLd(input: {
         remainingAttendeeCapacity: first?.remaining,
       }),
     ];
+  }
+  if (kind === "project" && leaf) {
+    const { resolvePublicProject } = await import("@/modules/projects/portfolio-service");
+    const result = await resolvePublicProject.call({ slug: leaf }, ANONYMOUS);
+    if (!result) return [];
+    const absolute = (value: string) =>
+      value.startsWith("/") ? `${input.origin}${value}` : value;
+    return [
+      creativeWorkJsonLd({
+        name: result.project.title,
+        url,
+        description: result.project.summary ?? input.description,
+        dateCreated: result.project.occurredOn,
+        images: result.images.map((image) => ({
+          url: absolute(image.src),
+          caption: image.altText,
+        })),
+        services: result.services.map((service) => ({
+          name: service.name,
+          url: `${input.origin}/products/${service.slug}`,
+        })),
+      }),
+    ];
+  }
+  if (kind === "collection") {
+    return [collectionPageJsonLd({ name: input.title, url, description: input.description })];
   }
   return [];
 }

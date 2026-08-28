@@ -13,7 +13,7 @@ import { violates } from "@/core/db/errors";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineService,
-  listServices,
+  listExternalServices,
   ServiceError,
   type Actor,
 } from "@/core/service";
@@ -51,7 +51,7 @@ function refuseAgents(actor: Actor, verb: string): void {
  * `permits()` will consult, so agreement is guaranteed by construction.
  */
 function assertKnownScopes(scopes: string[]): void {
-  const services = listServices();
+  const services = listExternalServices();
   const families = new Set(
     [...services.keys()].map((name) => `${name.split(".")[0]}.*`),
   );
@@ -87,7 +87,7 @@ export const listScopes = defineService({
     }),
   ),
   handler: async (_input, _ctx) => {
-    const services = [...listServices().values()];
+    const services = [...listExternalServices().values()];
     const modules = new Map<string, { name: string; summary: string; kind: string }[]>();
     for (const service of services) {
       const area = service.def.name.split(".")[0]!;

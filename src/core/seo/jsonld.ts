@@ -224,3 +224,54 @@ export function articleJsonLd(input: {
       : {}),
   };
 }
+
+export function creativeWorkJsonLd(input: {
+  name: string;
+  url: string;
+  description?: string | null;
+  dateCreated?: string | null;
+  images?: Array<{ url: string; caption?: string | null }>;
+  services?: Array<{ name: string; url: string }>;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "CreativeWork",
+    name: input.name,
+    url: input.url,
+    mainEntityOfPage: input.url,
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.dateCreated ? { dateCreated: input.dateCreated } : {}),
+    ...(input.images?.length
+      ? {
+          image: input.images.map((image) => ({
+            "@type": "ImageObject",
+            contentUrl: image.url,
+            ...(image.caption ? { caption: image.caption } : {}),
+          })),
+        }
+      : {}),
+    ...(input.services?.length
+      ? {
+          about: input.services.map((service) => ({
+            "@type": "Service",
+            name: service.name,
+            url: service.url,
+          })),
+        }
+      : {}),
+  };
+}
+
+export function collectionPageJsonLd(input: {
+  name: string;
+  url: string;
+  description?: string | null;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "CollectionPage",
+    name: input.name,
+    url: input.url,
+    ...(input.description ? { description: input.description } : {}),
+  };
+}

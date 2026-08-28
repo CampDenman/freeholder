@@ -8,19 +8,32 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
+import { listAssets } from "@/core/media/service";
+import { listContacts } from "@/core/contacts/service";
+import { listProducts } from "@/modules/catalog/service";
 import { getProject } from "@/modules/projects/service";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
 import {
   addTaskAction,
+  addTestimonialAction,
+  attachProjectFileAction,
+  detachProjectFileAction,
   linkAction,
+  projectConsentAction,
+  projectPublicationAction,
+  removeOutcomeAction,
   removeTaskAction,
   setOutcomeAction,
   setTaskStatusAction,
   unlinkAction,
+  testimonialStatusAction,
+  updateCaseStudySettingsAction,
   updateProjectAction,
 } from "../../../project-actions";
+import { editorBlockTypes, editorLabels } from "../../editorLabels";
+import { ProjectEditor } from "./ProjectEditor";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -43,6 +56,9 @@ const TASK_TONES: Record<string, Tone> = {
 
 const STATUSES = ["enquiry", "quoted", "active", "on_hold", "complete", "cancelled"];
 const LINK_KINDS = ["quote", "contract", "booking", "invoice", "rental", "form_submission"];
+const FILE_ROLES = ["hero", "gallery", "before", "after", "process", "detail", "document"];
+const CONSENT_METHODS = ["contract", "email", "written", "verbal", "other"];
+const TESTIMONIAL_STATUSES = ["draft", "published", "withdrawn"];
 
 /** Where each kind of attachment actually lives, so a link goes somewhere. */
 const LINK_PATHS: Record<string, string> = {
@@ -62,12 +78,20 @@ export default async function ProjectPage({
 }) {
   const actor = await requireStaffActor("projects");
   const { id } = await params;
-  const [t, project, query] = await Promise.all([
+  const [t, project, query, library, services, people] = await Promise.all([
     getT(),
     domainOrNull(getProject.call({ id }, actor)),
     searchParams,
+    domainOrNull(listAssets.call({ kind: "image", limit: 500 }, actor)),
+    domainOrNull(listProducts.call({ kind: "service", limit: 500 }, actor)),
+    domainOrNull(listContacts.call({ limit: 500 }, actor)),
   ]);
   if (!project) notFound();
+  const seo = project.seo;
+  const imageAssets = library?.rows ?? [];
+  const publicServices = (services ?? []).filter(
+    (service) => service.status === "active" && service.visibility === "public",
+  );
 
   return (
     <div className="grid gap-6">
@@ -96,6 +120,124 @@ export default async function ProjectPage({
           {query.error.includes(" ") ? query.error : t("projects.failed")}
         </p>
       ) : null}
+
+      <Card>
+        <CardHeader title={t("projects.caseStudy.publishTitle")} />
+        <CardBody>
+          <div className="flex flex-wrap items-center gap-3">
+            <Pill tone={project.publicationStatus === "published" ? "success" : "neutral"}>
+              {t(`projects.publication.${project.publicationStatus}`)}
+            </Pill>
+            {project.publicationStatus === "published" ? (
+              <a href={`/portfolio/${project.slug}`} className="text-sm font-semibold underline">
+                {t("projects.caseStudy.viewLive")}
+              </a>
+            ) : null}
+            <form action={projectPublicationAction} className="ms-auto">
+              <input type="hidden" name="id" value={project.id} />
+              <input
+                type="hidden"
+                name="intent"
+                value={project.publicationStatus === "published" ? "unpublish" : "publish"}
+              />
+              <Button type="submit">
+                {project.publicationStatus === "published"
+                  ? t("projects.caseStudy.unpublish")
+                  : t("projects.caseStudy.publish")}
+              </Button>
+            </form>
+          </div>
+          <p className="max-w-prose text-sm text-ink-muted">
+            {t("projects.caseStudy.publishHint")}
+          </p>
+
+          {project.contactId ? (
+            <div className="grid max-w-prose gap-3 rounded-md border border-rule p-3">
+              <p className="text-sm font-semibold">{t("projects.caseStudy.clientConsent")}</p>
+              {project.clientConsentGivenAt ? (
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <Pill tone="success">{t("projects.caseStudy.consentRecorded")}</Pill>
+                  <span className="text-ink-muted">
+                    {t(`projects.consent.${project.clientConsentMethod}`)}
+                  </span>
+                  <form action={projectConsentAction} className="ms-auto">
+                    <input type="hidden" name="id" value={project.id} />
+                    <input type="hidden" name="intent" value="revoke" />
+                    <Button type="submit" variant="quiet">
+                      {t("projects.caseStudy.revokeConsent")}
+                    </Button>
+                  </form>
+                </div>
+              ) : (
+                <form action={projectConsentAction} className="grid gap-3 sm:grid-cols-2">
+                  <input type="hidden" name="id" value={project.id} />
+                  <input type="hidden" name="intent" value="record" />
+                  <label className="grid gap-1 text-sm">
+                    <span className="text-ink-muted">{t("projects.caseStudy.consentMethod")}</span>
+                    <select name="method" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                      {CONSENT_METHODS.map((method) => (
+                        <option key={method} value={method}>{t(`projects.consent.${method}`)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="text-ink-muted">{t("projects.caseStudy.consentNote")}</span>
+                    <input name="note" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+                  </label>
+                  <div><Button type="submit" variant="quiet">{t("projects.caseStudy.recordConsent")}</Button></div>
+                </form>
+              )}
+            </div>
+          ) : null}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("projects.caseStudy.settingsTitle")} />
+        <CardBody>
+          <form action={updateCaseStudySettingsAction} className="grid gap-3 sm:grid-cols-2">
+            <input type="hidden" name="id" value={project.id} />
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.cover")}</span>
+              <select name="coverAssetId" defaultValue={project.coverAssetId ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                <option value="">{t("projects.caseStudy.noCover")}</option>
+                {imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.filename}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 self-end text-sm">
+              <input type="checkbox" name="featured" defaultChecked={project.featured} />
+              {t("projects.caseStudy.featured")}
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.seoTitle")}</span>
+              <input name="seoTitle" maxLength={60} defaultValue={seo.title ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.seoDescription")}</span>
+              <input name="seoDescription" maxLength={155} defaultValue={seo.description ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <div><Button type="submit" variant="quiet">{t("projects.action.save")}</Button></div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("projects.caseStudy.storyTitle")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("projects.caseStudy.storyHint")}</p>
+          <ProjectEditor
+            id={project.id}
+            initialVersion={project.version}
+            initialBlocks={project.blocks}
+            blockTypes={editorBlockTypes(
+              t,
+              "page",
+              imageAssets.map((asset) => ({ id: asset.id, filename: asset.filename, kind: asset.kind })),
+            ).filter((entry) => entry.type !== "projectCaseStudy")}
+            labels={editorLabels(t)}
+          />
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("projects.attached")} />
@@ -245,6 +387,62 @@ export default async function ProjectPage({
       </Card>
 
       <Card>
+        <CardHeader title={t("projects.caseStudy.mediaTitle")} />
+        <CardBody>
+          {project.files.length === 0 ? (
+            <p className="max-w-prose text-sm text-ink-muted">{t("projects.caseStudy.noMedia")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {project.files.map((file) => {
+                const asset = imageAssets.find((candidate) => candidate.id === file.assetId);
+                return (
+                  <li key={file.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-2 text-sm">
+                    <Pill tone="neutral">{t(`projects.file.${file.role}`)}</Pill>
+                    <span>{asset?.filename ?? file.assetId}</span>
+                    {file.pairKey ? <span className="text-ink-muted">{file.pairKey}</span> : null}
+                    {file.caption ? <span className="text-ink-muted">{file.caption}</span> : null}
+                    <form action={detachProjectFileAction} className="ms-auto">
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <input type="hidden" name="id" value={file.id} />
+                      <Button type="submit" variant="quiet">{t("projects.caseStudy.detachMedia")}</Button>
+                    </form>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <form action={attachProjectFileAction} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <input type="hidden" name="projectId" value={project.id} />
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.asset")}</span>
+              <select name="assetId" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                <option value="">{t("projects.caseStudy.chooseAsset")}</option>
+                {imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.filename}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.role")}</span>
+              <select name="role" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                {FILE_ROLES.filter((role) => role !== "document").map((role) => (
+                  <option key={role} value={role}>{t(`projects.file.${role}`)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.pairKey")}</span>
+              <input name="pairKey" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.caption")}</span>
+              <input name="caption" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <div><Button type="submit" variant="quiet">{t("projects.caseStudy.attachMedia")}</Button></div>
+          </form>
+          <p className="max-w-prose text-sm text-ink-muted">{t("projects.caseStudy.pairHint")}</p>
+        </CardBody>
+      </Card>
+
+      <Card>
         <CardHeader title={t("projects.outcomes")} />
         <CardBody>
           {project.outcomes.length === 0 ? (
@@ -266,6 +464,11 @@ export default async function ProjectPage({
                     // owner notice before it reaches a case study.
                     <p className="text-warning">{t("projects.unmeasured")}</p>
                   )}
+                  <form action={removeOutcomeAction} className="mt-2">
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input type="hidden" name="id" value={outcome.id} />
+                    <Button type="submit" variant="quiet">{t("projects.caseStudy.removeOutcome")}</Button>
+                  </form>
                 </li>
               ))}
             </ul>
@@ -305,6 +508,88 @@ export default async function ProjectPage({
             <Button type="submit" variant="quiet">
               {t("projects.action.addOutcome")}
             </Button>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("projects.caseStudy.testimonialsTitle")} />
+        <CardBody>
+          {project.testimonials.length === 0 ? (
+            <p className="max-w-prose text-sm text-ink-muted">{t("projects.caseStudy.noTestimonials")}</p>
+          ) : (
+            <ul className="grid list-none gap-3 p-0">
+              {project.testimonials.map((testimonial) => (
+                <li key={testimonial.id} className="grid gap-2 rounded-md border border-rule p-3 text-sm">
+                  <blockquote><p>{testimonial.body}</p></blockquote>
+                  <p className="text-ink-muted">
+                    {testimonial.displayName}{testimonial.role ? ` · ${testimonial.role}` : ""}
+                  </p>
+                  <form action={testimonialStatusAction} className="flex flex-wrap items-end gap-2">
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input type="hidden" name="id" value={testimonial.id} />
+                    <label className="grid gap-1">
+                      <span className="text-ink-muted">{t("projects.caseStudy.testimonialStatus")}</span>
+                      <select name="status" defaultValue={testimonial.status} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                        {TESTIMONIAL_STATUSES.map((status) => (
+                          <option key={status} value={status}>{t(`projects.testimonial.${status}`)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <Button type="submit" variant="quiet">{t("projects.action.save")}</Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form action={addTestimonialAction} className="grid gap-3 sm:grid-cols-2">
+            <input type="hidden" name="projectId" value={project.id} />
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.field.client")}</span>
+              <select name="contactId" required defaultValue={project.contactId ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                <option value="">{t("projects.caseStudy.chooseContact")}</option>
+                {(people?.rows ?? []).map((contact) => <option key={contact.id} value={contact.id}>{contact.name}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.displayName")}</span>
+              <input name="displayName" required defaultValue={project.clientDisplayName ?? project.contactName ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm sm:col-span-2">
+              <span className="text-ink-muted">{t("projects.caseStudy.quote")}</span>
+              <textarea name="body" required rows={3} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.clientRole")}</span>
+              <input name="role" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.rating")}</span>
+              <select name="rating" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                <option value="">{t("projects.caseStudy.noRating")}</option>
+                {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}/5</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.consentMethod")}</span>
+              <select name="consentMethod" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                {CONSENT_METHODS.map((method) => <option key={method} value={method}>{t(`projects.consent.${method}`)}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.consentNote")}</span>
+              <input name="consentNote" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <fieldset className="flex flex-wrap gap-3 text-sm sm:col-span-2">
+              <legend className="mb-1 text-ink-muted">{t("projects.caseStudy.displayLocations")}</legend>
+              {["project", "service", "portfolio"].map((location) => (
+                <label key={location} className="flex items-center gap-2">
+                  <input type="checkbox" name="displayLocation" value={location} defaultChecked={location === "project"} />
+                  {t(`projects.display.${location}`)}
+                </label>
+              ))}
+            </fieldset>
+            <div><Button type="submit" variant="quiet">{t("projects.caseStudy.addTestimonial")}</Button></div>
           </form>
         </CardBody>
       </Card>
@@ -356,6 +641,26 @@ export default async function ProjectPage({
                 />
               </label>
             </div>
+            <fieldset className="grid gap-2">
+              <legend className="text-sm text-ink-muted">{t("projects.caseStudy.services")}</legend>
+              {publicServices.length === 0 ? (
+                <p className="text-sm text-warning">{t("projects.caseStudy.noPublicServices")}</p>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {publicServices.map((service) => (
+                    <label key={service.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="serviceProductId"
+                        value={service.id}
+                        defaultChecked={project.serviceProductIds.includes(service.id)}
+                      />
+                      {service.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.summary")}</span>
               <input

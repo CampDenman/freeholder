@@ -5,8 +5,9 @@
 // Each path resolves the unified contact and emits an event. None of them
 // invents a module-private customer.
 import { z } from "zod";
-import { okResult } from "@/core/contract";
-import { defineService } from "@/core/service";
+import { createHash } from "node:crypto";
+import { okResult, row, uuid } from "@/core/contract";
+import { defineService, getService } from "@/core/service";
 import { resolveContact } from "@/core/contacts/service";
 
 const email = z.string().trim().email().toLowerCase();
@@ -37,23 +38,40 @@ export const submitQuoteRequest = defineService({
 
 export const submitSiteChat = defineService({
   name: "cms.submitSiteChat",
-  summary: "A visitor starts a conversation; attach it to their contact.",
+  summary: "A visitor starts a live chat on their canonical Contact conversation.",
   kind: "mutation",
   permission: "public",
-  input: z.object({ name, email, message }),
-  output: okResult,
+  writeClass: "message",
+  input: z.object({
+    name,
+    email,
+    message,
+    locale: z
+      .string()
+      .trim()
+      .regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/)
+      .default("en"),
+  }),
+  rateLimit: {
+    limit: 5,
+    windowSeconds: 60 * 60,
+    subject: (input) => createHash("sha256").update(input.email, "utf8").digest("hex"),
+    message: "Wait before starting another chat with this email address.",
+  },
+  output: row({ ok: z.literal(true), token: z.string(), conversationId: uuid, contactId: uuid }),
   handler: async (input, ctx) => {
-    const resolved = await ctx.callAsSystem(resolveContact, {
-      name: input.name,
-      email: input.email,
-      source: "site-chat",
-    });
-    ctx.setSubject("contact", resolved.contact.id);
+    const started = (await ctx.call(getService("messaging.startSiteChat"), input)) as {
+      ok: true;
+      token: string;
+      conversationId: string;
+      contactId: string;
+    };
+    ctx.setSubject("conversation", started.conversationId);
     ctx.queueEvent("cms.siteChatStarted", {
-      contactId: resolved.contact.id,
-      message: input.message,
+      conversationId: started.conversationId,
+      contactId: started.contactId,
     });
-    return { ok: true as const };
+    return started;
   },
 });
 

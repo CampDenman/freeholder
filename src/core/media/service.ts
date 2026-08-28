@@ -1063,7 +1063,7 @@ export const registerStoredOriginal = defineService({
   name: "media.registerStoredOriginal",
   summary: "Turn an already-stored original into a library Asset.",
   kind: "mutation",
-  permission: "scoped",
+  permission: "system",
   input: z.object({
     key: z.string().min(1).max(500),
     filename: z.string().min(1).max(255),
@@ -2074,7 +2074,7 @@ export const purgeExpiredAsset = defineService({
   name: "media.purgeExpired",
   summary: "Purge one asset after its recoverable trash window expires.",
   kind: "mutation",
-  permission: "scoped",
+  permission: "system",
   input: z.object({
     id: z.string().uuid(),
     asOf: z.string().datetime().optional(),

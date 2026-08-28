@@ -8,4 +8,13 @@ export function runOwnershipDrill(options: {
   sourceDatabaseUrl?: string;
   configPath?: string;
   environment?: NodeJS.ProcessEnv;
-}): Promise<{ tables: number; rows: number; assets: number; objects: number }>;
+  pairs?: string[][];
+}): Promise<{
+  pairs: number;
+  tables: number;
+  rows: number;
+  assets: number;
+  objects: number;
+}>;
+export const TIER1_TARGETS: string[];
+export function tier1Pairs(): string[][];

@@ -12,8 +12,11 @@ both less trustworthy:
 Media bytes remain in the configured object store. `media-manifest.json` is the
 bridge: it lists the database's Assets and storage objects, their keys, sizes,
 MIME types, checksums where known, lifecycle state, and any database inventory
-gap. A complete recovery needs the database dump, separately protected
-configuration secrets and the object store.
+gap. `pnpm media:transfer` reads that artifact, copies across S3-compatible or
+Replit stores, then reads every target object back to compare size and SHA-256.
+See `migration-runbook.md` for the prefixed source/target credentials and
+cutover sequence. A complete recovery needs the database dump, separately
+protected configuration secrets and the object store.
 
 ## Create a secret-safe logical export
 

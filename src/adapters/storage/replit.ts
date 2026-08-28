@@ -2,12 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Replit Object Storage (MASTER.md §12, §20 — Replit is the Tier-1 recipe).
 //
-// The client is imported *dynamically*, and `@replit/object-storage` is an
-// optional dependency. A DigitalOcean droplet or a Docker self-host should not
-// install a Replit-only package to satisfy an import it will never evaluate,
-// and §14's one-command deploy is slower for everybody if it does. The cost is
-// this file having to say something useful when the package is absent, which
-// is cheaper than the alternative.
+// The official client is a production dependency because Replit is Tier 1.
+// It remains dynamically imported so non-Replit processes do not initialize a
+// provider SDK they never use.
 //
 // Replit Object Storage buckets are private and have no public URL, so `url()`
 // hands back a path served by the platform's own media route. That is the same
@@ -35,9 +32,8 @@ interface ReplitClient {
 
 async function connect(config: ReplitConfig): Promise<ReplitClient> {
   try {
-    // The specifier is a variable so TypeScript does not try to resolve a
-    // package that is deliberately not installed here. The shape is declared
-    // above instead, which is the honest cost of an optional dependency.
+    // Keep the narrow local shape so provider SDK changes are contained at the
+    // adapter boundary rather than leaking through core.
     const specifier = "@replit/object-storage";
     const mod = (await import(specifier)) as {
       Client: new (options?: { bucketId?: string }) => ReplitClient;

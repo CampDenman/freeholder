@@ -21,6 +21,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
+import { assets } from "@/core/media/schema";
 import { conversations, messageDeliveries, messages } from "@/core/messaging/schema";
 import { messagingNumbers } from "@/core/messaging/numbers-schema";
 import { createTwilioSms } from "@/adapters/sms/twilio";
@@ -39,6 +40,15 @@ import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/
 
 const TOKEN = "test-auth-token";
 const URL = "https://example.test/api/sms/webhooks/twilio";
+
+/** An IANA fixed-offset zone whose current local hour is always noon. */
+function daytimeTimezone(): string {
+  let offset = 12 - new Date().getUTCHours();
+  if (offset > 12) offset -= 24;
+  if (offset < -12) offset += 24;
+  if (offset === 0) return "UTC";
+  return offset > 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
+}
 
 /** Twilio's scheme, computed here independently of the adapter's copy. */
 function sign(url: string, params: Record<string, string>, token = TOKEN): string {
@@ -115,6 +125,37 @@ describe("the Twilio edge", () => {
       "https://api.twilio.test/one.jpg",
       "https://api.twilio.test/two.jpg",
     ]);
+  });
+
+  it("downloads inbound media only from the authenticated provider origin", async () => {
+    const png = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z8nAAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+    let authorization = "";
+    const mediaAdapter = createTwilioSms({
+      accountSid: "AC-test",
+      authToken: TOKEN,
+      apiBase: "https://api.twilio.test/2010-04-01",
+      fetch: async (_url, init) => {
+        authorization = new Headers(init?.headers).get("authorization") ?? "";
+        return new Response(png, {
+          status: 200,
+          headers: { "content-type": "image/png", "content-length": String(png.byteLength) },
+        });
+      },
+    });
+    const downloaded = await mediaAdapter.downloadMedia!(
+      "https://api.twilio.test/2010-04-01/Accounts/AC/Messages/SM/Media/ME",
+    );
+    expect(downloaded).toMatchObject({ filename: "ME.png", contentType: "image/png" });
+    expect(downloaded.bytes).toEqual(png);
+    expect(authorization).toMatch(/^Basic /);
+    await expect(
+      mediaAdapter.downloadMedia!("https://attacker.example/steal"),
+    ).rejects.toBeInstanceOf(AdapterError);
   });
 
   it("reads a delivery report, keeping the carrier's own code", async () => {
@@ -258,9 +299,23 @@ describe.runIf(hasDatabase)("text messaging", { timeout: 90_000 }, () => {
 
   it("refuses to send when no provider is configured", async () => {
     await number();
+    const [contact] = await db()
+      .insert(contacts)
+      .values({
+        name: "Carrier Test",
+        email: "carrier-test@example.test",
+        phone: "+447700900123",
+        timezone: daytimeTimezone(),
+      })
+      .returning();
     const refused = await failure(
       sendSms.call(
-        { to: "+447700900123", body: "Hello", idempotencyKey: "k1" },
+        {
+          contactId: contact!.id,
+          to: "+447700900123",
+          body: "Hello",
+          idempotencyKey: "k1",
+        },
         OWNER,
       ),
     );
@@ -352,6 +407,12 @@ describe.runIf(hasDatabase)("text messaging", { timeout: 90_000 }, () => {
   });
 
   it("calls a text with pictures a picture message", async () => {
+    const png = new Uint8Array(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z8nAAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
     await applySmsEvents.call(
       {
         events: [
@@ -361,7 +422,14 @@ describe.runIf(hasDatabase)("text messaging", { timeout: 90_000 }, () => {
             providerRef: "SM-mms",
             from: "+447700900123",
             body: "",
-            mediaUrls: ["https://api.twilio.test/one.jpg"],
+            media: [
+              {
+                sourceUrl: "https://api.twilio.test/one.png",
+                filename: "one.png",
+                contentType: "image/png",
+                bytes: png,
+              },
+            ],
             occurredAt: "2026-08-23T09:00:00.000Z",
           },
         ],
@@ -370,6 +438,8 @@ describe.runIf(hasDatabase)("text messaging", { timeout: 90_000 }, () => {
     );
     const [message] = await db().select().from(messages);
     expect(message!.channel).toBe("mms");
+    expect(message!.mediaAssetIds).toHaveLength(1);
+    expect(await db().select().from(assets)).toHaveLength(1);
     // A message with no words still needs a body the thread can render.
     expect(message!.body).toBe("(no text)");
   });
@@ -395,6 +465,9 @@ describe.runIf(hasDatabase)("text messaging", { timeout: 90_000 }, () => {
             id: "SM-out:delivered",
             kind: "delivered",
             providerRef: "SM-out",
+            segments: 2,
+            costMinor: 3,
+            costCurrency: "USD",
             occurredAt: "2026-08-23T09:05:00.000Z",
           },
         ],
@@ -407,6 +480,65 @@ describe.runIf(hasDatabase)("text messaging", { timeout: 90_000 }, () => {
       .from(messageDeliveries)
       .where(eq(messageDeliveries.messageId, recorded.message.id));
     expect(report!.status).toBe("delivered");
+    const [priced] = await db().select().from(messages).where(eq(messages.id, recorded.message.id));
+    expect(priced).toMatchObject({ segments: 2, costMinor: 3, costCurrency: "USD" });
+  });
+
+  it("marks a hard-invalid recipient and refuses the next send", async () => {
+    const [person] = await db()
+      .insert(contacts)
+      .values({
+        name: "Bad Number",
+        email: "bad-number@example.test",
+        phone: "+15005550199",
+        timezone: daytimeTimezone(),
+      })
+      .returning();
+    const { getService } = await import("@/core/service");
+    await getService("conversations.record").call(
+      {
+        contactId: person!.id,
+        direction: "outbound",
+        channel: "sms",
+        body: "Hello",
+        sentBy: "system",
+        providerRef: "SM-hard-invalid",
+        recipientAddress: person!.phone!,
+      },
+      { kind: "system" },
+    );
+    await applySmsEvents.call(
+      {
+        events: [
+          {
+            id: "SM-hard-invalid:failed",
+            kind: "failed",
+            providerRef: "SM-hard-invalid",
+            errorCode: "21614",
+            errorText: "Not a valid mobile number",
+            occurredAt: "2026-08-23T09:05:00.000Z",
+          },
+        ],
+      },
+      { kind: "system" },
+    );
+    const [invalid] = await db().select().from(contacts).where(eq(contacts.id, person!.id));
+    expect(invalid).toMatchObject({
+      phoneStatus: "invalid",
+      phoneInvalidProviderCode: "21614",
+    });
+    const refused = await failure(
+      sendSms.call(
+        {
+          contactId: person!.id,
+          to: person!.phone!,
+          body: "Retry",
+          idempotencyKey: "hard-invalid-retry",
+        },
+        OWNER,
+      ),
+    );
+    expect(refused.message).toContain("marked invalid");
   });
 
   it("ignores a report about a message it has no record of", async () => {

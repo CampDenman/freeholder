@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from "zod";
 import { defineBlock } from "@/modules/cms/blocks/types";
-import { registerBlock } from "@/modules/cms/blocks/registry";
 import { subscribePublicNewsletter } from "../../../app/(public)/newsletter-actions";
 
 export const newsletterArchive = defineBlock({
@@ -122,8 +121,6 @@ export const newsletterSubscribe = defineBlock({
   },
 });
 
-registerBlock(newsletterArchive as never);
-registerBlock(newsletterIssue as never);
-registerBlock(newsletterSubscribe as never);
+// Registration happens once, in boot, from the manifest's `blocks` entry.
 
 export default [newsletterArchive, newsletterIssue, newsletterSubscribe];

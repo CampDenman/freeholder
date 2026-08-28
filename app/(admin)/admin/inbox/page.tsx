@@ -164,6 +164,9 @@ export default async function InboxPage({
                     <Pill tone={CHANNEL_TONES[thread.replyChannel] ?? "neutral"}>
                       {t(`conversations.channel.${thread.replyChannel}`)}
                     </Pill>
+                    {thread.assistantEscalatedAt && !thread.assistantEscalationResolvedAt ? (
+                      <Pill tone="warning">{t("inbox.assistantNeedsYou")}</Pill>
+                    ) : null}
                     {/* The last thing said, so a list of threads reads as a
                         list of things rather than a list of names. */}
                     <span className="min-w-40 grow truncate text-ink-muted">

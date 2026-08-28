@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
 name: freeholder
+region: sfo
 services:
   - name: web
     image:
@@ -11,15 +12,60 @@ services:
     http_port: 3000
     instance_count: 1
     instance_size_slug: basic-xxs
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 15
+      period_seconds: 10
+      timeout_seconds: 5
+      failure_threshold: 6
+    liveness_health_check:
+      http_path: /api/health
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 5
+      failure_threshold: 3
     envs:
+      - key: NODE_ENV
+        value: production
+        scope: RUN_TIME
       - key: APP_URL
+        value: ${_self.PUBLIC_URL}
         scope: RUN_TIME
       - key: DATABASE_URL
+        value: ${freeholder-db.DATABASE_PRIVATE_URL}
         scope: RUN_TIME
-        type: SECRET
+      - key: FREEHOLDER_STORAGE
+        value: s3
+        scope: RUN_TIME
       - key: SESSION_SECRET
+        value: REPLACE_WITH_32_PLUS_RANDOM_CHARACTERS
         scope: RUN_TIME
         type: SECRET
       - key: CREDENTIAL_KEY
+        value: REPLACE_WITH_BASE64_32_BYTE_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: S3_ENDPOINT
+        value: https://sfo3.digitaloceanspaces.com
+        scope: RUN_TIME
+      - key: S3_REGION
+        value: sfo3
+        scope: RUN_TIME
+      - key: S3_BUCKET
+        value: REPLACE_WITH_SPACES_BUCKET
+        scope: RUN_TIME
+      - key: S3_ACCESS_KEY_ID
+        value: REPLACE_WITH_SCOPED_SPACES_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: S3_SECRET_ACCESS_KEY
+        value: REPLACE_WITH_SCOPED_SPACES_SECRET
+        scope: RUN_TIME
+        type: SECRET
+databases:
+  - name: freeholder-db
+    engine: PG
+    version: "16"
+    production: false
+    db_name: freeholder
+    db_user: freeholder

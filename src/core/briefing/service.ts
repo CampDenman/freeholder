@@ -97,9 +97,7 @@ export const assembleBriefing = defineService({
   name: "briefing.assemble",
   summary: "Build one person's briefing for one day, before they arrive.",
   kind: "mutation",
-  permission: "public",
-  mcpExclude: true,
-  agentCallable: false,
+  permission: "system",
   input: z.object({
     userId: z.uuid(),
     onDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

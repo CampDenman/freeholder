@@ -96,9 +96,23 @@ export { notes, noteRevisions } from "@/core/notes/schema";
 export { segments, segmentMembers } from "@/core/segments/schema";
 export { scoringRules, contactScoreAwards } from "@/core/scoring/schema";
 export { savedViews } from "@/core/views/schema";
-export { contactImports, contactImportRows } from "@/core/import/contacts-schema";
-export { conversations, messages, messageDeliveries } from "@/core/messaging/schema";
+export {
+  contactImports,
+  contactImportRows,
+  signupContactImportChoices,
+  signupContactImportPolicies,
+} from "@/core/import/contacts-schema";
+export {
+  conversations,
+  keywordRuleEvents,
+  keywordRules,
+  messages,
+  messageDeliveries,
+  siteChatSessions,
+  smsComplianceEvents,
+} from "@/core/messaging/schema";
 export { messagingNumbers } from "@/core/messaging/numbers-schema";
+export { messagingWindows } from "@/core/messaging/policy-schema";
 export { auditLog } from "@/core/events/schema";
 export {
   assets,

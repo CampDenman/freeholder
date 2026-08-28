@@ -15,6 +15,7 @@ test-results/
 .env
 .env.*
 !.env.example
+.freeholder-do-app*.yaml
 
 # local media, written by the dev-only storage adapter (§18: production media
 # lives in object storage, never on instance disk — this directory only ever

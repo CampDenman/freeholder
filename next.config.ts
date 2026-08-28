@@ -22,7 +22,28 @@ const nextConfig: NextConfig = {
   // build succeeds either way, which is exactly why §18's recipe check runs
   // the container instead of trusting that it compiled.
   outputFileTracingIncludes: {
-    "/**": ["./node_modules/sharp/**", "./node_modules/@img/**"],
+    "/*": ["./node_modules/sharp/**/*", "./node_modules/@img/**/*"],
+  },
+
+  // Runtime filesystem adapters accept paths that do not exist until an
+  // owner uses them. Static tracing can conservatively mistake those reads
+  // for dependencies on matching source, fixture and documentation files.
+  // These roots are either compiled into server chunks or copied explicitly
+  // by the runtime image (public/ and db/); none is executed from source.
+  outputFileTracingExcludes: {
+    "/*": [
+      "./app/**/*.{ts,tsx,md}",
+      "./db/**/*.md",
+      "./deploy/**",
+      "./locales/**/*.md",
+      "./packages/**/*.md",
+      "./plugins/**/*.{ts,tsx,md,json}",
+      "./scripts/**",
+      "./seed/**",
+      "./src/**/*.{ts,tsx,mjs,mts,md}",
+      "./tests/**",
+      "./README.md",
+    ],
   },
 
   // Security headers (MASTER.md §36: "security headers … shipped, not sold").
@@ -51,10 +72,16 @@ const nextConfig: NextConfig = {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
           },
-          // Nothing in core asks for a camera, a microphone or a location.
+          // Record Studio asks for same-origin camera, microphone and screen
+          // capture after a person clicks Grant. Browser permission remains
+          // mandatory. This must be document-wide rather than scoped only to
+          // /admin/media/record: client navigation retains the policy of the
+          // document that first loaded the admin. Location and Payment Request
+          // are not core capabilities and remain disabled.
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), payment=()",
+            value:
+              "camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=()",
           },
           // Two years, subdomains included. Recipes terminate TLS in front of
           // the app (Caddy on the droplet), so this is the app stating the

@@ -72,6 +72,12 @@ export default async function PortalPrivacyPage() {
           <a href="#guidance" className="text-sm text-ink-muted underline">
             {t("guidance.help")}
           </a>
+          <a
+            href={localizeCustomerHref("/portal/contact-import", locale, policy)}
+            className="text-sm text-ink-muted underline"
+          >
+            {t("contactImports.signup.manage")}
+          </a>
           <PortalLocaleChooser
             locale={locale}
             policy={policy}

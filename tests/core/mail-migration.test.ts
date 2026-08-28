@@ -127,7 +127,7 @@ describe.runIf(hasDatabase)("the migrated mail constraints", () => {
     const names = rows.map((row) => row.name);
     for (const expected of [
       "mail_senders_default_ready",
-      "mail_oauth_states_admin_return",
+      "mail_oauth_states_safe_return",
       "mail_deliveries_provider_purpose",
       "mail_provider_events_digest_format",
       "mail_suppressions_release_consistent",

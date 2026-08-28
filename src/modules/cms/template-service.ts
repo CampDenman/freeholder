@@ -16,7 +16,7 @@ import {
 import { seedTemplates, slugFromTitle } from "./templates";
 
 const presetSchema = z.enum(TEMPLATE_PRESETS);
-const kindSchema = z.enum(["page", "post", "product", "service", "email"] as const);
+const kindSchema = z.enum(["page", "post", "product", "service", "email", "sms"] as const);
 const templateRow = row({
   id: uuid,
   key: z.string(),
@@ -25,6 +25,7 @@ const templateRow = row({
   name: z.string(),
   locale: z.string(),
   blocks: z.unknown(),
+  variables: z.array(z.string()),
   origin: z.enum(["system", "owner"]),
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -108,31 +109,29 @@ export const getTemplate = defineService({
   output: templateRow.nullable(),
   handler: async (input, ctx) => {
     const preset = input.preset ?? instancePreset();
-    const [row] = await ctx.tx
-      .select()
-      .from(contentTemplates)
-      .where(
-        and(
-          eq(contentTemplates.key, input.key),
-          eq(contentTemplates.preset, preset),
-          eq(contentTemplates.locale, input.locale),
-        ),
-      )
-      .limit(1);
-    if (row) return row;
-    if (preset === "everything") return null;
-    const [fallback] = await ctx.tx
-      .select()
-      .from(contentTemplates)
-      .where(
-        and(
-          eq(contentTemplates.key, input.key),
-          eq(contentTemplates.preset, "everything"),
-          eq(contentTemplates.locale, input.locale),
-        ),
-      )
-      .limit(1);
-    return fallback ?? null;
+    // Contact locale first, then the neutral preset, then English in the same
+    // order. A missing translation must not turn a booking reminder into a 404.
+    const attempts = [
+      [preset, input.locale],
+      ...(preset === "everything" ? [] : [["everything", input.locale]]),
+      ...(input.locale === "en" ? [] : [[preset, "en"]]),
+      ...(input.locale === "en" || preset === "everything" ? [] : [["everything", "en"]]),
+    ] as Array<[TemplatePreset, string]>;
+    for (const [candidatePreset, locale] of attempts) {
+      const [template] = await ctx.tx
+        .select()
+        .from(contentTemplates)
+        .where(
+          and(
+            eq(contentTemplates.key, input.key),
+            eq(contentTemplates.preset, candidatePreset),
+            eq(contentTemplates.locale, locale),
+          ),
+        )
+        .limit(1);
+      if (template) return template;
+    }
+    return null;
   },
 });
 
@@ -147,6 +146,7 @@ export const updateTemplate = defineService({
     locale: z.string().default("en"),
     name: z.string().trim().min(1).max(80).optional(),
     blocks: z.unknown(),
+    variables: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
   }),
   output: templateRow,
   handler: async (input, ctx) => {
@@ -173,7 +173,7 @@ export const updateTemplate = defineService({
           try {
             return parseBlockTree(
               input.blocks,
-              existing.kind === "email" ? "email" : "page",
+              existing.kind === "email" || existing.kind === "sms" ? "email" : "page",
             );
           } catch (error) {
             if (error instanceof BlockValidationError) {
@@ -182,6 +182,7 @@ export const updateTemplate = defineService({
             throw error;
           }
         })(),
+        ...(input.variables ? { variables: [...new Set(input.variables)] } : {}),
         origin: "owner",
       })
       .where(eq(contentTemplates.id, existing.id))
@@ -227,7 +228,11 @@ export const resetTemplate = defineService({
       .update(contentTemplates)
       .set({
         name: seed.name,
-        blocks: parseBlockTree(seed.blocks, "page"),
+        blocks: parseBlockTree(
+          seed.blocks,
+          seed.kind === "email" || seed.kind === "sms" ? "email" : "page",
+        ),
+        variables: seed.variables,
         origin: "system",
       })
       .where(eq(contentTemplates.id, existing.id))
@@ -261,10 +266,16 @@ export const createFromTemplate = defineService({
       throw new ServiceError("not_found", "That template is not on this site.");
     }
     const stamp = Math.random().toString(36).slice(2, 7);
-    const blocks = cloneTree(parseBlockTree(template.blocks, "page"), stamp);
-    if (template.kind === "email") {
+    const blocks = cloneTree(
+      parseBlockTree(
+        template.blocks,
+        template.kind === "email" || template.kind === "sms" ? "email" : "page",
+      ),
+      stamp,
+    );
+    if (template.kind === "email" || template.kind === "sms") {
       return {
-        kind: "email" as const,
+        kind: template.kind,
         templateKey: template.key,
         blocks,
         page: null,
@@ -313,7 +324,10 @@ export const previewTemplate = defineService({
     }
     return {
       ...template,
-      blocks: parseBlockTree(template.blocks, "page"),
+      blocks: parseBlockTree(
+        template.blocks,
+        template.kind === "email" || template.kind === "sms" ? "email" : "page",
+      ),
     };
   },
 });
@@ -337,7 +351,11 @@ export const ensureTemplates = defineService({
             preset,
             name: seed.name,
             locale: input.locale,
-            blocks: parseBlockTree(seed.blocks, "page"),
+            blocks: parseBlockTree(
+              seed.blocks,
+              seed.kind === "email" || seed.kind === "sms" ? "email" : "page",
+            ),
+            variables: seed.variables,
             origin: "system",
           })
           .onConflictDoNothing({

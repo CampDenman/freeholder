@@ -3,7 +3,7 @@ Copyright (C) 2026 Tony Aly
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Handoff — 2026-08-24
+# Handoff — 2026-08-26
 
 Written for whoever picks this up next, human or agent. `MASTER.md` remains the
 only source of truth for product, architecture and status; this document is a
@@ -20,45 +20,58 @@ detail simply lives in one place now instead of two.*
 
 ## 1. Where things stand
 
-**Plan gate: 176 of 271 checked, 95 open.** Run `node scripts/plan-gate.mjs` for
+**Plan gate: 184 of 271 checked, 87 open.** Run `node scripts/plan-gate.mjs` for
 the live number — it is the only count that is not a guess.
 
-### Merged to `main` this session
+### Current working branch
 
-| Item | What it built | PR |
-|---|---|---|
-| C6.17 | Recurring invoices, overdue sweeps, chasing that stops | #185 |
-| C7.01 | Pipelines, deals, lifecycle board | #186 |
-| C7.02 | Tasks — one work list, in `core/tasks` | #187 |
-| C7.03 | Notes with revisions, visibility, mentions | #188 |
-| C7.04 | Segments — the one definition of "who" | #189 |
-| C7.05 | Transparent lead scoring | #191 |
-| C7.06 | Saved views | #192 |
-| C7.07 | CSV contact import, reversible | #193 |
-| C7.08 | Canonical conversations | #194 |
-| C7.09 | The inbox — four verbs and a search | #195 |
-| C7.10 | SMS adapter contract + Twilio | #196 |
-| — | Spec gaps filled, handoff rewritten | #197 |
-| — | `@formatjs/icu-messageformat-parser` patch | #85 |
-| — | `pg-boss` 12.26.2 → 12.27.0 | #79 |
+The branch is `chore/remove-proprietary-site-packs`, based on `origin/main` at
+`56e0baa`. It is not committed or pushed yet. It contains:
 
-### In review
+- the removal of 21 proprietary industry packs from this open-source repo and
+  an exact-hash copy under the private WeVibeSites
+  `freeholder-editions/` overlay;
+- C7.12 mandatory multilingual SMS consent/control words;
+- C7.13 recipient-local quiet hours and frequency policy;
+- C7.14 SMS templates, keywords, MMS, delivery/cost and invalid-number state;
+- C7.15 bearer-isolated live chat, assistant handoff and consent-neutral
+  WhatsApp/Messenger deep links.
+- C7.16 owner-controlled, skippable post-signup contact import from Google,
+  Microsoft, vCard, CSV and supported device selection, with exact preview,
+  user-attributed undo and no implied marketing permission.
+- C8.01 CMS-snapshotted project case studies with client publication consent,
+  public catalog-service links, substantiated metrics, enforced before/after
+  pairs, contact-backed testimonials and reciprocal service-page proof.
+- C8.02 CMS-template-backed public portfolio and curated collection pages with
+  normalized many-to-many membership, service/collection/text filtering,
+  draft-isolated public snapshots, accessible media enforcement, sharing,
+  `CreativeWork`/`CollectionPage` data and sitemap classification.
 
-| PR | Item | State |
-|---|---|---|
-| #199 | C7.11 — registration states | CI running; verified locally (106 tests across 9 files) |
+`RESTART_HANDOFF.md` is pre-existing untracked scratch. Do not modify or stage
+it. The temporary `C:\tmp\wevibesites-freeholder-editions.zip` may still exist;
+its cleanup was denied and it is outside both repositories.
 
 ### Next item
 
-**C7.12** — per-purpose, per-channel consent, with STOP / START / HELP handled
-before anything else sees the message, localized keywords, and an opt-out that
-propagates across every channel rather than only the number it arrived on.
+**C8.03** — build private client galleries with PIN/magic-link/login access,
+scoped guests, expiry, per-asset permissions and access audit. The user asked
+to stop before beginning this item, so no C8.03 implementation is in progress.
+C7.17 remains explicitly dependency-owned by C9.01/C9.06/C9.08 and should be
+checked only when those audience consumers exist.
 
-§4.14 is unusually firm here and worth reading before writing anything:
-*"Honouring an opt-out is not a feature to be configured."* The consent record
-already exists (`consent_records`, §30) — this is about making the send path
-incapable of skipping it, which means the check belongs where `senderFor` is,
-not where a screen is.
+The current cold production build passes at 9,858 standalone files /
+201,458,835 bytes and includes both project-collection admin routes; the
+artifact gate finds no source or environment leakage. C8.02 has 4 focused
+PostgreSQL tests and a bounded 102-test project/CMS/SEO/i18n/migration/registry
+regression set green, plus full lint, typecheck and licensing. The unbounded
+`pnpm test` process was stopped after an extended silent run and is not claimed
+as evidence. C8.01's 5 focused tests and 74 surrounding regressions remain the
+prior milestone evidence. The in-app browser pass could not start because this
+workstation's Codex Windows browser sandbox helper is missing. A separate local
+development-server attempt also encountered the pre-existing development
+database's duplicate `contacts_name_search_idx`; the isolated test database
+migrates through 0118 cleanly. Do not conflate that stale dev database with the
+feature or production build.
 
 ---
 
@@ -78,7 +91,6 @@ rules that bite most often in practice:
 - **`git commit -s`** — DCO, no CLA.
 - **`main` is protected.** PR + green checks, squash-merge, do not delete
   branches.
-- **Never merge Law Firm Edition #104 or Dependabot PRs** unless asked.
 
 ### The per-item loop that works
 
@@ -144,9 +156,10 @@ Anyone changing this area should know them.
 The reason: §4.14 attaches a task and a note to a contact, deal, invoice,
 booking and project — five owners across four modules. Putting the one work list
 inside any of them would make every other module depend on that one to have a
-to-do. `src/modules/projects/manifest.ts` already argues this for itself
-(*"`requires: ["core"]` and nothing else, which is the point"*), and adding
-`requires: ["crm"]` to it would have been the first casualty.
+to-do. The projects module's operational links therefore remain polymorphic
+and import none of quote/booking/invoice/rental; C8.01 adds only the CMS
+dependency needed for its public snapshot, not a dependency on every kind of
+record a project can attach.
 
 **The rule, stated once:** anything several modules must read, or that core
 itself reads, belongs to the spine.
@@ -165,7 +178,7 @@ that follows the last thing that happened.** Both sentences are now true.
 
 The original C7.04 required segments to be reused by "pricing, campaigns,
 automation and reporting". Three of those four do not exist yet — broadcasts are
-C9.06, automations C9.01, reporting C10. Ticking an item whose evidence cannot
+  C9.06, automations C9.01, reporting C9.08. Ticking an item whose evidence cannot
 exist is what §43 forbids; leaving the model unbuilt until C10 would let each
 surface grow its own answer to "who" as it landed.
 
@@ -195,8 +208,10 @@ contributors, contact references and segment fields.
 
 `conversations.reply` refuses on a channel with nothing able to send, rather
 than recording a message that never leaves. Words sitting in a thread the
-customer never saw are worse than an error somebody can act on. C7.10 turned the
-SMS case from a refusal into a send; C7.15 owes the same for chat and social.
+customer never saw are worse than an error somebody can act on. C7.10 connected
+SMS; C7.15 connects chat only while a valid browser session exists. WhatsApp
+and Messenger are deliberately external deep links, not provider inboxes, so a
+`social` reply still refuses instead of claiming delivery.
 
 ### 4.7 Carrier registration is derived, never stored
 
@@ -262,10 +277,10 @@ clear WCAG AA — `tests/core/tokens.test.ts` fails the build otherwise.
 Honestly: **the checklist is not, deliberately, and mostly that is fine — but it
 had three real holes, now filled.**
 
-The 95 open items have a median length of 16 words. They are *pointers* into
+The 90 open items have a median length of roughly 16 words. They are *pointers* into
 §§1–42, which is ~35,000 words of specification (§4 alone is 9,900). The detail
 is meant to live there; CLAUDE.md explicitly forbids creating a second roadmap,
-and expanding 95 one-liners would duplicate the spec and give two places to be
+and expanding 90 one-liners would duplicate the spec and give two places to be
 wrong.
 
 I audited every open block against the sections it points at. Coverage is
@@ -329,9 +344,6 @@ Two notes worth carrying:
 
 - **`RESTART_HANDOFF.md`** is untracked scratch in the repo root. It is not this
   file. Leave it alone or delete it; never stage it.
-- **PR #190** ("Fishing Charter and Law Firm edition seed packs") was merged by
-  someone else mid-session and moved `main` under a stacked branch. If a rebase
-  looks strange, check whether `main` moved.
 - **The `none` SMS adapter is not a placeholder.** It is what an unconfigured
   instance resolves to, and it refuses clearly. Do not remove it when adding a
   second provider.

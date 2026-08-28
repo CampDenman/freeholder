@@ -23,6 +23,7 @@ import type {
   SmsAdapter,
   SmsNumber,
   SmsNumberHealth,
+  SmsInboundMedia,
   SmsProviderEvent,
   SmsSendResult,
 } from "./types";
@@ -47,8 +48,13 @@ export interface TwilioSmsOptions {
   webhookUrl?: string;
 }
 
-function fail(code: AdapterErrorCode, message: string, retryable = false): never {
-  throw new AdapterError("sms", ID, code, message, retryable);
+function fail(
+  code: AdapterErrorCode,
+  message: string,
+  retryable = false,
+  providerCode?: string,
+): never {
+  throw new AdapterError("sms", ID, code, message, retryable, providerCode);
 }
 
 async function twilioJson(response: Response): Promise<Record<string, unknown>> {
@@ -81,6 +87,7 @@ async function twilioJson(response: Response): Promise<Record<string, unknown>> 
             : "invalid_request",
       `Twilio refused the request (${code})${detail ? `: ${detail}` : ""}.`,
       response.status === 429 || response.status >= 500,
+      code,
     );
   }
   return record;
@@ -113,6 +120,7 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
   const authToken = options.authToken?.trim();
   const doFetch = options.fetch ?? fetch;
   const apiBase = options.apiBase ?? "https://api.twilio.com/2010-04-01";
+  const apiOrigin = new URL(apiBase).origin;
   const available = Boolean(accountSid && authToken);
   const message = available
     ? "Sending and receiving text messages through Twilio."
@@ -245,6 +253,7 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
             : status === "failed"
               ? "failed"
               : "sent";
+      const segments = Number(params.get("NumSegments"));
       return [
         {
           id: `${sid}:${status}`,
@@ -252,9 +261,72 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
           providerRef: sid,
           errorCode: params.get("ErrorCode") ?? undefined,
           errorText: params.get("ErrorMessage") ?? undefined,
+          segments: Number.isFinite(segments) && segments > 0 ? segments : undefined,
+          costMinor: priceToMinor(params.get("Price")),
+          costCurrency: params.get("PriceUnit")?.toUpperCase() || undefined,
           occurredAt,
         },
       ];
+    },
+
+    async downloadMedia(url: string): Promise<SmsInboundMedia> {
+      requireReady();
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return fail("invalid_request", "Twilio sent an invalid media URL.");
+      }
+      if (parsed.protocol !== "https:" || parsed.origin !== apiOrigin) {
+        return fail("invalid_request", "Twilio media must come from the configured Twilio API origin.");
+      }
+      const response = await doFetch(parsed, { headers: { authorization: auth() } });
+      if (!response.ok) {
+        return fail(
+          response.status === 401 || response.status === 403
+            ? "authentication"
+            : response.status >= 500
+              ? "provider_failure"
+              : "invalid_request",
+          `Twilio media download failed with HTTP ${response.status}.`,
+          response.status >= 500,
+        );
+      }
+      const maxMediaBytes = 10 * 1024 * 1024;
+      const announced = Number(response.headers.get("content-length"));
+      if (Number.isFinite(announced) && announced > maxMediaBytes) {
+        return fail("invalid_request", "Twilio sent a media file larger than 10 MB.");
+      }
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength === 0 || buffer.byteLength > maxMediaBytes) {
+        return fail("invalid_request", "Twilio sent an empty or oversized media file.");
+      }
+      const contentType = (response.headers.get("content-type") ?? "application/octet-stream")
+        .split(";", 1)[0]!
+        .trim()
+        .toLowerCase();
+      const extensionByType: Record<string, string> = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "audio/mpeg": ".mp3",
+        "audio/mp4": ".m4a",
+        "video/mp4": ".mp4",
+      };
+      const pathName = decodeURIComponent(parsed.pathname.split("/").pop() ?? "media")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .slice(-180);
+      const extension = extensionByType[contentType] ?? "";
+      const filename = /\.[a-z0-9]{1,8}$/i.test(pathName)
+        ? pathName
+        : `${pathName || "media"}${extension}`;
+      return {
+        sourceUrl: parsed.toString(),
+        filename,
+        contentType,
+        bytes: new Uint8Array(buffer),
+      };
     },
 
     async listNumbers(): Promise<readonly SmsNumber[]> {

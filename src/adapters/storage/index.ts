@@ -48,6 +48,7 @@ function build(): StorageAdapter {
         bucket: e.S3_BUCKET!,
         accessKeyId: e.S3_ACCESS_KEY_ID!,
         secretAccessKey: e.S3_SECRET_ACCESS_KEY!,
+        addressingStyle: e.S3_ADDRESSING_STYLE,
         publicBaseUrl: e.S3_PUBLIC_BASE_URL,
         isPublic: e.S3_PUBLIC === "true",
       });

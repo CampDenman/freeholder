@@ -23,9 +23,7 @@ export const playbookSection = defineService({
   name: "briefing.playbookSection",
   summary: "What one playbook's work found since yesterday.",
   kind: "query",
-  permission: "public",
-  mcpExclude: true,
-  agentCallable: false,
+  permission: "system",
   input: z.object({
     userId: z.uuid(),
     onDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

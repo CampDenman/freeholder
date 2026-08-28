@@ -848,8 +848,7 @@ export const recordMailProviderEvent = defineService({
   name: "mail.recordProviderEvent",
   summary: "Record one authenticated provider delivery event.",
   kind: "mutation",
-  permission: "scoped",
-  agentCallable: false,
+  permission: "system",
   input: z.object({
     provider: z.enum(["resend", "postmark", "ses"]),
     externalEventId: z.string().min(1).max(500),

@@ -69,9 +69,10 @@ export type Actor = ActorIdentity & {
 
 /**
  * A service declares only whether it is public, personal to a signed-in user,
- * or governed by module grants. No role name appears in this contract.
+ * governed by module grants, or reserved for trusted platform composition.
+ * No role name appears in this contract.
  */
-export type Permission = "public" | "authenticated" | "scoped";
+export type Permission = "public" | "authenticated" | "scoped" | "system";
 
 export class ServiceError extends Error {
   constructor(
@@ -116,7 +117,8 @@ export function actorString(actor: Actor): string {
  * The whole authorization decision, as one pure function — exported so the
  * matrix can be tested exhaustively without a database standing behind it.
  * `public` admits anyone including unscoped API keys, which is the same reach
- * an anonymous visitor already has, so it grants nothing extra.
+ * an anonymous visitor already has, so it grants nothing extra. `system` is
+ * the opposite edge: only trusted platform composition can cross it.
  */
 export function permits(
   actor: Actor,
@@ -125,6 +127,7 @@ export function permits(
   kind: "query" | "mutation" = "mutation",
 ): boolean {
   if (actor.kind === "system") return true;
+  if (required === "system") return false;
   if (required === "public") return true;
   if (actor.kind === "anonymous") return false;
   if (actor.kind === "agent") {
@@ -552,6 +555,36 @@ export function getService(name: string): Service {
     throw new ServiceError("not_found", `no service named "${name}"`);
   }
   return service;
+}
+
+/**
+ * Whether a registered service belongs on an external protocol surface.
+ *
+ * System services still live in the registry because jobs, listeners and
+ * composed services resolve them by name. They are not endpoints: exposing a
+ * scheduler or briefing contributor just because it is registered turns an
+ * internal implementation detail into an anonymous/API-key back door.
+ */
+export function isExternallyExposed(service: Service): boolean {
+  return service.def.permission !== "system";
+}
+
+/** Resolve exactly the services the versioned HTTP dispatcher may expose. */
+export function getExternalService(name: string): Service {
+  const service = getService(name);
+  if (!isExternallyExposed(service)) {
+    // Deliberately indistinguishable from a miss. A private service name is
+    // not part of the public contract and probing it should reveal nothing.
+    throw new ServiceError("not_found", `no service named "${name}"`);
+  }
+  return service;
+}
+
+/** A fresh projection so callers cannot mutate the complete registry. */
+export function listExternalServices(): ReadonlyMap<string, Service> {
+  return new Map(
+    [...registry].filter(([, service]) => isExternallyExposed(service)),
+  );
 }
 
 export function listServices(): ReadonlyMap<string, Service> {

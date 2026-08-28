@@ -782,8 +782,7 @@ export const createNotification = defineService({
   name: "notifications.create",
   summary: "Create one deduplicated notification and its channel work.",
   kind: "mutation",
-  permission: "scoped",
-  agentCallable: false,
+  permission: "system",
   input: createInput,
   output: notificationCreateResult,
   handler: async (input, ctx) => {

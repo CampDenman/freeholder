@@ -24,6 +24,8 @@ export interface S3Config {
   bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
+  /** Railway requires virtual-hosted URLs; most compatible stores accept path style. */
+  addressingStyle?: "path" | "virtual";
   /**
    * Serve objects from here instead of the bucket endpoint — a CDN or a custom
    * domain. Only meaningful when the bucket is public.
@@ -73,8 +75,13 @@ export function createS3Storage(config: S3Config): StorageAdapter {
   });
 
   const origin = config.endpoint.replace(/\/+$/, "");
-  const objectUrl = (key: string) =>
-    `${origin}/${config.bucket}/${encodeURI(key)}`;
+  const storageBase = (() => {
+    if (config.addressingStyle !== "virtual") return `${origin}/${config.bucket}`;
+    const target = new URL(origin);
+    target.hostname = `${config.bucket}.${target.hostname}`;
+    return target.toString().replace(/\/+$/, "");
+  })();
+  const objectUrl = (key: string) => `${storageBase}/${encodeURI(key)}`;
 
   const multipartUrl = (key: string, uploadId?: string, partNumber?: number) => {
     const target = new URL(objectUrl(key));
@@ -263,7 +270,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
 
     async url(key, options: SignedUrlOptions = {}): Promise<string> {
       if (config.isPublic) {
-        const base = (config.publicBaseUrl ?? `${origin}/${config.bucket}`)
+        const base = (config.publicBaseUrl ?? storageBase)
           .replace(/\/+$/, "");
         return `${base}/${encodeURI(key)}`;
       }
