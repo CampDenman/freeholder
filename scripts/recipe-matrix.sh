@@ -69,8 +69,13 @@ for target in "${TARGETS[@]}"; do
   [ "$created" = "201" ]
 
   set +e
+  # --enroll-totp because the owner holds a wildcard grant, and a privileged
+  # grant makes two-factor mandatory: permits() refuses every scoped service
+  # until the session is both enrolled and verified, which is why /api/doctor
+  # answered 403. confirmTotpEnrollment marks the session step-up verified,
+  # and the secret is generated and discarded inside this gate.
   node scripts/doctor.mjs --url "$BASE" --email "$OWNER_EMAIL" \
-    --password "$OWNER_PASSWORD" --json >/tmp/freeholder-recipe-doctor.json
+    --password "$OWNER_PASSWORD" --enroll-totp --json >/tmp/freeholder-recipe-doctor.json
   doctor_status=$?
   set -e
   if [ "$doctor_status" -gt 1 ]; then
