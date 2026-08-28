@@ -78,17 +78,35 @@ for target in "${TARGETS[@]}"; do
     --password "$OWNER_PASSWORD" --enroll-totp --json >/tmp/freeholder-recipe-doctor.json
   doctor_status=$?
   set -e
-  if [ "$doctor_status" -gt 1 ]; then
-    cat /tmp/freeholder-recipe-doctor.json
-    exit "$doctor_status"
-  fi
+  # Doctor exits 2 whenever any check fails, and `env.appUrl` always fails
+  # here: this is a production build served on localhost, which is broken for
+  # a real deploy and correct for a throwaway container. Exiting on the status
+  # code alone therefore treated an expected failure as a broken image, and
+  # never reached the filter below that exists to judge *which* checks failed.
+  # public-gates.sh makes the same exemption in the same place, for the same
+  # reason, and this now matches it.
   node -e '
-    const report = JSON.parse(require("fs").readFileSync("/tmp/freeholder-recipe-doctor.json", "utf8"));
-    const failed = report.checks.filter((check) => check.verdict === "fail");
+    const fs = require("fs");
+    const raw = fs.readFileSync("/tmp/freeholder-recipe-doctor.json", "utf8");
+    let report;
+    try {
+      report = JSON.parse(raw);
+    } catch {
+      // No parseable report means doctor could not answer at all — a 403, a
+      // dead container — which is a different and worse failure than a check
+      // verdict, so say so rather than reporting zero failed checks.
+      console.error(`Doctor produced no report (exit ${process.argv[1]}):`);
+      console.error(raw);
+      process.exit(2);
+    }
+    const expected = new Set(["env.appUrl"]);
+    const failed = (report.checks ?? []).filter(
+      (check) => check.verdict === "fail" && !expected.has(check.id),
+    );
     if (failed.length) {
       console.error(failed.map((check) => `${check.id}: ${check.detail}`).join("\n"));
       process.exit(1);
     }
-  '
+  ' "$doctor_status"
   echo "${target}: image healthy; seeded setup claim and Doctor passed with no failures"
 done
