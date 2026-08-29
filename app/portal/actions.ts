@@ -287,3 +287,32 @@ export async function portalSignOutAction(): Promise<void> {
       : "/portal/login",
   );
 }
+
+/** Correct your own name or phone from the portal (C8.10). */
+export async function updatePortalProfileAction(form: FormData): Promise<void> {
+  const path = "/portal/profile";
+  try {
+    const { updateMyProfile } = await import("@/core/portal/service");
+    await updateMyProfile.call(
+      { name: field(form, "name"), phone: field(form, "phone") || null },
+      await currentPortalActor(),
+    );
+  } catch {
+    redirect(`${path}?error=1`);
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
+}
+
+/** Sign one other device out. The current session is ended by signing out. */
+export async function revokePortalSessionAction(form: FormData): Promise<void> {
+  const path = "/portal/profile";
+  try {
+    const { revokeSession } = await import("@/core/auth/session-management/service");
+    await revokeSession.call({ id: field(form, "id") }, await currentPortalActor());
+  } catch {
+    redirect(`${path}?error=1`);
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
+}

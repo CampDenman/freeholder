@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.09 review requests after purchases/bookings, moderation, replies, photo/video media, incentives, review-wall blocks and `AggregateRating` rules. |
+| Current focus | C8.11 portal quotes/contracts/invoices/payments, bookings/events/rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/referrals and messages, using the same services as admin. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5908,8 +5908,36 @@ permitted conversation on the same contact timeline.
 - [ ] **C8.09** Build review requests after purchases/bookings, moderation,
   replies, photo/video media, incentives, review-wall blocks and
   `AggregateRating` rules that never misrepresent hidden reviews.
-- [ ] **C8.10** Build the customer portal shell with magic-link/password auth,
+- [x] **C8.10** Build the customer portal shell with magic-link/password auth,
   profile, locale, consent/preferences, sessions and accessible navigation.
+  (Most of what this line names already existed and is reused rather than
+  rebuilt: `auth.requestCustomerMagicLink` / `auth.consumeCustomerMagicLink`
+  already mint a real session, `auth.login` accepts any user holding a
+  password hash, `auth.requestPasswordReset` is public so a customer created
+  with a null hash can set a first one, `auth.listSessions` /
+  `auth.revokeSession` are `authenticated` and so already a customer's,
+  `i18n.setMyLocale` persists `preferred_locale`, and `/portal/privacy` is
+  the consent and preference centre. What was missing was the shell itself —
+  `app/portal/` had nine token-addressed pages and no `layout.tsx` or
+  `page.tsx`. The locale action was already calling
+  `revalidatePath("/portal", "layout")` against a layout that did not exist.
+  `app/portal/layout.tsx` is that layout: a named `<nav>`, a skip link, sign
+  in/out, and `robots: noindex` because a portal is a person's own records
+  and never a search result. `/portal` is a short list of doors rather than
+  a dashboard — C8.11 fills the rooms, and promising them now would be a
+  menu of dead ends. `/portal/profile` carries details, password state and
+  signed-in devices.
+  The one genuine service gap was self-service identity: `contacts.update`
+  is the owner's tool and is staff-scoped. `portal.myProfile` and
+  `portal.updateMyProfile` are built around one rule — a customer may
+  correct what the business knows about them and may not become somebody
+  else. Email is the spine's identity (§4.1), so it is readable and not
+  writable: changing it would silently fork or merge two people's histories,
+  which is a merge the owner performs. `hasPassword` is exposed as a fact
+  and the hash never is. A staff account holds no contact row and is told
+  so, rather than being shown an empty shell that looks broken. Five tests
+  in `tests/core/portal-shell.test.ts`, one per rule. EN/FR/ES, 84 keys.
+  Changeset `portal-shell.md`.)
 - [ ] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
   rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
   referrals and messages using the same services as admin.
