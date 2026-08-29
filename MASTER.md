@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.11 portal quotes/contracts/invoices/payments, bookings/events/rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/referrals and messages, using the same services as admin. |
+| Current focus | C8.13 documents/files shared to contacts/projects/portal with versioning, access rules, expiry, download audit and export. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5982,9 +5982,57 @@ permitted conversation on the same contact timeline.
   so, rather than being shown an empty shell that looks broken. Five tests
   in `tests/core/portal-shell.test.ts`, one per rule. EN/FR/ES, 84 keys.
   Changeset `portal-shell.md`.)
-- [ ] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
+- [x] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
   rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
   referrals and messages using the same services as admin.
+  (**The last clause is the whole item**, and honouring it literally needed
+  a change to the permission model — the alternative was eight parallel
+  read paths, which is the drift the clause exists to prevent.
+  The obstacle: those queries already take a `contactId`, because an owner
+  needed to ask "what does this person have?", and a customer asking that
+  about themselves is the identical query with the identical filter. But
+  they are `permission: "scoped"`, so `ctx.call` refuses a customer, and
+  several call `requirePerson`, so `ctx.callAsSystem` refuses the platform.
+  Both guards are right and neither could simply be weakened.
+  So `ServiceDef` gains **`selfService: { contactField }`** — opt-in, per
+  service. Three things must hold and the framework checks all three, so no
+  module can get any of them wrong: the service opted in; it is a *query*,
+  so this can never widen what a customer may **do**; and the named field
+  is present and equals the caller's own contact. That last clause is the
+  one that matters — `contactId` is optional on every one of these services
+  and an absent filter means everybody, so a missing field is **refused**,
+  not ignored. `tests/core/portal-rooms.test.ts` tests exactly that case.
+  `permits()` is untouched and still pure. It cannot reach a database and
+  ownership is a fact about rows, so eligibility is decided beside it and
+  *verified inside the transaction* before the handler runs — which also
+  means the exhaustive permission matrix still describes the model.
+  The rooms themselves are a registry (`core/portal/sections.ts`), the
+  third use of the seam `contacts/lifecycle.ts` established. Core names no
+  domain; each module claims a room at import time. One route renders any
+  of them, which is §32's "structure is data" applied to the portal, and
+  the nav and home page list only rooms with something in them because a
+  navigation full of empty rooms teaches somebody the portal is empty.
+  **That is also the honest answer to the unbuilt clauses.** Subscriptions
+  and passes (C9.13–C9.16), referral earnings (C9.09–C9.10) and shared
+  files (C8.13) are not missing from the portal — they have not registered
+  a room yet, and will when those modules exist, without this code
+  changing. Loyalty registers its own once C9.11 lands. Eight rooms ship:
+  quotes, agreements, invoices, bookings, orders, hires, projects and
+  messages.
+  A room reports `failed` rather than returning empty. The first draft
+  caught the loader's error and returned no records, and an empty room is
+  indistinguishable from a room with nothing in it — so a permission bug
+  looked exactly like a customer with no quotes, and the feature appeared
+  to work. One module failing must not take the portal down, and must not
+  pass for good news either.
+  No links yet: `quotes.list` names its columns one by one specifically so
+  `view_token` cannot ride along into "every list, log and screenshot", and
+  a portal room is exactly such a list. The room shows the record and its
+  state, the emailed link still opens it, and session-authenticated record
+  pages are per-module work rather than something the registry can invent.
+  Twelve tests in `tests/core/portal-rooms.test.ts`, five of them on the
+  permission boundary rather than the portal. EN/FR/ES, 33 keys. Changeset
+  `portal-rooms.md`.)
 - [x] **C8.12** Build a CMS-backed help centre/knowledge base with categories,
   search, locale variants, feedback, SEO and owner editing.
   (Migration `0126_help_centre.sql`. There is no `help_articles` table,

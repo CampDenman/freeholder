@@ -24,6 +24,10 @@ import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { defineService, ServiceError, type Actor } from "@/core/service";
 import { contractDocuments, CONTRACT_KINDS, CONTRACT_STATUSES } from "./schema";
+// Claims this module's room in the customer portal (C8.11). Imported for
+// its side effect: core owns the registry so it never imports a module,
+// and something has to make the claim at load time.
+import "./portal";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -388,6 +392,11 @@ export const listContracts = defineService({
   summary: "Agreements issued, signed and outstanding.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({
     contactId: z.uuid().optional(),
     subjectType: z.string().trim().max(50).optional(),

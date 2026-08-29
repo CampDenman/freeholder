@@ -13,6 +13,10 @@ export { quoteTax } from "./tax-service";
 import briefingContributors from "@/modules/invoicing/briefing";
 
 import recurringServices from "./recurring-service";
+// Claims this module's room in the customer portal (C8.11). Imported for
+// its side effect: core owns the registry so it never imports a module,
+// and something has to make the claim at load time.
+import "./portal";
 
 export default [
   ...recurringServices,

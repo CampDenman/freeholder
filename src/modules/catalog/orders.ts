@@ -537,6 +537,11 @@ export const listOrders = defineService({
   summary: "Orders for the owner workspace or one contact.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({ contactId: id.optional() }),
   output: listed(orderRow),
   handler: (input, ctx) =>

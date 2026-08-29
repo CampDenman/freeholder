@@ -59,6 +59,10 @@ import {
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
+// Claims this module's room in the customer portal (C8.11). Imported for
+// its side effect: core owns the registry so it never imports a module,
+// and something has to make the claim at load time.
+import "./portal";
 
 /** What may follow what. Anything absent from this map is not a transition. */
 const NEXT: Record<string, readonly string[]> = {
@@ -871,6 +875,11 @@ export const listBookings = defineService({
   summary: "Appointments in a window, by calendar or by customer.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({
     calendarId: z.uuid().optional(),
     contactId: z.uuid().optional(),
