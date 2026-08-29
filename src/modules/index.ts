@@ -30,6 +30,7 @@ import rentalsManifest from "@/modules/rentals/manifest";
 import quotesManifest from "@/modules/quotes/manifest";
 import projectsManifest from "@/modules/projects/manifest";
 import galleriesManifest from "@/modules/galleries/manifest";
+import reviewsManifest from "@/modules/reviews/manifest";
 import crmManifest from "@/modules/crm/manifest";
 import giftRegistryManifest from "../../plugins/gift-registry/manifest";
 import printOnDemandManifest from "../../plugins/print-on-demand/manifest";
@@ -55,6 +56,7 @@ const manifests: ModuleManifest[] = [
   quotesManifest,
   projectsManifest,
   galleriesManifest,
+  reviewsManifest,
   crmManifest,
   giftRegistryManifest,
   printOnDemandManifest,

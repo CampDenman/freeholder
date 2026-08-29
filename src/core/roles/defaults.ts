@@ -50,6 +50,7 @@ const ADMIN_MODULES = [
   "projects",
   "quotes",
   "rentals",
+  "reviews",
   "roles",
   "scheduling",
   "seo",
