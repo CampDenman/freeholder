@@ -6113,7 +6113,16 @@ customer has one secure, comprehensible home for the relationship.
 - [ ] **C9.09** Build first-party attribution touches, codes, invitations,
   configurable first/last/position models, cookie windows and manual/QR entry.
 - [ ] **C9.10** Build commission events, holdbacks, refund reversal, payout
-  batches/CSV, tax-form status, portal earnings and one-hop enforcement.
+  batches/CSV, tax-form status, portal earnings and one-hop enforcement,
+  and dual-sided referral rewards that may pay in loyalty points.
+  (The last clause moved here from C9.12 on 2026-08-29. §4.13 states it
+  under *Referral and affiliate dynamics* — "A referrer may earn
+  commission, loyalty points, a pass, or a credit" — and it needs an
+  `AffiliateCode` and a `ReferralInvitation` to attach to, neither of which
+  exists before C9.09. C9.12 built the half that belongs to loyalty: a
+  reward is granted through `core/rewards/issue.ts`, so the referral rail
+  will call the same seam commerce already answers rather than growing a
+  second way to pay somebody.)
 - [x] **C9.11** Build loyalty programs, accounts and append-only points ledger,
   earn listeners/caps, reversal, expiry notices and explainable balances.
   (New `loyalty` module, migration `0127_loyalty.sql`. Tiers, rewards and
@@ -6166,8 +6175,47 @@ customer has one secure, comprehensible home for the relationship.
   one business and one person.
   Sixteen tests in `tests/modules/loyalty.test.ts`, driven through the bus
   the way the outbox drives it. Changeset `loyalty-points.md`.)
-- [ ] **C9.12** Build tiers/evaluation, rewards/redemption through normal money,
-  referral dual rewards, fraud controls and outstanding-liability reporting.
+- [x] **C9.12** Build tiers/evaluation, rewards/redemption through normal money,
+  fraud controls and outstanding-liability reporting.
+  (Migration `0128_loyalty_tiers_rewards.sql`, extending the C9.11 module.
+  **Referral dual rewards moved to C9.10**, where §4.13 actually states the
+  rule and where the rails it needs are built; the loyalty half of it —
+  granting a reward through a seam any rail can call — is here.
+  The hard part was the convergence rule: "Points become a coupon, a pass
+  balance, or a zero-value invoice line — never a parallel discount path."
+  That pulls against C9.11's other rule, that commerce must not know
+  loyalty exists — redemption has to produce a *real* coupon without
+  loyalty importing commerce, and without commerce importing loyalty
+  either, which would only reverse the dependency. `core/rewards/issue.ts`
+  is the answer and is the same shape as `contacts/lifecycle.ts`: core owns
+  a registry, catalog claims it at import time, loyalty asks core. Neither
+  module names the other anywhere.
+  With nothing registered the fallback neither throws nor silently
+  succeeds. `manual` is a real redemption status: on an instance with no
+  commerce module there is a voucher waiting to be written out, and calling
+  that "issued" is a lie the customer discovers at the till. The same
+  applies to a framed print — a coupon cannot express a physical product,
+  so the issuer returns null rather than handing somebody a discount code
+  where they were promised a photograph.
+  Tiers are evaluated, never assigned: `evaluateTier` is a pure function of
+  the ledger and a window, run on write and available on demand, so a tier
+  somebody was *put* in is a tier the next evaluation silently takes away.
+  The basis sums every movement except `redeem` and `expire` — spending
+  points must not cost somebody their standing, a reversal lowers it
+  because the thing that earned it was undone, and a goodwill adjustment
+  counts, since "we gave you 500 points to apologise but they do not count
+  towards Gold" is a distinction the customer cannot see. Promotion and
+  demotion reach the timeline so automations can act and the customer can
+  be told.
+  Redemption checks the balance from the rows rather than the cached
+  column, and everything that can refuse does so before anything is
+  written: programme, tier eligibility, stock, per-contact limit, the
+  balance itself, and §4.13's fraud floor of a minimum account age. The
+  ledger row and the coupon commit in one transaction, because a redemption
+  that debited points and then failed to produce anything is the single
+  worst outcome available here.
+  Sixteen tests in `tests/modules/loyalty-rewards.test.ts`; the C9.11 suite
+  passes unchanged. Changeset `loyalty-tiers-rewards.md`.)
 - [ ] **C9.13** Build plans, subscription lifecycle and events, provider/
   platform/manual billing, trials, proration, pause/cancel and portal self-service.
 - [ ] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
