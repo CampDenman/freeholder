@@ -74,7 +74,12 @@ fi
 # install" directly above a log line saying it had.
 installed=""
 for _ in $(seq 1 60); do
-  if docker logs fh-demo 2>&1 | grep -q "demo installed"; then
+  # Capture and match without a pipe. `docker logs … | grep -q` looks
+  # equivalent and is a SIGPIPE trap under `set -o pipefail`: grep exits at
+  # the first match while docker is still writing, docker dies on the closed
+  # pipe, and the pipeline reports 141 — an intermittent red build with no
+  # failing assertion anywhere in the log.
+  if [[ "$(docker logs fh-demo 2>&1)" == *"demo installed"* ]]; then
     installed="yes"
     break
   fi
@@ -85,7 +90,7 @@ if [ -z "$installed" ]; then
   docker logs fh-demo
   exit 1
 fi
-docker logs fh-demo 2>&1 | grep "demo installed"
+docker logs fh-demo 2>&1 | grep "demo installed" || true
 
 # C1.24, at the actual route boundary and before CI creates or repairs any
 # owner data: a database created above in this script must render the complete
