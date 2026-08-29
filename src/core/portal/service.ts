@@ -15,7 +15,7 @@
 // changing it would silently fork or merge two people's histories.
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { row, timestamp, uuid } from "@/core/contract";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 
@@ -114,4 +114,82 @@ export const updateMyProfile = defineService({
   },
 });
 
-export default [myProfile, updateMyProfile];
+
+/* -------------------------------------------------------------- the rooms */
+
+const portalRecord = row({
+  id: z.string(),
+  title: z.string(),
+  status: z.string().nullable(),
+  at: z.date().nullable(),
+  href: z.string().nullable(),
+  amountMinor: z.number().int().nullish(),
+  currency: z.string().nullish(),
+});
+
+const portalRoom = row({
+  key: z.string(),
+  count: z.number().int(),
+  records: z.array(portalRecord),
+  /**
+   * True when the room could not be read.
+   *
+   * Not decoration. The first draft caught the loader's error and returned
+   * an empty room, and an empty room is indistinguishable from a room with
+   * nothing in it — so a permission bug looked exactly like a customer with
+   * no quotes, and the feature appeared to work. One module failing still
+   * must not take the portal down, but it must not pass for good news.
+   */
+  failed: z.boolean(),
+});
+
+/**
+ * Every room a module has claimed, for the signed-in customer (C8.11).
+ *
+ * The contact is resolved from the session and never taken from the input —
+ * there is no parameter to point at somebody else, which is the shape that
+ * cannot be misused rather than the shape that checks whether it was.
+ *
+ * Each room's loader calls the module's own admin query with that contact id,
+ * because C8.11 asks for "the same services as admin" and those services
+ * already take a `contactId`: an owner asking "what does this person have?"
+ * and a customer asking it about themselves are the identical query.
+ */
+export const myRecords = defineService({
+  name: "portal.myRecords",
+  summary: "Everything the signed-in customer has with this business.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({
+    /** One room, or every room when absent. */
+    section: z.string().trim().max(40).optional(),
+    limit: z.number().int().min(1).max(200).default(50),
+  }),
+  output: listed(portalRoom),
+  handler: async (input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const { portalSection, portalSections } = await import("./sections");
+
+    const wanted = input.section
+      ? [portalSection(input.section)].filter((s) => s !== null)
+      : [...portalSections()];
+
+    const rooms = [];
+    for (const section of wanted) {
+      // A module whose loader throws must not take the whole portal down with
+      // it: the customer's other records are still true, and an empty room is
+      // a smaller failure than a page that will not render.
+      let records: Awaited<ReturnType<typeof section.load>> = [];
+      let failed = false;
+      try {
+        records = await section.load(ctx, contact.id, input.limit);
+      } catch {
+        failed = true;
+      }
+      rooms.push({ key: section.key, count: records.length, records, failed });
+    }
+    return rooms;
+  },
+});
+
+export default [myProfile, updateMyProfile, myRecords];

@@ -44,6 +44,10 @@ import {
   projectTestimonials,
   projects,
 } from "./schema";
+// Claims this module's room in the customer portal (C8.11). Imported for
+// its side effect: core owns the registry so it never imports a module,
+// and something has to make the claim at load time.
+import "./portal";
 
 const id = z.string().uuid();
 const slug = z
@@ -601,6 +605,11 @@ export const listProjects = defineService({
   summary: "Work in hand, and work finished.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({
     status: z.enum(PROJECT_STATUSES).optional(),
     contactId: id.optional(),
