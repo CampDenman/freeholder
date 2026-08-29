@@ -93,7 +93,7 @@ describe.runIf(hasDatabase)("the portal shell", { timeout: 90_000 }, () => {
     // Changing it would silently fork or merge two people's histories, which
     // is a merge the owner performs, not a text box.
     await updateMyProfile.call(
-      { name: "Rae", email: "someone.else@example.test" } as never,
+      { name: "Rae", email: "someone.else@example.test" },
       CUSTOMER,
     );
     const [after] = await db().select().from(contacts).where(eq(contacts.id, contact.id));
