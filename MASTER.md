@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.09 review requests after purchases/bookings, moderation, replies, photo/video media, incentives, review-wall blocks and `AggregateRating` rules. |
+| Current focus | C8.10 the customer portal shell: magic-link/password auth, profile, locale, consent/preferences, sessions and accessible navigation. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5905,9 +5905,40 @@ permitted conversation on the same contact timeline.
   ordinary shopping still merges, the sheet, the view ceiling and provenance
   surviving checkout; the existing cart, order and fulfilment suites pass
   unchanged. Changeset `gallery-sales.md`.)
-- [ ] **C8.09** Build review requests after purchases/bookings, moderation,
+- [x] **C8.09** Build review requests after purchases/bookings, moderation,
   replies, photo/video media, incentives, review-wall blocks and
   `AggregateRating` rules that never misrepresent hidden reviews.
+  (New `reviews` module, migration `0125_reviews.sql`. A `Review` is not the
+  `Testimonial` of §4.5: a testimonial is a quote the owner chose and is
+  proud of, a review is what a customer said whether or not the owner enjoys
+  reading it. Conflating them would let "curate the wall" become "delete the
+  ones under four stars".
+  **The last clause of this line is the design.** Moderation has four states
+  because two of them had to differ: `hidden` withholds a real opinion and
+  **still counts toward the rating**, while `rejected` says the text was
+  never a customer's opinion at all and counts toward nothing. Counting only
+  what is displayed would make withholding a one-star an act of rating
+  inflation; counting rejected spam would let anyone with an email address
+  move the number. `pending` counts too — unread is not the same as did not
+  happen, so leaving reviews unmoderated cannot hold the number up. The
+  aggregate is computed, never stored, because a cached average drifts from
+  its own reviews and this is the one number a reader is entitled to trust.
+  The wall reports `withheld` so a surface can say the list is shorter than
+  the count it is averaged from, and the block does say it.
+  Requests are one per person per subject — chasing somebody twice about one
+  purchase is how a request becomes spam — and re-asking returns the
+  existing ask rather than minting a second working link. Tokens are HMAC of
+  high-entropy random, as gallery guests are. Submissions arrive `pending`,
+  carry photo/video via `review_media`, and an incentivised review is
+  disclosed as one: a check constraint refuses to store a coupon without the
+  disclosure, because that is what regulators fine people for. The public
+  projection drops `contact_id`, so nobody can join two reviews to one
+  person. Automated paths call `contacts.resolve`; merge repoints reviews and
+  consolidates duplicate asks; erasure nulls the contact and the display name
+  and **keeps the rating**, because a business's public rating is not the
+  reviewer's personal data to withdraw. Eleven tests in
+  `tests/core/reviews.test.ts`, one per rule above. EN/FR/ES. Changeset
+  `reviews.md`.)
 - [ ] **C8.10** Build the customer portal shell with magic-link/password auth,
   profile, locale, consent/preferences, sessions and accessible navigation.
 - [ ] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
