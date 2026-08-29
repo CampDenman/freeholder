@@ -5939,8 +5939,49 @@ permitted conversation on the same contact timeline.
   reviewer's personal data to withdraw. Eleven tests in
   `tests/core/reviews.test.ts`, one per rule above. EN/FR/ES. Changeset
   `reviews.md`.)
-- [ ] **C8.10** Build the customer portal shell with magic-link/password auth,
+- [x] **C8.10** Build the customer portal shell with magic-link/password auth,
   profile, locale, consent/preferences, sessions and accessible navigation.
+  (Most of what this line names already existed and is reused rather than
+  rebuilt: `auth.requestCustomerMagicLink` / `auth.consumeCustomerMagicLink`
+  already mint a real session, `auth.login` accepts any user holding a
+  password hash, `auth.requestPasswordReset` is public so a customer created
+  with a null hash can set a first one, `auth.listSessions` /
+  `auth.revokeSession` are `authenticated` and so already a customer's,
+  `i18n.setMyLocale` persists `preferred_locale`, and `/portal/privacy` is
+  the consent and preference centre. What was missing was the shell itself —
+  `app/portal/` had nine token-addressed pages and no `layout.tsx` or
+  `page.tsx`. The locale action was already calling
+  `revalidatePath("/portal", "layout")` against a layout that did not exist.
+  `app/portal/(account)/layout.tsx` is that layout: a named `<nav>`, a skip
+  link, sign in/out, and `robots: noindex` because a portal is a person's
+  own records and never a search result. `/portal` is a short list of doors
+  rather than a dashboard — C8.11 fills the rooms, and promising them now
+  would be a menu of dead ends. `/portal/profile` carries details, password
+  state and signed-in devices.
+  **It is a route group, and that is the design rather than a detail.** The
+  layout first went in at `app/portal/layout.tsx`, where it wrapped all nine
+  existing pages — and the real-browser gate failed it, because each of
+  those pages already renders its own `<main>` and its own skip link: they
+  predate any shell and are whole documents. Two `<main>` landmarks is a
+  genuine defect, and the honest fix was not to strip nine working pages but
+  to notice they are not the account. A magic-linked agreement at
+  `/portal/agreements/[token]` is one document reached by one link, usually
+  by somebody not signed in; wrapping it in an account navigation it cannot
+  use would have been wrong even if the markup had been legal. The group
+  changes no URL, so the shell covers `/portal` and `/portal/profile` — and
+  whatever C8.11 adds beside them — while token-addressed surfaces stay
+  exactly as they were.
+  The one genuine service gap was self-service identity: `contacts.update`
+  is the owner's tool and is staff-scoped. `portal.myProfile` and
+  `portal.updateMyProfile` are built around one rule — a customer may
+  correct what the business knows about them and may not become somebody
+  else. Email is the spine's identity (§4.1), so it is readable and not
+  writable: changing it would silently fork or merge two people's histories,
+  which is a merge the owner performs. `hasPassword` is exposed as a fact
+  and the hash never is. A staff account holds no contact row and is told
+  so, rather than being shown an empty shell that looks broken. Five tests
+  in `tests/core/portal-shell.test.ts`, one per rule. EN/FR/ES, 84 keys.
+  Changeset `portal-shell.md`.)
 - [ ] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
   rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
   referrals and messages using the same services as admin.
