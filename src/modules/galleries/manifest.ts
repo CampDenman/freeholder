@@ -26,6 +26,7 @@ export default defineModule({
       "gallery.roundReopened",
       "gallery.archiveRequested",
       "gallery.ready",
+      "gallery.ordered",
     ],
   },
 });

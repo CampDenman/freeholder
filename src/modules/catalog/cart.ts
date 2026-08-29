@@ -6,7 +6,7 @@
 // contact's open cart so a phone and a laptop become one basket. Prices and
 // stock are refreshed on every read; they are never stored as truth.
 
-import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
@@ -66,6 +66,8 @@ const cartLineRow = row({
   locationId: uuid.nullable(),
   quantity: z.number().int(),
   reservationId: uuid.nullable(),
+  galleryId: uuid.nullable(),
+  assetId: uuid.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
   sku: z.string(),
@@ -408,6 +410,14 @@ export const addCartItem = defineService({
     variantId: id,
     quantity: z.number().int().min(1).max(1_000_000).default(1),
     locationId: id.optional(),
+    /**
+     * Where this line came from, when it came from a gallery (§4.5,
+     * C8.08). Supplied together or not at all, and the reason gallery
+     * sales need no commerce path of their own: the line is an ordinary
+     * cart line that happens to know which photograph it is for.
+     */
+    galleryId: id.optional(),
+    assetId: id.optional(),
   }),
   output: cartProjection,
   handler: async (input, ctx) => {
@@ -423,10 +433,27 @@ export const addCartItem = defineService({
     if (!variant || variant.status !== "active") {
       throw new ServiceError("not_found", "That variant is not here.");
     }
+    if (Boolean(input.galleryId) !== Boolean(input.assetId)) {
+      throw new ServiceError(
+        "validation",
+        "A gallery line needs both the gallery and the photograph.",
+      );
+    }
+    // Two photographs ordered as the same 8x10 are two lines, not one line
+    // of quantity two: the lab has to know which images to print. Ordinary
+    // shopping still matches on the variant alone and still merges.
     const [existing] = await ctx.tx
       .select()
       .from(cartItems)
-      .where(and(eq(cartItems.cartId, cart.id), eq(cartItems.variantId, input.variantId)))
+      .where(
+        and(
+          eq(cartItems.cartId, cart.id),
+          eq(cartItems.variantId, input.variantId),
+          input.assetId
+            ? eq(cartItems.assetId, input.assetId)
+            : isNull(cartItems.assetId),
+        ),
+      )
       .limit(1);
     const nextQty = (existing?.quantity ?? 0) + input.quantity;
     const locationId = input.locationId ?? existing?.locationId ?? null;
@@ -465,6 +492,8 @@ export const addCartItem = defineService({
         quantity: nextQty,
         locationId,
         reservationId,
+        galleryId: input.galleryId ?? null,
+        assetId: input.assetId ?? null,
       });
     }
     await ctx.tx

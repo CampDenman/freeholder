@@ -46,6 +46,7 @@ import {
   galleryGuests,
   galleryItems,
   galleryArchives,
+  galleryPriceSheetItems,
   galleryRounds,
   gallerySelections,
   gallerySessions,
@@ -249,6 +250,13 @@ function publicArchive(archive: typeof galleryArchives.$inferSelect) {
   const { storageKey: _storageKey, createdAt: _c, updatedAt: _u, ...rest } = archive;
   return rest;
 }
+
+const priceSheetRow = row({
+  id: uuid,
+  galleryId: uuid,
+  variantId: uuid,
+  position: z.number().int(),
+});
 
 const logRow = row({
   id: uuid,
@@ -1967,6 +1975,167 @@ export const downloadGalleryArchive = defineService({
   },
 });
 
+/**
+ * Offer a product on this gallery (§4.5, C8.08).
+ *
+ * A link and nothing more. The variant owns price, stock and tax; recording
+ * a second opinion here is how two answers to one question get shipped.
+ */
+export const addGalleryPriceSheetItem = defineService({
+  name: "galleries.addPriceSheetItem",
+  summary: "Offer a product variant for sale from this gallery.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({
+    galleryId: id,
+    variantId: id,
+    position: z.number().int().min(0).max(10_000).default(0),
+  }),
+  output: priceSheetRow,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const gallery = await loadGallery(ctx, input.galleryId);
+    const [saved] = await ctx.tx
+      .insert(galleryPriceSheetItems)
+      .values({
+        galleryId: gallery.id,
+        variantId: input.variantId,
+        position: input.position,
+      })
+      .onConflictDoUpdate({
+        target: [galleryPriceSheetItems.galleryId, galleryPriceSheetItems.variantId],
+        set: { position: input.position, updatedAt: new Date() },
+      })
+      .returning();
+    ctx.setSubject("gallery", gallery.id);
+    return saved!;
+  },
+});
+
+/** Stop offering a product from this gallery. */
+export const removeGalleryPriceSheetItem = defineService({
+  name: "galleries.removePriceSheetItem",
+  summary: "Stop offering a product variant from this gallery.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({ id }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const [removed] = await ctx.tx
+      .delete(galleryPriceSheetItems)
+      .where(eq(galleryPriceSheetItems.id, input.id))
+      .returning();
+    if (removed) ctx.setSubject("gallery", removed.galleryId);
+    return { ok: true as const };
+  },
+});
+
+/** What this gallery offers, for the owner and for the client's session. */
+export const listGalleryPriceSheet = defineService({
+  name: "galleries.listPriceSheet",
+  summary: "The products this gallery sells.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ galleryId: id }),
+  output: listed(priceSheetRow),
+  handler: async (input, ctx) => {
+    await loadGallery(ctx, input.galleryId);
+    return ctx.tx
+      .select()
+      .from(galleryPriceSheetItems)
+      .where(eq(galleryPriceSheetItems.galleryId, input.galleryId))
+      .orderBy(asc(galleryPriceSheetItems.position));
+  },
+});
+
+/**
+ * Buy a print of one photograph (§4.5, C8.08).
+ *
+ * Goes through `catalog.addCartItem` rather than beside it. §4.5 forbids a
+ * parallel commerce path, and this is what honouring that looks like: the
+ * gallery decides *what may be bought and of which frame*, and commerce
+ * decides price, stock, tax and the order — each answering only the question
+ * it owns.
+ *
+ * `ctx.call` keeps it in one transaction, so a cart line and the audit entry
+ * describing it cannot half-commit.
+ */
+export const addGalleryItemToCart = defineService({
+  name: "galleries.addToCart",
+  summary: "Add a print of one gallery photograph to a cart.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({
+    sessionToken: z.string().min(20).max(200),
+    itemId: id,
+    variantId: id,
+    cartId: id,
+    quantity: z.number().int().min(1).max(1_000).default(1),
+  }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const { session, gallery, guest } = await loadSession(ctx, input.sessionToken);
+    const [found] = await ctx.tx
+      .select({ item: galleryItems, asset: assets })
+      .from(galleryItems)
+      .innerJoin(assets, eq(assets.id, galleryItems.assetId))
+      .where(and(eq(galleryItems.id, input.itemId), eq(galleryItems.galleryId, gallery.id)))
+      .limit(1);
+    if (!found || found.asset.status !== "ready") {
+      throw new ServiceError("not_found", "That file is not in this gallery.");
+    }
+    // Buying follows the view ceiling. A frame this person cannot see is not
+    // one they can order a print of.
+    if (!itemAllowed(found.item, guest, "view")) {
+      throw new ServiceError("permission", "That file is not in this gallery.");
+    }
+    // Only what the owner put on the sheet. Without this the variant id is
+    // an open door onto the whole catalogue from a PIN-gated page.
+    const [offered] = await ctx.tx
+      .select({ id: galleryPriceSheetItems.id })
+      .from(galleryPriceSheetItems)
+      .where(
+        and(
+          eq(galleryPriceSheetItems.galleryId, gallery.id),
+          eq(galleryPriceSheetItems.variantId, input.variantId),
+        ),
+      )
+      .limit(1);
+    if (!offered) {
+      throw new ServiceError("permission", "That is not for sale from this gallery.");
+    }
+
+    await ctx.call(getService("catalog.addCartItem"), {
+      cartId: input.cartId,
+      variantId: input.variantId,
+      quantity: input.quantity,
+      galleryId: gallery.id,
+      assetId: found.asset.id,
+    });
+
+    ctx.setSubject("gallery", gallery.id);
+    if (session.contactId) {
+      await ctx.emitTimeline({
+        contactId: session.contactId,
+        eventType: "gallery.ordered",
+        subjectType: "gallery",
+        subjectId: gallery.id,
+        payload: { assetId: found.asset.id, variantId: input.variantId },
+      });
+    }
+    ctx.queueEvent("gallery.ordered", {
+      id: gallery.id,
+      assetId: found.asset.id,
+      variantId: input.variantId,
+    });
+    return { ok: true as const };
+  },
+});
+
 export const galleryBySlug = defineService({
   name: "galleries.publicBySlug",
   summary: "The lock screen facts for a gallery, never its files.",
@@ -2345,6 +2514,10 @@ export default [
   buildGalleryArchive,
   galleryArchiveState,
   downloadGalleryArchive,
+  addGalleryPriceSheetItem,
+  removeGalleryPriceSheetItem,
+  listGalleryPriceSheet,
+  addGalleryItemToCart,
   downloadGalleryItem,
   galleryBySlug,
   expireGallerySessions,

@@ -9,4 +9,5 @@ export {
   gallerySelections,
   galleryRounds,
   galleryArchives,
+  galleryPriceSheetItems,
 } from "./schema";
