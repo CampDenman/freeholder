@@ -6110,8 +6110,51 @@ customer has one secure, comprehensible home for the relationship.
 
 #### Referral, loyalty, subscriptions, and paywalls
 
-- [ ] **C9.09** Build first-party attribution touches, codes, invitations,
+- [x] **C9.09** Build first-party attribution touches, codes, invitations,
   configurable first/last/position models, cookie windows and manual/QR entry.
+  (New `referrals` module, migration `0129_referrals_attribution.sql`,
+  carrying §4.3's `AffiliateProgram` and `AffiliateCode` and §4.13's
+  `AttributionTouch` and `ReferralInvitation`. It records and attributes
+  and pays nobody: `CommissionEvent`, holdbacks and payout batches are
+  C9.10, which reads what this stores.
+  **Nothing stores a winner**, and that is the design rather than an
+  omission. §4.13: "`AttributionTouch` keeps the whole chain regardless, so
+  changing the model does not require re-running history — it re-reads
+  it." So the touches are the record, the model is a column on the
+  programme, and credit is computed at read time by a pure function over
+  the chain. An owner who switches from last-touch to first-touch on
+  Tuesday gets a different, correct answer about Monday, with no migration
+  and nobody's history rewritten — there is a test that does exactly that.
+  Credit comes back as **shares** rather than one winner, because
+  position-based genuinely splits it and C9.10 has to divide real money by
+  these numbers; a model that returned a single code would have forced
+  position-based to lie. Position-based is 40/20/40, with the two edges
+  handled deliberately: one touch takes everything, and two split evenly
+  rather than taking 40% each with a fifth going nowhere.
+  One table for every arrival (§4.13: "A code on a session, a scanned QR at
+  a market stall, a code typed at checkout, and an invitation accepted by
+  link all land in the same table"), so `recordTouch` is one public service
+  with a `kind` — four entry points would become four answers to "where did
+  this customer come from". `claimTouches` is what makes attribution
+  "survive the cookie": a touch recorded against the platform's own visitor
+  id in March is claimed by the contact created in May, so the chain read
+  is the real one rather than the part after a form was filled in.
+  **One hop only, refused by the data model rather than by policy.** There
+  is no parent column on `affiliate_codes` and no service that could build
+  a chain of referrers, and the test suite asserts the absence of the
+  column — a data model only refuses while something checks. Self-referral
+  is excluded in `attributionFor` rather than watched for later, because
+  the cheapest moment to say so is before the number reaches an invoice.
+  A code is unique globally: it is read off a card at a till, and two
+  meanings for one word is not a conflict anybody can resolve at that
+  moment. Invitation tokens are HMAC of high-entropy random, returned once
+  and stored only as a hash, as gallery guests and quote links are.
+  Merge repoints all three contact columns and is undoable. Erasure
+  **keeps the touch and removes the person** — an attribution chain is the
+  business's own record of where its customers came from, so the count is
+  not the individual's to withdraw, but the link to them is.
+  Fifteen tests in `tests/modules/referrals.test.ts`. Changeset
+  `referral-attribution.md`.)
 - [ ] **C9.10** Build commission events, holdbacks, refund reversal, payout
   batches/CSV, tax-form status, portal earnings and one-hop enforcement,
   and dual-sided referral rewards that may pay in loyalty points.
