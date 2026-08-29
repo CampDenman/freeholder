@@ -6108,11 +6108,109 @@ customer has one secure, comprehensible home for the relationship.
   Fifteen tests in `tests/modules/referrals.test.ts`. Changeset
   `referral-attribution.md`.)
 - [ ] **C9.10** Build commission events, holdbacks, refund reversal, payout
-  batches/CSV, tax-form status, portal earnings and one-hop enforcement.
-- [ ] **C9.11** Build loyalty programs, accounts and append-only points ledger,
+  batches/CSV, tax-form status, portal earnings and one-hop enforcement,
+  and dual-sided referral rewards that may pay in loyalty points.
+  (The last clause moved here from C9.12 on 2026-08-29. §4.13 states it
+  under *Referral and affiliate dynamics* — "A referrer may earn
+  commission, loyalty points, a pass, or a credit" — and it needs an
+  `AffiliateCode` and a `ReferralInvitation` to attach to, neither of which
+  exists before C9.09. C9.12 built the half that belongs to loyalty: a
+  reward is granted through `core/rewards/issue.ts`, so the referral rail
+  will call the same seam commerce already answers rather than growing a
+  second way to pay somebody.)
+- [x] **C9.11** Build loyalty programs, accounts and append-only points ledger,
   earn listeners/caps, reversal, expiry notices and explainable balances.
-- [ ] **C9.12** Build tiers/evaluation, rewards/redemption through normal money,
-  referral dual rewards, fraud controls and outstanding-liability reporting.
+  (New `loyalty` module, migration `0127_loyalty.sql`. Tiers, rewards and
+  redemption are C9.12 and are deliberately absent.
+  **`requires: ["core"]`, and that is the feature.** §4.13: "Earning is a
+  listener on spine events, never a call from inside another module …
+  Commerce does not know loyalty exists." The converse has to hold too or
+  the independence is only rhetorical, so this module imports no catalog,
+  no bookings and no quotes: a business running none of them still has a
+  working programme, and one running all of them did not wire anything up.
+  That required solving a gap the checklist line hides. A bus event does
+  not carry what earning needs — `catalog.orderPaid` is `{ orderId }` and
+  nothing more — so a handler must either import the emitting module (which
+  inverts the rule) or read the **spine row** the same mutation wrote.
+  `emitTimeline` runs inside the transaction and `queueEvent` publishes
+  only after it commits, so by the time a listener runs the TimelineEvent
+  is there, carrying the contact and the money. `spine.ts` is that seam and
+  the only place the mapping lives; `EarnRule.event_type` is therefore a
+  `timeline_events.event_type`, not a topic. The wildcard listener exists
+  and is **not** used, because its own documentation says it is "a fan-out
+  seam, not a way for a module to observe another module's traffic, which
+  §11 routes through named events on purpose."
+  Points are a ledger and the balance is a sum of it. Nothing in the module
+  reads `points_balance_cached` — it is refreshed after every append and
+  used only for display, because the first time a cache and a ledger
+  disagree the customer is holding the ledger. `loyalty.statement` returns
+  the balance *and* the rows behind it from one service, since §4.13's
+  requirement is that a balance be explainable and a number without its
+  workings is exactly what customers stop believing.
+  A retried delivery cannot pay twice: a partial unique index on (rule,
+  source) where reason is `earn` makes the second insert a no-op. Reversal
+  writes the negative row citing the original and never deletes, and a
+  refund delivered twice reverses once. Caps trim an award to the headroom
+  left in the period rather than refusing it, because a partial reward is
+  honest and a silent zero is not.
+  Expiry refuses to be configured without notice **in the contract** — the
+  zod union has no member with `days` and no `noticeDays` — so there is no
+  handler that could forget the rule. The job gives notice as a delta-zero
+  ledger row, so "we told you on the 3rd" sits in the customer's statement
+  in its place in time, and expires only once the notice period has since
+  elapsed: noticing and expiring in one pass would meet the letter of
+  "gives notice first" and none of its purpose.
+  Merge moves the duplicate's ledger onto the survivor's account rather
+  than repointing a second account into a unique-index collision, so no
+  points are lost — the reason the ledger is the record. That merge is
+  recorded as **not undoable**: once two ledgers are combined the rows are
+  indistinguishable, and inventing a split would be worse than saying so.
+  Erasure removes the account and its ledger rather than anonymising them,
+  because unlike a public review a balance is a private arrangement between
+  one business and one person.
+  Sixteen tests in `tests/modules/loyalty.test.ts`, driven through the bus
+  the way the outbox drives it. Changeset `loyalty-points.md`.)
+- [x] **C9.12** Build tiers/evaluation, rewards/redemption through normal money,
+  fraud controls and outstanding-liability reporting.
+  (Migration `0128_loyalty_tiers_rewards.sql`, extending the C9.11 module.
+  **Referral dual rewards moved to C9.10**, where §4.13 actually states the
+  rule and where the rails it needs are built; the loyalty half of it —
+  granting a reward through a seam any rail can call — is here.
+  The hard part was the convergence rule: "Points become a coupon, a pass
+  balance, or a zero-value invoice line — never a parallel discount path."
+  That pulls against C9.11's other rule, that commerce must not know
+  loyalty exists — redemption has to produce a *real* coupon without
+  loyalty importing commerce, and without commerce importing loyalty
+  either, which would only reverse the dependency. `core/rewards/issue.ts`
+  is the answer and is the same shape as `contacts/lifecycle.ts`: core owns
+  a registry, catalog claims it at import time, loyalty asks core. Neither
+  module names the other anywhere.
+  With nothing registered the fallback neither throws nor silently
+  succeeds. `manual` is a real redemption status: on an instance with no
+  commerce module there is a voucher waiting to be written out, and calling
+  that "issued" is a lie the customer discovers at the till. The same
+  applies to a framed print — a coupon cannot express a physical product,
+  so the issuer returns null rather than handing somebody a discount code
+  where they were promised a photograph.
+  Tiers are evaluated, never assigned: `evaluateTier` is a pure function of
+  the ledger and a window, run on write and available on demand, so a tier
+  somebody was *put* in is a tier the next evaluation silently takes away.
+  The basis sums every movement except `redeem` and `expire` — spending
+  points must not cost somebody their standing, a reversal lowers it
+  because the thing that earned it was undone, and a goodwill adjustment
+  counts, since "we gave you 500 points to apologise but they do not count
+  towards Gold" is a distinction the customer cannot see. Promotion and
+  demotion reach the timeline so automations can act and the customer can
+  be told.
+  Redemption checks the balance from the rows rather than the cached
+  column, and everything that can refuse does so before anything is
+  written: programme, tier eligibility, stock, per-contact limit, the
+  balance itself, and §4.13's fraud floor of a minimum account age. The
+  ledger row and the coupon commit in one transaction, because a redemption
+  that debited points and then failed to produce anything is the single
+  worst outcome available here.
+  Sixteen tests in `tests/modules/loyalty-rewards.test.ts`; the C9.11 suite
+  passes unchanged. Changeset `loyalty-tiers-rewards.md`.)
 - [ ] **C9.13** Build plans, subscription lifecycle and events, provider/
   platform/manual billing, trials, proration, pause/cancel and portal self-service.
 - [ ] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
