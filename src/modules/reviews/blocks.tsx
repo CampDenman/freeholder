@@ -71,7 +71,7 @@ export const reviewWall = defineBlock({
                   {ctx.t("reviews.rating.outOf", { rating: review.rating })}
                 </span>
                 {review.displayName ? (
-                  <span className="ml-2 font-medium text-ink">{review.displayName}</span>
+                  <span className="ms-2 font-medium text-ink">{review.displayName}</span>
                 ) : null}
               </p>
               {review.title ? <p className="mt-1 font-semibold">{review.title}</p> : null}
@@ -82,7 +82,7 @@ export const reviewWall = defineBlock({
                 </p>
               ) : null}
               {review.replyBody ? (
-                <p className="mt-2 border-l-2 border-rule pl-3 text-sm text-ink-muted">
+                <p className="mt-2 border-s-2 border-rule ps-3 text-sm text-ink-muted">
                   {review.replyBody}
                 </p>
               ) : null}
