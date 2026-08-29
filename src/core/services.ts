@@ -32,6 +32,7 @@ import duplicateServices from "@/core/contacts/duplicates";
 import organizationServices from "@/core/contacts/organizations";
 import relationshipServices from "@/core/contacts/relationships";
 import privacyServices from "@/core/privacy/service";
+import portalServices from "@/core/portal/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
 import outboxServices from "@/core/events/outbox-service";
@@ -120,6 +121,7 @@ const services: Service[] = [
   ...organizationServices,
   ...relationshipServices,
   ...privacyServices,
+  ...portalServices,
   ...doctorServices,
   ...eventServices,
   ...outboxServices,
