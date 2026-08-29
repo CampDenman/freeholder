@@ -36,6 +36,7 @@ const INTERNAL = [
   "media.registerStoredOriginal",
   "messaging.applySmsEvents",
   "notifications.create",
+  "referrals.claimTouches",
 ] as const;
 
 const wildcard: Actor = {

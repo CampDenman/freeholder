@@ -904,6 +904,13 @@
       "when": 1788710400000,
       "tag": "0128_loyalty_tiers_rewards",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1788796800000,
+      "tag": "0129_referrals_attribution",
+      "breakpoints": true
     }
   ]
 }
