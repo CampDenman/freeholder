@@ -61,6 +61,17 @@ time. Fixing one failure only ever revealed the next:
    `env.appUrl` fails in a throwaway container and should: it is a production
    build on localhost. It now reasons about *which* checks failed.
 
+**Run `pnpm gates` before every push.** It runs everything CI checks that is
+cheap: typecheck, lint, license headers, the changelog gate, the plan gate,
+and the static-contract suites (locale/RTL, token contrast, block fields,
+CMS a11y, the a11y smoke test, the internal-service inventory). About four
+minutes, and lint is most of it. Three separate red pipelines in this
+session were things on that list, each reported locally in seconds by a gate
+that was already in the repository — the gates were not missing, running
+them was. A green `pnpm gates` means "nothing cheap is broken", never "CI
+will pass": the browser, recipe, SEO and upgrade gates are not in it,
+because they cannot run here at all.
+
 **Do not calibrate any of these limits from a local run.** Docker is not
 installed on the development machine, so the recipe, SEO and upgrade gates
 cannot be exercised locally at all; CI is the only place they run.
