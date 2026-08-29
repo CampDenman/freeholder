@@ -10,8 +10,8 @@ import { myProfile } from "@/core/portal/service";
 import { listSessions } from "@/core/auth/session-management/service";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
-import { getLocale, getT } from "../../i18n";
-import { revokePortalSessionAction, updatePortalProfileAction } from "../actions";
+import { getLocale, getT } from "../../../i18n";
+import { revokePortalSessionAction, updatePortalProfileAction } from "../../actions";
 
 export const dynamic = "force-dynamic";
 

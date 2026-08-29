@@ -13,8 +13,8 @@ import { actorFromToken } from "@/core/http/actor";
 import { myProfile } from "@/core/portal/service";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
-import { getLocale, getT } from "../i18n";
-import { PortalLocaleChooser } from "./PortalLocaleChooser";
+import { getLocale, getT } from "../../i18n";
+import { PortalLocaleChooser } from "../PortalLocaleChooser";
 
 export const dynamic = "force-dynamic";
 

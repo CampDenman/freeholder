@@ -5921,12 +5921,25 @@ permitted conversation on the same contact timeline.
   `app/portal/` had nine token-addressed pages and no `layout.tsx` or
   `page.tsx`. The locale action was already calling
   `revalidatePath("/portal", "layout")` against a layout that did not exist.
-  `app/portal/layout.tsx` is that layout: a named `<nav>`, a skip link, sign
-  in/out, and `robots: noindex` because a portal is a person's own records
-  and never a search result. `/portal` is a short list of doors rather than
-  a dashboard — C8.11 fills the rooms, and promising them now would be a
-  menu of dead ends. `/portal/profile` carries details, password state and
-  signed-in devices.
+  `app/portal/(account)/layout.tsx` is that layout: a named `<nav>`, a skip
+  link, sign in/out, and `robots: noindex` because a portal is a person's
+  own records and never a search result. `/portal` is a short list of doors
+  rather than a dashboard — C8.11 fills the rooms, and promising them now
+  would be a menu of dead ends. `/portal/profile` carries details, password
+  state and signed-in devices.
+  **It is a route group, and that is the design rather than a detail.** The
+  layout first went in at `app/portal/layout.tsx`, where it wrapped all nine
+  existing pages — and the real-browser gate failed it, because each of
+  those pages already renders its own `<main>` and its own skip link: they
+  predate any shell and are whole documents. Two `<main>` landmarks is a
+  genuine defect, and the honest fix was not to strip nine working pages but
+  to notice they are not the account. A magic-linked agreement at
+  `/portal/agreements/[token]` is one document reached by one link, usually
+  by somebody not signed in; wrapping it in an account navigation it cannot
+  use would have been wrong even if the markup had been legal. The group
+  changes no URL, so the shell covers `/portal` and `/portal/profile` — and
+  whatever C8.11 adds beside them — while token-addressed surfaces stay
+  exactly as they were.
   The one genuine service gap was self-service identity: `contacts.update`
   is the owner's tool and is staff-scoped. `portal.myProfile` and
   `portal.updateMyProfile` are built around one rule — a customer may

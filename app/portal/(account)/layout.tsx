@@ -13,11 +13,11 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
-import { getLocale, getT } from "../i18n";
+import { getLocale, getT } from "../../i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
 import { SkipLink } from "@/ui/SkipLink";
-import { portalSignOutAction } from "./actions";
+import { portalSignOutAction } from "../actions";
 
 export const metadata: Metadata = {
   // A portal is a person's own records. It is never a search result.
