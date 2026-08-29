@@ -6114,8 +6114,58 @@ customer has one secure, comprehensible home for the relationship.
   configurable first/last/position models, cookie windows and manual/QR entry.
 - [ ] **C9.10** Build commission events, holdbacks, refund reversal, payout
   batches/CSV, tax-form status, portal earnings and one-hop enforcement.
-- [ ] **C9.11** Build loyalty programs, accounts and append-only points ledger,
+- [x] **C9.11** Build loyalty programs, accounts and append-only points ledger,
   earn listeners/caps, reversal, expiry notices and explainable balances.
+  (New `loyalty` module, migration `0127_loyalty.sql`. Tiers, rewards and
+  redemption are C9.12 and are deliberately absent.
+  **`requires: ["core"]`, and that is the feature.** §4.13: "Earning is a
+  listener on spine events, never a call from inside another module …
+  Commerce does not know loyalty exists." The converse has to hold too or
+  the independence is only rhetorical, so this module imports no catalog,
+  no bookings and no quotes: a business running none of them still has a
+  working programme, and one running all of them did not wire anything up.
+  That required solving a gap the checklist line hides. A bus event does
+  not carry what earning needs — `catalog.orderPaid` is `{ orderId }` and
+  nothing more — so a handler must either import the emitting module (which
+  inverts the rule) or read the **spine row** the same mutation wrote.
+  `emitTimeline` runs inside the transaction and `queueEvent` publishes
+  only after it commits, so by the time a listener runs the TimelineEvent
+  is there, carrying the contact and the money. `spine.ts` is that seam and
+  the only place the mapping lives; `EarnRule.event_type` is therefore a
+  `timeline_events.event_type`, not a topic. The wildcard listener exists
+  and is **not** used, because its own documentation says it is "a fan-out
+  seam, not a way for a module to observe another module's traffic, which
+  §11 routes through named events on purpose."
+  Points are a ledger and the balance is a sum of it. Nothing in the module
+  reads `points_balance_cached` — it is refreshed after every append and
+  used only for display, because the first time a cache and a ledger
+  disagree the customer is holding the ledger. `loyalty.statement` returns
+  the balance *and* the rows behind it from one service, since §4.13's
+  requirement is that a balance be explainable and a number without its
+  workings is exactly what customers stop believing.
+  A retried delivery cannot pay twice: a partial unique index on (rule,
+  source) where reason is `earn` makes the second insert a no-op. Reversal
+  writes the negative row citing the original and never deletes, and a
+  refund delivered twice reverses once. Caps trim an award to the headroom
+  left in the period rather than refusing it, because a partial reward is
+  honest and a silent zero is not.
+  Expiry refuses to be configured without notice **in the contract** — the
+  zod union has no member with `days` and no `noticeDays` — so there is no
+  handler that could forget the rule. The job gives notice as a delta-zero
+  ledger row, so "we told you on the 3rd" sits in the customer's statement
+  in its place in time, and expires only once the notice period has since
+  elapsed: noticing and expiring in one pass would meet the letter of
+  "gives notice first" and none of its purpose.
+  Merge moves the duplicate's ledger onto the survivor's account rather
+  than repointing a second account into a unique-index collision, so no
+  points are lost — the reason the ledger is the record. That merge is
+  recorded as **not undoable**: once two ledgers are combined the rows are
+  indistinguishable, and inventing a split would be worse than saying so.
+  Erasure removes the account and its ledger rather than anonymising them,
+  because unlike a public review a balance is a private arrangement between
+  one business and one person.
+  Sixteen tests in `tests/modules/loyalty.test.ts`, driven through the bus
+  the way the outbox drives it. Changeset `loyalty-points.md`.)
 - [ ] **C9.12** Build tiers/evaluation, rewards/redemption through normal money,
   referral dual rewards, fraud controls and outstanding-liability reporting.
 - [ ] **C9.13** Build plans, subscription lifecycle and events, provider/
