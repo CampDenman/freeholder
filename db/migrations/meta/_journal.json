@@ -911,6 +911,13 @@
       "when": 1788796800000,
       "tag": "0129_referrals_attribution",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1788883200000,
+      "tag": "0130_ad_inventory",
+      "breakpoints": true
     }
   ]
 }

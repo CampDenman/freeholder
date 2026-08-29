@@ -6270,8 +6270,49 @@ customer has one secure, comprehensible home for the relationship.
 
 #### Advertising, assistant, social, and sharing
 
-- [ ] **C9.17** Build ad sizes/slots, breakpoint reservations, advertisers,
+- [x] **C9.17** Build ad sizes/slots, breakpoint reservations, advertisers,
   campaigns, line items, targeting/dayparting/frequency caps and approvals.
+  (New `ads` module, migration `0130_ad_inventory.sql`. It is the inventory
+  and the paperwork and it **serves nothing** — creatives, house fill, the
+  signed click-out and the counting are C9.18 and C9.19, third-party tags
+  and `ads.txt` are C9.20. Keeping them apart is deliberate: an owner can
+  sell and schedule a campaign before anything renders, which is the order
+  the work actually happens in.
+  §4.16's spine rule is the one that shapes the module: "`Advertiser` … **A
+  `Contact`**, not a separate customer table." So `advertisers` carries a
+  `contact_id` and nothing that duplicates a contact, and a local business
+  that both advertises and buys prints is one person here. `saveAdvertiser`
+  is an automated path, so it calls `contacts.resolve`.
+  `formats` lives on the slot rather than on the block that places it: one
+  slot, many pages, one answer about how tall to leave the hole. §4.16
+  wants the space reserved because "an ad that arrives late and pushes the
+  article down is a Core Web Vitals failure", and `ads.slotByCode` is the
+  public read that tells a page the shape — **and nothing else**. Reserved
+  space is a layout fact, not a disclosure, so the projection drops
+  `allow_third_party` and even `status`; a test asserts their absence.
+  Targeting, dayparting, frequency caps and flight windows are **pure
+  functions in `targeting.ts`**, tested without a database. Deciding which
+  ad runs is the part an advertiser disputes and an owner has to explain,
+  and a decision assembled inline in a query is one nobody can test a case
+  against. Two rules are worth naming: an unstated condition is not a
+  condition (the alternative turns a half-filled form into a campaign that
+  silently never runs), and a daypart may cross midnight, because a
+  late-night sponsor running 22:00–02:00 is a real thing somebody will
+  configure. The path language is `*` within a segment and `**` across
+  them, deliberately not a regular expression — an owner types these into a
+  form, and a targeting rule that can hang the server is not a feature.
+  Approval gates going live, and **a house promotion does not need one**:
+  it is the owner's own, and asking them to approve it would be ceremony,
+  which is what makes people switch a gate off.
+  One correction to the plan text, made while building: §4.16 says standard
+  sizes "ship seeded", and the first draft seeded them in the migration.
+  That is wrong in a way only a truncate reveals — reference data existing
+  only in a migration cannot be restored, so a test helper, a reset or a
+  restore leaves a publisher with no sizes and no way back short of editing
+  SQL. The list lives in TypeScript, `ads.ensureSizes` applies it
+  idempotently, and the module answers `settings.setupCompleted` with it —
+  the same seam cms already uses. The failing test is what found it.
+  Nineteen tests in `tests/modules/ads.test.ts`. Changeset `ad-inventory.md`.)
 - [ ] **C9.18** Build house/sold creatives, money-path invoices, labelled
   sponsored markup, signed click redirect and house fill.
 - [ ] **C9.19** Build first-party impression/viewability/unique/click events,
