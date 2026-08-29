@@ -328,6 +328,31 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    * agent is never invited to guess a password.
    */
   mcpExclude?: boolean;
+  /**
+   * C8.11: a signed-in customer may run this **query** about themselves.
+   *
+   * The portal is meant to be a second audience for the owner's queries
+   * rather than a second implementation of them — and those queries already
+   * take a contact id, because an owner needed to ask "what does this
+   * person have?". A customer asking that about themselves is the identical
+   * query with the identical filter. Without this, the portal would have to
+   * grow a parallel read path per domain, which is the drift C8.11 exists
+   * to prevent.
+   *
+   * Three things have to hold, and the framework checks all three so a
+   * module cannot get any of them wrong:
+   *
+   *   - the service opted in, here, by naming the field that carries the
+   *     contact id;
+   *   - it is a query, so this can never widen what a customer may *do*;
+   *   - the field is **present** and equals the caller's own contact.
+   *
+   * That last clause is the one that matters most. `contactId` is optional
+   * on every one of these services and an absent filter means "everybody",
+   * so treating a missing field as harmless would hand a customer the whole
+   * table. Absent is refused, not ignored.
+   */
+  selfService?: { contactField: string };
   handler: (input: z.output<In>, ctx: ServiceContext) => Promise<Out>;
 }
 
@@ -350,7 +375,17 @@ export function defineService<In extends z.ZodType, Out>(
       actor: Actor,
       options?: ServiceCallOptions,
     ): Promise<Out> {
-      if (!permits(actor, def.permission, def.name, def.kind)) {
+      // Ownership cannot be decided by `permits`: it is pure by design, and
+      // whether this contact belongs to this user is a fact about rows. So
+      // eligibility is decided here and *verified inside the transaction*,
+      // below, before the handler runs.
+      const viaSelfService =
+        def.selfService !== undefined &&
+        def.kind === "query" &&
+        actor.kind === "user" &&
+        !permits(actor, def.permission, def.name, def.kind);
+
+      if (!viaSelfService && !permits(actor, def.permission, def.name, def.kind)) {
         // Written for whoever reads it, which is a business owner looking at a
         // form that just refused them — not the author of this file. The old
         // message ("anonymous may not call settings.updateBusiness.") reached
@@ -443,6 +478,30 @@ export function defineService<In extends z.ZodType, Out>(
       let subject: { subjectType: string; subjectId: string } | undefined;
 
       const run = async (tx: Tx): Promise<Out> => {
+        // A caller who got here only because the service is self-service has
+        // proved nothing yet. Prove it now, against the same transaction the
+        // handler is about to read from.
+        if (viaSelfService && actor.kind === "user") {
+          const { contacts } = await import("@/core/contacts/schema");
+          const { eq } = await import("drizzle-orm");
+          const asked = (parsed.data as Record<string, unknown>)[
+            def.selfService!.contactField
+          ];
+          const [own] = await tx
+            .select({ id: contacts.id })
+            .from(contacts)
+            .where(eq(contacts.userId, actor.userId))
+            .limit(1);
+          if (!own || typeof asked !== "string" || asked !== own.id) {
+            // One message for "you are not a customer", "you asked about
+            // somebody else" and "you asked about everybody". Distinguishing
+            // them would tell a prober which contact ids exist.
+            throw new ServiceError(
+              "permission",
+              "You can only see your own records.",
+            );
+          }
+        }
         const ctx: ServiceContext = {
           tx,
           actor,

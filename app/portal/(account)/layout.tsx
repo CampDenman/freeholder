@@ -13,6 +13,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
+import { myRecords } from "@/core/portal/service";
 import { getLocale, getT } from "../../i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
@@ -43,8 +44,19 @@ export default async function PortalLayout({
   const href = (path: string) =>
     business ? localizeCustomerHref(path, locale, business) : path;
 
+  // The rooms come from the registry rather than a list here, so a module
+  // arriving later is reachable without this file changing (C8.11). Only
+  // rooms with something in them are shown: a navigation full of empty
+  // rooms teaches somebody that the portal is empty.
+  const rooms = signedIn
+    ? await myRecords.call({ limit: 1 }, actor).catch(() => [])
+    : [];
+
   const links = [
     { path: "/portal", label: t("portal.nav.home") },
+    ...rooms
+      .filter((room) => room.count > 0)
+      .map((room) => ({ path: `/portal/${room.key}`, label: t(`portal.room.${room.key}`) })),
     { path: "/portal/profile", label: t("portal.nav.profile") },
     { path: "/portal/privacy", label: t("portal.nav.privacy") },
   ];
