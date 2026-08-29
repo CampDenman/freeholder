@@ -34,6 +34,9 @@ export default defineModule({
       "loyalty.pointsReversed",
       "loyalty.pointsExpired",
       "loyalty.expiryNoticed",
+      "loyalty.redeemed",
+      "loyalty.promoted",
+      "loyalty.demoted",
     ],
     listens: {
       // Earning moments.

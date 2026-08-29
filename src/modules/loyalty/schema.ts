@@ -67,6 +67,13 @@ export const loyaltyPrograms = pgTable(
       .default("opt_in"),
     /** The page carrying the terms. A programme with no terms is a promise. */
     termsPageId: uuid("terms_page_id"),
+    /**
+     * How old an account must be before it may redeem (§4.13: "a minimum
+     * account age before redemption"). Zero is allowed and is a decision;
+     * the point is that it is a number the owner set rather than an absence
+     * nobody noticed.
+     */
+    minAccountAgeDays: integer("min_account_age_days").notNull().default(0),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -146,8 +153,17 @@ export const loyaltyAccounts = pgTable(
       .references(() => loyaltyPrograms.id, { onDelete: "cascade" }),
     /** Display only. Every decision sums the ledger; see the file header. */
     pointsBalanceCached: integer("points_balance_cached").notNull().default(0),
-    /** Earned ever, never reduced by redemption. Tier basis in C9.12. */
+    /** Earned ever, never reduced by redemption. One tier basis (§4.13). */
     lifetimePoints: integer("lifetime_points").notNull().default(0),
+    /**
+     * Where they stand. Derived by `evaluateTier` from the ledger and a
+     * window, never set by hand — a tier somebody was put in is a tier the
+     * next evaluation silently takes away.
+     */
+    tierId: uuid("tier_id"),
+    tierSince: timestamp("tier_since", { withTimezone: true }),
+    /** When this standing lapses if the window's earning is not repeated. */
+    tierExpiresAt: timestamp("tier_expires_at", { withTimezone: true }),
     enrolledAt: timestamp("enrolled_at", { withTimezone: true }).notNull().defaultNow(),
     /** The last spine event that moved this account, for inactivity expiry. */
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true })
@@ -209,5 +225,109 @@ export const pointsLedger = pgTable(
       .where(sql`${t.reason} = 'earn'`),
     index("points_ledger_reverses_idx").on(t.reversesId),
     index("points_ledger_expiry_idx").on(t.expiresAt),
+  ],
+);
+
+/**
+ * Status levels (§4.13, C9.12).
+ *
+ * A tier is a *threshold*, not a flag on a person: `evaluateTier` is "a pure
+ * function of the ledger and a window", so the answer to "why am I Gold" is
+ * always the same rows that answer "why do I have 400 points".
+ */
+export const loyaltyTiers = pgTable(
+  "loyalty_tiers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id")
+      .notNull()
+      .references(() => loyaltyPrograms.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    thresholdBasis: text("threshold_basis", {
+      enum: ["points_earned", "lifetime_spend"],
+    })
+      .notNull()
+      .default("points_earned"),
+    /** Points, or minor units of spend, depending on the basis. */
+    threshold: integer("threshold").notNull(),
+    /**
+     * How far back the threshold looks. Zero means all time — the
+     * difference between "you spent this much last year" and "you spent this
+     * much once, in 2019".
+     */
+    windowDays: integer("window_days").notNull().default(365),
+    /** `{ pointsMultiplier?, freeShipping?, earlyAccess?, perks[] }`. */
+    benefits: jsonb("benefits").notNull().default({}),
+    /** Ascending seniority. Position 0 is the entry tier. */
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("loyalty_tiers_program_position_idx").on(t.programId, t.position),
+    index("loyalty_tiers_program_idx").on(t.programId),
+  ],
+);
+
+/** What points buy (§4.13). */
+export const rewards = pgTable(
+  "rewards",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id")
+      .notNull()
+      .references(() => loyaltyPrograms.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    kind: text("kind", {
+      enum: ["discount", "free_product", "free_shipping", "gift_card", "pass_credits", "donation"],
+    }).notNull(),
+    /** Never negative and never zero: a free reward is not a redemption. */
+    costPoints: integer("cost_points").notNull(),
+    /** `{ percentOffPpm?, amountMinor?, currency?, productId? }`. */
+    value: jsonb("value").notNull().default({}),
+    /** Null is unlimited. A number is decremented as they are taken. */
+    stock: integer("stock"),
+    perContactLimit: integer("per_contact_limit"),
+    /** Empty means every tier, including no tier at all. */
+    eligibleTierIds: jsonb("eligible_tier_ids").notNull().default([]),
+    status: text("status", { enum: ["draft", "active", "retired"] })
+      .notNull()
+      .default("draft"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [index("rewards_program_status_idx").on(t.programId, t.status)],
+);
+
+/**
+ * A reward actually taken.
+ *
+ * `issuedReference` is what the customer presents — a coupon code, an
+ * invoice. `issuedBy` records which module produced it, or "manual" when
+ * nothing could, because a redemption nobody can honour must say so rather
+ * than look identical to one that worked.
+ */
+export const redemptions = pgTable(
+  "redemptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => loyaltyAccounts.id, { onDelete: "cascade" }),
+    rewardId: uuid("reward_id")
+      .notNull()
+      .references(() => rewards.id, { onDelete: "restrict" }),
+    pointsSpent: integer("points_spent").notNull(),
+    ledgerId: uuid("ledger_id"),
+    issuedReference: text("issued_reference"),
+    issuedBy: text("issued_by"),
+    status: text("status", { enum: ["issued", "manual", "used", "expired", "reversed"] })
+      .notNull()
+      .default("issued"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("redemptions_account_idx").on(t.accountId, t.at),
+    index("redemptions_reward_idx").on(t.rewardId),
   ],
 );

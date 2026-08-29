@@ -25,6 +25,29 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import { contacts } from "@/core/contacts/schema";
 import { earnRules, loyaltyAccounts, loyaltyPrograms, pointsLedger } from "./schema";
 import { SPINE_SOURCES, spineFactFor } from "./spine";
+// Tiers, rewards and redemption (C9.12). A sibling file rather than a
+// second module: they are the same programme, and a redemption reads the
+// same ledger an earn writes.
+export {
+  catalogue,
+  redeem,
+  redemptionHistory,
+  reevaluateTier,
+  saveReward,
+  saveTier,
+  tiers,
+  evaluateTier,
+} from "./rewards-service";
+import {
+  catalogue,
+  redeem,
+  redemptionHistory,
+  reevaluateTier,
+  saveReward,
+  saveTier,
+  tiers,
+  evaluateTier,
+} from "./rewards-service";
 
 /* ------------------------------------------------------------ the ledger */
 
@@ -145,6 +168,8 @@ export const saveProgram = defineService({
     expiryPolicy,
     enrolment: z.enum(["automatic", "opt_in"]).default("opt_in"),
     termsPageId: uuidSchema.nullish(),
+    /** §4.13's fraud floor: how old an account must be to redeem (C9.12). */
+    minAccountAgeDays: z.number().int().min(0).max(3650).default(0),
   }),
   output: programRow,
   handler: async (input, ctx) => {
@@ -157,6 +182,7 @@ export const saveProgram = defineService({
       expiryPolicy: input.expiryPolicy,
       enrolment: input.enrolment,
       termsPageId: input.termsPageId ?? null,
+      minAccountAgeDays: input.minAccountAgeDays,
     };
     if (input.id) {
       const [updated] = await ctx.tx
@@ -610,6 +636,10 @@ export async function onSpineEvent(payload: unknown, eventName?: string): Promis
           .onConflictDoNothing();
       }
       await refreshCache(tx, accountId);
+      // Run on write, as §4.13 asks. The notification of a change belongs
+      // to `reevaluateTier`, which has a service context to emit from; here
+      // the standing is simply kept true.
+      await evaluateTier(tx, accountId);
     }
   });
 }
@@ -784,4 +814,11 @@ export default [
   myStatement,
   adjustPoints,
   liability,
+  catalogue,
+  redeem,
+  redemptionHistory,
+  reevaluateTier,
+  saveReward,
+  saveTier,
+  tiers,
 ];
