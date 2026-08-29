@@ -899,6 +899,13 @@
       "breakpoints": true
     },
     {
+      "idx": 128,
+      "version": "7",
+      "when": 1788710400000,
+      "tag": "0128_loyalty_tiers_rewards",
+      "breakpoints": true
+    },
+    {
       "idx": 130,
       "version": "7",
       "when": 1788883200000,
