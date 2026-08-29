@@ -160,6 +160,11 @@ import fulfillmentServices, {
   requestReturn,
   shipFulfillment,
 } from "./fulfillment";
+// Registers this module as the thing that can turn a redeemed reward into a
+// real coupon (§4.13's convergence rule). Imported for its side effect: the
+// registry lives in core precisely so loyalty and catalog never import each
+// other, and something has to make the claim at load time.
+import "./reward-issuer";
 import promotionServices, {
   applyCouponToCart,
   applyGiftCardToInvoice,
