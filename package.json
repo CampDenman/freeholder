@@ -22,6 +22,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "gates": "node scripts/fast-gates.mjs",
     "test:a11y": "playwright test tests/browser/accessibility.spec.ts --config playwright.a11y.config.ts",
     "test:journeys": "playwright test tests/browser/journeys.spec.ts --config playwright.a11y.config.ts",
     "test:browser": "playwright test --config playwright.a11y.config.ts",
