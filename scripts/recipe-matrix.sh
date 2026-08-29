@@ -56,11 +56,23 @@ for target in "${TARGETS[@]}"; do
     exit 1
   fi
 
+  # Capture and match without a pipe: see the note in public-gates.sh.
+  # `docker logs … | grep -q` takes SIGPIPE when grep exits on the first
+  # match while docker is still writing, which `set -o pipefail` turns into
+  # exit 141 and `set -e` turns into a red build with nothing failing in it.
+  installed=""
   for _ in $(seq 1 60); do
-    docker logs freeholder-recipe-gate 2>&1 | grep -q "demo installed" && break
+    if [[ "$(docker logs freeholder-recipe-gate 2>&1)" == *"demo installed"* ]]; then
+      installed="yes"
+      break
+    fi
     sleep 1
   done
-  docker logs freeholder-recipe-gate 2>&1 | grep -q "demo installed"
+  if [ -z "$installed" ]; then
+    echo "${target}: the demo did not install"
+    docker logs freeholder-recipe-gate
+    exit 1
+  fi
 
   created=$(curl -sS -o /tmp/freeholder-recipe-owner.json -w '%{http_code}' \
     -H 'content-type: application/json' \
