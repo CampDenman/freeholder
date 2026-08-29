@@ -748,26 +748,44 @@ registerContactReference({
       }
     }
   },
-  captureForUndo: async (tx, duplicateId, survivingId) => ({
-    state: {
-      accounts: await tx
-        .select()
-        .from(loyaltyAccounts)
-        .where(
-          or(
-            eq(loyaltyAccounts.contactId, duplicateId),
-            eq(loyaltyAccounts.contactId, survivingId),
-          ),
-        ),
-    },
-    // A merge that moved a ledger cannot be undone by moving it back: the
-    // rows are indistinguishable once combined, and inventing a split would
-    // be worse than saying so. Undo is honest about that rather than
-    // silently reconstructing a balance nobody can vouch for.
-    undoable: false,
-  }),
-  restoreAfterUndo: async () => {
-    /* Not undoable; see captureForUndo. */
+  captureForUndo: async (tx, duplicateId, survivingId) => {
+    const mine = await tx
+      .select()
+      .from(loyaltyAccounts)
+      .where(eq(loyaltyAccounts.contactId, duplicateId));
+    const theirs = await tx
+      .select({ programId: loyaltyAccounts.programId })
+      .from(loyaltyAccounts)
+      .where(eq(loyaltyAccounts.contactId, survivingId));
+    const survivorPrograms = new Set(theirs.map((a) => a.programId));
+
+    // Only a merge that actually *combined* two ledgers is irreversible:
+    // once the rows sit on one account they are indistinguishable, and
+    // inventing a split would be worse than saying so. Repointing an
+    // account whose programme the survivor was not in moves nothing
+    // together and undoes perfectly — and declaring every merge
+    // irreversible because loyalty is installed would take undo away from
+    // instances where no points were involved at all.
+    const combined = mine.some((a) => survivorPrograms.has(a.programId));
+    return {
+      state: { accounts: mine.map((a) => ({ id: a.id, programId: a.programId })) },
+      undoable: !combined,
+    };
+  },
+  restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
+    const parsed = z
+      .object({
+        accounts: z.array(z.object({ id: z.string().uuid(), programId: z.string().uuid() })),
+      })
+      .parse(beforeState);
+    for (const account of parsed.accounts) {
+      // Undo only reaches here when nothing was combined, so each of these
+      // is still its own row and goes back to the contact it came from.
+      await tx
+        .update(loyaltyAccounts)
+        .set({ contactId: duplicateId })
+        .where(eq(loyaltyAccounts.id, account.id));
+    }
   },
 });
 

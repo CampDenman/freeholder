@@ -100,10 +100,18 @@ export type SpineFact = {
   currency: string | null;
 };
 
+/** Ids on this platform are uuids; anything else is not ours to match. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function subjectIdFrom(payload: unknown, idKey: string): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const value = (payload as Record<string, unknown>)[idKey];
-  return typeof value === "string" ? value : null;
+  if (typeof value !== "string") return null;
+  // Checked rather than assumed. `contact_id` is a uuid column, so a bus
+  // event carrying anything else made the query *throw* — which turned
+  // somebody else's ordinary mutation into a dead-lettered event. Declining
+  // is the behaviour the rest of this file already promises.
+  return UUID.test(value) ? value : null;
 }
 
 /** Money lives under different names on different events; take the first. */
