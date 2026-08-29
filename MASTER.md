@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.10 the customer portal shell: magic-link/password auth, profile, locale, consent/preferences, sessions and accessible navigation. |
+| Current focus | C8.11 portal quotes/contracts/invoices/payments, bookings/events/rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/referrals and messages, using the same services as admin. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5939,13 +5939,94 @@ permitted conversation on the same contact timeline.
   reviewer's personal data to withdraw. Eleven tests in
   `tests/core/reviews.test.ts`, one per rule above. EN/FR/ES. Changeset
   `reviews.md`.)
-- [ ] **C8.10** Build the customer portal shell with magic-link/password auth,
+- [x] **C8.10** Build the customer portal shell with magic-link/password auth,
   profile, locale, consent/preferences, sessions and accessible navigation.
+  (Most of what this line names already existed and is reused rather than
+  rebuilt: `auth.requestCustomerMagicLink` / `auth.consumeCustomerMagicLink`
+  already mint a real session, `auth.login` accepts any user holding a
+  password hash, `auth.requestPasswordReset` is public so a customer created
+  with a null hash can set a first one, `auth.listSessions` /
+  `auth.revokeSession` are `authenticated` and so already a customer's,
+  `i18n.setMyLocale` persists `preferred_locale`, and `/portal/privacy` is
+  the consent and preference centre. What was missing was the shell itself —
+  `app/portal/` had nine token-addressed pages and no `layout.tsx` or
+  `page.tsx`. The locale action was already calling
+  `revalidatePath("/portal", "layout")` against a layout that did not exist.
+  `app/portal/(account)/layout.tsx` is that layout: a named `<nav>`, a skip
+  link, sign in/out, and `robots: noindex` because a portal is a person's
+  own records and never a search result. `/portal` is a short list of doors
+  rather than a dashboard — C8.11 fills the rooms, and promising them now
+  would be a menu of dead ends. `/portal/profile` carries details, password
+  state and signed-in devices.
+  **It is a route group, and that is the design rather than a detail.** The
+  layout first went in at `app/portal/layout.tsx`, where it wrapped all nine
+  existing pages — and the real-browser gate failed it, because each of
+  those pages already renders its own `<main>` and its own skip link: they
+  predate any shell and are whole documents. Two `<main>` landmarks is a
+  genuine defect, and the honest fix was not to strip nine working pages but
+  to notice they are not the account. A magic-linked agreement at
+  `/portal/agreements/[token]` is one document reached by one link, usually
+  by somebody not signed in; wrapping it in an account navigation it cannot
+  use would have been wrong even if the markup had been legal. The group
+  changes no URL, so the shell covers `/portal` and `/portal/profile` — and
+  whatever C8.11 adds beside them — while token-addressed surfaces stay
+  exactly as they were.
+  The one genuine service gap was self-service identity: `contacts.update`
+  is the owner's tool and is staff-scoped. `portal.myProfile` and
+  `portal.updateMyProfile` are built around one rule — a customer may
+  correct what the business knows about them and may not become somebody
+  else. Email is the spine's identity (§4.1), so it is readable and not
+  writable: changing it would silently fork or merge two people's histories,
+  which is a merge the owner performs. `hasPassword` is exposed as a fact
+  and the hash never is. A staff account holds no contact row and is told
+  so, rather than being shown an empty shell that looks broken. Five tests
+  in `tests/core/portal-shell.test.ts`, one per rule. EN/FR/ES, 84 keys.
+  Changeset `portal-shell.md`.)
 - [ ] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
   rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
   referrals and messages using the same services as admin.
-- [ ] **C8.12** Build a CMS-backed help centre/knowledge base with categories,
+- [x] **C8.12** Build a CMS-backed help centre/knowledge base with categories,
   search, locale variants, feedback, SEO and owner editing.
+  (Migration `0126_help_centre.sql`. There is no `help_articles` table,
+  because §4.6 already decided there must not be one: "The help centre is
+  the CMS, not a second CMS. A HelpArticle is a Page with a category and a
+  helpfulness counter." So an article is a row in `pages` carrying a
+  `help_category_id` — the choice `sections.kind` already made: one object,
+  one discriminator, listed separately in admin because that is the only
+  place the difference matters. What it inherits, none of it written twice:
+  the block editor, locale variants, per-page SEO, the working copy,
+  scheduling, approval, the publish flow, the catch-all route and the
+  sitemap. A separate table would have had to reimplement each one and then
+  keep up with it forever — and an article proves the inheritance by
+  refusing to publish without exactly one H1, the same rule every page
+  obeys. Only `help_categories` is new, per-locale like the pages it
+  arranges.
+  Search is `ilike` over the title, trigram-indexed, **and over the body**.
+  The body is a block tree, so rather than denormalise it into a column that
+  drifts from the blocks it was copied from, the query asks Postgres for
+  every string in the jsonb at query time: it cannot go stale and there is
+  no write path to remember. The cost is a scan on the body half, which is
+  the right trade at help-centre scale and is documented at the call site.
+  Helpfulness is two integer counters and no comment box, because §4.6 is
+  explicit that "a free-text box is a support queue nobody staffed, and an
+  unanswered one is worse than none" — there is no text column for one to
+  be added to. `cms.helpArticleFeedback` sorts most-`no` first, so the
+  article worth an afternoon is the first an owner sees, and articles nobody
+  rated sort last because no signal is not no problem. A vote on a draft is
+  refused: a draft has no readers, so it came from guessing ids.
+  `deleteHelpCategory` is `writeClass: "destructive"` and destroys nothing
+  — the FK is `on delete set null`, so the articles stay published at the
+  same address, uncategorised, and it reports how many.
+  The `knowledge` block — one of the two passing mentions §4.6 records — is
+  upgraded in place rather than joined by a second listing block, because
+  two blocks that both list help articles is the forbidden second CMS
+  arriving through the palette instead of the schema. With no categories
+  defined it still lists by slug prefix exactly as before, so no existing
+  page loses its index. Search is a GET form and the vote is a server action
+  that redirects with a flag, so the public surface stays the unhydrated
+  HTML §5 and the SEO gate depend on.
+  Twelve tests in `tests/modules/help-centre.test.ts`, one per rule.
+  EN/FR/ES, 27 keys. Changeset `help-centre.md`.)
 - [ ] **C8.13** Build documents/files shared to contacts/projects/portal with
   versioning, access rules, expiry, download audit and export.
 

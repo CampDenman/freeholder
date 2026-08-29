@@ -101,7 +101,32 @@ import { draftPageTranslation, pageTranslationReport } from "./translation-workf
 export { previewEmail, testSendEmail } from "./email-service";
 import { previewEmail, testSendEmail } from "./email-service";
 export { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
+// The help centre (C8.12). Sibling file, one module: an article is a page,
+// so these services sit beside the page services rather than in a module of
+// their own (§4.6).
+export {
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  helpArticleAt,
+  searchHelp,
+} from "./help-service";
 import { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
+import {
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleAt,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  searchHelp,
+} from "./help-service";
 import { analyzeAccessibility, publishA11yMessage } from "./a11y-hints";
 import { budgetMessage } from "./budgets";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
@@ -1479,6 +1504,15 @@ export default [
   previewSms,
   sendSmsTemplate,
   testSendSms,
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleAt,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  searchHelp,
   listRevisions,
   pageAuthorSummary,
   restoreRevision,

@@ -19,16 +19,32 @@ the live number — it is the only count that is not a guess.
 
 ### Landed on `main`
 
-Five PRs merged on 2026-08-27/28, each green across all eighteen CI steps:
+Seven PRs merged on 2026-08-27/28, each green across all eighteen CI steps:
 
 - **#207** C7.12–C8.02, plus the CI repair described below
 - **#208** C8.03 private client galleries, and an audit of them
 - **#209** C8.04 watermarked variants and a `download_policy` that is read
 - **#210** C8.05 client proofing (`GallerySelection`)
-- **#211** C8.06 approval rounds *(in flight at the time of writing)*
+- **#211** C8.06 approval rounds
+- **#212** C8.07 archive delivery and its notifications
 
-`feat/c8.07-archive-delivery` holds C8.07 — archive delivery and its
-notifications — committed and locally verified, awaiting #211.
+**192 of the 274 §43 items are checked; 82 remain.**
+
+### In flight: a three-deep stack
+
+Three branches are committed, locally verified, and stacked — each on the
+one before it, so they merge in order and each needs `main` merged in after
+the one below it lands:
+
+- `feat/c8.08-gallery-sales` — **#213**, C8.08 print and digital sales
+- `feat/c8.09-reviews` — C8.09 collected customer feedback, no PR yet
+- `feat/c8.10-portal-shell` — C8.10 the customer portal shell, no PR yet
+
+The two without PRs are deliberate: opening them now would show cumulative
+diffs against `main` and re-run three full pipelines for one change. Open
+each once the one below it has merged. All three carry the SIGPIPE fix in
+item 7 below, cherry-picked, so their first pipeline is not exposed to it —
+expect that commit to be a no-op by the time the upper two merge.
 
 ### The CI pipeline was not running
 
@@ -60,6 +76,19 @@ time. Fixing one failure only ever revealed the next:
 6. The same gate then exited on Doctor's status code rather than its verdict.
    `env.appUrl` fails in a throwaway container and should: it is a production
    build on localhost. It now reasons about *which* checks failed.
+7. Both the recipe gate and the public gates waited for the demo with
+   `docker logs <container> | grep -q "demo installed"`, which is a SIGPIPE
+   trap under `set -o pipefail`: `grep -q` exits on the first match, docker —
+   still writing — dies on the closed pipe, and the pipeline reports 141. It
+   presents as `Process completed with exit code 141` with **no failing**
+   **assertion anywhere in the log**, and it is a race, so it passes on
+   re-run. It cost two red builds (#211, #213) before the pattern was clear.
+   **Never pipe a long-running writer into an early-exiting reader in a**
+   **`pipefail` script.** Capture into a variable and match with `[[ ==
+   *glob* ]]`. Piping from `echo` is fine; the writer is already finished.
+
+A red build with nothing failing in it is the signature of the environment,
+not of the code — check for 141 before you go looking for a regression.
 
 **Run `pnpm gates` before every push.** It runs everything CI checks that is
 cheap: typecheck, lint, license headers, the changelog gate, the plan gate,
@@ -78,9 +107,13 @@ cannot be exercised locally at all; CI is the only place they run.
 
 ### Next item
 
-**C8.08** — print/digital gallery sales through catalog/cart/orders,
-preserving asset/product/selection provenance. C8.05's selections and C8.06's
-approved rounds are the natural input: what the client chose is what they buy.
+**C8.11** — fill the portal rooms C8.10 deliberately left out: quotes,
+contracts, invoices and payments; bookings, events and rentals; galleries
+and files; orders and returns; subscriptions and passes; loyalty and
+referrals; messages. Each reads through the same services admin uses —
+the portal is a second audience for them, never a second implementation.
+Do not start it on top of the stack above; land the stack first, or it
+becomes four deep.
 
 `RESTART_HANDOFF.md` is pre-existing untracked scratch. Do not modify or stage
 it.

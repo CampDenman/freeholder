@@ -196,42 +196,8 @@ export const share = defineBlock({
   },
 });
 
-export const knowledge = defineBlock({
-  type: "knowledge",
-  labelKey: "cms.block.knowledge",
-  contexts: ["page"],
-  schema: z.object({
-    prefix: z.string().trim().min(1).max(40).default("help"),
-  }),
-  starter: () => ({ prefix: "help" }),
-  resolve: async (props) => {
-    const { publishedPaths } = await import("../service");
-    const rows = await publishedPaths.call({}, { kind: "anonymous" });
-    const prefix = props.prefix.replace(/^\/+|\/+$/g, "");
-    return rows.filter(
-      (row) => row.slug === prefix || row.slug.startsWith(`${prefix}/`),
-    );
-  },
-  render: ({ resolved, ctx }) => {
-    if (!resolved || resolved.length === 0) return null;
-    return (
-      <nav aria-label={ctx.t("cms.block.knowledge")}>
-        <ul className="grid list-none gap-2 p-0">
-          {resolved.map((page) => (
-            <li key={page.slug}>
-              <a
-                href={ctx.localizeHref?.(page.slug === "" ? "/" : `/${page.slug}`) ?? `/${page.slug}`}
-                className="font-semibold text-ink"
-              >
-                {page.title}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-    );
-  },
-});
+// The knowledge block moved to ./help.tsx when C8.12 turned it from a slug
+// listing into the help centre proper.
 
 /* ---------------------------------------------------------------- C2.09 */
 
