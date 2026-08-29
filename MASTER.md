@@ -5985,8 +5985,48 @@ permitted conversation on the same contact timeline.
 - [ ] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
   rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
   referrals and messages using the same services as admin.
-- [ ] **C8.12** Build a CMS-backed help centre/knowledge base with categories,
+- [x] **C8.12** Build a CMS-backed help centre/knowledge base with categories,
   search, locale variants, feedback, SEO and owner editing.
+  (Migration `0126_help_centre.sql`. There is no `help_articles` table,
+  because §4.6 already decided there must not be one: "The help centre is
+  the CMS, not a second CMS. A HelpArticle is a Page with a category and a
+  helpfulness counter." So an article is a row in `pages` carrying a
+  `help_category_id` — the choice `sections.kind` already made: one object,
+  one discriminator, listed separately in admin because that is the only
+  place the difference matters. What it inherits, none of it written twice:
+  the block editor, locale variants, per-page SEO, the working copy,
+  scheduling, approval, the publish flow, the catch-all route and the
+  sitemap. A separate table would have had to reimplement each one and then
+  keep up with it forever — and an article proves the inheritance by
+  refusing to publish without exactly one H1, the same rule every page
+  obeys. Only `help_categories` is new, per-locale like the pages it
+  arranges.
+  Search is `ilike` over the title, trigram-indexed, **and over the body**.
+  The body is a block tree, so rather than denormalise it into a column that
+  drifts from the blocks it was copied from, the query asks Postgres for
+  every string in the jsonb at query time: it cannot go stale and there is
+  no write path to remember. The cost is a scan on the body half, which is
+  the right trade at help-centre scale and is documented at the call site.
+  Helpfulness is two integer counters and no comment box, because §4.6 is
+  explicit that "a free-text box is a support queue nobody staffed, and an
+  unanswered one is worse than none" — there is no text column for one to
+  be added to. `cms.helpArticleFeedback` sorts most-`no` first, so the
+  article worth an afternoon is the first an owner sees, and articles nobody
+  rated sort last because no signal is not no problem. A vote on a draft is
+  refused: a draft has no readers, so it came from guessing ids.
+  `deleteHelpCategory` is `writeClass: "destructive"` and destroys nothing
+  — the FK is `on delete set null`, so the articles stay published at the
+  same address, uncategorised, and it reports how many.
+  The `knowledge` block — one of the two passing mentions §4.6 records — is
+  upgraded in place rather than joined by a second listing block, because
+  two blocks that both list help articles is the forbidden second CMS
+  arriving through the palette instead of the schema. With no categories
+  defined it still lists by slug prefix exactly as before, so no existing
+  page loses its index. Search is a GET form and the vote is a server action
+  that redirects with a flag, so the public surface stays the unhydrated
+  HTML §5 and the SEO gate depend on.
+  Twelve tests in `tests/modules/help-centre.test.ts`, one per rule.
+  EN/FR/ES, 27 keys. Changeset `help-centre.md`.)
 - [ ] **C8.13** Build documents/files shared to contacts/projects/portal with
   versioning, access rules, expiry, download audit and export.
 
