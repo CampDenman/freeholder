@@ -260,6 +260,11 @@ export const checkoutCart = defineService({
         unitAmountMinor: line.unitAmountMinor!,
         lineTotalMinor: line.lineTotalMinor!,
         snapshot: { sku: line.sku, productName: line.productName, requiresShipping: line.requiresShipping },
+        // Provenance survives checkout, or it was never provenance: the
+        // owner has to know which gallery and which frame an order line is
+        // for long after the cart is gone.
+        galleryId: line.galleryId ?? null,
+        assetId: line.assetId ?? null,
       });
     }
 

@@ -383,3 +383,39 @@ export const galleryArchives = pgTable(
     ),
   ],
 );
+
+/**
+ * What a gallery sells, and for how much (§4.5, C8.08).
+ *
+ * §4.5 is explicit: "`GalleryItem` links to `ProductVariant` price sheets →
+ * standard `Order` flow. No parallel commerce path." So this table is a link
+ * and nothing more — no prices, no stock, no tax rules of its own. The variant
+ * already knows all of that, and a second opinion about the price of an 8×10
+ * is how two answers to one question get shipped.
+ *
+ * Scoped to the gallery rather than the item: a photographer sells the same
+ * sizes across a delivery, and per-frame pricing is a menu nobody wants to
+ * maintain forty times.
+ */
+export const galleryPriceSheetItems = pgTable(
+  "gallery_price_sheet_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    galleryId: uuid("gallery_id")
+      .notNull()
+      .references(() => galleries.id, { onDelete: "cascade" }),
+    /**
+     * Untyped on purpose. The galleries module must work with catalog
+     * switched off (§11), so this records the id without importing the table
+     * and taking a hard dependency on commerce.
+     */
+    variantId: uuid("variant_id").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("gallery_price_sheet_unique_idx").on(t.galleryId, t.variantId),
+    index("gallery_price_sheet_order_idx").on(t.galleryId, t.position),
+  ],
+);

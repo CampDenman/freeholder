@@ -3136,7 +3136,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.08 print/digital gallery sales through catalog/cart/orders, preserving asset/product/selection provenance. |
+| Current focus | C8.09 review requests after purchases/bookings, moderation, replies, photo/video media, incentives, review-wall blocks and `AggregateRating` rules. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -5875,8 +5875,36 @@ permitted conversation on the same contact timeline.
   container was also verified against an outside implementation
   (PowerShell `Expand-Archive`) during development. EN/FR/ES. Changeset
   `gallery-archive-delivery.md`.)
-- [ ] **C8.08** Add print/digital gallery sales through catalog/cart/orders and
+- [x] **C8.08** Add print/digital gallery sales through catalog/cart/orders and
   preserve asset/product/selection provenance.
+  (Migration `0124_gallery_sales.sql`. §4.5 is explicit — "`GalleryItem`
+  links to `ProductVariant` price sheets → standard `Order` flow. No
+  parallel commerce path" — so `gallery_price_sheet_items` is a link and
+  nothing else. The variant already owns price, stock and tax; a second
+  opinion about the price of an 8×10 is how two answers to one question get
+  shipped. `variant_id` is deliberately untyped, because the galleries
+  module must work with catalog switched off (§11).
+  Selling runs through `catalog.addCartItem` via `ctx.call`, not beside it:
+  the gallery decides what may be bought and of which frame, commerce
+  decides everything else, and both sit in one transaction.
+  **Provenance is the substance of this item and it needed a commerce
+  change to be real.** `cart_items` was unique on `(cart_id, variant_id)`,
+  so two photographs ordered as the same print would have merged into one
+  line of quantity two and the lab would have had no idea which images to
+  print. That index is replaced by two partial ones: ordinary shopping still
+  merges on the variant alone, and a gallery line is unique per photograph.
+  `gallery_id` and `asset_id` ride on `cart_items` and `order_items` as
+  columns rather than inside `order_items.snapshot`, because "which orders
+  came from this gallery" is a question the owner asks and a jsonb blob
+  cannot answer it with an index. A check constraint keeps the pair whole:
+  a print of nothing is not a line anybody can fulfil.
+  Buying follows the C8.03 view ceiling, and only what the owner put on the
+  sheet can be bought — otherwise a variant id is an open door onto the
+  whole catalogue from a PIN-gated page. Six tests in
+  `tests/core/gallery-sales.test.ts` cover the two-lines guarantee, that
+  ordinary shopping still merges, the sheet, the view ceiling and provenance
+  surviving checkout; the existing cart, order and fulfilment suites pass
+  unchanged. Changeset `gallery-sales.md`.)
 - [ ] **C8.09** Build review requests after purchases/bookings, moderation,
   replies, photo/video media, incentives, review-wall blocks and
   `AggregateRating` rules that never misrepresent hidden reviews.
