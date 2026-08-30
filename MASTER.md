@@ -6155,9 +6155,35 @@ customer has one secure, comprehensible home for the relationship.
   not the individual's to withdraw, but the link to them is.
   Fifteen tests in `tests/modules/referrals.test.ts`. Changeset
   `referral-attribution.md`.)
-- [ ] **C9.10** Build commission events, holdbacks, refund reversal, payout
+- [x] **C9.10** Build commission events, holdbacks, refund reversal, payout
   batches/CSV, tax-form status, portal earnings and one-hop enforcement,
   and dual-sided referral rewards that may pay in loyalty points.
+  (Extends the C9.09 module; migration `0131_commissions_payouts.sql`.
+  A conversion is `invoice.paid` and only that — §4.3 makes the invoice
+  "the single money object", so listening to the order *as well* would
+  pay twice for one sale. Signups convert on `contact.created`, which
+  §4.3 notes have no invoice.
+  **Paying in points needed no loyalty import and no second amount.**
+  §4.13 says earning is "a listener on spine events, never a call from
+  inside another module" and names "a referral converted" as one of
+  them, so this module emits `referral.converted` against the *referrer*
+  and a loyalty `EarnRule` decides what it is worth. A points-only
+  programme sets its cash commission to `none`.
+  Holdback is `payable_at` on the row, not a flag, so a batch asks "what
+  is payable as of this run" rather than trusting a job to have run.
+  Reversal is two operations because §4.13 describes two: inside the
+  window the row is marked reversed; after payout a negative row citing
+  it lands on the next batch, and the original is never edited because
+  it records a payment that really happened.
+  Money arithmetic is integer parts-per-million throughout, with
+  largest-remainder splitting, so a conversion divided between referrers
+  sums to exactly what was earned — asserted over every amount to 500.
+  One hop is refused structurally, as C9.09 left it: a test asserts a
+  referrer's referrer earns nothing and that no upline column exists.
+  `commission_events`, `payout_lines` and `affiliate_tax_profiles` each
+  repoint in `contacts.merge` and register a privacy source; the
+  financial rows survive erasure the way invoices do, the tax profile
+  does not. Tests: `tests/modules/referrals-commission.test.ts`.)
   (The last clause moved here from C9.12 on 2026-08-29. §4.13 states it
   under *Referral and affiliate dynamics* — "A referrer may earn
   commission, loyalty points, a pass, or a credit" — and it needs an

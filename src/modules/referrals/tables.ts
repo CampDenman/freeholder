@@ -6,4 +6,8 @@ export {
   affiliateCodes,
   attributionTouches,
   referralInvitations,
+  commissionEvents,
+  payoutBatches,
+  payoutLines,
+  affiliateTaxProfiles,
 } from "./schema";

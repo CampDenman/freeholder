@@ -743,7 +743,7 @@ export const issueInvoice = defineService({
       eventType: zero ? "invoice.paid" : "invoice.sent",
       subjectType: "invoice",
       subjectId: updated.id,
-      payload: { number, currency: updated.currency, totalMinor: updated.totalMinor },
+      payload: { number, currency: updated.currency, totalMinor: updated.totalMinor, sourceType: updated.sourceType },
     });
     ctx.queueEvent(zero ? "invoice.paid" : "invoice.sent", { invoiceId: updated.id, contactId: updated.contactId, number });
     ctx.setSubject("invoice", updated.id);
@@ -1020,7 +1020,13 @@ export const settlePayment = defineService({
       eventType: invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid",
       subjectType: "invoice",
       subjectId: invoice.id,
-      payload: { paymentId: payment.id, amountMinor: payment.amountMinor, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency },
+      // `sourceType` rides along so a listener can tell what was actually
+      // bought without reading this module's tables. §4.3 makes the invoice
+      // "the single money object", which means every listener that cares
+      // about money resolves to an invoice and would otherwise have to guess
+      // whether it settled an order, a booking or a subscription — and
+      // guessing wrong misfiles somebody's commission (C9.10).
+      payload: { paymentId: payment.id, amountMinor: payment.amountMinor, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency, sourceType: invoice.sourceType },
     });
     ctx.queueEvent("payment.succeeded", { paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: payment.amountMinor });
     ctx.queueEvent(invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid", { invoiceId: invoice.id, contactId: invoice.contactId, paidMinor });

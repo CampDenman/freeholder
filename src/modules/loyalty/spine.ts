@@ -1,47 +1,23 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// The seam between a bus topic and the spine row it accompanies
+// Which events earn points, and what they are about
 // (MASTER.md §4.1, §4.13, C9.11).
 //
-// This file exists because of a gap that is easy to miss and expensive to get
-// wrong. §4.13 says earning is "a listener on spine events" and that
+// §4.13 says earning is "a listener on spine events" and that
 // `EarnRule.event_match` selects "from what the platform already emits
-// (§4.1)" — and §4.1's TimelineEvent is the thing that carries the contact and
-// the money. The *bus* event does not: `catalog.orderPaid` is
-// `{ orderId }` and nothing else.
+// (§4.1)". The bus event alone cannot serve that: `catalog.orderPaid` is
+// `{ orderId }` and carries neither the contact nor the money. Resolving it
+// against the spine row the emitting transaction wrote is the way out, and
+// that mechanism now lives in `core/spine/facts.ts` — it moved there in C9.10
+// when referrals became the second module to need it.
 //
-// So a handler cannot earn from the bus payload alone, and the two ways out of
-// that are not equally good:
-//
-//   - Import the emitting module's service to look the order up. That makes
-//     loyalty require catalog, and then a business with no shop has a loyalty
-//     module that will not boot. It also inverts §4.13's rule: commerce would
-//     not know loyalty exists, but loyalty would know all about commerce.
-//   - Read the spine row the same transaction wrote. `emitTimeline` runs
-//     inside the mutation and `queueEvent` publishes only after it commits, so
-//     by the time a listener runs the row is there. Loyalty depends on core
-//     and on nothing else.
-//
-// The second is what this does. The cost is this table: one honest mapping,
-// in one file, rather than the knowledge scattered across six handlers.
-import { and, desc, eq } from "drizzle-orm";
+// What stays here is the part that is loyalty's own business: which of the
+// platform's events are worth points. A shared rule that guessed would pay for
+// events nobody meant to reward.
 import type { Tx } from "@/core/service";
-import { timelineEvents } from "@/core/contacts/schema";
+import { type SpineFact, type SpineSource, spineFactFor } from "@/core/spine/facts";
 
-export type SpineSource = {
-  /** The `timeline_events.event_type` the emitting mutation wrote. */
-  eventType: string;
-  /** Which key of the bus payload carries the subject's id. */
-  idKey: string;
-  /** The `timeline_events.subject_type` to match, or null for the contact. */
-  subjectType: string | null;
-  /**
-   * Whether arriving here means points are owed or owed back. §4.13: "A refund
-   * reverses the earn. Reversal writes a negative row citing the original; it
-   * never deletes history."
-   */
-  direction: "earn" | "reverse";
-};
+export type { SpineFact, SpineSource };
 
 /**
  * Every topic this module listens to, and how to find what it is about.
@@ -76,6 +52,25 @@ export const SPINE_SOURCES: Readonly<Record<string, SpineSource>> = {
     subjectType: "contact",
     direction: "earn",
   },
+  /**
+   * A referral converted (C9.10).
+   *
+   * §4.13 lists this as an earning moment by name, and it is how "dual-sided
+   * rewards can pay in points" works without either module importing the
+   * other: referrals writes the spine row against the *referrer*, and an
+   * `EarnRule` matching this event decides what it is worth. The amount lives
+   * in the rule, so a programme that pays only in points sets its cash
+   * commission to "none" and nothing is configured twice.
+   */
+  "referral.converted": {
+    eventType: "referral.converted",
+    // The *referrer*, and `subjectType: null` so the spine row is found by
+    // contact. The conversion's own subject is an invoice belonging to the
+    // person who bought something, which is the wrong contact to pay.
+    idKey: "referrerContactId",
+    subjectType: null,
+    direction: "earn",
+  },
   "catalog.orderCancelled": {
     eventType: "order.cancelled",
     idKey: "orderId",
@@ -90,91 +85,13 @@ export const SPINE_SOURCES: Readonly<Record<string, SpineSource>> = {
   },
 };
 
-export type SpineFact = {
-  contactId: string;
-  eventType: string;
-  subjectType: string;
-  subjectId: string;
-  /** Minor units, when the event was about money. Zero when it was not. */
-  amountMinor: number;
-  currency: string | null;
-};
-
-/** Ids on this platform are uuids; anything else is not ours to match. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function subjectIdFrom(payload: unknown, idKey: string): string | null {
-  if (typeof payload !== "object" || payload === null) return null;
-  const value = (payload as Record<string, unknown>)[idKey];
-  if (typeof value !== "string") return null;
-  // Checked rather than assumed. `contact_id` is a uuid column, so a bus
-  // event carrying anything else made the query *throw* — which turned
-  // somebody else's ordinary mutation into a dead-lettered event. Declining
-  // is the behaviour the rest of this file already promises.
-  return UUID.test(value) ? value : null;
-}
-
-/** Money lives under different names on different events; take the first. */
-function amountFrom(payload: unknown): { amountMinor: number; currency: string | null } {
-  if (typeof payload !== "object" || payload === null) {
-    return { amountMinor: 0, currency: null };
-  }
-  const bag = payload as Record<string, unknown>;
-  for (const key of ["totalMinor", "amountMinor", "subtotalMinor"]) {
-    const value = bag[key];
-    if (typeof value === "number") {
-      return {
-        amountMinor: value,
-        currency: typeof bag.currency === "string" ? bag.currency : null,
-      };
-    }
-  }
-  return { amountMinor: 0, currency: typeof bag.currency === "string" ? bag.currency : null };
-}
-
 /**
- * Find the spine row that accompanies a bus event.
+ * Find the spine row that accompanies one of *these* topics.
  *
- * Returns null rather than throwing when there is no such row. That is not
- * defensive padding: an event can legitimately arrive with no timeline row
- * behind it — an order paid by somebody who is not a contact, a module that
- * queues an event without writing history — and a loyalty programme that threw
- * would turn somebody else's ordinary mutation into a dead-lettered event.
+ * A one-line wrapper so every call site in this module keeps reading the way
+ * it did before the mechanism moved to core, and so the source table cannot be
+ * forgotten at a call site.
  */
-export async function spineFactFor(
-  tx: Tx,
-  topic: string,
-  payload: unknown,
-): Promise<SpineFact | null> {
-  const source = SPINE_SOURCES[topic];
-  if (!source) return null;
-  const subjectId = subjectIdFrom(payload, source.idKey);
-  if (!subjectId) return null;
-
-  const [row] = await tx
-    .select()
-    .from(timelineEvents)
-    .where(
-      and(
-        eq(timelineEvents.eventType, source.eventType),
-        source.subjectType === "contact"
-          ? eq(timelineEvents.contactId, subjectId)
-          : eq(timelineEvents.subjectId, subjectId),
-      ),
-    )
-    // The newest, because an order can be paid, refunded and paid again, and
-    // the points owed are for the payment that just happened.
-    .orderBy(desc(timelineEvents.occurredAt))
-    .limit(1);
-
-  if (!row?.contactId) return null;
-  const money = amountFrom(row.payload);
-  return {
-    contactId: row.contactId,
-    eventType: source.eventType,
-    subjectType: source.subjectType ?? "contact",
-    subjectId,
-    amountMinor: money.amountMinor,
-    currency: money.currency,
-  };
+export function spineFact(tx: Tx, topic: string, payload: unknown): Promise<SpineFact | null> {
+  return spineFactFor(tx, SPINE_SOURCES, topic, payload);
 }
