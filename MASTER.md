@@ -6230,12 +6230,35 @@ customer has one secure, comprehensible home for the relationship.
 
 #### Automation, email, and reporting
 
-- [ ] **C9.01** Build visual trigger → condition → action automations over the
+- [x] **C9.01** Build visual trigger → condition → action automations over the
   event registry, with module/plugin verbs, drafts, validation and versioning.
   (§4.17 carries the entities and rules. The graph holds both deterministic
   `call` steps and `prompt`/`playbook` steps, because an owner wants them in
   the same automation and two runtimes would mean two histories for one piece
-  of work.)
+  of work.
+  New `automations` module, migration `0133_automations.sql`.
+  **The event registry did not exist.** Manifests declared `emits` and
+  nothing ever collected it, because a listener is written by a developer
+  who already knows the name. A trigger is chosen from a menu, so boot now
+  records declared events into `core/events/catalogue.ts` — built from the
+  manifests rather than a constant, which would be wrong the first time a
+  module added an event, and wrong silently.
+  **A verb is not a service.** The registry is an allow-list: a module
+  writes down what an automation may do, and a service nobody wrote down
+  is unreachable from a canvas. `contacts.merge` is a perfectly good
+  service and does not belong one dropdown away from an owner dragging
+  boxes around.
+  Validation is the guarantee rather than an editor convenience —
+  `publish` refuses what it rejects. It reports every problem at once,
+  and refuses unbounded cycles, unreachable steps, unknown verbs,
+  dangling edges, and contact-acting verbs under a trigger that carries
+  no contact.
+  Versions are immutable and the draft is a separate mutable column: an
+  owner building a canvas saves constantly and most of those saves are
+  not decisions, so publishing is the decision that writes history.
+  Restoring an old version fills the draft rather than rewriting it.
+  Runs, delays and per-contact state are C9.02; the guardrails are C9.03.
+  Tests: `tests/modules/automations.test.ts`.)
 - [ ] **C9.02** Add delays, schedules, branches, loops with hard bounds,
   idempotency, per-contact state, retries, pause/kill and run inspection.
   (§4.17. Runs, steps, approvals and spend move to `core/runs` so a mixed
