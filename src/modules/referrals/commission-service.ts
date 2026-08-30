@@ -653,6 +653,43 @@ export const batches = defineService({
 });
 
 /**
+ * The lines on one batch.
+ *
+ * Added with the admin screens (C9.10): the batch total and the CSV both
+ * existed, and nothing could show an owner who is on a batch before they
+ * approve it. Approving a payment run you can only read as a total is not a
+ * decision, it is a guess.
+ */
+export const payoutLinesFor = defineService({
+  name: "referrals.payoutLines",
+  summary: "Who is on this batch, and for how much.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ batchId: uuidSchema }),
+  output: listed(
+    row({
+      id: uuidSchema,
+      affiliateContactId: uuidSchema,
+      amountMinor: z.number().int(),
+      currency: z.string(),
+      taxFormState: z.enum(["not_required", "requested", "collected", "expired"]),
+    }),
+  ),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select({
+        id: payoutLines.id,
+        affiliateContactId: payoutLines.affiliateContactId,
+        amountMinor: payoutLines.amountMinor,
+        currency: payoutLines.currency,
+        taxFormState: payoutLines.taxFormState,
+      })
+      .from(payoutLines)
+      .where(eq(payoutLines.batchId, input.batchId))
+      .orderBy(desc(payoutLines.amountMinor)),
+});
+
+/**
  * One CSV field, quoted the way a spreadsheet expects.
  *
  * The leading-character guard is not decoration. A value beginning `=`, `+`,
