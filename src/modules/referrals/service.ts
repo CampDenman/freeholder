@@ -54,6 +54,7 @@ export {
   markBatchPaid,
   batches,
   batchCsv,
+  payoutLinesFor,
   saveTaxProfile,
   taxPrompts,
 } from "./commission-service";
@@ -64,6 +65,7 @@ import {
   buildBatch,
   commissions,
   markBatchPaid,
+  payoutLinesFor,
   saveTaxProfile,
   taxPrompts,
 } from "./commission-service";
@@ -589,6 +591,7 @@ export default [
   markBatchPaid,
   batches,
   batchCsv,
+  payoutLinesFor,
   saveTaxProfile,
   taxPrompts,
 ];
