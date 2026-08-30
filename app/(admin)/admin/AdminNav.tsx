@@ -90,8 +90,10 @@ export interface AdminNavLabels {
   tasks: string;
   segments: string;
   scoring: string;
+  referrals: string;
   ads: string;
   automations: string;
+  documents: string;
   inbox: string;
   messaging: string;
   projects: string;
@@ -146,12 +148,14 @@ const LINKS = [
   { href: "/admin/automations", key: "automations", module: "automations", Icon: Shuffle },
   { href: "/admin/projects", key: "projects", module: "projects", Icon: Kanban },
   { href: "/admin/galleries", key: "galleries", module: "galleries", Icon: ImageIcon },
+  { href: "/admin/documents", key: "documents", module: "documents", Icon: FileText },
   { href: "/admin/time", key: "time", module: "time", Icon: Clock },
   { href: "/admin/quotes", key: "quotes", module: "quotes", Icon: Receipt },
   { href: "/admin/agreements", key: "agreements", module: "contracts", Icon: Signature },
   { href: "/admin/hire", key: "hire", module: "rentals", Icon: Package },
   { href: "/admin/events", key: "events", module: "events", Icon: CalendarBlank },
   { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
+  { href: "/admin/referrals", key: "referrals", module: "referrals", Icon: UserPlus },
   { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
