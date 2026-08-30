@@ -135,6 +135,7 @@ export default async function AdminLayout({
               tasks: t("tasks.title"),
               segments: t("segments.title"),
               scoring: t("scoring.title"),
+              ads: t("ads.title"),
               automations: t("automations.title"),
               inbox: t("inbox.title"),
               messaging: t("messaging.title"),

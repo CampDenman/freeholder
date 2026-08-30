@@ -40,6 +40,7 @@ import {
   UsersThree,
   CalendarBlank,
   Newspaper,
+  Megaphone,
   ChatCircleText,
   PuzzlePiece,
   DownloadSimple,
@@ -89,6 +90,7 @@ export interface AdminNavLabels {
   tasks: string;
   segments: string;
   scoring: string;
+  ads: string;
   automations: string;
   inbox: string;
   messaging: string;
@@ -150,6 +152,7 @@ const LINKS = [
   { href: "/admin/hire", key: "hire", module: "rentals", Icon: Package },
   { href: "/admin/events", key: "events", module: "events", Icon: CalendarBlank },
   { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
+  { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
