@@ -126,6 +126,10 @@ const programRow = row({
   redemptionValueCents: z.number().int(),
   expiryPolicy: z.unknown(),
   enrolment: z.enum(["automatic", "opt_in"]),
+  // Read back so the admin form can show what is set. Without it, editing a
+  // programme posts the default and silently resets the fraud floor §4.13
+  // asks for — a field that only ever moves one way is worse than no field.
+  minAccountAgeDays: z.number().int(),
 });
 
 const ledgerRow = row({
@@ -289,6 +293,80 @@ export const saveEarnRule = defineService({
  * automatic programme's listener and potentially from a customer opting in,
  * and none of those should be able to create a second balance.
  */
+/**
+ * Every earn rule on a programme.
+ *
+ * Added with the admin screens (C9.11): `saveEarnRule` could write a rule and
+ * nothing could read the list back, so an owner could configure earning and
+ * then had no way to see what they had configured. A write with no matching
+ * read is a feature only its author can use.
+ */
+export const listEarnRules = defineService({
+  name: "loyalty.earnRules",
+  summary: "What earns points on this programme, highest priority first.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ programId: uuidSchema }),
+  output: listed(
+    row({
+      id: uuidSchema,
+      name: z.string(),
+      eventType: z.string(),
+      formula: z.enum(["fixed", "per_currency_unit", "multiplier"]),
+      points: z.number().int(),
+      capPerPeriod: z.number().int().nullable(),
+      capPeriodDays: z.number().int(),
+      startsAt: z.date().nullable(),
+      endsAt: z.date().nullable(),
+      priority: z.number().int(),
+      active: z.enum(["yes", "no"]),
+    }),
+  ),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select({
+        id: earnRules.id,
+        name: earnRules.name,
+        eventType: earnRules.eventType,
+        formula: earnRules.formula,
+        points: earnRules.points,
+        capPerPeriod: earnRules.capPerPeriod,
+        capPeriodDays: earnRules.capPeriodDays,
+        startsAt: earnRules.startsAt,
+        endsAt: earnRules.endsAt,
+        priority: earnRules.priority,
+        active: earnRules.active,
+      })
+      .from(earnRules)
+      .where(eq(earnRules.programId, input.programId))
+      .orderBy(desc(earnRules.priority), asc(earnRules.name)),
+});
+
+/**
+ * The events a rule may name.
+ *
+ * Read from this module's own source table, so the picker cannot offer an
+ * event nothing delivers — which `saveEarnRule` already refuses, and a form
+ * that let somebody choose it first would be a form that sets them up to fail.
+ */
+export const earnableEvents = defineService({
+  name: "loyalty.earnableEvents",
+  summary: "The spine events loyalty can earn from.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: listed(row({ eventType: z.string(), direction: z.string() })),
+  handler: () =>
+    Promise.resolve(
+      [...new Map(
+        Object.values(SPINE_SOURCES).map((source) => [
+          source.eventType,
+          { eventType: source.eventType, direction: source.direction },
+        ]),
+      ).values()].sort((a, b) => a.eventType.localeCompare(b.eventType)),
+    ),
+});
+
 export const enrol = defineService({
   name: "loyalty.enrol",
   writeClass: "write",
@@ -827,6 +905,8 @@ export default [
   saveProgram,
   programs,
   saveEarnRule,
+  listEarnRules,
+  earnableEvents,
   enrol,
   statementFor,
   myStatement,

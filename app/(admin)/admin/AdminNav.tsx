@@ -89,6 +89,7 @@ export interface AdminNavLabels {
   tasks: string;
   segments: string;
   scoring: string;
+  loyalty: string;
   inbox: string;
   messaging: string;
   projects: string;
@@ -148,6 +149,7 @@ const LINKS = [
   { href: "/admin/hire", key: "hire", module: "rentals", Icon: Package },
   { href: "/admin/events", key: "events", module: "events", Icon: CalendarBlank },
   { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
+  { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
