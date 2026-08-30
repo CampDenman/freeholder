@@ -932,6 +932,13 @@
       "when": 1789056000000,
       "tag": "0132_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1789142400000,
+      "tag": "0133_automations",
+      "breakpoints": true
     }
   ]
 }
