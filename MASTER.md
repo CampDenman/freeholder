@@ -1102,6 +1102,97 @@ numbers — not a Google tag and a hope.
   placements are labelled in the markup (`rel="sponsored"` on links,
   a visible label), and there is no configuration that removes the label.
 
+### 4.17 Automations (the connective tissue)
+
+§36 calls this "the connective tissue that makes every other capability
+compound, and it is core rather than a plugin because a business whose tools
+cannot talk to each other has bought a filing cabinet." This section says what
+it is made of.
+
+**One graph, two kinds of step.** An automation step is deterministic (call a
+module's verb) or it is a prompt (ask an agent), and both sit in the same
+graph, in the same run, under the same approval. "When a booking is cancelled,
+wait two days, *draft* a win-back note, then — if I approve it — send it and
+tag the contact" is one automation, not a deterministic one that hands off to a
+prompt-based one. Two runtimes would mean two run histories for one piece of
+work and no way to put a single approval in front of it.
+
+| Entity | Purpose | Key fields |
+|---|---|---|
+| `Automation` | The rule itself. | name, description, trigger_kind (event/schedule/manual), event_pattern, schedule_cron, timezone, next_run_at, catch_up, entry_segment_id (nullable), status (draft/active/paused/archived), current_version, autonomy_ceiling (suggest/approve/autonomous), budget_minor, max_steps, max_runs_per_contact (per window), reentry (once/cooldown/always), cooldown_days, created_by_user_id |
+| `AutomationVersion` | One published shape of the graph. Immutable once written. | automation_id, version (int, 1-based), graph (jsonb: nodes + edges), note, created_by_user_id, created_at |
+| `AutomationRun` | One execution, kept. | automation_id, version_id (the version that produced it), contact_id (nullable), trigger (event/schedule/manual/backfill), idempotency_key, status (running/waiting/paused/succeeded/failed/killed/skipped), skipped_reason, next_wake_at, step_count, spend_minor, started_at, finished_at |
+| `AutomationRunStep` | One node, as it actually ran. | run_id, position, node_id, kind (call/prompt/playbook/wait/branch/loop/gate), status, input (jsonb, redacted), output (jsonb, redacted), error, approval_id (nullable), started_at, finished_at |
+| `AutomationContactState` | What this automation has already done to this person. | automation_id, contact_id, entry_count, last_entered_at, cooldown_until |
+
+A **verb** is not an entity. Modules register what they can do at import time,
+exactly as they register a portal room, a reward issuer or a merge repoint —
+core cannot import a module (§11), so the registry lives in core and each
+module claims into it. A verb declares its input schema, its `writeClass`, and
+whether it touches money, a message or a destructive change, which is what lets
+§4.17's guardrails and §40's autonomy ladder read it without knowing what it
+does.
+
+**Rules:**
+
+- **A version is immutable, and a run pins the one that produced it.** Editing
+  an automation writes a new `AutomationVersion` and bumps `current_version`;
+  in-flight runs finish on the version they started. This is the same argument
+  `AgentPlaybookVersion` makes about prompts: a run that went wrong last month
+  has to be readable against the rules it was actually given, and the row says
+  what the automation says *now*, which is a different sentence.
+- **Every loop is bounded at validation, not at runtime.** A graph declares
+  `max_steps` and every loop declares its iteration cap; a graph that can
+  express an unbounded loop is refused when it is saved. An automation that
+  runs away is not an incident an owner should be expected to notice — the
+  cheapest place to stop it is before it is switched on.
+- **Idempotency is per `(automation, version, trigger key)`.** The outbox
+  retries and a job re-runs its handler, so the same event must not enter the
+  same automation twice. The key is stored on the run and enforced by a unique
+  index, which is the only guard that holds under concurrency.
+- **Re-entry is a stated policy, not an accident.** `once`, `cooldown_days`, or
+  `always`, with `AutomationContactState` recording what has already happened
+  to this person. A customer receiving the same win-back note every time they
+  cancel is the failure mode that makes owners switch automation off entirely.
+- **Waiting is a row, not a held process.** A delay writes `next_wake_at` and
+  the run sleeps in the database; a restart, a deploy or an outage does not
+  lose it, and a two-day wait costs nothing while it waits.
+- **Untrusted input is data, never instruction.** Content that arrived from
+  outside — a form field, an inbound message, a review, a webhook — may be
+  passed *to* a prompt step as quoted data and may never be concatenated into
+  its instructions. §40's rule applied at the automation boundary: the person
+  who fills in your contact form does not get to write your agent's brief.
+- **The guardrails are properties of the run, not of the step kind.** Consent
+  (§4.14) is checked before any step that would reach a person, quiet hours
+  defer rather than drop, the budget ceiling is the automation's own and lower
+  of it and the agent's applies, and an approval gate suspends the whole run
+  rather than one step. A mixed run gets one answer to "may this proceed",
+  which is the whole reason the two kinds share a graph.
+- **A failing step retries with backoff, then parks the run.** Parked is a
+  state an owner can see and retry, not a silent stop — the same discipline
+  §40 applies to agent tasks, and for the same reason: work that fails
+  invisibly is worse than work that fails.
+- **Pause, kill and inspect are first-class.** An owner can pause an automation
+  (new runs skip, in-flight runs hold), kill a run, and read every step it took
+  with its input and output redacted the way agent steps already are.
+
+**Where the runtime lives.** Runs, steps, approvals and spend are the same
+concepts §40 already built for agents, and an automation that mixes prompt and
+deterministic steps must produce *one* inspectable run. So those four move to
+`core/runs` and both callers share them: `core/agents` keeps prompt work and
+the autonomy ladder, `modules/automations` owns the graph, the verb registry
+and the interpreter. This is the move `core/spine/facts.ts` made when referrals
+became the second module needing loyalty's event-resolution mechanism — the
+mechanism goes to core, and each caller keeps what is genuinely its own.
+
+**A prompt step and a playbook step are both available**, and they are not the
+same thing. An inline prompt is written in the automation, versioned with it,
+and its output is threaded into later steps by name. A playbook step invokes an
+existing `AgentPlaybook` and waits for it, which is what an owner wants when
+the work is already written down and used elsewhere. Offering only the first
+would orphan every playbook; offering only the second would make "draft this
+one line" a whole second object to maintain.
+
 ---
 
 ## 5. The SEO Layer (doctrine, enforced structurally)
@@ -6141,10 +6232,19 @@ customer has one secure, comprehensible home for the relationship.
 
 - [ ] **C9.01** Build visual trigger → condition → action automations over the
   event registry, with module/plugin verbs, drafts, validation and versioning.
+  (§4.17 carries the entities and rules. The graph holds both deterministic
+  `call` steps and `prompt`/`playbook` steps, because an owner wants them in
+  the same automation and two runtimes would mean two histories for one piece
+  of work.)
 - [ ] **C9.02** Add delays, schedules, branches, loops with hard bounds,
   idempotency, per-contact state, retries, pause/kill and run inspection.
+  (§4.17. Runs, steps, approvals and spend move to `core/runs` so a mixed
+  prompt/deterministic run is one inspectable run; §40 keeps prompt work and
+  the autonomy ladder.)
 - [ ] **C9.03** Enforce consent, quiet hours, budgets, approval requirements and
   untrusted-input rules for every automated action.
+  (§4.17: the guardrails are properties of the run, not of the step kind, so a
+  mixed run gets one answer to "may this proceed".)
 - [x] **C9.04** Build newsletters, double-opt-in subscriptions, RFC 8058 one-
   click unsubscribe, public issue archive and per-newsletter preference state.
   *(Evidence: `newsletters` module — identities, draft/published issues,
