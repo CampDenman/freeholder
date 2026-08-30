@@ -24,7 +24,7 @@ import { registerContactReference, resolveContact } from "@/core/contacts/servic
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { contacts } from "@/core/contacts/schema";
 import { earnRules, loyaltyAccounts, loyaltyPrograms, pointsLedger } from "./schema";
-import { SPINE_SOURCES, spineFactFor } from "./spine";
+import { SPINE_SOURCES, spineFact } from "./spine";
 // Tiers, rewards and redemption (C9.12). A sibling file rather than a
 // second module: they are the same programme, and a redemption reads the
 // same ledger an earn writes.
@@ -557,7 +557,7 @@ export async function onSpineEvent(payload: unknown, eventName?: string): Promis
   const { db } = await import("@/core/db");
 
   await db().transaction(async (tx) => {
-    const fact = await spineFactFor(tx, topic, payload);
+    const fact = await spineFact(tx, topic, payload);
     if (!fact) return;
 
     const active = await tx

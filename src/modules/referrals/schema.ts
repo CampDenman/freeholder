@@ -19,6 +19,7 @@
 // `AffiliateCode` — and that is deliberate." There is no parent column below,
 // and `tests/modules/referrals.test.ts` asserts its absence so a later
 // well-meaning change has to argue with a test.
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -50,6 +51,15 @@ export const affiliatePrograms = pgTable(
      * argument nobody can win without a number both sides agreed to.
      */
     cookieWindowDays: integer("cookie_window_days").notNull().default(30),
+    /**
+     * How long a commission is held before it may be paid (C9.10).
+     *
+     * §4.13: "A `CommissionEvent` becomes payable only after the refund window
+     * closes." That window is a property of the programme rather than of a
+     * sale, because it is a promise the owner makes to affiliates once, in
+     * writing, and a per-sale holdback would be a promise nobody could read.
+     */
+    holdbackDays: integer("holdback_days").notNull().default(30),
     /**
      * Which touch in the chain earns the credit.
      *
@@ -195,4 +205,217 @@ export const referralInvitations = pgTable(
     index("referral_invitations_referrer_idx").on(t.referrerContactId),
     index("referral_invitations_program_idx").on(t.programId),
   ],
+);
+
+/* ------------------------------------------------- C9.10: paying for it */
+
+/**
+ * One earned commission on the ledger (§4.3, §4.13).
+ *
+ * `sharePpm` is stored, and stored in parts-per-million rather than as a
+ * float, because position-based attribution genuinely splits one conversion
+ * between several referrers. The split has to be reproducible from the row
+ * years later — "why was I paid £4.80 and not £6" is a question with exactly
+ * one right answer — and a float share would leave the arithmetic that
+ * produced the amount unreconstructable at the third decimal place.
+ *
+ * `invoiceId` carries no foreign key on purpose. Referrals requires only core
+ * (see the manifest), so a business with no invoicing module still earns and
+ * settles commissions; a real FK here would make this module unbootable
+ * without one. The trade is that a deleted invoice leaves a dangling id, which
+ * is the lesser harm and is why the column is nullable anyway — §4.3 notes
+ * signups have no invoice at all.
+ */
+export const commissionEvents = pgTable(
+  "commission_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    programId: uuid("program_id")
+      .notNull()
+      .references(() => affiliatePrograms.id, { onDelete: "cascade" }),
+    codeId: uuid("code_id")
+      .notNull()
+      .references(() => affiliateCodes.id, { onDelete: "cascade" }),
+    /**
+     * The referrer, denormalised from the code.
+     *
+     * A payout batch groups by person, not by code: somebody with three codes
+     * is paid once. Reaching that through the code on every batch build would
+     * be a join that exists only to recover a fact which cannot change — a
+     * code's owner is fixed at issue — so it is written down.
+     */
+    affiliateContactId: uuid("affiliate_contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    referredContactId: uuid("referred_contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    conversionType: text("conversion_type", {
+      enum: ["signup", "subscription", "order", "booking", "custom"],
+    }).notNull(),
+    subjectType: text("subject_type").notNull(),
+    subjectId: uuid("subject_id"),
+    /** No FK: see the comment above. */
+    invoiceId: uuid("invoice_id"),
+    /** Parts per million of the conversion this referrer earned. */
+    sharePpm: integer("share_ppm").notNull().default(1000000),
+    /** What the commission was calculated from, before the share was applied. */
+    basisMinor: integer("basis_minor").notNull().default(0),
+    amountMinor: integer("amount_minor").notNull().default(0),
+    currency: text("currency").notNull().default("GBP"),
+    status: text("status", { enum: ["pending", "approved", "paid", "reversed"] })
+      .notNull()
+      .default("pending"),
+    /**
+     * When the holdback closes. §4.13: "A `CommissionEvent` becomes payable
+     * only after the refund window closes."
+     *
+     * A timestamp rather than a flag, because the question a batch asks is
+     * "what is payable as of this run", and a flag would only be right if a
+     * job had already run correctly.
+     */
+    payableAt: timestamp("payable_at", { withTimezone: true }).notNull(),
+    /**
+     * Set on a negative row that undoes an already-paid one. §4.13: reversing
+     * after payout "produces a negative line on the next batch rather than an
+     * argument".
+     */
+    reversesId: uuid("reverses_id"),
+    /**
+     * Which payout line settled it.
+     *
+     * §4.3 describes the line as carrying `commission_event_ids[]`. The link
+     * lives on the event instead: an array column cannot be constrained by a
+     * foreign key, and the question that actually gets asked — "is this
+     * commission paid, and on which batch" — is asked of the event far more
+     * often than of the line.
+     */
+    payoutLineId: uuid("payout_line_id"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("commission_events_affiliate_idx").on(t.affiliateContactId, t.status),
+    index("commission_events_payable_idx").on(t.status, t.payableAt),
+    index("commission_events_subject_idx").on(t.subjectType, t.subjectId),
+    index("commission_events_program_idx").on(t.programId),
+    /**
+     * One commission per code per conversion.
+     *
+     * Partial, because a reversal is deliberately a second row about the same
+     * subject and must not collide with the row it reverses. The bus can
+     * deliver an event more than once and a retried job re-runs its handler,
+     * so without this a redelivery pays somebody twice for one sale — the
+     * expensive direction of this bug.
+     */
+    uniqueIndex("commission_events_once_idx")
+      .on(t.codeId, t.subjectType, t.subjectId)
+      .where(sql`${t.reversesId} is null and ${t.subjectId} is not null`),
+  ],
+);
+
+/** Settling commissions: the batch (§4.13). */
+export const payoutBatches = pgTable(
+  "payout_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    currency: text("currency").notNull().default("GBP"),
+    /**
+     * §4.13: "v1 is manual and batched with a CSV the owner can hand to their
+     * bank or accountant; a payout-provider adapter is a later implementation
+     * of the same interface." `provider` is in the enum already so that later
+     * adapter needs no migration to become expressible.
+     */
+    method: text("method", { enum: ["manual", "transfer", "provider"] })
+      .notNull()
+      .default("manual"),
+    status: text("status", { enum: ["draft", "approved", "paid"] })
+      .notNull()
+      .default("draft"),
+    totalMinor: integer("total_minor").notNull().default(0),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [index("payout_batches_status_idx").on(t.status, t.periodEnd)],
+);
+
+/** One person's total on one batch (§4.13). */
+export const payoutLines = pgTable(
+  "payout_lines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => payoutBatches.id, { onDelete: "cascade" }),
+    affiliateContactId: uuid("affiliate_contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    amountMinor: integer("amount_minor").notNull().default(0),
+    currency: text("currency").notNull().default("GBP"),
+    /**
+     * Copied from the person's tax profile when the batch is built, not read
+     * through to it. A batch is a historical document: what the owner knew
+     * about somebody's paperwork on the day they paid them does not change
+     * because the paperwork arrived the following week.
+     */
+    taxFormState: text("tax_form_state", {
+      enum: ["not_required", "requested", "collected", "expired"],
+    })
+      .notNull()
+      .default("not_required"),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    index("payout_lines_batch_idx").on(t.batchId),
+    index("payout_lines_affiliate_idx").on(t.affiliateContactId),
+    // One line per person per batch: that is what "somebody with three codes
+    // is paid once" means, enforced rather than assumed.
+    uniqueIndex("payout_lines_once_idx").on(t.batchId, t.affiliateContactId),
+  ],
+);
+
+/**
+ * What paperwork this affiliate owes, and whether it arrived (§4.13).
+ *
+ * "Tax paperwork is acknowledged, not automated: `tax_form_state` tracks
+ * whether the information a jurisdiction requires above a threshold (1099-NEC,
+ * T4A, equivalents) has been collected. The platform prompts and records; it
+ * does not file."
+ *
+ * A table rather than a column on the payout line, because the threshold is a
+ * property of a person and a year rather than of a payment: an affiliate
+ * crosses it across several batches, and a per-line enum could never answer
+ * "have they crossed it yet". The line still carries its own copy — see there
+ * for why.
+ */
+export const affiliateTaxProfiles = pgTable(
+  "affiliate_tax_profiles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    /** Free text: the platform does not model the world's tax authorities. */
+    jurisdiction: text("jurisdiction").notNull().default(""),
+    /** "1099-NEC", "T4A", or whatever the owner's accountant calls it. */
+    formKind: text("form_kind").notNull().default(""),
+    state: text("state", {
+      enum: ["not_required", "requested", "collected", "expired"],
+    })
+      .notNull()
+      .default("not_required"),
+    /** Paid-in-year above which the owner must ask. Zero means "always ask". */
+    thresholdMinor: integer("threshold_minor").notNull().default(0),
+    currency: text("currency").notNull().default("GBP"),
+    requestedAt: timestamp("requested_at", { withTimezone: true }),
+    collectedAt: timestamp("collected_at", { withTimezone: true }),
+    note: text("note"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [uniqueIndex("affiliate_tax_profiles_contact_idx").on(t.contactId)],
 );
