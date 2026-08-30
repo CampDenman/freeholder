@@ -39,7 +39,9 @@
 import { z } from "zod";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
-import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { actorString, defineService, ServiceError, type Tx } from "@/core/service";
+import { writeTimelineEvent } from "@/core/events";
+import { dispatchNow, enqueue } from "@/core/events/outbox";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
@@ -50,7 +52,7 @@ import {
   payoutLines,
   referralInvitations,
 } from "./schema";
-import { attributionFor } from "./attribution-service";
+import { attributionOf } from "./attribution-service";
 import {
   type CommissionConfig,
   commissionFor,
@@ -87,6 +89,9 @@ const commissionRow = row({
  * cannot invent money. It can only fail to pay some, which is the direction an
  * owner notices and can correct.
  */
+/** A bus event waiting for its transaction to commit. */
+type Queued = [eventName: string, payload: unknown];
+
 function configOf(program: { commission: unknown }): CommissionConfig {
   const raw = program.commission;
   return typeof raw === "object" && raw !== null ? raw : {};
@@ -101,14 +106,15 @@ function configOf(program: { commission: unknown }): CommissionConfig {
  * that explain it commit with each other or not at all.
  */
 async function convert(
-  ctx: ServiceContext,
+  tx: Tx,
+  queued: Queued[],
   topic: string,
   payload: unknown,
 ): Promise<{ written: number }> {
-  const fact = await spineFact(ctx.tx, topic, payload);
+  const fact = await spineFact(tx, topic, payload);
   if (!fact) return { written: 0 };
 
-  const programs = await ctx.tx
+  const programs = await tx
     .select()
     .from(affiliatePrograms)
     .where(eq(affiliatePrograms.status, "active"));
@@ -126,11 +132,8 @@ async function convert(
     // Attribution is asked for, not recomputed here. It is the same read the
     // owner sees in the admin, so what the report shows and what the affiliate
     // is paid cannot drift apart.
-    const attribution = await ctx.call(attributionFor, {
-      contactId: fact.contactId,
-      programId: program.id,
-    });
-    if (attribution.credits.length === 0) continue;
+    const attribution = await attributionOf(tx, fact.contactId, program.id);
+    if (!attribution || attribution.credits.length === 0) continue;
 
     const config = configOf(program);
     const basisMinor = Math.max(0, fact.amountMinor);
@@ -148,7 +151,7 @@ async function convert(
       // pays nothing here and everything through loyalty's earn rule. Writing
       // it against the *referrer* is what makes the points land on the person
       // who did the referring rather than the person who bought something.
-      await ctx.emitTimeline({
+      await writeTimelineEvent(tx, actorString({ kind: "system" }), {
         contactId: credit.referrerContactId,
         eventType: "referral.converted",
         subjectType: fact.subjectType,
@@ -169,14 +172,14 @@ async function convert(
       // record and carries the money; the bus event is what wakes a loyalty
       // earn rule up, and it carries the referrer's id because that is the
       // contact whose points these are.
-      ctx.queueEvent("referral.converted", {
+      queued.push(["referral.converted", {
         referrerContactId: credit.referrerContactId,
         codeId: credit.codeId,
         programId: program.id,
         conversionType,
         amountMinor,
         currency,
-      });
+      }]);
 
       if (amountMinor <= 0) continue;
 
@@ -184,7 +187,7 @@ async function convert(
       // redeliver and a retried job re-runs its handler, and the unique index
       // is the only guard that holds under concurrency. Paying somebody twice
       // for one sale is the expensive direction of this bug.
-      const [inserted] = await ctx.tx
+      const [inserted] = await tx
         .insert(commissionEvents)
         .values({
           programId: program.id,
@@ -207,17 +210,17 @@ async function convert(
 
       if (!inserted) continue;
       written += 1;
-      ctx.queueEvent("referral.commissionEarned", {
+      queued.push(["referral.commissionEarned", {
         commissionEventId: inserted.id,
         affiliateContactId: credit.referrerContactId,
         amountMinor,
         currency,
-      });
+      }]);
     }
 
     // An invitation that led here has done its job. §4.13 gives
     // `reward_state` for exactly this and C9.09 could only ever write "none".
-    await ctx.tx
+    await tx
       .update(referralInvitations)
       .set({ convertedAt: new Date(), rewardState: total > 0 ? "pending" : "granted" })
       .where(
@@ -254,14 +257,15 @@ function program_currency(program: { commission: unknown }): string {
  * owner out of pocket.
  */
 async function reverse(
-  ctx: ServiceContext,
+  tx: Tx,
+  queued: Queued[],
   topic: string,
   payload: unknown,
 ): Promise<{ reversed: number; clawedBack: number }> {
-  const fact = await spineFact(ctx.tx, topic, payload);
+  const fact = await spineFact(tx, topic, payload);
   if (!fact?.subjectId) return { reversed: 0, clawedBack: 0 };
 
-  const existing = await ctx.tx
+  const existing = await tx
     .select()
     .from(commissionEvents)
     .where(
@@ -282,7 +286,7 @@ async function reverse(
       // Already settled. A negative row, citing the original, that the next
       // batch will net off. The original is left exactly as it was: it is the
       // record of a payment that really happened.
-      await ctx.tx.insert(commissionEvents).values({
+      await tx.insert(commissionEvents).values({
         programId: event.programId,
         codeId: event.codeId,
         affiliateContactId: event.affiliateContactId,
@@ -303,27 +307,27 @@ async function reverse(
         reversesId: event.id,
       });
       clawedBack += 1;
-      ctx.queueEvent("referral.commissionClawedBack", {
+      queued.push(["referral.commissionClawedBack", {
         commissionEventId: event.id,
         affiliateContactId: event.affiliateContactId,
         amountMinor: -event.amountMinor,
-      });
+      }]);
       continue;
     }
 
-    await ctx.tx
+    await tx
       .update(commissionEvents)
       .set({ status: "reversed" })
       .where(eq(commissionEvents.id, event.id));
     reversed += 1;
-    ctx.queueEvent("referral.commissionReversed", {
+    queued.push(["referral.commissionReversed", {
       commissionEventId: event.id,
       affiliateContactId: event.affiliateContactId,
-    });
+    }]);
   }
 
   if (reversed + clawedBack > 0) {
-    await ctx.tx
+    await tx
       .update(referralInvitations)
       .set({ rewardState: "reversed" })
       .where(
@@ -337,33 +341,20 @@ async function reverse(
   return { reversed, clawedBack };
 }
 
-const applySpineEvent = defineService({
-  name: "referrals.applySpineEvent",
-  writeClass: "write",
-  summary: "React to a conversion or a refund by writing or undoing commission.",
-  kind: "mutation",
-  permission: "system",
-  input: z.object({ topic: z.string(), payload: z.unknown() }),
-  output: row({ written: z.number().int(), reversed: z.number().int(), clawedBack: z.number().int() }),
-  handler: async (input, ctx) => {
-    const direction = directionOf(input.topic);
-    if (!direction) return { written: 0, reversed: 0, clawedBack: 0 };
-    if (direction === "reverse") {
-      const result = await reverse(ctx, input.topic, input.payload);
-      return { written: 0, ...result };
-    }
-    const result = await convert(ctx, input.topic, input.payload);
-    return { ...result, reversed: 0, clawedBack: 0 };
-  },
-});
-
 /**
  * The listener the bus calls, one function for every topic in the manifest.
  *
- * It runs after the emitting transaction has committed, in its own — which is
- * why calling `.call` here is right rather than a second-transaction bug. A
- * listener *is* the top of a transaction; the rule it would break is calling
- * one service from inside another handler, and there is no handler above this.
+ * **Not a service, and that is the point.** Every mutation service writes an
+ * `audit_log` row, which is right for something a person did and wrong for an
+ * automatic reaction: this fires on every `contact.created`, so as a service it
+ * put "referrals reacted to something" at the top of the owner's activity feed
+ * on sites with no referral programme at all. Loyalty's listener is a plain
+ * function for the same reason. The spine row and the bus event are still
+ * written — those are the record and the notification, and neither is an audit
+ * of a human decision.
+ *
+ * It runs after the emitting transaction committed, and opens its own, so the
+ * commission and the timeline rows explaining it commit together or not at all.
  *
  * Safe to run twice. The partial unique index on
  * (code, subject_type, subject_id) means a redelivery cannot pay for the same
@@ -372,8 +363,32 @@ const applySpineEvent = defineService({
  */
 export async function onSpineEvent(payload: unknown, eventName?: string): Promise<void> {
   const topic = eventName ?? "";
-  if (!directionOf(topic)) return;
-  await applySpineEvent.call({ topic, payload }, { kind: "system" });
+  const direction = directionOf(topic);
+  if (!direction) return;
+
+  const { db } = await import("@/core/db");
+  const queued: Queued[] = [];
+  const published: { id: string; eventName: string; payload: unknown }[] = [];
+
+  await db().transaction(async (tx) => {
+    if (direction === "reverse") {
+      await reverse(tx, queued, topic, payload);
+    } else {
+      await convert(tx, queued, topic, payload);
+    }
+    // Written inside the transaction so an event cannot survive a rollback,
+    // and dispatched outside it so a listener never observes state that then
+    // disappeared (§11's outbox).
+    for (const [eventName_, eventPayload] of queued) {
+      published.push({
+        id: await enqueue(tx, eventName_, eventPayload),
+        eventName: eventName_,
+        payload: eventPayload,
+      });
+    }
+  });
+
+  await dispatchNow(published);
 }
 
 /* ------------------------------------------------------------- holdback */

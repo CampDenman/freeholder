@@ -13,6 +13,7 @@ import { and, eq } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { db } from "@/core/db";
 import { timelineEvents } from "@/core/contacts/schema";
+import { auditLog } from "@/core/events/schema";
 import {
   commissionEvents,
   payoutBatches,
@@ -702,6 +703,20 @@ describe.runIf(hasDatabase)("commission, holdbacks and payouts", () => {
     expect(
       await commissions.call({ affiliateContactId: referrer.id }, OWNER),
     ).toHaveLength(1);
+  });
+
+  it("reacts without writing itself into the owner's activity feed", async () => {
+    // Every mutation service writes an audit_log row, which is right for
+    // something a person did and wrong for an automatic reaction. This
+    // listener fires on every contact.created, so as a service it put
+    // "referrals reacted to something" at the top of the admin overview on
+    // sites with no referral programme at all.
+    await referredSale({ totalMinor: 10_000 });
+    const actions = (await db().select({ action: auditLog.action }).from(auditLog)).map(
+      (entry) => entry.action,
+    );
+    expect(actions.filter((action) => action.startsWith("referrals.applySpine"))).toHaveLength(0);
+    expect(actions.filter((action) => action.startsWith("referrals.onSpine"))).toHaveLength(0);
   });
 
   it("totals a batch from its lines", async () => {
