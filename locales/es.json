@@ -2971,6 +2971,7 @@
   "portal.room.bookings": "Reservas",
   "portal.room.contracts": "Contratos",
   "portal.room.documents": "Documentos",
+  "portal.room.earnings": "Ganancias",
   "portal.room.empty": "Todavía no hay nada en «{room}».",
   "portal.room.failed": "No pudimos cargar esto ahora mismo. Inténtalo de nuevo en un momento.",
   "portal.room.invoices": "Facturas",

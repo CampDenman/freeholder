@@ -44,6 +44,10 @@ export default defineModule({
       "quote.accepted": "onSpineEvent",
       "project.completed": "onSpineEvent",
       "contact.created": "onSpineEvent",
+      // §4.13 names "a referral converted" among the earning moments. C9.10
+      // emits it against the referrer, so points land on whoever did the
+      // referring rather than on whoever bought something.
+      "referral.converted": "onSpineEvent",
       // Reversal moments. §4.13: "A refund reverses the earn." The same
       // handler serves both, because whether a rule earns or a reversal
       // applies is a property of the event, not of the wiring.
