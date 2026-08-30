@@ -533,8 +533,36 @@ Series:   active → paused → completed | cancelled   (per-occurrence override
 | `GalleryItem` | Ordered membership. | gallery_id, asset_id, position |
 | `GallerySelection` | Client proofing. | gallery_id, contact_id, asset_id, kind (favorite/select/reject), comment |
 | `GalleryAccessLog` | Views/downloads → also emits TimelineEvents. | gallery_id, contact_id, action, asset_id, at |
+| `Document` | A named file shared with somebody, with a history. Not a gallery: a gallery is many pictures chosen from, a document is one thing revised. | title, description, subject_type + subject_id (contact/project/quote/invoice/null), contact_id (nullable — who it is *for*), current_version_id, status (draft/shared/archived), created_by_user_id |
+| `DocumentVersion` | One revision. Immutable once written. | document_id, version (int, 1-based), asset_id, note, created_by_user_id, created_at |
+| `DocumentShare` | Who may open it, how, and until when. | document_id, contact_id (nullable), access (link/password/login), secret_hash, token_hash, pinned_version_id (nullable — else current), download_policy (none/view/download), download_limit, expires_at, revoked_at |
+| `DocumentAccessLog` | Views/downloads → also emits TimelineEvents. | document_id, version_id, share_id, contact_id, action (view/download/denied), at |
 
 Print/digital sales from a gallery: `GalleryItem` links to `ProductVariant` price sheets → standard `Order` flow. No parallel commerce path.
+
+**A document is revised, not replaced.** Uploading a new file against a
+document writes a `DocumentVersion`; it never overwrites the last one. "Which
+version did they actually sign" and "what did we send them in March" are
+questions a business is asked under pressure, and a system that overwrote the
+file cannot answer either. Versions are immutable once written, and a share
+either follows the current version or is pinned to the one it was sent about —
+pinned is what a countersigned contract needs, current is what a working
+drawing needs, and guessing between them is how somebody signs the wrong page.
+
+**Documents reuse the gallery access vocabulary deliberately.** `link`,
+`password` and `login`, an `expires_at` that is stated rather than implied, and
+an access log that is append-only and emits `TimelineEvent`s. One answer to
+"how do I protect a thing I send a client" is worth more than a better second
+one: an owner who has learned how a gallery is shared already knows how a
+contract is shared, and the platform has one place where that model can be
+audited rather than two that will drift.
+
+**Every open is on the record.** `DocumentAccessLog` is append-only, records
+denials as well as successes, and survives a contact merge with the contact
+repointed rather than the row deleted — a document history that vanishes the
+first time two duplicates are merged is not an audit. The owner can export a
+document's whole history, versions and access alike, because "prove you sent
+it" is the reason this exists.
 
 **Capture is a first-class media origin, not a browser trick.** Admin surfaces
 can record the screen, a window/tab, camera and microphone through explicit
@@ -3136,7 +3164,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C8.13 documents/files shared to contacts/projects/portal with versioning, access rules, expiry, download audit and export. |
+| Current focus | C9.01–C9.03 automations: visual trigger → condition → action, with delays, branches and hard bounds, and consent, quiet hours, budgets and approvals enforced. C7.17's segment convergence is blocked on C9.01 together with C9.06 and C9.08, so this unblocks another stream as well as its own. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6075,8 +6103,34 @@ permitted conversation on the same contact timeline.
   HTML §5 and the SEO gate depend on.
   Twelve tests in `tests/modules/help-centre.test.ts`, one per rule.
   EN/FR/ES, 27 keys. Changeset `help-centre.md`.)
-- [ ] **C8.13** Build documents/files shared to contacts/projects/portal with
+- [x] **C8.13** Build documents/files shared to contacts/projects/portal with
   versioning, access rules, expiry, download audit and export.
+  (New `documents` module, migration `0132_documents.sql`. §4.5 gained the
+  four entities and three rules this implements — they were named in the
+  checklist and nowhere else, so the doc entry lands in this change.
+  A document is the name and the thread; the bytes are on a version, so
+  there is no `asset_id` on `documents` and nothing here can overwrite an
+  answer to "which version did they sign". Versions are immutable: no
+  `updated_at`, no service that edits one, and a test asserting the column
+  is absent.
+  A share follows the current version or pins one, because a
+  countersigned contract and a working drawing want opposite answers.
+  Access reuses the gallery vocabulary — link/password/login, a stated
+  expiry, a download policy — so an owner learns one model, not two.
+  **Refusals return rather than throw.** A denial writes its reason and a
+  throw would roll that row back, which is how a guessed password leaves
+  no trace; `galleries.unlock` had already learned this and the comment
+  there says so. The visitor gets `{ ok: false }` and cannot tell an
+  expired link from a revoked one from a token that never existed — the
+  history can.
+  Bytes stay an `Asset`, so scanning, checksums and storage are core's;
+  a version refuses an asset that is not `ready` or is `infected`,
+  because sending it is the moment it stops being reversible.
+  `documents`, `document_shares` and `document_access_logs` repoint in
+  `contacts.merge` and register a privacy source; the access row survives
+  erasure with its person removed, as an attribution touch does.
+  Portal room registered through C8.11's registry, so no page changed.
+  Tests: `tests/modules/documents.test.ts`.)
 
 **C8 exit:** the business can prove, deliver and support its work while each
 customer has one secure, comprehensible home for the relationship.
