@@ -94,6 +94,7 @@ export interface AdminNavLabels {
   ads: string;
   automations: string;
   documents: string;
+  loyalty: string;
   inbox: string;
   messaging: string;
   projects: string;
@@ -157,6 +158,7 @@ const LINKS = [
   { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
   { href: "/admin/referrals", key: "referrals", module: "referrals", Icon: UserPlus },
   { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
+  { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
