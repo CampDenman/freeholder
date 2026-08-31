@@ -1179,7 +1179,11 @@ does.
 **Where the runtime lives.** Runs, steps, approvals and spend are the same
 concepts §40 already built for agents, and an automation that mixes prompt and
 deterministic steps must produce *one* inspectable run. So those four move to
-`core/runs` and both callers share them: `core/agents` keeps prompt work and
+`core/runs` — **the tables as well as the code**, because a table called
+`agent_runs` holding an automation's run is a name that needs a comment, and a
+comment explaining why a name is wrong is a flaw rather than a fix. Before 1.0
+the cost of that rename is a migration; after it, it is a coordination problem
+forever. Both callers share them: `core/agents` keeps prompt work and
 the autonomy ladder, `modules/automations` owns the graph, the verb registry
 and the interpreter. This is the move `core/spine/facts.ts` made when referrals
 became the second module needing loyalty's event-resolution mechanism — the
@@ -6605,8 +6609,28 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   consent, progress, pause/resume/cancel, retry and destination selection, and
   prove the native app and app-free phone path create equivalent Assets.
 
+- [ ] **C10.19** Collapse the migration chain into one reviewed baseline once
+  the schema is complete, keeping seed, demo and restore working, and
+  re-baseline the reference instance deliberately rather than by surprise.
+  (Scheduled here on purpose: it must land **after** C10's own tables —
+  §39.10's `UpdateSetting`, `AvailableRelease`, `UpdateRun` and `Snapshot`
+  are the last schema this plan adds — and **before** C11, so C11's
+  journeys run against the collapsed schema and are what proves it. Doing
+  it just before the C11.17 gate would put a whole-schema rewrite at the
+  moment the product is meant to be stabilising.
+  Pre-1.0 is the only window: after 1.0 the chain is somebody else's
+  installed history and collapsing it stops being ours to do.
+  **Evidence:** the baseline produces a database structurally identical to
+  the one the chain produces, proved by diffing a fresh baseline apply
+  against a fresh chain apply; `db:migrate` from empty works; the seed and
+  demo scenarios load; §23's migration round-trip still passes. §39.9's
+  upgrade gate loses its N-1 anchor at this commit — that break is
+  one-time, expected and must be stated in the changeset per §39.9's
+  schema-compatibility rule rather than discovered by CI.)
+
 **C10 exit:** an owner can leave, restore, update, fork and serve customers on
-mobile without surrendering the code, data, deployment or upgrade path.
+mobile without surrendering the code, data, deployment or upgrade path, and the
+schema they inherit reads as a designed thing rather than an excavation.
 
 ### 43.16 C11 — Product-perfection and final DONE proof
 
