@@ -4,9 +4,11 @@
 -- Runs, steps, approvals and spend move out of the agent layer
 -- (MASTER.md §4.17, §40, C9.02).
 --
--- SCHEMA-BREAKING. §39.9's schema-compatibility gate requires that to be said
--- rather than discovered: the release before this one reads `agent_runs` and
--- will not find it. The accompanying changeset says so.
+-- freeholder:schema-breaking Renames agent_runs, agent_steps, agent_approvals and agent_spend, and renames task_id to subject_id on two of them. The previous release reads the old names and will not find them; the rollback for this one is a restore rather than an image swap.
+--
+-- §39.9 asks for that to be declared on the migration rather than discovered
+-- by whoever rolls back at 3am. The marker above is the declaration; the
+-- changeset says the same thing in the owner's words.
 --
 -- Why the shape changes as well as the name. `agent_runs.task_id` and
 -- `agent_id` were both NOT NULL, so a run was by construction an agent working
