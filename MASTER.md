@@ -6280,8 +6280,30 @@ customer has one secure, comprehensible home for the relationship.
   `/newsletters` archive and per-newsletter subscription status. Merge keeps
   one row per newsletter. Migration `0059_concerned_sumo.sql`;
   `tests/core/newsletters.test.ts`.)*
-- [ ] **C9.05** Build shared block-based templates for transactional, campaign,
+- [x] **C9.05** Build shared block-based templates for transactional, campaign,
   newsletter, automation and SMS uses with locale variants and locked variables.
+  (§30's "one template model serves everything", taken literally: one
+  `email_templates` table across all five kinds, because a receipt and a
+  campaign differ in when they are sent and to whom, not in what they are
+  made of. A table per kind would be four places for the block vocabulary,
+  the slots and the locale handling to drift apart.
+  Rendering is the existing `cms/email-render.ts`; locale variants are
+  `entity_translations` rows (§4.9), so a template is translated by the
+  screen that translates a page, and a missing locale falls back rather
+  than failing — a receipt in the wrong language still says what somebody
+  was charged.
+  **Locked variables are enforced, not decorative.** A template declares
+  what it promises to fill and `templates.render` refuses when a promised
+  slot has no value: a customer reading `{{invoice.total}}` is worse than
+  a failed send, because the send retries and the impression does not.
+  §30's reset keeps `default_blocks` beside the owner's edits rather than
+  in code, so it still works on an instance whose release has moved on,
+  and "has this been customised" is a comparison rather than a flag an
+  edit path can forget. Reset restores rather than deletes, so the slug,
+  the variables and every translation survive.
+  Admin at `/admin/newsletters/templates` — `/admin/templates` is already
+  C2.13's *content* templates, a different thing wearing the same word.
+  Migration `0136_message_templates.sql`; `tests/modules/templates.test.ts`.)
 - [ ] **C9.06** Build broadcasts/segments, test sends, scheduling, provider
   batches, suppression, bounce/complaint handling and honest local analytics.
 - [ ] **C9.07** Complete the funnel from visit → lead → quote/booking/cart →
