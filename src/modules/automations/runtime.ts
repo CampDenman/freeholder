@@ -19,8 +19,9 @@ import { and, asc, desc, eq, lte, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
+import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
-import { runSteps, runs } from "@/core/runs/schema";
+import { runApprovals, runSteps, runs } from "@/core/runs/schema";
 import { automationVerb } from "@/core/automations/verbs";
 import {
   automationContactState,
@@ -29,6 +30,7 @@ import {
 } from "./schema";
 import { automationGraph, type AutomationGraph } from "./graph";
 import { advance, completeCall, type RunRow } from "./engine";
+import { mayProceed } from "./guardrails";
 
 const RUN_SUBJECT = "automation" as const;
 
@@ -223,6 +225,82 @@ export async function step(
   if (outcome.state === "call") {
     const node = graph.nodes.find((each) => each.id === outcome.nodeId)!;
     const verb = automationVerb(outcome.verbKey)!;
+
+    // The guardrails, asked once, before the step that acts (§4.17, C9.03).
+    // Here rather than inside each verb because §4.17 makes them properties of
+    // the run: a mixed run gets one answer, and a verb that had to ask for
+    // itself would be a check every module could forget to write.
+    const [automation] = await ctx.tx
+      .select({
+        autonomyCeiling: automations.autonomyCeiling,
+        budgetMinor: automations.budgetMinor,
+      })
+      .from(automations)
+      .where(eq(automations.id, run.subjectId));
+    const [person] = run.contactId
+      ? await ctx.tx
+          .select({ phone: contacts.phone })
+          .from(contacts)
+          .where(eq(contacts.id, run.contactId))
+      : [];
+
+    const verdict = await mayProceed(ctx, {
+      verb,
+      contactId: run.contactId,
+      phone: person?.phone ?? null,
+      autonomyCeiling: automation?.autonomyCeiling ?? null,
+      // The whole run is untrusted when its trigger was, not only the step
+      // that reads the field (§4.17) — otherwise a form submission could
+      // launder itself through one harmless step into a step that acts.
+      inputTrust: untrustedTrigger(run.context) ? "untrusted" : "system",
+      budgetRemainingMinor: automation?.budgetMinor ?? null,
+    });
+
+    if (verdict.decision === "refuse") {
+      await completeCall(ctx.tx, view, node, {
+        serviceName: outcome.verbKey,
+        input: outcome.input,
+        error: verdict.reason,
+      });
+      await fail(ctx, run.id, "refused", verdict.reason);
+      return { done: true, state: "refused", detail: verdict.reason };
+    }
+
+    if (verdict.decision === "defer") {
+      // Held, not dropped. The run sleeps on the node it was about to run, so
+      // waking resumes exactly here rather than one step further on.
+      await ctx.tx
+        .update(runs)
+        .set({ wakeAt: verdict.until, resumeNodeId: node.id })
+        .where(eq(runs.id, run.id));
+      return { done: false, state: "deferred", detail: verdict.reason };
+    }
+
+    if (verdict.decision === "approve") {
+      await ctx.tx.insert(runApprovals).values({
+        runId: run.id,
+        subjectKind: RUN_SUBJECT,
+        subjectId: run.subjectId,
+        kind: verb.effect,
+        summary: verdict.reason,
+        // Verbatim, as the schema promises: approving replays exactly this.
+        // Every read surface redacts instead.
+        serviceName: verb.service.def.name,
+        input: outcome.input ?? {},
+        proposedAutonomy: "approve",
+      });
+      // Parked on the node awaiting a decision, so approving resumes here.
+      await ctx.tx
+        .update(runs)
+        .set({ resumeNodeId: node.id })
+        .where(eq(runs.id, run.id));
+      ctx.queueEvent("automation.runAwaitingApproval", {
+        runId: run.id,
+        nodeId: node.id,
+      });
+      return { done: false, state: "waiting", detail: verdict.reason };
+    }
+
     try {
       // As the platform: an automation acts on the owner's behalf and holds no
       // session of its own. C9.03 puts consent, quiet hours, the budget and
@@ -277,10 +355,25 @@ async function finish(ctx: ServiceContext, runId: string): Promise<void> {
   ctx.queueEvent("automation.runFinished", { runId });
 }
 
+/**
+ * Whether anything in this run came from outside.
+ *
+ * §4.17: untrusted input is data, never instruction, and the taint belongs to
+ * the whole run rather than to the step that reads the field — otherwise a
+ * form submission could launder itself through one harmless step into a step
+ * that acts.
+ */
+function untrustedTrigger(context: unknown): boolean {
+  if (typeof context !== "object" || context === null) return false;
+  const trigger = (context as { trigger?: unknown }).trigger;
+  if (typeof trigger !== "object" || trigger === null) return false;
+  return (trigger as { untrusted?: unknown }).untrusted === true;
+}
+
 async function fail(
   ctx: ServiceContext,
   runId: string,
-  reason: "error" | "bounds",
+  reason: "error" | "bounds" | "refused",
   detail: string,
 ): Promise<void> {
   await ctx.tx

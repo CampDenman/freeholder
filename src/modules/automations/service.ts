@@ -42,6 +42,12 @@ import { automationGraph, validateGraph, type GraphProblem } from "./graph";
 // are not the same subject.
 export { runNow, wake, killRun, listRuns, inspectRun } from "./runtime";
 import { inspectRun, killRun, listRuns, runNow, wake } from "./runtime";
+// The guardrails as a service (C9.03). It exists because "would this be
+// allowed?" is a real question an owner asks before switching an automation
+// on — and because a decision this consequential should be inspectable from
+// outside the runtime rather than only observable by its effects.
+export { checkGuardrails } from "./guardrail-service";
+import { checkGuardrails } from "./guardrail-service";
 
 const automationRow = row({
   id: uuidSchema,
@@ -550,4 +556,6 @@ export default [
   killRun,
   listRuns,
   inspectRun,
+  // C9.03.
+  checkGuardrails,
 ];
