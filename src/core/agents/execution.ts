@@ -38,14 +38,8 @@
 import { z } from "zod";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { row, timestamp, uuid } from "@/core/contract";
-import {
-  agentConnections,
-  agentRuns,
-  agents,
-  agentSpend,
-  agentSteps,
-  agentTasks,
-} from "@/core/agents/schema";
+import { agentConnections, agents, agentTasks } from "@/core/agents/schema";
+import { runSpend, runSteps, runs } from "@/core/runs/schema";
 import { apiKeys } from "@/core/apikeys/schema";
 import { effectiveAutonomy, MAX_TASK_ATTEMPTS } from "@/core/agents/service";
 import {
@@ -125,12 +119,12 @@ export async function agentForActor(tx: Tx, actor: Actor): Promise<ResolvedAgent
 async function liveRuns(tx: Tx, agentId: string): Promise<number> {
   const [row] = await tx
     .select({ count: sql<number>`count(*)::int` })
-    .from(agentRuns)
+    .from(runs)
     .where(
       and(
-        eq(agentRuns.agentId, agentId),
-        eq(agentRuns.status, "running"),
-        sql`${agentRuns.leaseExpiresAt} > now()`,
+        eq(runs.agentId, agentId),
+        eq(runs.status, "running"),
+        sql`${runs.leaseExpiresAt} > now()`,
       ),
     );
   return row?.count ?? 0;
@@ -143,12 +137,12 @@ async function spentThisPeriod(
   period: string,
 ): Promise<number> {
   const [row] = await tx
-    .select({ total: sql<number>`coalesce(sum(${agentSpend.costCents}), 0)::int` })
-    .from(agentSpend)
+    .select({ total: sql<number>`coalesce(sum(${runSpend.costCents}), 0)::int` })
+    .from(runSpend)
     .where(
       and(
-        eq(agentSpend.agentId, agentId),
-        sql`${agentSpend.periodStart} >= date_trunc(${period}, now())`,
+        eq(runSpend.agentId, agentId),
+        sql`${runSpend.periodStart} >= date_trunc(${period}, now())`,
       ),
     );
   return row?.total ?? 0;
@@ -276,14 +270,17 @@ export const claimTask = defineService({
     if (!task) return null;
 
     const [run] = await ctx.tx
-      .insert(agentRuns)
+      .insert(runs)
       .values({
-        taskId: task.id,
+        // An agent working a task: the subject is the task, the worker is the
+        // agent. Both are named because core/runs knows neither (§4.17).
+        subjectKind: "agent_task",
+        subjectId: task.id,
         agentId: agent.id,
         attempt: task.attempts,
         leaseExpiresAt: sql`now() + ${`${LEASE_MINUTES} minutes`}::interval`,
       })
-      .returning({ id: agentRuns.id, leaseExpiresAt: agentRuns.leaseExpiresAt });
+      .returning({ id: runs.id, leaseExpiresAt: runs.leaseExpiresAt });
 
     ctx.setSubject("agent_task", task.id);
     ctx.queueEvent("agentTask.claimed", {
@@ -361,12 +358,12 @@ export const reportStep = defineService({
     const run = await ownRun(ctx.tx, input.runId, agent.id);
 
     const [nextSeq] = await ctx.tx
-      .select({ seq: sql<number>`coalesce(max(${agentSteps.seq}), 0) + 1` })
-      .from(agentSteps)
-      .where(eq(agentSteps.runId, run.id));
+      .select({ seq: sql<number>`coalesce(max(${runSteps.seq}), 0) + 1` })
+      .from(runSteps)
+      .where(eq(runSteps.runId, run.id));
 
     const [step] = await ctx.tx
-      .insert(agentSteps)
+      .insert(runSteps)
       .values({
         runId: run.id,
         seq: nextSeq?.seq ?? 1,
@@ -378,18 +375,18 @@ export const reportStep = defineService({
         durationMs: input.durationMs ?? null,
         error: input.error ?? null,
       })
-      .returning({ id: agentSteps.id, seq: agentSteps.seq });
+      .returning({ id: runSteps.id, seq: runSteps.seq });
 
     // The heartbeat. A run whose agent keeps reporting keeps its claim; one
     // that goes quiet loses it to the reaper.
     const [updated] = await ctx.tx
-      .update(agentRuns)
+      .update(runs)
       .set({
-        tokensIn: sql`${agentRuns.tokensIn} + ${input.tokens}`,
+        tokensIn: sql`${runs.tokensIn} + ${input.tokens}`,
         leaseExpiresAt: sql`now() + ${`${LEASE_MINUTES} minutes`}::interval`,
       })
-      .where(eq(agentRuns.id, run.id))
-      .returning({ leaseExpiresAt: agentRuns.leaseExpiresAt });
+      .where(eq(runs.id, run.id))
+      .returning({ leaseExpiresAt: runs.leaseExpiresAt });
 
     ctx.setSubject("agent_task", run.taskId);
     return {
@@ -408,13 +405,13 @@ async function ownRun(
 ): Promise<{ id: string; taskId: string; status: string }> {
   const [run] = await tx
     .select({
-      id: agentRuns.id,
-      taskId: agentRuns.taskId,
-      status: agentRuns.status,
-      agentId: agentRuns.agentId,
+      id: runs.id,
+      taskId: runs.subjectId,
+      status: runs.status,
+      agentId: runs.agentId,
     })
-    .from(agentRuns)
-    .where(eq(agentRuns.id, runId))
+    .from(runs)
+    .where(eq(runs.id, runId))
     .limit(1);
 
   // Unknown and not-yours answer the same way, so a run id cannot be probed.
@@ -489,7 +486,7 @@ export const completeTask = defineService({
       input.outcome === "refused" || (task?.attempts ?? 0) >= MAX_TASK_ATTEMPTS;
 
     await ctx.tx
-      .update(agentRuns)
+      .update(runs)
       .set({
         status: succeeded ? "done" : "failed",
         // `outcome` is the agent's word for what happened; `stopReason` is the
@@ -503,11 +500,11 @@ export const completeTask = defineService({
         endedAt: sql`now()`,
         leaseExpiresAt: null,
         costCents: input.costCents,
-        tokensIn: sql`${agentRuns.tokensIn} + ${input.tokensIn}`,
-        tokensOut: sql`${agentRuns.tokensOut} + ${input.tokensOut}`,
+        tokensIn: sql`${runs.tokensIn} + ${input.tokensIn}`,
+        tokensOut: sql`${runs.tokensOut} + ${input.tokensOut}`,
         error: input.failureReason ?? null,
       })
-      .where(eq(agentRuns.id, run.id));
+      .where(eq(runs.id, run.id));
 
     const status = succeeded
       ? ("done" as const)
@@ -532,7 +529,7 @@ export const completeTask = defineService({
       .where(and(eq(agentTasks.id, run.taskId), eq(agentTasks.status, "running")));
 
     if (input.costCents > 0 || input.tokensIn > 0 || input.tokensOut > 0) {
-      await ctx.tx.insert(agentSpend).values({
+      await ctx.tx.insert(runSpend).values({
         agentId: agent.id,
         runId: run.id,
         periodStart: sql`date_trunc(${agent.budgetPeriod}, now())`,
@@ -573,7 +570,7 @@ export const releaseTask = defineService({
     const run = await ownRun(ctx.tx, input.runId, agent.id);
 
     await ctx.tx
-      .update(agentRuns)
+      .update(runs)
       .set({
         status: "cancelled",
         stopReason: "cancelled",
@@ -581,7 +578,7 @@ export const releaseTask = defineService({
         leaseExpiresAt: null,
         error: input.reason ?? "Released by the agent.",
       })
-      .where(eq(agentRuns.id, run.id));
+      .where(eq(runs.id, run.id));
 
     await ctx.tx
       .update(agentTasks)
@@ -605,7 +602,7 @@ export async function reapExpiredLeases(): Promise<{ reclaimed: number }> {
   const { db } = await import("@/core/db");
 
   const expired = await db()
-    .update(agentRuns)
+    .update(runs)
     .set({
       status: "failed",
       stopReason: "timeout",
@@ -615,11 +612,11 @@ export async function reapExpiredLeases(): Promise<{ reclaimed: number }> {
     })
     .where(
       and(
-        eq(agentRuns.status, "running"),
-        or(isNull(agentRuns.leaseExpiresAt), sql`${agentRuns.leaseExpiresAt} <= now()`),
+        eq(runs.status, "running"),
+        or(isNull(runs.leaseExpiresAt), sql`${runs.leaseExpiresAt} <= now()`),
       ),
     )
-    .returning({ taskId: agentRuns.taskId });
+    .returning({ taskId: runs.subjectId });
 
   if (expired.length === 0) return { reclaimed: 0 };
 

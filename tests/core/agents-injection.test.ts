@@ -11,7 +11,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
-import { agentSteps, agentTasks } from "@/core/agents/schema";
+import { agentTasks } from "@/core/agents/schema";
+import { runSteps } from "@/core/runs/schema";
 import { fenceIntact, untrustedEnvelope } from "@/core/agents/envelope";
 import {
   connectAgentRuntime,
@@ -340,8 +341,8 @@ describe.runIf(hasDatabase)("an agent reading hostile material", { timeout: 60_0
     const [task] = await db().select().from(agentTasks);
     const steps = await db()
       .select()
-      .from(agentSteps)
-      .where(eq(agentSteps.runId, task!.id))
+      .from(runSteps)
+      .where(eq(runSteps.runId, task!.id))
       .limit(1);
     // Steps exist for the run; their contents went through redact() on write,
     // which the unit test above pins.

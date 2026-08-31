@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
-import { agentApprovals } from "@/core/agents/schema";
+import { runApprovals } from "@/core/runs/schema";
 import { createContact, getContact } from "@/core/contacts/service";
 import {
   connectAgentRuntime,
@@ -316,8 +316,8 @@ describe.runIf(hasDatabase)("managed writes", { timeout: 30_000 }, () => {
     expect((result.approval?.input as Record<string, unknown>).apiToken).toBe("[redacted]");
     const [stored] = await db()
       .select()
-      .from(agentApprovals)
-      .where(eq(agentApprovals.id, result.approval!.id));
+      .from(runApprovals)
+      .where(eq(runApprovals.id, result.approval!.id));
     expect((stored!.input as Record<string, unknown>).apiToken).toBe("s3cret");
     const [listedRow] = await listApprovals.call({}, OWNER);
     expect((listedRow!.input as Record<string, unknown>).apiToken).toBe("[redacted]");

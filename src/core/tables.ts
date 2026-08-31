@@ -21,13 +21,12 @@ export {
   agentConnections,
   agents,
   agentTasks,
-  agentRuns,
-  agentSteps,
-  agentApprovals,
-  agentSpend,
   agentPlaybooks,
   agentPlaybookVersions,
 } from "@/core/agents/schema";
+// The runtime four (§4.17, C9.02). Agents and automations both run work, so
+// runs belong to neither of them.
+export { runs, runSteps, runApprovals, runSpend } from "@/core/runs/schema";
 export {
   calendars,
   calendarMemberships,
