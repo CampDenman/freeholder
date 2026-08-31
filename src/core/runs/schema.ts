@@ -34,6 +34,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { contacts } from "@/core/contacts/schema";
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
@@ -41,13 +42,22 @@ import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 export const RUN_SUBJECTS = ["agent_task", "automation"] as const;
 export const RUN_STATUSES = ["running", "done", "failed", "cancelled"] as const;
 export const STEP_KINDS = [
+  // What an agent records: a turn of reasoning and the calls it made.
   "message",
   "tool_call",
   "tool_result",
   "note",
-  // C9.02 adds the automation kinds — `call`, `prompt`, `wait`, `branch` and
-  // the rest — with the runtime that writes them. This change moves the tables
-  // and nothing else, so the enum is still exactly what agents record.
+  // What an automation records: one node of its graph (§4.17, C9.02). A graph
+  // holds deterministic and prompt work in the same shape, so the enum has to
+  // hold both, or a mixed run could not write down half of itself.
+  "call",
+  "prompt",
+  "playbook",
+  "wait",
+  "branch",
+  "loop",
+  "gate",
+  "stop",
 ] as const;
 
 export const runs = pgTable(
@@ -59,6 +69,15 @@ export const runs = pgTable(
     /** The agent task, or the automation. No FK — see the file header. */
     subjectId: uuid("subject_id").notNull(),
     /**
+     * The version of the subject that produced this run, when it has versions.
+     *
+     * §4.17: "a run pins the version that produced it". An automation edited
+     * next week must not change what last week's run was doing, and the only
+     * way to keep that true is to write the answer down rather than resolve it
+     * later against something that has since moved.
+     */
+    subjectVersionId: uuid("subject_version_id"),
+    /**
      * Who did the work, when anybody did.
      *
      * Nullable, which is the whole difference from `agent_runs`: an automation
@@ -66,6 +85,10 @@ export const runs = pgTable(
      * column here would have forced a fake agent into existence to satisfy it.
      */
     agentId: uuid("agent_id"),
+    /** The contact this run is about, when it is about one. */
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
     attempt: integer("attempt").notNull().default(1),
     status: text("status", { enum: RUN_STATUSES }).notNull().default("running"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
@@ -75,9 +98,59 @@ export const runs = pgTable(
     tokensOut: integer("tokens_out").notNull().default(0),
     costCents: integer("cost_cents").notNull().default(0),
     stopReason: text("stop_reason", {
-      enum: ["done", "budget", "timeout", "refused", "error", "cancelled"],
+      enum: [
+        "done",
+        "budget",
+        "timeout",
+        "refused",
+        "error",
+        "cancelled",
+        // A run that hit its own declared ceiling stopped for a different
+        // reason than one that errored, and an owner reading "error" would go
+        // looking for a fault that does not exist (§4.17).
+        "bounds",
+      ],
     }),
     error: text("error"),
+    /**
+     * When a sleeping run should be looked at again (§4.17's `wait`).
+     *
+     * A row rather than a held process, because §4.17 says so and the reason
+     * is operational: a deploy, a restart or a crash must not lose a two-day
+     * delay, and a two-day wait should cost nothing while it waits.
+     */
+    wakeAt: timestamp("wake_at", { withTimezone: true }),
+    /**
+     * How many steps this run has taken, against the graph's own ceiling.
+     *
+     * Counted rather than derived. §4.17 bounds a run by `maxSteps` and the
+     * check happens *before* each step, so the runtime needs a number it can
+     * read without counting rows it is in the middle of writing.
+     */
+    stepCount: integer("step_count").notNull().default(0),
+    /**
+     * The node to resume at, for a run that is sleeping or waiting on somebody.
+     *
+     * Null while a run is executing: a run that is mid-step has no single
+     * "next", and writing one would be a guess that survives a crash.
+     */
+    resumeNodeId: text("resume_node_id"),
+    /**
+     * What earlier steps produced, by output key (§4.17's `outputKey`).
+     *
+     * On the run rather than assembled from steps, because a step's output is
+     * redacted for display and this is the unredacted value a later step
+     * actually needs. Both exist for different readers.
+     */
+    context: jsonb("context").notNull().default({}),
+    /**
+     * One run per (subject, trigger key), where a key is given.
+     *
+     * §4.17: "The outbox retries and a job re-runs its handler, so the same
+     * event must not enter the same automation twice." Null for work with no
+     * natural key — a manual run is meant to be repeatable.
+     */
+    idempotencyKey: text("idempotency_key"),
     /**
      * An inbound runtime holds a lease. If it dies mid-run the lease lapses
      * and the work becomes claimable again — which is the only way to tell
@@ -91,6 +164,15 @@ export const runs = pgTable(
     index("runs_subject_idx").on(t.subjectKind, t.subjectId),
     index("runs_agent_idx").on(t.agentId),
     index("runs_lease_idx").on(t.leaseExpiresAt).where(sql`${t.status} = 'running'`),
+    index("runs_contact_idx").on(t.contactId),
+    // The wake sweep is a range scan over sleeping runs rather than a parse of
+    // every row, the same argument `agent_playbooks.next_run_at` records.
+    index("runs_wake_idx").on(t.wakeAt).where(sql`${t.status} = 'running'`),
+    // Only the index holds under concurrency, which is the point of having it
+    // rather than a check in the handler.
+    uniqueIndex("runs_idempotency_idx")
+      .on(t.subjectKind, t.subjectId, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
   ],
 );
 
@@ -111,6 +193,8 @@ export const runSteps = pgTable(
       .references(() => runs.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
     kind: text("kind", { enum: STEP_KINDS }).notNull(),
+    /** Which node of the graph this was, for an automation. */
+    nodeId: text("node_id"),
     serviceName: text("service_name"),
     /** Redacted by the same rule the audit trail uses — secrets never land here. */
     input: jsonb("input"),

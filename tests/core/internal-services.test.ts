@@ -18,6 +18,11 @@ import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 const INTERNAL = [
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
+  // The wake sweep (C9.02). System rather than scoped because a sleeping run
+  // is woken by a job on nobody's behalf, and it needs a real ServiceContext:
+  // advancing a run dispatches verbs through `ctx.callAsSystem` and queues
+  // events, neither of which a plain function can do.
+  "automations.wake",
   "briefing.agentAttention",
   "briefing.appointments",
   "briefing.assemble",
