@@ -37,6 +37,11 @@ import {
   automations,
 } from "./schema";
 import { automationGraph, validateGraph, type GraphProblem } from "./graph";
+// The runtime half (C9.02). Re-exported here because the manifest names one
+// services module, and separate because defining an automation and running one
+// are not the same subject.
+export { runNow, wake, killRun, listRuns, inspectRun } from "./runtime";
+import { inspectRun, killRun, listRuns, runNow, wake } from "./runtime";
 
 const automationRow = row({
   id: uuidSchema,
@@ -539,4 +544,10 @@ export default [
   versions,
   versionGraph,
   restoreVersion,
+  // C9.02.
+  runNow,
+  wake,
+  killRun,
+  listRuns,
+  inspectRun,
 ];

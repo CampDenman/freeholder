@@ -9,6 +9,10 @@ import twoFactorServices from "@/core/auth/two-factor";
 import sessionManagementServices from "@/core/auth/session-management/service";
 import magicLinkServices from "@/core/auth/magic-links/service";
 import resetServices from "@/core/auth/reset";
+// What a merge and an erasure mean for a run. Imported for the side effect:
+// `core/runs` owns the table, so it owns the obligations that come with a
+// `contact_id`, and something loaded at boot has to make the registration.
+import "@/core/runs/spine";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
 import agentWrites from "@/core/agents/writes";

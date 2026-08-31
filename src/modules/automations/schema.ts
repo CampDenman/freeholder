@@ -28,6 +28,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { contacts } from "@/core/contacts/schema";
 import { segments } from "@/core/segments/schema";
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
@@ -143,5 +144,39 @@ export const automationVersions = pgTable(
     // only the index can stop two "version 3"s existing.
     uniqueIndex("automation_versions_number_idx").on(t.automationId, t.version),
     index("automation_versions_automation_idx").on(t.automationId, t.createdAt),
+  ],
+);
+
+/**
+ * What this automation has already done to this person (§4.17, C9.02).
+ *
+ * §4.17: "Re-entry is a stated policy, not an accident ... A customer
+ * receiving the same win-back note every time they cancel is the failure mode
+ * that makes owners switch automation off entirely."
+ *
+ * One row per person per automation, enforced by a unique index rather than by
+ * the handler: the decision is read and written on the same row, so two events
+ * arriving together must not be able to create two states and both conclude
+ * "never entered".
+ */
+export const automationContactState = pgTable(
+  "automation_contact_state",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    automationId: uuid("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    entryCount: integer("entry_count").notNull().default(0),
+    lastEnteredAt: timestamp("last_entered_at", { withTimezone: true }),
+    /** Null when the policy is `once` or `always`; a date under `cooldown`. */
+    cooldownUntil: timestamp("cooldown_until", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("automation_contact_state_once_idx").on(t.automationId, t.contactId),
   ],
 );
