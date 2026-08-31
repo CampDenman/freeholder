@@ -12,7 +12,8 @@ import {
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
-import { agentApprovals, agentRuns, agentTasks } from "@/core/agents/schema";
+import { agentTasks } from "@/core/agents/schema";
+import { runApprovals, runs } from "@/core/runs/schema";
 import { effectiveAutonomy } from "@/core/agents/service";
 import { agentForActor } from "@/core/agents/execution";
 import {
@@ -42,8 +43,19 @@ const approvalRow = row({
 });
 
 /** What proposeWrite hands back: secrets stay out of agent-visible copies. */
-function redactedApproval<T extends { input: unknown }>(approval: T): T {
-  return { ...approval, input: redact(approval.input) ?? {} };
+/**
+ * An approval as this layer names it, with its input redacted.
+ *
+ * `core/runs` calls the owner `subjectId` because a run can belong to an
+ * automation as easily as to a task (§4.17). In the agent layer it is always a
+ * task, so the contract keeps saying `taskId` — the projection lives here
+ * rather than leaking core's polymorphism into an API that has no use for it.
+ */
+function redactedApproval<T extends { input: unknown; subjectId: string }>(
+  approval: T,
+): Omit<T, "subjectId"> & { taskId: string; input: unknown } {
+  const { subjectId, ...rest } = approval;
+  return { ...rest, taskId: subjectId, input: redact(approval.input) ?? {} };
 }
 
 async function beforeBlocks(
@@ -93,13 +105,13 @@ export const proposeWrite = defineService({
 
     const [run] = await ctx.tx
       .select({
-        id: agentRuns.id,
-        taskId: agentRuns.taskId,
-        agentId: agentRuns.agentId,
-        status: agentRuns.status,
+        id: runs.id,
+        taskId: runs.subjectId,
+        agentId: runs.agentId,
+        status: runs.status,
       })
-      .from(agentRuns)
-      .where(eq(agentRuns.id, input.runId))
+      .from(runs)
+      .where(eq(runs.id, input.runId))
       .limit(1);
     if (!run || run.status !== "running" || run.agentId !== agent.id) {
       throw new ServiceError("not_found", "No such active run.");
@@ -160,10 +172,11 @@ export const proposeWrite = defineService({
     // an irreversible or undeclared write.
     const awaiting = autonomy !== "suggest";
     const [inserted] = await ctx.tx
-      .insert(agentApprovals)
+      .insert(runApprovals)
       .values({
         runId: run.id,
-        taskId: task.id,
+        subjectKind: "agent_task",
+        subjectId: task.id,
         kind,
         summary,
         preview,
@@ -217,14 +230,14 @@ export const listApprovals = defineService({
       );
     }
     const filters = [
-      input.taskId ? eq(agentApprovals.taskId, input.taskId) : undefined,
-      input.status ? eq(agentApprovals.status, input.status) : undefined,
+      input.taskId ? eq(runApprovals.subjectId, input.taskId) : undefined,
+      input.status ? eq(runApprovals.status, input.status) : undefined,
     ].filter((clause) => clause !== undefined);
     const rows = await ctx.tx
       .select()
-      .from(agentApprovals)
+      .from(runApprovals)
       .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(agentApprovals.createdAt))
+      .orderBy(desc(runApprovals.createdAt))
       .limit(input.limit);
     // Stored verbatim for once-only execution; redacted wherever it is shown.
     return rows.map(redactedApproval);
@@ -237,9 +250,9 @@ export const listApprovals = defineService({
  */
 async function explainUndecidable(ctx: ServiceContext, id: string): Promise<never> {
   const [existing] = await ctx.tx
-    .select({ status: agentApprovals.status, expiresAt: agentApprovals.expiresAt })
-    .from(agentApprovals)
-    .where(eq(agentApprovals.id, id))
+    .select({ status: runApprovals.status, expiresAt: runApprovals.expiresAt })
+    .from(runApprovals)
+    .where(eq(runApprovals.id, id))
     .limit(1);
   if (!existing) throw new ServiceError("not_found", "That approval is not here.");
   if (existing.status === "pending") {
@@ -262,16 +275,16 @@ function requireDecider(ctx: ServiceContext): string {
 }
 
 const CLAIMABLE = and(
-  eq(agentApprovals.status, "pending"),
-  sql`(${agentApprovals.expiresAt} is null or ${agentApprovals.expiresAt} > now())`,
+  eq(runApprovals.status, "pending"),
+  sql`(${runApprovals.expiresAt} is null or ${runApprovals.expiresAt} > now())`,
 );
 
 /** After a decision or expiry, a task parked on approval goes back to work. */
 async function releaseTask(ctx: ServiceContext, taskId: string): Promise<void> {
   const [pending] = await ctx.tx
-    .select({ id: agentApprovals.id })
-    .from(agentApprovals)
-    .where(and(eq(agentApprovals.taskId, taskId), eq(agentApprovals.status, "pending")))
+    .select({ id: runApprovals.id })
+    .from(runApprovals)
+    .where(and(eq(runApprovals.subjectId, taskId), eq(runApprovals.status, "pending")))
     .limit(1);
   if (pending) return;
   await ctx.tx
@@ -296,14 +309,14 @@ export const approveWrite = defineService({
     // below throws, the whole transaction rolls back and the row stays
     // pending — approved means executed, always.
     const [claimed] = await ctx.tx
-      .update(agentApprovals)
+      .update(runApprovals)
       .set({
         status: "approved",
         decidedBy,
         decidedAt: sql`now()`,
         decisionNote: input.note?.length ? input.note : null,
       })
-      .where(and(eq(agentApprovals.id, input.id), CLAIMABLE))
+      .where(and(eq(runApprovals.id, input.id), CLAIMABLE))
       .returning();
     if (!claimed) await explainUndecidable(ctx, input.id);
 
@@ -314,11 +327,11 @@ export const approveWrite = defineService({
     const service = getService(claimed!.serviceName);
     const result = await ctx.call(service, claimed!.input);
 
-    await releaseTask(ctx, claimed!.taskId);
+    await releaseTask(ctx, claimed!.subjectId);
     ctx.setSubject("agent_approval", claimed!.id);
     ctx.queueEvent("agentApproval.approved", {
       id: claimed!.id,
-      taskId: claimed!.taskId,
+      taskId: claimed!.subjectId,
       serviceName: claimed!.serviceName,
     });
     return { approval: redactedApproval(claimed!), result: result ?? null };
@@ -339,22 +352,22 @@ export const rejectWrite = defineService({
   handler: async (input, ctx) => {
     const decidedBy = requireDecider(ctx);
     const [claimed] = await ctx.tx
-      .update(agentApprovals)
+      .update(runApprovals)
       .set({
         status: "rejected",
         decidedBy,
         decidedAt: sql`now()`,
         decisionNote: input.note,
       })
-      .where(and(eq(agentApprovals.id, input.id), CLAIMABLE))
+      .where(and(eq(runApprovals.id, input.id), CLAIMABLE))
       .returning();
     if (!claimed) await explainUndecidable(ctx, input.id);
 
-    await releaseTask(ctx, claimed!.taskId);
+    await releaseTask(ctx, claimed!.subjectId);
     ctx.setSubject("agent_approval", claimed!.id);
     ctx.queueEvent("agentApproval.rejected", {
       id: claimed!.id,
-      taskId: claimed!.taskId,
+      taskId: claimed!.subjectId,
       serviceName: claimed!.serviceName,
     });
     return { approval: redactedApproval(claimed!) };
@@ -370,15 +383,15 @@ export const expireApprovals = defineService({
   output: row({ expired: z.number().int() }),
   handler: async (_input, ctx) => {
     const lapsed = await ctx.tx
-      .update(agentApprovals)
+      .update(runApprovals)
       .set({ status: "expired", decidedAt: sql`now()` })
       .where(
         and(
-          eq(agentApprovals.status, "pending"),
-          sql`${agentApprovals.expiresAt} <= now()`,
+          eq(runApprovals.status, "pending"),
+          sql`${runApprovals.expiresAt} <= now()`,
         ),
       )
-      .returning({ id: agentApprovals.id, taskId: agentApprovals.taskId });
+      .returning({ id: runApprovals.id, taskId: runApprovals.subjectId });
     for (const row of new Map(lapsed.map((item) => [item.taskId, item])).values()) {
       await releaseTask(ctx, row.taskId);
     }
