@@ -608,6 +608,19 @@ export function rfc8058UnsubscribeHeaders(origin: string, unsubscribeToken: stri
   };
 }
 
+// Templates (C9.05). Re-exported because the manifest names one services
+// module, and separate because authoring a template and sending an issue are
+// not the same subject.
+export {
+  saveTemplate,
+  resetTemplate,
+  listTemplates,
+  getTemplate,
+  renderTemplate,
+  templateSlots,
+} from "./template-service";
+import templateServices from "./template-service";
+
 export default [
   listNewsletters,
   listPublicNewsletters,
@@ -622,5 +635,6 @@ export default [
   subscribeToNewsletter,
   confirmSubscription,
   unsubscribeFromNewsletter,
+  ...templateServices,
 ];
 
