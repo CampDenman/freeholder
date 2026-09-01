@@ -45,6 +45,8 @@ import { actorFromToken } from "@/core/http/actor";
 import { assignmentsFor } from "@/modules/cms/experiments";
 import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
 import { recordExperimentImpressions } from "@/modules/analytics/service";
+import { PopupMount } from "@/modules/popups/mount";
+import { POPUP_TALLY_COOKIE } from "@/modules/popups/tally";
 import { MagicWand } from "@phosphor-icons/react/dist/ssr";
 
 export const dynamic = "force-dynamic";
@@ -202,6 +204,25 @@ export default async function PublicLayout({
           </a>
         </div>
       </div>
+      {/*
+        The popup surface (C9.30). Last in the document because both of its
+        non-modal shapes are fixed to the bottom of the viewport, so this is
+        where the tab order should meet them; the modal shape goes to the
+        browser's top layer and does not care where it was written.
+
+        The visitor's cap tally is handed over as the raw cookie value. The
+        service owns that encoding — the shell's job is to carry it, not to
+        understand it.
+      */}
+      <PopupMount
+        path={ctx.path}
+        locale={locale}
+        t={t}
+        business={ctx.business}
+        localizeHref={ctx.localizeHref}
+        visitorKey={visitorId ?? cookieJar.get(ANON_COOKIE)?.value ?? null}
+        tally={cookieJar.get(POPUP_TALLY_COOKIE)?.value ?? null}
+      />
       <AnalyticsConsentControl
         policy={analytics.consentPolicy}
         state={consent}

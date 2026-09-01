@@ -1100,6 +1100,13 @@
       "when": 1791129600000,
       "tag": "0156_mail_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 157,
+      "version": "7",
+      "when": 1791216000000,
+      "tag": "0157_popups",
+      "breakpoints": true
     }
   ]
 }
