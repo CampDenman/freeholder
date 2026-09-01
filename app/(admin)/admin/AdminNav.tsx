@@ -30,6 +30,7 @@ import {
   Flask,
   MapPin,
   ChartLine,
+  ChartBar,
   Shuffle,
   Envelope,
   Stethoscope,
@@ -105,6 +106,7 @@ export interface AdminNavLabels {
   hire: string;
   events: string;
   newsletters: string;
+  reports: string;
   contribute: string;
   plugins: string;
   imports: string;
@@ -163,6 +165,7 @@ const LINKS = [
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
   { href: "/admin/traffic", key: "traffic", module: "analytics", Icon: ChartLine },
+  { href: "/admin/reports", key: "reports", module: "reporting", Icon: ChartBar },
   { href: "/admin/experiments", key: "experiments", module: "analytics", Icon: Shuffle },
   { href: "/admin/roles", key: "roles", module: "roles", Icon: ShieldCheck },
   { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
