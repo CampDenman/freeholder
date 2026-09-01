@@ -6732,8 +6732,102 @@ customer has one secure, comprehensible home for the relationship.
   OG assets, tracked short links and entity-level controls.
 - [ ] **C9.29** Build scoped gallery/quote/product gift-registry sharing and
   embeds for galleries, reviews, bookings and newsletter forms with backlinks.
-- [ ] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,
+- [x] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,
   targeting, consent-aware capture and accessibility-safe dismissal.
+  (New `popups` module, migration `0153_popups.sql`. §36 names the four
+  properties that make this worth absorbing rather than installing —
+  "block-editor-built, frequency-capped, targeting rules; newsletter capture
+  wired to §30 consent records" — and each of them is a decision here rather
+  than a field.
+  **Block-editor-built** is taken literally: a popup's body is a block tree,
+  validated against the same registry a page is and edited in the same editor.
+  It is stored in the **`chrome`** block context and analysed in a new
+  **`popup`** a11y context, which is the one seam worth explaining. Chrome is
+  already the platform's answer to "blocks that are not the page", so a fourth
+  *storage* context would have meant editing forty block definitions to state a
+  fact chrome already states; what a popup needs that chrome does not is a
+  different set of *rules*, and that is exactly what an analysis context
+  selects.
+  **Accessibility-safe dismissal is delegated, not written.** A modal has four
+  obligations — focus enters, focus stays, Escape closes, focus returns — and
+  every hand-rolled `role="dialog"` eventually gets one of them wrong. The
+  surface is a native `<dialog>` opened with `showModal()`, so the browser owns
+  all four; the close control is **first in the DOM** so the way out is what
+  `showModal()` focuses; and only the modal shape traps focus at all, because a
+  bar and a corner card are labelled regions that must not interrupt somebody
+  mid-sentence. Two new error-severity hints back it: `popupH1` (a popup renders
+  over a page that already has its H1, so an H1 inside one is a second H1 on
+  that page — the very failure the page rule exists to prevent, arriving from a
+  surface the page's editor never sees) and `popupRawHtml` (nothing can promise
+  the close button stays reachable inside markup the platform did not author).
+  `popups.setStatus` refuses to go live on either, the same shape as
+  `publishPage` refusing a page with no H1, and the axe audit in
+  `tests/modules/popups.test.ts` runs over the real rendered markup rather than
+  asserting a class name is present.
+  **Where the frequency count lives** is the question this item turns on. The
+  obvious answer — a server ledger keyed on the first-party visitor id — only
+  works for visitors who *have* one, and `analytics/visitor.ts` rightly refuses
+  to set an identifier without a durable consent choice. So there are two
+  stores: `popup_events` for anyone with a durable key, and a strictly narrow
+  cap cookie for everyone else, which holds no identifier at all — one line per
+  popup saying "shown twice since Tuesday, closed on Wednesday", meaningless
+  outside that browser and unjoinable to anything. Both survive the tab
+  closing, which is the whole promise.
+  Reconciling them is where the trap was. Merging the two into one history and
+  evaluating that once pairs the larger count with the more recent window, so
+  impressions from an expired window get spent against a live one. Each history
+  is evaluated **against its own window** and every one of them holds a veto,
+  which is the same conservatism with none of the arithmetic. Erring toward
+  showing less is the right side: the cost of one missed impression is an
+  impression; the cost of one too many is the visitor deciding the site is
+  hostile. The honest limit is stated at the call site rather than glossed — a
+  visitor who accepts no cookies at all and is not signed in cannot be
+  remembered by anything, and that is the floor of every frequency cap on the
+  web.
+  **The impression is recorded when it happened, not when it was planned.**
+  `decide` is a read; the client reports the open. An exit-intent popup that
+  never fires was never shown, and charging it against somebody's three-a-week
+  would mean the popup that did not appear is why the next one does not either.
+  **Targeting is `segments.contains` and nothing else** (§30, C7.17). The mode
+  that earns its place is `notInSegment` — do not ask somebody already on the
+  list to join it — and it is also why an anonymous visitor is *answered*
+  rather than skipped: nobody is a member of a list of contacts, so an
+  anonymous visitor is correctly outside every segment, which is a real answer
+  and not a missing one. `decide` derives the contact from `ctx.actor` rather
+  than accepting a `contactId`, because a contact id on a public query is an
+  invitation to ask what somebody else's audience would have been shown, and
+  its public projection drops the segment, the cap and the schedule the same
+  way `ads.slotByCode` drops `allow_third_party`.
+  **Consent is the platform's, in one model.** The database refuses a capture
+  popup with no consent statement (`popups_capture_consent`), because evidence
+  that cannot say what was agreed to is not evidence. Naming a newsletter hands
+  off to `newsletters.subscribe` and the double opt-in writes the record;
+  naming none writes it through `contacts.recordConsent` with the exact words
+  shown as the `terms_version`. An unticked box is a refusal and produces no
+  contact at all.
+  Two smaller decisions worth recording. Neither non-modal shape sits at the
+  top of the page: §32 already owns the top announcement bar as chrome, and a
+  timed bar arriving four seconds after paint is the Core Web Vitals failure
+  §4.16 refuses for ads — which does not stop being one because the message is
+  the owner's own. And an exit-intent popup never appears on a touch screen,
+  said out loud on the screen where the trigger is chosen, because a cursor
+  leaving the window is the only honest exit signal and substituting a timer
+  would be a popup at a moment nobody chose.
+  Two corrections made while building, both worth recording. The ledger first
+  counted impressions from the earliest one ever recorded rather than over a
+  rolling window, so a single view a year ago opened a window that had long
+  expired and every view since rode free inside it — a cap that reads as
+  enforced and is not, which is the same defect as a stored column nothing
+  reads. And the first accessibility test audited an open `<dialog>` directly:
+  axe inside jsdom reports **every** rule as *undecided* when one is present,
+  because the rest of the document is inert and the dialog's own contents go
+  unchecked too, so the assertion would have passed forever while checking
+  nothing — §15.7's silent-gate failure exactly. It audits `role="dialog"` with
+  `aria-modal` instead, which is what a native modal *is* in the accessibility
+  tree, and a positive control asserts the audit can still fail.
+  Thirty tests in `tests/modules/popups.test.ts` and four more in
+  `tests/core/cms-a11y.test.ts`, so the popup rules run in the cheap contract
+  gate beside the ones they extend. Changeset `popups.md`.)
 - [ ] **C9.31** Enable the social connection/onboarding surface in normal
   presets while never auto-authorizing or auto-publishing; make every installed
   conforming social adapter discoverable through one capability-negotiated UI
