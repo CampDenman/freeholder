@@ -34,6 +34,8 @@ import { analyticsAttributions, analyticsEvents } from "./schema";
 import { currentAnalyticsSettings } from "./read";
 import type { VisitorKind } from "./classify";
 import type { AnalyticsConsentState } from "./visitor";
+// The top of the funnel (§4.7, C9.07). Imported for the registration.
+import "./funnel";
 
 // CLAUDE.md's non-negotiable: events point at contacts, so a merge has to
 // bring a visitor's history with them. Unconditional — one person may have
@@ -1268,6 +1270,10 @@ import {
   recordExperimentConversion,
   recordExperimentImpressions,
 } from "./experiments";
+// The funnel (§4.7, C9.07). Separate because it is composed from stages other
+// modules register, rather than from this module's own tables alone.
+export { funnel, funnelDefinitions } from "./funnel-service";
+import funnelServices from "./funnel-service";
 
 export default [
   track,
@@ -1286,4 +1292,5 @@ export default [
   recordExperimentImpressions,
   recordExperimentConversion,
   experimentReport,
+  ...funnelServices,
 ];

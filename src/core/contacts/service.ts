@@ -34,6 +34,8 @@ import {
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import { defineService, ServiceError, type Tx } from "@/core/service";
+// "Lead" means one thing, and core says what (§4.7, C9.07).
+import "./funnel";
 
 const STAGES = ["lead", "prospect", "customer", "repeat"] as const;
 const lifecycleStage = z.enum(STAGES);

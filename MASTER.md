@@ -6377,8 +6377,36 @@ customer has one secure, comprehensible home for the relationship.
   now links to it and to C9.05's templates, which nothing linked to.
   Migration `0137_broadcasts.sql`; `tests/modules/broadcasts.test.ts`, whose
   webhook test runs the whole chain from provider event to campaign figure.)
-- [ ] **C9.07** Complete the funnel from visit → lead → quote/booking/cart →
+- [x] **C9.07** Complete the funnel from visit → lead → quote/booking/cart →
   invoice → paid/refunded and make attribution/query definitions inspectable.
+  (§4.7 states the design in a line — "Funnel = `AnalyticsEvent` joined through
+  `contact_id` to money tables" — and the care goes into *which* money tables,
+  because that depends on what this business has switched on. So the bands are
+  core's (`core/funnel/stages.ts`: visit, lead, interest, committed, paid,
+  returned) and the stages inside them are the modules': a module registers at
+  import time like a portal room or an automation verb, and one that is not
+  installed simply has no stage. A funnel that named every module would break
+  the first time one was toggled off.
+  **It counts people, not rows.** The person key is the contact where known
+  and `anon:<anon_id>` where not, one namespace — so a visitor who identifies
+  on Friday is the same person as the stranger who browsed on Monday, which is
+  what `analytics.identify`'s backfill was always for.
+  **Period counts, said out loud, not a cohort walk.** A cohort funnel over a
+  real business collapses to nothing, because most customers never visited the
+  site first — the walk-in, the referral, the phone call — and a chart claiming
+  0.4% would be arithmetically true and wrong about the business. The cost is
+  that somebody can appear in a later band without an earlier one, so every
+  band also reports how many of its people *were* in the previous band: the
+  caveat is checkable rather than buried. Cohort reports remain C9.08's.
+  **A refund is not a sixth step**, so `returned` is never a denominator — a
+  business must not appear to convert customers into refunds.
+  Inspectable is the point, not a footnote: `analytics.funnelDefinitions`
+  returns one line per stage saying exactly what is counted and which module
+  answers for it, plus what first- and last-touch attribution each mean, and
+  the admin screen prints them under the chart. A number an owner cannot
+  interrogate is a number they are entitled to disbelieve.
+  Admin at `/admin/traffic/funnel`, linked from traffic. No migration — every
+  stage reads tables that already exist. `tests/modules/funnel.test.ts`.)
 - [ ] **C9.08** Build reporting saved views, revenue/service/product/location/
   cohort/funnel reports, scheduled exports and CSV/QuickBooks/Xero shapes.
 
