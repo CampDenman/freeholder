@@ -7,6 +7,11 @@ name: CI
 
 on:
   pull_request:
+  # The merge queue tests the batch it is about to merge, on a temporary
+  # branch, and blocks on these same checks. Without this trigger the queue
+  # waits for a report that never comes, times out an hour later, and drops
+  # the pull request — so this line is what makes a queue usable at all.
+  merge_group:
   push:
     branches: [main]
 
