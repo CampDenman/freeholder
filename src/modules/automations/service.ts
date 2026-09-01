@@ -70,15 +70,21 @@ const automationRow = row({
 const problemRow = row({ nodeId: z.string().nullable(), message: z.string() });
 
 /**
- * Whether a trigger of this kind arrives with somebody attached.
+ * Whether a run of this automation arrives with somebody attached.
  *
  * An event carries a contact often enough that a verb acting on one is
  * reasonable; a schedule or a manual run does not. Validation uses this to
  * refuse "tag the contact" on a nightly automation at save time rather than
  * letting it throw in six weeks at 3am.
+ *
+ * An **audience settles it either way** (§30, C7.17): an automation whose entry
+ * condition is a segment is by definition about people, and `startRun` refuses
+ * to start one without a contact — so a manual "send this to everyone in the
+ * segment" rule may use contact verbs, and the refusal that made it impossible
+ * was the validator disagreeing with the runtime rather than a real rule.
  */
-function triggerHasContact(triggerKind: string): boolean {
-  return triggerKind === "event";
+function triggerHasContact(triggerKind: string, hasAudience: boolean): boolean {
+  return triggerKind === "event" || hasAudience;
 }
 
 /** The verb keys installed right now, and which of them need a contact. */
@@ -93,7 +99,11 @@ function knownVerbs(): { verbs: Set<string>; verbsNeedingContact: Set<string> } 
 }
 
 /** Everything wrong with a candidate graph, given what is installed. */
-function problemsFor(graph: unknown, triggerKind: string): GraphProblem[] {
+function problemsFor(
+  graph: unknown,
+  triggerKind: string,
+  hasAudience: boolean,
+): GraphProblem[] {
   const parsed = automationGraph.safeParse(graph);
   if (!parsed.success) {
     return parsed.error.issues.map((issue) => ({
@@ -104,7 +114,7 @@ function problemsFor(graph: unknown, triggerKind: string): GraphProblem[] {
   const known = knownVerbs();
   return validateGraph(parsed.data, {
     ...known,
-    triggerHasContact: triggerHasContact(triggerKind),
+    triggerHasContact: triggerHasContact(triggerKind, hasAudience),
   });
 }
 
@@ -263,10 +273,12 @@ export const validate = defineService({
   input: z.object({
     graph: z.unknown(),
     triggerKind: z.enum(AUTOMATION_TRIGGERS).default("event"),
+    /** An audience makes a run about somebody, whatever the trigger (C7.17). */
+    entrySegmentId: uuidSchema.nullish(),
   }),
   output: row({ ok: z.boolean(), problems: z.array(problemRow) }),
   handler: (input) => {
-    const problems = problemsFor(input.graph, input.triggerKind);
+    const problems = problemsFor(input.graph, input.triggerKind, Boolean(input.entrySegmentId));
     return Promise.resolve({ ok: problems.length === 0, problems });
   },
 });
@@ -302,7 +314,11 @@ export const publish = defineService({
       throw new ServiceError("conflict", "There is nothing drafted to publish.");
     }
 
-    const problems = problemsFor(automation.draftGraph, automation.triggerKind);
+    const problems = problemsFor(
+      automation.draftGraph,
+      automation.triggerKind,
+      Boolean(automation.entrySegmentId),
+    );
     if (problems.length > 0) {
       throw new ServiceError(
         "validation",
@@ -333,6 +349,9 @@ export const publish = defineService({
         triggerKind: automation.triggerKind,
         eventPattern: automation.eventPattern,
         scheduleCron: automation.scheduleCron,
+        // And the audience with it (§30, C7.17): narrowing who may enter is
+        // an edit like any other, and last month's runs were not narrowed.
+        entrySegmentId: automation.entrySegmentId,
         createdByUserId: await actingUserId(ctx),
       })
       .returning();
@@ -452,7 +471,11 @@ export const getAutomation = defineService({
       problems:
         automation.draftGraph === null || automation.draftGraph === undefined
           ? []
-          : problemsFor(automation.draftGraph, automation.triggerKind),
+          : problemsFor(
+              automation.draftGraph,
+              automation.triggerKind,
+              Boolean(automation.entrySegmentId),
+            ),
     };
   },
 });

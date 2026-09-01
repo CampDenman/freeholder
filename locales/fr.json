@@ -4708,5 +4708,11 @@
   "reports.saveName": "Nommez-la",
   "reports.save": "Enregistrer cette vue",
   "reports.delete": "Supprimer",
-  "reports.open": "Ouvrir"
+  "reports.open": "Ouvrir",
+  "automations.field.audience": "Audience",
+  "automations.field.audienceHint": "Seules les personnes de ce groupe peuvent entrer. Laissez « Tout le monde » si la règle vaut pour toute personne amenée par le déclencheur.",
+  "automations.field.everyone": "Tout le monde",
+  "reports.audience": "Audience",
+  "reports.everyone": "Tout le monde",
+  "reports.apply": "Afficher"
 }

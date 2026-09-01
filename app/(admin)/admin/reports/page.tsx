@@ -23,6 +23,7 @@ import {
   revenueByReport,
   revenueReport,
 } from "@/modules/reporting/service";
+import { listSegments } from "@/core/segments/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -40,6 +41,7 @@ export default async function ReportsPage({
   searchParams: Promise<{
     days?: string;
     dimension?: string;
+    segment?: string;
     error?: string;
     saved?: string;
   }>;
@@ -52,13 +54,20 @@ export default async function ReportsPage({
     ? (query.dimension as (typeof DIMENSIONS)[number])
     : "service";
 
-  const [t, business, revenue, definitions, cohorts, views] = await Promise.all([
+  // The cohort's audience is a segment the business already defined (§30,
+  // C7.17), never a filter this screen invents — "who" is answered once.
+  const segmentId = typeof query.segment === "string" && query.segment ? query.segment : null;
+
+  const [t, business, revenue, definitions, cohorts, views, audiences] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(revenueReport.call({ days }, actor)),
     domainOrNull(reportDefinitions.call({}, actor)),
-    domainOrNull(cohortReport.call({ months: 12 }, actor)),
+    domainOrNull(
+      cohortReport.call({ months: 12, ...(segmentId ? { segmentId } : {}) }, actor),
+    ),
     domainOrNull(listReportViews.call({}, actor)),
+    domainOrNull(listSegments.call({}, actor)),
   ]);
 
   // Asked only when something can answer, so the page shows a plain sentence
@@ -225,6 +234,28 @@ export default async function ReportsPage({
       <Card>
         <CardHeader title={t("reports.label.cohort")} />
         <CardBody>
+          <form method="get" className="mb-4 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="days" value={days} />
+            <input type="hidden" name="dimension" value={dimension} />
+            <Field label={t("reports.audience")} htmlFor="segment">
+              <select
+                id="segment"
+                name="segment"
+                defaultValue={segmentId ?? ""}
+                className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+              >
+                <option value="">{t("reports.everyone")}</option>
+                {(audiences ?? []).map((segment) => (
+                  <option key={segment.id} value={segment.id}>
+                    {segment.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Button type="submit" variant="quiet">
+              {t("reports.apply")}
+            </Button>
+          </form>
           {(cohorts?.cohorts ?? []).length === 0 ? (
             <p className="text-sm text-ink-muted">{t("reports.empty")}</p>
           ) : (
