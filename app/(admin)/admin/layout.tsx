@@ -138,6 +138,7 @@ export default async function AdminLayout({
               scoring: t("scoring.title"),
               referrals: t("referrals.title"),
               ads: t("ads.title"),
+              assistant: t("assistant.title"),
               automations: t("automations.title"),
               documents: t("documents.title"),
               loyalty: t("loyalty.title"),

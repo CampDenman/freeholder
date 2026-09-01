@@ -46,6 +46,7 @@ import {
   PuzzlePiece,
   DownloadSimple,
   Kanban,
+  Robot,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -93,6 +94,7 @@ export interface AdminNavLabels {
   scoring: string;
   referrals: string;
   ads: string;
+  assistant: string;
   automations: string;
   documents: string;
   loyalty: string;
@@ -143,6 +145,7 @@ const LINKS = [
   { href: "/admin/appointments", key: "appointments", module: "scheduling", Icon: CalendarBlank },
   { href: "/admin/calendars", key: "calendars", module: "scheduling", Icon: CalendarBlank },
   { href: "/admin/inbox", key: "inbox", module: "crm", Icon: ChatCircleText },
+  { href: "/admin/assistant", key: "assistant", module: "assistant", Icon: Robot },
   { href: "/admin/messaging", key: "messaging", module: "crm", Icon: DeviceMobile },
   { href: "/admin/pipeline", key: "pipeline", module: "crm", Icon: Kanban },
   { href: "/admin/tasks", key: "tasks", module: "crm", Icon: ClipboardText },

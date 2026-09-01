@@ -6705,8 +6705,73 @@ customer has one secure, comprehensible home for the relationship.
   MRC timing, daily rollups, pacing, advertiser reports and reconciliation.
 - [ ] **C9.20** Support consent-gated third-party tags off by default and
   generate accurate `ads.txt`/`app-ads.txt`.
-- [ ] **C9.21** Build the optional front-site assistant with AI adapters,
+- [x] **C9.21** Build the optional front-site assistant with AI adapters,
   provider/model/key settings, hard scopes, spend/rate limits and off fallback.
+  (New `assistant` module, migration `0143_front_site_assistant.sql`, plus
+  real `anthropic` and `openai` entries in `adapters/ai`, which until now
+  held only `none` — so `freeholder.config.ts`'s `adapters.ai` finally
+  resolves to something.
+  It answers on C7.15's site chat rather than growing a chat of its own.
+  `assistant.answer` composes `messaging.sendAssistantChatMessage`, so the
+  assistant's words are ordinary `messages` on the contact's canonical
+  conversation: visible in the shared inbox, part of the contact's history,
+  escalatable to a person. §31 says "every conversation lands on the
+  spine", and a private transcript table would have been a second truth
+  about the same conversation. This module therefore stores no transcript
+  at all — `assistant_turns` records what an attempt cost and what became
+  of it, and nothing else.
+  **Off is the default and a first-class answer.** `enabled` is false,
+  `spend_cap_cents` is zero, and every scope is ungranted, so an instance
+  that migrates to this release and never opens the screen has an assistant
+  that could not spend a penny if it were on. `assistant.answer` on that
+  instance returns `{ status: "off" }` before it reads a session, reaches a
+  provider or writes a row, and the chat widget is exactly what C7.15
+  built. The public site degrades to *nothing changed* rather than to an
+  error, which is the whole of "optional".
+  **The key is not in the database.** §17 puts secrets in the environment
+  and configuration in the database, and `agent_connections.credential_ref`
+  already established the indirection for provider credentials, so
+  `assistant_settings.credential_ref` holds the *name* of an environment
+  variable and the admin reports whether this deployment has it. A dump of
+  an instance contains no model key, and no read service has to remember to
+  omit a column. The cost is real and worth naming: an owner who cannot set
+  an environment variable on their host cannot configure the assistant.
+  That is why the screen names the exact variable and says found or missing
+  rather than failing at the first visitor question.
+  **Scopes are a catalogue, not a prompt.** `actions.ts` is the hard
+  ceiling — the only services this assistant can ever reach — and a grant
+  row switches one on. The model chooses *whether* to ask; it never chooses
+  what is possible, and it never supplies the arguments that say who
+  somebody is: `request_quote` takes the visitor's name and email from
+  their own chat session, so no arrangement of words in a chat window can
+  file a quote request in somebody else's name. Two actions ship, which is
+  deliberately few. Anything that needs to know what the business sells,
+  charges or has free is unsafe to offer before the assistant is grounded
+  in that data, and offering `check_availability` now would be inviting a
+  model to invent an appointment. That is C9.22.
+  **Nothing is decided after something is written.** Every refusal — spent
+  budget, hourly cap, conversation cap, unpriced model, missing key — is
+  read before any insert, because a failed statement aborts the whole
+  Postgres transaction and a module that discovered its budget was gone by
+  trying to spend it could not then record that it had refused. And a
+  refusal is returned, never thrown: a throw after writing the refusal row
+  rolls that row back, and the refusal leaves no trace on the one screen an
+  owner opens when the assistant has gone quiet. The money arithmetic is
+  §40's, imported from `core/agents/pricing` rather than copied — an
+  over-estimate of the next turn checked against what is left, so the last
+  answer of a period cannot cross the cap that exists to hold it, and an
+  unpriced model may not spend at all.
+  One thing the plan text does not survive contact with. §31 says the
+  assistant "never invents prices or availability — it quotes the catalogue
+  and calendar through service calls or says it doesn't know", and that is
+  C9.23's to enforce. What C9.21 can honestly claim is narrower and
+  structural: this build hands the model no prices, no hours and no diary,
+  so there is nothing here for it to quote. The prompt says so; the
+  enforcement is still owed.
+  Thirty-one tests in `tests/modules/assistant.test.ts`, including switched
+  off, a spend limit reached before the provider is ever called, a granted
+  action taken, an ungranted one refused, and one refused for not existing
+  at all. Changeset `front-site-assistant.md`.)
 - [ ] **C9.22** Ground the assistant from published content/catalog/hours/
   policies plus locale-aware `KnowledgeEntry` rows in pgvector/Postgres.
 - [ ] **C9.23** Prevent invented price/availability, enforce refusals and

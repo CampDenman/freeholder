@@ -46,6 +46,12 @@ import {
   PRODUCT_VISIBILITIES,
 } from "@/modules/catalog/contract";
 import { IMPORT_STATUSES, PLUGIN_STATUSES } from "@/core/plugins/schema";
+import {
+  ASSISTANT_PROVIDERS,
+  ASSISTANT_SPEND_PERIODS,
+  ASSISTANT_TURN_OUTCOMES,
+} from "@/modules/assistant/contract";
+import { ASSISTANT_ACTION_IDS } from "@/modules/assistant/actions";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
 import { WRITE_KINDS } from "@/core/agents/previews";
 import en from "../../locales/en.json";
@@ -238,6 +244,11 @@ describe("the families built from a template key", () => {
     ["work.column", BOARD_COLUMNS],
     ["work.approval.kind", WRITE_KINDS],
     ["plugins.status", PLUGIN_STATUSES],
+    ["assistant.provider", ASSISTANT_PROVIDERS],
+    ["assistant.period", ASSISTANT_SPEND_PERIODS],
+    ["assistant.outcome", ASSISTANT_TURN_OUTCOMES],
+    ["assistant.scope", ASSISTANT_ACTION_IDS],
+    ["assistant.scopeHint", ASSISTANT_ACTION_IDS],
     [
       "imports.status",
       IMPORT_STATUSES,
