@@ -7,8 +7,10 @@ import path from "node:path";
 
 // Next 16/Turbopack splits this route-rich application into thousands of small
 // server chunks. File count is still bounded to catch a traced repository or
-// dependency explosion, but it needs headroom above the clean-build baseline
-// (9,351 at C7.15). Forbidden roots remain the strongest boundary.
+// dependency explosion, but it needs headroom above the clean-build baseline:
+// 9,351 at C7.15, and 12,069 at C9.32 — the growth is one more admin screen
+// and one more module at a time, each adding chunks, with no dependency
+// change behind it. Forbidden roots remain the strongest boundary.
 //
 // These are tripwires for a traced repository or a dependency explosion, not
 // a size budget: the number to catch is a doubling, not a percent of drift.
@@ -23,7 +25,12 @@ import path from "node:path";
 // cap set from a local build is therefore a cap that passes locally and
 // fails in CI. 320 MiB sits about 1.5x above the Linux baseline, which still
 // catches the failure mode this exists for.
-const MAX_FILES = 12_000;
+// 1.5x the measured baseline, on the same reasoning as the byte cap below: far
+// enough above organic growth that a release is not blocked by shipping a
+// feature, close enough that a traced repository or a dependency explosion —
+// which arrive as a doubling, not as a drift — still trips it. Raised from
+// 12,000 when an ordinary eleven-file module crossed it.
+const MAX_FILES = 18_000;
 const MAX_BYTES = 320 * 1024 * 1024;
 const STANDALONE = path.resolve(".next", "standalone");
 const FORBIDDEN_ROOTS = new Set([
