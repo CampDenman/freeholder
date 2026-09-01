@@ -31,6 +31,12 @@ const INTERNAL = [
   "briefing.tasks",
   "briefing.update",
   "briefing.webhookFailures",
+  // Sending a campaign (C9.06). Starting one is scoped — an owner presses
+  // send — but carrying it forward is not: `sendNext` and `tick` run from
+  // `newsletters.tickBroadcasts` a batch at a time, on nobody's behalf, long
+  // after the request that started it has ended.
+  "broadcasts.sendNext",
+  "broadcasts.tick",
   "forms.briefingEnquiries",
   "galleries.buildArchive",
   "galleries.expireSessions",

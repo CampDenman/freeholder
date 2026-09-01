@@ -6334,8 +6334,49 @@ customer has one secure, comprehensible home for the relationship.
   Admin at `/admin/newsletters/templates` — `/admin/templates` is already
   C2.13's *content* templates, a different thing wearing the same word.
   Migration `0136_message_templates.sql`; `tests/modules/templates.test.ts`.)
-- [ ] **C9.06** Build broadcasts/segments, test sends, scheduling, provider
+- [x] **C9.06** Build broadcasts/segments, test sends, scheduling, provider
   batches, suppression, bounce/complaint handling and honest local analytics.
+  (A broadcast is a template (C9.05) plus a segment (§30's "unit of who") plus
+  a moment, and deliberately none of those things itself — the drift C7.17 is
+  about starts with a campaign growing its own idea of an audience.
+  **The audience is frozen when sending begins.** §30's segments are dynamic
+  queries, so a send that re-read one mid-flight would mail people who joined
+  after it started, skip people who left, and could never answer "who did this
+  go to". `broadcast_recipients` is written once, up front.
+  **A row per recipient, not a counter.** A counter cannot say whether one
+  person got it, cannot be recomputed after a provider replays a webhook, and
+  cannot resume a send that stopped halfway. All three are why the figures on
+  the campaign screen are `count(*)` over recorded rows: §30's honest local
+  analytics means a lost webhook makes a number stop rising, not go wrong.
+  **Refusals are outcomes, not exceptions.** `sendMail` throws on a suppressed
+  address; one unsubscribed customer must not halt a send to nine thousand
+  others, so the reason is written on the recipient row and the batch carries
+  on.
+  **Consent is asked at the moment of sending**, not assumed and not frozen
+  with the audience: `contacts.canContact("marketing", "email")` is the one
+  answer, so no segment definition can talk over somebody who said no, and
+  consent withdrawn between freeze and send still counts. Building this
+  surfaced that nothing on the platform ever *recorded* email marketing
+  consent — §2096 says the double opt-in is that evidence, but C9.04 wrote a
+  subscription row and stopped, so `canContact` said "denied" for every
+  confirmed subscriber alive. `newsletters.confirm` now records the grant and
+  `newsletters.unsubscribe` the withdrawal, which is where consent belonged
+  all along: on the contact, at the moment the person actually answered.
+  Archived wording is refused at the start: a draft is fair game — an owner
+  writes and sends in one sitting — but deliberately retired wording is never
+  what somebody meant, and a list is not a mistake you can take back.
+  Sending is `newsletters.tickBroadcasts` a committed batch at a time, so a
+  crash costs a batch rather than a campaign, and pressing send starts a
+  campaign rather than performing one — said on the screen, beside the button.
+  Bounces and complaints come back through `mail.deliveryUpdated` and are
+  matched on the delivery, never on the address: the same person is usually on
+  several campaigns, and attributing a bounce to the most recent one is a wrong
+  number rather than a missing one.
+  Admin at `/admin/newsletters/broadcasts` — list, compose, start, pause,
+  resume, cancel, test send and the per-recipient record. The newsletters index
+  now links to it and to C9.05's templates, which nothing linked to.
+  Migration `0137_broadcasts.sql`; `tests/modules/broadcasts.test.ts`, whose
+  webhook test runs the whole chain from provider event to campaign figure.)
 - [ ] **C9.07** Complete the funnel from visit → lead → quote/booking/cart →
   invoice → paid/refunded and make attribution/query definitions inspectable.
 - [ ] **C9.08** Build reporting saved views, revenue/service/product/location/
