@@ -25,3 +25,9 @@ And when it is time to bill, a campaign raises an ordinary draft invoice
 against the advertiser's contact — the same invoice, tax and reporting path as
 anything else you sell. You issue it from the invoice, where the tax question
 is asked properly.
+
+One thing to redo if you were an early adopter: an ad position could previously
+carry its own house image and link, set on the position itself in the editor.
+That setting has gone, because it was a second, unlabelled kind of ad that none
+of your reports could see. If you had set one, create it as a house campaign
+instead and it will fill the same space — labelled and counted this time.
