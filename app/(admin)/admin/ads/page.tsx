@@ -1,16 +1,23 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Ads: the positions you sell, who buys them, and what runs
-// (C9.17, MASTER.md §4.16).
+// Ads: the positions you sell, who buys them, what runs, and the bill
+// (C9.17–C9.18, MASTER.md §4.16).
 //
 // Inventory first, buyers second, campaigns third — the order a publisher
 // actually works in. You cannot sell a slot that does not exist, and §4.16's
 // point about reserved space is a property of the slot rather than of the sale.
 //
-// Nothing here serves an ad. C9.17 shipped inventory that deliberately renders
-// nothing: creatives, house fill and the counting are C9.18–C9.20. The screen
-// says so rather than leaving an owner to wonder why their live campaign shows
-// no impressions.
+// C9.18 gives the sale something to show. Creatives hang off a line item, in
+// the size the position actually declares; a paid one needs reviewing before it
+// appears and drops back to needing it on every edit, because §4.16's rule is
+// that "a creative cannot be swapped for a different target after approval".
+// The invoice button is here rather than in the money screen for the same
+// reason the advertiser is a Contact: selling an ad is selling a product, and
+// the owner is standing in front of the campaign when they decide to bill it.
+//
+// What is still missing is the counting — impressions, viewability and the
+// daily rollup are C9.19 — so the screen says so rather than leaving an owner
+// to wonder why a live campaign reports nothing.
 import type { Metadata } from "next";
 import {
   Button,
@@ -26,9 +33,11 @@ import {
 import { currentBusiness } from "@/core/settings/read";
 import { formatMoney } from "@/core/i18n";
 import { listContacts } from "@/core/contacts/service";
+import { listAssets } from "@/core/media/service";
 import {
   advertiserList,
   campaigns,
+  creatives as campaignCreatives,
   lineItems,
   sizes,
   slots,
@@ -38,8 +47,11 @@ import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
 import {
   decideCampaignAction,
+  invoiceCampaignAction,
+  reviewCreativeAction,
   saveAdvertiserAction,
   saveCampaignAction,
+  saveCreativeAction,
   saveLineItemAction,
   saveSlotAction,
   setCampaignStatusAction,
@@ -78,6 +90,11 @@ function formatsOf(value: unknown): Array<{ breakpoint: string; sizes: Array<{ w
   });
 }
 
+/** The slot ids a line item names, read defensively — it is jsonb. */
+function slotIdsOf(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
+}
+
 export default async function AdsPage({
   searchParams,
 }: {
@@ -96,9 +113,13 @@ export default async function AdsPage({
   ]);
 
   const openCampaign = query.campaign ?? (sold ?? [])[0]?.id ?? null;
-  const items = openCampaign
-    ? await domainOrNull(lineItems.call({ campaignId: openCampaign }, actor))
-    : null;
+  const [items, art, images] = openCampaign
+    ? await Promise.all([
+        domainOrNull(lineItems.call({ campaignId: openCampaign }, actor)),
+        domainOrNull(campaignCreatives.call({ campaignId: openCampaign }, actor)),
+        domainOrNull(listAssets.call({ kind: "image", limit: 100 }, actor)),
+      ])
+    : [null, null, null];
 
   const locale = business?.defaultLocale ?? "en";
   const currency = business?.baseCurrency ?? "GBP";
@@ -125,9 +146,10 @@ export default async function AdsPage({
         </p>
       ) : null}
 
-      {/* Said once, plainly. A live campaign showing nothing is otherwise read
-          as a bug rather than as the next piece of work. */}
-      <Callout tone="neutral">{t("ads.notServingYet")}</Callout>
+      {/* Said once, plainly. Ads run now; nothing is counted yet, and a live
+          campaign reporting nothing is otherwise read as a bug rather than as
+          the next piece of work. */}
+      <Callout tone="neutral">{t("ads.notCountingYet")}</Callout>
 
       <Card>
         <CardHeader title={t("ads.slots")} />
@@ -356,6 +378,24 @@ export default async function AdsPage({
                         </Button>
                       </form>
                     ))}
+                    {/* Selling an ad is selling a product (§4.16), so the
+                        bill is raised here and issued from the invoice, where
+                        the tax question is asked properly. */}
+                    {campaign.invoiceId ? (
+                      <a
+                        href={`/admin/invoices/${campaign.invoiceId}`}
+                        className="text-sm font-semibold text-accent underline"
+                      >
+                        {t("ads.action.openInvoice")}
+                      </a>
+                    ) : campaign.pricing === "house" ? null : (
+                      <form action={invoiceCampaignAction}>
+                        <input type="hidden" name="id" value={campaign.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("ads.action.invoice")}
+                        </Button>
+                      </form>
+                    )}
                     <form method="get" className="ms-auto">
                       <input type="hidden" name="campaign" value={campaign.id} />
                       <Button type="submit" variant="quiet">
@@ -369,18 +409,200 @@ export default async function AdsPage({
                       {items === null || items.length === 0 ? (
                         <p className="text-sm text-ink-muted">{t("ads.noLineItems")}</p>
                       ) : (
-                        <ul className="grid list-none gap-1 p-0">
-                          {items.map((item) => (
-                            <li key={item.id} className="flex flex-wrap items-center gap-3 text-sm">
-                              <span>{item.name}</span>
-                              <span className="text-ink-muted tabular-nums">
-                                {t("ads.weight", { n: String(item.weight) })}
-                              </span>
-                              <Pill tone={item.status === "active" ? "success" : "neutral"}>
-                                {t(`ads.lineStatus.${item.status}`)}
-                              </Pill>
-                            </li>
-                          ))}
+                        <ul className="grid list-none gap-3 p-0">
+                          {items.map((item) => {
+                            // Only the sizes this line item's own positions
+                            // declare. Offering every IAB size would let an
+                            // owner build a creative that can never run.
+                            const declared = new Map<string, string>();
+                            for (const slotId of slotIdsOf(item.slotIds)) {
+                              const slot = (positions ?? []).find((each) => each.id === slotId);
+                              for (const format of formatsOf(slot?.formats)) {
+                                for (const size of format.sizes) {
+                                  declared.set(
+                                    `${size.width}x${size.height}`,
+                                    `${size.width}×${size.height}`,
+                                  );
+                                }
+                              }
+                            }
+                            const artwork = (art ?? []).filter(
+                              (creative) => creative.lineItemId === item.id,
+                            );
+                            return (
+                              <li
+                                key={item.id}
+                                className="grid gap-2 rounded-md border border-rule p-3"
+                              >
+                                <div className="flex flex-wrap items-center gap-3 text-sm">
+                                  <span className="font-medium">{item.name}</span>
+                                  <span className="text-ink-muted tabular-nums">
+                                    {t("ads.weight", { n: String(item.weight) })}
+                                  </span>
+                                  <Pill tone={item.status === "active" ? "success" : "neutral"}>
+                                    {t(`ads.lineStatus.${item.status}`)}
+                                  </Pill>
+                                </div>
+
+                                {artwork.length === 0 ? (
+                                  <p className="text-sm text-ink-muted">{t("ads.noCreatives")}</p>
+                                ) : (
+                                  <ul className="grid list-none gap-1 p-0">
+                                    {artwork.map((creative) => (
+                                      <li
+                                        key={creative.id}
+                                        className="flex flex-wrap items-center gap-3 text-sm"
+                                      >
+                                        <span>
+                                          {creative.headline ?? creative.altText ?? creative.clickUrl}
+                                        </span>
+                                        <span className="text-ink-muted tabular-nums">
+                                          {creative.width}×{creative.height}
+                                        </span>
+                                        <Pill
+                                          tone={creative.status === "active" ? "success" : "neutral"}
+                                        >
+                                          {t(`ads.creativeStatus.${creative.status}`)}
+                                        </Pill>
+                                        {/* §4.16: a creative carries its own
+                                            review state, separate from the
+                                            approval of the sale. */}
+                                        <Pill
+                                          tone={
+                                            creative.reviewState === "approved"
+                                              ? "success"
+                                              : creative.reviewState === "rejected"
+                                                ? "danger"
+                                                : "warning"
+                                          }
+                                        >
+                                          {t(`ads.review.${creative.reviewState}`)}
+                                        </Pill>
+                                        {(["approved", "rejected"] as const).map((decision) => (
+                                          <form key={decision} action={reviewCreativeAction}>
+                                            <input type="hidden" name="id" value={creative.id} />
+                                            <input type="hidden" name="decision" value={decision} />
+                                            <Button
+                                              type="submit"
+                                              variant="quiet"
+                                              disabled={creative.reviewState === decision}
+                                            >
+                                              {decision === "approved"
+                                                ? t("ads.action.approve")
+                                                : t("ads.action.reject")}
+                                            </Button>
+                                          </form>
+                                        ))}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+
+                                {declared.size === 0 ? (
+                                  <p className="text-sm text-ink-muted">
+                                    {t("ads.noSizesDeclared")}
+                                  </p>
+                                ) : (
+                                  <form
+                                    action={saveCreativeAction}
+                                    className="grid gap-3 md:grid-cols-4"
+                                  >
+                                    <input type="hidden" name="lineItemId" value={item.id} />
+                                    <Field
+                                      label={t("ads.field.creativeKind")}
+                                      htmlFor={`ck-${item.id}`}
+                                    >
+                                      <Select id={`ck-${item.id}`} name="kind" defaultValue="image">
+                                        <option value="image">{t("ads.creativeKind.image")}</option>
+                                        <option value="native">
+                                          {t("ads.creativeKind.native")}
+                                        </option>
+                                      </Select>
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.creativeSize")}
+                                      htmlFor={`cz-${item.id}`}
+                                    >
+                                      <Select id={`cz-${item.id}`} name="size" required defaultValue="">
+                                        <option value="">—</option>
+                                        {[...declared].map(([value, label]) => (
+                                          <option key={value} value={value}>
+                                            {label}
+                                          </option>
+                                        ))}
+                                      </Select>
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.image")}
+                                      htmlFor={`ci-${item.id}`}
+                                      hint={t("ads.field.imageHint")}
+                                    >
+                                      <Select id={`ci-${item.id}`} name="assetId" defaultValue="">
+                                        <option value="">—</option>
+                                        {(images?.rows ?? []).map((asset) => (
+                                          <option key={asset.id} value={asset.id}>
+                                            {asset.filename}
+                                          </option>
+                                        ))}
+                                      </Select>
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.clickUrl")}
+                                      htmlFor={`cu-${item.id}`}
+                                      hint={t("ads.field.clickUrlHint")}
+                                    >
+                                      <Input
+                                        id={`cu-${item.id}`}
+                                        name="clickUrl"
+                                        type="url"
+                                        required
+                                      />
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.altText")}
+                                      htmlFor={`ca-${item.id}`}
+                                      hint={t("ads.field.altTextHint")}
+                                    >
+                                      <Input id={`ca-${item.id}`} name="altText" maxLength={300} />
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.headline")}
+                                      htmlFor={`ch-${item.id}`}
+                                    >
+                                      <Input id={`ch-${item.id}`} name="headline" maxLength={200} />
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.ctaLabel")}
+                                      htmlFor={`cc-${item.id}`}
+                                    >
+                                      <Input id={`cc-${item.id}`} name="ctaLabel" maxLength={60} />
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.creativeStatus")}
+                                      htmlFor={`cs-${item.id}`}
+                                    >
+                                      <Select id={`cs-${item.id}`} name="status" defaultValue="active">
+                                        <option value="draft">
+                                          {t("ads.creativeStatus.draft")}
+                                        </option>
+                                        <option value="active">
+                                          {t("ads.creativeStatus.active")}
+                                        </option>
+                                        <option value="paused">
+                                          {t("ads.creativeStatus.paused")}
+                                        </option>
+                                      </Select>
+                                    </Field>
+                                    <div className="flex items-end">
+                                      <Button type="submit" variant="quiet">
+                                        {t("ads.action.addCreative")}
+                                      </Button>
+                                    </div>
+                                  </form>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
 

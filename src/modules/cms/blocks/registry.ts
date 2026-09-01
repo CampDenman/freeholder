@@ -37,7 +37,6 @@ import {
   video,
 } from "./library";
 import {
-  adSlot,
   booking,
   gallery,
   map,
@@ -90,7 +89,6 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   tip,
   siteChat,
   paywall,
-  adSlot,
 ] as unknown as BlockDefinition<z.ZodType, never>[];
 
 const byType = new Map(definitions.map((d) => [d.type, d]));

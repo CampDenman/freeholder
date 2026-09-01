@@ -10,8 +10,11 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
   decideCampaign,
+  invoiceCampaign,
+  reviewCreative,
   saveAdvertiser,
   saveCampaign,
+  saveCreative,
   saveLineItem,
   saveSlot,
   setCampaignStatus,
@@ -217,6 +220,79 @@ export async function setCampaignStatusAction(form: FormData): Promise<void> {
       },
       caller,
     );
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath("/admin/ads");
+  done();
+}
+
+/**
+ * The artwork. §4.16's in-house case first: an uploaded asset from the media
+ * library, a headline and a click URL.
+ *
+ * The size is posted as one "WxH" value from a list of what the line item's
+ * positions actually declare, rather than as two free numbers, because a
+ * creative in a size no slot accepts can never run — and the owner's only
+ * symptom would be an advertiser asking why they saw no impressions.
+ */
+export async function saveCreativeAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  const [width, height] = text(form, "size")
+    .split("x")
+    .map((value) => Number.parseInt(value, 10));
+  try {
+    await saveCreative.call(
+      {
+        ...(optional(form, "id") ? { id: text(form, "id") } : {}),
+        lineItemId: text(form, "lineItemId"),
+        kind: (text(form, "kind") || "image") as "image" | "native",
+        assetId: optional(form, "assetId"),
+        width: Number.isFinite(width) ? width! : 0,
+        height: Number.isFinite(height) ? height! : 0,
+        clickUrl: text(form, "clickUrl"),
+        altText: optional(form, "altText"),
+        headline: optional(form, "headline"),
+        body: optional(form, "body"),
+        ctaLabel: optional(form, "ctaLabel"),
+        status: (text(form, "status") || "draft") as "draft" | "active" | "paused",
+      },
+      caller,
+    );
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath("/admin/ads");
+  done();
+}
+
+export async function reviewCreativeAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  try {
+    await reviewCreative.call(
+      {
+        id: text(form, "id"),
+        decision: text(form, "decision") as "approved" | "rejected",
+        note: optional(form, "note"),
+      },
+      caller,
+    );
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath("/admin/ads");
+  done();
+}
+
+/**
+ * Selling an ad is selling a product (§4.16), so this raises an ordinary
+ * draft invoice and leaves issuing it to the invoice screen, where the tax
+ * question is asked properly.
+ */
+export async function invoiceCampaignAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  try {
+    await invoiceCampaign.call({ id: text(form, "id") }, caller);
   } catch (error) {
     done(error);
   }

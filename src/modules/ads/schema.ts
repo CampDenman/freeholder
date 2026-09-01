@@ -33,6 +33,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { assets } from "@/core/media/schema";
 import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
@@ -210,5 +211,76 @@ export const adLineItems = pgTable(
   (t) => [
     index("ad_line_items_campaign_idx").on(t.campaignId),
     index("ad_line_items_status_idx").on(t.status),
+  ],
+);
+
+/**
+ * The thing rendered (§4.16, C9.18).
+ *
+ * C9.17 could sell a slot but not fill it. This is what fills it: the owner's
+ * own uploaded artwork, a headline and a click URL. §4.16 is explicit that
+ * this is the case to get right — "the default inventory is the owner's own …
+ * That is the case that must be excellent, because it is how a small
+ * publisher runs a sponsor, and how anyone runs a house promotion."
+ *
+ * Two kinds ship here and no more. `image` is an asset from `core/media`;
+ * `native` is text the site's own typography renders, for a newsletter-style
+ * sponsor line that should not look like a banner. The `html_tag` and
+ * `provider` kinds §4.16 also names carry somebody else's script, which means
+ * consent, disclosure and `ads.txt` — that is C9.20's whole subject, and
+ * shipping the columns for it now would be storage nothing reads.
+ *
+ * `width`/`height` are on the creative rather than derived from the asset
+ * because the size is a *contract with the slot*: §4.16 reserves the space
+ * from the declared size at every breakpoint, and an advertiser who supplied a
+ * 1456×182 retina file for a 728×90 leaderboard has still bought a 728×90.
+ * `ads.saveCreative` refuses a size none of the line item's slots declares,
+ * because a creative that can never be served is one whose only symptom is an
+ * advertiser asking why they saw no impressions.
+ */
+export const adCreatives = pgTable(
+  "ad_creatives",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lineItemId: uuid("line_item_id")
+      .notNull()
+      .references(() => adLineItems.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["image", "native"] }).notNull(),
+    /**
+     * Restricted rather than cascaded: an image somebody is paying to run
+     * should not disappear because it was tidied out of the media library.
+     * The same choice catalog makes for a product image, for the same reason —
+     * money depends on it still rendering.
+     */
+    assetId: uuid("asset_id").references(() => assets.id, { onDelete: "restrict" }),
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    /** Absolute http(s), validated on the way in and again on the way out. */
+    clickUrl: text("click_url").notNull(),
+    altText: text("alt_text"),
+    headline: text("headline"),
+    body: text("body"),
+    ctaLabel: text("cta_label"),
+    status: text("status", { enum: ["draft", "active", "paused"] })
+      .notNull()
+      .default("draft"),
+    /**
+     * §4.16: "creatives carry a review state". Separate from the campaign's
+     * approval, which is the *sale*: an approved advertiser can still send
+     * artwork the owner will not print, and one field cannot say both.
+     */
+    reviewState: text("review_state", { enum: ["pending", "approved", "rejected"] })
+      .notNull()
+      .default("pending"),
+    reviewNote: text("review_note"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("ad_creatives_line_item_idx").on(t.lineItemId),
+    // The serving query's shape: everything eligible, in one pass.
+    index("ad_creatives_servable_idx").on(t.status, t.reviewState),
   ],
 );

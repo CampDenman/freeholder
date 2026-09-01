@@ -198,7 +198,12 @@ export const invoices = pgTable(
     contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
     number: text("number"),
     sequenceKey: text("sequence_key").notNull().default("invoice"),
-    sourceType: text("source_type", { enum: ["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock"] })
+    // "ad_campaign" is §4.16's: "selling an ad is selling a product", so a
+    // campaign is invoiced here rather than in a private ledger. The member
+    // earns its place because `sourceType` rides along on every settlement
+    // event — a listener that cannot tell an ad sale from an order misfiles
+    // somebody's commission (C9.10).
+    sourceType: text("source_type", { enum: ["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock", "ad_campaign"] })
       .notNull()
       .default("manual"),
     sourceId: text("source_id"),

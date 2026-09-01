@@ -6699,8 +6699,61 @@ customer has one secure, comprehensible home for the relationship.
   idempotently, and the module answers `settings.setupCompleted` with it —
   the same seam cms already uses. The failing test is what found it.
   Nineteen tests in `tests/modules/ads.test.ts`. Changeset `ad-inventory.md`.)
-- [ ] **C9.18** Build house/sold creatives, money-path invoices, labelled
+- [x] **C9.18** Build house/sold creatives, money-path invoices, labelled
   sponsored markup, signed click redirect and house fill.
+  (`ad_creatives` in migration 0141, `ads.serve`, `ads.recordClick`,
+  `ads.invoiceCampaign`, and the `adSlot` block moved into the ads module.
+  §4.16 says "in-house first … that is the case that must be excellent", so
+  the two kinds that ship are an uploaded image and a text sponsor line;
+  `html_tag` and `provider` carry somebody else's script and are C9.20 in
+  full, columns included, because storage nothing reads is a defect rather
+  than a placeholder. **The server answers for every breakpoint the slot
+  declares and CSS chooses between them** — no user-agent sniffing anywhere,
+  which is the only way to keep §4.16's "one placement serves a leaderboard
+  on a laptop and a 320×50 on a phone" while `analytics/visitor.ts` refuses
+  to derive anything from a device. It also means the ad is in the server's
+  HTML, so nothing arrives late and an unsold slot renders nothing at all
+  rather than a permanent grey box. Two review gates, not one: the campaign
+  approval is the *sale*, the creative's review is the *artwork*, and one
+  field cannot say both — an approved advertiser can still send something the
+  owner will not print. **A sold creative returns to `pending` on every
+  edit**, which is what makes §4.16's "a creative cannot be swapped for a
+  different target after approval" true rather than stated; a house creative
+  is approved on save, attributed to the owner rather than waived, for the
+  same anti-ceremony reason C9.17 exempted house campaigns. The click-out
+  signs the destination *inside* the token and refuses when the stored row no
+  longer matches it, so the redirect can never be talked into a target nobody
+  reviewed — the destination comes from the row, the signature is verified
+  before anything is read, and `javascript:`/`data:`/relative are refused at
+  save and again at redirect. `/go/ad` rather than `/ads/…`, because that path
+  is on every content blocker's list and a publisher whose click-outs 404 for
+  a third of their readers has a broken site rather than a private one. House
+  fill is a fallback and never a competitor: a house line item cannot outrank
+  a paying one whatever priority somebody typed on it, because that would be
+  the owner quietly not delivering a campaign they had already invoiced.
+  Selling an ad is selling a product, so `invoicing` gained an `ad_campaign`
+  source type — `"manual"` would have worked and lost the signal every
+  settlement event carries, which is how a commission gets misfiled (C9.10) —
+  and the campaign raises a *draft*, never an issued invoice, because this
+  module has no addresses to calculate tax from and guessing one is the thing
+  an accounting system must not do. Reconciling a per-thousand buy against
+  what actually delivered is C9.19, on the same invoice.
+  Two decisions worth flagging to a reviewer. The `adSlot` block **moved out
+  of cms** into `src/modules/ads/blocks.tsx`: its C9.17 shape carried its own
+  house image, href and four size numbers, which was a second, private notion
+  of an ad living in the page tree — unlabelled, uncounted, unreviewed and
+  invisible to the screen the owner sells from, which is exactly what §4.16
+  forbids. It now has one prop, the slot's code, so there is no configuration
+  left that could remove the label. And `ads` now `requires` `analytics`:
+  §4.16 measures through §4.7, and an ad module that cannot count is not one
+  a publisher can sell from. One gap the plan text leaves open and this does
+  not close: §4.16's `AdCreative.kind` also names `animated` and `video`.
+  Animated is covered — a GIF or APNG is an image asset and runs today as the
+  `image` kind — but a video creative is built by no item here, C9.19 and
+  C9.20 included, and its viewability rule (two continuous seconds rather
+  than one) has nowhere to live. Recorded rather than quietly dropped.
+  Thirty tests in `tests/modules/ads-serving.test.ts`. Changeset
+  `ad-creatives.md`.)
 - [ ] **C9.19** Build first-party impression/viewability/unique/click events,
   MRC timing, daily rollups, pacing, advertiser reports and reconciliation.
 - [ ] **C9.20** Support consent-gated third-party tags off by default and
