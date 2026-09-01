@@ -57,6 +57,10 @@ export const NOTIFICATION_TOPICS = [
   "mail.delivery",
   "contribute.ingested",
   "contribute.status",
+  // A scheduled accounting export that did not arrive (C9.32). It earns a
+  // topic of its own because its failure is *silence*: unlike a wrong figure
+  // on a screen, nobody is looking at the thing that stopped.
+  "reports.exportFailed",
 ] as const;
 
 const notificationCreateResult = z.object({
@@ -1501,6 +1505,23 @@ interface EventTemplate {
 }
 
 function eventTemplate(eventName: string, payload: Record<string, unknown>): EventTemplate | undefined {
+  // A scheduled accounting export that did not arrive (C9.32). Critical, and
+  // that is a judgement rather than an oversight: an owner finds out about a
+  // wrong report by reading it, and about a missing one only when their
+  // accountant asks for a quarter that never came.
+  if (eventName === "report.exportFailed" && typeof payload.id === "string") {
+    return {
+      module: "reporting",
+      topic: "reports.exportFailed",
+      priority: "critical",
+      titleKey: "notifications.event.reportExport.title",
+      ...(typeof payload.detail === "string" && payload.detail
+        ? { body: payload.detail.slice(0, 4000) }
+        : { bodyKey: "notifications.event.reportExport.body" }),
+      href: "/admin/reports/exports",
+      dedupeKey: `report-export:${payload.id}`,
+    };
+  }
   if (eventName === "connection.needsAttention" && typeof payload.id === "string") {
     return {
       module: "connections",
