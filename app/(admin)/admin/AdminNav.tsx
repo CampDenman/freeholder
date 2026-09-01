@@ -22,6 +22,7 @@ import {
   ClipboardText,
   AirplaneTakeoff,
   ArrowUUpLeft,
+  ArrowsClockwise,
   Ticket,
   DeviceMobile,
   Receipt,
@@ -107,6 +108,7 @@ export interface AdminNavLabels {
   events: string;
   newsletters: string;
   reports: string;
+  subscriptions: string;
   contribute: string;
   plugins: string;
   imports: string;
@@ -161,6 +163,12 @@ const LINKS = [
   { href: "/admin/referrals", key: "referrals", module: "referrals", Icon: UserPlus },
   { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
+  {
+    href: "/admin/subscriptions",
+    key: "subscriptions",
+    module: "subscriptions",
+    Icon: ArrowsClockwise,
+  },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },

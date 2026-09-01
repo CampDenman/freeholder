@@ -105,6 +105,7 @@ export default async function AdminLayout({
               forms: t("forms.title"),
               traffic: t("analytics.title"),
               reports: t("reports.title"),
+              subscriptions: t("subscriptions.title"),
               experiments: t("experiments.title"),
               health: t("doctor.title"),
               jobs: t("jobs.title"),

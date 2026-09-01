@@ -6645,8 +6645,50 @@ customer has one secure, comprehensible home for the relationship.
   worst outcome available here.
   Sixteen tests in `tests/modules/loyalty-rewards.test.ts`; the C9.11 suite
   passes unchanged. Changeset `loyalty-tiers-rewards.md`.)
-- [ ] **C9.13** Build plans, subscription lifecycle and events, provider/
-  platform/manual billing, trials, proration, pause/cancel and portal self-service.
+- [x] **C9.13** Build plans, the subscription lifecycle and its events, trials,
+  `manual` billing, pause/cancel and portal self-service.
+  (Split under §43.17.1: the original line carried seven capabilities, and
+  three of them turn on something the platform does not have yet. **C9.33**
+  takes the two automatic billing modes and proration. §4.15 wants `platform`
+  mode to charge "a stored payment method" from `core/jobs`, and the payments
+  adapter contract has `createCheckout`, `captureCheckout`, `refund`,
+  `revokeSavedMethod` and `verifyWebhook` — no off-session charge at all. So
+  `platform` is not a mode this item can switch on; it is a new adapter
+  capability across every provider, which is the same work `provider` mode
+  needs and belongs beside it. What is left here is one coherent thing: the
+  object, the states it moves between, and the invoices a business raises
+  itself.
+  Delivered as a `subscriptions` module holding §4.15's split: §4.3 owns the
+  money and this owns the life, so there is **no price column and no total** —
+  a plan points at a product, `catalog.resolvePrice` answers what a period
+  costs, and every period raises an ordinary invoice with
+  `source_type = 'subscription'`. An owner changing what a membership costs
+  changes it in one place.
+  **The period is the truth.** A subscription is active because it is inside a
+  period somebody paid for, not because a flag says so, and §4.15's rule falls
+  out rather than being enforced separately: cancelling sets
+  `cancel_at_period_end` and the sweep ends it when that period runs out, so
+  access "never quietly outlives the money, and never disappears before the
+  period the customer paid for". A month is calendar arithmetic, so a
+  subscription taken out on the 31st renews on the 28th in February instead of
+  drifting into March a day at a time.
+  **A refusal is read before anything is written.** A failed statement aborts
+  the whole Postgres transaction, so a sweep that let the invoice throw and
+  then wrote "payment failed" would fail at the writing — the price check is
+  therefore a query, taken first, and an unexpected error is left to
+  propagate. What happens *after* a failure is a `DunningPolicy` (C9.16),
+  which is why nothing here retries, cancels, or moves the period.
+  Two things the platform taught this item: `invoices` is uniquely indexed on
+  `(source_type, source_id)`, so a recurring agreement names the period in its
+  source id the way the deposit/balance pair does — one invoice per source
+  *thing*, and the thing is the period; and the payments adapter has no
+  off-session charge at all, which is what moved both automatic modes to
+  C9.33 rather than leaving a plan that silently never bills.
+  Admin at `/admin/subscriptions` — plans, subscribers, pause, resume, cancel
+  — plus §4.15's mandatory portal self-service: a customer's own room and
+  `subscriptions.cancelMine`, which resolves the contact from the session and
+  can only ever reach their own row.
+  Migration `0140_subscriptions.sql`; `tests/modules/subscriptions.test.ts`.)
 - [ ] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
   one-time unlocks, loyalty tiers and manually granted access.
 - [ ] **C9.15** Build hard/soft/metered/registration paywalls, server-side
@@ -6805,6 +6847,17 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   platform does not do bookkeeping; it refuses to make bookkeeping harder" —
   so this is the shapes those two packages actually accept, delivered on a
   schedule, and not a general ledger.)
+- [ ] **C9.33** Build the automatic subscription billing modes — `provider`
+  (Stripe/PayPal schedules and their webhook reconciliation) and `platform`
+  (off-session charges against a stored payment method) — and plan changes with
+  proration.
+  (Split from C9.13 under §43.17.1. Both modes need what the payments adapter
+  contract does not yet offer: an off-session charge. `provider` is then a
+  reconciliation problem — the provider's schedule is the truth and the local
+  row follows it — and `platform` is the same charge run from `core/jobs`
+  instead. Proration comes with them because a mid-cycle plan change is where
+  the money question actually arises, and §4.15 insists it is stated per plan
+  rather than discovered at the first change.)
 - [ ] **C10.01** Enforce customization seams—database, plugins, configuration,
   uploads—and detect unsupported live core-file modifications.
 - [ ] **C10.02** Implement semantic stable/security/edge channels and
