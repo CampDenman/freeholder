@@ -304,6 +304,38 @@ test.describe("real-browser product journeys", () => {
       await expect(page.getByRole("button", { name: "Send journey" })).toBeVisible();
     });
 
+    await test.step("sharing mints a tracked link and switching it off revokes the link", async () => {
+      await page.getByRole("button", { name: "Copy link", exact: true }).click();
+      await expect(page).toHaveURL(/\/journey\?shared=[a-z0-9]+$/);
+
+      const shared = new URL(page.url()).searchParams.get("shared");
+      expect(shared).toMatch(/^[a-z0-9]{10}$/);
+      const shareValue = await page
+        .getByLabel("Copy this and paste it anywhere.")
+        .inputValue();
+      const shortUrl = shareValue.match(/https?:\/\/\S+\/s\/[a-z0-9]+$/)?.[0];
+      expect(shortUrl).toBeTruthy();
+
+      await page.goto(shortUrl!);
+      const destination = new URL(page.url());
+      expect(destination.pathname).toBe("/journey");
+      expect(destination.searchParams.get("utm_source")).toBe("link");
+      expect(destination.searchParams.get("utm_medium")).toBe("share");
+      expect(destination.searchParams.get("utm_campaign")).toBe(`share:${shared}`);
+
+      await page.goto("/admin/sharing");
+      const journey = page.getByRole("row").filter({ hasText: "/journey" });
+      await journey.getByRole("button", { name: "Switch off", exact: true }).click();
+      await expect(page).toHaveURL(/\/admin\/sharing\?saved=1$/);
+      await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
+
+      const revoked = await page.goto(shortUrl!);
+      expect(revoked?.status()).toBe(404);
+      await page.goto("/journey");
+      await expect(page.getByRole("heading", { name: "Share this" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Send journey" })).toBeVisible();
+    });
+
     await test.step("public form creates a visible submission and contact", async () => {
       // Let the signed form timestamp clear its intentional three-second trap.
       await page.waitForTimeout(3_100);

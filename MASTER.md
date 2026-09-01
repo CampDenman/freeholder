@@ -7081,8 +7081,75 @@ customer has one secure, comprehensible home for the relationship.
   those visits to identified contacts and paid invoices. Migration
   `0153_social_gbp.sql`. Tests in `tests/modules/social-gbp.test.ts`.
   Changeset `social-gbp.md`.)
-- [ ] **C9.28** Build universal `ShareTarget`, native/channel intents, generated
+- [x] **C9.28** Build universal `ShareTarget`, native/channel intents, generated
   OG assets, tracked short links and entity-level controls.
+  (New `share` module, migration `0155_share_targets.sql`, admin at
+  `/admin/sharing`, public redirect at `/s/<ref>`, a share bar on every public
+  page, twenty-six tests in `tests/modules/share.test.ts`, and a Chromium
+  acceptance journey that mints, follows, and revokes a real link. Null and
+  empty channel allow-lists remain distinct (all versus none), public share
+  writes are limited per signed-in identity or validated client address, custom social
+  images accept only on-site paths or HTTP(S), and forgetting links requires
+  explicit confirmation.
+  §34's first sentence is the design: "Sharing isn't a buttons plugin; it's a
+  property of every entity with a public face." A property, not a record — so
+  **there is no row per shareable thing**. The set of entities with a public
+  face is already answered once, by the SEO entity registry every module feeds
+  (§5, C2.21), and a second list here would have drifted from it the first
+  time somebody published a product: shareable on the sitemap, invisible to
+  the share bar until something synced. A `share_targets` row therefore exists
+  only where an owner *said something* — sharing off, a social headline
+  written — plus as the anchor a tracked link hangs from. No row means
+  shareable, described by the page itself, which is "present by default,
+  removable per entity" written down as data. The admin list is built from the
+  registry, so a page published on Tuesday is controllable on Tuesday.
+  **The entity-level control is enforced at the redirect, not only at the
+  button.** An owner switching sharing off for a gallery has not asked to stop
+  new buttons appearing; they have asked for that gallery to stop circulating.
+  So `share.resolveLink` refuses links minted while sharing was on, and a test
+  asserts it — a control that only hid buttons would be a setting the owner
+  believed and the platform ignored, which is the same defect as a stored
+  column nothing reads. Four places read the flag: the share bar, minting a
+  link, following one, and the social card; the third is the one that means
+  anything the day after somebody changes their mind.
+  **Clicks are counted by analytics and nowhere else.** There is no `clicks`
+  column and no `share_click` table. §34 wants clicks to "land as analytics
+  events attributed to the share", and the platform already counts visits and
+  attributes campaigns — so `/s/<ref>` redirects to the entity's own URL
+  carrying `utm_medium=share&utm_campaign=share:<ref>`, the page records its
+  own view through machinery that already exists, and the report composes a
+  new `analytics.campaignTotals` rather than counting anything itself. The
+  cost is real and is stated on the screen: a visitor who declined analytics is
+  not counted here either. The alternative buys a number that disagrees with
+  the traffic report, and a business cannot use two. `campaignTotals` lives in
+  analytics rather than in share for the same reason — counting a visitor is
+  analytics' definition to hold — and it had to exist because
+  `campaignAttribution` answers "what are my biggest campaigns", a leaderboard
+  on which a share link with four visitors is absent and real.
+  A public redirect is the most abused shape on the web, so it is refused
+  twice: a share target stores a *path* and `internalPath` rejects schemes,
+  protocol-relative authorities, traversals and control characters, and
+  `destinationFor` then resolves against the configured origin and checks the
+  result still *has* it. The test inserts a hostile row straight into the
+  database, past every validator, because the check that matters is the one
+  standing between a stranger's request and the browser — the row outlives the
+  code that wrote it. Channel intents are a fixed map keyed by an enum, so
+  nothing a caller sends can change which host a visitor lands on.
+  The sharer is a Contact on the spine, **derived from the session and never
+  accepted as input**: a public mutation taking a `contactId` would let any
+  visitor file their share under somebody else's name, which is a forged
+  customer row rather than a cosmetic lie. `shared_links.sharer_contact_id` is
+  registered in `contacts.merge` and in the privacy registry; erasure nulls the
+  person and keeps the row, because the link belongs to whoever is holding it
+  as much as to whoever sent it.
+  One judgement worth naming: sharing a page twice mints two links rather than
+  reusing one. §34 promises an owner "this gallery was shared 12 times", and
+  that sentence is the row count — deduplicating would have turned it into
+  "how many distinct ways it could be shared", which nobody asked. The share
+  bar is a server action rather than a script, so it works with JavaScript off;
+  the Web Share API is offered on top, only where the browser actually has it.
+  §34's client-side sharing — scoped gallery and quote links, gift registries —
+  and its embeds remain C9.29.)
 - [ ] **C9.29** Build scoped gallery/quote/product gift-registry sharing and
   embeds for galleries, reviews, bookings and newsletter forms with backlinks.
 - [ ] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,

@@ -271,7 +271,7 @@ export interface ServiceRateLimit extends RateLimitPolicy {
    * What to count separately — the email being attempted, the caller's IP.
    * Return undefined to skip counting this particular call.
    */
-  subject: (input: never) => string | undefined;
+  subject: (input: never, actor: Actor) => string | undefined;
   /** Message shown when the limit is hit. Written for a person, not a log. */
   message: string;
 }
@@ -313,7 +313,9 @@ export interface ServiceDef<In extends z.ZodType, Out> {
    */
   output?: z.ZodType;
   /** Optional throttle, consumed before the transaction opens. */
-  rateLimit?: ServiceRateLimit & { subject: (input: z.output<In>) => string | undefined };
+  rateLimit?: ServiceRateLimit & {
+    subject: (input: z.output<In>, actor: Actor) => string | undefined;
+  };
   /** Require a fresh second-factor proof from an interactive user session. */
   stepUp?: boolean;
   /**
@@ -459,7 +461,7 @@ export function defineService<In extends z.ZodType, Out>(
       // internal refactor that adds a step start failing under a limit nobody
       // changed. See rate-limit.ts for why the counter commits separately.
       if (def.rateLimit && !inheritedTx && actor.kind !== "system") {
-        const subject = def.rateLimit.subject(parsed.data);
+        const subject = def.rateLimit.subject(parsed.data, actor);
         if (subject !== undefined) {
           const verdict = await consume(
             rateLimitKey(def.name, subject),

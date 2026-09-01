@@ -35,6 +35,7 @@ import crmManifest from "@/modules/crm/manifest";
 import loyaltyManifest from "@/modules/loyalty/manifest";
 import referralsManifest from "@/modules/referrals/manifest";
 import adsManifest from "@/modules/ads/manifest";
+import shareManifest from "@/modules/share/manifest";
 import documentsManifest from "@/modules/documents/manifest";
 import automationsManifest from "@/modules/automations/manifest";
 import reportingManifest from "@/modules/reporting/manifest";
@@ -68,6 +69,7 @@ const manifests: ModuleManifest[] = [
   reviewsManifest,
   crmManifest,
   adsManifest,
+  shareManifest,
   documentsManifest,
   automationsManifest,
   reportingManifest,
