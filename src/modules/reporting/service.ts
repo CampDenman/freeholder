@@ -29,6 +29,7 @@ import {
   revenueSourcesFor,
   type RevenueWindow,
 } from "@/core/reporting/dimensions";
+import exportServices from "./export-service";
 import { REPORT_KEYS, reportViews } from "./schema";
 
 const days = z.number().int().min(1).max(1095).default(90);
@@ -503,6 +504,25 @@ const REPORTS = {
   funnel: funnelReport,
 } as const;
 
+/**
+ * Scheduled exports and the accounting shapes (C9.32).
+ *
+ * A separate file because reading a report and *delivering* one are different
+ * subjects with different failure modes — a wrong number is embarrassing, a
+ * wrong number emailed to an accountant every month is worse — but the same
+ * module, because both answer for the same money.
+ */
+export {
+  saveExport,
+  deleteExport,
+  listExports,
+  runExport,
+  exportFile,
+  listExportRuns,
+  deliverExportRun,
+  reclaimExportRuns,
+} from "./export-service";
+
 export default [
   revenueReport,
   revenueByReport,
@@ -512,4 +532,5 @@ export default [
   saveReportView,
   listReportViews,
   deleteReportView,
+  ...exportServices,
 ];

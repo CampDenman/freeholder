@@ -6746,12 +6746,60 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 
 #### Safe update system
 
-- [ ] **C9.32** Build scheduled exports and the accounting export shapes
+- [x] **C9.32** Build scheduled exports and the accounting export shapes
   (CSV, QuickBooks, Xero).
   (Split from C9.08 under §43.17.1. §2535 is explicit about the scope: "the
   platform does not do bookkeeping; it refuses to make bookkeeping harder" —
   so this is the shapes those two packages actually accept, delivered on a
-  schedule, and not a general ledger.)
+  schedule, and not a general ledger.
+  Delivered as two tables on the `reporting` module: what an owner configured,
+  and what actually happened to it. The second is the point. A report an owner
+  reads is wrong *loudly* — they look at it and disbelieve it — while a report
+  emailed to a bookkeeper on the first of the month fails by **not arriving**,
+  which nobody notices for a quarter. So a run writes a row before it can
+  succeed, the row is identified by the period it covers rather than by a
+  timer, and `reports.reclaimExportRuns` — the one `system` service here —
+  marks a run whose delivery transaction died as failed, because a transaction
+  that died cannot write its own failure. The orchestration therefore lives in
+  the job rather than in a service: reclaim, build, deliver, three commits.
+  Building and sending in one transaction would let a failed send roll back the
+  evidence that it failed, which is the same silence with extra steps.
+  **One export is one currency**, enforced on the query rather than applied
+  afterwards, so there is no moment at which two currencies sit in one array
+  waiting to be added. §4.9 forbids converting at charge time and both packages
+  import one file into one company file, so a mixed file is either rejected or
+  — worse — posted at a rate nobody chose. What the filter excluded is counted
+  on the run and printed in the email: a reconciliation that comes up short
+  always carries its own explanation.
+  **The exported lines add up to the invoice, exactly.** C9.08's `lines` basis
+  deliberately does not, because spreading an invoice's discount and postage
+  across its items by proportion invents a rounding decision the business never
+  made — but both packages total an invoice by adding its lines, so a file
+  short by the postage produces a wrong number *inside the accounting system*.
+  The resolution is a row rather than a proportion: invoice-level charges get
+  their own line, and the identity is integer addition that cancels to the
+  `invoices_total_consistent` check. The same rule governs quantity: a quantity
+  and a rate are written only when `quantity × rate` reconstructs the amount
+  exactly, and otherwise the row is quantity 1 at the net amount with the real
+  quantity in the description, where it informs a human and cannot move a
+  total.
+  The boundary is held by *carrying* rather than inventing: account code, tax
+  code and item code are the bookkeeper's, typed once and repeated verbatim,
+  and saving a Xero export without the two it requires is refused rather than
+  guessed. Date format is a setting for the same reason — `03/04` is two
+  different days in two countries and the platform cannot know which. Refunds
+  are reported beside the total, never turned into credit notes.
+  Delivery is a link, not an attachment: an accounting export names every
+  customer and what they paid, and an attachment copies that into an inbox, a
+  sent-items folder and every mail server between. A non-delivering adapter is
+  recorded as a failure rather than a delivery, or the console sink would put a
+  green tick on a report reaching nobody. Recipients are plain addresses and
+  deliberately not contacts — the person receiving this is the bookkeeper, and
+  resolving them would file an accountant in the customer list.
+  Admin at `/admin/reports/exports`, linked from reports, with the last
+  delivery's outcome on every row and an overdue export said out loud at the
+  top. Migration `0148_scheduled_exports.sql`;
+  `tests/modules/reporting-exports.test.ts`.)
 - [ ] **C10.01** Enforce customization seams—database, plugins, configuration,
   uploads—and detect unsupported live core-file modifications.
 - [ ] **C10.02** Implement semantic stable/security/edge channels and

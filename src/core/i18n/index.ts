@@ -222,17 +222,53 @@ export function formatMoney(
     );
   }
   const format = new Intl.NumberFormat(locale, { style: "currency", currency });
-  const exponent = format.resolvedOptions().maximumFractionDigits ?? 2;
-  const sign = amountMinorUnits < 0 ? "-" : "";
-  const digits = String(Math.abs(amountMinorUnits)).padStart(exponent + 1, "0");
-  const whole = digits.slice(0, digits.length - exponent);
-  const fraction = digits.slice(digits.length - exponent);
-  const decimal = `${sign}${whole}${fraction ? `.${fraction}` : ""}`;
+  const decimal = moneyDecimal(
+    amountMinorUnits,
+    currency,
+    format.resolvedOptions().maximumFractionDigits ?? 2,
+  );
   // Intl accepts a decimal string (ES2023), which is what keeps this exact for
   // amounts past 2^53. TypeScript models that parameter as a template-literal
   // type no runtime-built string can satisfy, so the assertion narrows a type
   // rather than claiming anything about the value.
   return format.format(decimal as Intl.StringNumericLiteral);
+}
+
+/**
+ * The same money as a bare decimal string: 123_456 minor CAD units give
+ * `"1234.56"`, and 1000 Kuwaiti fils give `"1.000"`.
+ *
+ * Split out of `formatMoney` because a machine-read file is not a sentence. A
+ * cell QuickBooks or Xero is going to import has to say `1234.56` rather than
+ * `CA$1,234.56`: the symbol, the grouping separator and the locale's decimal
+ * mark are three separate ways to make an importer read the wrong number, and
+ * a French locale writing `1 234,56` splits the cell in two at the comma.
+ *
+ * It is deliberately the *same* assembly `formatMoney` uses — pad, slice,
+ * insert the point — because the only thing worse than a second money
+ * formatter is a second money formatter that rounds differently. No division
+ * and no floats, here or there (§15.4).
+ */
+export function moneyDecimal(
+  amountMinorUnits: number,
+  currency: string,
+  exponentHint?: number,
+): string {
+  if (!Number.isInteger(amountMinorUnits)) {
+    throw new Error(
+      `money must be integer minor units, got ${amountMinorUnits} — never do float math on money (MASTER.md §15.4).`,
+    );
+  }
+  const exponent =
+    exponentHint ??
+    new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions()
+      .maximumFractionDigits ??
+    2;
+  const sign = amountMinorUnits < 0 ? "-" : "";
+  const digits = String(Math.abs(amountMinorUnits)).padStart(exponent + 1, "0");
+  const whole = digits.slice(0, digits.length - exponent);
+  const fraction = digits.slice(digits.length - exponent);
+  return `${sign}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
 /** Store UTC, display in an explicit timezone (§4.9 timezone discipline). */

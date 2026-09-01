@@ -15,7 +15,19 @@ export default defineModule({
   requires: ["core", "invoicing", "analytics"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  // Scheduled accounting exports (C9.32). A report an owner opens needs no
+  // job; one an accountant is waiting for does.
+  jobs: () => import("./jobs"),
   events: {
-    emits: ["report.viewSaved"],
+    emits: [
+      "report.viewSaved",
+      "report.exportDefined",
+      "report.exportBuilt",
+      "report.exportDelivered",
+      // The one that matters. A delivery that failed has to reach a person,
+      // because the whole failure mode of a scheduled report is that nobody
+      // notices it stopped.
+      "report.exportFailed",
+    ],
   },
 });

@@ -48,6 +48,13 @@ const INTERNAL = [
   "messaging.applySmsEvents",
   "notifications.create",
   "referrals.claimTouches",
+  // Reclaiming a half-finished accounting export (C9.32). System rather than
+  // scoped because nobody triggers it: it exists for the run whose delivery
+  // transaction died, and a transaction that died cannot write its own
+  // failure — so a later job has to, in a transaction of its own. Left
+  // pending, that run reads as "still going" forever, which is exactly the
+  // silence a scheduled report fails by.
+  "reports.reclaimExportRuns",
 ] as const;
 
 const wildcard: Actor = {
