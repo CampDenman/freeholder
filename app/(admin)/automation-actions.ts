@@ -159,6 +159,10 @@ export async function saveSettingsAction(form: FormData): Promise<void> {
         eventPattern: optional(form, "eventPattern"),
         scheduleCron: optional(form, "scheduleCron"),
         timezone: optional(form, "timezone"),
+        // Carried explicitly. `saveAutomation` writes `entrySegmentId ?? null`,
+        // so a settings form that omitted it would quietly widen the audience
+        // to everybody every time somebody renamed the rule (§30, C7.17).
+        entrySegmentId: optional(form, "entrySegmentId"),
         autonomyCeiling: (optional(form, "autonomyCeiling") ?? null) as
           | "suggest"
           | "approve"

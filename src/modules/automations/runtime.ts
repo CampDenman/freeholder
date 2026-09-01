@@ -17,7 +17,13 @@
 import { z } from "zod";
 import { and, asc, desc, eq, lte, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
-import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import {
+  defineService,
+  getService,
+  ServiceError,
+  type ServiceContext,
+  type Tx,
+} from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -152,6 +158,40 @@ export async function startRun(
 
   const entry = await mayEnter(ctx.tx, automation, input.contactId ?? null, now);
   if (!entry.ok) return { started: false, reason: entry.reason };
+
+  // The audience, asked of the one thing that answers it (§30, C7.17).
+  //
+  // `segments.contains` is that thing, and its own comment says so: "every
+  // consumer that decides something *about one person* uses this rather than
+  // pulling the whole membership and searching it". An automation that
+  // compiled its own version of the rules would be a second answer to "who",
+  // and two answers is how a customer ends up in a campaign they were
+  // explicitly excluded from.
+  //
+  // Read from the published version rather than the automation, so an audience
+  // narrowed this morning does not retroactively narrow a run that started
+  // last night.
+  const [version] = await ctx.tx
+    .select({ entrySegmentId: automationVersions.entrySegmentId })
+    .from(automationVersions)
+    .where(eq(automationVersions.id, automation.currentVersionId));
+  if (version?.entrySegmentId) {
+    if (!input.contactId) {
+      // An automation with an audience is about people. Firing it with nobody
+      // attached would run it for a person the segment was never asked about.
+      return {
+        started: false,
+        reason: "This automation only runs for people in its audience, and this had nobody.",
+      };
+    }
+    const { member } = (await ctx.call(getService("segments.contains"), {
+      id: version.entrySegmentId,
+      contactId: input.contactId,
+    })) as { member: boolean };
+    if (!member) {
+      return { started: false, reason: "This person is not in this automation's audience." };
+    }
+  }
 
   // `onConflictDoNothing` on the idempotency index rather than a prior check:
   // the outbox retries and a job re-runs its handler, and only the index holds

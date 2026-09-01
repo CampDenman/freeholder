@@ -134,6 +134,16 @@ export const automationVersions = pgTable(
     triggerKind: text("trigger_kind", { enum: AUTOMATION_TRIGGERS }).notNull(),
     eventPattern: text("event_pattern"),
     scheduleCron: text("schedule_cron"),
+    /**
+     * Who was allowed in, as at publication (§30, C7.17).
+     *
+     * Copied for the same reason the trigger is: an automation whose audience
+     * was narrowed last week did not narrow last month's runs, and a run has
+     * to be readable against what it was actually doing.
+     */
+    entrySegmentId: uuid("entry_segment_id").references(() => segments.id, {
+      onDelete: "set null",
+    }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),

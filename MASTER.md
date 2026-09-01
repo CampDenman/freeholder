@@ -5759,11 +5759,36 @@ equipment, classes and expertise without double-booking or duplicated records.
   callback, and the 9,479-file/193,623,512-byte standalone boundary reports no
   source or environment leakage; changeset `signup-contact-import.md`.)
 
-- [ ] **C7.17** Adopt the C7.04 segment model as the audience for campaign
+- [x] **C7.17** Adopt the C7.04 segment model as the audience for campaign
   broadcasts, the entry condition for automations and the cohort for reports, so
-  no surface grows a second answer to "who". Dependency-blocked: C9.06 builds
-  broadcasts, C9.01 builds automations and C9.08 builds reporting, and there is
-  nothing to converge until they exist.
+  no surface grows a second answer to "who".
+  (All three now ask §30's model rather than compiling their own. Broadcasts
+  arrived already adopted with C9.06 — a broadcast names a segment and freezes
+  its membership. This item is the other two, and one of them was a live
+  defect: `automations.entry_segment_id` had been stored since C9.01 and
+  **never read**, so an automation with an audience ran for everybody,
+  including the people it was written to leave out. `startRun` now asks
+  `segments.contains`, which is the one thing that answers a question about one
+  person — its own comment already said every such consumer should use it.
+  Read from the **published version**, not the automation: the entry segment is
+  now snapshotted beside the trigger, because narrowing an audience this
+  morning did not narrow a run that started last night.
+  An audience also settles the contact question. The graph validator refused
+  contact verbs on a manual trigger, which made "run this for everyone in the
+  segment" impossible to build; an automation with an entry segment is by
+  definition about people, and `startRun` now refuses to start one without a
+  contact — so the validator agreeing is the runtime and the rule saying the
+  same thing rather than a loosened check.
+  Reports take the segment as the cohort. The admin settings form gained the
+  audience field it never had, which also fixed a quiet widening: the form
+  omitted `entrySegmentId`, and `saveAutomation` writes `?? null`, so renaming
+  a rule silently opened it to everybody.
+  The proof is behavioural rather than architectural: one segment, and the
+  campaign's recipients, the automation's entry decision, the report's cohort
+  and `segments.members` all name the same person
+  (`tests/modules/one-audience.test.ts`). A rule saying "call this service" can
+  be obeyed by code that ignores the answer.
+  Migration `0139_automation_entry_segment.sql`.)
 
 **C7 exit:** Freeholder tells the owner what work is owed and carries every
 permitted conversation on the same contact timeline.
