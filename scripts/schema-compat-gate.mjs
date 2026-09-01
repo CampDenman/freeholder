@@ -119,7 +119,35 @@ export function reviewMigration(path, sql) {
   return { path, ok: true, breaking, reason: ack.reason, acknowledged: true };
 }
 
-function changedMigrations(base) {
+/**
+ * The ref to compare against, or the default branch when it has gone.
+ *
+ * CI passes the pull request's base branch, and a stacked pull request's base
+ * is frequently deleted the moment it merges — at which point `git diff`
+ * against a ref that no longer exists throws, and this gate fails a pull
+ * request for a reason that has nothing to do with schema compatibility. A
+ * tidied-up branch is not a breaking migration, so it must not read like one.
+ */
+function resolveBase(base) {
+  try {
+    execFileSync("git", ["rev-parse", "--verify", "--quiet", `${base}^{commit}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return base;
+  } catch {
+    const fallback = "origin/main";
+    if (base === fallback) throw new Error(`Schema gate: neither ${base} nor a fallback exists.`);
+    console.warn(
+      `Schema-compatibility gate: "${base}" is gone (a merged base branch, usually), ` +
+        `so comparing against ${fallback} instead.`,
+    );
+    return fallback;
+  }
+}
+
+function changedMigrations(requested) {
+  const base = resolveBase(requested);
   const out = execFileSync(
     "git",
     ["diff", "--name-only", "--diff-filter=AM", `${base}...HEAD`],
