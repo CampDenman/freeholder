@@ -17,6 +17,8 @@ import recurringServices from "./recurring-service";
 // its side effect: core owns the registry so it never imports a module,
 // and something has to make the claim at load time.
 import "./portal";
+// Revenue by place (§4.7, C9.08).
+import "./reporting";
 // The funnel stages this module answers for (§4.7, C9.07).
 import "./funnel";
 

@@ -6407,8 +6407,41 @@ customer has one secure, comprehensible home for the relationship.
   interrogate is a number they are entitled to disbelieve.
   Admin at `/admin/traffic/funnel`, linked from traffic. No migration — every
   stage reads tables that already exist. `tests/modules/funnel.test.ts`.)
-- [ ] **C9.08** Build reporting saved views, revenue/service/product/location/
-  cohort/funnel reports, scheduled exports and CSV/QuickBooks/Xero shapes.
+- [x] **C9.08** Build reporting saved views and the revenue/service/product/
+  location/cohort/funnel report set.
+  (Split under §43.17.1: the original item carried a module's worth of work in
+  one line. Reading a report and *delivering* one on a schedule are different
+  subjects with different failure modes — a wrong number is embarrassing, a
+  wrong number emailed to an accountant every month is worse — so the exports
+  and the accounting shapes are **C9.32** and land after this. The funnel
+  report reuses C9.07's stages rather than defining its own; two answers to
+  "what is a lead" is the drift C7.17 exists to prevent.
+  Delivered: a `reporting` module over §4.6's "single money object" — revenue
+  is paid invoices, dated by `paid_at` and net of refunds, so an invoice
+  written in March and settled in May is May's money. **Currencies are never
+  added together**, even for a business with one, because §4.9 forbids
+  converting at charge time and a single impressive total would be doing
+  exactly that with extra steps.
+  The cuts follow C9.07's pattern: `core/reporting/dimensions.ts` names the
+  questions — by service, by product, by location — and modules register
+  sources at import time, so a dimension nothing installed answers is stated
+  as such rather than drawn as an empty chart. **Basis is part of the answer.**
+  A booking is for one service, so that cut is the invoice's own net paid
+  figure; an order puts several products on one invoice, so that cut is the
+  line values, and it deliberately will not add up to the revenue total —
+  spreading an invoice's discount, postage and tax across its items by
+  proportion would invent a rounding decision the business never made. Sources
+  in one dimension must agree on basis, enforced at registration.
+  Cohorts are dated by a customer's *first payment*, not by when they became a
+  contact: somebody on the list for two years who buys today is this month's
+  new customer, and crediting the month they signed up would credit a month
+  that earned nothing. The funnel report asks `analytics.funnel` rather than
+  defining a second one — C7.17's whole point.
+  A saved view keeps the **question, never the answer**, and is validated
+  against the report's own input when saved rather than when opened, so a view
+  cannot rot into a question the report will not answer.
+  Admin at `/admin/reports`, with the definitions printed under the figures.
+  Migration `0138_report_views.sql`; `tests/modules/reporting.test.ts`.)
 
 #### Referral, loyalty, subscriptions, and paywalls
 
@@ -6688,6 +6721,12 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 
 #### Safe update system
 
+- [ ] **C9.32** Build scheduled exports and the accounting export shapes
+  (CSV, QuickBooks, Xero).
+  (Split from C9.08 under §43.17.1. §2535 is explicit about the scope: "the
+  platform does not do bookkeeping; it refuses to make bookkeeping harder" —
+  so this is the shapes those two packages actually accept, delivered on a
+  schedule, and not a general ledger.)
 - [ ] **C10.01** Enforce customization seams—database, plugins, configuration,
   uploads—and detect unsupported live core-file modifications.
 - [ ] **C10.02** Implement semantic stable/security/edge channels and
