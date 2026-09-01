@@ -40,7 +40,6 @@ describe("parseBlockTree for new surfaces", () => {
           props: { teaser: "Locked", ctaLabel: "Go", ctaHref: "/contact" },
           children: [{ id: "h", type: "heading", props: { text: "Secret", level: 2 } }],
         },
-        { id: "a", type: "adSlot", props: { code: "header" } },
       ],
       "page",
     );
@@ -49,8 +48,10 @@ describe("parseBlockTree for new surfaces", () => {
       "share",
       "quoteRequest",
       "paywall",
-      "adSlot",
     ]);
+    // C2.10's ad slot moved to the ads module in C9.18, so it is no longer in
+    // the registry this file sees — it is asserted in
+    // `tests/modules/ads-serving.test.ts`, after boot.
   });
 
   it("does not leak paywall children into JSON-LD", () => {

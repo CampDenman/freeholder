@@ -486,7 +486,7 @@ export const reconcileMoney = defineService({
 const createDraftInput = z.object({
   contactId: z.string().uuid(),
   currency,
-  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock"]).default("manual"),
+  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock", "ad_campaign"]).default("manual"),
   sourceId: z.string().trim().max(240).optional(),
   idempotencyKey,
   lines: z.array(lineInput).min(1).max(1_000),

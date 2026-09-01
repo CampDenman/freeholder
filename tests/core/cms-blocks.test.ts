@@ -45,7 +45,10 @@ describe("the registry", () => {
         "tip",
         "siteChat",
         "paywall",
-        "adSlot",
+        // "adSlot" is deliberately absent: C9.18 moved it to the ads module,
+        // which owns what a creative is. `tests/modules/ads-serving.test.ts`
+        // asserts it registers and parses once the modules have booted — this
+        // file boots nothing, on purpose, so it can run without a database.
         "sectionInstance",
         "nav",
         "brand",

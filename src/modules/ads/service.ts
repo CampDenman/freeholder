@@ -16,10 +16,28 @@
 import { z } from "zod";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
-import { actorString, defineService, ServiceError } from "@/core/service";
+import {
+  actorString,
+  defineService,
+  getService,
+  listServices,
+  ServiceError,
+} from "@/core/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
-import { adCampaigns, adLineItems, adSizes, adSlots, advertisers } from "./schema";
+import { getBusiness } from "@/core/settings/service";
+import { track } from "@/modules/analytics/service";
+import {
+  adCampaigns,
+  adCreatives,
+  adLineItems,
+  adSizes,
+  adSlots,
+  advertisers,
+} from "./schema";
+import { clickPath, safeClickUrl, signClickToken, verifyClickToken } from "./clicks";
+import { chooseFill, zonedClock, type Candidate, type DeclaredSize } from "./select";
+import type { ServeContext } from "./targeting";
 
 const slotCode = z
   .string()
@@ -629,6 +647,664 @@ export const lineItems = defineService({
       .orderBy(desc(adLineItems.weight), asc(adLineItems.name)),
 });
 
+
+/* ----------------------------------------------------------- creatives */
+
+/**
+ * §4.16 bounds this module by editorial honesty, and the label is only half
+ * of that. The other half is that an approved creative stays the creative
+ * that was approved — so a paid creative returns to `pending` on every edit,
+ * and a swapped image stops serving until somebody looks at it again.
+ */
+const creativeRow = row({
+  id: uuidSchema,
+  lineItemId: uuidSchema,
+  kind: z.enum(["image", "native"]),
+  assetId: uuidSchema.nullable(),
+  width: z.number().int(),
+  height: z.number().int(),
+  clickUrl: z.string(),
+  altText: z.string().nullable(),
+  headline: z.string().nullable(),
+  body: z.string().nullable(),
+  ctaLabel: z.string().nullable(),
+  status: z.enum(["draft", "active", "paused"]),
+  reviewState: z.enum(["pending", "approved", "rejected"]),
+  reviewNote: z.string().nullable(),
+});
+
+/** The stored jsonb, read defensively — it is owner-editable. */
+function declaredFormats(value: unknown): Array<{
+  breakpoint: "desktop" | "tablet" | "mobile";
+  sizes: DeclaredSize[];
+}> {
+  const parsed = z
+    .array(
+      z.object({
+        breakpoint: z.enum(["desktop", "tablet", "mobile"]),
+        sizes: z.array(z.object({ width: z.number().int(), height: z.number().int() })),
+      }),
+    )
+    .safeParse(value);
+  return parsed.success ? parsed.data.filter((format) => format.sizes.length > 0) : [];
+}
+
+export const saveCreative = defineService({
+  name: "ads.saveCreative",
+  writeClass: "write",
+  summary: "Create or change the artwork a line item runs.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id: uuidSchema.optional(),
+    lineItemId: uuidSchema,
+    kind: z.enum(["image", "native"]).default("image"),
+    assetId: uuidSchema.nullish(),
+    width: z.number().int().min(1).max(4000),
+    height: z.number().int().min(1).max(4000),
+    clickUrl: z.string().trim().max(2000),
+    altText: z.string().trim().max(300).nullish(),
+    headline: z.string().trim().max(200).nullish(),
+    body: z.string().trim().max(600).nullish(),
+    ctaLabel: z.string().trim().max(60).nullish(),
+    status: z.enum(["draft", "active", "paused"]).default("draft"),
+  }),
+  output: creativeRow,
+  handler: async (input, ctx) => {
+    // Everything that can refuse is read before anything is written. A failed
+    // statement aborts the whole transaction, so a refusal discovered by
+    // trying it is a refusal that cannot be recorded or explained.
+    const [line] = await ctx.tx
+      .select({
+        id: adLineItems.id,
+        slotIds: adLineItems.slotIds,
+        pricing: adCampaigns.pricing,
+      })
+      .from(adLineItems)
+      .innerJoin(adCampaigns, eq(adLineItems.campaignId, adCampaigns.id))
+      .where(eq(adLineItems.id, input.lineItemId));
+    if (!line) throw new ServiceError("not_found", "There is no such line item.");
+
+    const destination = safeClickUrl(input.clickUrl);
+    if (!destination) {
+      throw new ServiceError(
+        "validation",
+        "A click-through needs a full web address starting http:// or https://.",
+      );
+    }
+
+    if (input.kind === "image") {
+      if (!input.assetId) {
+        throw new ServiceError("validation", "Pick the image this ad shows.");
+      }
+      // §5 requires alt text on every public image, and an ad is no
+      // exception — a sponsor's banner with no alt text is a page a screen
+      // reader cannot describe.
+      if (!input.altText) {
+        throw new ServiceError(
+          "validation",
+          "Describe the image, for anyone who cannot see it.",
+        );
+      }
+    } else if (!input.headline) {
+      throw new ServiceError("validation", "A text ad needs a headline.");
+    }
+
+    // The size must be one the slots this line item runs in actually declare.
+    // Otherwise the creative is unservable and the owner's only symptom is an
+    // advertiser asking why they saw no impressions — the same failure C9.17
+    // refuses a line item for.
+    const slotIds = z.array(uuidSchema).safeParse(line.slotIds);
+    const slotRows =
+      slotIds.success && slotIds.data.length > 0
+        ? await ctx.tx
+            .select({ formats: adSlots.formats })
+            .from(adSlots)
+            .where(inArray(adSlots.id, slotIds.data))
+        : [];
+    const declared = slotRows
+      .flatMap((slot) => declaredFormats(slot.formats))
+      .flatMap((format) => format.sizes);
+    if (!declared.some((size) => size.width === input.width && size.height === input.height)) {
+      throw new ServiceError(
+        "validation",
+        `None of this line item's positions accepts a ${input.width}×${input.height} ad, so it could never run.`,
+      );
+    }
+
+    // A house promotion is the owner's own, so making it is the approval —
+    // recorded against them rather than waived, so the trail still says who.
+    // Anything sold goes back to pending on every edit: §4.16's rule is that
+    // "a creative cannot be swapped for a different target after approval",
+    // and an edit is exactly that swap.
+    const house = line.pricing === "house";
+    const values: typeof adCreatives.$inferInsert = {
+      lineItemId: input.lineItemId,
+      kind: input.kind,
+      assetId: input.assetId ?? null,
+      width: input.width,
+      height: input.height,
+      clickUrl: destination,
+      altText: input.altText ?? null,
+      headline: input.headline ?? null,
+      body: input.body ?? null,
+      ctaLabel: input.ctaLabel ?? null,
+      status: input.status,
+      reviewState: house ? "approved" : "pending",
+      reviewNote: null,
+      reviewedBy: house ? actorString(ctx.actor) : null,
+      reviewedAt: house ? new Date() : null,
+    };
+
+    if (input.id) {
+      const [updated] = await ctx.tx
+        .update(adCreatives)
+        .set({ ...values, updatedAt: new Date() })
+        .where(eq(adCreatives.id, input.id))
+        .returning();
+      if (!updated) throw new ServiceError("not_found", "There is no such creative.");
+      ctx.setSubject("ad_creative", updated.id);
+      return updated;
+    }
+    const [created] = await ctx.tx.insert(adCreatives).values(values).returning();
+    ctx.setSubject("ad_creative", created!.id);
+    return created!;
+  },
+});
+
+export const reviewCreative = defineService({
+  name: "ads.reviewCreative",
+  writeClass: "write",
+  summary: "Approve or reject the artwork before it may appear.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id: uuidSchema,
+    decision: z.enum(["approved", "rejected"]),
+    note: z.string().trim().max(1000).nullish(),
+  }),
+  output: creativeRow,
+  handler: async (input, ctx) => {
+    const [updated] = await ctx.tx
+      .update(adCreatives)
+      .set({
+        reviewState: input.decision,
+        reviewNote: input.note ?? null,
+        reviewedBy: actorString(ctx.actor),
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(adCreatives.id, input.id))
+      .returning();
+    if (!updated) throw new ServiceError("not_found", "There is no such creative.");
+    ctx.queueEvent("ads.creativeReviewed", {
+      creativeId: updated.id,
+      decision: input.decision,
+    });
+    return updated;
+  },
+});
+
+export const creatives = defineService({
+  name: "ads.creatives",
+  summary: "The artwork booked against a campaign.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ campaignId: uuidSchema }),
+  output: listed(creativeRow),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select({
+        id: adCreatives.id,
+        lineItemId: adCreatives.lineItemId,
+        kind: adCreatives.kind,
+        assetId: adCreatives.assetId,
+        width: adCreatives.width,
+        height: adCreatives.height,
+        clickUrl: adCreatives.clickUrl,
+        altText: adCreatives.altText,
+        headline: adCreatives.headline,
+        body: adCreatives.body,
+        ctaLabel: adCreatives.ctaLabel,
+        status: adCreatives.status,
+        reviewState: adCreatives.reviewState,
+        reviewNote: adCreatives.reviewNote,
+      })
+      .from(adCreatives)
+      .innerJoin(adLineItems, eq(adCreatives.lineItemId, adLineItems.id))
+      .where(eq(adLineItems.campaignId, input.campaignId))
+      .orderBy(desc(adCreatives.createdAt)),
+});
+
+/* --------------------------------------------------------- the serving */
+
+const servedCreative = row({
+  id: uuidSchema,
+  kind: z.enum(["image", "native"]),
+  assetId: uuidSchema.nullable(),
+  altText: z.string().nullable(),
+  headline: z.string().nullable(),
+  body: z.string().nullable(),
+  ctaLabel: z.string().nullable(),
+  /**
+   * Always first-party, always signed. The advertiser's own URL is never in
+   * the page: §4.16 wants the count and the destination unable to disagree,
+   * and a second, unsigned way out of the page is exactly that disagreement.
+   */
+  href: z.string(),
+  /**
+   * What the visible label says. There is no third value and no way to turn
+   * it off — §4.16: "there is no configuration that removes the label".
+   */
+  label: z.enum(["sponsored", "house"]),
+});
+
+/**
+ * What the visible label says. §4.16 allows exactly two answers and no way to
+ * suppress either, so this is the only place the words are decided.
+ */
+function labelFor(house: boolean): "house" | "sponsored" {
+  return house ? "house" : "sponsored";
+}
+
+/**
+ * What to draw in this slot, at every breakpoint it declares.
+ *
+ * One call per placement rather than one per breakpoint, and no device
+ * detection anywhere. §4.16 asks that "one placement serves a leaderboard on a
+ * laptop and a 320×50 on a phone without the owner building two pages", and
+ * the platform already refuses to derive anything from the visitor's device
+ * (see `analytics/visitor.ts`). So the server answers for every breakpoint the
+ * slot declares and CSS picks between them — which also means the reserved
+ * space is correct before a byte of JavaScript runs, which is the Core Web
+ * Vitals promise §36 makes on core's behalf.
+ */
+export const serve = defineService({
+  name: "ads.serve",
+  summary: "The ad to draw in one position, per breakpoint.",
+  kind: "query",
+  permission: "public",
+  input: z.object({
+    code: z.string().trim().toLowerCase().max(40),
+    path: z.string().trim().max(2000).default("/"),
+    locale: z.string().trim().max(20).default("en"),
+    country: z.string().trim().length(2).toUpperCase().nullish(),
+    referrer: z.string().trim().max(2000).nullish(),
+  }),
+  output: row({
+    code: z.string(),
+    lazy: z.boolean(),
+    fills: listed(
+      row({
+        breakpoint: z.enum(["desktop", "tablet", "mobile"]),
+        width: z.number().int(),
+        height: z.number().int(),
+        creative: servedCreative.nullable(),
+      }),
+    ),
+  }).nullable(),
+  handler: async (input, ctx) => {
+    const [slot] = await ctx.tx.select().from(adSlots).where(eq(adSlots.code, input.code));
+    if (!slot || slot.status !== "active") return null;
+    const formats = declaredFormats(slot.formats);
+    if (formats.length === 0) return null;
+
+    // Everything that could run anywhere, in one pass: a live campaign's
+    // active line items with approved, active artwork. Which of them actually
+    // runs is decided in `select.ts`, where it can be tested without a
+    // database — deciding between two advertisers is the part they dispute.
+    const rows = await ctx.tx
+      .select({
+        lineItemId: adLineItems.id,
+        campaignId: adCampaigns.id,
+        pricing: adCampaigns.pricing,
+        priority: adCampaigns.priority,
+        weight: adLineItems.weight,
+        startsAt: adCampaigns.startsAt,
+        endsAt: adCampaigns.endsAt,
+        slotIds: adLineItems.slotIds,
+        targeting: adLineItems.targeting,
+        dayparting: adLineItems.dayparting,
+        creativeId: adCreatives.id,
+        kind: adCreatives.kind,
+        assetId: adCreatives.assetId,
+        width: adCreatives.width,
+        height: adCreatives.height,
+        clickUrl: adCreatives.clickUrl,
+        altText: adCreatives.altText,
+        headline: adCreatives.headline,
+        body: adCreatives.body,
+        ctaLabel: adCreatives.ctaLabel,
+      })
+      .from(adCreatives)
+      .innerJoin(adLineItems, eq(adCreatives.lineItemId, adLineItems.id))
+      .innerJoin(adCampaigns, eq(adLineItems.campaignId, adCampaigns.id))
+      .where(
+        and(
+          eq(adCreatives.status, "active"),
+          // The editorial gate, in the hot path rather than in a comment.
+          eq(adCreatives.reviewState, "approved"),
+          eq(adLineItems.status, "active"),
+          eq(adCampaigns.status, "live"),
+        ),
+      );
+
+    const byLineItem = new Map<string, Candidate>();
+    for (const each of rows) {
+      const ids = z.array(uuidSchema).safeParse(each.slotIds);
+      if (!ids.success || !ids.data.includes(slot.id)) continue;
+      const candidate: Candidate = byLineItem.get(each.lineItemId) ?? {
+        lineItemId: each.lineItemId,
+        campaignId: each.campaignId,
+        house: each.pricing === "house",
+        priority: each.priority,
+        weight: each.weight,
+        startsAt: each.startsAt,
+        endsAt: each.endsAt,
+        // Read straight from jsonb: `matchesTargeting` and `withinDaypart`
+        // both treat anything they do not recognise as an unstated condition,
+        // which is the only safe reading of a field an owner can edit.
+        targeting: each.targeting ?? {},
+        dayparting: each.dayparting ?? {},
+        creatives: [],
+      };
+      candidate.creatives.push({
+        id: each.creativeId,
+        kind: each.kind,
+        assetId: each.assetId,
+        width: each.width,
+        height: each.height,
+        clickUrl: each.clickUrl,
+        altText: each.altText,
+        headline: each.headline,
+        body: each.body,
+        ctaLabel: each.ctaLabel,
+      });
+      byLineItem.set(each.lineItemId, candidate);
+    }
+    const candidates = [...byLineItem.values()];
+
+    const business = await ctx.call(getBusiness, {});
+    const now = new Date();
+    const clock = zonedClock(now, business?.timezone ?? "UTC");
+    const issuedAt = Math.floor(now.getTime() / 1000);
+
+    const fills = formats.map((format) => {
+      const context: ServeContext = {
+        locale: input.locale,
+        country: input.country ?? null,
+        device: format.breakpoint,
+        path: input.path,
+        referrer: input.referrer ?? null,
+        minuteOfDay: clock.minuteOfDay,
+        dayOfWeek: clock.dayOfWeek,
+      };
+      const chosen = chooseFill(candidates, format.sizes, context, {
+        now,
+        allowHouseFill: slot.allowHouseFill,
+        roll: Math.random(),
+        creativeRoll: Math.random(),
+      });
+      const reserved = chosen
+        ? { width: chosen.creative.width, height: chosen.creative.height }
+        : format.sizes[0]!;
+      return {
+        breakpoint: format.breakpoint,
+        width: reserved.width,
+        height: reserved.height,
+        creative: chosen
+          ? {
+              id: chosen.creative.id,
+              kind: chosen.creative.kind,
+              assetId: chosen.creative.assetId,
+              altText: chosen.creative.altText,
+              headline: chosen.creative.headline,
+              body: chosen.creative.body,
+              ctaLabel: chosen.creative.ctaLabel,
+              href: clickPath(
+                signClickToken({
+                  creativeId: chosen.creative.id,
+                  url: chosen.creative.clickUrl,
+                  issuedAt,
+                }),
+              ),
+              label: labelFor(chosen.candidate.house),
+            }
+          : null,
+      };
+    });
+
+    return { code: slot.code, lazy: slot.lazy, fills };
+  },
+});
+
+/**
+ * Count the click, then say where to send them (§4.16).
+ *
+ * The order in that sentence is the contract: this records first and hands
+ * back a destination second, so there is no path through the code that sends
+ * a visitor onward without the click having been counted.
+ *
+ * It is also this module's one untrusted public surface, so it treats the
+ * token as hostile: the signature is verified before anything is read, the
+ * destination comes from the row rather than from the request, and the two
+ * must agree. A token whose URL no longer matches the creative's is refused
+ * rather than followed — that is §4.16's "a creative cannot be swapped for a
+ * different target after approval", enforced at the moment it would matter.
+ */
+export const recordClick = defineService({
+  name: "ads.recordClick",
+  writeClass: "write",
+  summary: "Count an ad click and resolve where it goes.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    token: z.string().trim().min(1).max(2000),
+    /** Supplied only when analytics policy permits identifiers at all. */
+    anonId: z.string().trim().min(1).max(64).nullish(),
+    sessionId: z.string().trim().min(1).max(64).nullish(),
+    path: z.string().trim().max(2000).default("/"),
+  }),
+  rateLimit: {
+    limit: 120,
+    windowSeconds: 10 * 60,
+    // Per link, not per visitor: there is no identity here we are willing to
+    // rely on, and one link being hammered is the shape of the abuse.
+    subject: (input) => `token:${input.token.slice(0, 40)}`,
+    message: "That ad link has been followed a great many times just now.",
+  },
+  output: row({ url: z.string() }),
+  handler: async (input, ctx) => {
+    const claim = verifyClickToken(input.token, Math.floor(Date.now() / 1000));
+    if (!claim) {
+      throw new ServiceError("validation", "That ad link is not valid, or it has expired.");
+    }
+
+    const [creative] = await ctx.tx
+      .select({
+        id: adCreatives.id,
+        clickUrl: adCreatives.clickUrl,
+        lineItemId: adCreatives.lineItemId,
+        campaignId: adLineItems.campaignId,
+      })
+      .from(adCreatives)
+      .innerJoin(adLineItems, eq(adCreatives.lineItemId, adLineItems.id))
+      .where(eq(adCreatives.id, claim.creativeId));
+    if (!creative) throw new ServiceError("not_found", "That ad is no longer running.");
+
+    if (creative.clickUrl !== claim.url) {
+      throw new ServiceError(
+        "conflict",
+        "This ad's destination changed after it was shown, so the click was not followed.",
+      );
+    }
+    // Checked again here rather than trusted from the row: a destination
+    // written before this rule existed, or edited straight in SQL, must not
+    // become a redirect the owner's own domain vouches for.
+    const destination = safeClickUrl(creative.clickUrl);
+    if (!destination) {
+      throw new ServiceError("validation", "That ad's destination is not a web address.");
+    }
+
+    // §4.16 measures through first-party analytics (§4.7), so a click joins
+    // the same ledger as everything else and C9.19's rollup reads it there
+    // rather than from a counter only this module understands. No identifiers
+    // means policy refused collection at the edge; the visitor still travels.
+    if (input.anonId && input.sessionId) {
+      await ctx.call(track, {
+        anonId: input.anonId,
+        sessionId: input.sessionId,
+        name: "ad.click",
+        // A double-click, a prefetch and a retried request are the same click
+        // within a minute; a genuine second visit an hour later is not.
+        eventKey: `ad.click:${input.anonId}:${creative.id}:${Math.floor(Date.now() / 60_000)}`,
+        path: input.path,
+        props: {
+          creativeId: creative.id,
+          lineItemId: creative.lineItemId,
+          campaignId: creative.campaignId,
+        },
+      });
+    }
+
+    return { url: destination };
+  },
+});
+
+/* ------------------------------------------------------ the money path */
+
+/**
+ * Raise the invoice for a sold campaign (§4.16).
+ *
+ * "Selling an ad is selling a product. `AdCampaign.invoice_id` ties a sale to
+ * the same invoicing, tax and reporting path as everything else." So this
+ * raises an ordinary invoice against an ordinary contact, and the advertiser's
+ * pitch, quote, invoice and last year's campaign end up on one timeline.
+ *
+ * A *draft*, deliberately, and never issued here. Issuing allocates a gapless
+ * number and settles a tax treatment, and this module has no addresses to
+ * calculate one from — guessing a tax treatment on somebody's behalf is the
+ * one thing an accounting system must not do. The owner issues it from the
+ * invoice, where the question is asked properly.
+ */
+export const invoiceCampaign = defineService({
+  name: "ads.invoiceCampaign",
+  writeClass: "money",
+  summary: "Raise the invoice for a sold campaign.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: uuidSchema }),
+  output: row({
+    invoiceId: uuidSchema,
+    amountMinor: z.number().int(),
+    currency: z.string(),
+  }),
+  handler: async (input, ctx) => {
+    // Every refusal below is read before the first write. A failed statement
+    // aborts the transaction, so "try it and then record that it failed" is
+    // not something this can do.
+    const [campaign] = await ctx.tx
+      .select()
+      .from(adCampaigns)
+      .where(eq(adCampaigns.id, input.id));
+    if (!campaign) throw new ServiceError("not_found", "There is no such campaign.");
+    if (campaign.pricing === "house") {
+      throw new ServiceError(
+        "validation",
+        "A house promotion is your own, so there is nobody to invoice.",
+      );
+    }
+    if (campaign.invoiceId) {
+      throw new ServiceError("conflict", "This campaign has already been invoiced.");
+    }
+    if (campaign.approvalState !== "approved") {
+      throw new ServiceError(
+        "validation",
+        "Approve the campaign before invoicing it — the sale comes before the bill.",
+      );
+    }
+    if (!listServices().has("invoicing.createDraft")) {
+      throw new ServiceError("validation", "Invoicing is switched off, so nothing was raised.");
+    }
+
+    const lines = await ctx.tx
+      .select({
+        goalImpressions: adLineItems.goalImpressions,
+        goalClicks: adLineItems.goalClicks,
+      })
+      .from(adLineItems)
+      .where(eq(adLineItems.campaignId, input.id));
+    const goalImpressions = lines.reduce((sum, line) => sum + (line.goalImpressions ?? 0), 0);
+    const goalClicks = lines.reduce((sum, line) => sum + (line.goalClicks ?? 0), 0);
+
+    // The booked value of the buy, computed the way the campaign was priced.
+    // A per-thousand campaign is invoiced against what was *sold*: what was
+    // delivered is not known until it has run, and reconciling the two
+    // against this same invoice is C9.19's job.
+    const amountMinor =
+      campaign.pricing === "flat"
+        ? campaign.rateCents
+        : campaign.pricing === "cpm"
+          ? Math.round((campaign.rateCents * goalImpressions) / 1000)
+          : campaign.rateCents * goalClicks;
+    if (amountMinor <= 0) {
+      throw new ServiceError(
+        "validation",
+        campaign.pricing === "cpm"
+          ? "Set a rate and an impression goal before invoicing a per-thousand campaign; there is nothing to bill against."
+          : campaign.pricing === "cpc"
+            ? "Set a rate and a click goal before invoicing a per-click campaign; there is nothing to bill against."
+            : "Set a rate before invoicing this campaign.",
+      );
+    }
+
+    const business = await ctx.call(getBusiness, {});
+    const currency = business?.baseCurrency;
+    if (!currency) {
+      throw new ServiceError("validation", "Set your currency in settings before invoicing.");
+    }
+
+    // Resolved by name rather than imported: §4.16's `invoice_id` is a plain
+    // column and not a foreign key precisely because an instance that only
+    // ever runs house promotions need not install invoicing at all.
+    const draft = (await ctx.call(getService("invoicing.createDraft"), {
+      contactId: campaign.advertiserContactId,
+      currency,
+      sourceType: "ad_campaign",
+      sourceId: campaign.id,
+      // Stable per campaign, so a retry never raises a second invoice.
+      idempotencyKey: `ads:campaign:${campaign.id}`,
+      lines: [
+        {
+          description:
+            campaign.pricing === "cpm"
+              ? `${campaign.name} — ${goalImpressions} impressions`
+              : campaign.pricing === "cpc"
+                ? `${campaign.name} — ${goalClicks} clicks`
+                : campaign.name,
+          quantityMicros: 1_000_000,
+          unitAmountMinor: amountMinor,
+        },
+      ],
+      tax: {
+        mode: "not_applicable",
+        reason: `Advertising campaign ${campaign.name}; tax applied when issued.`,
+      },
+    })) as { invoice: { id: string } };
+
+    await ctx.tx
+      .update(adCampaigns)
+      .set({ invoiceId: draft.invoice.id, updatedAt: new Date() })
+      .where(eq(adCampaigns.id, campaign.id));
+    ctx.setSubject("ad_campaign", campaign.id);
+    ctx.queueEvent("ads.campaignInvoiced", {
+      campaignId: campaign.id,
+      invoiceId: draft.invoice.id,
+    });
+    return { invoiceId: draft.invoice.id, amountMinor, currency };
+  },
+});
+
 /* ------------------------------------------------------------ the spine */
 
 registerContactReference({
@@ -744,4 +1420,10 @@ export default [
   campaigns,
   saveLineItem,
   lineItems,
+  saveCreative,
+  reviewCreative,
+  creatives,
+  serve,
+  recordClick,
+  invoiceCampaign,
 ];
