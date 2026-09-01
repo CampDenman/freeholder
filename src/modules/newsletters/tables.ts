@@ -5,3 +5,5 @@ export { newsletterIssues, newsletterSubscriptions, newsletters } from "./schema
 // newsletters because that is where §30 puts it, and because a newsletter
 // issue is the first thing that reaches for one.
 export { emailTemplates } from "./template-schema";
+// Sending one message to many people (§30, C9.06).
+export { broadcasts, broadcastRecipients } from "./broadcast-schema";

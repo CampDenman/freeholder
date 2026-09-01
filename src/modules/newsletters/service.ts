@@ -9,7 +9,7 @@ import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
-import { registerContactPrivacySource } from "@/core/privacy/service";
+import { recordConsent, registerContactPrivacySource } from "@/core/privacy/service";
 import { sendMail } from "@/core/mail/service";
 import { siteOrigin } from "@/core/seo/origin";
 import {
@@ -557,6 +557,27 @@ export const confirmSubscription = defineService({
       })
       .where(eq(newsletterSubscriptions.id, row.id))
       .returning();
+    // The double opt-in *is* the consent evidence.
+    //
+    // §2096: subscriptions carry "double-opt-in records ... consent timestamps
+    // retained for compliance (CASL, GDPR, CAN-SPAM)". Until C9.06 there was
+    // nothing that read them, and the confirmation wrote a subscription row
+    // and nothing else — so `contacts.canContact("marketing", "email")` said
+    // "denied" for every confirmed subscriber on the platform, because absence
+    // of evidence is denial there and no email path ever produced evidence.
+    //
+    // Recorded here rather than in the campaign sender because this is the
+    // moment somebody actually consented, and because consent belongs to the
+    // contact spine rather than to whichever module happens to send next.
+    // `callAsSystem`: the person clicking a confirmation link is anonymous.
+    await ctx.callAsSystem(recordConsent, {
+      contactId: row.contactId,
+      purpose: "marketing" as const,
+      channel: "email" as const,
+      state: "granted" as const,
+      method: "double_opt_in" as const,
+    });
+
     ctx.setSubject("newsletterSubscription", row.id);
     ctx.queueEvent("newsletters.confirmed", {
       subscriptionId: row.id,
@@ -590,6 +611,17 @@ export const unsubscribeFromNewsletter = defineService({
       })
       .where(eq(newsletterSubscriptions.id, row.id))
       .returning();
+    // The other half of the same record. An unsubscribe that left the consent
+    // ledger saying "granted" would let a campaign built on a segment mail
+    // somebody who had just asked not to be mailed.
+    await ctx.callAsSystem(recordConsent, {
+      contactId: row.contactId,
+      purpose: "marketing" as const,
+      channel: "email" as const,
+      state: "withdrawn" as const,
+      method: "preference_center" as const,
+    });
+
     ctx.setSubject("newsletterSubscription", row.id);
     ctx.queueEvent("newsletters.unsubscribed", {
       subscriptionId: row.id,
@@ -620,6 +652,23 @@ export {
   templateSlots,
 } from "./template-service";
 import templateServices from "./template-service";
+// Broadcasts (C9.06): a template, an audience and a moment.
+export {
+  saveBroadcast,
+  testSend,
+  startBroadcast,
+  sendNext,
+  tick,
+  pauseBroadcast,
+  resumeBroadcast,
+  listBroadcasts,
+  broadcastStats,
+  broadcastRecipientList,
+  // The provider-feedback listener. Named in the manifest's `listens`, which
+  // resolves handlers from this module.
+  onMailDeliveryUpdated,
+} from "./broadcast-service";
+import broadcastServices from "./broadcast-service";
 
 export default [
   listNewsletters,
@@ -636,5 +685,6 @@ export default [
   confirmSubscription,
   unsubscribeFromNewsletter,
   ...templateServices,
+  ...broadcastServices,
 ];
 

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 
+import Link from "next/link";
 import { Newspaper, Plus } from "@phosphor-icons/react/dist/ssr";
 import { listNewsletters } from "@/modules/newsletters/service";
 import { Button, Card, CardBody, CardHeader, Field, Input } from "@/ui/primitives";
@@ -23,6 +24,19 @@ export default async function NewslettersPage() {
         </h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("newsletters.intro")}</p>
       </div>
+
+      {/* The two screens that live under this one. The nav (§43's admin shell)
+          carries top-level sections only, so a page nobody links to is a page
+          nobody finds — which is exactly what happened to templates until a
+          campaign needed one. */}
+      <nav className="flex flex-wrap items-center gap-4 text-sm">
+        <Link href="/admin/newsletters/broadcasts" className="underline">
+          {t("broadcasts.title")}
+        </Link>
+        <Link href="/admin/newsletters/templates" className="underline">
+          {t("templates.title")}
+        </Link>
+      </nav>
 
       <Card>
         <CardHeader title={t("newsletters.add")} />
