@@ -113,6 +113,28 @@ why at the call site.
   each other into 10-minute timeouts. Run `node scripts/fast-gates.mjs` once,
   in the foreground.
 
+## Running several branches at once
+
+Parallel authoring works; the machinery around it is what costs time, and it is
+now built. What was learned setting it up:
+
+- **`MASTER.md` is 515 KB.** An agent told to "read §4.16" will open the whole
+  file and stall. Extract the range it needs (`sed -n 'A,Bp'`) into a small
+  brief beside its worktree, and edit the file with a targeted `Edit` on a
+  unique string rather than reading it back.
+- **`node scripts/fast-gates.mjs` with no arguments takes over ten minutes**
+  here — lint alone has hit 491s — which is longer than a subagent's stall
+  watchdog allows for one command. Run it in slices: typecheck/license/release
+  notes/plan gate together, then contract suites, then `npx eslint .` alone.
+- **One database per worktree.** Two vitest processes on the same database
+  truncate each other's fixtures, and the failure looks exactly like a flaky
+  test in an unrelated suite. `freeholder_test_1..6` exist for this; each
+  worktree's `.env` points at its own.
+- Worktrees live beside the repo (`../fh-<lane>`), never inside it — git
+  refuses a worktree it discovers under another checkout.
+- Reserve a migration number range per lane before starting. Two branches
+  taking the same number cannot be fixed downstream.
+
 ## Restacking: the places that always collide
 
 Every squash puts the other branches behind. All are "keep both":
@@ -122,10 +144,13 @@ Every squash puts the other branches behind. All are "keep both":
    numbered `0138` up front to avoid the collision.
 2. `src/modules/index.ts` — keep both manifests.
 3. `MASTER.md` §43 — the other branch's checked item plus this one's.
-4. All three `locales/*.json`, at the same closing brace. When three or more
-   branches have appended keys, `git checkout origin/main -- locales/` and
-   re-run the branch's own key script; patching the markers by hand can span
-   the closing brace and produce invalid JSON.
+4. All three `locales/*.json`, at the same closing brace.
+
+**Do not resolve 1 or 4 by hand.** `node scripts/resolve-append-conflicts.mjs`,
+run inside the conflicted worktree mid-rebase, does both by meaning rather than
+by text: it keeps what main has and adds what the branch added, computed from
+git's own three stages. It refuses, loudly, when both sides changed the same
+key — that is a real disagreement about one string and not a merge to automate.
 
 Locale files are **not sorted**, so append before the closing brace rather than
 re-sorting.
@@ -139,9 +164,18 @@ re-sorting.
 - If an item's entities are not in §§1–42, the doc entry lands in the same PR
   (CLAUDE.md), or in a spec-only PR first.
 - Commits are DCO signed-off (`git commit -s`).
-- `main` is protected: PR + green checks only. Repository auto-merge is on, so
-  `gh pr merge <n> --auto --squash` arms it; a PR that is `BEHIND` needs
-  `gh pr update-branch <n>` before it will fire.
+- `main` is protected: PR + green checks only, merged through a **merge queue**
+  (ruleset "main merge queue"). `gh pr merge <n> --auto --squash` arms an entry;
+  the queue picks the strategy, so it will say so rather than take yours.
+  "Require branches to be up to date" is deliberately **off** — the queue tests
+  the batch against what it will actually merge into, so forcing every open PR
+  to re-run after each merge was the ~50-minute serial floor and bought
+  nothing. The queue needs `merge_group` in `ci.yml`; without it every merge
+  stalls an hour and is dropped.
+- Retargeting a PR after its base merges can leave a **stale DCO check** that
+  never re-runs and never passes. Amending the commit (`git commit --amend
+  --no-edit -s`) gives a fresh sha and a fresh check. Closing and reopening
+  does not, and it clears auto-merge.
 - Apache-2.0 SPDX on new files. One contact spine. One transaction via
   `ctx.call` / `ctx.callAsSystem`. Integer minor-unit money. Light+dark
   EN/FR/ES WCAG AA.
