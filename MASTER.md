@@ -6263,15 +6263,45 @@ customer has one secure, comprehensible home for the relationship.
   Restoring an old version fills the draft rather than rewriting it.
   Runs, delays and per-contact state are C9.02; the guardrails are C9.03.
   Tests: `tests/modules/automations.test.ts`.)
-- [ ] **C9.02** Add delays, schedules, branches, loops with hard bounds,
+- [x] **C9.02** Add delays, schedules, branches, loops with hard bounds,
   idempotency, per-contact state, retries, pause/kill and run inspection.
-  (§4.17. Runs, steps, approvals and spend move to `core/runs` so a mixed
+  (§4.17. Runs, steps, approvals and spend moved to `core/runs`, so a mixed
   prompt/deterministic run is one inspectable run; §40 keeps prompt work and
-  the autonomy ladder.)
-- [ ] **C9.03** Enforce consent, quiet hours, budgets, approval requirements and
+  the autonomy ladder. Migrations `0134_core_runs.sql` — schema-breaking, and
+  a redesign rather than a rename because `agent_runs.task_id` and `agent_id`
+  were both NOT NULL and an automation run has neither — and
+  `0135_automation_runtime.sql`.
+  **A run is a row between steps, not a held process.** A held process loses
+  a two-day wait to a deploy, occupies a worker while it sleeps, and cannot
+  be inspected or killed between steps. The cost is that everything a step
+  needs is written down: `resume_node_id`, `context`, `step_count`.
+  Loop iterations are counted from the steps already written, because a
+  counter in a process resets on the first restart and the loop becomes
+  unbounded. Bounds are checked before each step, not after. Idempotency is
+  a unique index on (subject, key), since the outbox retries and a check in
+  the handler loses that race.
+  Tests: `tests/modules/automations-runtime.test.ts`.)
+- [x] **C9.03** Enforce consent, quiet hours, budgets, approval requirements and
   untrusted-input rules for every automated action.
   (§4.17: the guardrails are properties of the run, not of the step kind, so a
-  mixed run gets one answer to "may this proceed".)
+  mixed run gets one answer to "may this proceed". One function, asked once,
+  before the step that acts — `modules/automations/guardrails.ts` — and
+  exposed as `automations.checkGuardrails` so an owner can ask before
+  switching a rule on rather than discovering it from a parked run.
+  **Nothing is reimplemented.** Consent is §4.14's `contacts.canContact`,
+  quiet hours are §4.14's `messaging.evaluateSmsPolicy`, the ladder is §40's
+  `effectiveAutonomy`. What is new is the order and that the answer is one
+  verdict: consent, then budget, then the ladder, then timing — stopping at
+  the first no, so the reason an owner is given is the true one.
+  Untrusted input pins autonomy at `suggest` however the owner configured it,
+  and the taint belongs to the whole run rather than the step that reads the
+  field, or a form submission could launder itself through a harmless step.
+  Quiet hours defer rather than drop: the run sleeps on the node it was about
+  to run, so waking resumes exactly there.
+  Consent is checked for marketing only — `CONSENT_PURPOSES` has no
+  "transactional" because §4.14 does not require consent for what is owed to
+  somebody, and the caller states which it is rather than the verb guessing.
+  Tests: `tests/modules/automations-guardrails.test.ts`.)
 - [x] **C9.04** Build newsletters, double-opt-in subscriptions, RFC 8058 one-
   click unsubscribe, public issue archive and per-newsletter preference state.
   *(Evidence: `newsletters` module — identities, draft/published issues,

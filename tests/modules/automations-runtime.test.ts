@@ -6,7 +6,7 @@
 // wait that outlives the process, a loop that cannot exceed its declared
 // bound, and an event delivered twice that runs once. Each is a property the
 // design exists for, and each would look fine in a happy-path test.
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { runSteps, runs } from "@/core/runs/schema";
@@ -25,6 +25,7 @@ import { armMatches, readPath } from "@/modules/automations/engine";
 import { listNotes } from "@/core/notes/service";
 import { resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
+import { ready } from "@/core/runtime";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 /* ------------------------------------------------------------ pure parts */
@@ -107,6 +108,14 @@ const noteGraph = (body: string) => ({
 });
 
 describe.runIf(hasDatabase)("running an automation", () => {
+  // Boot once, before the first test rather than inside its hook. Wiring every
+  // module is a one-off cost of several seconds, and charging it to the first
+  // `beforeEach` is how a suite fails on a timeout that has nothing to do with
+  // what it is testing.
+  beforeAll(async () => {
+    await ready();
+  }, 60_000);
+
   beforeEach(async () => {
     await truncateSpine();
     await updateBusiness.call(BUSINESS, OWNER);
