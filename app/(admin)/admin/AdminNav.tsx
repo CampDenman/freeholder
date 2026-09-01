@@ -42,6 +42,7 @@ import {
   CalendarBlank,
   Newspaper,
   Megaphone,
+  ShareNetwork,
   ChatCircleText,
   PuzzlePiece,
   DownloadSimple,
@@ -93,6 +94,7 @@ export interface AdminNavLabels {
   scoring: string;
   referrals: string;
   ads: string;
+  sharing: string;
   automations: string;
   documents: string;
   loyalty: string;
@@ -160,6 +162,7 @@ const LINKS = [
   { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
   { href: "/admin/referrals", key: "referrals", module: "referrals", Icon: UserPlus },
   { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
+  { href: "/admin/sharing", key: "sharing", module: "share", Icon: ShareNetwork },
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },

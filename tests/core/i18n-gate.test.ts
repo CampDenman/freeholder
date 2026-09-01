@@ -46,6 +46,7 @@ import {
   PRODUCT_VISIBILITIES,
 } from "@/modules/catalog/contract";
 import { IMPORT_STATUSES, PLUGIN_STATUSES } from "@/core/plugins/schema";
+import { SHARE_CHANNELS } from "@/modules/share/intents";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
 import { WRITE_KINDS } from "@/core/agents/previews";
 import en from "../../locales/en.json";
@@ -238,6 +239,9 @@ describe("the families built from a template key", () => {
     ["work.column", BOARD_COLUMNS],
     ["work.approval.kind", WRITE_KINDS],
     ["plugins.status", PLUGIN_STATUSES],
+    // C9.28: the share bar renders one button per channel, so a channel added
+    // without its label would ship a raw dotted key onto every public page.
+    ["share.channel", SHARE_CHANNELS],
     [
       "imports.status",
       IMPORT_STATUSES,
