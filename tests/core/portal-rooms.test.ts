@@ -7,7 +7,8 @@
 // records through the ordinary owner-facing services and then check that the
 // customer sees exactly those, through the portal, without any module having
 // grown a second read path.
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { ready } from "@/core/runtime";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
@@ -40,6 +41,13 @@ async function otherCustomer(email = "sam@example.test") {
 }
 
 describe.runIf(hasDatabase)("the customer portal's rooms", () => {
+  // Boot wires every installed module and takes seconds, and it grows with
+  // each one. Charged here rather than to the first test, which otherwise
+  // fails on an unrelated thirty-second timeout the moment a module is added.
+  beforeAll(async () => {
+    await ready();
+  }, 60_000);
+
   beforeEach(async () => {
     await truncateSpine();
     await updateBusiness.call(BUSINESS, OWNER);
@@ -126,9 +134,13 @@ describe.runIf(hasDatabase)("the customer portal's rooms", () => {
 
   it("says nothing at all for a section nobody registered", async () => {
     const { actor } = await signedInCustomer();
-    const rooms = await myRecords.call({ section: "subscriptions" }, actor);
-    // Not an error: C9.13 has not been built, so the honest answer is that
-    // there is no such room yet rather than that something went wrong.
+    // Deliberately not a module name. This used to ask for "subscriptions",
+    // which was true until C9.13 registered that room and turned the example
+    // into a real one — so the name is now something no module will ever
+    // claim, and the test keeps meaning what it was written to mean.
+    const rooms = await myRecords.call({ section: "no-such-room" }, actor);
+    // Not an error: the honest answer is that there is no such room rather
+    // than that something went wrong.
     expect(rooms).toEqual([]);
   });
 });
