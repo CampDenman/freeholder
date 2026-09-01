@@ -37,6 +37,7 @@ import {
   verbs,
   versions,
 } from "@/modules/automations/service";
+import { listSegments } from "@/core/segments/service";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
@@ -97,12 +98,15 @@ export default async function AutomationEditor({
   const detail = await domainOrNull(getAutomation.call({ automationId: id }, actor));
   if (!detail) notFound();
 
-  const [t, business, palette, available, history] = await Promise.all([
+  const [t, business, palette, available, history, audiences] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(verbs.call({}, actor)),
     domainOrNull(triggers.call({}, actor)),
     domainOrNull(versions.call({ automationId: id }, actor)),
+    // The audiences the business has already defined (§30). Offering the list
+    // rather than a rule builder is the point of C7.17.
+    domainOrNull(listSegments.call({}, actor)),
   ]);
 
   const locale = business?.defaultLocale ?? "en";
@@ -420,6 +424,28 @@ export default async function AutomationEditor({
                 defaultValue={rule.scheduleCron ?? ""}
                 placeholder="0 9 * * *"
               />
+            </Field>
+            {/* The audience (§30, C7.17). A segment rather than a filter of
+                this screen's own: "who" is a question the business answers
+                once, and an automation that answered it again could disagree
+                with the campaign built on the same words. */}
+            <Field
+              label={t("automations.field.audience")}
+              htmlFor="entrySegmentId"
+              hint={t("automations.field.audienceHint")}
+            >
+              <Select
+                id="entrySegmentId"
+                name="entrySegmentId"
+                defaultValue={rule.entrySegmentId ?? ""}
+              >
+                <option value="">{t("automations.field.everyone")}</option>
+                {(audiences ?? []).map((segment) => (
+                  <option key={segment.id} value={segment.id}>
+                    {segment.name}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field
               label={t("automations.field.reentry")}

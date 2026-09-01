@@ -4708,5 +4708,11 @@
   "reports.saveName": "Call it",
   "reports.save": "Save this view",
   "reports.delete": "Delete",
-  "reports.open": "Open"
+  "reports.open": "Open",
+  "automations.field.audience": "Audience",
+  "automations.field.audienceHint": "Only people in this group may enter. Leave it as everyone if the rule is for anybody the trigger brings.",
+  "automations.field.everyone": "Everyone",
+  "reports.audience": "Audience",
+  "reports.everyone": "Everyone",
+  "reports.apply": "Show"
 }

@@ -226,6 +226,15 @@ export const cohortReport = defineService({
   input: z.object({
     months: z.number().int().min(2).max(36).default(12),
     timezone,
+    /**
+     * Narrow the report to one audience (§30, C7.17).
+     *
+     * A segment, not a filter of this report's own devising: "customers in
+     * Ontario who bought twice" is a question the business has already
+     * answered once, and answering it a second time here is how two screens
+     * come to disagree about who that is.
+     */
+    segmentId: uuidSchema.optional(),
   }),
   output: row({
     /** Cohort month → what they spent in the months since. */
@@ -246,6 +255,21 @@ export const cohortReport = defineService({
     ),
   }),
   handler: async (input, ctx) => {
+    // The audience, when one was asked for. Materialised rather than joined
+    // because a segment is a compiled condition over `contacts` rather than a
+    // table this query could reach into — and capped, because a report is not
+    // a mailing: past ten thousand people the shape of the answer stops
+    // depending on the last of them.
+    let audience: string[] | null = null;
+    if (input.segmentId) {
+      const members = (await ctx.call(getService("segments.members"), {
+        id: input.segmentId,
+        limit: 10_000,
+      })) as Array<{ id: string }>;
+      audience = members.map((each) => each.id);
+      if (audience.length === 0) return { cohorts: [] };
+    }
+
     // A cohort is dated by a customer's *first* payment, not by when they
     // became a contact: somebody on the list for two years who buys today is
     // this month's new customer, and treating them as an old one would credit
@@ -259,6 +283,7 @@ export const cohortReport = defineService({
         from ${invoices}
         where ${invoices.paidAt} is not null
           and ${invoices.contactId} is not null
+          ${audience ? sql`and ${invoices.contactId} in ${audience}` : sql``}
       ),
       first_payment as (
         select contact_id, currency, min(month) as cohort

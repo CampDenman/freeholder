@@ -4708,5 +4708,11 @@
   "reports.saveName": "Ponle nombre",
   "reports.save": "Guardar esta vista",
   "reports.delete": "Borrar",
-  "reports.open": "Abrir"
+  "reports.open": "Abrir",
+  "automations.field.audience": "Audiencia",
+  "automations.field.audienceHint": "Solo entran las personas de este grupo. Déjalo en «Todos» si la regla vale para cualquiera que traiga el disparador.",
+  "automations.field.everyone": "Todos",
+  "reports.audience": "Audiencia",
+  "reports.everyone": "Todos",
+  "reports.apply": "Mostrar"
 }
