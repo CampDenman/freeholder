@@ -26,6 +26,8 @@ import {
   MEMBERSHIP_ROLES,
 } from "@/core/scheduling/schema";
 import { defineService, ServiceError, type Tx } from "@/core/service";
+// Booked time, as a funnel stage (§4.7, C9.07).
+import "./funnel";
 
 const timezoneValue = z
   .string()
