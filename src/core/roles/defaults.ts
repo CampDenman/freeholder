@@ -38,6 +38,7 @@ const ADMIN_MODULES = [
   "demo",
   "events",
   "entitlements",
+  "paywalls",
   "forms",
   "galleries",
   "newsletters",

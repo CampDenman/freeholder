@@ -8,6 +8,10 @@ import { submitInboundAction } from "../../../../app/(public)/inbound-actions";
 import { SiteChatClient } from "./SiteChatClient";
 import { defineBlock } from "./types";
 import { socialEmbed } from "./social";
+import {
+  previewChildCount,
+  selectPreviewChildren,
+} from "@/core/paywalls/evaluate";
 
 const href = z.string().trim().min(1).max(2048);
 
@@ -463,6 +467,13 @@ function InboundFields({ t }: { t: (key: string) => string }) {
 
 /* ---------------------------------------------------------------- C2.10 */
 
+type PaywallResolved = {
+  allowed: boolean;
+  reveal: "all" | "preview" | "none";
+  previewStrategy: "blocks" | "paragraphs" | "percent";
+  previewValue: number;
+};
+
 export const paywall = defineBlock({
   type: "paywall",
   labelKey: "cms.block.paywall",
@@ -472,33 +483,76 @@ export const paywall = defineBlock({
     teaser: z.string().min(1).max(400),
     ctaLabel: z.string().min(1).max(80),
     ctaHref: href,
+    paywallId: z.string().uuid().optional(),
   }),
   starter: () => ({
     teaser: "The rest of this page is for supporters.",
     ctaLabel: "Continue",
     ctaHref: "/contact",
   }),
-  includeChildren: ({ ctx }) => ctx.identifyBlocks === true,
-  render: ({ props, ctx, children }) => {
+  resolve: async (props, ctx): Promise<PaywallResolved> => {
+    if (ctx.identifyBlocks) {
+      return { allowed: true, reveal: "all", previewStrategy: "blocks", previewValue: 0 };
+    }
+    const { evaluatePaywall } = await import("@/core/paywalls/service");
+    const decision = await evaluatePaywall.call(
+      {
+        paywallId: props.paywallId,
+        kind: "page",
+        selector: ctx.path,
+        anonId: ctx.visitorId,
+      },
+      ctx.actor ?? { kind: "anonymous" },
+    );
+    // A paywall *block* is a gate even when no Paywall row matches this path.
+    // Showing children in that case would leak every C2.10 tree the moment
+    // this item shipped. A Paywall row is what makes a grant able to open it.
+    if (!decision.gated) {
+      return { allowed: false, reveal: "none", previewStrategy: "blocks", previewValue: 0 };
+    }
+    return {
+      allowed: decision.allowed,
+      reveal: decision.reveal,
+      previewStrategy: decision.previewStrategy,
+      previewValue: decision.previewValue,
+    };
+  },
+  includeChildren: ({ ctx, resolved }) =>
+    ctx.identifyBlocks === true || resolved.reveal !== "none",
+  selectChildren: ({ children, ctx, resolved }) => {
+    if (ctx.identifyBlocks || resolved.reveal === "all") return children;
+    return selectPreviewChildren(
+      children,
+      resolved.previewStrategy,
+      previewChildCount(children.length, resolved.previewStrategy, resolved.previewValue),
+    );
+  },
+  render: ({ props, ctx, resolved, children }) => {
     if (ctx.identifyBlocks) {
       return <div className="grid gap-4">{children}</div>;
     }
+    const showGated = resolved.reveal !== "none";
     return (
-      <aside data-paywall-teaser className="grid max-w-prose gap-3 rounded-lg border border-rule p-4">
-        <p className="text-ink">{props.teaser}</p>
-        <a
-          href={ctx.localizeHref?.(props.ctaHref) ?? props.ctaHref}
-          className="inline-flex w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent"
-        >
-          {props.ctaLabel}
-        </a>
-      </aside>
+      <div className="grid max-w-prose gap-4">
+        {showGated ? <div data-paywall-gated className="grid gap-4">{children}</div> : null}
+        {resolved.allowed ? null : (
+          <aside data-paywall-teaser className="grid gap-3 rounded-lg border border-rule p-4">
+            <p className="text-ink">{props.teaser}</p>
+            <a
+              href={ctx.localizeHref?.(props.ctaHref) ?? props.ctaHref}
+              className="inline-flex w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent"
+            >
+              {props.ctaLabel}
+            </a>
+          </aside>
+        )}
+      </div>
     );
   },
   jsonLd: () => ({
     "@context": "https://schema.org",
     "@type": "WebPageElement",
     isAccessibleForFree: false,
-    cssSelector: "[data-paywall-teaser]",
+    cssSelector: "[data-paywall-gated]",
   }),
 });

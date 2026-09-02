@@ -100,6 +100,7 @@ export {
   passBalances,
   contentUnlocks,
 } from "@/core/entitlements/schema";
+export { paywalls, meterCounters } from "@/core/paywalls/schema";
 export { savedViews } from "@/core/views/schema";
 export {
   contactImports,

@@ -48,6 +48,7 @@ import {
   DownloadSimple,
   Kanban,
   Key,
+  Lock,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -111,6 +112,7 @@ export interface AdminNavLabels {
   reports: string;
   subscriptions: string;
   access: string;
+  paywalls: string;
   contribute: string;
   plugins: string;
   imports: string;
@@ -172,6 +174,7 @@ const LINKS = [
     Icon: ArrowsClockwise,
   },
   { href: "/admin/access", key: "access", module: "entitlements", Icon: Key },
+  { href: "/admin/paywalls", key: "paywalls", module: "paywalls", Icon: Lock },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
