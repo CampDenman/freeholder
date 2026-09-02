@@ -28,6 +28,7 @@ export default defineModule({
   requires: ["core", "cms", "analytics"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
   // §4.16: an ad slot is "placed on the page as a block (§32), so where an ad
   // appears is content structure like everything else." The block belongs to
   // this module rather than to cms, because it is this module's vocabulary —
@@ -40,6 +41,7 @@ export default defineModule({
       "ads.campaignInvoiced",
       "ads.campaignStatusChanged",
       "ads.creativeReviewed",
+      "ads.campaignReconciled",
     ],
     // Core announces that setup finished; ads answers with its standard
     // sizes, and neither module imports the other (§11).

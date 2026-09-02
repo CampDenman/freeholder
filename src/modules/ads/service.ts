@@ -14,7 +14,7 @@
 // advertises and buys prints is one person here, which is the spine (§4.1)
 // doing the job it exists for.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
 import {
   actorString,
@@ -27,16 +27,26 @@ import { registerContactReference, resolveContact } from "@/core/contacts/servic
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { getBusiness } from "@/core/settings/service";
 import { track } from "@/modules/analytics/service";
+import { analyticsEvents } from "@/modules/analytics/schema";
 import {
   adCampaigns,
   adCreatives,
   adLineItems,
   adSizes,
   adSlots,
+  adStats,
   advertisers,
 } from "./schema";
 import { clickPath, safeClickUrl, signClickToken, verifyClickToken } from "./clicks";
 import { chooseFill, zonedClock, type Candidate, type DeclaredSize } from "./select";
+import {
+  bumpStat,
+  deliveryByLineItem,
+  rebuildDay,
+  spendCents,
+  utcDay,
+  visitorImpressions,
+} from "./stats";
 import type { ServeContext } from "./targeting";
 
 const slotCode = z
@@ -897,6 +907,9 @@ const servedCreative = row({
    * it off — §4.16: "there is no configuration that removes the label".
    */
   label: z.enum(["sponsored", "house"]),
+  lineItemId: uuidSchema,
+  campaignId: uuidSchema,
+  slotId: uuidSchema,
 });
 
 /**
@@ -930,6 +943,8 @@ export const serve = defineService({
     locale: z.string().trim().max(20).default("en"),
     country: z.string().trim().length(2).toUpperCase().nullish(),
     referrer: z.string().trim().max(2000).nullish(),
+    /** Present when analytics policy permits identifiers; used for frequency. */
+    anonId: z.string().trim().min(1).max(64).nullish(),
   }),
   output: row({
     code: z.string(),
@@ -958,8 +973,13 @@ export const serve = defineService({
         lineItemId: adLineItems.id,
         campaignId: adCampaigns.id,
         pricing: adCampaigns.pricing,
+        pacing: adCampaigns.pacing,
+        budgetCents: adCampaigns.budgetCents,
         priority: adCampaigns.priority,
         weight: adLineItems.weight,
+        goalImpressions: adLineItems.goalImpressions,
+        frequencyCap: adLineItems.frequencyCap,
+        frequencyPeriodHours: adLineItems.frequencyPeriodHours,
         startsAt: adCampaigns.startsAt,
         endsAt: adCampaigns.endsAt,
         slotIds: adLineItems.slotIds,
@@ -1001,6 +1021,10 @@ export const serve = defineService({
         weight: each.weight,
         startsAt: each.startsAt,
         endsAt: each.endsAt,
+        pacing: each.pacing,
+        goalImpressions: each.goalImpressions,
+        budgetCents: each.budgetCents,
+        frequencyCap: each.frequencyCap,
         // Read straight from jsonb: `matchesTargeting` and `withinDaypart`
         // both treat anything they do not recognise as an unstated condition,
         // which is the only safe reading of a field an owner can edit.
@@ -1023,6 +1047,33 @@ export const serve = defineService({
       byLineItem.set(each.lineItemId, candidate);
     }
     const candidates = [...byLineItem.values()];
+    const delivery = await deliveryByLineItem(
+      ctx.tx,
+      candidates.map((candidate) => candidate.lineItemId),
+    );
+    let seen = new Map<string, number>();
+    if (input.anonId) {
+      const oldestCap = Math.max(
+        ...candidates.map((candidate) => {
+          const hours = rows.find((row) => row.lineItemId === candidate.lineItemId)
+            ?.frequencyPeriodHours ?? 24;
+          return hours;
+        }),
+        24,
+      );
+      seen = await visitorImpressions(
+        ctx.tx,
+        input.anonId,
+        candidates.map((candidate) => candidate.lineItemId),
+        new Date(Date.now() - oldestCap * 3600_000),
+      );
+    }
+    for (const candidate of candidates) {
+      const totals = delivery.get(candidate.lineItemId);
+      candidate.deliveredImpressions = totals?.impressions ?? 0;
+      candidate.spentCents = totals?.spendCents ?? 0;
+      candidate.visitorImpressions = seen.get(candidate.lineItemId) ?? 0;
+    }
 
     const business = await ctx.call(getBusiness, {});
     const now = new Date();
@@ -1066,9 +1117,13 @@ export const serve = defineService({
                   creativeId: chosen.creative.id,
                   url: chosen.creative.clickUrl,
                   issuedAt,
+                  slotId: slot.id,
                 }),
               ),
               label: labelFor(chosen.candidate.house),
+              lineItemId: chosen.candidate.lineItemId,
+              campaignId: chosen.candidate.campaignId,
+              slotId: slot.id,
             }
           : null,
       };
@@ -1151,6 +1206,7 @@ export const recordClick = defineService({
     // rather than from a counter only this module understands. No identifiers
     // means policy refused collection at the edge; the visitor still travels.
     if (input.anonId && input.sessionId) {
+      const slotId = claim.slotId ?? null;
       await ctx.call(track, {
         anonId: input.anonId,
         sessionId: input.sessionId,
@@ -1163,11 +1219,147 @@ export const recordClick = defineService({
           creativeId: creative.id,
           lineItemId: creative.lineItemId,
           campaignId: creative.campaignId,
+          ...(slotId ? { slotId } : {}),
         },
       });
+      if (slotId) {
+        const [campaign] = await ctx.tx
+          .select({ pricing: adCampaigns.pricing, rateCents: adCampaigns.rateCents })
+          .from(adCampaigns)
+          .where(eq(adCampaigns.id, creative.campaignId));
+        await bumpStat(
+          ctx.tx,
+          {
+            lineItemId: creative.lineItemId,
+            creativeId: creative.id,
+            slotId,
+            day: utcDay(new Date()),
+          },
+          {
+            clicks: 1,
+            spendCents: campaign
+              ? spendCents(campaign.pricing, campaign.rateCents, 0, 1)
+              : 0,
+          },
+        );
+      }
     }
 
     return { url: destination };
+  },
+});
+
+/**
+ * Count a render or a viewable impression (§4.16, C9.19).
+ *
+ * The browser decides *when*: an impression on render of the visible
+ * breakpoint fill, a viewable impression after MRC's 50% / one second. This
+ * records what it decided, on the same first-party ledger as the click.
+ */
+export const recordBeacon = defineService({
+  name: "ads.recordBeacon",
+  writeClass: "write",
+  summary: "Count an ad impression or a viewable impression.",
+  kind: "mutation",
+  permission: "public",
+  input: z.object({
+    kind: z.enum(["impression", "viewable"]),
+    creativeId: uuidSchema,
+    slotId: uuidSchema,
+    anonId: z.string().trim().min(1).max(64).nullish(),
+    sessionId: z.string().trim().min(1).max(64).nullish(),
+    path: z.string().trim().max(2000).default("/"),
+  }),
+  rateLimit: {
+    limit: 240,
+    windowSeconds: 10 * 60,
+    subject: (input) => `beacon:${input.creativeId}:${input.kind}`,
+    message: "That ad has been counted a great many times just now.",
+  },
+  output: row({ counted: z.boolean() }),
+  handler: async (input, ctx) => {
+    if (!input.anonId || !input.sessionId) return { counted: false };
+    const [creative] = await ctx.tx
+      .select({
+        id: adCreatives.id,
+        lineItemId: adCreatives.lineItemId,
+        campaignId: adLineItems.campaignId,
+        pricing: adCampaigns.pricing,
+        rateCents: adCampaigns.rateCents,
+      })
+      .from(adCreatives)
+      .innerJoin(adLineItems, eq(adCreatives.lineItemId, adLineItems.id))
+      .innerJoin(adCampaigns, eq(adLineItems.campaignId, adCampaigns.id))
+      .where(eq(adCreatives.id, input.creativeId));
+    if (!creative) return { counted: false };
+    const [slot] = await ctx.tx
+      .select({ id: adSlots.id })
+      .from(adSlots)
+      .where(eq(adSlots.id, input.slotId));
+    if (!slot) return { counted: false };
+
+    const name = input.kind === "viewable" ? "ad.viewable" : "ad.impression";
+    const minute = Math.floor(Date.now() / 60_000);
+    const eventKey = `${name}:${input.anonId}:${creative.id}:${slot.id}:${minute}`;
+    const [prior] = await ctx.tx
+      .select({ id: analyticsEvents.id })
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.eventKey, eventKey))
+      .limit(1);
+    if (prior) return { counted: false };
+
+    const start = new Date(`${utcDay(new Date())}T00:00:00.000Z`);
+    const firstToday =
+      input.kind === "impression"
+        ? (
+            await ctx.tx
+              .select({ n: sql<number>`count(*)` })
+              .from(analyticsEvents)
+              .where(
+                and(
+                  eq(analyticsEvents.name, "ad.impression"),
+                  eq(analyticsEvents.anonId, input.anonId),
+                  gte(analyticsEvents.at, start),
+                  sql`${analyticsEvents.props}->>'lineItemId' = ${creative.lineItemId}`,
+                  sql`${analyticsEvents.props}->>'slotId' = ${slot.id}`,
+                ),
+              )
+          )[0]
+        : null;
+    const uniqueDelta = Number(firstToday?.n ?? 1) === 0 ? 1 : 0;
+
+    await ctx.call(track, {
+      anonId: input.anonId,
+      sessionId: input.sessionId,
+      name,
+      eventKey,
+      path: input.path,
+      props: {
+        creativeId: creative.id,
+        lineItemId: creative.lineItemId,
+        campaignId: creative.campaignId,
+        slotId: slot.id,
+      },
+    });
+    await bumpStat(
+      ctx.tx,
+      {
+        lineItemId: creative.lineItemId,
+        creativeId: creative.id,
+        slotId: slot.id,
+        day: utcDay(new Date()),
+      },
+      {
+        impressions: input.kind === "impression" ? 1 : 0,
+        viewableImpressions: input.kind === "viewable" ? 1 : 0,
+        uniqueDelta: input.kind === "impression" ? uniqueDelta : 0,
+        spendCents:
+          input.kind === "impression"
+            ? spendCents(creative.pricing, creative.rateCents, 1, 0)
+            : 0,
+      },
+    );
+    return { counted: true };
   },
 });
 
@@ -1305,6 +1497,180 @@ export const invoiceCampaign = defineService({
   },
 });
 
+export const rollUpStats = defineService({
+  name: "ads.rollUpStats",
+  writeClass: "write",
+  summary: "Rebuild today's and yesterday's ad rollup from first-party events.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
+  output: row({ days: z.number().int(), rows: z.number().int() }),
+  handler: async (input, ctx) => {
+    const days = input.day
+      ? [input.day]
+      : [utcDay(new Date(Date.now() - 86_400_000)), utcDay(new Date())];
+    let rows = 0;
+    for (const day of [...new Set(days)]) {
+      rows += await rebuildDay(ctx.tx, day);
+    }
+    return { days: days.length, rows };
+  },
+});
+
+const statRow = row({
+  lineItemId: uuidSchema,
+  creativeId: uuidSchema,
+  slotId: uuidSchema,
+  day: z.string(),
+  impressions: z.number().int(),
+  viewableImpressions: z.number().int(),
+  uniques: z.number().int(),
+  clicks: z.number().int(),
+  spendCents: z.number().int(),
+});
+
+export const campaignReport = defineService({
+  name: "ads.campaignReport",
+  summary: "What a campaign delivered, from the daily rollup.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ campaignId: uuidSchema }),
+  output: row({
+    campaignId: uuidSchema,
+    impressions: z.number().int(),
+    viewableImpressions: z.number().int(),
+    uniques: z.number().int(),
+    clicks: z.number().int(),
+    spendCents: z.number().int(),
+    bookedMinor: z.number().int(),
+    days: listed(statRow),
+  }),
+  handler: async (input, ctx) => {
+    const [campaign] = await ctx.tx
+      .select()
+      .from(adCampaigns)
+      .where(eq(adCampaigns.id, input.campaignId));
+    if (!campaign) throw new ServiceError("not_found", "There is no such campaign.");
+    const lines = await ctx.tx
+      .select({
+        id: adLineItems.id,
+        goalImpressions: adLineItems.goalImpressions,
+        goalClicks: adLineItems.goalClicks,
+      })
+      .from(adLineItems)
+      .where(eq(adLineItems.campaignId, input.campaignId));
+    const ids = lines.map((line) => line.id);
+    const days =
+      ids.length === 0
+        ? []
+        : await ctx.tx
+            .select()
+            .from(adStats)
+            .where(inArray(adStats.lineItemId, ids))
+            .orderBy(asc(adStats.day));
+    const impressions = days.reduce((sum, row) => sum + row.impressions, 0);
+    const viewableImpressions = days.reduce((sum, row) => sum + row.viewableImpressions, 0);
+    const uniques = days.reduce((sum, row) => sum + row.uniques, 0);
+    const clicks = days.reduce((sum, row) => sum + row.clicks, 0);
+    const spendCentsTotal = days.reduce((sum, row) => sum + row.spendCents, 0);
+    const goalImpressions = lines.reduce((sum, line) => sum + (line.goalImpressions ?? 0), 0);
+    const goalClicks = lines.reduce((sum, line) => sum + (line.goalClicks ?? 0), 0);
+    const bookedMinor =
+      campaign.pricing === "flat"
+        ? campaign.rateCents
+        : campaign.pricing === "cpm"
+          ? Math.round((campaign.rateCents * goalImpressions) / 1000)
+          : campaign.rateCents * goalClicks;
+    return {
+      campaignId: campaign.id,
+      impressions,
+      viewableImpressions,
+      uniques,
+      clicks,
+      spendCents: spendCentsTotal,
+      bookedMinor,
+      days,
+    };
+  },
+});
+
+export const reconcileCampaign = defineService({
+  name: "ads.reconcileCampaign",
+  writeClass: "money",
+  summary: "Credit a per-thousand or per-click buy that did not fully deliver.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: uuidSchema }),
+  output: row({
+    bookedMinor: z.number().int(),
+    deliveredMinor: z.number().int(),
+    creditedMinor: z.number().int(),
+    creditNoteId: uuidSchema.nullable(),
+  }),
+  handler: async (input, ctx) => {
+    const report = (await ctx.call(campaignReport, { campaignId: input.id })) as {
+      bookedMinor: number;
+      spendCents: number;
+    };
+    const [campaign] = await ctx.tx
+      .select()
+      .from(adCampaigns)
+      .where(eq(adCampaigns.id, input.id));
+    if (!campaign) throw new ServiceError("not_found", "There is no such campaign.");
+    if (campaign.pricing === "house" || campaign.pricing === "flat") {
+      throw new ServiceError(
+        "validation",
+        campaign.pricing === "house"
+          ? "A house promotion is not invoiced, so there is nothing to reconcile."
+          : "A flat buy is billed as sold, not as delivered.",
+      );
+    }
+    if (campaign.reconciledAt) {
+      throw new ServiceError("conflict", "This campaign has already been reconciled.");
+    }
+    const deliveredMinor = report.spendCents;
+    const shortfall = Math.max(0, report.bookedMinor - deliveredMinor);
+    let creditNoteId: string | null = null;
+    if (shortfall > 0 && campaign.invoiceId && listServices().has("invoicing.createCreditNote")) {
+      try {
+        const note = (await ctx.call(getService("invoicing.createCreditNote"), {
+          invoiceId: campaign.invoiceId,
+          idempotencyKey: `ad-reconcile:${campaign.id}`,
+          reason: "Undelivered impressions or clicks against the booked buy.",
+          lines: [
+            {
+              description: "Undelivered advertising",
+              quantityMicros: 1_000_000,
+              subtotalMinor: shortfall,
+              taxMinor: 0,
+            },
+          ],
+        })) as { id: string };
+        creditNoteId = note.id;
+      } catch (error) {
+        if (!(error instanceof ServiceError && error.code === "conflict")) throw error;
+        // Draft invoices cannot take a credit note; the numbers are still
+        // recorded so the owner issues the reconciled amount.
+      }
+    }
+    await ctx.tx
+      .update(adCampaigns)
+      .set({
+        reconciledAt: new Date(),
+        reconciledDeliveredMinor: deliveredMinor,
+        updatedAt: new Date(),
+      })
+      .where(eq(adCampaigns.id, campaign.id));
+    ctx.setSubject("ad_campaign", campaign.id);
+    return {
+      bookedMinor: report.bookedMinor,
+      deliveredMinor,
+      creditedMinor: creditNoteId ? shortfall : 0,
+      creditNoteId,
+    };
+  },
+});
+
 /* ------------------------------------------------------------ the spine */
 
 registerContactReference({
@@ -1425,5 +1791,9 @@ export default [
   creatives,
   serve,
   recordClick,
+  recordBeacon,
+  rollUpStats,
+  campaignReport,
+  reconcileCampaign,
   invoiceCampaign,
 ];

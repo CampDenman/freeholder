@@ -16,6 +16,7 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "ads.rollUpStats",
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
   // The wake sweep (C9.02). System rather than scoped because a sleeping run

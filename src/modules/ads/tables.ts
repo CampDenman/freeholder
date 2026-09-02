@@ -8,4 +8,5 @@ export {
   adCampaigns,
   adLineItems,
   adCreatives,
+  adStats,
 } from "./schema";

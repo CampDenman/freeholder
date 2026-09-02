@@ -20,6 +20,7 @@ import {
   type ServeContext,
   type Targeting,
 } from "./targeting";
+import { withinFrequency, withinPace, type Pacing } from "./pacing";
 
 export type Breakpoint = "desktop" | "tablet" | "mobile";
 
@@ -55,6 +56,13 @@ export interface Candidate {
   targeting: Targeting;
   dayparting: Dayparting;
   creatives: CandidateCreative[];
+  pacing?: Pacing;
+  goalImpressions?: number | null;
+  deliveredImpressions?: number;
+  budgetCents?: number | null;
+  spentCents?: number;
+  frequencyCap?: number | null;
+  visitorImpressions?: number;
 }
 
 export interface Fill {
@@ -119,6 +127,23 @@ function eligible(
   if (!withinFlight(candidate.startsAt, candidate.endsAt, now)) return [];
   if (!matchesTargeting(candidate.targeting, ctx)) return [];
   if (!withinDaypart(candidate.dayparting, ctx)) return [];
+  if (
+    !withinPace({
+      pacing: candidate.pacing ?? "asap",
+      startsAt: candidate.startsAt,
+      endsAt: candidate.endsAt,
+      now,
+      goal: candidate.goalImpressions ?? null,
+      delivered: candidate.deliveredImpressions ?? 0,
+      budgetCents: candidate.budgetCents ?? null,
+      spentCents: candidate.spentCents ?? 0,
+    })
+  ) {
+    return [];
+  }
+  if (!withinFrequency(candidate.frequencyCap ?? null, candidate.visitorImpressions ?? 0)) {
+    return [];
+  }
   return creativesThatFit(candidate, sizes).map((creative) => ({ candidate, creative }));
 }
 

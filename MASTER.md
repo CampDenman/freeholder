@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.19 ads measurement. Next after that: C9.20 ads.txt / third-party tags. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.20 ads.txt / third-party tags. Next after that: C9.21 assistant. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6850,8 +6850,22 @@ customer has one secure, comprehensible home for the relationship.
   than one) has nowhere to live. Recorded rather than quietly dropped.
   Thirty tests in `tests/modules/ads-serving.test.ts`. Changeset
   `ad-creatives.md`.)
-- [ ] **C9.19** Build first-party impression/viewability/unique/click events,
+- [x] **C9.19** Build first-party impression/viewability/unique/click events,
   MRC timing, daily rollups, pacing, advertiser reports and reconciliation.
+  (Events stream into analytics as `ad.impression`, `ad.viewable`, `ad.click`
+  — the click was already C9.18; impressions and viewable beacons are
+  `ads.recordBeacon`, observed in the browser with MRC's 50% / one continuous
+  second (`viewability.ts`). No identifiers means not counted, the same
+  trade clicks already made. `AdStat` is the daily rollup (`ads.rollUpStats`),
+  not the source; reporting (`ads.campaignReport`) reads it. Pacing and
+  frequency caps are applied in `chooseFill` from those numbers. A
+  per-thousand or per-click buy is reconciled against delivered spend on the
+  same invoice (`ads.reconcileCampaign`): a shortfall on an issued invoice
+  raises a credit note; a draft records the numbers so the owner issues the
+  delivered amount. Video viewability (two seconds) is named and unused,
+  matching the C9.18 gap.
+  Admin on `/admin/ads`. Migration `0145_ad_stats.sql`;
+  `tests/modules/ads-measurement.test.ts`. Changeset `ad-measurement.md`.)
 - [ ] **C9.20** Support consent-gated third-party tags off by default and
   generate accurate `ads.txt`/`app-ads.txt`.
 - [ ] **C9.21** Build the optional front-site assistant with AI adapters,
