@@ -71,7 +71,14 @@ export default async function PortalRoom({
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-medium text-ink">
                   {record.href ? (
-                    <a href={record.href} className="underline">
+                    <a
+                      href={
+                        business
+                          ? localizeCustomerHref(record.href, locale, business)
+                          : record.href
+                      }
+                      className="underline"
+                    >
                       {record.title}
                     </a>
                   ) : (

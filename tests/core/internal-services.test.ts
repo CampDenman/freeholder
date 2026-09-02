@@ -48,6 +48,10 @@ const INTERNAL = [
   "messaging.applySmsEvents",
   "notifications.create",
   "referrals.claimTouches",
+  // The renewal sweep (C9.13). System because a period ending is not
+  // something anybody did: a job finds what is due and raises the invoice on
+  // nobody's behalf, long after the person who subscribed has gone.
+  "subscriptions.renewDue",
 ] as const;
 
 const wildcard: Actor = {
