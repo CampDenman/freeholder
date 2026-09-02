@@ -14,6 +14,9 @@ import { contacts } from "@/core/contacts/schema";
 import { resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
 import { invoices } from "@/modules/invoicing/schema";
+import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
+import { notifications } from "@/core/notifications/schema";
+import { hasAccess } from "@/core/entitlements/service";
 import {
   priceListEntries,
   priceLists,
@@ -22,6 +25,7 @@ import {
 } from "@/modules/catalog/schema";
 import { subscriptionEvents, subscriptions } from "@/modules/subscriptions/schema";
 import {
+  advanceDunning,
   cancelMySubscription,
   cancelSubscription,
   getSubscription,
@@ -29,6 +33,7 @@ import {
   listSubscriptions,
   pauseSubscription,
   periodEnd,
+  recoverDunning,
   renewDue,
   resumeSubscription,
   savePlan,
@@ -429,5 +434,149 @@ describe.runIf(hasDatabase)("subscriptions", () => {
     expect(rows.map((each) => each.kind)).toEqual(
       expect.arrayContaining(["created", "activated", "renewed", "paused", "resumed"]),
     );
+  });
+
+  /* ---------------------------------------------------------------- dunning */
+
+  it("keeps access through grace, then pauses when the owner said so", async () => {
+    const member = await person("grace");
+    const monthly = await plan({
+      dunning: {
+        retries: [0],
+        graceDays: 7,
+        notifyChannels: ["email"],
+        finalAction: "pause",
+      },
+    });
+    expect(monthly.dunning?.graceDays).toBe(7);
+
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id }, OWNER);
+    expect(
+      (await hasAccess.call({ resource: { kind: "site" }, contactId: member.id }, OWNER)).allowed,
+    ).toBe(true);
+
+    await due(started.subscription.id);
+    await db().delete(priceListEntries);
+    await renewDue.call({}, { kind: "system" });
+
+    const overdue = await getSubscription.call({ id: started.subscription.id }, OWNER);
+    expect(overdue.subscription.status).toBe("past_due");
+    expect(
+      (await hasAccess.call({ resource: { kind: "site" }, contactId: member.id }, OWNER)).allowed,
+    ).toBe(true);
+    expect(
+      await db()
+        .select()
+        .from(notifications)
+        .where(eq(notifications.recipientContactId, member.id)),
+    ).toHaveLength(1);
+
+    await db()
+      .update(subscriptions)
+      .set({
+        graceEndsAt: new Date(Date.now() - 1000),
+        dunningNextAt: new Date(Date.now() - 1000),
+      })
+      .where(eq(subscriptions.id, started.subscription.id));
+    await advanceDunning.call({}, { kind: "system" });
+    const paused = await getSubscription.call({ id: started.subscription.id }, OWNER);
+    expect(paused.subscription.status).toBe("paused");
+    expect(
+      (await hasAccess.call({ resource: { kind: "site" }, contactId: member.id }, OWNER)).allowed,
+    ).toBe(false);
+  });
+
+  it("cancels at the end of grace when that is the policy", async () => {
+    const member = await person("cut-off");
+    const monthly = await plan({
+      dunning: {
+        retries: [0],
+        graceDays: 0,
+        notifyChannels: ["in_app"],
+        finalAction: "cancel",
+      },
+    });
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id }, OWNER);
+    await due(started.subscription.id);
+    await db().delete(priceListEntries);
+    await renewDue.call({}, { kind: "system" });
+    await advanceDunning.call({}, { kind: "system" });
+    expect((await getSubscription.call({ id: started.subscription.id }, OWNER)).subscription.status).toBe(
+      "cancelled",
+    );
+  });
+
+  it("moves them onto the fallback plan instead of cutting them off", async () => {
+    const member = await person("step-down");
+    const fallback = await plan({ name: "Friend rate" });
+    const monthly = await plan({
+      name: "Studio",
+      dunning: {
+        retries: [0],
+        graceDays: 0,
+        notifyChannels: ["email"],
+        finalAction: "downgrade",
+        downgradeToPlanId: fallback.id,
+      },
+    });
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id }, OWNER);
+    await due(started.subscription.id);
+    await db().delete(priceListEntries);
+    await renewDue.call({}, { kind: "system" });
+    await advanceDunning.call({}, { kind: "system" });
+    const moved = await getSubscription.call({ id: started.subscription.id }, OWNER);
+    expect(moved.subscription.status).toBe("active");
+    expect(moved.subscription.planId).toBe(fallback.id);
+    expect(moved.history.map((each) => each.kind)).toContain("plan_changed");
+  });
+
+  it("stops chasing once the invoice is paid", async () => {
+    const member = await person("caught-up");
+    const monthly = await plan({
+      dunning: {
+        retries: [0],
+        graceDays: 14,
+        notifyChannels: ["email"],
+        finalAction: "pause",
+      },
+    });
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id }, OWNER);
+    await due(started.subscription.id);
+    const swept = await renewDue.call({}, { kind: "system" });
+    expect(swept.renewed).toBe(1);
+
+    const [live] = await db()
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.id, started.subscription.id));
+    const invoiceId = live!.dunningInvoiceId;
+    expect(invoiceId).toBeTruthy();
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, invoiceId!));
+    expect(invoice).toBeDefined();
+
+    await advanceDunning.call({}, { kind: "system" });
+    expect((await getSubscription.call({ id: started.subscription.id }, OWNER)).subscription.status).toBe(
+      "past_due",
+    );
+
+    const payment = await createPayment.call(
+      {
+        invoiceId: invoice!.id,
+        provider: "manual",
+        method: "bank_transfer",
+        amountMinor: invoice!.totalMinor,
+        idempotencyKey: `dunning-pay-${invoice!.id}`,
+      },
+      OWNER,
+    );
+    await settlePayment.call({ id: payment.id, providerRef: "manual:dunning" }, OWNER);
+    await recoverDunning.call({ invoiceId: invoiceId! }, { kind: "system" });
+
+    const recovered = await getSubscription.call({ id: started.subscription.id }, OWNER);
+    expect(recovered.subscription.status).toBe("active");
+    expect(recovered.subscription.dunningNextAt).toBeNull();
+    expect(
+      (await hasAccess.call({ resource: { kind: "site" }, contactId: member.id }, OWNER)).allowed,
+    ).toBe(true);
   });
 });

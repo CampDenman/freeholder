@@ -24,6 +24,11 @@ export default defineModule({
       "subscription.resumed",
       "subscription.cancelled",
       "subscription.expired",
+      "subscription.dunning",
+      "subscription.planChanged",
     ],
+    listens: {
+      "invoice.paid": "onInvoicePaid",
+    },
   },
 });

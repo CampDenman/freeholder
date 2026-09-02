@@ -22,4 +22,15 @@ export const renewSubscriptions = defineJob({
   },
 });
 
-export default [renewSubscriptions];
+export const advanceDunning = defineJob({
+  name: "subscriptions.advanceDunning",
+  summary: "Retry a failed renewal, keep access through grace, then take the final action.",
+  schedule: "17 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { advanceDunning: run } = await import("./service");
+    return run.call({}, { kind: "system" });
+  },
+});
+
+export default [renewSubscriptions, advanceDunning];

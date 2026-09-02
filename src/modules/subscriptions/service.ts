@@ -21,7 +21,7 @@
 // never edited: `status` says where a subscription is and the events say how
 // it got there, which is the only one of the two that can answer "why did this
 // customer stop paying in March".
-import { and, asc, desc, eq, inArray, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid as uuidSchema } from "@/core/contract";
 import {
@@ -40,14 +40,18 @@ import { currentBusiness } from "@/core/settings/read";
 import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
+import { invoices } from "@/modules/invoicing/schema";
 import {
   BILLING_MODES,
   CANCEL_BEHAVIOURS,
+  DUNNING_CHANNELS,
+  DUNNING_FINAL_ACTIONS,
   PLAN_INTERVALS,
   PLAN_STATUSES,
   PRORATION_MODES,
   SUBSCRIPTION_EVENT_KINDS,
   SUBSCRIPTION_STATUSES,
+  dunningPolicies,
   plans,
   subscriptionEvents,
   subscriptions,
@@ -103,6 +107,34 @@ const planRow = row({
   updatedAt: timestamp,
 });
 
+const dunningRow = row({
+  retries: z.array(z.number().int()),
+  graceDays: z.number().int(),
+  notifyChannels: z.array(z.enum(DUNNING_CHANNELS)),
+  finalAction: z.enum(DUNNING_FINAL_ACTIONS),
+  downgradeToPlanId: uuidSchema.nullable(),
+});
+
+const planOut = planRow.extend({ dunning: dunningRow.nullable() });
+
+const dunningInput = z
+  .object({
+    retries: z.array(z.number().int().min(0).max(90)).min(1).max(8).default([3, 7, 14]),
+    graceDays: z.number().int().min(0).max(365).default(14),
+    notifyChannels: z.array(z.enum(DUNNING_CHANNELS)).min(1).max(3).default(["email"]),
+    finalAction: z.enum(DUNNING_FINAL_ACTIONS).default("pause"),
+    downgradeToPlanId: uuidSchema.nullable().optional(),
+  })
+  .superRefine((value, issue) => {
+    if (value.finalAction === "downgrade" && !value.downgradeToPlanId) {
+      issue.addIssue({
+        code: "custom",
+        path: ["downgradeToPlanId"],
+        message: "A downgrade needs the plan they fall back to.",
+      });
+    }
+  });
+
 const subscriptionRow = row({
   id: uuidSchema,
   contactId: uuidSchema,
@@ -118,8 +150,18 @@ const subscriptionRow = row({
   pausedAt: timestamp.nullable(),
   cancelledAt: timestamp.nullable(),
   endedAt: timestamp.nullable(),
+  graceEndsAt: timestamp.nullable(),
+  dunningNextAt: timestamp.nullable(),
   updatedAt: timestamp,
 });
+
+const DAY_MS = 86_400_000;
+
+function retryOffsets(retries: number[]): number[] {
+  return [...new Set(retries.filter((day) => Number.isInteger(day) && day >= 0))].sort(
+    (left, right) => left - right,
+  );
+}
 
 /** Append one moment. Never updates: the history is the point. */
 async function record(
@@ -134,6 +176,165 @@ async function record(
     invoiceId: extra.invoiceId ?? null,
     detail: extra.detail ?? null,
   });
+}
+
+async function policyFor(tx: Tx, planId: string) {
+  const [policy] = await tx
+    .select()
+    .from(dunningPolicies)
+    .where(eq(dunningPolicies.planId, planId))
+    .limit(1);
+  return policy ?? null;
+}
+
+async function attachDunning<T extends { id: string }>(tx: Tx, rows: T[]) {
+  if (rows.length === 0) return rows.map((row) => ({ ...row, dunning: null }));
+  const policies = await tx
+    .select()
+    .from(dunningPolicies)
+    .where(
+      inArray(
+        dunningPolicies.planId,
+        rows.map((row) => row.id),
+      ),
+    );
+  const byPlan = new Map(policies.map((policy) => [policy.planId, policy]));
+  return rows.map((row) => {
+    const policy = byPlan.get(row.id);
+    return {
+      ...row,
+      dunning: policy
+        ? {
+            retries: retryOffsets(policy.retries),
+            graceDays: policy.graceDays,
+            notifyChannels: policy.notifyChannels,
+            finalAction: policy.finalAction,
+            downgradeToPlanId: policy.downgradeToPlanId,
+          }
+        : null,
+    };
+  });
+}
+
+async function writePolicy(
+  tx: Tx,
+  planId: string,
+  input: z.infer<typeof dunningInput>,
+) {
+  const retries = retryOffsets(input.retries);
+  const values = {
+    retries,
+    graceDays: input.graceDays,
+    notifyChannels: [...new Set(input.notifyChannels)],
+    finalAction: input.finalAction,
+    downgradeToPlanId:
+      input.finalAction === "downgrade" ? (input.downgradeToPlanId ?? null) : null,
+  };
+  const [existing] = await tx
+    .select({ id: dunningPolicies.id })
+    .from(dunningPolicies)
+    .where(eq(dunningPolicies.planId, planId))
+    .limit(1);
+  if (existing) {
+    await tx.update(dunningPolicies).set(values).where(eq(dunningPolicies.id, existing.id));
+    return;
+  }
+  await tx.insert(dunningPolicies).values({ planId, ...values });
+}
+
+async function keepAccess(
+  ctx: ServiceContext,
+  subscription: typeof subscriptions.$inferSelect,
+  planName: string,
+  endsAt: Date,
+  status: "active" | "paused" | "expired" = "active",
+) {
+  await ctx.callAsSystem(syncSubscriptionAccess, {
+    subscriptionId: subscription.id,
+    contactId: subscription.contactId,
+    planId: subscription.planId,
+    planName,
+    startsAt: subscription.currentPeriodStart,
+    endsAt,
+    status,
+  });
+}
+
+async function notifyDunning(
+  ctx: ServiceContext,
+  subscription: typeof subscriptions.$inferSelect,
+  policy: typeof dunningPolicies.$inferSelect,
+  attempt: number,
+) {
+  if (policy.notifyChannels.length === 0) return;
+  await ctx.callAsSystem(getService("notifications.create"), {
+    recipient: { kind: "contact", id: subscription.contactId },
+    topic: "subscriptions.dunning",
+    priority: "warning",
+    titleKey: "subscriptions.dunning.noticeTitle",
+    bodyKey: "subscriptions.dunning.noticeBody",
+    href: `/portal/subscriptions/${subscription.id}`,
+    idempotencyKey: `dunning:${subscription.id}:${attempt}`,
+  });
+}
+
+async function beginDunning(
+  ctx: ServiceContext,
+  subscription: typeof subscriptions.$inferSelect,
+  extra: { detail?: string; invoiceId?: string | null } = {},
+) {
+  const policy = await policyFor(ctx.tx, subscription.planId);
+  if (!policy) return;
+  const now = new Date();
+  const offsets = retryOffsets(policy.retries);
+  const graceEnds = new Date(now.getTime() + policy.graceDays * DAY_MS);
+  const first = offsets[0] ?? policy.graceDays;
+  const immediate = first === 0;
+  const nextOffset = immediate ? offsets[1] : first;
+  const nextAt =
+    nextOffset === undefined
+      ? graceEnds
+      : new Date(now.getTime() + nextOffset * DAY_MS);
+  await ctx.tx
+    .update(subscriptions)
+    .set({
+      status: "past_due",
+      dunningStartedAt: now,
+      dunningAttempt: immediate ? 1 : 0,
+      dunningNextAt: nextAt,
+      graceEndsAt: graceEnds,
+      dunningInvoiceId: extra.invoiceId ?? subscription.dunningInvoiceId,
+    })
+    .where(eq(subscriptions.id, subscription.id));
+  await record(ctx, subscription.id, "dunning", {
+    invoiceId: extra.invoiceId ?? null,
+    detail: extra.detail ?? "started",
+  });
+  ctx.queueEvent("subscription.dunning", { subscriptionId: subscription.id });
+  const [plan] = await ctx.tx
+    .select({ name: plans.name })
+    .from(plans)
+    .where(eq(plans.id, subscription.planId));
+  await keepAccess(ctx, subscription, plan?.name ?? "Membership", graceEnds, "active");
+  if (immediate) await notifyDunning(ctx, subscription, policy, 0);
+}
+
+async function clearDunningClock(
+  ctx: ServiceContext,
+  subscriptionId: string,
+  patch: Record<string, unknown> = {},
+) {
+  await ctx.tx
+    .update(subscriptions)
+    .set({
+      dunningStartedAt: null,
+      dunningAttempt: 0,
+      dunningNextAt: null,
+      graceEndsAt: null,
+      dunningInvoiceId: null,
+      ...patch,
+    })
+    .where(eq(subscriptions.id, subscriptionId));
 }
 
 /* --------------------------------------------------------------- plans */
@@ -157,8 +358,9 @@ export const savePlan = defineService({
     cancelBehaviour: z.enum(CANCEL_BEHAVIOURS).default("period_end"),
     proration: z.enum(PRORATION_MODES).default("create_prorations"),
     status: z.enum(PLAN_STATUSES).default("draft"),
+    dunning: dunningInput.optional(),
   }),
-  output: planRow,
+  output: planOut,
   handler: async (input, ctx) => {
     const [product] = await ctx.tx
       .select({ id: products.id })
@@ -197,13 +399,15 @@ export const savePlan = defineService({
         .where(eq(plans.id, input.id))
         .returning();
       if (!updated) throw new ServiceError("not_found", "There is no such plan.");
+      if (input.dunning) await writePolicy(ctx.tx, updated.id, input.dunning);
       ctx.setSubject("plan", updated.id);
-      return updated;
+      return (await attachDunning(ctx.tx, [updated]))[0]!;
     }
     const [created] = await ctx.tx.insert(plans).values(values).returning();
+    if (input.dunning) await writePolicy(ctx.tx, created!.id, input.dunning);
     ctx.setSubject("plan", created!.id);
     ctx.queueEvent("plan.created", { planId: created!.id });
-    return created!;
+    return (await attachDunning(ctx.tx, [created!]))[0]!;
   },
 });
 
@@ -213,14 +417,16 @@ export const listPlans = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({ status: z.enum(PLAN_STATUSES).optional() }),
-  output: listed(planRow),
-  handler: (input, ctx) =>
-    ctx.tx
+  output: listed(planOut),
+  handler: async (input, ctx) => {
+    const rows = await ctx.tx
       .select()
       .from(plans)
       .where(input.status ? eq(plans.status, input.status) : undefined)
       .orderBy(desc(plans.createdAt))
-      .limit(200),
+      .limit(200);
+    return attachDunning(ctx.tx, rows);
+  },
 });
 
 /* -------------------------------------------------------- subscribing */
@@ -546,14 +752,16 @@ export const renewDue = defineService({
       const price = await priceFor(ctx, subscription);
       if ("refused" in price) {
         // Not silently skipped: the reason lands on the history, where an
-        // owner will look. What happens *next* is a dunning policy (C9.16),
-        // which is why nothing here retries or cancels — and why the period
-        // does not move, so nobody is given a month they were not billed for.
+        // owner will look. A DunningPolicy (C9.16) then retries, keeps access
+        // for the grace window, and takes the final action the owner chose.
+        // The period still does not move: nobody is given a month they were
+        // not billed for.
         await record(ctx, subscription.id, "payment_failed", { detail: price.refused });
         ctx.queueEvent("subscription.paymentFailed", {
           subscriptionId: subscription.id,
           detail: price.refused,
         });
+        await beginDunning(ctx, subscription, { detail: price.refused });
         failed += 1;
         continue;
       }
@@ -591,6 +799,23 @@ export const renewDue = defineService({
         endsAt: end,
         status: "active",
       });
+      // Manual billing has already moved the period; the invoice still has to
+      // be paid. A policy starts the chase clock without taking access away.
+      const policy = await policyFor(ctx.tx, plan.id);
+      if (policy) {
+        const offsets = retryOffsets(policy.retries);
+        const first = offsets[0] ?? policy.graceDays;
+        await ctx.tx
+          .update(subscriptions)
+          .set({
+            dunningStartedAt: now,
+            dunningAttempt: 0,
+            dunningNextAt: new Date(now.getTime() + first * DAY_MS),
+            graceEndsAt: new Date(now.getTime() + policy.graceDays * DAY_MS),
+            dunningInvoiceId: invoiceId,
+          })
+          .where(eq(subscriptions.id, subscription.id));
+      }
       renewed += 1;
     }
 
@@ -614,12 +839,24 @@ export const pauseSubscription = defineService({
       .from(subscriptions)
       .where(eq(subscriptions.id, input.id));
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
-    if (subscription.status !== "active" && subscription.status !== "trialing") {
+    if (
+      subscription.status !== "active" &&
+      subscription.status !== "trialing" &&
+      subscription.status !== "past_due"
+    ) {
       throw new ServiceError("conflict", "Only a running subscription can be paused.");
     }
     const [paused] = await ctx.tx
       .update(subscriptions)
-      .set({ status: "paused", pausedAt: new Date() })
+      .set({
+        status: "paused",
+        pausedAt: new Date(),
+        dunningStartedAt: null,
+        dunningAttempt: 0,
+        dunningNextAt: null,
+        graceEndsAt: null,
+        dunningInvoiceId: null,
+      })
       .where(eq(subscriptions.id, input.id))
       .returning();
     await record(ctx, input.id, "paused");
@@ -770,6 +1007,266 @@ export const cancelSubscription = defineService({
     return cancelled!;
   },
 });
+
+/* -------------------------------------------------------------- dunning */
+
+async function invoiceIsPaid(tx: Tx, invoiceId: string | null): Promise<boolean> {
+  if (!invoiceId) return false;
+  const [invoice] = await tx
+    .select({ status: invoices.status })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
+  return invoice?.status === "paid";
+}
+
+async function applyFinalAction(
+  ctx: ServiceContext,
+  subscription: typeof subscriptions.$inferSelect,
+  policy: typeof dunningPolicies.$inferSelect,
+) {
+  if (policy.finalAction === "pause") {
+    await ctx.call(pauseSubscription, { id: subscription.id });
+    return;
+  }
+  if (policy.finalAction === "cancel") {
+    await ctx.call(cancelSubscription, { id: subscription.id, immediately: true });
+    return;
+  }
+  const targetId = policy.downgradeToPlanId;
+  if (!targetId) {
+    await ctx.call(pauseSubscription, { id: subscription.id });
+    return;
+  }
+  const [target] = await ctx.tx.select().from(plans).where(eq(plans.id, targetId)).limit(1);
+  if (!target) {
+    await ctx.call(pauseSubscription, { id: subscription.id });
+    return;
+  }
+  await ctx.tx
+    .update(subscriptions)
+    .set({
+      planId: target.id,
+      status: "active",
+      dunningStartedAt: null,
+      dunningAttempt: 0,
+      dunningNextAt: null,
+      graceEndsAt: null,
+      dunningInvoiceId: null,
+    })
+    .where(eq(subscriptions.id, subscription.id));
+  await ctx.tx.insert(subscriptionEvents).values({
+    subscriptionId: subscription.id,
+    kind: "plan_changed",
+    fromPlanId: subscription.planId,
+    toPlanId: target.id,
+    detail: "dunning downgrade",
+  });
+  ctx.queueEvent("subscription.planChanged", {
+    subscriptionId: subscription.id,
+    fromPlanId: subscription.planId,
+    toPlanId: target.id,
+  });
+  await keepAccess(
+    ctx,
+    { ...subscription, planId: target.id },
+    target.name,
+    subscription.currentPeriodEnd,
+    "active",
+  );
+}
+
+export const recoverDunning = defineService({
+  name: "subscriptions.recoverDunning",
+  writeClass: "write",
+  summary: "End dunning because the invoice was paid.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ invoiceId: uuidSchema }),
+  output: row({ recovered: z.boolean() }),
+  handler: async (input, ctx) => {
+    const [subscription] = await ctx.tx
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.dunningInvoiceId, input.invoiceId))
+      .limit(1);
+    if (!subscription) {
+      const [invoice] = await ctx.tx
+        .select({ sourceType: invoices.sourceType, sourceId: invoices.sourceId })
+        .from(invoices)
+        .where(eq(invoices.id, input.invoiceId))
+        .limit(1);
+      if (invoice?.sourceType !== "subscription" || !invoice.sourceId) {
+        return { recovered: false };
+      }
+      const subscriptionId = invoice.sourceId.split(":")[0] ?? "";
+      if (!uuidSchema.safeParse(subscriptionId).success) {
+        return { recovered: false };
+      }
+      const [bySource] = await ctx.tx
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.id, subscriptionId))
+        .limit(1);
+      if (!bySource || (bySource.status !== "past_due" && !bySource.dunningNextAt)) {
+        return { recovered: false };
+      }
+      return recoverOne(ctx, bySource);
+    }
+    return recoverOne(ctx, subscription);
+  },
+});
+
+async function recoverOne(
+  ctx: ServiceContext,
+  subscription: typeof subscriptions.$inferSelect,
+) {
+  const [plan] = await ctx.tx
+    .select({ name: plans.name })
+    .from(plans)
+    .where(eq(plans.id, subscription.planId));
+  const status = subscription.status === "past_due" ? "active" : subscription.status;
+  await clearDunningClock(ctx, subscription.id, {
+    status: status === "expired" || status === "cancelled" ? subscription.status : status,
+  });
+  if (subscription.status === "past_due") {
+    await record(ctx, subscription.id, "dunning", { detail: "recovered" });
+    await keepAccess(
+      ctx,
+      subscription,
+      plan?.name ?? "Membership",
+      subscription.currentPeriodEnd,
+      "active",
+    );
+  }
+  return { recovered: true };
+}
+
+export const advanceDunning = defineService({
+  name: "subscriptions.advanceDunning",
+  writeClass: "write",
+  summary: "Send the next dunning notice, or take the final action.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
+  output: row({
+    noticed: z.number().int(),
+    recovered: z.number().int(),
+    finished: z.number().int(),
+  }),
+  handler: async (input, ctx) => {
+    const now = new Date();
+    const due = await ctx.tx
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          isNotNull(subscriptions.dunningNextAt),
+          lte(subscriptions.dunningNextAt, now),
+          inArray(subscriptions.status, ["past_due", "active", "trialing"]),
+        ),
+      )
+      .orderBy(asc(subscriptions.dunningNextAt))
+      .limit(input.limit);
+
+    let noticed = 0;
+    let recovered = 0;
+    let finished = 0;
+
+    for (const subscription of due) {
+      if (await invoiceIsPaid(ctx.tx, subscription.dunningInvoiceId)) {
+        await recoverOne(ctx, subscription);
+        recovered += 1;
+        continue;
+      }
+
+      const policy = await policyFor(ctx.tx, subscription.planId);
+      if (!policy) {
+        await clearDunningClock(ctx, subscription.id);
+        continue;
+      }
+
+      const offsets = retryOffsets(policy.retries);
+      const started = subscription.dunningStartedAt ?? now;
+      const attempt = subscription.dunningAttempt;
+      const graceEnds = subscription.graceEndsAt ?? new Date(started.getTime() + policy.graceDays * DAY_MS);
+
+      if (subscription.status !== "past_due") {
+        const [plan] = await ctx.tx
+          .select({ name: plans.name })
+          .from(plans)
+          .where(eq(plans.id, subscription.planId));
+        const nextOffset = offsets[attempt + 1];
+        const nextAt =
+          nextOffset === undefined
+            ? graceEnds
+            : new Date(started.getTime() + nextOffset * DAY_MS);
+        await ctx.tx
+          .update(subscriptions)
+          .set({
+            status: "past_due",
+            graceEndsAt: graceEnds,
+            dunningAttempt: attempt + 1,
+            dunningNextAt: nextAt,
+          })
+          .where(eq(subscriptions.id, subscription.id));
+        await record(ctx, subscription.id, "dunning", {
+          invoiceId: subscription.dunningInvoiceId,
+          detail: "invoice unpaid",
+        });
+        ctx.queueEvent("subscription.dunning", { subscriptionId: subscription.id });
+        await keepAccess(ctx, subscription, plan?.name ?? "Membership", graceEnds, "active");
+        await notifyDunning(ctx, subscription, policy, attempt);
+        noticed += 1;
+        continue;
+      }
+
+      if (attempt < offsets.length) {
+        await notifyDunning(ctx, subscription, policy, attempt);
+        await record(ctx, subscription.id, "dunning", {
+          invoiceId: subscription.dunningInvoiceId,
+          detail: `retry ${attempt + 1}`,
+        });
+        const nextOffset = offsets[attempt + 1];
+        const nextAt =
+          nextOffset === undefined
+            ? graceEnds
+            : new Date(started.getTime() + nextOffset * DAY_MS);
+        await ctx.tx
+          .update(subscriptions)
+          .set({ dunningAttempt: attempt + 1, dunningNextAt: nextAt })
+          .where(eq(subscriptions.id, subscription.id));
+        noticed += 1;
+        continue;
+      }
+
+      if (now < graceEnds) {
+        await ctx.tx
+          .update(subscriptions)
+          .set({ dunningNextAt: graceEnds })
+          .where(eq(subscriptions.id, subscription.id));
+        continue;
+      }
+
+      await applyFinalAction(ctx, subscription, policy);
+      finished += 1;
+    }
+
+    return { noticed, recovered, finished };
+  },
+});
+
+export async function onInvoicePaid(
+  payload: unknown,
+  _eventName?: string,
+): Promise<void> {
+  const invoiceId =
+    payload && typeof payload === "object" && "invoiceId" in payload
+      ? (payload as { invoiceId?: string }).invoiceId
+      : undefined;
+  if (!invoiceId) return;
+  await recoverDunning.call({ invoiceId }, { kind: "system" });
+}
 
 /* -------------------------------------------------------------- reading */
 
@@ -971,4 +1468,6 @@ export default [
   listSubscriptions,
   getSubscription,
   cancelMySubscription,
+  advanceDunning,
+  recoverDunning,
 ];

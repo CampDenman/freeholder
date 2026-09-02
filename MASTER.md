@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.16 dunning. Next after that: C9.19 ads measurement. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.19 ads measurement. Next after that: C9.20 ads.txt / third-party tags. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6733,8 +6733,22 @@ customer has one secure, comprehensible home for the relationship.
   so the markup matches the choice rather than an owner's help-doc judgement.
   Admin at `/admin/paywalls`. Migration `0143_paywalls.sql`;
   `tests/core/paywalls.test.ts`. Changeset `paywalls.md`.)
-- [ ] **C9.16** Build dunning retries, grace periods, consented notices, final
+- [x] **C9.16** Build dunning retries, grace periods, consented notices, final
   policy actions and access continuity/expiry guarantees.
+  (`DunningPolicy` is one row per plan: retries as day offsets, `grace_days`,
+  `notify_channels`, and `final_action` pause / cancel / downgrade. A
+  `payment_failed` renewal or an unpaid period invoice starts the clock.
+  Access is the grant window — `syncSubscriptionAccess` keeps the grant
+  active until `grace_ends_at`, so the content is not gated by a leftover
+  flag. Notices go through `notifications.create` (`subscriptions.dunning`)
+  for the channels the contact already receives. `subscriptions.advanceDunning`
+  is a system job; paying the invoice (`subscriptions.recoverDunning`, also
+  on `invoice.paid`) clears the clock and restores `active`. Without a
+  policy a failure stays on the history and the period does not move, which
+  is what C9.13 already did.
+  Admin on `/admin/subscriptions` with the plan. Migration
+  `0144_dunning.sql`; `tests/modules/subscriptions.test.ts`. Changeset
+  `dunning.md`.)
 
 #### Advertising, assistant, social, and sharing
 

@@ -37,13 +37,16 @@ export const BILLING_MODES = ["provider", "platform", "manual"] as const;
 export const CANCEL_BEHAVIOURS = ["period_end", "immediate"] as const;
 export const PRORATION_MODES = ["create_prorations", "none"] as const;
 export const PLAN_STATUSES = ["draft", "active", "archived"] as const;
+export const DUNNING_CHANNELS = ["email", "sms", "in_app"] as const;
+export const DUNNING_FINAL_ACTIONS = ["pause", "cancel", "downgrade"] as const;
 
 /**
  * Where a subscription is in its life.
  *
- * `past_due` exists here and is written by nothing yet: what happens after a
- * failed renewal is a `DunningPolicy` (C9.16), and inventing a retry schedule
- * in the meantime would be the wrong answer written down twice.
+ * `past_due` is a dunning state (C9.16): a renewal failed or its invoice is
+ * unpaid, a `DunningPolicy` is running, and access continues until
+ * `grace_ends_at`. Without a policy the status is never written — a failure
+ * stays on the history and the period does not move.
  */
 export const SUBSCRIPTION_STATUSES = [
   "trialing",
@@ -176,6 +179,18 @@ export const subscriptions = pgTable(
      * now.
      */
     grants: jsonb("grants").notNull().default({}),
+    /**
+     * Dunning clock (C9.16). Null until a policy starts. `dunning_next_at`
+     * is when the next retry or the final action is due; `grace_ends_at` is
+     * how long access continues after the failure.
+     */
+    dunningStartedAt: timestamp("dunning_started_at", { withTimezone: true }),
+    dunningAttempt: integer("dunning_attempt").notNull().default(0),
+    dunningNextAt: timestamp("dunning_next_at", { withTimezone: true }),
+    graceEndsAt: timestamp("grace_ends_at", { withTimezone: true }),
+    dunningInvoiceId: uuid("dunning_invoice_id").references(() => invoices.id, {
+      onDelete: "set null",
+    }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -183,6 +198,7 @@ export const subscriptions = pgTable(
     index("subscriptions_contact_idx").on(t.contactId),
     // The renewal sweep's own query: what is due, oldest first.
     index("subscriptions_due_idx").on(t.status, t.currentPeriodEnd),
+    index("subscriptions_dunning_idx").on(t.status, t.dunningNextAt),
     index("subscriptions_plan_idx").on(t.planId),
     uniqueIndex("subscriptions_provider_ref_idx")
       .on(t.provider, t.providerRef)
@@ -225,5 +241,42 @@ export const subscriptionEvents = pgTable(
   (t) => [
     index("subscription_events_subscription_idx").on(t.subscriptionId, t.at),
     index("subscription_events_kind_idx").on(t.kind, t.at),
+  ],
+);
+
+/**
+ * What happens when a renewal fails (MASTER.md §4.15, C9.16).
+ *
+ * One policy per plan: retries at stated day offsets, a grace window during
+ * which grants stay live, notices on the channels the contact consented to,
+ * and a final action the owner chose. Involuntary churn is a retry-schedule
+ * problem; this is the schedule.
+ */
+export const dunningPolicies = pgTable(
+  "dunning_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => plans.id, { onDelete: "cascade" }),
+    /** Days after dunning starts. `[3, 7, 14]` means notices on those days. */
+    retries: jsonb("retries").$type<number[]>().notNull().default([3, 7, 14]),
+    graceDays: integer("grace_days").notNull().default(14),
+    notifyChannels: jsonb("notify_channels")
+      .$type<Array<(typeof DUNNING_CHANNELS)[number]>>()
+      .notNull()
+      .default(["email"]),
+    finalAction: text("final_action", { enum: DUNNING_FINAL_ACTIONS })
+      .notNull()
+      .default("pause"),
+    downgradeToPlanId: uuid("downgrade_to_plan_id").references(() => plans.id, {
+      onDelete: "set null",
+    }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("dunning_policies_plan_idx").on(t.planId),
+    check("dunning_policies_grace_nonnegative", sql`${t.graceDays} >= 0`),
   ],
 );
