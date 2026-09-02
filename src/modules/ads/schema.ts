@@ -227,12 +227,11 @@ export const adLineItems = pgTable(
  * That is the case that must be excellent, because it is how a small
  * publisher runs a sponsor, and how anyone runs a house promotion."
  *
- * Two kinds ship here and no more. `image` is an asset from `core/media`;
- * `native` is text the site's own typography renders, for a newsletter-style
- * sponsor line that should not look like a banner. The `html_tag` and
- * `provider` kinds §4.16 also names carry somebody else's script, which means
- * consent, disclosure and `ads.txt` — that is C9.20's whole subject, and
- * shipping the columns for it now would be storage nothing reads.
+ * Four kinds. `image` is an asset from `core/media`; `native` is text the
+ * site's own typography renders, for a newsletter-style sponsor line that
+ * should not look like a banner. `html_tag` and `provider` carry somebody
+ * else's script, which means consent, disclosure at the moment of pasting,
+ * and a matching `ads.txt` line for a named network — C9.20.
  *
  * `width`/`height` are on the creative rather than derived from the asset
  * because the size is a *contract with the slot*: §4.16 reserves the space
@@ -249,7 +248,7 @@ export const adCreatives = pgTable(
     lineItemId: uuid("line_item_id")
       .notNull()
       .references(() => adLineItems.id, { onDelete: "cascade" }),
-    kind: text("kind", { enum: ["image", "native"] }).notNull(),
+    kind: text("kind", { enum: ["image", "native", "html_tag", "provider"] }).notNull(),
     /**
      * Restricted rather than cascaded: an image somebody is paying to run
      * should not disappear because it was tidied out of the media library.
@@ -265,6 +264,13 @@ export const adCreatives = pgTable(
     headline: text("headline"),
     body: text("body"),
     ctaLabel: text("cta_label"),
+    /** Raw tag for `html_tag`. Never served without consent. */
+    tagHtml: text("tag_html"),
+    /**
+     * `{ network, unitPath, params }` for `provider`. `network` is the ads.txt
+     * domain, so a GAM unit the file does not authorize cannot be saved.
+     */
+    provider: jsonb("provider"),
     status: text("status", { enum: ["draft", "active", "paused"] })
       .notNull()
       .default("draft"),
@@ -324,4 +330,31 @@ export const adStats = pgTable(
     index("ad_stats_day_idx").on(t.day),
     index("ad_stats_line_item_idx").on(t.lineItemId),
   ],
+);
+
+/**
+ * One authorized digital seller, as IAB ads.txt spells it (C9.20).
+ *
+ * `/ads.txt` and `/app-ads.txt` are generated from these rows rather than
+ * hand-edited, because a file that is not the list the owner is looking at
+ * is the definition of inaccurate.
+ */
+export const adTxtEntries = pgTable(
+  "ad_txt_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Advertising-system domain, lowercase, no scheme. */
+    domain: text("domain").notNull(),
+    /** Publisher account id inside that system. */
+    accountId: text("account_id").notNull(),
+    relationship: text("relationship", { enum: ["DIRECT", "RESELLER"] }).notNull(),
+    certificationAuthorityId: text("certification_authority_id"),
+    /** Which generated file this line appears in. */
+    surface: text("surface", { enum: ["web", "app", "both"] })
+      .notNull()
+      .default("both"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [uniqueIndex("ad_txt_entries_line_idx").on(t.domain, t.accountId, t.relationship, t.surface)],
 );

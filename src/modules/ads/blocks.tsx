@@ -36,6 +36,8 @@ import { z } from "zod";
 import { defineBlock } from "@/modules/cms/blocks/types";
 import type { ResolvedImage } from "@/core/media/service";
 import { AdBeacon } from "./AdBeacon";
+import { ThirdPartyConsent } from "./ThirdPartyConsent";
+import { isThirdPartyKind, providerMarkup, stampNonce, type ProviderSpec } from "./tags";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -45,14 +47,17 @@ interface ServedFill {
   breakpoint: Breakpoint;
   width: number;
   height: number;
+  needsThirdPartyConsent: boolean;
   creative: {
     id: string;
-    kind: "image" | "native";
+    kind: "image" | "native" | "html_tag" | "provider";
     assetId: string | null;
     altText: string | null;
     headline: string | null;
     body: string | null;
     ctaLabel: string | null;
+    tagHtml: string | null;
+    provider: unknown;
     href: string;
     label: "sponsored" | "house";
     lineItemId: string;
@@ -106,7 +111,13 @@ export const adSlot = defineBlock({
   resolve: async (props, ctx): Promise<Served | null> => {
     const { serve } = await import("./service");
     const served = await serve.call(
-      { code: props.code, path: ctx.path, locale: ctx.locale },
+      {
+        code: props.code,
+        path: ctx.path,
+        locale: ctx.locale,
+        anonId: ctx.visitorId,
+        thirdPartyConsent: ctx.thirdPartyConsent,
+      },
       ANONYMOUS,
     );
     if (!served) return null;
@@ -130,64 +141,85 @@ export const adSlot = defineBlock({
     // article down is a Core Web Vitals failure" — and nothing arrives late
     // here, because the answer is in the server's HTML. An empty grey box on
     // every page of an unsold site would be a cost paid for no benefit.
-    const filled = (resolved?.fills ?? []).filter((fill) => fill.creative !== null);
+    // A slot waiting on third-party consent still reserves the hole.
+    const filled = (resolved?.fills ?? []).filter(
+      (fill) => fill.creative !== null || fill.needsThirdPartyConsent,
+    );
     if (!resolved || filled.length === 0) return null;
     const declared = filled.map((fill) => fill.breakpoint);
 
     return (
       <aside aria-label={ctx.t("ads.label.region")} className="grid justify-items-center">
         {filled.map((fill) => {
-          const creative = fill.creative!;
+          const creative = fill.creative;
+          const box = {
+            className:
+              "grid place-items-center overflow-hidden rounded-md border border-rule bg-surface",
+            style: { width: fill.width, height: fill.height },
+          };
           return (
             <div key={fill.breakpoint} className={visibility(fill.breakpoint, declared)}>
               {/* The label, unconditionally. §4.16: "there is no configuration
                   that removes the label", so there is no prop here to remove
                   it with and no branch that omits it. */}
               <p className="text-xs uppercase tracking-wide text-ink-muted">
-                {ctx.t(`ads.label.${creative.label}`)}
+                {ctx.t(`ads.label.${creative?.label ?? "sponsored"}`)}
               </p>
-              <AdBeacon creativeId={creative.id} slotId={creative.slotId}>
-              <a
-                href={creative.href}
-                // `sponsored` is the declaration §4.16 asks for; `nofollow`
-                // because a paid link must not pass ranking either way; and
-                // `noopener` because the destination is somebody else's site.
-                rel="sponsored nofollow noopener"
-                className="grid place-items-center overflow-hidden rounded-md border border-rule bg-surface"
-                // The declared size, so an oversized file cannot change the
-                // shape of the page it was sold into.
-                style={{ width: fill.width, height: fill.height }}
-              >
-                {creative.kind === "image" && fill.image ? (
-                  <picture>
-                    {fill.image.sources.map((source) => (
-                      <source key={source.format} srcSet={source.srcset} type={source.type} />
-                    ))}
-                    <img
-                      src={fill.image.src}
-                      alt={creative.altText ?? fill.image.altText ?? ""}
-                      width={fill.width}
-                      height={fill.height}
-                      loading={resolved.lazy ? "lazy" : "eager"}
-                      decoding="async"
-                      className="h-full w-full object-contain"
-                    />
-                  </picture>
-                ) : (
-                  <span className="grid gap-1 px-3 py-2 text-center">
-                    <span className="text-sm font-semibold text-ink">{creative.headline}</span>
-                    {creative.body ? (
-                      <span className="text-xs text-ink-muted">{creative.body}</span>
-                    ) : null}
-                    {creative.ctaLabel ? (
-                      <span className="text-xs font-semibold text-accent">
-                        {creative.ctaLabel}
+              {fill.needsThirdPartyConsent || !creative ? (
+                <div {...box}>
+                  <ThirdPartyConsent returnTo={ctx.path || "/"} t={ctx.t} />
+                </div>
+              ) : isThirdPartyKind(creative.kind) ? (
+                <AdBeacon creativeId={creative.id} slotId={creative.slotId}>
+                  <div
+                    {...box}
+                    dangerouslySetInnerHTML={{
+                      __html: thirdPartyHtml(creative, fill, ctx.cspNonce ?? ""),
+                    }}
+                  />
+                </AdBeacon>
+              ) : (
+                <AdBeacon creativeId={creative.id} slotId={creative.slotId}>
+                  <a
+                    href={creative.href}
+                    // `sponsored` is the declaration §4.16 asks for; `nofollow`
+                    // because a paid link must not pass ranking either way; and
+                    // `noopener` because the destination is somebody else's site.
+                    rel="sponsored nofollow noopener"
+                    className={box.className}
+                    style={box.style}
+                  >
+                    {creative.kind === "image" && fill.image ? (
+                      <picture>
+                        {fill.image.sources.map((source) => (
+                          <source key={source.format} srcSet={source.srcset} type={source.type} />
+                        ))}
+                        <img
+                          src={fill.image.src}
+                          alt={creative.altText ?? fill.image.altText ?? ""}
+                          width={fill.width}
+                          height={fill.height}
+                          loading={resolved.lazy ? "lazy" : "eager"}
+                          decoding="async"
+                          className="h-full w-full object-contain"
+                        />
+                      </picture>
+                    ) : (
+                      <span className="grid gap-1 px-3 py-2 text-center">
+                        <span className="text-sm font-semibold text-ink">{creative.headline}</span>
+                        {creative.body ? (
+                          <span className="text-xs text-ink-muted">{creative.body}</span>
+                        ) : null}
+                        {creative.ctaLabel ? (
+                          <span className="text-xs font-semibold text-accent">
+                            {creative.ctaLabel}
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
-                  </span>
-                )}
-              </a>
-              </AdBeacon>
+                    )}
+                  </a>
+                </AdBeacon>
+              )}
             </div>
           );
         })}
@@ -195,5 +227,20 @@ export const adSlot = defineBlock({
     );
   },
 });
+
+function thirdPartyHtml(
+  creative: NonNullable<ServedFill["creative"]>,
+  fill: { width: number; height: number },
+  nonce: string,
+): string {
+  if (creative.kind === "provider") {
+    const parsed = creative.provider as ProviderSpec | null;
+    if (parsed?.network && parsed.unitPath) {
+      const markup = providerMarkup(parsed, fill, `fh-gpt-${creative.id}`);
+      if (markup) return stampNonce(markup, nonce);
+    }
+  }
+  return stampNonce(creative.tagHtml ?? "", nonce);
+}
 
 export default [adSlot];

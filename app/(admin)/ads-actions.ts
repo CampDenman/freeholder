@@ -18,6 +18,8 @@ import {
   saveCreative,
   saveLineItem,
   saveSlot,
+  saveTxtEntry,
+  deleteTxtEntry,
   setCampaignStatus,
 } from "@/modules/ads/service";
 
@@ -247,7 +249,7 @@ export async function saveCreativeAction(form: FormData): Promise<void> {
       {
         ...(optional(form, "id") ? { id: text(form, "id") } : {}),
         lineItemId: text(form, "lineItemId"),
-        kind: (text(form, "kind") || "image") as "image" | "native",
+        kind: (text(form, "kind") || "image") as "image" | "native" | "html_tag" | "provider",
         assetId: optional(form, "assetId"),
         width: Number.isFinite(width) ? width! : 0,
         height: Number.isFinite(height) ? height! : 0,
@@ -256,6 +258,15 @@ export async function saveCreativeAction(form: FormData): Promise<void> {
         headline: optional(form, "headline"),
         body: optional(form, "body"),
         ctaLabel: optional(form, "ctaLabel"),
+        tagHtml: optional(form, "tagHtml"),
+        ...(optional(form, "providerNetwork") && optional(form, "providerUnit")
+          ? {
+              provider: {
+                network: text(form, "providerNetwork"),
+                unitPath: text(form, "providerUnit"),
+              },
+            }
+          : {}),
         status: (text(form, "status") || "draft") as "draft" | "active" | "paused",
       },
       caller,
@@ -294,6 +305,37 @@ export async function invoiceCampaignAction(form: FormData): Promise<void> {
   const caller = await actor();
   try {
     await invoiceCampaign.call({ id: text(form, "id") }, caller);
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath("/admin/ads");
+  done();
+}
+
+export async function saveTxtEntryAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  try {
+    await saveTxtEntry.call(
+      {
+        domain: text(form, "domain"),
+        accountId: text(form, "accountId"),
+        relationship: (text(form, "relationship") || "DIRECT") as "DIRECT" | "RESELLER",
+        certificationAuthorityId: optional(form, "certificationAuthorityId"),
+        surface: (text(form, "surface") || "both") as "web" | "app" | "both",
+      },
+      caller,
+    );
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath("/admin/ads");
+  done();
+}
+
+export async function deleteTxtEntryAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  try {
+    await deleteTxtEntry.call({ id: text(form, "id") }, caller);
   } catch (error) {
     done(error);
   }

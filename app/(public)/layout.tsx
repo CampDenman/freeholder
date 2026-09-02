@@ -14,6 +14,11 @@
 import type { ReactNode } from "react";
 import { cookies, headers } from "next/headers";
 import { PATH_HEADER, REQUEST_TARGET_HEADER } from "@/core/http/headers";
+import {
+  CSP_NONCE_HEADER,
+  THIRD_PARTY_CREATIVE_CONSENT_COOKIE,
+  parseThirdPartyCreativeConsent,
+} from "@/core/http/csp";
 import { renderBlocks } from "@/modules/cms/render";
 import {
   ANNOUNCEMENT_KEY,
@@ -113,6 +118,10 @@ export default async function PublicLayout({
     path: requestHeaders.get(PATH_HEADER) ?? "/",
     visitorId,
     experimentAssignments,
+    thirdPartyConsent: parseThirdPartyCreativeConsent(
+      cookieJar.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
+    ),
+    cspNonce: requestHeaders.get(CSP_NONCE_HEADER) ?? undefined,
     localizeHref: business
       ? (href: string) => localizeCustomerHref(href, locale, business)
       : undefined,

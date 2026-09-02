@@ -9,4 +9,5 @@ export {
   adLineItems,
   adCreatives,
   adStats,
+  adTxtEntries,
 } from "./schema";

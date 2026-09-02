@@ -105,3 +105,10 @@ export function thirdPartyCreativeConsentGranted(
 ): boolean {
   return value === "granted";
 }
+
+export function parseThirdPartyCreativeConsent(
+  value: string | null | undefined,
+): "granted" | "denied" | undefined {
+  if (value === "granted" || value === "denied") return value;
+  return undefined;
+}

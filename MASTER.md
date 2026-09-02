@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.20 ads.txt / third-party tags. Next after that: C9.21 assistant. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.21 assistant. Next after that: C9.22 grounding. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6866,8 +6866,17 @@ customer has one secure, comprehensible home for the relationship.
   matching the C9.18 gap.
   Admin on `/admin/ads`. Migration `0145_ad_stats.sql`;
   `tests/modules/ads-measurement.test.ts`. Changeset `ad-measurement.md`.)
-- [ ] **C9.20** Support consent-gated third-party tags off by default and
+- [x] **C9.20** Support consent-gated third-party tags off by default and
   generate accurate `ads.txt`/`app-ads.txt`.
+  (`html_tag` and `provider` on `ad_creatives`; `ad_txt_entries` is the
+  authorized-seller list `/ads.txt` and `/app-ads.txt` are generated from.
+  A third-party creative is refused unless a slot it runs in has
+  `allowThirdParty`, a provider creative is refused unless its network is
+  already in that list, and serving emits the tag only when the visitor's
+  `fh_tc` cookie is `granted` — not implied by first-party analytics consent.
+  A winning third-party creative without a choice reserves the hole and asks;
+  a denial falls through to house fill. Migration `0146_ad_third_party.sql`;
+  `tests/modules/ads-third-party.test.ts`. Changeset `ad-third-party.md`.)
 - [ ] **C9.21** Build the optional front-site assistant with AI adapters,
   provider/model/key settings, hard scopes, spend/rate limits and off fallback.
 - [ ] **C9.22** Ground the assistant from published content/catalog/hours/
