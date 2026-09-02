@@ -37,6 +37,10 @@ const INTERNAL = [
   // after the request that started it has ended.
   "broadcasts.sendNext",
   "broadcasts.tick",
+  "entitlements.issuePass",
+  "entitlements.issueUnlock",
+  "entitlements.syncSubscription",
+  "entitlements.syncTier",
   "forms.briefingEnquiries",
   "galleries.buildArchive",
   "galleries.expireSessions",

@@ -94,6 +94,12 @@ export { tasks } from "@/core/tasks/schema";
 export { notes, noteRevisions } from "@/core/notes/schema";
 export { segments, segmentMembers } from "@/core/segments/schema";
 export { scoringRules, contactScoreAwards } from "@/core/scoring/schema";
+export {
+  entitlements,
+  entitlementGrants,
+  passBalances,
+  contentUnlocks,
+} from "@/core/entitlements/schema";
 export { savedViews } from "@/core/views/schema";
 export {
   contactImports,

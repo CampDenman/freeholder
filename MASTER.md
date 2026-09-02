@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.01–C9.03 automations: visual trigger → condition → action, with delays, branches and hard bounds, and consent, quiet hours, budgets and approvals enforced. C7.17's segment convergence is blocked on C9.01 together with C9.06 and C9.08, so this unblocks another stream as well as its own. |
+| Current focus | C9.15 paywalls over C9.14 grants. Next after that: C9.16 dunning, then C9.19 ads measurement. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6689,8 +6689,29 @@ customer has one secure, comprehensible home for the relationship.
   `subscriptions.cancelMine`, which resolves the contact from the session and
   can only ever reach their own row.
   Migration `0140_subscriptions.sql`; `tests/modules/subscriptions.test.ts`.)
-- [ ] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
+- [x] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
   one-time unlocks, loyalty tiers and manually granted access.
+  (Access lives in core, not in the subscriptions module: a grantor can be a
+  plan, a pass, an unlock invoice, a loyalty tier or a manual decision, and a
+  module that imported another module to ask "may they in?" would be the
+  second path §4.15 exists to prevent. `Entitlement` + `EntitlementGrant` are
+  the unit; `pass_balances` and `content_unlocks` are the prepaid and one-time
+  sources, not a second access API.
+  Access is computed at the moment of asking. A site-wide grant covers every
+  resource; a more specific one names a kind and selector. `subscriptions.grants`
+  jsonb is not read. A plan with no entitlements of its own gets a default
+  `{ kind: "site" }` grant so a membership created today actually lets somebody
+  in. The grant window is the subscription period: pause sets the grant paused,
+  resume restores it, cancel-at-period-end leaves it until that instant, and
+  immediate cancel ends it now. Loyalty `evaluateTier` moves tier grants in the
+  same write that changed standing. A paid order for a `pass` product issues
+  punches once per order; a paid `unlock` invoice issues a perpetual grant for
+  that content. Member-only catalog products ask `contactHasAccess` rather than
+  "are they signed in". Merge keeps one live grant per entitlement rather than
+  colliding the unique index; erasure revokes rather than deleting the record
+  of what was held.
+  Admin at `/admin/access`. Migration `0142_entitlements.sql`;
+  `tests/core/entitlements.test.ts`. Changeset `access-from-grants.md`.)
 - [ ] **C9.15** Build hard/soft/metered/registration paywalls, server-side
   exclusion, anonymous/contact counters, teasers, upsell and accurate SEO markup.
 - [ ] **C9.16** Build dunning retries, grace periods, consented notices, final

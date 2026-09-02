@@ -24,7 +24,8 @@ import { ORDER_STATUSES } from "./contract";
 import { releaseReservation, reserveStock } from "./inventory";
 import { attachCartToContact, getCart, requireContactAuthority } from "./cart";
 import { quoteShipping } from "./shipping";
-import { carts, orderItems, orders, stockReservations } from "./schema";
+import { issuePass } from "@/core/entitlements/service";
+import { carts, orderItems, orders, products, productVariants, stockReservations } from "./schema";
 
 const id = z.string().uuid();
 
@@ -452,6 +453,31 @@ export const payOrder = defineService({
     await ctx.tx.update(orders).set({ status: "paid", updatedAt: new Date() }).where(eq(orders.id, order.id));
     const { grantDigitalFulfillment } = await import("./fulfillment");
     await ctx.call(grantDigitalFulfillment, { orderId: order.id });
+    const lines = await ctx.tx
+      .select({
+        quantity: orderItems.quantity,
+        productId: products.id,
+        productName: products.name,
+        kind: products.kind,
+      })
+      .from(orderItems)
+      .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(eq(orderItems.orderId, order.id));
+    for (const line of lines) {
+      if (line.kind !== "pass") continue;
+      const punches =
+        line.quantity >= QUANTITY_SCALE
+          ? Math.max(1, Math.floor(line.quantity / QUANTITY_SCALE))
+          : Math.max(1, line.quantity);
+      await ctx.callAsSystem(issuePass, {
+        contactId: order.contactId,
+        productId: line.productId,
+        productName: line.productName,
+        quantity: punches,
+        sourceOrderId: order.id,
+      });
+    }
     ctx.setSubject("order", order.id);
     ctx.queueEvent("catalog.orderPaid", { orderId: order.id });
     await ctx.emitTimeline({
