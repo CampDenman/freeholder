@@ -711,6 +711,10 @@ export const listSubscriptions = defineService({
   summary: "Subscriptions, newest first.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The field must
+  // be present and their own — an absent filter means everybody, which is
+  // refused rather than ignored.
+  selfService: { contactField: "contactId" },
   input: z.object({
     contactId: uuidSchema.optional(),
     status: z.enum(SUBSCRIPTION_STATUSES).optional(),

@@ -4,7 +4,7 @@
 
 You can now sell memberships. Create a plan — what it gives people, how often
 it bills, whether it starts with a free trial, whether there is a one-off
-joining fee — and put people on it.
+joining fee — and put a contact on it from the memberships screen.
 
 A plan has no price of its own. It points at one of your products, and that
 product's price is what gets billed, so changing what a membership costs is one

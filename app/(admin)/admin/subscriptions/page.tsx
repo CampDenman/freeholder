@@ -19,6 +19,7 @@ import {
   Pill,
   Select,
 } from "@/ui/primitives";
+import { listContacts } from "@/core/contacts/service";
 import { currentBusiness } from "@/core/settings/read";
 import { listProducts } from "@/modules/catalog/service";
 import { listPlans, listSubscriptions } from "@/modules/subscriptions/service";
@@ -30,6 +31,7 @@ import {
   pauseSubscriptionAction,
   resumeSubscriptionAction,
   savePlanAction,
+  subscribeAction,
 } from "../../subscription-actions";
 
 export const dynamic = "force-dynamic";
@@ -50,17 +52,18 @@ const TONE = {
 export default async function SubscriptionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string; error?: string; saved?: string }>;
+  searchParams: Promise<{ plan?: string; error?: string; saved?: string; enrolled?: string }>;
 }) {
   const actor = await requireStaffActor("subscriptions", "manage");
   const query = await searchParams;
 
-  const [t, business, plans, people, products] = await Promise.all([
+  const [t, business, plans, people, products, contacts] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(listPlans.call({}, actor)),
     domainOrNull(listSubscriptions.call({ limit: 100 }, actor)),
     domainOrNull(listProducts.call({ status: "active" }, actor)),
+    listContacts.call({ limit: 100 }, actor).catch(() => ({ rows: [], total: 0 })),
   ]);
 
   const chosen = query.plan ? (plans ?? []).find((each) => each.id === query.plan) : null;
@@ -90,6 +93,11 @@ export default async function SubscriptionsPage({
       {query.saved ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
           {t("subscriptions.saved")}
+        </p>
+      ) : null}
+      {query.enrolled ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("subscriptions.enrolled")}
         </p>
       ) : null}
 
@@ -221,6 +229,47 @@ export default async function SubscriptionsPage({
               <Button type="submit">{t("subscriptions.action.savePlan")}</Button>
             </div>
           </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("subscriptions.enroll.title")} />
+        <CardBody>
+          <p className="mb-3 max-w-prose text-sm text-ink-muted">
+            {t("subscriptions.enroll.intro")}
+          </p>
+          {contacts.rows.length === 0 || (plans ?? []).filter((each) => each.status === "active").length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("subscriptions.enroll.missing")}</p>
+          ) : (
+            <form action={subscribeAction} className="grid gap-3 md:grid-cols-3">
+              <Field label={t("subscriptions.enroll.contact")} htmlFor="contactId">
+                <Select id="contactId" name="contactId" required defaultValue="">
+                  <option value="">{t("subscriptions.enroll.chooseContact")}</option>
+                  {contacts.rows.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}
+                      {contact.email ? ` · ${contact.email}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t("subscriptions.enroll.plan")} htmlFor="planId">
+                <Select id="planId" name="planId" required defaultValue="">
+                  <option value="">{t("subscriptions.enroll.choosePlan")}</option>
+                  {(plans ?? [])
+                    .filter((each) => each.status === "active")
+                    .map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name}
+                      </option>
+                    ))}
+                </Select>
+              </Field>
+              <div className="self-end">
+                <Button type="submit">{t("subscriptions.enroll.submit")}</Button>
+              </div>
+            </form>
+          )}
         </CardBody>
       </Card>
 

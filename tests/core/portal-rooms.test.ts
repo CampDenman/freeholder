@@ -67,6 +67,7 @@ describe.runIf(hasDatabase)("the customer portal's rooms", () => {
     expect(keys).toContain("bookings");
     expect(keys).toContain("orders");
     expect(keys).toContain("messages");
+    expect(keys).toContain("subscriptions");
     // Ordered for a person rather than alphabetically: money before messages.
     expect(keys.indexOf("quotes")).toBeLessThan(keys.indexOf("messages"));
   });
@@ -130,6 +131,60 @@ describe.runIf(hasDatabase)("the customer portal's rooms", () => {
     // A customer with no history has rooms, all empty — which is what lets
     // the home page and the nav hide them rather than guess.
     expect(rooms.every((room) => room.count === 0)).toBe(true);
+  });
+
+  it("shows a customer the membership they are on, with a way in", async () => {
+    const { contact, actor } = await signedInCustomer();
+    const { subscribe, savePlan } = await import("@/modules/subscriptions/service");
+    const { products, productVariants, priceLists, priceListEntries } = await import(
+      "@/modules/catalog/schema"
+    );
+    const [product] = await db()
+      .insert(products)
+      .values({
+        name: "Studio membership",
+        slug: "studio-membership",
+        kind: "digital",
+        status: "active",
+        publishedAt: new Date(),
+      })
+      .returning();
+    const [variant] = await db()
+      .insert(productVariants)
+      .values({
+        productId: product!.id,
+        combinationKey: "default",
+        sku: "mem-1",
+        isDefault: true,
+      })
+      .returning();
+    const [list] = await db()
+      .insert(priceLists)
+      .values({ name: "CAD", currency: "CAD", active: true })
+      .returning();
+    await db().insert(priceListEntries).values({
+      priceListId: list!.id,
+      variantId: variant!.id,
+      amountMinor: 2_500,
+    });
+    const plan = await savePlan.call(
+      {
+        productId: product!.id,
+        name: "Monthly",
+        interval: "month",
+        status: "active",
+      },
+      OWNER,
+    );
+    const started = await subscribe.call({ contactId: contact.id, planId: plan.id }, OWNER);
+
+    const rooms = await myRecords.call({ section: "subscriptions" }, actor);
+    expect(rooms[0]?.failed).toBe(false);
+    expect(rooms[0]?.records).toHaveLength(1);
+    expect(rooms[0]?.records[0]?.id).toBe(started.subscription.id);
+    expect(rooms[0]?.records[0]?.href).toBe(
+      `/portal/subscriptions/${started.subscription.id}`,
+    );
   });
 
   it("says nothing at all for a section nobody registered", async () => {

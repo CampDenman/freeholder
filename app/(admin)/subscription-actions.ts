@@ -12,6 +12,7 @@ import {
   pauseSubscription,
   resumeSubscription,
   savePlan,
+  subscribe,
 } from "@/modules/subscriptions/service";
 
 async function actor() {
@@ -61,6 +62,19 @@ export async function savePlanAction(form: FormData): Promise<void> {
     done(error);
   }
   done();
+}
+
+export async function subscribeAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  try {
+    await subscribe.call(
+      { contactId: text(form, "contactId"), planId: text(form, "planId") },
+      caller,
+    );
+  } catch (error) {
+    done(error);
+  }
+  done(undefined, "enrolled");
 }
 
 export async function pauseSubscriptionAction(form: FormData): Promise<void> {

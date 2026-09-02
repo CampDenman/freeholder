@@ -25,7 +25,10 @@ registerPortalSection({
       // The date that matters to the person paying: when it renews, or when it
       // stops if they have already asked it to.
       at: subscription.currentPeriodEnd,
-      href: null,
+      // Session-authenticated record page, not a view token: C8.11 left those
+      // to the module that owns the row, and this is the click-to-cancel
+      // surface §4.15 makes mandatory.
+      href: `/portal/subscriptions/${subscription.id}`,
     }));
   },
 });

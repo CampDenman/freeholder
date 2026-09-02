@@ -10,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
 import { resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
 import { invoices } from "@/modules/invoicing/schema";
@@ -21,9 +22,11 @@ import {
 } from "@/modules/catalog/schema";
 import { subscriptionEvents, subscriptions } from "@/modules/subscriptions/schema";
 import {
+  cancelMySubscription,
   cancelSubscription,
   getSubscription,
   listPlans,
+  listSubscriptions,
   pauseSubscription,
   periodEnd,
   renewDue,
@@ -32,7 +35,7 @@ import {
   subscribe,
 } from "@/modules/subscriptions/service";
 import { ready } from "@/core/runtime";
-import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { closeDb, CUSTOMER, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const BUSINESS = {
   name: "Aurora Coast Studio",
@@ -369,6 +372,47 @@ describe.runIf(hasDatabase)("subscriptions", () => {
     await plan({ status: "draft" });
     expect(await listPlans.call({ status: "active" }, OWNER)).toHaveLength(1);
     expect(await listPlans.call({}, OWNER)).toHaveLength(2);
+  });
+
+  it("lets the customer cancel their own membership, and nobody else's", async () => {
+    const member = await person("rae");
+    await db()
+      .insert(users)
+      .values({ id: CUSTOMER.userId, email: "rae@example.test", role: "customer" });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, member.id));
+
+    const monthly = await plan();
+    const started = await subscribe.call({ contactId: member.id, planId: monthly.id }, OWNER);
+
+    const mine = await cancelMySubscription.call({ id: started.subscription.id }, CUSTOMER);
+    expect(mine.cancelled).toBe(true);
+    const detail = await getSubscription.call({ id: started.subscription.id }, OWNER);
+    expect(detail.subscription.cancelAtPeriodEnd).toBe(true);
+    expect(detail.subscription.status).toBe("active");
+
+    const stranger = await person("sam");
+    const other = await subscribe.call({ contactId: stranger.id, planId: monthly.id }, OWNER);
+    const error = await failure(
+      cancelMySubscription.call({ id: other.subscription.id }, CUSTOMER),
+    );
+    expect(error.code).toBe("not_found");
+  });
+
+  it("lets a customer list only their own memberships", async () => {
+    const member = await person("listed");
+    await db()
+      .insert(users)
+      .values({ id: CUSTOMER.userId, email: "listed@example.test", role: "customer" });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, member.id));
+    const monthly = await plan();
+    await subscribe.call({ contactId: member.id, planId: monthly.id }, OWNER);
+    await subscribe.call({ contactId: (await person("other-listed")).id, planId: monthly.id }, OWNER);
+
+    const mine = await listSubscriptions.call({ contactId: member.id }, CUSTOMER);
+    expect(mine).toHaveLength(1);
+
+    const missing = await failure(listSubscriptions.call({}, CUSTOMER));
+    expect(missing.code).toBe("permission");
   });
 
   it("keeps every subscription's history in order", async () => {
