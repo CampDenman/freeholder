@@ -23,6 +23,7 @@ import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const GRANTOR_TYPES = ["plan", "pass", "unlock", "tier", "manual"] as const;
+export type GrantorType = (typeof GRANTOR_TYPES)[number];
 export const ENTITLEMENT_PERIODS = ["per_month", "per_cycle", "total"] as const;
 export const ENTITLEMENT_STATUSES = ["active", "archived"] as const;
 export const GRANT_STATUSES = ["active", "paused", "expired", "revoked"] as const;

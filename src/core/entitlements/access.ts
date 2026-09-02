@@ -10,11 +10,11 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Tx } from "@/core/service";
 import {
-  GRANTOR_TYPES,
   contentUnlocks,
   entitlementGrants,
   entitlements,
   passBalances,
+  type GrantorType,
   type Resource,
 } from "./schema";
 
@@ -70,7 +70,7 @@ export async function contactHasAccess(
 export async function ensureEntitlement(
   tx: Tx,
   input: {
-    grantorType: (typeof GRANTOR_TYPES)[number];
+    grantorType: GrantorType;
     grantorId: string;
     name: string;
     resource: Resource;

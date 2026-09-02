@@ -285,7 +285,7 @@ export const hasAccess = defineService({
   }),
   output: row({ allowed: z.boolean(), contactId: uuidSchema.nullable() }),
   handler: async (input, ctx) => {
-    let contactId = input.contactId ?? (await actorContactId(ctx));
+    const contactId = input.contactId ?? (await actorContactId(ctx));
     if (input.contactId) {
       const staff =
         ctx.actor.kind === "user" &&
