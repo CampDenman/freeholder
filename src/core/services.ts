@@ -54,6 +54,7 @@ import taskServices from "@/core/tasks/service";
 import noteServices from "@/core/notes/service";
 import segmentServices from "@/core/segments/service";
 import scoringServices from "@/core/scoring/service";
+import entitlementServices from "@/core/entitlements/service";
 import viewServices from "@/core/views/service";
 import contactImportServices from "@/core/import/contacts-service";
 import signupContactImportServices from "@/core/import/signup-contact-service";
@@ -109,6 +110,7 @@ const services: Service[] = [
   ...noteServices,
   ...segmentServices,
   ...scoringServices,
+  ...entitlementServices,
   ...viewServices,
   ...contactImportServices,
   ...signupContactImportServices,

@@ -746,6 +746,15 @@ export const issueInvoice = defineService({
       payload: { number, currency: updated.currency, totalMinor: updated.totalMinor, sourceType: updated.sourceType },
     });
     ctx.queueEvent(zero ? "invoice.paid" : "invoice.sent", { invoiceId: updated.id, contactId: updated.contactId, number });
+    if (zero && updated.sourceType === "unlock") {
+      const { issueUnlock } = await import("@/core/entitlements/service");
+      await ctx.callAsSystem(issueUnlock, {
+        contactId: updated.contactId,
+        invoiceId: updated.id,
+        name: number,
+        resource: { kind: "content", selector: updated.sourceId ?? updated.id },
+      });
+    }
     ctx.setSubject("invoice", updated.id);
     return invoiceBundle(ctx.tx, updated.id);
   },
@@ -1030,6 +1039,15 @@ export const settlePayment = defineService({
     });
     ctx.queueEvent("payment.succeeded", { paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: payment.amountMinor });
     ctx.queueEvent(invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid", { invoiceId: invoice.id, contactId: invoice.contactId, paidMinor });
+    if (invoiceStatus === "paid" && invoice.sourceType === "unlock") {
+      const { issueUnlock } = await import("@/core/entitlements/service");
+      await ctx.callAsSystem(issueUnlock, {
+        contactId: invoice.contactId,
+        invoiceId: invoice.id,
+        name: invoice.number ?? "Unlock",
+        resource: { kind: "content", selector: invoice.sourceId ?? invoice.id },
+      });
+    }
     ctx.setSubject("payment", payment.id);
     return updatedPayment!;
   },

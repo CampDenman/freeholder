@@ -47,6 +47,7 @@ import {
   PuzzlePiece,
   DownloadSimple,
   Kanban,
+  Key,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -109,6 +110,7 @@ export interface AdminNavLabels {
   newsletters: string;
   reports: string;
   subscriptions: string;
+  access: string;
   contribute: string;
   plugins: string;
   imports: string;
@@ -169,6 +171,7 @@ const LINKS = [
     module: "subscriptions",
     Icon: ArrowsClockwise,
   },
+  { href: "/admin/access", key: "access", module: "entitlements", Icon: Key },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },

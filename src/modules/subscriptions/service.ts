@@ -33,6 +33,7 @@ import {
 } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { syncSubscriptionAccess } from "@/core/entitlements/service";
 import { contacts } from "@/core/contacts/schema";
 import { listLocations } from "@/core/locations/service";
 import { currentBusiness } from "@/core/settings/read";
@@ -450,6 +451,15 @@ export const subscribe = defineService({
       contactId: input.contactId,
       planId: plan.id,
     });
+    await ctx.callAsSystem(syncSubscriptionAccess, {
+      subscriptionId: created!.id,
+      contactId: created!.contactId,
+      planId: plan.id,
+      planName: plan.name,
+      startsAt: created!.currentPeriodStart,
+      endsAt: created!.currentPeriodEnd,
+      status: "active",
+    });
     return { subscription: created!, invoiceId };
   },
 });
@@ -504,6 +514,19 @@ export const renewDue = defineService({
           .where(eq(subscriptions.id, subscription.id));
         await record(ctx, subscription.id, "expired");
         ctx.queueEvent("subscription.expired", { subscriptionId: subscription.id });
+        const [endedPlan] = await ctx.tx
+          .select({ name: plans.name })
+          .from(plans)
+          .where(eq(plans.id, subscription.planId));
+        await ctx.callAsSystem(syncSubscriptionAccess, {
+          subscriptionId: subscription.id,
+          contactId: subscription.contactId,
+          planId: subscription.planId,
+          planName: endedPlan?.name ?? "Membership",
+          startsAt: subscription.currentPeriodStart,
+          endsAt: now,
+          status: "expired",
+        });
         ended += 1;
         continue;
       }
@@ -559,6 +582,15 @@ export const renewDue = defineService({
         subscriptionId: subscription.id,
         invoiceId,
       });
+      await ctx.callAsSystem(syncSubscriptionAccess, {
+        subscriptionId: subscription.id,
+        contactId: subscription.contactId,
+        planId: plan.id,
+        planName: plan.name,
+        startsAt: start,
+        endsAt: end,
+        status: "active",
+      });
       renewed += 1;
     }
 
@@ -593,6 +625,19 @@ export const pauseSubscription = defineService({
     await record(ctx, input.id, "paused");
     ctx.setSubject("subscription", input.id);
     ctx.queueEvent("subscription.paused", { subscriptionId: input.id });
+    const [plan] = await ctx.tx
+      .select({ name: plans.name })
+      .from(plans)
+      .where(eq(plans.id, paused!.planId));
+    await ctx.callAsSystem(syncSubscriptionAccess, {
+      subscriptionId: paused!.id,
+      contactId: paused!.contactId,
+      planId: paused!.planId,
+      planName: plan?.name ?? "Membership",
+      startsAt: paused!.currentPeriodStart,
+      endsAt: paused!.currentPeriodEnd,
+      status: "paused",
+    });
     return paused!;
   },
 });
@@ -649,6 +694,19 @@ export const resumeSubscription = defineService({
     await record(ctx, input.id, "resumed");
     ctx.setSubject("subscription", input.id);
     ctx.queueEvent("subscription.resumed", { subscriptionId: input.id });
+    const [resumedPlan] = await ctx.tx
+      .select({ name: plans.name })
+      .from(plans)
+      .where(eq(plans.id, resumed!.planId));
+    await ctx.callAsSystem(syncSubscriptionAccess, {
+      subscriptionId: resumed!.id,
+      contactId: resumed!.contactId,
+      planId: resumed!.planId,
+      planName: resumedPlan?.name ?? "Membership",
+      startsAt: resumed!.currentPeriodStart,
+      endsAt: resumed!.currentPeriodEnd,
+      status: "active",
+    });
     return resumed!;
   },
 });
@@ -699,6 +757,15 @@ export const cancelSubscription = defineService({
     ctx.queueEvent("subscription.cancelled", {
       subscriptionId: input.id,
       immediately: atOnce,
+    });
+    await ctx.callAsSystem(syncSubscriptionAccess, {
+      subscriptionId: cancelled!.id,
+      contactId: cancelled!.contactId,
+      planId: cancelled!.planId,
+      planName: "Membership",
+      startsAt: cancelled!.currentPeriodStart,
+      endsAt: atOnce ? now : cancelled!.currentPeriodEnd,
+      status: atOnce ? "expired" : "active",
     });
     return cancelled!;
   },

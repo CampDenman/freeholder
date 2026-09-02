@@ -22,6 +22,7 @@ import { and, asc, desc, eq, gte, notInArray, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
 import { actorString, defineService, ServiceError, type Tx } from "@/core/service";
 import { issueReward } from "@/core/rewards/issue";
+import { syncTierAccess } from "@/core/entitlements/access";
 import {
   loyaltyAccounts,
   loyaltyPrograms,
@@ -225,6 +226,13 @@ export async function evaluateTier(tx: Tx, accountId: string): Promise<TierChang
       updatedAt: new Date(),
     })
     .where(eq(loyaltyAccounts.id, accountId));
+
+  await syncTierAccess(tx, {
+    contactId: account.contactId,
+    fromTierId: before,
+    toTierId: earned,
+    endsAt: expiresAt,
+  });
 
   return { accountId, from: before, to: earned, direction };
 }

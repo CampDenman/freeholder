@@ -552,7 +552,24 @@ export const resolveVisibleProduct = defineService({
       .where(eq(products.slug, input.slug))
       .limit(1);
     if (!product || product.status !== "active") return null;
-    if (product.visibility === "member_only" && ctx.actor.kind === "anonymous") return null;
+    if (product.visibility === "member_only") {
+      const { contactHasAccess } = await import("@/core/entitlements/access");
+      const { contacts } = await import("@/core/contacts/schema");
+      let contactId: string | null = null;
+      if (ctx.actor.kind === "user") {
+        const [person] = await ctx.tx
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(eq(contacts.userId, ctx.actor.userId))
+          .limit(1);
+        contactId = person?.id ?? null;
+      }
+      const allowed = await contactHasAccess(ctx.tx, contactId, {
+        kind: "catalog",
+        selector: product.id,
+      });
+      if (!allowed) return null;
+    }
     return publicProduct(product);
   },
 });

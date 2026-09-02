@@ -37,6 +37,7 @@ const ADMIN_MODULES = [
   "contribute",
   "demo",
   "events",
+  "entitlements",
   "forms",
   "galleries",
   "newsletters",
