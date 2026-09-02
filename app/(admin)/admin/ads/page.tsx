@@ -17,6 +17,8 @@
 //
 // C9.19 counts: each campaign shows what it delivered, and a per-thousand
 // or per-click buy can be reconciled against those numbers on the same invoice.
+// C9.20 is the remaining edge: third-party tags, off by default, and the
+// generated ads.txt the owner edits here.
 import type { Metadata } from "next";
 import {
   Button,
@@ -40,6 +42,7 @@ import {
   lineItems,
   sizes,
   slots,
+  txtEntries,
 } from "@/modules/ads/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
@@ -54,6 +57,8 @@ import {
   saveCreativeAction,
   saveLineItemAction,
   saveSlotAction,
+  saveTxtEntryAction,
+  deleteTxtEntryAction,
   setCampaignStatusAction,
 } from "../../ads-actions";
 
@@ -102,7 +107,7 @@ export default async function AdsPage({
 }) {
   const actor = await requireStaffActor("ads", "manage");
   const query = await searchParams;
-  const [t, business, positions, sizeList, buyers, sold, people] = await Promise.all([
+  const [t, business, positions, sizeList, buyers, sold, people, sellers] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(slots.call({}, actor)),
@@ -110,6 +115,7 @@ export default async function AdsPage({
     domainOrNull(advertiserList.call({}, actor)),
     domainOrNull(campaigns.call({}, actor)),
     domainOrNull(listContacts.call({ limit: 200 }, actor)),
+    domainOrNull(txtEntries.call({}, actor)),
   ]);
 
   const reports = await Promise.all(
@@ -246,6 +252,66 @@ export default async function AdsPage({
                 {t("ads.field.thirdParty")}
               </label>
               <Button type="submit">{t("ads.action.saveSlot")}</Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("ads.txt.title")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("ads.txt.intro")}</p>
+          {sellers === null || sellers.length === 0 ? (
+            <p className="mt-2 max-w-prose text-sm text-ink-muted">{t("ads.txt.empty")}</p>
+          ) : (
+            <ul className="mt-2 grid list-none gap-2 p-0">
+              {sellers.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm"
+                >
+                  <code className="font-mono text-xs">
+                    {entry.domain}, {entry.accountId}, {entry.relationship}
+                    {entry.certificationAuthorityId
+                      ? `, ${entry.certificationAuthorityId}`
+                      : ""}
+                  </code>
+                  <Pill tone="neutral">{t(`ads.txt.surface.${entry.surface}`)}</Pill>
+                  <form action={deleteTxtEntryAction}>
+                    <input type="hidden" name="id" value={entry.id} />
+                    <Button type="submit" variant="quiet">
+                      {t("ads.action.deleteTxt")}
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form action={saveTxtEntryAction} className="mt-3 grid gap-3 md:grid-cols-5">
+            <Field label={t("ads.field.txtDomain")} htmlFor="txtDomain">
+              <Input id="txtDomain" name="domain" required placeholder={t("ads.field.txtDomainPlaceholder")} />
+            </Field>
+            <Field label={t("ads.field.txtAccount")} htmlFor="txtAccount">
+              <Input id="txtAccount" name="accountId" required />
+            </Field>
+            <Field label={t("ads.field.txtRelationship")} htmlFor="txtRelationship">
+              <Select id="txtRelationship" name="relationship" defaultValue="DIRECT">
+                <option value="DIRECT">{t("ads.txt.relationship.DIRECT")}</option>
+                <option value="RESELLER">{t("ads.txt.relationship.RESELLER")}</option>
+              </Select>
+            </Field>
+            <Field label={t("ads.field.txtCert")} htmlFor="txtCert">
+              <Input id="txtCert" name="certificationAuthorityId" />
+            </Field>
+            <Field label={t("ads.field.txtSurface")} htmlFor="txtSurface">
+              <Select id="txtSurface" name="surface" defaultValue="both">
+                <option value="both">{t("ads.txt.surface.both")}</option>
+                <option value="web">{t("ads.txt.surface.web")}</option>
+                <option value="app">{t("ads.txt.surface.app")}</option>
+              </Select>
+            </Field>
+            <div className="flex items-end">
+              <Button type="submit">{t("ads.action.saveTxt")}</Button>
             </div>
           </form>
         </CardBody>
@@ -538,6 +604,12 @@ export default async function AdsPage({
                                         <option value="native">
                                           {t("ads.creativeKind.native")}
                                         </option>
+                                        <option value="html_tag">
+                                          {t("ads.creativeKind.html_tag")}
+                                        </option>
+                                        <option value="provider">
+                                          {t("ads.creativeKind.provider")}
+                                        </option>
                                       </Select>
                                     </Field>
                                     <Field
@@ -576,7 +648,39 @@ export default async function AdsPage({
                                         id={`cu-${item.id}`}
                                         name="clickUrl"
                                         type="url"
-                                        required
+                                      />
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.tagHtml")}
+                                      htmlFor={`th-${item.id}`}
+                                      hint={t("ads.field.tagHtmlHint")}
+                                    >
+                                      <textarea
+                                        id={`th-${item.id}`}
+                                        name="tagHtml"
+                                        rows={3}
+                                        className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                                      />
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.providerNetwork")}
+                                      htmlFor={`pn-${item.id}`}
+                                      hint={t("ads.field.providerHint")}
+                                    >
+                                      <Input
+                                        id={`pn-${item.id}`}
+                                        name="providerNetwork"
+                                        placeholder={t("ads.field.providerNetworkPlaceholder")}
+                                      />
+                                    </Field>
+                                    <Field
+                                      label={t("ads.field.providerUnit")}
+                                      htmlFor={`pu-${item.id}`}
+                                    >
+                                      <Input
+                                        id={`pu-${item.id}`}
+                                        name="providerUnit"
+                                        placeholder={t("ads.field.providerUnitPlaceholder")}
                                       />
                                     </Field>
                                     <Field

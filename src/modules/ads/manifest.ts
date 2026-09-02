@@ -16,10 +16,8 @@
 // dependency is real rather than optional.
 //
 // C9.17 was the inventory and the paperwork; C9.18 is the artwork, the house
-// fill, the signed click-out and the money path. Third-party tags and ads.txt
-// are C9.20, and the counting of impressions and viewability is C9.19 — a
-// campaign can be sold, scheduled and served before either exists, which is
-// the order the work actually happens in.
+// fill, the signed click-out and the money path; C9.19 counts. C9.20 is the
+// remaining edge: consent-gated third-party tags and generated ads.txt.
 import { defineModule } from "@/core/module";
 
 export default defineModule({

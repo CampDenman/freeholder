@@ -58,7 +58,11 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { recordExperimentImpressions } from "@/modules/analytics/service";
 import { localizeCustomerHref } from "@/core/i18n/customer";
-import { CSP_NONCE_HEADER } from "@/core/http/csp";
+import {
+  CSP_NONCE_HEADER,
+  THIRD_PARTY_CREATIVE_CONSENT_COOKIE,
+  parseThirdPartyCreativeConsent,
+} from "@/core/http/csp";
 
 export const dynamic = "force-dynamic";
 
@@ -258,7 +262,8 @@ export default async function PublicPage({
       ANONYMOUS,
     ).catch(() => undefined);
   }
-  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const cookieJar = await cookies();
+  const actor = await actorFromToken(cookieJar.get(SESSION_COOKIE)?.value);
   const rendered = await renderBlocks(blocks, {
     locale,
     t,
@@ -272,6 +277,10 @@ export default async function PublicPage({
     visitorId,
     actor,
     experimentAssignments,
+    thirdPartyConsent: parseThirdPartyCreativeConsent(
+      cookieJar.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
+    ),
+    cspNonce: nonce,
     localizeHref: business
       ? (href: string) => localizeCustomerHref(href, locale, business)
       : undefined,

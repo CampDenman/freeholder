@@ -87,6 +87,14 @@ export interface BlockRenderContext {
    * through `resolve` / a service rather than querying itself.
    */
   actor?: Actor;
+  /**
+   * Visitor's `fh_tc` choice for third-party creatives (C9.20). Only
+   * `granted` emits somebody else's script. Absent means they have not
+   * chosen yet.
+   */
+  thirdPartyConsent?: "granted" | "denied";
+  /** Request CSP nonce, so a reviewed tag's inline scripts can run. */
+  cspNonce?: string;
 }
 
 /**

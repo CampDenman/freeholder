@@ -28,6 +28,7 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import { getBusiness } from "@/core/settings/service";
 import { track } from "@/modules/analytics/service";
 import { analyticsEvents } from "@/modules/analytics/schema";
+import { siteOrigin } from "@/core/seo/origin";
 import {
   adCampaigns,
   adCreatives,
@@ -35,10 +36,26 @@ import {
   adSizes,
   adSlots,
   adStats,
+  adTxtEntries,
   advertisers,
 } from "./schema";
 import { clickPath, safeClickUrl, signClickToken, verifyClickToken } from "./clicks";
-import { chooseFill, zonedClock, type Candidate, type DeclaredSize } from "./select";
+import { chooseFill, zonedClock, type Candidate, type CandidateCreative, type DeclaredSize } from "./select";
+import {
+  adsTxtDomain,
+  coversSurface,
+  renderAdsTxtFile,
+  TXT_RELATIONSHIPS,
+  TXT_SURFACES,
+  type AdsTxtLine,
+} from "./ads-txt";
+import {
+  CREATIVE_KINDS,
+  isThirdPartyKind,
+  knownProviderNetwork,
+  reviewedTagHtml,
+  TAG_HTML_MAX,
+} from "./tags";
 import {
   bumpStat,
   deliveryByLineItem,
@@ -666,10 +683,16 @@ export const lineItems = defineService({
  * that was approved — so a paid creative returns to `pending` on every edit,
  * and a swapped image stops serving until somebody looks at it again.
  */
+const providerSpec = z.object({
+  network: z.string().trim().min(1).max(253),
+  unitPath: z.string().trim().min(1).max(400),
+  params: z.record(z.string().max(80), z.string().max(400)).optional(),
+});
+
 const creativeRow = row({
   id: uuidSchema,
   lineItemId: uuidSchema,
-  kind: z.enum(["image", "native"]),
+  kind: z.enum(CREATIVE_KINDS),
   assetId: uuidSchema.nullable(),
   width: z.number().int(),
   height: z.number().int(),
@@ -678,6 +701,8 @@ const creativeRow = row({
   headline: z.string().nullable(),
   body: z.string().nullable(),
   ctaLabel: z.string().nullable(),
+  tagHtml: z.string().nullable(),
+  provider: z.unknown().nullable(),
   status: z.enum(["draft", "active", "paused"]),
   reviewState: z.enum(["pending", "approved", "rejected"]),
   reviewNote: z.string().nullable(),
@@ -708,15 +733,17 @@ export const saveCreative = defineService({
   input: z.object({
     id: uuidSchema.optional(),
     lineItemId: uuidSchema,
-    kind: z.enum(["image", "native"]).default("image"),
+    kind: z.enum(CREATIVE_KINDS).default("image"),
     assetId: uuidSchema.nullish(),
     width: z.number().int().min(1).max(4000),
     height: z.number().int().min(1).max(4000),
-    clickUrl: z.string().trim().max(2000),
+    clickUrl: z.string().trim().max(2000).default(""),
     altText: z.string().trim().max(300).nullish(),
     headline: z.string().trim().max(200).nullish(),
     body: z.string().trim().max(600).nullish(),
     ctaLabel: z.string().trim().max(60).nullish(),
+    tagHtml: z.string().max(TAG_HTML_MAX).nullish(),
+    provider: providerSpec.nullish(),
     status: z.enum(["draft", "active", "paused"]).default("draft"),
   }),
   output: creativeRow,
@@ -735,13 +762,27 @@ export const saveCreative = defineService({
       .where(eq(adLineItems.id, input.lineItemId));
     if (!line) throw new ServiceError("not_found", "There is no such line item.");
 
-    const destination = safeClickUrl(input.clickUrl);
-    if (!destination) {
+    const thirdParty = isThirdPartyKind(input.kind);
+    let destination = "";
+    if (input.clickUrl) {
+      const safe = safeClickUrl(input.clickUrl);
+      if (!safe) {
+        throw new ServiceError(
+          "validation",
+          "A click-through needs a full web address starting http:// or https://.",
+        );
+      }
+      destination = safe;
+    } else if (!thirdParty) {
       throw new ServiceError(
         "validation",
         "A click-through needs a full web address starting http:// or https://.",
       );
     }
+
+    let tagHtml: string | null = null;
+    let provider: { network: string; unitPath: string; params?: Record<string, string> } | null =
+      null;
 
     if (input.kind === "image") {
       if (!input.assetId) {
@@ -756,8 +797,37 @@ export const saveCreative = defineService({
           "Describe the image, for anyone who cannot see it.",
         );
       }
-    } else if (!input.headline) {
-      throw new ServiceError("validation", "A text ad needs a headline.");
+    } else if (input.kind === "native") {
+      if (!input.headline) {
+        throw new ServiceError("validation", "A text ad needs a headline.");
+      }
+    } else if (input.kind === "html_tag") {
+      const tag = reviewedTagHtml(input.tagHtml ?? "");
+      if (!tag) {
+        throw new ServiceError(
+          "validation",
+          "Paste the third-party tag. It cannot contain javascript: or data: HTML, and it has to fit.",
+        );
+      }
+      tagHtml = tag;
+    } else {
+      if (!input.provider) {
+        throw new ServiceError("validation", "A network ad needs the network and the unit path.");
+      }
+      const network = adsTxtDomain(input.provider.network);
+      if (!network) {
+        throw new ServiceError(
+          "validation",
+          "The network must be an ads.txt domain such as google.com, with no scheme.",
+        );
+      }
+      if (!knownProviderNetwork(network)) {
+        throw new ServiceError(
+          "validation",
+          "This module generates a tag for google.com. Paste an HTML tag for any other network.",
+        );
+      }
+      provider = { ...input.provider, network };
     }
 
     // The size must be one the slots this line item runs in actually declare.
@@ -768,7 +838,7 @@ export const saveCreative = defineService({
     const slotRows =
       slotIds.success && slotIds.data.length > 0
         ? await ctx.tx
-            .select({ formats: adSlots.formats })
+            .select({ formats: adSlots.formats, allowThirdParty: adSlots.allowThirdParty })
             .from(adSlots)
             .where(inArray(adSlots.id, slotIds.data))
         : [];
@@ -780,6 +850,24 @@ export const saveCreative = defineService({
         "validation",
         `None of this line item's positions accepts a ${input.width}×${input.height} ad, so it could never run.`,
       );
+    }
+    if (thirdParty && !slotRows.some((slot) => slot.allowThirdParty)) {
+      throw new ServiceError(
+        "validation",
+        "Turn on third-party tags on at least one of this line item's positions first. They are off by default.",
+      );
+    }
+    if (provider) {
+      const listed = await ctx.tx
+        .select({ id: adTxtEntries.id })
+        .from(adTxtEntries)
+        .where(eq(adTxtEntries.domain, provider.network));
+      if (listed.length === 0) {
+        throw new ServiceError(
+          "validation",
+          "Add this network to ads.txt before saving a provider creative, so the file stays accurate.",
+        );
+      }
     }
 
     // A house promotion is the owner's own, so making it is the approval —
@@ -799,6 +887,8 @@ export const saveCreative = defineService({
       headline: input.headline ?? null,
       body: input.body ?? null,
       ctaLabel: input.ctaLabel ?? null,
+      tagHtml,
+      provider,
       status: input.status,
       reviewState: house ? "approved" : "pending",
       reviewNote: null,
@@ -876,6 +966,8 @@ export const creatives = defineService({
         headline: adCreatives.headline,
         body: adCreatives.body,
         ctaLabel: adCreatives.ctaLabel,
+        tagHtml: adCreatives.tagHtml,
+        provider: adCreatives.provider,
         status: adCreatives.status,
         reviewState: adCreatives.reviewState,
         reviewNote: adCreatives.reviewNote,
@@ -890,12 +982,14 @@ export const creatives = defineService({
 
 const servedCreative = row({
   id: uuidSchema,
-  kind: z.enum(["image", "native"]),
+  kind: z.enum(CREATIVE_KINDS),
   assetId: uuidSchema.nullable(),
   altText: z.string().nullable(),
   headline: z.string().nullable(),
   body: z.string().nullable(),
   ctaLabel: z.string().nullable(),
+  tagHtml: z.string().nullable(),
+  provider: z.unknown().nullable(),
   /**
    * Always first-party, always signed. The advertiser's own URL is never in
    * the page: §4.16 wants the count and the destination unable to disagree,
@@ -918,6 +1012,30 @@ const servedCreative = row({
  */
 function labelFor(house: boolean): "house" | "sponsored" {
   return house ? "house" : "sponsored";
+}
+
+function asCreativeKind(kind: string): CandidateCreative["kind"] | null {
+  if (kind === "image" || kind === "native" || kind === "html_tag" || kind === "provider") {
+    return kind;
+  }
+  return null;
+}
+
+function withoutThirdParty(candidates: Candidate[]): Candidate[] {
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      creatives: candidate.creatives.filter((creative) => !isThirdPartyKind(creative.kind)),
+    }))
+    .filter((candidate) => candidate.creatives.length > 0);
+}
+
+function ownerDomainOf(): string | null {
+  try {
+    return new URL(siteOrigin()).hostname.toLowerCase().replace(/^www\./, "") || null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -945,6 +1063,12 @@ export const serve = defineService({
     referrer: z.string().trim().max(2000).nullish(),
     /** Present when analytics policy permits identifiers; used for frequency. */
     anonId: z.string().trim().min(1).max(64).nullish(),
+    /**
+     * Visitor's `fh_tc` choice. Only `granted` emits a third-party tag.
+     * `denied` skips them without asking again; missing asks only when a
+     * third-party creative would otherwise have won.
+     */
+    thirdPartyConsent: z.enum(["granted", "denied"]).nullish(),
   }),
   output: row({
     code: z.string(),
@@ -955,6 +1079,7 @@ export const serve = defineService({
         width: z.number().int(),
         height: z.number().int(),
         creative: servedCreative.nullable(),
+        needsThirdPartyConsent: z.boolean(),
       }),
     ),
   }).nullable(),
@@ -995,6 +1120,8 @@ export const serve = defineService({
         headline: adCreatives.headline,
         body: adCreatives.body,
         ctaLabel: adCreatives.ctaLabel,
+        tagHtml: adCreatives.tagHtml,
+        provider: adCreatives.provider,
       })
       .from(adCreatives)
       .innerJoin(adLineItems, eq(adCreatives.lineItemId, adLineItems.id))
@@ -1032,9 +1159,11 @@ export const serve = defineService({
         dayparting: each.dayparting ?? {},
         creatives: [],
       };
+      const kind = asCreativeKind(each.kind);
+      if (!kind) continue;
       candidate.creatives.push({
         id: each.creativeId,
-        kind: each.kind,
+        kind,
         assetId: each.assetId,
         width: each.width,
         height: each.height,
@@ -1043,6 +1172,8 @@ export const serve = defineService({
         headline: each.headline,
         body: each.body,
         ctaLabel: each.ctaLabel,
+        tagHtml: each.tagHtml,
+        provider: each.provider,
       });
       byLineItem.set(each.lineItemId, candidate);
     }
@@ -1080,6 +1211,9 @@ export const serve = defineService({
     const clock = zonedClock(now, business?.timezone ?? "UTC");
     const issuedAt = Math.floor(now.getTime() / 1000);
 
+    const eligible = slot.allowThirdParty ? candidates : withoutThirdParty(candidates);
+    const firstParty = withoutThirdParty(eligible);
+
     const fills = formats.map((format) => {
       const context: ServeContext = {
         locale: input.locale,
@@ -1090,19 +1224,40 @@ export const serve = defineService({
         minuteOfDay: clock.minuteOfDay,
         dayOfWeek: clock.dayOfWeek,
       };
-      const chosen = chooseFill(candidates, format.sizes, context, {
+      const options = {
         now,
         allowHouseFill: slot.allowHouseFill,
         roll: Math.random(),
         creativeRoll: Math.random(),
-      });
+      };
+      const withThirdParty = chooseFill(eligible, format.sizes, context, options);
+      const without = chooseFill(firstParty, format.sizes, context, options);
+      const thirdPartyWon =
+        withThirdParty !== null && isThirdPartyKind(withThirdParty.creative.kind);
+
+      let chosen = without;
+      let needsThirdPartyConsent = false;
+      if (input.thirdPartyConsent === "granted") {
+        chosen = withThirdParty;
+      } else if (thirdPartyWon) {
+        if (input.thirdPartyConsent === "denied") {
+          chosen = without;
+        } else {
+          chosen = null;
+          needsThirdPartyConsent = true;
+        }
+      }
+
       const reserved = chosen
         ? { width: chosen.creative.width, height: chosen.creative.height }
-        : format.sizes[0]!;
+        : thirdPartyWon && withThirdParty
+          ? { width: withThirdParty.creative.width, height: withThirdParty.creative.height }
+          : format.sizes[0]!;
       return {
         breakpoint: format.breakpoint,
         width: reserved.width,
         height: reserved.height,
+        needsThirdPartyConsent,
         creative: chosen
           ? {
               id: chosen.creative.id,
@@ -1112,14 +1267,18 @@ export const serve = defineService({
               headline: chosen.creative.headline,
               body: chosen.creative.body,
               ctaLabel: chosen.creative.ctaLabel,
-              href: clickPath(
-                signClickToken({
-                  creativeId: chosen.creative.id,
-                  url: chosen.creative.clickUrl,
-                  issuedAt,
-                  slotId: slot.id,
-                }),
-              ),
+              tagHtml: chosen.creative.tagHtml ?? null,
+              provider: chosen.creative.provider ?? null,
+              href: chosen.creative.clickUrl
+                ? clickPath(
+                    signClickToken({
+                      creativeId: chosen.creative.id,
+                      url: chosen.creative.clickUrl,
+                      issuedAt,
+                      slotId: slot.id,
+                    }),
+                  )
+                : "",
               label: labelFor(chosen.candidate.house),
               lineItemId: chosen.candidate.lineItemId,
               campaignId: chosen.candidate.campaignId,
@@ -1771,6 +1930,126 @@ registerContactPrivacySource({
   },
 });
 
+/* -------------------------------------------------------------- ads.txt */
+
+const txtRow = row({
+  id: uuidSchema,
+  domain: z.string(),
+  accountId: z.string(),
+  relationship: z.enum(TXT_RELATIONSHIPS),
+  certificationAuthorityId: z.string().nullable(),
+  surface: z.enum(TXT_SURFACES),
+});
+
+export const saveTxtEntry = defineService({
+  name: "ads.saveTxtEntry",
+  writeClass: "write",
+  summary: "Authorize one digital seller in the generated ads.txt.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    domain: z.string().trim().min(1).max(253),
+    accountId: z.string().trim().min(1).max(120),
+    relationship: z.enum(TXT_RELATIONSHIPS),
+    certificationAuthorityId: z.string().trim().max(80).nullish(),
+    surface: z.enum(TXT_SURFACES).default("both"),
+  }),
+  output: txtRow,
+  handler: async (input, ctx) => {
+    const domain = adsTxtDomain(input.domain);
+    if (!domain) {
+      throw new ServiceError(
+        "validation",
+        "That is not an ads.txt domain. Use a hostname such as google.com, with no scheme.",
+      );
+    }
+    const values = {
+      domain,
+      accountId: input.accountId,
+      relationship: input.relationship,
+      certificationAuthorityId: input.certificationAuthorityId ?? null,
+      surface: input.surface,
+    };
+    const clash = await ctx.tx
+      .select({ id: adTxtEntries.id })
+      .from(adTxtEntries)
+      .where(
+        and(
+          eq(adTxtEntries.domain, domain),
+          eq(adTxtEntries.accountId, input.accountId),
+          eq(adTxtEntries.relationship, input.relationship),
+          eq(adTxtEntries.surface, input.surface),
+        ),
+      );
+    if (clash.length > 0) {
+      throw new ServiceError(
+        "conflict",
+        "That authorized-seller line is already in the file.",
+      );
+    }
+    const [created] = await ctx.tx.insert(adTxtEntries).values(values).returning();
+    ctx.setSubject("ad_txt_entry", created!.id);
+    return created!;
+  },
+});
+
+export const txtEntries = defineService({
+  name: "ads.txtEntries",
+  summary: "The authorized digital sellers listed in ads.txt.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: listed(txtRow),
+  handler: (_input, ctx) =>
+    ctx.tx.select().from(adTxtEntries).orderBy(asc(adTxtEntries.domain), asc(adTxtEntries.accountId)),
+});
+
+export const deleteTxtEntry = defineService({
+  name: "ads.deleteTxtEntry",
+  writeClass: "write",
+  summary: "Remove one authorized-seller line from ads.txt.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: uuidSchema }),
+  output: row({ id: uuidSchema }),
+  handler: async (input, ctx) => {
+    const [removed] = await ctx.tx
+      .delete(adTxtEntries)
+      .where(eq(adTxtEntries.id, input.id))
+      .returning({ id: adTxtEntries.id });
+    if (!removed) throw new ServiceError("not_found", "There is no such ads.txt line.");
+    return removed;
+  },
+});
+
+/**
+ * The body of `/ads.txt` or `/app-ads.txt`.
+ *
+ * Public because crawlers fetch it with no session. Accurate because it is
+ * generated from the same rows the owner edits, not from a hand-copied file.
+ */
+export const adsTxt = defineService({
+  name: "ads.adsTxt",
+  summary: "The generated ads.txt or app-ads.txt body.",
+  kind: "query",
+  permission: "public",
+  input: z.object({ surface: z.enum(["web", "app"]) }),
+  output: row({ body: z.string() }),
+  handler: async (input, ctx) => {
+    const rows = await ctx.tx.select().from(adTxtEntries);
+    const listed: AdsTxtLine[] = rows
+      .filter((row) => coversSurface(row.surface, input.surface))
+      .map((row) => ({
+        domain: row.domain,
+        accountId: row.accountId,
+        relationship: row.relationship,
+        certificationAuthorityId: row.certificationAuthorityId,
+        surface: row.surface,
+      }));
+    return { body: renderAdsTxtFile(listed, ownerDomainOf()) };
+  },
+});
+
 export default [
   sizes,
   ensureSizes,
@@ -1796,4 +2075,8 @@ export default [
   campaignReport,
   reconcileCampaign,
   invoiceCampaign,
+  saveTxtEntry,
+  txtEntries,
+  deleteTxtEntry,
+  adsTxt,
 ];

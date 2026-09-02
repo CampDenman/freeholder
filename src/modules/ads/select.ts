@@ -32,7 +32,7 @@ export interface DeclaredSize {
 
 export interface CandidateCreative {
   id: string;
-  kind: "image" | "native";
+  kind: "image" | "native" | "html_tag" | "provider";
   assetId: string | null;
   width: number;
   height: number;
@@ -41,6 +41,8 @@ export interface CandidateCreative {
   headline: string | null;
   body: string | null;
   ctaLabel: string | null;
+  tagHtml?: string | null;
+  provider?: unknown;
 }
 
 /** A line item, its campaign's terms, and the artwork it may run. */
