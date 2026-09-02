@@ -1246,6 +1246,7 @@
   "cms.field.noAsset": "Ninguno",
   "cms.field.openingMessage": "Mensaje para completar en WhatsApp",
   "cms.field.pageTitle": "Título",
+  "cms.field.paywallId": "Muro de pago",
   "cms.field.phone": "Número de teléfono marcado",
   "cms.field.prefix": "Ruta de ayuda",
   "cms.field.productId": "Producto",

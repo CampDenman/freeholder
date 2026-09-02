@@ -1246,6 +1246,7 @@
   "cms.field.noAsset": "Aucun",
   "cms.field.openingMessage": "Message à préremplir dans WhatsApp",
   "cms.field.pageTitle": "Titre",
+  "cms.field.paywallId": "Paywall",
   "cms.field.phone": "Numéro de téléphone composé",
   "cms.field.prefix": "Chemin d'aide",
   "cms.field.productId": "Produit",
