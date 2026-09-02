@@ -16,6 +16,7 @@
 import type { ReactNode } from "react";
 import type { z } from "zod";
 import type { Translate } from "@/core/i18n";
+import type { Actor } from "@/core/service";
 import type { FieldHint } from "./fields";
 
 export type BlockContext = "page" | "chrome" | "email";
@@ -25,10 +26,10 @@ export type BlockContext = "page" | "chrome" | "email";
  *
  * Deliberately narrow. A block gets the request's locale and the business
  * profile because those are properties of *where it is being rendered*; it
- * does not get a database handle, an actor, or the ability to call services at
- * will. A block is a pure function from its own validated props to semantic
- * HTML, and blocks that need live data get it through a resolver on the
- * definition (below) rather than by reaching out mid-render.
+ * does not get a database handle or the ability to call services at will.
+ * Who is looking is passed as `actor` so a paywall can ask a service about
+ * this person; the block still goes through `resolve` rather than querying
+ * itself. A block is a function from its validated props to semantic HTML.
  */
 export interface BlockRenderContext {
   locale: string;
@@ -80,6 +81,12 @@ export interface BlockRenderContext {
   experimentAssignments?: Readonly<Record<string, string>>;
   /** First-party visitor id used to assign variants when no assignment exists. */
   visitorId?: string | null;
+  /**
+   * Who is looking, so a paywall can ask entitlements about this person.
+   * Absent means anonymous. Never a database handle: the block still goes
+   * through `resolve` / a service rather than querying itself.
+   */
+  actor?: Actor;
 }
 
 /**
@@ -126,6 +133,7 @@ export interface BlockDefinition<
   includeChildren?: (args: {
     props: z.output<Props>;
     ctx: BlockRenderContext;
+    resolved: Resolved;
   }) => boolean | Promise<boolean>;
   /**
    * Pick which child nodes to render (C2.17). The public surface returns one
@@ -135,6 +143,7 @@ export interface BlockDefinition<
     props: z.output<Props>;
     children: BlockNode[];
     ctx: BlockRenderContext;
+    resolved: Resolved;
   }) => BlockNode[];
   resolve?: (
     props: z.output<Props>,

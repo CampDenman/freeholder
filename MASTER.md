@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.15 paywalls over C9.14 grants. Next after that: C9.16 dunning, then C9.19 ads measurement. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.16 dunning. Next after that: C9.19 ads measurement. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6712,8 +6712,27 @@ customer has one secure, comprehensible home for the relationship.
   of what was held.
   Admin at `/admin/access`. Migration `0142_entitlements.sql`;
   `tests/core/entitlements.test.ts`. Changeset `access-from-grants.md`.)
-- [ ] **C9.15** Build hard/soft/metered/registration paywalls, server-side
+- [x] **C9.15** Build hard/soft/metered/registration paywalls, server-side
   exclusion, anonymous/contact counters, teasers, upsell and accurate SEO markup.
+  (A page does not carry "members only". `Paywall` selects content by kind and
+  selector; `EntitlementGrant` answers for the person looking. The C2.10 block
+  stays the visual gate: without a matching Paywall row it still hides its
+  children, so existing trees do not leak the moment this ships. With a row,
+  `paywalls.evaluate` decides `all` / `preview` / `none` and the renderer
+  either omits children, slices a lead-in, or wraps them in
+  `[data-paywall-gated]`. There is no hidden div.
+  Hard is teaser-only. Soft is the configured lead-in (blocks, paragraphs or
+  percent) then the teaser. Metered counts first-party `anon_id` or
+  `contact_id` in `paywall_meter_counters`, the same function for crawlers as
+  for humans — there is no user-agent argument, because serving Google
+  something a reader cannot get is cloaking. A visitor with no identifier
+  does not get free views. Registration is a signed-in contact, not a grant.
+  JSON-LD names the gated part (`cssSelector: [data-paywall-gated]`) and
+  `isAccessibleForFree: false`; gated children still do not leak into the
+  document head. `seo_policy` is stored as flexible sampling vs fully gated
+  so the markup matches the choice rather than an owner's help-doc judgement.
+  Admin at `/admin/paywalls`. Migration `0143_paywalls.sql`;
+  `tests/core/paywalls.test.ts`. Changeset `paywalls.md`.)
 - [ ] **C9.16** Build dunning retries, grace periods, consented notices, final
   policy actions and access continuity/expiry guarantees.
 

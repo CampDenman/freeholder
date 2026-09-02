@@ -16,7 +16,7 @@
 //   - A path with no published page is a real 404, not a soft one — §5 wants
 //     "clean structural 404s", and a 200 saying "not found" is neither.
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { setupState } from "@/core/settings/service";
@@ -54,6 +54,8 @@ import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
 import { assignmentsFor } from "@/modules/cms/experiments";
 import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
 import { recordExperimentImpressions } from "@/modules/analytics/service";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { CSP_NONCE_HEADER } from "@/core/http/csp";
@@ -256,6 +258,7 @@ export default async function PublicPage({
       ANONYMOUS,
     ).catch(() => undefined);
   }
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
   const rendered = await renderBlocks(blocks, {
     locale,
     t,
@@ -267,6 +270,7 @@ export default async function PublicPage({
         } : null,
     path: path === "" ? "/" : `/${path}`,
     visitorId,
+    actor,
     experimentAssignments,
     localizeHref: business
       ? (href: string) => localizeCustomerHref(href, locale, business)
