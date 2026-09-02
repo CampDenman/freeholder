@@ -11,6 +11,7 @@ import { ServiceError } from "@/core/service";
 import {
   decideCampaign,
   invoiceCampaign,
+  reconcileCampaign,
   reviewCreative,
   saveAdvertiser,
   saveCampaign,
@@ -293,6 +294,17 @@ export async function invoiceCampaignAction(form: FormData): Promise<void> {
   const caller = await actor();
   try {
     await invoiceCampaign.call({ id: text(form, "id") }, caller);
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath("/admin/ads");
+  done();
+}
+
+export async function reconcileCampaignAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  try {
+    await reconcileCampaign.call({ id: text(form, "id") }, caller);
   } catch (error) {
     done(error);
   }

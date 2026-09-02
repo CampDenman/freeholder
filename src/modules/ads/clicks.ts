@@ -42,6 +42,8 @@ export interface ClickClaim {
   url: string;
   /** Unix seconds. Inside the signed material, so it cannot be extended. */
   issuedAt: number;
+  /** The slot this fill was shown in, so a click rollup can name the position. */
+  slotId?: string;
 }
 
 function secret(): string {
@@ -71,7 +73,12 @@ function mac(payload: string): Buffer {
  */
 export function signClickToken(claim: ClickClaim): string {
   const payload = Buffer.from(
-    JSON.stringify({ c: claim.creativeId, u: claim.url, t: claim.issuedAt }),
+    JSON.stringify({
+      c: claim.creativeId,
+      u: claim.url,
+      t: claim.issuedAt,
+      ...(claim.slotId ? { s: claim.slotId } : {}),
+    }),
     "utf8",
   ).toString("base64url");
   return `${payload}.${mac(payload).toString("base64url")}`;
@@ -107,7 +114,7 @@ export function verifyClickToken(token: string, nowSeconds: number): ClickClaim 
     return null;
   }
   if (typeof claim !== "object" || claim === null) return null;
-  const bag = claim as { c?: unknown; u?: unknown; t?: unknown };
+  const bag = claim as { c?: unknown; u?: unknown; t?: unknown; s?: unknown };
   if (typeof bag.c !== "string" || typeof bag.u !== "string") return null;
   if (typeof bag.t !== "number" || !Number.isFinite(bag.t)) return null;
 
@@ -118,7 +125,12 @@ export function verifyClickToken(token: string, nowSeconds: number): ClickClaim 
   // way it is not one we are willing to honour.
   if (bag.t - nowSeconds > 60) return null;
 
-  return { creativeId: bag.c, url: bag.u, issuedAt: bag.t };
+  return {
+    creativeId: bag.c,
+    url: bag.u,
+    issuedAt: bag.t,
+    ...(typeof bag.s === "string" ? { slotId: bag.s } : {}),
+  };
 }
 
 /**

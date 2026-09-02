@@ -35,6 +35,7 @@
 import { z } from "zod";
 import { defineBlock } from "@/modules/cms/blocks/types";
 import type { ResolvedImage } from "@/core/media/service";
+import { AdBeacon } from "./AdBeacon";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -54,6 +55,9 @@ interface ServedFill {
     ctaLabel: string | null;
     href: string;
     label: "sponsored" | "house";
+    lineItemId: string;
+    campaignId: string;
+    slotId: string;
   } | null;
 }
 
@@ -142,6 +146,7 @@ export const adSlot = defineBlock({
               <p className="text-xs uppercase tracking-wide text-ink-muted">
                 {ctx.t(`ads.label.${creative.label}`)}
               </p>
+              <AdBeacon creativeId={creative.id} slotId={creative.slotId}>
               <a
                 href={creative.href}
                 // `sponsored` is the declaration §4.16 asks for; `nofollow`
@@ -182,6 +187,7 @@ export const adSlot = defineBlock({
                   </span>
                 )}
               </a>
+              </AdBeacon>
             </div>
           );
         })}

@@ -24,6 +24,7 @@
 // system, which is the whole point of the spine (§4.1).
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -156,6 +157,9 @@ export const adCampaigns = pgTable(
       .notNull()
       .default("even"),
     invoiceId: uuid("invoice_id"),
+    /** When C9.19 last reconciled delivered vs booked on that invoice. */
+    reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+    reconciledDeliveredMinor: integer("reconciled_delivered_minor"),
     /** Higher wins the slot when several line items are eligible. */
     priority: integer("priority").notNull().default(0),
     /**
@@ -282,5 +286,42 @@ export const adCreatives = pgTable(
     index("ad_creatives_line_item_idx").on(t.lineItemId),
     // The serving query's shape: everything eligible, in one pass.
     index("ad_creatives_servable_idx").on(t.status, t.reviewState),
+  ],
+);
+
+/**
+ * Daily rollup from the event stream (MASTER.md §4.16, C9.19).
+ *
+ * "AdStat is a rollup, not the source. Events stream into analytics; a job
+ * aggregates daily. Reporting reads the rollup, so a busy month does not
+ * turn the advertiser report into a table scan, and the raw events remain
+ * for auditing a disputed invoice."
+ */
+export const adStats = pgTable(
+  "ad_stats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lineItemId: uuid("line_item_id")
+      .notNull()
+      .references(() => adLineItems.id, { onDelete: "cascade" }),
+    creativeId: uuid("creative_id")
+      .notNull()
+      .references(() => adCreatives.id, { onDelete: "cascade" }),
+    slotId: uuid("slot_id")
+      .notNull()
+      .references(() => adSlots.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    impressions: integer("impressions").notNull().default(0),
+    viewableImpressions: integer("viewable_impressions").notNull().default(0),
+    uniques: integer("uniques").notNull().default(0),
+    clicks: integer("clicks").notNull().default(0),
+    spendCents: integer("spend_cents").notNull().default(0),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("ad_stats_grain_idx").on(t.lineItemId, t.creativeId, t.slotId, t.day),
+    index("ad_stats_day_idx").on(t.day),
+    index("ad_stats_line_item_idx").on(t.lineItemId),
   ],
 );

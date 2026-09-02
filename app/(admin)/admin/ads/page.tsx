@@ -15,13 +15,11 @@
 // reason the advertiser is a Contact: selling an ad is selling a product, and
 // the owner is standing in front of the campaign when they decide to bill it.
 //
-// What is still missing is the counting — impressions, viewability and the
-// daily rollup are C9.19 — so the screen says so rather than leaving an owner
-// to wonder why a live campaign reports nothing.
+// C9.19 counts: each campaign shows what it delivered, and a per-thousand
+// or per-click buy can be reconciled against those numbers on the same invoice.
 import type { Metadata } from "next";
 import {
   Button,
-  Callout,
   Card,
   CardBody,
   CardHeader,
@@ -36,6 +34,7 @@ import { listContacts } from "@/core/contacts/service";
 import { listAssets } from "@/core/media/service";
 import {
   advertiserList,
+  campaignReport,
   campaigns,
   creatives as campaignCreatives,
   lineItems,
@@ -48,6 +47,7 @@ import { domainOrNull } from "../../read-helpers";
 import {
   decideCampaignAction,
   invoiceCampaignAction,
+  reconcileCampaignAction,
   reviewCreativeAction,
   saveAdvertiserAction,
   saveCampaignAction,
@@ -112,6 +112,15 @@ export default async function AdsPage({
     domainOrNull(listContacts.call({ limit: 200 }, actor)),
   ]);
 
+  const reports = await Promise.all(
+    (sold ?? []).map((campaign) =>
+      domainOrNull(campaignReport.call({ campaignId: campaign.id }, actor)),
+    ),
+  );
+  const reportOf = new Map(
+    (sold ?? []).map((campaign, index) => [campaign.id, reports[index]]),
+  );
+
   const openCampaign = query.campaign ?? (sold ?? [])[0]?.id ?? null;
   const [items, art, images] = openCampaign
     ? await Promise.all([
@@ -145,11 +154,6 @@ export default async function AdsPage({
           {query.error}
         </p>
       ) : null}
-
-      {/* Said once, plainly. Ads run now; nothing is counted yet, and a live
-          campaign reporting nothing is otherwise read as a bug rather than as
-          the next piece of work. */}
-      <Callout tone="neutral">{t("ads.notCountingYet")}</Callout>
 
       <Card>
         <CardHeader title={t("ads.slots")} />
@@ -329,6 +333,15 @@ export default async function AdsPage({
                     {campaign.startsAt ? (
                       <span className="text-ink-muted">{when(campaign.startsAt)}</span>
                     ) : null}
+                    {reportOf.get(campaign.id) ? (
+                      <span className="text-ink-muted">
+                        {t("ads.report.summary", {
+                          impressions: String(reportOf.get(campaign.id)!.impressions),
+                          viewable: String(reportOf.get(campaign.id)!.viewableImpressions),
+                          clicks: String(reportOf.get(campaign.id)!.clicks),
+                        })}
+                      </span>
+                    ) : null}
 
                     {/* §4.16 bounds this by editorial honesty: a campaign is
                         approved or rejected before it may run, and the state
@@ -396,6 +409,14 @@ export default async function AdsPage({
                         </Button>
                       </form>
                     )}
+                    {campaign.pricing === "cpm" || campaign.pricing === "cpc" ? (
+                      <form action={reconcileCampaignAction}>
+                        <input type="hidden" name="id" value={campaign.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("ads.action.reconcile")}
+                        </Button>
+                      </form>
+                    ) : null}
                     <form method="get" className="ms-auto">
                       <input type="hidden" name="campaign" value={campaign.id} />
                       <Button type="submit" variant="quiet">
