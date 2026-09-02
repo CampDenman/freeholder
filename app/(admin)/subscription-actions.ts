@@ -55,6 +55,26 @@ export async function savePlanAction(form: FormData): Promise<void> {
           | "period_end"
           | "immediate",
         status: (text(form, "status") || "draft") as "draft" | "active" | "archived",
+        ...(text(form, "dunningEnabled") === "yes"
+          ? {
+              dunning: {
+                retries: (() => {
+                  const days = text(form, "dunningRetries")
+                    .split(/[,\s]+/)
+                    .map(Number)
+                    .filter((day) => Number.isFinite(day) && day >= 0);
+                  return days.length > 0 ? days : [3, 7, 14];
+                })(),
+                graceDays: digits(form, "dunningGraceDays", 14),
+                notifyChannels: ["email" as const],
+                finalAction: (text(form, "dunningFinalAction") || "pause") as
+                  | "pause"
+                  | "cancel"
+                  | "downgrade",
+                downgradeToPlanId: text(form, "dunningDowngradeToPlanId") || null,
+              },
+            }
+          : {}),
       },
       caller,
     );

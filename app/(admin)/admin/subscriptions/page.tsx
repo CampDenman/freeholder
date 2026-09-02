@@ -225,6 +225,68 @@ export default async function SubscriptionsPage({
                 <option value="immediate">{t("subscriptions.cancel.immediate")}</option>
               </Select>
             </Field>
+            <Field
+              label={t("subscriptions.dunning.enable")}
+              htmlFor="dunningEnabled"
+              hint={t("subscriptions.dunning.hint")}
+            >
+              <Select
+                id="dunningEnabled"
+                name="dunningEnabled"
+                defaultValue={chosen?.dunning ? "yes" : "no"}
+              >
+                <option value="no">{t("subscriptions.dunning.off")}</option>
+                <option value="yes">{t("subscriptions.dunning.on")}</option>
+              </Select>
+            </Field>
+            <Field
+              label={t("subscriptions.dunning.retries")}
+              htmlFor="dunningRetries"
+              hint={t("subscriptions.dunning.retriesHint")}
+            >
+              <Input
+                id="dunningRetries"
+                name="dunningRetries"
+                defaultValue={(chosen?.dunning?.retries ?? [3, 7, 14]).join(", ")}
+              />
+            </Field>
+            <Field label={t("subscriptions.dunning.graceDays")} htmlFor="dunningGraceDays">
+              <Input
+                id="dunningGraceDays"
+                name="dunningGraceDays"
+                type="number"
+                min={0}
+                max={365}
+                defaultValue={chosen?.dunning?.graceDays ?? 14}
+              />
+            </Field>
+            <Field label={t("subscriptions.dunning.finalAction")} htmlFor="dunningFinalAction">
+              <Select
+                id="dunningFinalAction"
+                name="dunningFinalAction"
+                defaultValue={chosen?.dunning?.finalAction ?? "pause"}
+              >
+                <option value="pause">{t("subscriptions.dunning.action.pause")}</option>
+                <option value="cancel">{t("subscriptions.dunning.action.cancel")}</option>
+                <option value="downgrade">{t("subscriptions.dunning.action.downgrade")}</option>
+              </Select>
+            </Field>
+            <Field label={t("subscriptions.dunning.downgradePlan")} htmlFor="dunningDowngradeToPlanId">
+              <Select
+                id="dunningDowngradeToPlanId"
+                name="dunningDowngradeToPlanId"
+                defaultValue={chosen?.dunning?.downgradeToPlanId ?? ""}
+              >
+                <option value="">{t("subscriptions.dunning.noDowngrade")}</option>
+                {(plans ?? [])
+                  .filter((plan) => plan.id !== chosen?.id)
+                  .map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
             <div className="self-end">
               <Button type="submit">{t("subscriptions.action.savePlan")}</Button>
             </div>
@@ -304,9 +366,18 @@ export default async function SubscriptionsPage({
                   {subscription.cancelAtPeriodEnd && subscription.status !== "expired" ? (
                     <Pill tone="warning">{t("subscriptions.leaving")}</Pill>
                   ) : null}
+                  {subscription.status === "past_due" && subscription.graceEndsAt ? (
+                    <span className="text-ink-muted">
+                      {t("subscriptions.dunning.accessUntil", {
+                        date: when(subscription.graceEndsAt),
+                      })}
+                    </span>
+                  ) : null}
 
                   <span className="ms-auto flex flex-wrap gap-2">
-                    {subscription.status === "active" || subscription.status === "trialing" ? (
+                    {subscription.status === "active" ||
+                    subscription.status === "trialing" ||
+                    subscription.status === "past_due" ? (
                       <form action={pauseSubscriptionAction}>
                         <input type="hidden" name="id" value={subscription.id} />
                         <Button type="submit" variant="quiet">

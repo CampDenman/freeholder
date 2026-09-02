@@ -56,6 +56,11 @@ const INTERNAL = [
   // something anybody did: a job finds what is due and raises the invoice on
   // nobody's behalf, long after the person who subscribed has gone.
   "subscriptions.renewDue",
+  // The dunning sweep (C9.16). System because a retry offset expiring is not
+  // something anybody did: a job finds who is past due and sends the notice
+  // or takes the final action on nobody's behalf.
+  "subscriptions.advanceDunning",
+  "subscriptions.recoverDunning",
 ] as const;
 
 const wildcard: Actor = {
