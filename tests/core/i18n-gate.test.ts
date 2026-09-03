@@ -54,6 +54,12 @@ import {
   GAP_REASONS,
   KNOWLEDGE_KINDS,
 } from "@/modules/assistant/contract";
+import {
+  SOCIAL_APPROVAL_POLICIES,
+  SOCIAL_ASSIGNMENTS,
+  SOCIAL_HEALTH,
+  SOCIAL_PROFILE_STATUSES,
+} from "@/modules/social/contract";
 import { ASSISTANT_ACTION_IDS } from "@/modules/assistant/actions";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
 import { WRITE_KINDS } from "@/core/agents/previews";
@@ -255,6 +261,10 @@ describe("the families built from a template key", () => {
     ["assistant.knowledgeKind", KNOWLEDGE_KINDS],
     ["assistant.tone", ASSISTANT_TONES],
     ["assistant.gapReason", GAP_REASONS],
+    ["social.status", SOCIAL_PROFILE_STATUSES],
+    ["social.health", SOCIAL_HEALTH],
+    ["social.assignment", SOCIAL_ASSIGNMENTS],
+    ["social.approval", SOCIAL_APPROVAL_POLICIES],
     [
       "imports.status",
       IMPORT_STATUSES,

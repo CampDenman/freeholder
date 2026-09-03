@@ -30,8 +30,10 @@ or backlog.
   state claim on a second connection before exchanging the provider code,
   because provider codes are single-use and rolling the claim back would
   advertise an impossible retry. The rationale and its pool-deadlock caveat
-  live at the call site in `src/core/mail/oauth.ts`. Do not add a second
-  exception without recording it here.
+  live at the call site in `src/core/mail/oauth.ts`. The same pattern, for the
+  same reason, is used by `connections.completeCalendarOAuth` and
+  `social.completeOAuth`. Do not add another exception without recording it
+  here.
 - **Single-tenant.** One deploy = one business. No tenant-isolation
   abstractions.
 - **Monolith + toggleable modules.** No microservices. Adapters for the

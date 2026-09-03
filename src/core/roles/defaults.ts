@@ -29,6 +29,7 @@ const ADMIN_MODULES = [
   "analytics",
   "apikeys",
   "assistant",
+  "social",
   "catalog",
   "cms",
   "connections",

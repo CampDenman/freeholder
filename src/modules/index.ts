@@ -40,6 +40,7 @@ import automationsManifest from "@/modules/automations/manifest";
 import reportingManifest from "@/modules/reporting/manifest";
 import subscriptionsManifest from "@/modules/subscriptions/manifest";
 import assistantManifest from "@/modules/assistant/manifest";
+import socialManifest from "@/modules/social/manifest";
 import giftRegistryManifest from "../../plugins/gift-registry/manifest";
 import printOnDemandManifest from "../../plugins/print-on-demand/manifest";
 import communityManifest from "../../plugins/community/manifest";
@@ -72,6 +73,7 @@ const manifests: ModuleManifest[] = [
   reportingManifest,
   subscriptionsManifest,
   assistantManifest,
+  socialManifest,
   loyaltyManifest,
   referralsManifest,
   giftRegistryManifest,
