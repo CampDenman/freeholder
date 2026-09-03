@@ -34,6 +34,13 @@ import {
   schedulePublications,
   variantList,
 } from "./compose";
+import {
+  attributionReport,
+  runGbpJob,
+  syncGbp,
+  syncGbpHours,
+  syncGbpReviews,
+} from "./gbp";
 
 const EXPIRING_MS = 48 * 60 * 60 * 1000;
 
@@ -468,6 +475,11 @@ export {
   publishDue,
   publicationCalendar,
   runPublishJob,
+  syncGbpHours,
+  syncGbpReviews,
+  syncGbp,
+  attributionReport,
+  runGbpJob,
 };
 
 export default [
@@ -492,4 +504,8 @@ export default [
   schedulePublications,
   publishDue,
   publicationCalendar,
+  syncGbpHours,
+  syncGbpReviews,
+  syncGbp,
+  attributionReport,
 ];

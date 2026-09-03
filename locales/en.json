@@ -5114,5 +5114,12 @@
   "social.publicationStatus.drafted": "Drafted",
   "social.publicationStatus.scheduled": "Scheduled",
   "social.publicationStatus.published": "Published",
-  "social.publicationStatus.failed": "Failed"
+  "social.publicationStatus.failed": "Failed",
+  "social.action.syncGbp": "Sync Google Business Profile",
+  "social.attribution": "Outbound social",
+  "social.attributionHint": "Visits that arrived from a published post, the contacts those visitors became, and the revenue those contacts paid.",
+  "social.attributionEmpty": "No attributed visits yet.",
+  "social.attributionVisitors": "Visits",
+  "social.attributionContacts": "Contacts",
+  "social.attributionRevenue": "Revenue (minor units)"
 }

@@ -25,6 +25,8 @@ export default defineModule({
       "social.ingested",
       "social.variantsCreated",
       "social.scheduled",
+      "social.gbpHoursSynced",
+      "social.gbpReviewsSynced",
     ],
   },
 });

@@ -29,6 +29,7 @@ import { contacts } from "@/core/contacts/schema";
 import { conversations } from "@/core/messaging/schema";
 import { assets } from "@/core/media/schema";
 import { businessLocations } from "@/core/locations/schema";
+import { reviews } from "@/modules/reviews/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import {
   SOCIAL_APPROVAL_POLICIES,
@@ -249,6 +250,8 @@ export const socialPublications = pgTable(
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
     idempotencyKey: text("idempotency_key"),
+    /** First-party URL stamped on publish so visits close the loop (C9.27). */
+    canonicalUrl: text("canonical_url"),
     createdAt: createdAtColumn(),
   },
   (t) => [
@@ -291,6 +294,26 @@ export const socialInteractions = pgTable(
     uniqueIndex("social_interactions_ref_idx").on(t.providerRef),
     index("social_interactions_contact_idx").on(t.contactId),
     index("social_interactions_package_idx").on(t.packageId),
+  ],
+);
+
+export const socialGbpReviews = pgTable(
+  "social_gbp_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reviewId: uuid("review_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => socialProfiles.id, { onDelete: "cascade" }),
+    providerRef: text("provider_ref").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("social_gbp_reviews_ref_idx").on(t.providerRef),
+    uniqueIndex("social_gbp_reviews_review_idx").on(t.reviewId),
+    index("social_gbp_reviews_profile_idx").on(t.profileId),
   ],
 );
 

@@ -24,8 +24,8 @@ import { contacts } from "@/core/contacts/schema";
 import { assets } from "@/core/media/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
-/** §4.6: post_booking / post_order / manual. */
-export const REVIEW_SOURCES = ["post_order", "post_booking", "manual"] as const;
+/** §4.6: post_booking / post_order / manual. C9.27 adds google_business. */
+export const REVIEW_SOURCES = ["post_order", "post_booking", "manual", "google_business"] as const;
 
 /**
  * `pending` is unread, `approved` is public, `hidden` is read and withheld,
@@ -98,7 +98,8 @@ export const reviews = pgTable(
     index("reviews_contact_idx").on(t.contactId),
     index("reviews_status_idx").on(t.status, t.createdAt),
     check("reviews_rating", sql`${t.rating} between 1 and 5`),
-    check("reviews_body", sql`char_length(${t.body}) between 1 and 5000`),
+    // C9.27: Google Business Profile allows a star rating with no comment.
+    check("reviews_body", sql`char_length(${t.body}) between 0 and 5000`),
     check(
       "reviews_reply",
       sql`(${t.replyBody} is null and ${t.replyAt} is null) or (${t.replyBody} is not null and ${t.replyAt} is not null)`,

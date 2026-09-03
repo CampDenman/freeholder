@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.27 GBP. Next after that: C9.28 sharing. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.28 sharing. Next after that: C9.29 scoped sharing and embeds. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6976,8 +6976,17 @@ customer has one secure, comprehensible home for the relationship.
   `social.publicationCalendar` is the one calendar. Migration
   `0152_social_composer.sql`. Tests in
   `tests/modules/social-composer.test.ts`. Changeset `social-composer.md`.)
-- [ ] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
+- [x] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
   outbound social links to visits, contacts and revenue.
+  (`social.syncGbp` pulls owned GBP posts through ingest, pushes
+  `OpeningHours` via `social.syncGbpHours`, and imports reviews through
+  `reviews.ingestExternal` with source `google_business` — a reviewer email
+  resolves onto the contact spine, a handle does not. `social.publishDue`
+  stamps a first-party `utm_source`/`utm_medium=social`/`utm_campaign`
+  canonical URL on every publication. `social.attributionReport` joins
+  those visits to identified contacts and paid invoices. Migration
+  `0153_social_gbp.sql`. Tests in `tests/modules/social-gbp.test.ts`.
+  Changeset `social-gbp.md`.)
 - [ ] **C9.28** Build universal `ShareTarget`, native/channel intents, generated
   OG assets, tracked short links and entity-level controls.
 - [ ] **C9.29** Build scoped gallery/quote/product gift-registry sharing and

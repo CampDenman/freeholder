@@ -12,6 +12,7 @@ import { socialFetch, socialJson } from "./http";
 import type {
   SocialAdapter,
   SocialCapabilities,
+  SocialExternalReview,
   SocialIdentity,
   SocialInteraction,
   SocialOAuthTokens,
@@ -33,6 +34,8 @@ export interface SocialNetworkSpec {
   parseIdentity: (body: unknown) => SocialIdentity;
   ownedPostsUrl?: string;
   interactionUrl?: (postId: string) => string;
+  reviewsUrl?: string;
+  hoursUrl?: string;
 }
 
 function asRecord(body: unknown): Record<string, unknown> {
@@ -87,6 +90,54 @@ function parseOwnedPosts(body: unknown): SocialOwnedPost[] {
     });
   }
   return posts;
+}
+
+const STAR_NAMES: Record<string, number> = {
+  ONE: 1,
+  TWO: 2,
+  THREE: 3,
+  FOUR: 4,
+  FIVE: 5,
+};
+
+function parseRating(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return Math.min(5, Math.max(1, Math.round(raw) || 1));
+  }
+  if (typeof raw === "string") {
+    const named = STAR_NAMES[raw.toUpperCase()];
+    if (named) return named;
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+      return Math.min(5, Math.max(1, Math.round(numeric) || 1));
+    }
+  }
+  return 1;
+}
+
+function parseReviews(body: unknown): SocialExternalReview[] {
+  const items: SocialExternalReview[] = [];
+  for (const entry of asList(body)) {
+    const row = asRecord(entry);
+    const id = recordField(row, "id", "providerRef", "reviewId");
+    if (!id) continue;
+    const reviewer = nestedRecord(row, "reviewer");
+    const email =
+      recordField(row, "email") ?? recordField(reviewer, "email");
+    items.push({
+      providerRef: id,
+      rating: parseRating(row.starRating ?? row.rating),
+      body: recordField(row, "comment", "text", "body") ?? "",
+      displayName:
+        recordField(row, "displayName", "name") ??
+        recordField(reviewer, "displayName", "name"),
+      email: email && email.includes("@") ? email.toLowerCase() : null,
+      occurredAt:
+        recordField(row, "createTime", "timestamp", "occurredAt") ??
+        new Date().toISOString(),
+    });
+  }
+  return items;
 }
 
 function parseInteractions(
@@ -248,6 +299,28 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
         headers: { authorization: `Bearer ${accessToken}` },
       });
       return parseInteractions(await socialJson(response, spec.id), postProviderRef);
+    },
+    async listReviews(accessToken) {
+      requireReady();
+      if (!spec.reviewsUrl) return [];
+      const response = await socialFetch(spec.id, spec.reviewsUrl, {
+        method: "GET",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      return parseReviews(await socialJson(response, spec.id));
+    },
+    async pushHours(accessToken, periods) {
+      requireReady();
+      if (!spec.hoursUrl) return;
+      const response = await socialFetch(spec.id, spec.hoursUrl, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ periods }),
+      });
+      await socialJson(response, spec.id);
     },
     async health(accessToken) {
       try {

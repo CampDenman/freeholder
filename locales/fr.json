@@ -5114,5 +5114,12 @@
   "social.publicationStatus.drafted": "Brouillon",
   "social.publicationStatus.scheduled": "Planifiée",
   "social.publicationStatus.published": "Publiée",
-  "social.publicationStatus.failed": "Échec"
+  "social.publicationStatus.failed": "Échec",
+  "social.action.syncGbp": "Synchroniser Google Business Profile",
+  "social.attribution": "Réseaux sociaux sortants",
+  "social.attributionHint": "Visites arrivées depuis une publication, les contacts que ces visiteurs sont devenus, et le revenu que ces contacts ont payé.",
+  "social.attributionEmpty": "Aucune visite attribuée pour l'instant.",
+  "social.attributionVisitors": "Visites",
+  "social.attributionContacts": "Contacts",
+  "social.attributionRevenue": "Revenu (unités mineures)"
 }

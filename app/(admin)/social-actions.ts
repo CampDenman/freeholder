@@ -21,6 +21,7 @@ import {
   reviewVariant,
   schedulePublications,
   publishDue,
+  syncGbp,
 } from "@/modules/social/service";
 import { ownerFacing } from "./action-helpers";
 
@@ -182,6 +183,16 @@ export async function scheduleSocialAction(form: FormData): Promise<void> {
   try {
     await schedulePublications.call({ variantIds }, await actor());
     await publishDue.call({}, await actor());
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(SOCIAL);
+  done();
+}
+
+export async function syncGbpAction(form: FormData): Promise<void> {
+  try {
+    await syncGbp.call({ profileId: text(form, "id") }, await actor());
   } catch (error) {
     done(error);
   }

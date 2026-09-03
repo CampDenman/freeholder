@@ -21,6 +21,7 @@ import {
   SOCIAL_PUBLICATION_STATUSES,
   SOCIAL_VARIANT_STATUSES,
 } from "./contract";
+import { outboundCampaignUrl } from "./gbp";
 import { clipCaption, parseHashtags, policyFor } from "./policy";
 import { clipVideo, cropStill, stillThumbnail } from "./render";
 import {
@@ -61,6 +62,7 @@ const publicationRow = row({
   scheduledAt: timestamp.nullable(),
   publishedAt: timestamp.nullable(),
   lastError: z.string().nullable(),
+  canonicalUrl: z.string().nullable(),
   createdAt: timestamp,
 });
 
@@ -427,6 +429,7 @@ function presentPublication(row: typeof socialPublications.$inferSelect) {
     scheduledAt: row.scheduledAt,
     publishedAt: row.publishedAt,
     lastError: row.lastError,
+    canonicalUrl: row.canonicalUrl,
     createdAt: row.createdAt,
   };
 }
@@ -482,9 +485,14 @@ export const publishDue = defineService({
             altText: asset.altText ?? undefined,
           });
         }
+        const tracked = outboundCampaignUrl(publication.id, profile.provider);
+        const policy = policyFor(profile.provider);
+        const room = Math.max(0, policy.captionLimit - tracked.length - 1);
+        const clipped = clipCaption(variant.caption, room);
+        const text = clipped ? `${clipped}\n${tracked}` : tracked;
         const result = await adapter.publish({
           accountRef: token,
-          text: variant.caption,
+          text,
           media,
           idempotencyKey: publication.idempotencyKey ?? publication.id,
         });
@@ -496,9 +504,19 @@ export const publishDue = defineService({
             publishedAt: new Date(),
             attempts: publication.attempts + 1,
             lastError: null,
+            canonicalUrl: tracked,
           })
           .where(eq(socialPublications.id, publication.id))
           .returning();
+        await ctx.tx
+          .update(socialPackages)
+          .set({ canonicalUrl: tracked, updatedAt: new Date() })
+          .where(
+            and(
+              eq(socialPackages.id, publication.packageId),
+              sql`${socialPackages.canonicalUrl} is null`,
+            ),
+          );
         out.push(presentPublication(saved!));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Publish failed.";

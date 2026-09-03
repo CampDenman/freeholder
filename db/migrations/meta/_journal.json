@@ -1072,6 +1072,13 @@
       "when": 1790784000000,
       "tag": "0152_social_composer",
       "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1790870400000,
+      "tag": "0153_social_gbp",
+      "breakpoints": true
     }
   ]
 }

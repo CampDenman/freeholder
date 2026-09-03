@@ -9,4 +9,5 @@ export {
   socialPublications,
   socialInteractions,
   socialVariants,
+  socialGbpReviews,
 } from "./schema";

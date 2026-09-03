@@ -19,6 +19,7 @@ import {
   SOCIAL_ASSIGNMENTS,
 } from "@/modules/social/contract";
 import {
+  attributionReport,
   interactionList,
   networks,
   packageList,
@@ -42,6 +43,7 @@ import {
   reviewVariantAction,
   scheduleSocialAction,
   setSocialPolicyAction,
+  syncGbpAction,
 } from "../../social-actions";
 
 export const dynamic = "force-dynamic";
@@ -67,7 +69,7 @@ export default async function SocialPage({
   searchParams: Promise<{ saved?: string; error?: string; social?: string }>;
 }) {
   const actor = await requireStaffActor("social", "manage");
-  const [t, known, connected, staff, places, packs, threads, variants, calendar, query] = await Promise.all([
+  const [t, known, connected, staff, places, packs, threads, variants, calendar, attributed, query] = await Promise.all([
     getT(),
     domainOrNull(networks.call({}, actor)),
     domainOrNull(profiles.call({}, actor)),
@@ -77,6 +79,7 @@ export default async function SocialPage({
     domainOrNull(interactionList.call({}, actor)),
     domainOrNull(variantList.call({}, actor)),
     domainOrNull(publicationCalendar.call({}, actor)),
+    domainOrNull(attributionReport.call({ days: 30 }, actor)),
     searchParams,
   ]);
 
@@ -286,6 +289,14 @@ export default async function SocialPage({
                         </Button>
                       </form>
                     ) : null}
+                    {profile.status === "active" && profile.provider === "google_business" ? (
+                      <form action={syncGbpAction}>
+                        <input type="hidden" name="id" value={profile.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("social.action.syncGbp")}
+                        </Button>
+                      </form>
+                    ) : null}
                     <form action={healthSocialAction}>
                       <input type="hidden" name="id" value={profile.id} />
                       <Button type="submit" variant="quiet">
@@ -452,6 +463,36 @@ export default async function SocialPage({
                   {entry.providerRef ? (
                     <span className="font-mono text-xs text-ink-muted">{entry.providerRef}</span>
                   ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("social.attribution")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("social.attributionHint")}</p>
+          {(attributed ?? []).length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("social.attributionEmpty")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-2 p-0">
+              {(attributed ?? []).map((row) => (
+                <li
+                  key={`${row.source}:${row.campaign ?? ""}`}
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-rule p-3 text-sm"
+                >
+                  <span className="font-medium">{row.source}</span>
+                  <span className="text-xs text-ink-muted">
+                    {t("social.attributionVisitors")}: {row.visitors}
+                  </span>
+                  <span className="text-xs text-ink-muted">
+                    {t("social.attributionContacts")}: {row.contacts}
+                  </span>
+                  <span className="text-xs text-ink-muted">
+                    {t("social.attributionRevenue")}: {row.revenueMinor}
+                  </span>
                 </li>
               ))}
             </ul>

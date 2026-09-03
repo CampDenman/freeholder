@@ -5114,5 +5114,12 @@
   "social.publicationStatus.drafted": "Borrador",
   "social.publicationStatus.scheduled": "Programada",
   "social.publicationStatus.published": "Publicada",
-  "social.publicationStatus.failed": "Falló"
+  "social.publicationStatus.failed": "Falló",
+  "social.action.syncGbp": "Sincronizar Google Business Profile",
+  "social.attribution": "Redes sociales de salida",
+  "social.attributionHint": "Visitas que llegaron desde una publicación, los contactos en que se convirtieron y el ingreso que pagaron.",
+  "social.attributionEmpty": "Aún no hay visitas atribuidas.",
+  "social.attributionVisitors": "Visitas",
+  "social.attributionContacts": "Contactos",
+  "social.attributionRevenue": "Ingresos (unidades menores)"
 }
