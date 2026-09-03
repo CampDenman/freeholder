@@ -49,7 +49,12 @@ export async function periodSpend(
  * the module refused the act, and the words still went out. Counting it as a
  * non-reply would let a visitor whose every turn is refused talk forever.
  */
-export const REPLYING_OUTCOMES = ["answered", "refused_scope"] as const;
+export const REPLYING_OUTCOMES = [
+  "answered",
+  "refused_scope",
+  "refused_topic",
+  "refused_invention",
+] as const;
 
 /** Answers given across the whole site in the last hour. */
 export async function repliesInLastHour(tx: Tx): Promise<number> {

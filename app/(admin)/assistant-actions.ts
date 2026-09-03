@@ -11,9 +11,12 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
+import { parseTopics } from "@/modules/assistant/guardrails";
 import {
   deleteKnowledge,
+  dismissGap,
   reindex,
+  saveGapAsKnowledge,
   saveKnowledge,
   setScope,
   updateSettings,
@@ -79,6 +82,15 @@ export async function saveAssistantAction(form: FormData): Promise<void> {
               : "month",
         repliesPerConversation: digits(form, "repliesPerConversation", 20),
         repliesPerHour: digits(form, "repliesPerHour", 60),
+        tone:
+          text(form, "tone") === "friendly"
+            ? "friendly"
+            : text(form, "tone") === "brief"
+              ? "brief"
+              : "professional",
+        refuseTopics: parseTopics(text(form, "refuseTopics")),
+        escalateTopics: parseTopics(text(form, "escalateTopics")),
+        contactFormPath: optional(form, "contactFormPath"),
       },
       await actor(),
     );
@@ -121,6 +133,36 @@ export async function deleteKnowledgeAction(form: FormData): Promise<void> {
 export async function reindexAssistantAction(): Promise<void> {
   try {
     await reindex.call({}, await actor());
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(ASSISTANT);
+  done();
+}
+
+export async function saveGapAsKnowledgeAction(form: FormData): Promise<void> {
+  try {
+    await saveGapAsKnowledge.call(
+      {
+        id: text(form, "id"),
+        title: text(form, "title"),
+        body: text(form, "body"),
+        kind: (text(form, "kind") || "qa") as "qa" | "fact" | "policy",
+        locale: text(form, "locale") || "en",
+        enabled: true,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(ASSISTANT);
+  done();
+}
+
+export async function dismissGapAction(form: FormData): Promise<void> {
+  try {
+    await dismissGap.call({ id: text(form, "id") }, await actor());
   } catch (error) {
     done(error);
   }

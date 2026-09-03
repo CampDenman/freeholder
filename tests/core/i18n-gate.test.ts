@@ -49,7 +49,9 @@ import { IMPORT_STATUSES, PLUGIN_STATUSES } from "@/core/plugins/schema";
 import {
   ASSISTANT_PROVIDERS,
   ASSISTANT_SPEND_PERIODS,
+  ASSISTANT_TONES,
   ASSISTANT_TURN_OUTCOMES,
+  GAP_REASONS,
   KNOWLEDGE_KINDS,
 } from "@/modules/assistant/contract";
 import { ASSISTANT_ACTION_IDS } from "@/modules/assistant/actions";
@@ -251,6 +253,8 @@ describe("the families built from a template key", () => {
     ["assistant.scope", ASSISTANT_ACTION_IDS],
     ["assistant.scopeHint", ASSISTANT_ACTION_IDS],
     ["assistant.knowledgeKind", KNOWLEDGE_KINDS],
+    ["assistant.tone", ASSISTANT_TONES],
+    ["assistant.gapReason", GAP_REASONS],
     [
       "imports.status",
       IMPORT_STATUSES,

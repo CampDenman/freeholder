@@ -34,9 +34,16 @@ import { formatMoney } from "@/core/i18n";
 import {
   ASSISTANT_PROVIDERS,
   ASSISTANT_SPEND_PERIODS,
+  ASSISTANT_TONES,
   KNOWLEDGE_KINDS,
 } from "@/modules/assistant/contract";
-import { knowledgeList, scopes, settings, turns } from "@/modules/assistant/service";
+import {
+  knowledgeGapList,
+  knowledgeList,
+  scopes,
+  settings,
+  turns,
+} from "@/modules/assistant/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -46,6 +53,8 @@ import {
   deleteKnowledgeAction,
   reindexAssistantAction,
   setAssistantScopeAction,
+  saveGapAsKnowledgeAction,
+  dismissGapAction,
 } from "../../assistant-actions";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +67,8 @@ const OUTCOME_TONES = {
   refused_spend: "warning",
   refused_rate: "warning",
   refused_conversation_cap: "warning",
+  refused_topic: "warning",
+  refused_invention: "warning",
   unconfigured: "neutral",
   failed: "danger",
 } as const;
@@ -68,13 +79,14 @@ export default async function AssistantPage({
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("assistant", "manage");
-  const [t, business, current, grants, attempts, facts, query] = await Promise.all([
+  const [t, business, current, grants, attempts, facts, gaps, query] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(settings.call({}, actor)),
     domainOrNull(scopes.call({}, actor)),
     domainOrNull(turns.call({ limit: 50 }, actor)),
     domainOrNull(knowledgeList.call({}, actor)),
+    domainOrNull(knowledgeGapList.call({ status: "open" }, actor)),
     searchParams,
   ]);
 
@@ -391,7 +403,67 @@ export default async function AssistantPage({
                     />
                   </Field>
                 </div>
+              </CardBody>
+            </Card>
 
+            <Card>
+              <CardHeader title={t("assistant.guardrails")} />
+              <CardBody>
+                <p className="max-w-prose text-sm text-ink-muted">
+                  {t("assistant.guardrailsHint")}
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label={t("assistant.field.tone")}
+                    htmlFor="assistant-tone"
+                    hint={t("assistant.field.toneHint")}
+                  >
+                    <Select id="assistant-tone" name="tone" defaultValue={current.tone}>
+                      {ASSISTANT_TONES.map((tone) => (
+                        <option key={tone} value={tone}>
+                          {t(`assistant.tone.${tone}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field
+                    label={t("assistant.field.contactFormPath")}
+                    htmlFor="assistant-contact-form"
+                    hint={t("assistant.field.contactFormPathHint")}
+                  >
+                    <Input
+                      id="assistant-contact-form"
+                      name="contactFormPath"
+                      defaultValue={current.contactFormPath ?? ""}
+                    />
+                  </Field>
+                  <Field
+                    label={t("assistant.field.refuseTopics")}
+                    htmlFor="assistant-refuse"
+                    hint={t("assistant.field.refuseTopicsHint")}
+                  >
+                    <textarea
+                      id="assistant-refuse"
+                      name="refuseTopics"
+                      rows={4}
+                      defaultValue={current.refuseTopics.join("\n")}
+                      className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                    />
+                  </Field>
+                  <Field
+                    label={t("assistant.field.escalateTopics")}
+                    htmlFor="assistant-escalate"
+                    hint={t("assistant.field.escalateTopicsHint")}
+                  >
+                    <textarea
+                      id="assistant-escalate"
+                      name="escalateTopics"
+                      rows={4}
+                      defaultValue={current.escalateTopics.join("\n")}
+                      className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                    />
+                  </Field>
+                </div>
                 <div>
                   <Button type="submit">{t("assistant.action.save")}</Button>
                 </div>
@@ -539,6 +611,81 @@ export default async function AssistantPage({
                   {t("assistant.action.reindex")}
                 </Button>
               </form>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title={t("assistant.gaps")} />
+            <CardBody>
+              <p className="max-w-prose text-sm text-ink-muted">
+                {t("assistant.gapsHint")}
+              </p>
+              {(gaps ?? []).length === 0 ? (
+                <p className="mt-2 text-sm text-ink-muted">{t("assistant.gapsEmpty")}</p>
+              ) : (
+                <ul className="mt-3 grid list-none gap-3 p-0">
+                  {(gaps ?? []).map((gap) => (
+                    <li
+                      key={gap.id}
+                      className="grid gap-3 rounded-md border border-rule p-3 text-sm"
+                    >
+                      <span className="flex flex-wrap items-center gap-2">
+                        <Pill tone="warning">
+                          {t(`assistant.gapReason.${gap.reason}`)}
+                        </Pill>
+                        <span className="text-xs text-ink-muted">{gap.locale}</span>
+                        <span className="text-xs text-ink-muted">{when(gap.createdAt)}</span>
+                      </span>
+                      <p className="text-ink">{gap.question}</p>
+                      <form action={saveGapAsKnowledgeAction} className="grid gap-3 md:grid-cols-2">
+                        <input type="hidden" name="id" value={gap.id} />
+                        <input type="hidden" name="locale" value={gap.locale} />
+                        <Field label={t("assistant.field.knowledgeTitle")} htmlFor={`gap-title-${gap.id}`}>
+                          <Input
+                            id={`gap-title-${gap.id}`}
+                            name="title"
+                            required
+                            maxLength={200}
+                            defaultValue={gap.question.slice(0, 200)}
+                          />
+                        </Field>
+                        <Field label={t("assistant.field.knowledgeKind")} htmlFor={`gap-kind-${gap.id}`}>
+                          <Select id={`gap-kind-${gap.id}`} name="kind" defaultValue="qa">
+                            {KNOWLEDGE_KINDS.map((kind) => (
+                              <option key={kind} value={kind}>
+                                {t(`assistant.knowledgeKind.${kind}`)}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Field
+                          label={t("assistant.field.knowledgeBody")}
+                          htmlFor={`gap-body-${gap.id}`}
+                          hint={t("assistant.gapsBodyHint")}
+                        >
+                          <textarea
+                            id={`gap-body-${gap.id}`}
+                            name="body"
+                            required
+                            rows={3}
+                            maxLength={4000}
+                            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                          />
+                        </Field>
+                        <div className="flex items-end gap-2">
+                          <Button type="submit">{t("assistant.action.saveGap")}</Button>
+                        </div>
+                      </form>
+                      <form action={dismissGapAction}>
+                        <input type="hidden" name="id" value={gap.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("assistant.action.dismissGap")}
+                        </Button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardBody>
           </Card>
 
