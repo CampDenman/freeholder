@@ -34,13 +34,17 @@ import { formatMoney } from "@/core/i18n";
 import {
   ASSISTANT_PROVIDERS,
   ASSISTANT_SPEND_PERIODS,
+  KNOWLEDGE_KINDS,
 } from "@/modules/assistant/contract";
-import { scopes, settings, turns } from "@/modules/assistant/service";
+import { knowledgeList, scopes, settings, turns } from "@/modules/assistant/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
 import {
   saveAssistantAction,
+  saveKnowledgeAction,
+  deleteKnowledgeAction,
+  reindexAssistantAction,
   setAssistantScopeAction,
 } from "../../assistant-actions";
 
@@ -64,12 +68,13 @@ export default async function AssistantPage({
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("assistant", "manage");
-  const [t, business, current, grants, attempts, query] = await Promise.all([
+  const [t, business, current, grants, attempts, facts, query] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(settings.call({}, actor)),
     domainOrNull(scopes.call({}, actor)),
     domainOrNull(turns.call({ limit: 50 }, actor)),
+    domainOrNull(knowledgeList.call({}, actor)),
     searchParams,
   ]);
 
@@ -449,6 +454,91 @@ export default async function AssistantPage({
                   </li>
                 ))}
               </ul>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title={t("assistant.knowledge")} />
+            <CardBody>
+              <p className="max-w-prose text-sm text-ink-muted">
+                {t("assistant.knowledgeHint")}
+              </p>
+              {facts && facts.length > 0 ? (
+                <ul className="mt-3 grid list-none gap-2 p-0">
+                  {facts.map((entry) => (
+                    <li
+                      key={entry.id}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-rule p-3 text-sm"
+                    >
+                      <div className="grid gap-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{entry.title}</span>
+                          <Pill tone={entry.enabled ? "success" : "neutral"}>
+                            {entry.enabled
+                              ? t("assistant.knowledge.on")
+                              : t("assistant.knowledge.off")}
+                          </Pill>
+                          <span className="text-xs text-ink-muted">
+                            {t(`assistant.knowledgeKind.${entry.kind}`)} · {entry.locale}
+                          </span>
+                        </span>
+                        <span className="text-ink-muted">{entry.body}</span>
+                      </div>
+                      <form action={deleteKnowledgeAction}>
+                        <input type="hidden" name="id" value={entry.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("assistant.action.deleteKnowledge")}
+                        </Button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-sm text-ink-muted">{t("assistant.knowledgeEmpty")}</p>
+              )}
+              <form action={saveKnowledgeAction} className="mt-3 grid gap-3 md:grid-cols-2">
+                <Field label={t("assistant.field.knowledgeTitle")} htmlFor="knowledge-title">
+                  <Input id="knowledge-title" name="title" required maxLength={200} />
+                </Field>
+                <Field label={t("assistant.field.knowledgeKind")} htmlFor="knowledge-kind">
+                  <Select id="knowledge-kind" name="kind" defaultValue="fact">
+                    {KNOWLEDGE_KINDS.map((kind) => (
+                      <option key={kind} value={kind}>
+                        {t(`assistant.knowledgeKind.${kind}`)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label={t("assistant.field.knowledgeLocale")} htmlFor="knowledge-locale">
+                  <Input id="knowledge-locale" name="locale" defaultValue={locale} required />
+                </Field>
+                <label className="flex items-end gap-2 text-sm">
+                  <input type="checkbox" name="enabled" value="1" defaultChecked />
+                  {t("assistant.field.knowledgeEnabled")}
+                </label>
+                <Field
+                  label={t("assistant.field.knowledgeBody")}
+                  htmlFor="knowledge-body"
+                  hint={t("assistant.field.knowledgeBodyHint")}
+                >
+                  <textarea
+                    id="knowledge-body"
+                    name="body"
+                    required
+                    rows={3}
+                    maxLength={4000}
+                    className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                  />
+                </Field>
+                <div className="flex items-end">
+                  <Button type="submit">{t("assistant.action.saveKnowledge")}</Button>
+                </div>
+              </form>
+              <form action={reindexAssistantAction} className="mt-3">
+                <Button type="submit" variant="quiet">
+                  {t("assistant.action.reindex")}
+                </Button>
+              </form>
             </CardBody>
           </Card>
 

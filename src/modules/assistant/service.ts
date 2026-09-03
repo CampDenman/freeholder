@@ -85,11 +85,17 @@ import {
   type AssistantTurnOutcome,
 } from "./contract";
 import {
+  assistantChunks,
   assistantScopeGrants,
   assistantSettings,
   assistantTurns,
+  knowledgeEntries,
   type AssistantSettings,
 } from "./schema";
+import { collectDocuments } from "./corpus";
+import { embedText } from "./embed";
+import { retrieveNotes } from "./retrieve";
+import { KNOWLEDGE_KINDS } from "./contract";
 
 /** How much of the conversation the model is shown. Bounded, so cost is too. */
 const TRANSCRIPT_LIMIT = 20;
@@ -485,6 +491,7 @@ export const answer = defineService({
         id: messages.id,
         direction: messages.direction,
         contactId: messages.contactId,
+        body: messages.body,
       })
       .from(messages)
       .where(eq(messages.chatSessionId, session.id))
@@ -550,6 +557,7 @@ export const answer = defineService({
 
     const offered = await grantedActions(ctx.tx);
     const businessName = business?.name ?? "this business";
+    const notes = await retrieveNotes(ctx.tx, last.body, session.locale);
     const promptInput = {
       businessName,
       tagline: business?.tagline ?? null,
@@ -557,6 +565,7 @@ export const answer = defineService({
       locale: session.locale,
       actions: offered,
       transcript,
+      notes,
     };
     const system = buildSystemPrompt(promptInput);
     const asked = buildInput(promptInput);
@@ -735,4 +744,200 @@ export const answer = defineService({
   },
 });
 
-export default [settings, updateSettings, scopes, setScope, turns, answer];
+const knowledgeRow = row({
+  id: uuid,
+  locale: z.string(),
+  kind: z.enum(KNOWLEDGE_KINDS),
+  title: z.string(),
+  body: z.string(),
+  enabled: z.boolean(),
+  updatedAt: timestamp,
+});
+
+export const saveKnowledge = defineService({
+  name: "assistant.saveKnowledge",
+  writeClass: "write",
+  summary: "Create or change an owner-written fact the assistant may quote.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id: uuid.optional(),
+    locale: z.string().trim().min(2).max(20).default("en"),
+    kind: z.enum(KNOWLEDGE_KINDS),
+    title: z.string().trim().min(1).max(200),
+    body: z.string().trim().min(1).max(4_000),
+    enabled: z.boolean().default(true),
+  }),
+  output: knowledgeRow,
+  handler: async (input, ctx) => {
+    const values = {
+      locale: input.locale,
+      kind: input.kind,
+      title: input.title,
+      body: input.body,
+      enabled: input.enabled,
+    };
+    const saved = input.id
+      ? (
+          await ctx.tx
+            .update(knowledgeEntries)
+            .set({ ...values, updatedAt: new Date() })
+            .where(eq(knowledgeEntries.id, input.id))
+            .returning()
+        )[0]
+      : (await ctx.tx.insert(knowledgeEntries).values(values).returning())[0];
+    if (!saved) throw new ServiceError("not_found", "There is no such knowledge entry.");
+    ctx.setSubject("knowledge_entry", saved.id);
+    await ctx.tx
+      .delete(assistantChunks)
+      .where(
+        and(eq(assistantChunks.sourceType, "knowledge"), eq(assistantChunks.sourceId, saved.id)),
+      );
+    if (saved.enabled) {
+      const embedding = embedText(`${saved.title}\n${saved.body}`);
+      await ctx.tx
+        .insert(assistantChunks)
+        .values({
+          sourceType: "knowledge",
+          sourceId: saved.id,
+          locale: saved.locale,
+          title: saved.title,
+          body: `${saved.title}\n${saved.body}`,
+          embedding,
+        })
+        .onConflictDoUpdate({
+          target: [
+            assistantChunks.sourceType,
+            assistantChunks.sourceId,
+            assistantChunks.locale,
+          ],
+          set: {
+            title: saved.title,
+            body: `${saved.title}\n${saved.body}`,
+            embedding,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    return saved;
+  },
+});
+
+export const knowledgeList = defineService({
+  name: "assistant.knowledgeList",
+  summary: "Owner-written facts, Q&As and policies the assistant may quote.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: listed(knowledgeRow),
+  handler: (_input, ctx) =>
+    ctx.tx
+      .select()
+      .from(knowledgeEntries)
+      .orderBy(desc(knowledgeEntries.updatedAt)),
+});
+
+export const deleteKnowledge = defineService({
+  name: "assistant.deleteKnowledge",
+  writeClass: "write",
+  summary: "Remove an owner-written knowledge entry.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: uuid }),
+  output: row({ id: uuid }),
+  handler: async (input, ctx) => {
+    const [removed] = await ctx.tx
+      .delete(knowledgeEntries)
+      .where(eq(knowledgeEntries.id, input.id))
+      .returning({ id: knowledgeEntries.id });
+    if (!removed) throw new ServiceError("not_found", "There is no such knowledge entry.");
+    await ctx.tx
+      .delete(assistantChunks)
+      .where(
+        and(eq(assistantChunks.sourceType, "knowledge"), eq(assistantChunks.sourceId, input.id)),
+      );
+    return removed;
+  },
+});
+
+/**
+ * Rebuild the retrieval index from published content and knowledge rows.
+ *
+ * Scoped so an owner can press the button; a job and event listeners call it
+ * as system. Full rebuild is the honest answer at this scale: tens of pages,
+ * not millions of rows.
+ */
+export const reindex = defineService({
+  name: "assistant.reindex",
+  writeClass: "write",
+  summary: "Rebuild the assistant's retrieval index from published content.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({}),
+  output: row({ chunks: z.number().int() }),
+  handler: async (_input, ctx) => {
+    const docs = await collectDocuments(ctx.tx);
+    const keep = new Set(
+      docs.map((doc) => `${doc.sourceType}:${doc.sourceId}:${doc.locale}`),
+    );
+    for (const doc of docs) {
+      const embedding = embedText(`${doc.title}\n${doc.body}`);
+      await ctx.tx
+        .insert(assistantChunks)
+        .values({
+          sourceType: doc.sourceType,
+          sourceId: doc.sourceId,
+          locale: doc.locale,
+          title: doc.title,
+          body: doc.body,
+          embedding,
+        })
+        .onConflictDoUpdate({
+          target: [
+            assistantChunks.sourceType,
+            assistantChunks.sourceId,
+            assistantChunks.locale,
+          ],
+          set: {
+            title: doc.title,
+            body: doc.body,
+            embedding,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    const existing = await ctx.tx
+      .select({
+        id: assistantChunks.id,
+        sourceType: assistantChunks.sourceType,
+        sourceId: assistantChunks.sourceId,
+        locale: assistantChunks.locale,
+      })
+      .from(assistantChunks);
+    const gone = existing
+      .filter((row) => !keep.has(`${row.sourceType}:${row.sourceId}:${row.locale}`))
+      .map((row) => row.id);
+    if (gone.length > 0) {
+      await ctx.tx.delete(assistantChunks).where(inArray(assistantChunks.id, gone));
+    }
+    return { chunks: docs.length };
+  },
+});
+
+/** Publish, unpublish, catalog or location change: rebuild the index. */
+export async function onContentChanged(): Promise<void> {
+  await reindex.call({}, { kind: "system" });
+}
+
+export default [
+  settings,
+  updateSettings,
+  scopes,
+  setScope,
+  turns,
+  answer,
+  saveKnowledge,
+  knowledgeList,
+  deleteKnowledge,
+  reindex,
+];

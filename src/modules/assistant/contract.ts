@@ -28,3 +28,9 @@ export const ASSISTANT_TURN_OUTCOMES = [
   "failed",
 ] as const;
 export type AssistantTurnOutcome = (typeof ASSISTANT_TURN_OUTCOMES)[number];
+
+export const KNOWLEDGE_KINDS = ["qa", "fact", "policy"] as const;
+export type KnowledgeKind = (typeof KNOWLEDGE_KINDS)[number];
+
+export const CHUNK_SOURCES = ["page", "help", "product", "location", "knowledge"] as const;
+export type ChunkSource = (typeof CHUNK_SOURCES)[number];

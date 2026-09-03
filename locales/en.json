@@ -5004,5 +5004,22 @@
   "assistant.outcome.refused_rate": "Hourly limit",
   "assistant.outcome.refused_conversation_cap": "Conversation limit",
   "assistant.outcome.unconfigured": "Not set up",
-  "assistant.outcome.failed": "Failed"
+  "assistant.outcome.failed": "Failed",
+  "assistant.knowledge": "Facts it may quote",
+  "assistant.knowledgeHint": "Published pages, the catalog, opening hours and these notes are what the assistant may quote. A fact you switch off leaves the index.",
+  "assistant.knowledgeEmpty": "No owner-written notes yet. Published pages and hours are still indexed.",
+  "assistant.knowledge.on": "On",
+  "assistant.knowledge.off": "Off",
+  "assistant.knowledgeKind.qa": "Question and answer",
+  "assistant.knowledgeKind.fact": "Fact",
+  "assistant.knowledgeKind.policy": "Policy",
+  "assistant.field.knowledgeTitle": "Title",
+  "assistant.field.knowledgeKind": "Kind",
+  "assistant.field.knowledgeLocale": "Language",
+  "assistant.field.knowledgeEnabled": "The assistant may quote this",
+  "assistant.field.knowledgeBody": "The note",
+  "assistant.field.knowledgeBodyHint": "What a visitor would need to hear. Quote this, do not invent around it.",
+  "assistant.action.saveKnowledge": "Save note",
+  "assistant.action.deleteKnowledge": "Remove",
+  "assistant.action.reindex": "Rebuild the index"
 }

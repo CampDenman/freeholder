@@ -50,6 +50,7 @@ import {
   ASSISTANT_PROVIDERS,
   ASSISTANT_SPEND_PERIODS,
   ASSISTANT_TURN_OUTCOMES,
+  KNOWLEDGE_KINDS,
 } from "@/modules/assistant/contract";
 import { ASSISTANT_ACTION_IDS } from "@/modules/assistant/actions";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
@@ -249,6 +250,7 @@ describe("the families built from a template key", () => {
     ["assistant.outcome", ASSISTANT_TURN_OUTCOMES],
     ["assistant.scope", ASSISTANT_ACTION_IDS],
     ["assistant.scopeHint", ASSISTANT_ACTION_IDS],
+    ["assistant.knowledgeKind", KNOWLEDGE_KINDS],
     [
       "imports.status",
       IMPORT_STATUSES,
