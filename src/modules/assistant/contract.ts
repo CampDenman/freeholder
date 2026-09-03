@@ -24,13 +24,25 @@ export const ASSISTANT_TURN_OUTCOMES = [
   "refused_spend",
   "refused_rate",
   "refused_conversation_cap",
+  "refused_topic",
+  "refused_invention",
   "unconfigured",
   "failed",
 ] as const;
 export type AssistantTurnOutcome = (typeof ASSISTANT_TURN_OUTCOMES)[number];
 
+/** Tone is a setting, not a prompt the model is trusted to obey (C9.23). */
+export const ASSISTANT_TONES = ["professional", "friendly", "brief"] as const;
+export type AssistantTone = (typeof ASSISTANT_TONES)[number];
+
 export const KNOWLEDGE_KINDS = ["qa", "fact", "policy"] as const;
 export type KnowledgeKind = (typeof KNOWLEDGE_KINDS)[number];
+
+export const GAP_REASONS = ["unknown", "invented"] as const;
+export type GapReason = (typeof GAP_REASONS)[number];
+
+export const GAP_STATUSES = ["open", "saved", "dismissed"] as const;
+export type GapStatus = (typeof GAP_STATUSES)[number];
 
 export const CHUNK_SOURCES = ["page", "help", "product", "location", "knowledge"] as const;
 export type ChunkSource = (typeof CHUNK_SOURCES)[number];

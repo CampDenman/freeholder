@@ -7,4 +7,5 @@ export {
   assistantTurns,
   knowledgeEntries,
   assistantChunks,
+  knowledgeGaps,
 } from "./schema";

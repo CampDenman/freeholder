@@ -42,6 +42,8 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
+import { registerContactReference } from "@/core/contacts/service";
+import { registerContactPrivacySource } from "@/core/privacy/service";
 import { businessProfile } from "@/core/settings/schema";
 import { messages } from "@/core/messaging/schema";
 import { sessionForToken } from "@/core/messaging/chat";
@@ -81,7 +83,11 @@ import { assistantAdapter, credentialPresent, credentialRefFor } from "./provide
 import {
   ASSISTANT_PROVIDERS,
   ASSISTANT_SPEND_PERIODS,
+  ASSISTANT_TONES,
   ASSISTANT_TURN_OUTCOMES,
+  GAP_REASONS,
+  GAP_STATUSES,
+  KNOWLEDGE_KINDS,
   type AssistantTurnOutcome,
 } from "./contract";
 import {
@@ -90,12 +96,20 @@ import {
   assistantSettings,
   assistantTurns,
   knowledgeEntries,
+  knowledgeGaps,
   type AssistantSettings,
 } from "./schema";
 import { collectDocuments } from "./corpus";
 import { embedText } from "./embed";
+import {
+  admitsUnknown,
+  escalateSuffix,
+  matchingTopic,
+  refuseReply,
+  sanitizeReply,
+  validContactFormPath,
+} from "./guardrails";
 import { retrieveNotes } from "./retrieve";
-import { KNOWLEDGE_KINDS } from "./contract";
 
 /** How much of the conversation the model is shown. Bounded, so cost is too. */
 const TRANSCRIPT_LIMIT = 20;
@@ -132,6 +146,10 @@ async function readSettings(tx: Tx): Promise<AssistantSettings> {
     spendPeriod: "month",
     repliesPerConversation: 20,
     repliesPerHour: 60,
+    tone: "professional",
+    refuseTopics: [],
+    escalateTopics: [],
+    contactFormPath: null,
     lastError: null,
     createdAt: now,
     updatedAt: now,
@@ -185,6 +203,33 @@ async function recordTurn(
   });
 }
 
+async function queueGap(
+  ctx: ServiceContext,
+  values: {
+    contactId: string;
+    conversationId: string;
+    messageId: string;
+    question: string;
+    locale: string;
+    reason: "unknown" | "invented";
+  },
+): Promise<void> {
+  const [existingGap] = await ctx.tx
+    .select({ id: knowledgeGaps.id })
+    .from(knowledgeGaps)
+    .where(eq(knowledgeGaps.messageId, values.messageId))
+    .limit(1);
+  if (existingGap) return;
+  await ctx.tx.insert(knowledgeGaps).values({
+    contactId: values.contactId,
+    conversationId: values.conversationId,
+    messageId: values.messageId,
+    question: values.question.slice(0, 2_000),
+    locale: values.locale,
+    reason: values.reason,
+  });
+}
+
 /** Kept current so the admin can say what is wrong without a visitor's help. */
 async function noteError(tx: Tx, message: string | null): Promise<void> {
   await tx
@@ -209,6 +254,10 @@ const settingsRow = row({
   spendPeriod: z.enum(ASSISTANT_SPEND_PERIODS),
   repliesPerConversation: z.number(),
   repliesPerHour: z.number(),
+  tone: z.enum(ASSISTANT_TONES),
+  refuseTopics: z.array(z.string()),
+  escalateTopics: z.array(z.string()),
+  contactFormPath: z.string().nullable(),
   lastError: z.string().nullable(),
   priced: z.boolean(),
   spentCents: z.number(),
@@ -239,6 +288,10 @@ async function presentSettings(tx: Tx, settings: AssistantSettings) {
     spendPeriod: settings.spendPeriod,
     repliesPerConversation: settings.repliesPerConversation,
     repliesPerHour: settings.repliesPerHour,
+    tone: settings.tone,
+    refuseTopics: settings.refuseTopics,
+    escalateTopics: settings.escalateTopics,
+    contactFormPath: settings.contactFormPath,
     lastError: settings.lastError,
     priced: price !== null,
     spentCents,
@@ -287,6 +340,10 @@ export const updateSettings = defineService({
     spendPeriod: z.enum(ASSISTANT_SPEND_PERIODS).default("month"),
     repliesPerConversation: z.number().int().min(0).max(500).default(20),
     repliesPerHour: z.number().int().min(0).max(5_000).default(60),
+    tone: z.enum(ASSISTANT_TONES).default("professional"),
+    refuseTopics: z.array(z.string().trim().min(2).max(80)).max(40).default([]),
+    escalateTopics: z.array(z.string().trim().min(2).max(80)).max(40).default([]),
+    contactFormPath: z.string().trim().max(300).nullish(),
   }),
   output: settingsRow,
   handler: async (input, ctx) => {
@@ -305,6 +362,13 @@ export const updateSettings = defineService({
         "Set a spending limit before switching the assistant on. Every answer costs money, and a limit of nothing means it can never answer.",
       );
     }
+    const contactFormPath = validContactFormPath(input.contactFormPath);
+    if (input.contactFormPath?.trim() && !contactFormPath) {
+      throw new ServiceError(
+        "validation",
+        "The contact form has to be a path on this site (/contact) or an https address.",
+      );
+    }
     const values = {
       enabled: input.enabled,
       provider: input.provider,
@@ -319,6 +383,10 @@ export const updateSettings = defineService({
       spendPeriod: input.spendPeriod,
       repliesPerConversation: input.repliesPerConversation,
       repliesPerHour: input.repliesPerHour,
+      tone: input.tone,
+      refuseTopics: input.refuseTopics,
+      escalateTopics: input.escalateTopics,
+      contactFormPath,
       // A saved change is a fresh start: the old complaint described a
       // configuration that no longer exists.
       lastError: null,
@@ -520,6 +588,38 @@ export const answer = defineService({
       startedAt,
     };
 
+    // Refuse topics are a setting, not a prompt. Matched here, before a
+    // retrieve or a provider call, so a visitor asking about a refused
+    // subject never spends a penny and never sees a model try to be helpful.
+    const refusedTopic = matchingTopic(last.body, current.refuseTopics);
+    if (refusedTopic) {
+      const reply = refuseReply(session.locale);
+      await ctx.callAsSystem(getService("messaging.sendAssistantChatMessage"), {
+        conversationId: session.conversationId,
+        message: reply,
+      });
+      await recordTurn(ctx, {
+        ...base,
+        outcome: "refused_topic",
+        detail: `Refused topic: ${refusedTopic}`.slice(0, 1_000),
+        model: current.model,
+        provider: current.provider,
+      });
+      await ctx.emitTimeline({
+        contactId: session.contactId,
+        eventType: "assistant.refused",
+        subjectType: "conversation",
+        subjectId: session.conversationId,
+        payload: { reason: "topic", topic: refusedTopic },
+      });
+      ctx.setSubject("conversation", session.conversationId);
+      ctx.queueEvent("assistant.refused", {
+        conversationId: session.conversationId,
+        reason: "topic",
+      });
+      return { status: "answered" as const, reply, action: null };
+    }
+
     const [business] = await ctx.tx
       .select({ name: businessProfile.name, tagline: businessProfile.tagline })
       .from(businessProfile)
@@ -566,6 +666,10 @@ export const answer = defineService({
       actions: offered,
       transcript,
       notes,
+      tone: current.tone,
+      refuseTopics: current.refuseTopics,
+      escalateTopics: current.escalateTopics,
+      contactFormPath: current.contactFormPath,
     };
     const system = buildSystemPrompt(promptInput);
     const asked = buildInput(promptInput);
@@ -599,6 +703,13 @@ export const answer = defineService({
         provider: current.provider,
       });
       ctx.setSubject("conversation", session.conversationId);
+      await ctx.emitTimeline({
+        contactId: session.contactId,
+        eventType: "assistant.refused",
+        subjectType: "conversation",
+        subjectId: session.conversationId,
+        payload: { reason: verdict.refusal.kind },
+      });
       ctx.queueEvent("assistant.refused", {
         conversationId: session.conversationId,
         reason: verdict.refusal.kind,
@@ -671,26 +782,59 @@ export const answer = defineService({
       return { status: "failed" as const, reply: null, action: null };
     }
 
+    // The hard rule, outside the model: a price or an availability claim
+    // that is not in the retrieved notes never reaches the visitor.
+    const sanitised = sanitizeReply(
+      parsed.reply,
+      notes,
+      session.locale,
+      current.contactFormPath,
+    );
+    let reply = sanitised.reply;
+    let actionId = parsed.actionId;
+    let actionArguments = parsed.actionArguments;
+
+    // Escalation is also a setting. If the visitor asked about a topic the
+    // owner flagged, we hand over when that action is granted, and we offer
+    // the contact form either way. We never claim a person was asked if one
+    // was not.
+    const escalateTopic = matchingTopic(last.body, current.escalateTopics);
+    const canHandOver = offered.some((entry) => entry.id === "hand_to_a_person");
+    let handedOver = false;
+    if (escalateTopic && canHandOver && actionId !== "hand_to_a_person") {
+      actionId = "hand_to_a_person";
+      actionArguments = { reason: `Asked about ${escalateTopic}` };
+    }
+    if (escalateTopic) {
+      const suffix = escalateSuffix(
+        session.locale,
+        current.contactFormPath,
+        canHandOver,
+      );
+      if (suffix) reply = `${reply} ${suffix}`.trim();
+      handedOver = canHandOver;
+    }
+
     // The words go out first. An action that escalates marks the thread for a
     // person, and recording the reply afterwards would clear the very flag the
     // escalation just raised.
     await ctx.callAsSystem(getService("messaging.sendAssistantChatMessage"), {
       conversationId: session.conversationId,
-      message: parsed.reply,
+      message: reply,
     });
 
     let takenAction: string | null = null;
     let actionAllowed: boolean | null = null;
     let actionDetail: string | null = null;
-    if (parsed.actionId !== undefined) {
+    if (actionId !== undefined) {
       const [contact] = await ctx.tx
         .select({ name: contacts.name, email: contacts.email })
         .from(contacts)
         .where(eq(contacts.id, session.contactId))
         .limit(1);
       const decision = verdictFor(
-        parsed.actionId,
-        parsed.actionArguments,
+        actionId,
+        actionArguments,
         new Set(offered.map((entry) => entry.id)),
         {
           conversationId: session.conversationId,
@@ -721,16 +865,44 @@ export const answer = defineService({
       }
     }
 
+    const outcome: AssistantTurnOutcome = sanitised.invented
+      ? "refused_invention"
+      : actionAllowed === false
+        ? "refused_scope"
+        : "answered";
     await recordTurn(ctx, {
       ...base,
       ...usage,
-      outcome: actionAllowed === false ? "refused_scope" : "answered",
-      detail: actionDetail,
-      action: parsed.actionId ?? null,
+      outcome,
+      detail:
+        actionDetail ??
+        (sanitised.invented
+          ? "Reply invented a price or availability that was not in the notes."
+          : handedOver
+            ? `Escalated topic: ${escalateTopic}`
+            : null),
+      action: actionId ?? null,
       actionAllowed,
     });
+    if (sanitised.invented || admitsUnknown(reply)) {
+      await queueGap(ctx, {
+        contactId: session.contactId,
+        conversationId: session.conversationId,
+        messageId: last.id,
+        question: last.body,
+        locale: session.locale,
+        reason: sanitised.invented ? "invented" : "unknown",
+      });
+    }
     if (current.lastError) await noteError(ctx.tx, null);
     ctx.setSubject("conversation", session.conversationId);
+    await ctx.emitTimeline({
+      contactId: session.contactId,
+      eventType: "assistant.replied",
+      subjectType: "conversation",
+      subjectId: session.conversationId,
+      payload: { action: takenAction, outcome },
+    });
     ctx.queueEvent("assistant.replied", {
       conversationId: session.conversationId,
       contactId: last.contactId,
@@ -738,7 +910,7 @@ export const answer = defineService({
     });
     return {
       status: "answered" as const,
-      reply: parsed.reply,
+      reply,
       action: takenAction,
     };
   },
@@ -929,6 +1101,164 @@ export async function onContentChanged(): Promise<void> {
   await reindex.call({}, { kind: "system" });
 }
 
+const gapRow = row({
+  id: uuid,
+  contactId: uuid,
+  conversationId: uuid,
+  question: z.string(),
+  locale: z.string(),
+  reason: z.enum(GAP_REASONS),
+  status: z.enum(GAP_STATUSES),
+  knowledgeEntryId: uuid.nullable(),
+  createdAt: timestamp,
+});
+
+export const knowledgeGapList = defineService({
+  name: "assistant.knowledgeGapList",
+  summary: "Unanswered questions waiting to become knowledge entries.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    status: z.enum(GAP_STATUSES).default("open"),
+  }),
+  output: listed(gapRow),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select({
+        id: knowledgeGaps.id,
+        contactId: knowledgeGaps.contactId,
+        conversationId: knowledgeGaps.conversationId,
+        question: knowledgeGaps.question,
+        locale: knowledgeGaps.locale,
+        reason: knowledgeGaps.reason,
+        status: knowledgeGaps.status,
+        knowledgeEntryId: knowledgeGaps.knowledgeEntryId,
+        createdAt: knowledgeGaps.createdAt,
+      })
+      .from(knowledgeGaps)
+      .where(eq(knowledgeGaps.status, input.status))
+      .orderBy(desc(knowledgeGaps.createdAt)),
+});
+
+export const saveGapAsKnowledge = defineService({
+  name: "assistant.saveGapAsKnowledge",
+  writeClass: "write",
+  summary: "Turn one unanswered question into an owner-written knowledge entry.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    id: uuid,
+    title: z.string().trim().min(1).max(200),
+    body: z.string().trim().min(1).max(4_000),
+    kind: z.enum(KNOWLEDGE_KINDS).default("qa"),
+    locale: z.string().trim().min(2).max(20).optional(),
+    enabled: z.boolean().default(true),
+  }),
+  output: knowledgeRow,
+  handler: async (input, ctx) => {
+    const [gap] = await ctx.tx
+      .select()
+      .from(knowledgeGaps)
+      .where(eq(knowledgeGaps.id, input.id))
+      .limit(1);
+    if (!gap) throw new ServiceError("not_found", "There is no such knowledge gap.");
+    if (gap.status !== "open") {
+      throw new ServiceError(
+        "conflict",
+        "That question has already been saved or dismissed.",
+      );
+    }
+    const saved = await ctx.call(saveKnowledge, {
+      locale: input.locale ?? gap.locale,
+      kind: input.kind,
+      title: input.title,
+      body: input.body,
+      enabled: input.enabled,
+    });
+    await ctx.tx
+      .update(knowledgeGaps)
+      .set({
+        status: "saved",
+        knowledgeEntryId: saved.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(knowledgeGaps.id, gap.id));
+    ctx.setSubject("knowledge_gap", gap.id);
+    return saved;
+  },
+});
+
+export const dismissGap = defineService({
+  name: "assistant.dismissGap",
+  writeClass: "write",
+  summary: "Drop one unanswered question from the knowledge-gap queue.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ id: uuid }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const [gap] = await ctx.tx
+      .update(knowledgeGaps)
+      .set({ status: "dismissed", updatedAt: new Date() })
+      .where(and(eq(knowledgeGaps.id, input.id), eq(knowledgeGaps.status, "open")))
+      .returning({ id: knowledgeGaps.id });
+    if (!gap) throw new ServiceError("not_found", "There is no open knowledge gap with that id.");
+    ctx.setSubject("knowledge_gap", gap.id);
+    return { ok: true as const };
+  },
+});
+
+registerContactReference({
+  table: "knowledge_gaps",
+  repoint: (tx, duplicateId, survivingId) =>
+    tx
+      .update(knowledgeGaps)
+      .set({ contactId: survivingId })
+      .where(eq(knowledgeGaps.contactId, duplicateId)),
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({ id: knowledgeGaps.id, contactId: knowledgeGaps.contactId })
+      .from(knowledgeGaps)
+      .where(inArray(knowledgeGaps.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
+    const moved = z
+      .array(z.object({ id: z.string().uuid(), contactId: z.string().uuid() }))
+      .parse(beforeState)
+      .filter((gap) => gap.contactId === duplicateId);
+    if (moved.length) {
+      await tx
+        .update(knowledgeGaps)
+        .set({ contactId: duplicateId })
+        .where(
+          inArray(
+            knowledgeGaps.id,
+            moved.map((gap) => gap.id),
+          ),
+        );
+    }
+  },
+});
+
+registerContactPrivacySource({
+  scope: "contact.assistant",
+  tables: ["knowledge_gaps"],
+  exportData: async (tx, contactId) => ({
+    knowledgeGaps: await tx
+      .select()
+      .from(knowledgeGaps)
+      .where(eq(knowledgeGaps.contactId, contactId)),
+  }),
+  erase: async (tx, contactId) => {
+    const removed = await tx
+      .delete(knowledgeGaps)
+      .where(eq(knowledgeGaps.contactId, contactId))
+      .returning({ id: knowledgeGaps.id });
+    return { affected: removed.length };
+  },
+});
+
 export default [
   settings,
   updateSettings,
@@ -940,4 +1270,7 @@ export default [
   knowledgeList,
   deleteKnowledge,
   reindex,
+  knowledgeGapList,
+  saveGapAsKnowledge,
+  dismissGap,
 ];

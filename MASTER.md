@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.23 assistant guardrails. Next after that: C9.24 social. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.24 social. Next after that: C9.25 social ingest. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6911,9 +6911,25 @@ customer has one secure, comprehensible home for the relationship.
   `0148_assistant_grounding.sql`. Tests in
   `tests/modules/assistant-grounding.test.ts`. Changeset
   `assistant-grounding.md`.)
-- [ ] **C9.23** Prevent invented price/availability, enforce refusals and
+- [x] **C9.23** Prevent invented price/availability, enforce refusals and
   escalation, attach consented transcripts to contacts, surface knowledge gaps
   and prove prompt-injection resistance.
+  (Guardrails live on `assistant_settings` — tone, refuse topics, escalate
+  topics, contact-form path — and the module matches them itself. A refuse
+  topic never reaches the provider. A price or availability claim that is
+  not in the retrieved notes is replaced with a canned "I don't have that
+  to hand" and recorded as `refused_invention`. Escalation appends the
+  contact form and, when granted, runs `hand_to_a_person`. Site-chat
+  transcripts already attach to the Contact created on email capture
+  (C7.15); `assistant.replied` / `assistant.refused` TimelineEvents now
+  fire on that contact. Unanswered questions queue as `knowledge_gaps`
+  with `contact_id` (merge-repointed, privacy-exported); the owner saves
+  one as a `KnowledgeEntry` in one click. Visitor text is the user
+  message, never the system prompt; an ungranted `request_quote` stays
+  refused even when the visitor asks the model to grant it. Migration
+  `0149_assistant_guardrails.sql`. Tests in
+  `tests/modules/assistant-guardrails.test.ts`. Changeset
+  `assistant-guardrails.md`.)
 - [ ] **C9.24** Build social OAuth/adapters for Instagram, Facebook, TikTok,
   YouTube, LinkedIn, X, Pinterest and Google Business Profile with multiple
   profiles/provider, capability discovery and health; explicitly assign each

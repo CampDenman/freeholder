@@ -45,6 +45,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { contacts } from "@/core/contacts/schema";
 import { conversations, messages, siteChatSessions } from "@/core/messaging/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
@@ -54,8 +55,11 @@ import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import {
   ASSISTANT_PROVIDERS,
   ASSISTANT_SPEND_PERIODS,
+  ASSISTANT_TONES,
   ASSISTANT_TURN_OUTCOMES,
   CHUNK_SOURCES,
+  GAP_REASONS,
+  GAP_STATUSES,
   KNOWLEDGE_KINDS,
 } from "./contract";
 
@@ -117,6 +121,19 @@ export const assistantSettings = pgTable(
      */
     repliesPerConversation: integer("replies_per_conversation").notNull().default(20),
     repliesPerHour: integer("replies_per_hour").notNull().default(60),
+    /**
+     * Guardrails as settings, not prompts (C9.23).
+     *
+     * Tone, refuse and escalate lists, and the contact-form path are owner
+     * decisions the module matches itself. A model asked to refuse "refund"
+     * will still talk about refunds; a substring match against this column
+     * will not.
+     */
+    tone: text("tone", { enum: ASSISTANT_TONES }).notNull().default("professional"),
+    refuseTopics: text("refuse_topics").array().notNull().default(sql`'{}'`),
+    escalateTopics: text("escalate_topics").array().notNull().default(sql`'{}'`),
+    /** Relative (`/contact`) or `https://…`. Null means do not offer a form. */
+    contactFormPath: text("contact_form_path"),
     /** The last thing that went wrong, in plain English, for the admin. */
     lastError: text("last_error"),
     createdAt: createdAtColumn(),
@@ -274,5 +291,46 @@ export const assistantChunks = pgTable(
   ],
 );
 
+/**
+ * Yesterday's unanswered question (MASTER.md §31, C9.23).
+ *
+ * The visitor's words already live on the contact's conversation. This table
+ * is the queue an owner works: one click turns a failed answer into a
+ * `KnowledgeEntry`. `contact_id` is here so a merge cannot orphan it, and so
+ * an export or erasure includes the questions this person asked.
+ */
+export const knowledgeGaps = pgTable(
+  "knowledge_gaps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    question: text("question").notNull(),
+    locale: text("locale").notNull().default("en"),
+    reason: text("reason", { enum: GAP_REASONS }).notNull(),
+    status: text("status", { enum: GAP_STATUSES }).notNull().default("open"),
+    knowledgeEntryId: uuid("knowledge_entry_id").references(() => knowledgeEntries.id, {
+      onDelete: "set null",
+    }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("knowledge_gaps_message_idx")
+      .on(t.messageId)
+      .where(sql`message_id is not null`),
+    index("knowledge_gaps_contact_idx").on(t.contactId),
+    index("knowledge_gaps_status_idx").on(t.status, t.createdAt),
+  ],
+);
+
 export type KnowledgeEntry = typeof knowledgeEntries.$inferSelect;
 export type AssistantChunk = typeof assistantChunks.$inferSelect;
+export type KnowledgeGap = typeof knowledgeGaps.$inferSelect;
