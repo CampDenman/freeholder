@@ -28,6 +28,7 @@ const ADMIN_MODULES = [
   "agents",
   "analytics",
   "apikeys",
+  "assistant",
   "catalog",
   "cms",
   "connections",

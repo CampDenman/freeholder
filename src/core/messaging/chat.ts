@@ -50,9 +50,16 @@ const transcript = row({
   expiresAt: timestamp,
 });
 
-type ActiveSession = typeof siteChatSessions.$inferSelect;
+export type ActiveSession = typeof siteChatSessions.$inferSelect;
 
-async function sessionForToken(
+/**
+ * The session a bearer names, or a refusal.
+ *
+ * Exported because the front-site assistant (C9.21) has to answer *this*
+ * session and no other, and the token hashing that makes that safe belongs
+ * here beside the table rather than copied into a module.
+ */
+export async function sessionForToken(
   tx: Tx,
   rawToken: string,
   options: { allowClosed?: boolean } = {},

@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.21 assistant. Next after that: C9.22 grounding. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.22 assistant grounding. Next after that: C9.23 guardrails. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6877,8 +6877,24 @@ customer has one secure, comprehensible home for the relationship.
   A winning third-party creative without a choice reserves the hole and asks;
   a denial falls through to house fill. Migration `0146_ad_third_party.sql`;
   `tests/modules/ads-third-party.test.ts`. Changeset `ad-third-party.md`.)
-- [ ] **C9.21** Build the optional front-site assistant with AI adapters,
+- [x] **C9.21** Build the optional front-site assistant with AI adapters,
   provider/model/key settings, hard scopes, spend/rate limits and off fallback.
+  (New `assistant` module, migration `0147_front_site_assistant.sql`, plus
+  real `anthropic` and `openai` entries in `adapters/ai`, which until now
+  held only `none` — so `freeholder.config.ts`'s `adapters.ai` finally
+  resolves to something.
+  It answers on C7.15's site chat rather than growing a chat of its own.
+  `assistant.answer` composes `messaging.sendAssistantChatMessage`, so the
+  assistant's words are ordinary `messages` on the contact's canonical
+  conversation. This module stores no transcript — `assistant_turns`
+  records what an attempt cost and what became of it.
+  Off is the default and a first-class answer: `enabled` is false,
+  `spend_cap_cents` is zero, and every scope is ungranted.
+  The key is not in the database: `credential_ref` names an environment
+  variable. Scopes are a catalogue in `actions.ts`, not a prompt; the
+  model never supplies who a quote request is for. C9.22 is grounding;
+  C9.23 is invented prices and injection. Tests in
+  `tests/modules/assistant.test.ts`. Changeset `front-site-assistant.md`.)
 - [ ] **C9.22** Ground the assistant from published content/catalog/hours/
   policies plus locale-aware `KnowledgeEntry` rows in pgvector/Postgres.
 - [ ] **C9.23** Prevent invented price/availability, enforce refusals and

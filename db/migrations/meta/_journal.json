@@ -1030,6 +1030,13 @@
       "when": 1790265600000,
       "tag": "0146_ad_third_party",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1790352000000,
+      "tag": "0147_front_site_assistant",
+      "breakpoints": true
     }
   ]
 }
