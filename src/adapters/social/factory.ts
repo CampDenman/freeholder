@@ -13,7 +13,9 @@ import type {
   SocialAdapter,
   SocialCapabilities,
   SocialIdentity,
+  SocialInteraction,
   SocialOAuthTokens,
+  SocialOwnedPost,
 } from "./types";
 
 export interface SocialNetworkSpec {
@@ -29,6 +31,8 @@ export interface SocialNetworkSpec {
   clientId: () => string | undefined;
   clientSecret: () => string | undefined;
   parseIdentity: (body: unknown) => SocialIdentity;
+  ownedPostsUrl?: string;
+  interactionUrl?: (postId: string) => string;
 }
 
 function asRecord(body: unknown): Record<string, unknown> {
@@ -47,6 +51,70 @@ export function recordField(body: unknown, ...keys: string[]): string | null {
 export function nestedRecord(body: unknown, key: string): unknown {
   const value = asRecord(body)[key];
   return value && typeof value === "object" ? value : {};
+}
+
+function asList(body: unknown): unknown[] {
+  if (Array.isArray(body)) return body;
+  const data = asRecord(body).data;
+  return Array.isArray(data) ? data : [];
+}
+
+function parseOwnedPosts(body: unknown): SocialOwnedPost[] {
+  const posts: SocialOwnedPost[] = [];
+  for (const entry of asList(body)) {
+    const row = asRecord(entry);
+    const id = recordField(row, "id", "providerRef");
+    if (!id) continue;
+    const mediaUrl = recordField(row, "media_url", "mediaUrl", "url");
+    const mime = recordField(row, "mime", "content_type") ?? "image/png";
+    posts.push({
+      providerRef: id,
+      url: recordField(row, "permalink", "url"),
+      body: recordField(row, "caption", "message", "text", "body") ?? "",
+      publishedAt:
+        recordField(row, "timestamp", "created_time", "publishedAt") ??
+        new Date().toISOString(),
+      media: mediaUrl
+        ? [
+            {
+              url: mediaUrl,
+              filename: recordField(row, "filename") ?? `${id}.png`,
+              mime,
+              altText: recordField(row, "alt_text", "altText") ?? undefined,
+            },
+          ]
+        : [],
+    });
+  }
+  return posts;
+}
+
+function parseInteractions(
+  body: unknown,
+  postProviderRef: string,
+): SocialInteraction[] {
+  const items: SocialInteraction[] = [];
+  for (const entry of asList(body)) {
+    const row = asRecord(entry);
+    const id = recordField(row, "id", "providerRef");
+    const text = recordField(row, "text", "message", "body");
+    if (!id || !text) continue;
+    const email = recordField(row, "email", "author_email", "authorEmail");
+    items.push({
+      providerRef: id,
+      postProviderRef:
+        recordField(row, "post_id", "postProviderRef") ?? postProviderRef,
+      kind: recordField(row, "kind") === "mention" ? "mention" : "comment",
+      body: text,
+      occurredAt:
+        recordField(row, "timestamp", "created_time", "occurredAt") ??
+        new Date().toISOString(),
+      authorHandle:
+        recordField(row, "username", "handle", "from") ?? "unknown",
+      authorEmail: email && email.includes("@") ? email.toLowerCase() : null,
+    });
+  }
+  return items;
 }
 
 export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
@@ -160,6 +228,26 @@ export function createSocialNetwork(spec: SocialNetworkSpec): SocialAdapter {
         publish: declared.publish,
         extras: declared.extras,
       };
+    },
+    async listOwnedPosts(accessToken) {
+      requireReady();
+      const url = spec.ownedPostsUrl ?? `${spec.identityUrl.replace(/\/+$/, "")}/media`;
+      const response = await socialFetch(spec.id, url, {
+        method: "GET",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      return parseOwnedPosts(await socialJson(response, spec.id));
+    },
+    async listInteractions(accessToken, postProviderRef) {
+      requireReady();
+      const url =
+        spec.interactionUrl?.(postProviderRef) ??
+        `${spec.identityUrl.replace(/\/me\/?$/, "")}/${postProviderRef}/comments`;
+      const response = await socialFetch(spec.id, url, {
+        method: "GET",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      return parseInteractions(await socialJson(response, spec.id), postProviderRef);
     },
     async health(accessToken) {
       try {

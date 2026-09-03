@@ -12,6 +12,8 @@ import {
   beginOAuth,
   checkHealth,
   disconnectProfile,
+  draftFromPackage,
+  ingestProfile,
   reviewProfile,
   setPolicy,
 } from "@/modules/social/service";
@@ -109,6 +111,26 @@ export async function setSocialPolicyAction(form: FormData): Promise<void> {
 export async function healthSocialAction(form: FormData): Promise<void> {
   try {
     await checkHealth.call({ id: text(form, "id") || undefined }, await actor());
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(SOCIAL);
+  done();
+}
+
+export async function ingestSocialAction(form: FormData): Promise<void> {
+  try {
+    await ingestProfile.call({ profileId: text(form, "id") }, await actor());
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(SOCIAL);
+  done();
+}
+
+export async function draftSocialAction(form: FormData): Promise<void> {
+  try {
+    await draftFromPackage.call({ id: text(form, "id") }, await actor());
   } catch (error) {
     done(error);
   }

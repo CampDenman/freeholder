@@ -51,6 +51,32 @@ export interface SocialOAuthTokens {
   scopes: readonly string[];
 }
 
+export interface SocialOwnedMedia {
+  url: string;
+  filename: string;
+  mime: string;
+  altText?: string;
+}
+
+export interface SocialOwnedPost {
+  providerRef: string;
+  url: string | null;
+  body: string;
+  publishedAt: string;
+  media: readonly SocialOwnedMedia[];
+}
+
+export interface SocialInteraction {
+  providerRef: string;
+  postProviderRef: string;
+  kind: "comment" | "mention";
+  body: string;
+  occurredAt: string;
+  authorHandle: string;
+  /** Only when the provider actually gave an address. Handles are not identity. */
+  authorEmail: string | null;
+}
+
 export interface SocialAdapter {
   readonly id: string;
   readonly label: string;
@@ -72,6 +98,11 @@ export interface SocialAdapter {
   identity(accessToken: string): Promise<SocialIdentity>;
   capabilities(scopes: readonly string[]): SocialCapabilities;
   health(accessToken: string): Promise<{ ok: boolean; message: string }>;
+  listOwnedPosts(accessToken: string): Promise<readonly SocialOwnedPost[]>;
+  listInteractions(
+    accessToken: string,
+    postProviderRef: string,
+  ): Promise<readonly SocialInteraction[]>;
   publish(request: SocialPublicationRequest): Promise<SocialPublicationResult>;
   remove(request: { providerRef: string; idempotencyKey: string }): Promise<void>;
   verifyWebhook(request: RawProviderRequest): Promise<readonly SocialProviderEvent[]>;

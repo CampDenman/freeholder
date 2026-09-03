@@ -5083,5 +5083,17 @@
   "social.action.assign": "Enregistrer l'attribution",
   "social.action.savePolicy": "Enregistrer les droits",
   "social.action.health": "Vérifier l'état",
-  "social.action.disconnect": "Déconnecter"
+  "social.action.disconnect": "Déconnecter",
+  "social.action.ingest": "Récupérer les publications",
+  "social.action.draft": "Brouillon pour d'autres profils",
+  "social.packages": "Publications détenues",
+  "social.packagesHint": "Publications tirées de vos profils connectés, avec leurs médias dans la bibliothèque. Un brouillon en copie une pour que vous puissiez la relire pour un autre réseau sans copier-coller.",
+  "social.packagesEmpty": "Rien d'ingéré pour l'instant.",
+  "social.packagesNoCaption": "Pas de légende.",
+  "social.sourceKind.ingest": "Ingérée",
+  "social.sourceKind.authored": "Rédigée",
+  "social.sourceKind.draft": "Brouillon",
+  "social.threads": "Commentaires et mentions",
+  "social.threadOnSpine": "Sur un contact",
+  "social.threadOffSpine": "Identifiant seulement — pas un contact"
 }

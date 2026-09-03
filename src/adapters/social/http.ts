@@ -47,6 +47,22 @@ export async function socialJson(
   return parsed;
 }
 
+export async function socialBytes(
+  response: Response,
+  adapterId: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  if (!response.ok) {
+    throw new AdapterError(
+      "social",
+      adapterId,
+      "provider_failure",
+      `The provider refused the media (HTTP ${response.status}).`,
+      response.status >= 500,
+    );
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
 export async function socialFetch(
   adapterId: string,
   input: string,

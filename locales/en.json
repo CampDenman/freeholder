@@ -5083,5 +5083,17 @@
   "social.action.assign": "Save assignment",
   "social.action.savePolicy": "Save permissions",
   "social.action.health": "Check health",
-  "social.action.disconnect": "Disconnect"
+  "social.action.disconnect": "Disconnect",
+  "social.action.ingest": "Pull posts",
+  "social.action.draft": "Draft for other profiles",
+  "social.packages": "Owned posts",
+  "social.packagesHint": "Posts pulled from your connected profiles, with their media in the library. A draft copies one so you can review it for another network without copy-paste.",
+  "social.packagesEmpty": "Nothing ingested yet.",
+  "social.packagesNoCaption": "No caption.",
+  "social.sourceKind.ingest": "Ingested",
+  "social.sourceKind.authored": "Authored",
+  "social.sourceKind.draft": "Draft",
+  "social.threads": "Comments and mentions",
+  "social.threadOnSpine": "On a contact",
+  "social.threadOffSpine": "Handle only — not a contact"
 }
