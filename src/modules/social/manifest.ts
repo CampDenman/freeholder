@@ -5,7 +5,8 @@
 // Optional: most instances never connect a network. The hub exists so that
 // when they do, every conforming adapter — built-in or plugin — is reached
 // the same way. Ingest, the composer and preset onboarding are later items;
-// this module stores connections, not posts.
+// this module stores connections and, from C9.25, the packages those
+// connections pull back. The composer is later.
 import { defineModule } from "@/core/module";
 
 export default defineModule({
@@ -21,6 +22,7 @@ export default defineModule({
       "social.profileReviewed",
       "social.profileAssigned",
       "social.profileUnhealthy",
+      "social.ingested",
     ],
   },
 });

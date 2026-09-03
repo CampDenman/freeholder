@@ -18,6 +18,22 @@ export type SocialProfileStatus = (typeof SOCIAL_PROFILE_STATUSES)[number];
 export const SOCIAL_HEALTH = ["ok", "expiring", "expired", "error"] as const;
 export type SocialHealth = (typeof SOCIAL_HEALTH)[number];
 
+export const SOCIAL_SOURCE_KINDS = ["ingest", "authored", "draft"] as const;
+export type SocialSourceKind = (typeof SOCIAL_SOURCE_KINDS)[number];
+
+export const SOCIAL_RIGHTS = ["owned", "licensed", "unknown"] as const;
+export type SocialRights = (typeof SOCIAL_RIGHTS)[number];
+
+export const SOCIAL_PUBLICATION_STATUSES = [
+  "ingested",
+  "drafted",
+  "published",
+] as const;
+export type SocialPublicationStatus = (typeof SOCIAL_PUBLICATION_STATUSES)[number];
+
+export const SOCIAL_INTERACTION_KINDS = ["comment", "mention"] as const;
+export type SocialInteractionKind = (typeof SOCIAL_INTERACTION_KINDS)[number];
+
 export const SOCIAL_NETWORK_IDS = [
   "instagram",
   "facebook",

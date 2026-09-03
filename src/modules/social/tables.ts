@@ -4,4 +4,8 @@ export {
   socialOauthStates,
   socialProfiles,
   socialProfileLocations,
+  socialPackages,
+  socialPackageAssets,
+  socialPublications,
+  socialInteractions,
 } from "./schema";

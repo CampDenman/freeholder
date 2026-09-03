@@ -5083,5 +5083,17 @@
   "social.action.assign": "Guardar asignación",
   "social.action.savePolicy": "Guardar permisos",
   "social.action.health": "Comprobar estado",
-  "social.action.disconnect": "Desconectar"
+  "social.action.disconnect": "Desconectar",
+  "social.action.ingest": "Traer publicaciones",
+  "social.action.draft": "Borrador para otros perfiles",
+  "social.packages": "Publicaciones propias",
+  "social.packagesHint": "Publicaciones traídas de sus perfiles conectados, con su media en la biblioteca. Un borrador copia una para que pueda revisarla en otra red sin copiar y pegar.",
+  "social.packagesEmpty": "Aún no se ha importado nada.",
+  "social.packagesNoCaption": "Sin pie de foto.",
+  "social.sourceKind.ingest": "Importada",
+  "social.sourceKind.authored": "Redactada",
+  "social.sourceKind.draft": "Borrador",
+  "social.threads": "Comentarios y menciones",
+  "social.threadOnSpine": "En un contacto",
+  "social.threadOffSpine": "Solo identificador — no es un contacto"
 }

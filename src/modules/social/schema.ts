@@ -15,21 +15,30 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
+import { contacts } from "@/core/contacts/schema";
+import { conversations } from "@/core/messaging/schema";
+import { assets } from "@/core/media/schema";
 import { businessLocations } from "@/core/locations/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import {
   SOCIAL_APPROVAL_POLICIES,
   SOCIAL_ASSIGNMENTS,
   SOCIAL_HEALTH,
+  SOCIAL_INTERACTION_KINDS,
   SOCIAL_PROFILE_STATUSES,
+  SOCIAL_PUBLICATION_STATUSES,
+  SOCIAL_RIGHTS,
+  SOCIAL_SOURCE_KINDS,
 } from "./contract";
 
 export const socialOauthStates = pgTable(
@@ -126,4 +135,120 @@ export const socialProfileLocations = pgTable(
   ],
 );
 
+/**
+ * Canonical owned content (MASTER.md §33, C9.25).
+ *
+ * Ingested once, edited once, cross-published without creating loops.
+ * `(source_provider, source_ref)` is the provider's own post id.
+ * `content_digest` is what we actually said, so the same caption+bytes
+ * arriving from another network is the same package, not a new one.
+ */
+export const socialPackages = pgTable(
+  "social_packages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceKind: text("source_kind", { enum: SOCIAL_SOURCE_KINDS }).notNull(),
+    sourceProfileId: uuid("source_profile_id").references(() => socialProfiles.id, {
+      onDelete: "set null",
+    }),
+    sourceProvider: text("source_provider"),
+    sourceRef: text("source_ref"),
+    contentDigest: text("content_digest").notNull(),
+    parentPackageId: uuid("parent_package_id").references((): AnyPgColumn => socialPackages.id, {
+      onDelete: "set null",
+    }),
+    authorUserId: uuid("author_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull().default(""),
+    locale: text("locale").notNull().default("en"),
+    canonicalUrl: text("canonical_url"),
+    rights: text("rights", { enum: SOCIAL_RIGHTS }).notNull().default("owned"),
+    provenance: jsonb("provenance").notNull().default(sql`'{}'::jsonb`),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("social_packages_source_idx")
+      .on(t.sourceProvider, t.sourceRef)
+      .where(sql`source_provider is not null and source_ref is not null`),
+    index("social_packages_digest_idx").on(t.contentDigest),
+    index("social_packages_parent_idx").on(t.parentPackageId),
+  ],
+);
+
+export const socialPackageAssets = pgTable(
+  "social_package_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    packageId: uuid("package_id")
+      .notNull()
+      .references(() => socialPackages.id, { onDelete: "cascade" }),
+    assetId: uuid("asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("social_package_assets_idx").on(t.packageId, t.assetId),
+    index("social_package_assets_asset_idx").on(t.assetId),
+  ],
+);
+
+/** Where a package has appeared. The unique provider ref is the loop brake. */
+export const socialPublications = pgTable(
+  "social_publications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    packageId: uuid("package_id")
+      .notNull()
+      .references(() => socialPackages.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id").references(() => socialProfiles.id, {
+      onDelete: "set null",
+    }),
+    provider: text("provider").notNull(),
+    providerRef: text("provider_ref").notNull(),
+    status: text("status", { enum: SOCIAL_PUBLICATION_STATUSES }).notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("social_publications_ref_idx").on(t.provider, t.providerRef),
+    index("social_publications_package_idx").on(t.packageId),
+  ],
+);
+
+export const socialInteractions = pgTable(
+  "social_interactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    packageId: uuid("package_id")
+      .notNull()
+      .references(() => socialPackages.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id").references(() => socialProfiles.id, {
+      onDelete: "set null",
+    }),
+    providerRef: text("provider_ref").notNull(),
+    kind: text("kind", { enum: SOCIAL_INTERACTION_KINDS }).notNull(),
+    body: text("body").notNull(),
+    authorHandle: text("author_handle").notNull(),
+    authorEmail: text("author_email"),
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    conversationId: uuid("conversation_id").references(() => conversations.id, {
+      onDelete: "set null",
+    }),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("social_interactions_ref_idx").on(t.providerRef),
+    index("social_interactions_contact_idx").on(t.contactId),
+    index("social_interactions_package_idx").on(t.packageId),
+  ],
+);
+
 export type SocialProfile = typeof socialProfiles.$inferSelect;
+export type SocialPackage = typeof socialPackages.$inferSelect;

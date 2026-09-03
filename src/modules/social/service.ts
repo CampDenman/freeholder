@@ -17,6 +17,13 @@ import {
 } from "./contract";
 import { socialProfileLocations, socialProfiles } from "./schema";
 import { beginOAuth, completeOAuth } from "./oauth";
+import {
+  draftFromPackage,
+  ingestProfile,
+  interactionList,
+  packageList,
+  runIngestJob,
+} from "./ingest";
 
 const EXPIRING_MS = 48 * 60 * 60 * 1000;
 
@@ -438,6 +445,11 @@ export async function runHealthJob(): Promise<void> {
 export {
   beginOAuth,
   completeOAuth,
+  ingestProfile,
+  packageList,
+  draftFromPackage,
+  interactionList,
+  runIngestJob,
 };
 
 export default [
@@ -451,4 +463,8 @@ export default [
   setPolicy,
   checkHealth,
   disconnectProfile,
+  ingestProfile,
+  packageList,
+  draftFromPackage,
+  interactionList,
 ];

@@ -19,7 +19,9 @@ import {
   SOCIAL_ASSIGNMENTS,
 } from "@/modules/social/contract";
 import {
+  interactionList,
   networks,
+  packageList,
   profiles,
   staffMembers,
 } from "@/modules/social/service";
@@ -30,7 +32,9 @@ import {
   assignSocialAction,
   beginSocialOAuthAction,
   disconnectSocialAction,
+  draftSocialAction,
   healthSocialAction,
+  ingestSocialAction,
   reviewSocialAction,
   setSocialPolicyAction,
 } from "../../social-actions";
@@ -58,12 +62,14 @@ export default async function SocialPage({
   searchParams: Promise<{ saved?: string; error?: string; social?: string }>;
 }) {
   const actor = await requireStaffActor("social", "manage");
-  const [t, known, connected, staff, places, query] = await Promise.all([
+  const [t, known, connected, staff, places, packs, threads, query] = await Promise.all([
     getT(),
     domainOrNull(networks.call({}, actor)),
     domainOrNull(profiles.call({}, actor)),
     domainOrNull(staffMembers.call({}, actor)),
     domainOrNull(listLocations.call({ includeHidden: true }, actor)),
+    domainOrNull(packageList.call({}, actor)),
+    domainOrNull(interactionList.call({}, actor)),
     searchParams,
   ]);
 
@@ -265,6 +271,14 @@ export default async function SocialPage({
                   </form>
 
                   <div className="flex flex-wrap gap-2">
+                    {profile.status === "active" && profile.allowRead ? (
+                      <form action={ingestSocialAction}>
+                        <input type="hidden" name="id" value={profile.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("social.action.ingest")}
+                        </Button>
+                      </form>
+                    ) : null}
                     <form action={healthSocialAction}>
                       <input type="hidden" name="id" value={profile.id} />
                       <Button type="submit" variant="quiet">
@@ -282,6 +296,55 @@ export default async function SocialPage({
               ))}
             </ul>
           )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("social.packages")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("social.packagesHint")}</p>
+          {(packs ?? []).length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("social.packagesEmpty")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-3 p-0">
+              {(packs ?? []).map((entry) => (
+                <li key={entry.id} className="grid gap-2 rounded-md border border-rule p-3 text-sm">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Pill tone={entry.sourceKind === "draft" ? "warning" : "success"}>
+                      {t(`social.sourceKind.${entry.sourceKind}`)}
+                    </Pill>
+                    <span className="text-xs text-ink-muted">{entry.rights}</span>
+                    {entry.sourceRef ? (
+                      <span className="font-mono text-xs text-ink-muted">{entry.sourceRef}</span>
+                    ) : null}
+                  </span>
+                  <p className="text-ink">{entry.body || t("social.packagesNoCaption")}</p>
+                  <form action={draftSocialAction}>
+                    <input type="hidden" name="id" value={entry.id} />
+                    <Button type="submit" variant="quiet">
+                      {t("social.action.draft")}
+                    </Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          {(threads ?? []).length > 0 ? (
+            <div className="mt-4 grid gap-2">
+              <h2 className="text-sm font-medium">{t("social.threads")}</h2>
+              <ul className="grid list-none gap-2 p-0">
+                {(threads ?? []).map((item) => (
+                  <li key={item.id} className="rounded-md border border-rule p-3 text-sm">
+                    <span className="text-xs text-ink-muted">
+                      {item.authorHandle}
+                      {item.contactId ? ` · ${t("social.threadOnSpine")}` : ` · ${t("social.threadOffSpine")}`}
+                    </span>
+                    <p className="text-ink">{item.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </CardBody>
       </Card>
     </div>

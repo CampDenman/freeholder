@@ -14,4 +14,15 @@ export const socialHealth = defineJob({
   },
 });
 
-export default [socialHealth];
+export const socialIngest = defineJob({
+  name: "social.ingest",
+  summary: "Pull owned posts and comments from every readable profile.",
+  schedule: "37 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { runIngestJob } = await import("./ingest");
+    return runIngestJob();
+  },
+});
+
+export default [socialHealth, socialIngest];
