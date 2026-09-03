@@ -16,6 +16,11 @@ import {
   ingestProfile,
   reviewProfile,
   setPolicy,
+  composePackage,
+  createVariants,
+  reviewVariant,
+  schedulePublications,
+  publishDue,
 } from "@/modules/social/service";
 import { ownerFacing } from "./action-helpers";
 
@@ -131,6 +136,52 @@ export async function ingestSocialAction(form: FormData): Promise<void> {
 export async function draftSocialAction(form: FormData): Promise<void> {
   try {
     await draftFromPackage.call({ id: text(form, "id") }, await actor());
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(SOCIAL);
+  done();
+}
+
+export async function composeSocialAction(form: FormData): Promise<void> {
+  const profileIds = form
+    .getAll("profileIds")
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  try {
+    const pack = await composePackage.call({ body: text(form, "body") }, await actor());
+    if (profileIds.length > 0) {
+      await createVariants.call(
+        { packageId: pack.id, profileIds, caption: text(form, "body") },
+        await actor(),
+      );
+    }
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(SOCIAL);
+  done();
+}
+
+export async function reviewVariantAction(form: FormData): Promise<void> {
+  try {
+    await reviewVariant.call(
+      { id: text(form, "id"), approved: text(form, "approved") === "1" },
+      await actor(),
+    );
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(SOCIAL);
+  done();
+}
+
+export async function scheduleSocialAction(form: FormData): Promise<void> {
+  const variantIds = form
+    .getAll("variantIds")
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  try {
+    await schedulePublications.call({ variantIds }, await actor());
+    await publishDue.call({}, await actor());
   } catch (error) {
     done(error);
   }

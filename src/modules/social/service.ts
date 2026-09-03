@@ -24,6 +24,16 @@ import {
   packageList,
   runIngestJob,
 } from "./ingest";
+import {
+  composePackage,
+  createVariants,
+  publicationCalendar,
+  publishDue,
+  reviewVariant,
+  runPublishJob,
+  schedulePublications,
+  variantList,
+} from "./compose";
 
 const EXPIRING_MS = 48 * 60 * 60 * 1000;
 
@@ -450,6 +460,14 @@ export {
   draftFromPackage,
   interactionList,
   runIngestJob,
+  composePackage,
+  createVariants,
+  reviewVariant,
+  variantList,
+  schedulePublications,
+  publishDue,
+  publicationCalendar,
+  runPublishJob,
 };
 
 export default [
@@ -467,4 +485,11 @@ export default [
   packageList,
   draftFromPackage,
   interactionList,
+  composePackage,
+  createVariants,
+  reviewVariant,
+  variantList,
+  schedulePublications,
+  publishDue,
+  publicationCalendar,
 ];

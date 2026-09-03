@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.26 composer. Next after that: C9.27 GBP. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.27 GBP. Next after that: C9.28 sharing. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6960,11 +6960,22 @@ customer has one secure, comprehensible home for the relationship.
   but does not create a contact. Migration `0151_social_ingest.sql`.
   Tests in `tests/modules/social-ingest.test.ts`. Changeset
   `social-ingest.md`.)
-- [ ] **C9.26** Build multi-platform composer/cross-pollination from authored,
+- [x] **C9.26** Build multi-platform composer/cross-pollination from authored,
   ingested, phone and screen-captured media; generate editable safe-area crops,
   clips, thumbnails, captions/alt/hashtags and codec/size/duration variants via
   ffmpeg, require human review where generated, and schedule/publish/reconcile
   every selected account idempotently from one calendar.
+  (`social.composePackage` authors a package from library assets; ingested
+  and capture-confirmed assets are the same Assets. `social.createVariants`
+  makes one rendition per selected profile with that network's caption
+  limit, aspect, safe area and duration. Stills crop via sharp; video clips
+  via ffmpeg when it is on PATH. Generated crops and profiles with
+  approval-required stay `pending_review`. `social.schedulePublications`
+  is idempotent on `idempotency_key`; `social.publishDue` publishes due
+  rows and a failure on one profile does not retry a success on another.
+  `social.publicationCalendar` is the one calendar. Migration
+  `0152_social_composer.sql`. Tests in
+  `tests/modules/social-composer.test.ts`. Changeset `social-composer.md`.)
 - [ ] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
   outbound social links to visits, contacts and revenue.
 - [ ] **C9.28** Build universal `ShareTarget`, native/channel intents, generated

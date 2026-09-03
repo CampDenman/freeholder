@@ -25,4 +25,15 @@ export const socialIngest = defineJob({
   },
 });
 
-export default [socialHealth, socialIngest];
+export const socialPublish = defineJob({
+  name: "social.publishDue",
+  summary: "Publish scheduled social variants whose time has come.",
+  schedule: "*/5 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { runPublishJob } = await import("./compose");
+    return runPublishJob();
+  },
+});
+
+export default [socialHealth, socialIngest, socialPublish];

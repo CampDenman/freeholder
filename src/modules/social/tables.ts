@@ -8,4 +8,5 @@ export {
   socialPackageAssets,
   socialPublications,
   socialInteractions,
+  socialVariants,
 } from "./schema";
