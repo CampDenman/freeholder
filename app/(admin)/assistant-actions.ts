@@ -11,7 +11,13 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
-import { setScope, updateSettings } from "@/modules/assistant/service";
+import {
+  deleteKnowledge,
+  reindex,
+  saveKnowledge,
+  setScope,
+  updateSettings,
+} from "@/modules/assistant/service";
 import { ownerFacing } from "./action-helpers";
 
 const ASSISTANT = "/admin/assistant";
@@ -76,6 +82,45 @@ export async function saveAssistantAction(form: FormData): Promise<void> {
       },
       await actor(),
     );
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(ASSISTANT);
+  done();
+}
+
+export async function saveKnowledgeAction(form: FormData): Promise<void> {
+  try {
+    await saveKnowledge.call(
+      {
+        title: text(form, "title"),
+        body: text(form, "body"),
+        kind: (text(form, "kind") || "fact") as "qa" | "fact" | "policy",
+        locale: text(form, "locale") || "en",
+        enabled: form.get("enabled") === "1",
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(ASSISTANT);
+  done();
+}
+
+export async function deleteKnowledgeAction(form: FormData): Promise<void> {
+  try {
+    await deleteKnowledge.call({ id: text(form, "id") }, await actor());
+  } catch (error) {
+    done(error);
+  }
+  revalidatePath(ASSISTANT);
+  done();
+}
+
+export async function reindexAssistantAction(): Promise<void> {
+  try {
+    await reindex.call({}, await actor());
   } catch (error) {
     done(error);
   }

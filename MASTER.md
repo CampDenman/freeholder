@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.22 assistant grounding. Next after that: C9.23 guardrails. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.23 assistant guardrails. Next after that: C9.24 social. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6895,8 +6895,22 @@ customer has one secure, comprehensible home for the relationship.
   model never supplies who a quote request is for. C9.22 is grounding;
   C9.23 is invented prices and injection. Tests in
   `tests/modules/assistant.test.ts`. Changeset `front-site-assistant.md`.)
-- [ ] **C9.22** Ground the assistant from published content/catalog/hours/
+- [x] **C9.22** Ground the assistant from published content/catalog/hours/
   policies plus locale-aware `KnowledgeEntry` rows in pgvector/Postgres.
+  (`knowledge_entries` is the owner-written Q&A/fact/policy, locale-aware
+  and toggleable. `assistant_chunks` is the retrieval index in Postgres:
+  published pages, help articles, active public catalog, visible locations
+  with hours, and those knowledge rows, each with a 256-d embedding stored
+  as `real[]` and ranked by cosine in the service. At this scale (tens of
+  pages) a table scan is the honest index — the same trade C8.12 made for
+  help-centre body search. Embeddings are local and deterministic so
+  indexing does not spend the answer budget. A publish (or a
+  location/catalog change) rebuilds the index; so does an hourly job and
+  an admin button. `assistant.answer` retrieves notes for the visitor's
+  locale and the prompt may quote only from them. Migration
+  `0148_assistant_grounding.sql`. Tests in
+  `tests/modules/assistant-grounding.test.ts`. Changeset
+  `assistant-grounding.md`.)
 - [ ] **C9.23** Prevent invented price/availability, enforce refusals and
   escalation, attach consented transcripts to contacts, surface knowledge gaps
   and prove prompt-injection resistance.

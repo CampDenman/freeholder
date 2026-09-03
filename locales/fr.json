@@ -5004,5 +5004,22 @@
   "assistant.outcome.refused_rate": "Limite horaire",
   "assistant.outcome.refused_conversation_cap": "Limite de conversation",
   "assistant.outcome.unconfigured": "Non configuré",
-  "assistant.outcome.failed": "Échec"
+  "assistant.outcome.failed": "Échec",
+  "assistant.knowledge": "Faits qu'il peut citer",
+  "assistant.knowledgeHint": "Les pages publiées, le catalogue, les horaires et ces notes sont ce que l'assistant peut citer. Un fait que vous désactivez quitte l'index.",
+  "assistant.knowledgeEmpty": "Pas encore de notes rédigées. Les pages et horaires publiés sont tout de même indexés.",
+  "assistant.knowledge.on": "Actif",
+  "assistant.knowledge.off": "Inactif",
+  "assistant.knowledgeKind.qa": "Question et réponse",
+  "assistant.knowledgeKind.fact": "Fait",
+  "assistant.knowledgeKind.policy": "Politique",
+  "assistant.field.knowledgeTitle": "Titre",
+  "assistant.field.knowledgeKind": "Type",
+  "assistant.field.knowledgeLocale": "Langue",
+  "assistant.field.knowledgeEnabled": "L'assistant peut citer ceci",
+  "assistant.field.knowledgeBody": "La note",
+  "assistant.field.knowledgeBodyHint": "Ce qu'un visiteur aurait besoin d'entendre. Citez-le, n'inventez pas autour.",
+  "assistant.action.saveKnowledge": "Enregistrer la note",
+  "assistant.action.deleteKnowledge": "Retirer",
+  "assistant.action.reindex": "Reconstruire l'index"
 }

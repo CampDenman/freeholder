@@ -40,6 +40,7 @@ import {
   index,
   integer,
   pgTable,
+  real,
   text,
   uniqueIndex,
   uuid,
@@ -54,7 +55,10 @@ import {
   ASSISTANT_PROVIDERS,
   ASSISTANT_SPEND_PERIODS,
   ASSISTANT_TURN_OUTCOMES,
+  CHUNK_SOURCES,
+  KNOWLEDGE_KINDS,
 } from "./contract";
+
 
 export const assistantSettings = pgTable(
   "assistant_settings",
@@ -228,3 +232,47 @@ export const assistantTurns = pgTable(
 
 export type AssistantTurn = typeof assistantTurns.$inferSelect;
 export type AssistantSettings = typeof assistantSettings.$inferSelect;
+
+/**
+ * Owner-written grounding (MASTER.md §31, C9.22).
+ *
+ * Toggleable and locale-aware: a French visitor should not be answered from
+ * an English-only parking note if a French one exists, and a fact the owner
+ * has switched off must leave the index.
+ */
+export const knowledgeEntries = pgTable(
+  "knowledge_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    locale: text("locale").notNull().default("en"),
+    kind: text("kind", { enum: KNOWLEDGE_KINDS }).notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [index("knowledge_entries_locale_idx").on(t.locale, t.enabled)],
+);
+
+export const assistantChunks = pgTable(
+  "assistant_chunks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceType: text("source_type", { enum: CHUNK_SOURCES }).notNull(),
+    sourceId: text("source_id").notNull(),
+    locale: text("locale").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    embedding: real("embedding").array().notNull(),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("assistant_chunks_source_idx").on(t.sourceType, t.sourceId, t.locale),
+    index("assistant_chunks_locale_idx").on(t.locale),
+  ],
+);
+
+export type KnowledgeEntry = typeof knowledgeEntries.$inferSelect;
+export type AssistantChunk = typeof assistantChunks.$inferSelect;

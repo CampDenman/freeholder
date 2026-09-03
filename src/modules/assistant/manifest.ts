@@ -19,10 +19,25 @@ export default defineModule({
   requires: ["core"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
   events: {
     // Both are worth an automation: "the assistant answered somebody" is a
     // moment a business might follow up on, and "the assistant refused" is one
     // an owner may want to hear about before a visitor tells them.
     emits: ["assistant.replied", "assistant.refused"],
+    // Publish a change → index updates. No copy-paste maintenance (§31).
+    listens: {
+      "cms.pagePublished": "onContentChanged",
+      "cms.pageUnpublished": "onContentChanged",
+      "cms.pageDeleted": "onContentChanged",
+      "location.created": "onContentChanged",
+      "location.updated": "onContentChanged",
+      "location.deleted": "onContentChanged",
+      "catalog.productActivated": "onContentChanged",
+      "catalog.productArchived": "onContentChanged",
+      "catalog.productUpdated": "onContentChanged",
+      "catalog.productVisibilityChanged": "onContentChanged",
+      "settings.setupCompleted": "onContentChanged",
+    },
   },
 });
