@@ -50,6 +50,7 @@ import {
   Key,
   Lock,
   Robot,
+  ShareNetwork,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -98,6 +99,7 @@ export interface AdminNavLabels {
   referrals: string;
   ads: string;
   assistant: string;
+  social: string;
   automations: string;
   documents: string;
   loyalty: string;
@@ -169,6 +171,7 @@ const LINKS = [
   { href: "/admin/referrals", key: "referrals", module: "referrals", Icon: UserPlus },
   { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
   { href: "/admin/assistant", key: "assistant", module: "assistant", Icon: Robot },
+  { href: "/admin/social", key: "social", module: "social", Icon: ShareNetwork },
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   {
     href: "/admin/subscriptions",

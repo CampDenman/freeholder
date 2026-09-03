@@ -85,6 +85,22 @@ const envSchema = z.object({
   MICROSOFT_OAUTH_CLIENT_SECRET: z.string().optional(),
   MICROSOFT_OAUTH_TENANT: z.string().default("common"),
 
+  /**
+   * Social OAuth apps (C9.24). YouTube and Google Business Profile reuse the
+   * Google client above; Instagram and Facebook share the Meta client. A
+   * missing pair just means that network's Connect button stays off.
+   */
+  META_OAUTH_CLIENT_ID: z.string().optional(),
+  META_OAUTH_CLIENT_SECRET: z.string().optional(),
+  TIKTOK_OAUTH_CLIENT_ID: z.string().optional(),
+  TIKTOK_OAUTH_CLIENT_SECRET: z.string().optional(),
+  LINKEDIN_OAUTH_CLIENT_ID: z.string().optional(),
+  LINKEDIN_OAUTH_CLIENT_SECRET: z.string().optional(),
+  X_OAUTH_CLIENT_ID: z.string().optional(),
+  X_OAUTH_CLIENT_SECRET: z.string().optional(),
+  PINTEREST_OAUTH_CLIENT_ID: z.string().optional(),
+  PINTEREST_OAUTH_CLIENT_SECRET: z.string().optional(),
+
   /** Bulk mail is separate so personal Gmail/Outlook can never broadcast. */
   MAIL_BULK_ADAPTER: z
     .enum(["resend", "postmark", "ses", "none"])

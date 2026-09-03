@@ -124,7 +124,7 @@ Owners can also file a bug, feature request or code submission from their runnin
 9. **International by default.** Locale, currency, timezone, and location are first-class core config, not bolt-ons. All money is `(amount_cents, currency)`, all timestamps are UTC with a business timezone for display, all user-facing strings run through the i18n layer from commit one — retrofitting i18n is the single most expensive refactor a platform can face.
 10. **SEO is architecture, not garnish.** Public pages are server-rendered HTML, URL structure follows a RIBA-compliant browse hierarchy (Root-Indexed Browse Architecture — every indexable page reachable within shallow hops from root-linked index pages), and every page ships complete meta, JSON-LD, and hreflang. The SEO module doesn't "add SEO"; the routing layer *is* the SEO.
 11. **Vibe-coded by design.** The primary way this codebase — and any deployed instance — gets edited is a coding agent in conversation with its owner. Every design decision is made with that reader in mind: strict TypeScript + Zod make the spec machine-checkable, modules and adapters have contracts narrow enough for an agent to hold one fully in context, conventions are enforced by lint/types/CI rather than tribal knowledge, and seed/demo mode exists so an agent can verify its change end-to-end. Code that is hard for an agent to safely modify is a design defect, not a documentation gap.
-12. **One sacred database (mandate).** Every piece of state lives in the ACID-compliant relational database (PostgreSQL) — religiously normalized (3NF as the default; denormalization only as a measured, documented optimization with the normalized source retained), deliberately abstracted (modules and plugins reach data exclusively through the service layer, never raw tables), and well-indexed as a review requirement (every foreign key indexed; every service-layer query pattern backed by an index; migrations adding queries without indexes fail review). No shadow stores: no state in JSON files, no truth in localStorage, no "we'll just cache it in memory." jsonb is permitted only for genuinely owner-defined schemaless data (custom fields, block content) and hot jsonb paths get generated columns + indexes. Transactions wrap every multi-table mutation — a half-created order must be impossible, not unlikely. The database *is* the business; everything else is a projection of it. *(One sanctioned exception to one-transaction composition exists: `mail.completeOAuth` commits its one-time state claim on a second connection before exchanging the provider's single-use code, because rolling the claim back would advertise a retry that can never succeed. The rationale and its pool-exhaustion caveat are written at the call site in `src/core/mail/oauth.ts`; a second exception requires amending this sentence.)*
+12. **One sacred database (mandate).** Every piece of state lives in the ACID-compliant relational database (PostgreSQL) — religiously normalized (3NF as the default; denormalization only as a measured, documented optimization with the normalized source retained), deliberately abstracted (modules and plugins reach data exclusively through the service layer, never raw tables), and well-indexed as a review requirement (every foreign key indexed; every service-layer query pattern backed by an index; migrations adding queries without indexes fail review). No shadow stores: no state in JSON files, no truth in localStorage, no "we'll just cache it in memory." jsonb is permitted only for genuinely owner-defined schemaless data (custom fields, block content) and hot jsonb paths get generated columns + indexes. Transactions wrap every multi-table mutation — a half-created order must be impossible, not unlikely. The database *is* the business; everything else is a projection of it. *(One sanctioned exception to one-transaction composition exists: `mail.completeOAuth` commits its one-time state claim on a second connection before exchanging the provider's single-use code, because rolling the claim back would advertise a retry that can never succeed. The same pattern, for the same reason, is used by `connections.completeCalendarOAuth` and `social.completeOAuth`. The rationale and its pool-exhaustion caveat are written at those call sites; another exception requires amending this sentence.)*
 
 ---
 
@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.24 social. Next after that: C9.25 social ingest. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C9.25 social ingest. Next after that: C9.26 composer. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -6930,11 +6930,22 @@ customer has one secure, comprehensible home for the relationship.
   `0149_assistant_guardrails.sql`. Tests in
   `tests/modules/assistant-guardrails.test.ts`. Changeset
   `assistant-guardrails.md`.)
-- [ ] **C9.24** Build social OAuth/adapters for Instagram, Facebook, TikTok,
+- [x] **C9.24** Build social OAuth/adapters for Instagram, Facebook, TikTok,
   YouTube, LinkedIn, X, Pinterest and Google Business Profile with multiple
   profiles/provider, capability discovery and health; explicitly assign each
   profile to an admin, the business or one/more locations with granular read,
   respond, publish and approval policy.
+  (`adapters/social/*` holds one adapter per network, registered on the
+  existing social family so a plugin can add another without a table
+  change. YouTube and Google Business Profile share the Google OAuth
+  client; Instagram and Facebook share Meta. Profiles land
+  `pending_review` until a person approves them. Assignment is user /
+  business / locations; read, respond, publish and approval policy are
+  separate switches. Health probes the token and warns before expiry.
+  Migration `0150_social_profiles.sql`. Tests in
+  `tests/modules/social.test.ts` and
+  `tests/adapters/social-conformance.test.ts`. Changeset
+  `social-connections.md`.)
 - [ ] **C9.25** Ingest owned posts/media into canonical packages with rights,
   checksum, source/publication ancestry and provenance; reclaim Assets, prevent
   repost loops, resolve identifiable contacts conservatively and route social

@@ -1051,6 +1051,13 @@
       "when": 1790524800000,
       "tag": "0149_assistant_guardrails",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1790611200000,
+      "tag": "0150_social_profiles",
+      "breakpoints": true
     }
   ]
 }
