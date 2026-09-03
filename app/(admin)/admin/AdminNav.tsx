@@ -49,6 +49,7 @@ import {
   Kanban,
   Key,
   Lock,
+  Robot,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -96,6 +97,7 @@ export interface AdminNavLabels {
   scoring: string;
   referrals: string;
   ads: string;
+  assistant: string;
   automations: string;
   documents: string;
   loyalty: string;
@@ -166,6 +168,7 @@ const LINKS = [
   { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
   { href: "/admin/referrals", key: "referrals", module: "referrals", Icon: UserPlus },
   { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
+  { href: "/admin/assistant", key: "assistant", module: "assistant", Icon: Robot },
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   {
     href: "/admin/subscriptions",
