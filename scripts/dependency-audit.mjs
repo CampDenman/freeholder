@@ -94,10 +94,11 @@ export function evaluateDependencyAudit(report, ledger, now = new Date()) {
   const advisoriesRecord = record(reportRecord?.advisories);
   const ledgerRecord = record(ledger);
   if (!reportRecord || !advisoriesRecord) {
+    const keys = reportRecord ? Object.keys(reportRecord).join(", ") : "null";
     return {
       ok: false,
       advisories: 0,
-      errors: ["pnpm audit did not return a valid advisory report"],
+      errors: [`pnpm audit did not return a valid advisory report (keys: ${keys || "(none)"})`],
       warnings,
     };
   }
@@ -197,8 +198,9 @@ function pause(ms) {
 }
 
 function isUnusableAudit(result) {
-  return result.errors.length === 1 &&
-    result.errors[0] === "pnpm audit did not return a valid advisory report";
+  return result.errors.some((error) =>
+    error.startsWith("pnpm audit did not return a valid advisory report"),
+  );
 }
 
 function main() {
@@ -212,7 +214,7 @@ function main() {
 
   // The registry sometimes answers JSON without an advisories map. That is
   // not a finding; retry before treating the lockfile as dirty.
-  const attempts = 3;
+  const attempts = 5;
   let result;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     let report;
@@ -220,15 +222,25 @@ function main() {
       report = runPnpmAudit();
     } catch (error) {
       if (attempt < attempts) {
-        pause(2_000);
+        console.warn(
+          `Dependency audit: attempt ${attempt}/${attempts} did not return JSON; retrying.`,
+        );
+        pause(8_000);
         continue;
       }
       console.error(`Dependency audit could not run: ${error instanceof Error ? error.message : error}`);
       process.exit(1);
     }
     result = evaluateDependencyAudit(report, ledger);
-    if (result.ok || !isUnusableAudit(result) || attempt === attempts) break;
-    pause(2_000);
+    if (result.ok || !isUnusableAudit(result) || attempt === attempts) {
+      if (!result.ok && isUnusableAudit(result)) {
+        const preview = JSON.stringify(report)?.slice(0, 500) ?? "undefined";
+        console.error(`Dependency audit: unusable payload: ${preview}`);
+      }
+      break;
+    }
+    console.warn(`Dependency audit: attempt ${attempt}/${attempts} unusable; retrying.`);
+    pause(8_000);
   }
 
   for (const warning of result.warnings) console.warn(`Dependency audit exception: ${warning}`);
