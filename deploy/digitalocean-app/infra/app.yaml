@@ -19,7 +19,7 @@ services:
       timeout_seconds: 5
       failure_threshold: 6
     liveness_health_check:
-      http_path: /api/health
+      http_path: /api/health/live
       initial_delay_seconds: 30
       period_seconds: 30
       timeout_seconds: 5

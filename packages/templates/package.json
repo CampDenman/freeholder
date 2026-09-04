@@ -1,7 +1,7 @@
 {
   "name": "@freeholder/templates",
   "version": "0.0.0",
-  "description": "Theme starters and business-preset templates for Freeholder",
+  "description": "Pre-release business-preset descriptors for Freeholder",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
@@ -10,10 +10,21 @@
     "directory": "packages/templates"
   },
   "type": "module",
-  "main": "src/presets.ts",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "main": "dist/presets.js",
+  "types": "dist/presets.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/presets.d.ts",
+      "import": "./dist/presets.js"
+    }
+  },
+  "files": ["dist", "LICENSE", "README.md"],
   "scripts": {
-    "build": "node --check src/presets.ts",
-    "lint": "node --check src/presets.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --test"
   }
 }

@@ -3,8 +3,8 @@
 import { describe, expect, it } from "vitest";
 import { BENCH_TOKENS, listPresets, preset } from "../../packages/templates/src/presets";
 
-describe("@freeholder/templates (C3.15)", () => {
-  it("uses Bench tokens and ships page, entity and email templates", () => {
+describe("@freeholder/templates starter descriptors", () => {
+  it("describes intended Bench, page, entity and email shapes", () => {
     expect(BENCH_TOKENS.accent).toMatch(/^#/);
     for (const key of listPresets()) {
       const value = preset(key);

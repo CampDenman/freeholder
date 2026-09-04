@@ -6,7 +6,7 @@
 # the build toolchain: deps installs, build compiles, runtime holds the
 # standalone output and nothing else.
 
-FROM node:22-bookworm-slim AS deps
+FROM node:22.23.2-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS deps
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -15,7 +15,7 @@ COPY packages ./packages
 # tested is not the artifact anybody reviewed.
 RUN pnpm install --frozen-lockfile
 
-FROM node:22-bookworm-slim AS build
+FROM node:22.23.2-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS build
 WORKDIR /app
 RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
@@ -25,7 +25,7 @@ COPY . .
 # succeeds with no database attached (§14).
 RUN pnpm build
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:22.23.2-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \

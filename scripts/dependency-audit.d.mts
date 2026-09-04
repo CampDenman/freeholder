@@ -8,6 +8,9 @@ export interface DependencyAuditResult {
   warnings: string[];
 }
 
+export const DEPENDENCY_AUDIT_ATTESTATION_SCHEMA:
+  "freeholder/dependency-audit-attestation/v1";
+
 export function evaluateDependencyAudit(
   report: unknown,
   ledger: unknown,

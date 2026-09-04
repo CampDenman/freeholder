@@ -1,4 +1,6 @@
 # @freeholder/templates (Apache-2.0)
 
-Theme starters and business-preset templates — Bench tokens, seeded page
-lists, entity layouts and email slots per preset (`MASTER.md` §13, §32, C3.15).
+Pre-release starter descriptors for three business presets: Bench token
+overrides plus intended page, entity and email shapes. They are data contracts,
+not yet CMS-installed templates or complete seeded businesses; that remaining
+work is tracked by `MASTER.md` C3.15.

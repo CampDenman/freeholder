@@ -136,7 +136,7 @@ export { designSettings } from "@/core/design/schema";
 export { entityTranslations } from "@/core/i18n/schema";
 export { passwordResets } from "@/core/auth/schema";
 export { outboxEventDeliveries, outboxEvents } from "@/core/events/schema";
-export { jobIdempotencyKeys } from "@/core/jobs/schema";
+export { jobIdempotencyKeys, jobRuntimeHeartbeats } from "@/core/jobs/schema";
 export { guidanceFlows, guidanceProgress } from "@/core/guidance/schema";
 export {
   demoScenarios,

@@ -77,7 +77,7 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
     const envs = web.envs as Array<{ key: string; value: string }>;
     expect(spec.databases[0]).toMatchObject({ engine: "PG", version: "16" });
     expect(web.health_check).toMatchObject({ http_path: "/api/health" });
-    expect(web.liveness_health_check).toMatchObject({ http_path: "/api/health" });
+    expect(web.liveness_health_check).toMatchObject({ http_path: "/api/health/live" });
     expect(envs).toContainEqual(expect.objectContaining({ key: "DATABASE_URL", value: "${freeholder-db.DATABASE_PRIVATE_URL}" }));
     expect(envs).toContainEqual(expect.objectContaining({ key: "FREEHOLDER_STORAGE", value: "s3" }));
     const rendered = renderAppSpec(readFileSync(templatePath, "utf8"), {
