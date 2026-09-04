@@ -12,7 +12,7 @@
 //     secret of anything that isn't a test.
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
-import RuntimeBalancedSequencer from "./tests/setup/runtime-balanced-sequencer";
+import RuntimeBalancedSequencer from "./scripts/runtime-balanced-sequencer";
 
 // The same file the app reads. Variables already in the environment win, so an
 // exported CI value is never clobbered by a developer's .env.

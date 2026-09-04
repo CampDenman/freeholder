@@ -8,7 +8,7 @@ import {
   estimateTestFileDurationMs,
   type WeightedTestFile,
   default as RuntimeBalancedSequencer,
-} from "../setup/runtime-balanced-sequencer";
+} from "../../scripts/runtime-balanced-sequencer";
 import vitestConfig from "../../vitest.config";
 
 function findTestFiles(directory: string): string[] {
