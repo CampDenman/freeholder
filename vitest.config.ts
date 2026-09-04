@@ -12,6 +12,7 @@
 //     secret of anything that isn't a test.
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import RuntimeBalancedSequencer from "./tests/setup/runtime-balanced-sequencer";
 
 // The same file the app reads. Variables already in the environment win, so an
 // exported CI value is never clobbered by a developer's .env.
@@ -67,6 +68,10 @@ export default defineConfig({
     // One sacred database (§2 principle 12) means one database for the suite
     // too: files that truncate spine tables must not run beside each other.
     fileParallelism: false,
+    // Hashing paths into equal file counts created a 25-minute shard beside
+    // three 10-minute shards. Partition by estimated runtime instead, while
+    // preserving one sequential database per independently isolated CI shard.
+    sequence: { sequencer: RuntimeBalancedSequencer },
     // Truncate now covers every installed module. The Vitest defaults (5s
     // tests, 10s hooks) lose the race once catalog/invoicing/cms tables join
     // the spine, and the next test then sees leftover unique emails.

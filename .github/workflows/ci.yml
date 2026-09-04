@@ -111,6 +111,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # vitest.config.ts uses the runtime-balanced sequencer. Keep this as a
+        # compact fixed topology: the sequencer, not path-hash luck, spreads
+        # expensive database/media files across these isolated databases.
         shard: [1/4, 2/4, 3/4, 4/4]
     services:
       postgres:
