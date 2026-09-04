@@ -7,12 +7,12 @@ export interface NetworkPolicy {
   captionLimit: number;
   aspect: SocialAspect;
   maxDurationSeconds: number;
-  safeArea: { top: number; bottom: number; left: number; right: number };
+  safeArea: { top: number; bottom: number; start: number; end: number };
 }
 
-const TALL = { top: 0.12, bottom: 0.18, left: 0.04, right: 0.04 };
-const SQUARE = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
-const WIDE = { top: 0.04, bottom: 0.08, left: 0.04, right: 0.04 };
+const TALL = { top: 0.12, bottom: 0.18, start: 0.04, end: 0.04 };
+const SQUARE = { top: 0.04, bottom: 0.04, start: 0.04, end: 0.04 };
+const WIDE = { top: 0.04, bottom: 0.08, start: 0.04, end: 0.04 };
 
 const POLICIES: Record<string, NetworkPolicy> = {
   instagram: { captionLimit: 2_200, aspect: "4:5", maxDurationSeconds: 60, safeArea: TALL },

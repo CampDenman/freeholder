@@ -214,7 +214,7 @@ export const socialVariants = pgTable(
     assetIds: text("asset_ids").array().notNull().default(sql`'{}'`),
     aspectRatio: text("aspect_ratio", { enum: SOCIAL_ASPECTS }).notNull(),
     safeArea: jsonb("safe_area")
-      .$type<{ top: number; bottom: number; left: number; right: number }>()
+      .$type<{ top: number; bottom: number; start: number; end: number }>()
       .notNull(),
     durationSeconds: integer("duration_seconds"),
     generated: boolean("generated").notNull().default(false),
