@@ -111,10 +111,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # vitest.config.ts uses the runtime-balanced sequencer. Keep this as a
-        # compact fixed topology: the sequencer, not path-hash luck, spreads
-        # expensive database/media files across these isolated databases.
-        shard: [1/4, 2/4, 3/4, 4/4]
+        # vitest.config.ts uses the runtime-balanced sequencer. Twenty isolated
+        # databases keep the 25-minute limit safe even when one hosted runner
+        # executes DB-backed files at the measured 6.7x degraded rate. The
+        # sequencer integrity test binds this topology to that resilience budget.
+        shard:
+          - 1/20
+          - 2/20
+          - 3/20
+          - 4/20
+          - 5/20
+          - 6/20
+          - 7/20
+          - 8/20
+          - 9/20
+          - 10/20
+          - 11/20
+          - 12/20
+          - 13/20
+          - 14/20
+          - 15/20
+          - 16/20
+          - 17/20
+          - 18/20
+          - 19/20
+          - 20/20
     services:
       postgres:
         image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94

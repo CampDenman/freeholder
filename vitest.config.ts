@@ -71,6 +71,7 @@ export default defineConfig({
     // Hashing paths into equal file counts created a 25-minute shard beside
     // three 10-minute shards. Partition by estimated runtime instead, while
     // preserving one sequential database per independently isolated CI shard.
+    // The workflow count is separately sized for measured hosted-runner drag.
     sequence: { sequencer: RuntimeBalancedSequencer },
     // Truncate now covers every installed module. The Vitest defaults (5s
     // tests, 10s hooks) lose the race once catalog/invoicing/cms tables join

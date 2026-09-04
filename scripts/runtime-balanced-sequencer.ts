@@ -11,6 +11,16 @@ import { BaseSequencer, type TestSpecification } from "vitest/node";
 
 const FILE_STARTUP_MS = 1_500;
 
+// CI keeps the job timeout fixed and uses enough isolated databases to absorb
+// a severely contended hosted runner. Consecutive runs of the exact same shard
+// at 0c7df0f showed a worst per-file slowdown of 6.7x (settings: 30.8s to
+// 206.3s), so seven times estimated work is the explicit resilience budget.
+// The integrity test binds these values to the workflow topology.
+export const CI_TEST_SHARD_COUNT = 20;
+export const CI_TEST_JOB_TIMEOUT_MS = 25 * 60 * 1_000;
+export const CI_DEGRADED_RUNNER_MULTIPLIER = 7;
+export const CI_FIXED_JOB_OVERHEAD_MS = 2 * 60 * 1_000;
+
 // Durations are rounded-up observations from the Linux CI run that exposed the
 // old path-hash imbalance. Keep only material outliers here: ordinary and new
 // files are estimated below, so this is not an exhaustive or brittle manifest.

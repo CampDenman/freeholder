@@ -3,8 +3,13 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import {
   balanceTestFiles,
+  CI_DEGRADED_RUNNER_MULTIPLIER,
+  CI_FIXED_JOB_OVERHEAD_MS,
+  CI_TEST_JOB_TIMEOUT_MS,
+  CI_TEST_SHARD_COUNT,
   estimateTestFileDurationMs,
   type WeightedTestFile,
   default as RuntimeBalancedSequencer,
@@ -42,7 +47,7 @@ describe("runtime-balanced CI test sharding", () => {
 
   it("partitions every repository test exactly once with bounded predicted skew", () => {
     const files = repositoryTestWork();
-    const shards = balanceTestFiles(files, 4);
+    const shards = balanceTestFiles(files, CI_TEST_SHARD_COUNT);
     const assigned = shards.flatMap((shard) => shard.files.map((file) => file.id));
     const weights = shards.map((shard) => shard.weight);
 
@@ -50,6 +55,33 @@ describe("runtime-balanced CI test sharding", () => {
     expect(new Set(assigned).size).toBe(files.length);
     expect(assigned.toSorted()).toEqual(files.map((file) => file.id).toSorted());
     expect(Math.max(...weights) / Math.min(...weights)).toBeLessThan(1.03);
+    expect(
+      Math.max(...weights) * CI_DEGRADED_RUNNER_MULTIPLIER +
+        CI_FIXED_JOB_OVERHEAD_MS,
+    ).toBeLessThan(CI_TEST_JOB_TIMEOUT_MS);
+  });
+
+  it("binds the protected workflow to the tested resilience topology", () => {
+    const workflow = parse(
+      readFileSync(join(process.cwd(), ".github/workflows/ci.yml"), "utf8"),
+    ) as {
+      jobs?: {
+        tests?: {
+          "timeout-minutes"?: number;
+          strategy?: { matrix?: { shard?: string[] } };
+        };
+      };
+    };
+    const testJob = workflow.jobs?.tests;
+    const expectedShards = Array.from(
+      { length: CI_TEST_SHARD_COUNT },
+      (_, index) => `${index + 1}/${CI_TEST_SHARD_COUNT}`,
+    );
+
+    expect((testJob?.["timeout-minutes"] ?? 0) * 60 * 1_000).toBe(
+      CI_TEST_JOB_TIMEOUT_MS,
+    );
+    expect(testJob?.strategy?.matrix?.shard).toEqual(expectedShards);
   });
 
   it("is deterministic and puts the longest remaining file on the lightest shard", () => {

@@ -2,9 +2,10 @@
 
 Freeholder treats the `checks` job in `.github/workflows/ci.yml` as the single
 protected-branch fan-in. It succeeds only after application checks, security
-checks, all four isolated test shards, the ownership restore drill, browser
-tests, and the deployment recipe matrix have passed. Do not add a required
-check outside that fan-in without updating the branch-protection contract.
+checks, all runtime-balanced isolated test shards, the ownership restore drill,
+browser tests, and the deployment recipe matrix have passed. Do not add a
+required check outside that fan-in without updating the branch-protection
+contract.
 
 ## Feedback objective
 
@@ -17,6 +18,17 @@ remove coverage or weaken an assertion to meet it.
 Each test shard owns a separate PostgreSQL service and database. The browser,
 ownership, and deployment jobs also use isolated services so concurrency cannot
 hide data coupling or make failures order-dependent.
+
+The shard topology has a checked degradation budget, not an arbitrary count.
+Run `33904651417` established the normal duration of a deterministic shard;
+run `33905822088` then placed that exact file list on a contended hosted runner,
+where representative database files slowed uniformly by as much as 6.7x. CI
+therefore partitions the suite across twenty databases and keeps a tested 7x
+work allowance plus fixed setup overhead below the unchanged 25-minute job
+limit. `tests/core/runtime-balanced-sequencer.test.ts` proves full, unique test
+coverage, bounded predicted skew, the degradation budget, and exact workflow
+topology. Refresh measured outliers and re-run that contract after a material
+test redesign; never increase the timeout merely to absorb an unexplained tail.
 
 The image gate also boots once against an unreachable database and requires
 process liveness to remain `200` while readiness is `503`, then boots normally
