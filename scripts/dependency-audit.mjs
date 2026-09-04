@@ -192,17 +192,45 @@ function runPnpmAudit() {
   }
 }
 
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isUnusableAudit(result) {
+  return result.errors.length === 1 &&
+    result.errors[0] === "pnpm audit did not return a valid advisory report";
+}
+
 function main() {
-  let report;
   let ledger;
   try {
-    report = runPnpmAudit();
     ledger = JSON.parse(readFileSync(EXCEPTIONS_PATH, "utf8"));
   } catch (error) {
     console.error(`Dependency audit could not run: ${error instanceof Error ? error.message : error}`);
     process.exit(1);
   }
-  const result = evaluateDependencyAudit(report, ledger);
+
+  // The registry sometimes answers JSON without an advisories map. That is
+  // not a finding; retry before treating the lockfile as dirty.
+  const attempts = 3;
+  let result;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    let report;
+    try {
+      report = runPnpmAudit();
+    } catch (error) {
+      if (attempt < attempts) {
+        pause(2_000);
+        continue;
+      }
+      console.error(`Dependency audit could not run: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
+    result = evaluateDependencyAudit(report, ledger);
+    if (result.ok || !isUnusableAudit(result) || attempt === attempts) break;
+    pause(2_000);
+  }
+
   for (const warning of result.warnings) console.warn(`Dependency audit exception: ${warning}`);
   if (!result.ok) {
     console.error(
