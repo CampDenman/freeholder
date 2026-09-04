@@ -161,6 +161,10 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
       const parent = await mkdtemp(path.join(tmpdir(), "freeholder-export-test-"));
       const output = path.join(parent, "export");
       const credentialKey = Buffer.alloc(32, 9).toString("hex");
+      const sensitiveAppUrl = new URL("https://example.test/freeholder");
+      sensitiveAppUrl.username = "operator";
+      sensitiveAppUrl.password = "app-url-secret";
+      sensitiveAppUrl.searchParams.set("token", "query-secret");
       try {
         const configPath = path.resolve("freeholder.config.ts");
         const result = await createOwnershipExport({
@@ -172,8 +176,7 @@ describe.runIf(hasDatabase)("complete ownership export", () => {
           },
           environment: {
             NODE_ENV: "test",
-            APP_URL:
-              "https://operator:app-url-secret@example.test/freeholder?token=query-secret",
+            APP_URL: sensitiveAppUrl.href,
             CREDENTIAL_KEY: credentialKey,
             SESSION_SECRET: "session-secret-must-not-export",
             DATABASE_URL: "database-url-must-not-export",

@@ -17,6 +17,7 @@ limits:
 artifacts:
   - deploy/docker-selfhost/infra/compose.yml
 required_environment:
+  - POSTGRES_PASSWORD
   - SESSION_SECRET
   - CREDENTIAL_KEY
   - APP_URL

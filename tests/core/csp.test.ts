@@ -28,11 +28,14 @@ describe("the Content Security Policy contract", () => {
       .toEqual(["https://ads.example", "https://media.example"]);
     expect(parseCspOrigins("http://localhost:3001")).toEqual(["http://localhost:3001"]);
 
+    const credentialedOrigin = new URL("https://ads.example");
+    credentialedOrigin.username = "fixture-user";
+    credentialedOrigin.password = "fixture-password";
     for (const unsafe of [
       "http://ads.example",
       "https://*.example",
       "https://ads.example/path",
-      "https://user:secret@ads.example",
+      credentialedOrigin.href,
     ]) {
       expect(() => parseCspOrigins(unsafe)).toThrow(/exact HTTPS origin/);
     }

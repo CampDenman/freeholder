@@ -10,6 +10,7 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const githubRoot = join(root, ".github");
 const ACTION = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.\/-]+)?@([a-f0-9]{40})$/;
 const CONTAINER = /^\S+@sha256:[a-f0-9]{64}$/;
+const SECRET_SCAN = "trufflesecurity/trufflehog@";
 
 function record(value) {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -59,6 +60,7 @@ export function inspectWorkflowDocument(source, path = "workflow") {
   }
   const jobs = record(document?.jobs);
   if (!jobs) return [];
+  const triggers = record(document?.on);
   const errors = [];
   const inspectContainer = (value, label) => {
     const image = typeof value === "string" ? value : record(value)?.image;
@@ -85,6 +87,29 @@ export function inspectWorkflowDocument(source, path = "workflow") {
         errors.push(
           `${path}: checkout in job ${jobName} step ${stepIndex + 1} must set persist-credentials: false`,
         );
+      }
+      if (typeof step?.uses === "string" && step.uses.startsWith(SECRET_SCAN)) {
+        const inputs = record(step.with);
+        const base = typeof inputs?.base === "string" ? inputs.base : "";
+        const head = typeof inputs?.head === "string" ? inputs.head : "";
+        const args = typeof inputs?.extra_args === "string" ? inputs.extra_args : "";
+        const requiredRanges = [
+          ["pull_request", "github.event.pull_request.base.sha", "github.event.pull_request.head.sha"],
+          ["merge_group", "github.event.merge_group.base_sha", "github.event.merge_group.head_sha"],
+          ["push", "github.event.before", "github.sha"],
+        ];
+        for (const [event, expectedBase, expectedHead] of requiredRanges) {
+          if (triggers?.[event] !== undefined && (!base.includes(expectedBase) || !head.includes(expectedHead))) {
+            errors.push(
+              `${path}: TruffleHog in job ${jobName} must bind ${event} to ${expectedBase}..${expectedHead}`,
+            );
+          }
+        }
+        if (!args.includes("--results=verified,unknown") || !args.includes("--fail-on-scan-errors")) {
+          errors.push(
+            `${path}: TruffleHog in job ${jobName} must fail on verified/unknown findings and scan errors`,
+          );
+        }
       }
     }
   }

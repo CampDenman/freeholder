@@ -67,4 +67,35 @@ with:
           persist-credentials: false
 `)).toEqual([]);
   });
+
+  it("requires explicit secret-scan ranges for every required event", () => {
+    const trufflehog = "trufflesecurity/trufflehog@" + "a".repeat(40);
+    const workflow = (
+      base: string,
+      head: string,
+      args = "--results=verified,unknown --fail-on-scan-errors",
+    ) => `on:
+  pull_request:
+  merge_group:
+  push:
+jobs:
+  security:
+    steps:
+      - uses: ${trufflehog}
+        with:
+          base: \${{ ${base} }}
+          head: \${{ ${head} }}
+          extra_args: ${args}
+`;
+    const base = "github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before";
+    const head = "github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha";
+    expect(inspectWorkflowDocument(workflow(base, head))).toEqual([]);
+    expect(
+      inspectWorkflowDocument(workflow("github.event.before", "github.sha", "--results=verified")),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining("bind pull_request"),
+      expect.stringContaining("bind merge_group"),
+      expect.stringContaining("verified/unknown findings and scan errors"),
+    ]));
+  });
 });

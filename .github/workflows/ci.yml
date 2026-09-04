@@ -64,6 +64,12 @@ jobs:
       - name: Secret scan
         uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c # v3.97.4
         with:
+          # TruffleHog infers ranges for pull_request and push, but not for
+          # merge_group. Keep every required event on an explicit immutable
+          # before/after range so a queue run neither misses its merge commit
+          # nor silently falls back to scanning unrelated repository history.
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
+          head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.sha }}
           version: 3.97.4
           extra_args: --results=verified,unknown --fail-on-scan-errors
       # Run repository scanners before executing any dependency lifecycle from

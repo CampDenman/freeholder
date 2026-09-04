@@ -110,6 +110,11 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
       expect(compose.services.app!.restart).toBe("unless-stopped");
       expect(compose.services.app!.env_file).not.toContain(".env.example");
       expect(compose.services.db!.healthcheck).toBeTruthy();
+      const current = recipe(target);
+      expect(current.required_environment).toContain("POSTGRES_PASSWORD");
+      const databaseUrl = (compose.services.app!.environment as Record<string, string>).DATABASE_URL;
+      expect(databaseUrl).toContain("${POSTGRES_PASSWORD:?");
+      expect(databaseUrl).not.toContain("freeholder:freeholder");
     }
   });
 

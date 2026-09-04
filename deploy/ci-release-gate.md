@@ -25,10 +25,19 @@ outage from being converted into a restart loop.
 
 ## Security evidence
 
-Every pull request and main-branch push runs dependency review, a live registry
-advisory audit, secret-history scanning, and CodeQL. The live audit emits an
-attestation containing the exact lockfile and exception-ledger hashes. Scheduled
-security CI regenerates the same evidence weekly instead of trusting a cache.
+Every pull request, merge-group candidate and main-branch push runs a live
+registry advisory audit, secret-history scanning, and CodeQL; pull requests also
+run dependency review. TruffleHog receives the immutable event-specific base and
+head SHAs explicitly. This is required because its action does not infer a
+`merge_group` range and otherwise falls back to unrelated full-history findings.
+The live audit emits an attestation containing the exact lockfile and exception-
+ledger hashes. Scheduled security CI regenerates the same evidence and performs
+the deliberate full-history scan weekly instead of trusting a cache.
+
+Credential-shaped values used to prove redaction or URL rejection are assembled
+inside the test process. Deployment examples never ship a default database
+password: Compose requires a separately generated, URL-safe
+`POSTGRES_PASSWORD` before configuration interpolation can succeed.
 
 All third-party actions and CI service containers are pinned to immutable
 digests, and CI reads the exact Node version from `.node-version`.

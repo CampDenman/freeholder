@@ -103,13 +103,17 @@ describe("errorResponse()", () => {
   });
 
   it("never leaks the message of an unexpected failure", async () => {
+    const credential = ["hunter", "2"].join("");
+    const database = new URL("postgres://db:5432/live");
+    database.username = "fixture-user";
+    database.password = credential;
     const leaky = new Error(
-      "connect ECONNREFUSED postgres://user:hunter2@db:5432/live",
+      `connect ECONNREFUSED ${database.href}`,
     );
     const response = errorResponse(leaky, CUSTOMER);
     expect(response.status).toBe(500);
     const body = JSON.stringify(await response.json());
-    expect(body).not.toContain("hunter2");
+    expect(body).not.toContain(credential);
     expect(body).not.toContain("postgres://");
     expect(body).toContain("Something went wrong");
   });
