@@ -1,31 +1,144 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
-# Quality gates (MASTER.md §15). The SEO, i18n, money, and a11y gates join
-# this file as the surfaces they check come into existence — each lands in
-# the same PR as its first checkable surface.
+# Independent required jobs keep first feedback below the owned CI SLO while
+# the final release gate still represents every test and deploy proof.
 name: CI
 
 on:
   pull_request:
-  # The merge queue tests the batch it is about to merge, on a temporary
-  # branch, and blocks on these same checks. Without this trigger the queue
-  # waits for a report that never comes, times out an hour later, and drops
-  # the pull request — so this line is what makes a queue usable at all.
   merge_group:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SESSION_SECRET: ci-build-only-not-a-real-secret-0000000000
+
 jobs:
-  checks:
+  application:
+    name: Application gates
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: pnpm plan:check
+      - run: pnpm license:check
+      - run: pnpm workflow:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - name: Published package artifact integrity
+        run: pnpm packages:verify
+      - run: pnpm build
+      - run: pnpm artifact:check
+      - name: Schema compatibility
+        if: github.event_name == 'pull_request'
+        run: node scripts/schema-compat-gate.mjs origin/${{ github.base_ref }}
+      - name: Changelog coverage
+        if: github.event_name == 'pull_request'
+        run: node scripts/changelog-gate.mjs origin/${{ github.base_ref }}
+
+  security:
+    name: Security and dependency evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Dependency change review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+      - name: Secret scan
+        uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c # v3.97.4
+        with:
+          # TruffleHog infers ranges for pull_request and push, but not for
+          # merge_group. Keep every required event on an explicit immutable
+          # before/after range so a queue run neither misses its merge commit
+          # nor silently falls back to scanning unrelated repository history.
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
+          head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.sha }}
+          version: 3.97.4
+          extra_args: --results=verified,unknown --fail-on-scan-errors
+      # Run repository scanners before executing any dependency lifecycle from
+      # a pull request. This job has no write permission in either phase.
+      - uses: ./.github/actions/setup-project
+      - name: Live dependency audit
+        run: node scripts/dependency-audit.mjs --write-attestation=artifacts/dependency-audit.json
+      - name: Preserve lockfile-keyed audit evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-audit-${{ github.sha }}
+          path: artifacts/dependency-audit.json
+          if-no-files-found: error
+          retention-days: 30
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
-      # The upgrade gate (§39.9) pulls the previously released image to prove
-      # an owner's instance can actually get from that release to this one.
-      packages: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+
+  tests:
+    name: Tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # vitest.config.ts uses the runtime-balanced sequencer. Twenty isolated
+        # databases keep the 25-minute limit safe even when one hosted runner
+        # executes DB-backed files at the measured 6.7x degraded rate. The
+        # sequencer integrity test binds this topology to that resilience budget.
+        shard:
+          - 1/20
+          - 2/20
+          - 3/20
+          - 4/20
+          - 5/20
+          - 6/20
+          - 7/20
+          - 8/20
+          - 9/20
+          - 10/20
+          - 11/20
+          - 12/20
+          - 13/20
+          - 14/20
+          - 15/20
+          - 16/20
+          - 17/20
+          - 18/20
+          - 19/20
+          - 20/20
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: freeholder_test
@@ -35,153 +148,242 @@ jobs:
           --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/freeholder_test
-      # `next build` prerenders pages, and prerendering calls env(), which
-      # refuses to resolve in production without a session secret. A build is
-      # not a running instance and this value signs nothing: it exists so the
-      # Build step can render, exactly as vitest.config.ts supplies a
-      # deterministic one because CI has no real secret to give.
-      SESSION_SECRET: ci-build-only-not-a-real-secret-0000000000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: pnpm exec vitest run --shard=${{ matrix.shard }}
+
+  ownership:
+    name: Backup, restore and export drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: freeholder_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/freeholder_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Product plan consistency (MASTER.md §43)
-        run: pnpm plan:check
-      - name: Apache-2.0 licensing consistency
-        run: pnpm license:check
-      # §36 lists dependency audit among the v1.0 security gates. High and
-      # critical findings are absolute failures. A lower-severity finding is
-      # also a failure unless SECURITY.md's owned, expiring exception contract
-      # has been recorded path-for-path in the checked-in ledger.
-      - name: Dependency audit (§36)
-        run: pnpm dependency:audit
-      - name: Lint (architecture boundaries, service-layer and money gates)
-        run: pnpm lint
-      - name: Typecheck
-        run: pnpm typecheck
-      - name: Test
-        run: pnpm test
-      # C1.23: a backup is not evidence until it restores. This uses the
-      # disposable CI database only, restores pg_dump into a random scratch
-      # database, compares every application-owned table and then generates
-      # the secret-safe logical export and media manifest from the restore.
-      - name: Ownership backup, restore and export drill (C1.23)
-        run: pnpm ownership:drill
-      - name: Build
-        run: pnpm build
-      - name: Standalone artifact boundary
-        run: pnpm artifact:check
-      # C1.21/C1.22 are deliberately separate from the jsdom unit helpers:
-      # Chromium supplies real layout, focus, navigation and Server Action
-      # behaviour. The serial suites reset only the disposable CI database.
-      - name: Real-browser accessibility and journey gates (§15.7, C1.21-C1.22)
-        run: |
-          pnpm exec playwright install --with-deps chromium
-          pnpm test:browser
-      # A recipe whose image does not build is a recipe nobody can use, and
-      # this repo has no Docker on the development machine — so CI is where
-      # that claim gets checked. First half of §18's recipe validation matrix.
-      - name: Deploy recipe — the image builds
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: pnpm ownership:drill
+
+  browser:
+    name: Browser accessibility and journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: freeholder_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/freeholder_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser
+
+  deployment:
+    name: Image, recipes, public gates and upgrade
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: read
+    services:
+      postgres:
+        image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: freeholder_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/freeholder_test
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      CI_IMAGE: freeholder:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - name: Build the release image
         run: docker build --tag freeholder:ci .
-      - name: Deploy recipe — the image serves a real request
+      - name: Prove dependency failure separates liveness from readiness
         run: |
-          # --network host so the container reaches the Postgres service the
-          # rest of this job already migrated. Asserting 200 rather than "some
-          # response": the first version of this step accepted any status and
-          # passed on a 500, which is a green tick for a broken image.
-          docker run -d --name freeholder-ci --network host -e SESSION_SECRET=ci-only-secret-that-is-32-chars-long -e APP_URL=http://localhost:3000 -e DATABASE_URL="$DATABASE_URL" freeholder:ci
-          for i in $(seq 1 40); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)
+          cleanup() { docker rm -f freeholder-outage >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run -d --name freeholder-outage --network host \
+            -e PORT=3001 \
+            -e SESSION_SECRET=ci-only-secret-that-is-32-chars-long \
+            -e APP_URL=http://localhost:3001 \
+            -e DATABASE_URL=postgres://postgres:postgres@127.0.0.1:59999/unavailable \
+            freeholder:ci
+          live=""
+          for _ in $(seq 1 60); do
+            live=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/api/health/live || true)
+            [ "$live" = "200" ] && break
+            sleep 1
+          done
+          [ "$live" = "200" ] || {
+            docker logs freeholder-outage
+            echo "liveness answered $live during dependency failure, expected 200"
+            exit 1
+          }
+          ready=$(curl --max-time 8 -s -o /dev/null -w '%{http_code}' http://localhost:3001/api/health || true)
+          [ "$ready" = "503" ] || {
+            docker logs freeholder-outage
+            echo "readiness answered $ready during dependency failure, expected 503"
+            exit 1
+          }
+      - name: Prove the image boots its real request graph
+        run: |
+          docker run -d --name freeholder-ci --network host \
+            -e SESSION_SECRET=ci-only-secret-that-is-32-chars-long \
+            -e APP_URL=http://localhost:3000 \
+            -e DATABASE_URL="$DATABASE_URL" freeholder:ci
+          code=""
+          for _ in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/health || true)
             [ "$code" = "200" ] && break
             sleep 1
           done
           if [ "$code" != "200" ]; then
-            echo "home page answered $code, expected 200"; docker logs freeholder-ci; exit 1
+            docker logs freeholder-ci
+            echo "readiness answered $code, expected 200"
+            exit 1
           fi
-          setup=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/setup || true)
-          if [ "$setup" != "200" ]; then
-            echo "/setup answered $setup, expected 200"; docker logs freeholder-ci; exit 1
-          fi
-          echo "image serves / and /setup with 200"
-          # The modules must be booted *in the graph serving requests*, not
-          # merely in instrumentation's. They were not, for three phases, and
-          # nothing failed — services are called as objects rather than looked
-          # up, so an empty registry is invisible until a module listens for an
-          # event. This asserts the wiring rather than trusting it.
-          health=$(curl -s http://localhost:3000/api/health)
-          echo "health: $health"
-          echo "$health" | grep -q '"ok":true' || { echo "platform did not boot"; docker logs freeholder-ci; exit 1; }
+          health=$(curl -fsS http://localhost:3000/api/health)
           node -e '
             const h = JSON.parse(process.argv[1]);
-            if (!h.modules || !h.services) {
-              console.error("booted with nothing wired:", h); process.exit(1);
+            if (!h.ok || !h.modules || !h.services || !h.jobs?.ready) {
+              console.error("incomplete boot evidence", h); process.exit(1);
             }
-            console.log(`booted ${h.modules} modules, ${h.services} services, ${h.listeners} listeners`);
+            console.log(`booted ${h.modules} modules, ${h.services} services, ${h.listeners} listeners; worker age ${h.jobs.heartbeatAgeSeconds}s`);
           ' "$health"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/setup)" = "200"
           docker rm -f freeholder-ci >/dev/null
-      - name: Tier-1 recipe runtime matrix (Postgres + MinIO + Doctor)
+      - name: Start S3-compatible recipe storage
         run: |
           docker run -d --name freeholder-minio --network host \
             -e MINIO_ROOT_USER=freeholder-ci \
             -e MINIO_ROOT_PASSWORD=freeholder-ci-secret \
-            minio/minio:RELEASE.2025-07-23T15-54-02Z server /data --address :9000
-          for i in $(seq 1 30); do
+            minio/minio:RELEASE.2025-07-23T15-54-02Z@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0 server /data --address :9000
+          for _ in $(seq 1 30); do
             curl -fsS http://127.0.0.1:9000/minio/health/live && break
             sleep 1
           done
           docker run --rm --network host --entrypoint /bin/sh \
-            minio/mc:RELEASE.2025-07-21T05-28-08Z -c \
+            minio/mc:RELEASE.2025-07-21T05-28-08Z@sha256:fb8f773eac8ef9d6da0486d5dec2f42f219358bcb8de579d1623d518c9ebd4cc -c \
             'mc alias set local http://127.0.0.1:9000 freeholder-ci freeholder-ci-secret && mc mb --ignore-existing local/freeholder-recipe-gate'
-          bash scripts/recipe-matrix.sh
-        env:
-          CI_IMAGE: freeholder:ci
-          PGHOST: localhost
-          PGUSER: postgres
-          PGPASSWORD: postgres
-      # §15.2, against the seeded demo site inside the built image.
-      # The doctrine in §5 is "enforced structurally" — this is the structure.
-      - name: SEO gate (§15.2)
-        run: bash scripts/public-gates.sh
-        env:
-          CI_IMAGE: freeholder:ci
-          PGHOST: localhost
-          PGUSER: postgres
-          PGPASSWORD: postgres
-      # §39.5: rollback is an image swap only while release N's schema is
-      # still readable by N-1. This refuses the statements known to break that,
-      # unless somebody wrote down that they are doing it deliberately.
-      - name: Schema-compatibility gate (§39.5)
-        if: github.event_name == 'pull_request'
-        run: node scripts/schema-compat-gate.mjs origin/${{ github.base_ref }}
-      # The gate that makes auto-update safe to leave on (§39.9). Everything
-      # else in §39 — signatures, preflight, snapshots — reduces the blast
-      # radius of a bad upgrade. This is the only part that checks an upgrade
-      # actually works, on real data, against the release people are running.
-      # Read-only, and only so the previously released image can be pulled.
-      # A pull request from a fork gets a token that cannot reach packages; the
-      # gate notices and skips with a warning rather than failing somebody
-      # else's contribution for a permission they were never going to have.
-      - name: Registry login (for the previous release)
+      - run: bash scripts/recipe-matrix.sh
+      - run: bash scripts/public-gates.sh
+      - name: Registry login for the previous release
         continue-on-error: true
-        uses: docker/login-action@v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upgrade gate (§39.9)
+      - name: Upgrade from the previous release
         run: bash scripts/upgrade-gate.sh
         env:
           PREVIOUS_IMAGE: ghcr.io/${{ github.repository }}:edge
           CURRENT_IMAGE: freeholder:ci
-          PGHOST: localhost
-          PGUSER: postgres
-          PGPASSWORD: postgres
-      - name: Changelog gate (§15.6)
-        if: github.event_name == 'pull_request'
-        run: node scripts/changelog-gate.mjs origin/${{ github.base_ref }}
+
+  release-gate:
+    # Keep the existing protected-branch context while changing its meaning
+    # from one serial job to the fan-in of every independent required job.
+    name: checks
+    needs: [application, security, codeql, tests, ownership, browser, deployment]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo "Every required gate passed for $GITHUB_SHA"
+
+  candidate-image:
+    name: Build attested release candidate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: release-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: image
+        name: Normalize the image name
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "name=$image" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.name }}:candidate-${{ github.sha }}
+          platforms: linux/amd64
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Attest candidate build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Record the exact promotable artifact
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p artifacts
+          jq -n \
+            --arg schema "freeholder/image-candidate/v1" \
+            --arg sha "$GITHUB_SHA" \
+            --arg image "$IMAGE" \
+            --arg digest "$DIGEST" \
+            '{schema: $schema, sha: $sha, image: $image, digest: $digest}' \
+            > artifacts/image-candidate.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: image-candidate-${{ github.sha }}
+          path: artifacts/image-candidate.json
+          if-no-files-found: error
+          retention-days: 30

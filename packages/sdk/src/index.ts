@@ -5,7 +5,7 @@
 // The method list is the instance's live service registry: this package
 // does not invent endpoints. `call(name, input)` POSTs `/api/v1/<name>`
 // with the same JSON the OpenAPI document describes.
-import { PLATFORM_VERSION } from "./version";
+import { PLATFORM_VERSION } from "./version.ts";
 
 export { PLATFORM_VERSION };
 

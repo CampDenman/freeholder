@@ -18,6 +18,15 @@ import {
 } from "pg-boss";
 import { db, type Database } from "@/core/db";
 import { databaseUrl, env } from "@/core/env";
+import {
+  EMPTY_JOB_RUNTIME_METRICS,
+  JOB_HEARTBEAT_INTERVAL_MS,
+  JOB_QUEUE_LAG_DEGRADED_SECONDS,
+  publishJobRuntimePulse,
+  type JobRuntimeMetrics,
+  type JobRuntimeRole,
+  type JobRuntimeState,
+} from "@/core/jobs/health";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
 
 type JobTx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -283,6 +292,195 @@ function executionOptions(
 
 let boss: PgBoss | undefined;
 let producerStarting: Promise<PgBoss | undefined> | undefined;
+let runtimeInstanceId: string | undefined;
+let runtimeHeartbeatTimer: NodeJS.Timeout | undefined;
+let runtimePulseInFlight: Promise<void> | undefined;
+let runtimeLastMetrics: JobRuntimeMetrics = { ...EMPTY_JOB_RUNTIME_METRICS };
+let runtimeLastErrorCode: string | undefined;
+let runtimeLastErrorAt: Date | undefined;
+let runtimeLastLogCode: string | undefined;
+let runtimeLastLogAt = 0;
+let runtimeLastAlert: "healthy" | "lag" | "dead_letters" = "healthy";
+
+const RUNTIME_ERROR_RECOVERY_MS = JOB_HEARTBEAT_INTERVAL_MS * 2;
+const RUNTIME_LOG_THROTTLE_MS = 60_000;
+
+/** Stable, bounded diagnostics only; never return an error message or payload. */
+export function jobRuntimeErrorCode(error: unknown): string {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    const candidate = current as { code?: unknown; name?: unknown; cause?: unknown };
+    if (
+      typeof candidate.code === "string" &&
+      /^[A-Za-z0-9_.-]{1,80}$/.test(candidate.code)
+    ) {
+      return candidate.code;
+    }
+    if (
+      typeof candidate.name === "string" &&
+      /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(candidate.name) &&
+      candidate.name !== "Error"
+    ) {
+      return candidate.name;
+    }
+    current = candidate.cause;
+  }
+  return "runtime_error";
+}
+
+function logRuntimeFailure(phase: string, error: unknown): string {
+  const code = jobRuntimeErrorCode(error);
+  const now = Date.now();
+  if (code !== runtimeLastLogCode || now - runtimeLastLogAt >= RUNTIME_LOG_THROTTLE_MS) {
+    // Error messages may contain SQL values or provider responses. The stable
+    // code and phase are actionable without risking a payload in platform logs.
+    console.error(`[jobs] ${phase} failed; code=${code}; runtime health is degraded`);
+    runtimeLastLogCode = code;
+    runtimeLastLogAt = now;
+  }
+  return code;
+}
+
+function rememberRuntimeFailure(phase: string, error: unknown): void {
+  runtimeLastErrorCode = logRuntimeFailure(phase, error);
+  runtimeLastErrorAt = new Date();
+}
+
+function integerMetric(value: number | string | null | undefined): number {
+  const parsed = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+async function collectRuntimeMetrics(instance: PgBoss): Promise<JobRuntimeMetrics> {
+  const queues = await instance.getQueues([...registry.keys(), DEAD_LETTER_QUEUE]);
+  const ordinary = queues.filter((queue) => queue.name !== DEAD_LETTER_QUEUE);
+  const deadLetter = queues.find((queue) => queue.name === DEAD_LETTER_QUEUE);
+  const lagRows = await db().execute(sql`
+    select
+      count(*)::int as ready_jobs,
+      coalesce(
+        greatest(0, floor(extract(epoch from (now() - min(start_after)))))::int,
+        0
+      ) as queue_lag_seconds
+    from pgboss.job
+    where state in ('created'::pgboss.job_state, 'retry'::pgboss.job_state)
+      and not blocked
+      and start_after <= now()
+      and name <> ${DEAD_LETTER_QUEUE}
+  `);
+  const lag = (lagRows[0] ?? {}) as {
+    queue_lag_seconds?: number | string;
+    ready_jobs?: number | string;
+  };
+  const sum = (
+    field: "queuedCount" | "readyCount" | "activeCount" | "failedCount",
+  ) => ordinary.reduce((total, queue) => total + integerMetric(queue[field]), 0);
+
+  return {
+    registeredJobs: registry.size,
+    mountedWorkers: mountedWorkers.size,
+    scheduledJobs: [...registry.values()].filter((job) => job.schedule).length,
+    queuedJobs: sum("queuedCount"),
+    readyJobs: integerMetric(lag.ready_jobs),
+    activeJobs: sum("activeCount"),
+    failedJobs: sum("failedCount"),
+    deadLetters: integerMetric(deadLetter?.queuedCount),
+    queueLagSeconds: integerMetric(lag.queue_lag_seconds),
+  };
+}
+
+function runtimeRole(): JobRuntimeRole {
+  return mountedWorkers.size > 0 ? "worker" : "producer";
+}
+
+function runtimeStateFor(metrics: JobRuntimeMetrics): {
+  state: JobRuntimeState;
+  errorCode?: string;
+  errorAt?: Date;
+} {
+  if (
+    metrics.readyJobs > 0 &&
+    metrics.queueLagSeconds >= JOB_QUEUE_LAG_DEGRADED_SECONDS
+  ) {
+    return { state: "degraded", errorCode: "queue_lag", errorAt: new Date() };
+  }
+  if (
+    runtimeLastErrorAt &&
+    Date.now() - runtimeLastErrorAt.getTime() < RUNTIME_ERROR_RECOVERY_MS
+  ) {
+    return {
+      state: "degraded",
+      errorCode: runtimeLastErrorCode,
+      errorAt: runtimeLastErrorAt,
+    };
+  }
+  runtimeLastErrorCode = undefined;
+  runtimeLastErrorAt = undefined;
+  return { state: "ready" };
+}
+
+function reportRuntimeBacklog(metrics: JobRuntimeMetrics): void {
+  const alert =
+    metrics.readyJobs > 0 &&
+    metrics.queueLagSeconds >= JOB_QUEUE_LAG_DEGRADED_SECONDS
+      ? "lag"
+      : metrics.deadLetters > 0
+        ? "dead_letters"
+        : "healthy";
+  if (alert === runtimeLastAlert) return;
+  runtimeLastAlert = alert;
+  if (alert === "lag") {
+    console.error(
+      `[jobs] queue lag degraded; ready_jobs=${metrics.readyJobs}; queue_lag_seconds=${metrics.queueLagSeconds}`,
+    );
+  } else if (alert === "dead_letters") {
+    console.error(`[jobs] dead-letter backlog; dead_letters=${metrics.deadLetters}`);
+  } else {
+    console.info("[jobs] runtime backlog recovered");
+  }
+}
+
+async function pulseJobRuntime(
+  instance: PgBoss,
+  requestedState?: "starting" | "stopping" | "stopped",
+): Promise<void> {
+  runtimeInstanceId ??= randomUUID();
+  const metrics = requestedState === "stopped"
+    ? runtimeLastMetrics
+    : await collectRuntimeMetrics(instance);
+  runtimeLastMetrics = metrics;
+  reportRuntimeBacklog(metrics);
+  const derived = requestedState
+    ? { state: requestedState as JobRuntimeState }
+    : runtimeStateFor(metrics);
+  await publishJobRuntimePulse({
+    instanceId: runtimeInstanceId,
+    role: runtimeRole(),
+    ...metrics,
+    state: derived.state,
+    lastErrorCode: derived.errorCode,
+    lastErrorAt: derived.errorAt,
+  });
+}
+
+function scheduleRuntimePulse(instance: PgBoss): void {
+  if (runtimePulseInFlight) return;
+  runtimePulseInFlight = pulseJobRuntime(instance)
+    .catch((error: unknown) => rememberRuntimeFailure("heartbeat", error))
+    .finally(() => {
+      runtimePulseInFlight = undefined;
+    });
+}
+
+async function startRuntimeHeartbeat(instance: PgBoss): Promise<void> {
+  await pulseJobRuntime(instance, "starting");
+  if (runtimeHeartbeatTimer) return;
+  runtimeHeartbeatTimer = setInterval(
+    () => scheduleRuntimePulse(instance),
+    JOB_HEARTBEAT_INTERVAL_MS,
+  );
+  runtimeHeartbeatTimer.unref();
+}
 
 async function ensureQueue(instance: PgBoss, job: JobDefinition): Promise<void> {
   if (mountedQueues.has(job.name)) return;
@@ -323,11 +521,15 @@ export async function startJobProducer(): Promise<PgBoss | undefined> {
       supervise: workersEnabled(),
       schedule: schedulesEnabled(),
     });
-    instance.on("error", (error) => console.error("[jobs] pg-boss error", error));
+    instance.on("error", (error) => {
+      rememberRuntimeFailure("pg-boss", error);
+      scheduleRuntimePulse(instance);
+    });
     try {
       await instance.start();
       await ensureDeadLetterQueue(instance);
       for (const job of registry.values()) await ensureQueue(instance, job);
+      await startRuntimeHeartbeat(instance);
       boss = instance;
       return instance;
     } catch (error) {
@@ -553,6 +755,7 @@ export async function startJobs(): Promise<PgBoss | undefined> {
       [...registry.values()].filter((job) => job.schedule).length
     } scheduled`,
   );
+  await pulseJobRuntime(instance);
   return instance;
 }
 
@@ -689,10 +892,29 @@ export async function pruneJobIdempotencyKeys(): Promise<number> {
 }
 
 export async function stopJobs(): Promise<void> {
-  const instance = boss;
+  const instance = boss ?? (await producerStarting?.catch(() => undefined));
   boss = undefined;
   producerStarting = undefined;
+  if (runtimeHeartbeatTimer) clearInterval(runtimeHeartbeatTimer);
+  runtimeHeartbeatTimer = undefined;
+  await runtimePulseInFlight?.catch(() => undefined);
+  runtimePulseInFlight = undefined;
+  if (instance && runtimeInstanceId) {
+    await pulseJobRuntime(instance, "stopping").catch((error: unknown) =>
+      logRuntimeFailure("shutdown-heartbeat", error),
+    );
+  }
+  await instance?.stop({ graceful: true, timeout: 30_000 });
+  if (instance && runtimeInstanceId) {
+    await pulseJobRuntime(instance, "stopped").catch((error: unknown) =>
+      logRuntimeFailure("shutdown-heartbeat", error),
+    );
+  }
   mountedQueues.clear();
   mountedWorkers.clear();
-  await instance?.stop({ graceful: true });
+  runtimeInstanceId = undefined;
+  runtimeLastMetrics = { ...EMPTY_JOB_RUNTIME_METRICS };
+  runtimeLastErrorCode = undefined;
+  runtimeLastErrorAt = undefined;
+  runtimeLastAlert = "healthy";
 }

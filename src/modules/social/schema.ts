@@ -29,9 +29,11 @@ import { contacts } from "@/core/contacts/schema";
 import { conversations } from "@/core/messaging/schema";
 import { assets } from "@/core/media/schema";
 import { businessLocations } from "@/core/locations/schema";
+import { reviews } from "@/modules/reviews/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import {
   SOCIAL_APPROVAL_POLICIES,
+  SOCIAL_ASPECTS,
   SOCIAL_ASSIGNMENTS,
   SOCIAL_HEALTH,
   SOCIAL_INTERACTION_KINDS,
@@ -39,6 +41,7 @@ import {
   SOCIAL_PUBLICATION_STATUSES,
   SOCIAL_RIGHTS,
   SOCIAL_SOURCE_KINDS,
+  SOCIAL_VARIANT_STATUSES,
 } from "./contract";
 
 export const socialOauthStates = pgTable(
@@ -196,6 +199,35 @@ export const socialPackageAssets = pgTable(
   ],
 );
 
+export const socialVariants = pgTable(
+  "social_variants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    packageId: uuid("package_id")
+      .notNull()
+      .references(() => socialPackages.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => socialProfiles.id, { onDelete: "cascade" }),
+    caption: text("caption").notNull().default(""),
+    hashtags: text("hashtags").array().notNull().default(sql`'{}'`),
+    assetIds: text("asset_ids").array().notNull().default(sql`'{}'`),
+    aspectRatio: text("aspect_ratio", { enum: SOCIAL_ASPECTS }).notNull(),
+    safeArea: jsonb("safe_area")
+      .$type<{ top: number; bottom: number; start: number; end: number }>()
+      .notNull(),
+    durationSeconds: integer("duration_seconds"),
+    generated: boolean("generated").notNull().default(false),
+    status: text("status", { enum: SOCIAL_VARIANT_STATUSES }).notNull().default("draft"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    index("social_variants_package_idx").on(t.packageId),
+    index("social_variants_profile_idx").on(t.profileId),
+  ],
+);
+
 /** Where a package has appeared. The unique provider ref is the loop brake. */
 export const socialPublications = pgTable(
   "social_publications",
@@ -204,18 +236,33 @@ export const socialPublications = pgTable(
     packageId: uuid("package_id")
       .notNull()
       .references(() => socialPackages.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id").references(() => socialVariants.id, {
+      onDelete: "set null",
+    }),
     profileId: uuid("profile_id").references(() => socialProfiles.id, {
       onDelete: "set null",
     }),
     provider: text("provider").notNull(),
-    providerRef: text("provider_ref").notNull(),
+    providerRef: text("provider_ref"),
     status: text("status", { enum: SOCIAL_PUBLICATION_STATUSES }).notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
     publishedAt: timestamp("published_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    idempotencyKey: text("idempotency_key"),
+    /** First-party URL stamped on publish so visits close the loop (C9.27). */
+    canonicalUrl: text("canonical_url"),
     createdAt: createdAtColumn(),
   },
   (t) => [
-    uniqueIndex("social_publications_ref_idx").on(t.provider, t.providerRef),
+    uniqueIndex("social_publications_ref_idx")
+      .on(t.provider, t.providerRef)
+      .where(sql`provider_ref is not null`),
+    uniqueIndex("social_publications_idempotency_idx")
+      .on(t.idempotencyKey)
+      .where(sql`idempotency_key is not null`),
     index("social_publications_package_idx").on(t.packageId),
+    index("social_publications_scheduled_idx").on(t.scheduledAt, t.status),
   ],
 );
 
@@ -247,6 +294,26 @@ export const socialInteractions = pgTable(
     uniqueIndex("social_interactions_ref_idx").on(t.providerRef),
     index("social_interactions_contact_idx").on(t.contactId),
     index("social_interactions_package_idx").on(t.packageId),
+  ],
+);
+
+export const socialGbpReviews = pgTable(
+  "social_gbp_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reviewId: uuid("review_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => socialProfiles.id, { onDelete: "cascade" }),
+    providerRef: text("provider_ref").notNull(),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("social_gbp_reviews_ref_idx").on(t.providerRef),
+    uniqueIndex("social_gbp_reviews_review_idx").on(t.reviewId),
+    index("social_gbp_reviews_profile_idx").on(t.profileId),
   ],
 );
 

@@ -23,6 +23,7 @@ import {
   SIGNATURE_HEADER,
   signPayload,
 } from "@/core/webhooks/sign";
+import { postWebhook } from "@/core/webhooks/transport";
 
 /** How long to wait for somebody else's server before giving up on a try. */
 const TIMEOUT_MS = 10_000;
@@ -177,30 +178,20 @@ async function attempt(delivery: Claimed): Promise<void> {
     Math.floor(Date.now() / 1000),
   );
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    controller.abort();
-  }, TIMEOUT_MS);
-
   try {
-    const response = await fetch(delivery.url, {
-      method: "POST",
-      headers: {
+    const response = await postWebhook(
+      delivery.url,
+      body,
+      {
         "content-type": "application/json",
         "user-agent": "Freeholder-Webhooks/1",
         [EVENT_HEADER]: delivery.eventName,
         [DELIVERY_HEADER]: delivery.id,
         [SIGNATURE_HEADER]: signature,
       },
-      body,
-      signal: controller.signal,
-      // A redirect is not followed on purpose: it is the ordinary way an
-      // allowed address turns into a disallowed one after the check, and a
-      // receiver that wants to move can be told to update the address.
-      redirect: "manual",
-    });
-
-    const text = await response.text().catch(() => "");
+      { timeoutMs: TIMEOUT_MS, maxResponseBytes: MAX_BODY },
+    );
+    const text = response.body;
     if (response.status >= 200 && response.status < 300) {
       await succeed(delivery, response.status, text);
     } else {
@@ -211,15 +202,8 @@ async function attempt(delivery: Claimed): Promise<void> {
       });
     }
   } catch (error) {
-    const message =
-      error instanceof Error && error.name === "AbortError"
-        ? `No answer within ${TIMEOUT_MS / 1000} seconds.`
-        : error instanceof Error
-          ? error.message
-          : String(error);
+    const message = error instanceof Error ? error.message : String(error);
     await fail(delivery, { error: message });
-  } finally {
-    clearTimeout(timer);
   }
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "create-freeholder",
   "version": "0.0.0",
-  "description": "npx create-freeholder — scaffold and deploy a Freeholder instance (MASTER.md §22)",
+  "description": "npx create-freeholder — scaffold a deployable Freeholder source project (MASTER.md §22)",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
@@ -10,12 +10,16 @@
     "directory": "packages/create-freeholder"
   },
   "type": "module",
-  "bin": {
-    "create-freeholder": "./src/index.ts"
+  "engines": {
+    "node": ">=20.19"
   },
+  "bin": {
+    "create-freeholder": "./dist/index.js"
+  },
+  "files": ["dist", "LICENSE", "README.md"],
   "scripts": {
-    "build": "node --check src/index.ts",
-    "lint": "node --check src/index.ts",
+    "build": "node scripts/build.mjs",
+    "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --test"
   }
 }

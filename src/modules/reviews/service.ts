@@ -597,6 +597,56 @@ registerContactPrivacySource({
   },
 });
 
+export const ingestExternal = defineService({
+  name: "reviews.ingestExternal",
+  writeClass: "write",
+  summary: "Import a review that originated on a connected network.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    source: z.enum(REVIEW_SOURCES),
+    rating: z.number().int().min(1).max(5),
+    body: z.string().trim().max(5_000).default(""),
+    displayName: z.string().trim().min(1).max(120).nullish(),
+    email: z.string().trim().email().toLowerCase().nullish(),
+  }),
+  output: reviewRow,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    let contactId: string | null = null;
+    if (input.email) {
+      const resolved = await ctx.call(resolveContact, {
+        email: input.email,
+        name: input.displayName ?? input.email,
+        source: "google-business",
+      });
+      contactId = resolved.contact.id;
+    }
+    const [created] = await ctx.tx
+      .insert(reviews)
+      .values({
+        contactId,
+        displayName: input.displayName ?? null,
+        source: input.source,
+        subjectType: "business",
+        rating: input.rating,
+        body: input.body,
+        status: "pending",
+      })
+      .returning();
+    ctx.setSubject("review", created!.id);
+    if (contactId) {
+      await ctx.emitTimeline({
+        contactId,
+        eventType: "review.ingested",
+        subjectType: "review",
+        subjectId: created!.id,
+      });
+    }
+    return created!;
+  },
+});
+
 export default [
   aggregateRating,
   requestReview,
@@ -605,4 +655,5 @@ export default [
   replyToReview,
   listReviews,
   publishedReviews,
+  ingestExternal,
 ];

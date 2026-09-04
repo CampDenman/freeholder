@@ -24,6 +24,23 @@ import {
   packageList,
   runIngestJob,
 } from "./ingest";
+import {
+  composePackage,
+  createVariants,
+  publicationCalendar,
+  publishDue,
+  reviewVariant,
+  runPublishJob,
+  schedulePublications,
+  variantList,
+} from "./compose";
+import {
+  attributionReport,
+  runGbpJob,
+  syncGbp,
+  syncGbpHours,
+  syncGbpReviews,
+} from "./gbp";
 
 const EXPIRING_MS = 48 * 60 * 60 * 1000;
 
@@ -450,6 +467,19 @@ export {
   draftFromPackage,
   interactionList,
   runIngestJob,
+  composePackage,
+  createVariants,
+  reviewVariant,
+  variantList,
+  schedulePublications,
+  publishDue,
+  publicationCalendar,
+  runPublishJob,
+  syncGbpHours,
+  syncGbpReviews,
+  syncGbp,
+  attributionReport,
+  runGbpJob,
 };
 
 export default [
@@ -467,4 +497,15 @@ export default [
   packageList,
   draftFromPackage,
   interactionList,
+  composePackage,
+  createVariants,
+  reviewVariant,
+  variantList,
+  schedulePublications,
+  publishDue,
+  publicationCalendar,
+  syncGbpHours,
+  syncGbpReviews,
+  syncGbp,
+  attributionReport,
 ];

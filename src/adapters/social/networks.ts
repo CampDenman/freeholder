@@ -155,6 +155,9 @@ export const googleBusiness = createSocialNetwork({
   scopes: ["https://www.googleapis.com/auth/business.manage"],
   extras: ["posts", "hours", "reviews", "locations"],
   extraAuthParams: { access_type: "offline", prompt: "consent" },
+  ownedPostsUrl: "https://mybusiness.googleapis.com/v4/accounts/me/locations/localPosts",
+  reviewsUrl: "https://mybusiness.googleapis.com/v4/accounts/me/locations/reviews",
+  hoursUrl: "https://mybusiness.googleapis.com/v4/accounts/me/locations/hours",
   ...google,
   parseIdentity: (body) => requireId(body, "sub", "id"),
 });

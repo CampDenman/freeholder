@@ -10,6 +10,11 @@ Copy `deploy/docker-selfhost/.env.example` to
 `install` operation in `recipe.yaml`. Compose waits for PostgreSQL health,
 restarts both services, and exposes only the app on port 3000.
 
+Generate independent URL-safe values for `POSTGRES_PASSWORD` and
+`SESSION_SECRET`; for example, run
+`node -e "console.log(crypto.randomBytes(32).toString('hex'))"` once for each.
+Compose refuses to start when the database password is empty.
+
 ## Operate
 
 - Use `verify.md` plus the recipe's `verify` command after each change.

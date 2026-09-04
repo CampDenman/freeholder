@@ -60,6 +60,8 @@ import {
   SOCIAL_HEALTH,
   SOCIAL_PROFILE_STATUSES,
   SOCIAL_SOURCE_KINDS,
+  SOCIAL_VARIANT_STATUSES,
+  SOCIAL_PUBLICATION_STATUSES,
 } from "@/modules/social/contract";
 import { ASSISTANT_ACTION_IDS } from "@/modules/assistant/actions";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
@@ -267,6 +269,8 @@ describe("the families built from a template key", () => {
     ["social.assignment", SOCIAL_ASSIGNMENTS],
     ["social.approval", SOCIAL_APPROVAL_POLICIES],
     ["social.sourceKind", SOCIAL_SOURCE_KINDS],
+    ["social.variantStatus", SOCIAL_VARIANT_STATUSES],
+    ["social.publicationStatus", SOCIAL_PUBLICATION_STATUSES],
     [
       "imports.status",
       IMPORT_STATUSES,

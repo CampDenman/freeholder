@@ -1,145 +1,180 @@
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
-# Publishing the container image is the one job CI genuinely owes this project:
-# it is what makes every *other* deploy CI-free. A self-hoster runs
-# `docker compose pull` and never needs a GitHub account, a runner, or a fork —
-# which is the ownership promise (§1) applied to the deploy story.
-#
-# Deliberately never triggered by pull_request. A public repository that builds
-# and pushes from a fork's code with registry credentials in scope is handing
-# those credentials to whoever opens the pull request.
+# Promote the exact candidate built after the complete CI gate. This workflow
+# never rebuilds release source and never consumes artifacts from a PR run.
 name: Publish image
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
   push:
-    branches: [main]
     tags: ["v*"]
-  workflow_dispatch:
 
 concurrency:
-  group: publish-image-${{ github.ref }}
-  cancel-in-progress: true
+  group: publish-image-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
 
-env:
-  IMAGE: ghcr.io/${{ github.repository }}
+permissions:
+  contents: read
 
 jobs:
-  publish:
+  resolve:
+    name: Resolve successful main CI
+    if: >-
+      github.event_name == 'push' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.ci.outputs.sha }}
+      short_sha: ${{ steps.ci.outputs.short_sha }}
+      run_id: ${{ steps.ci.outputs.run_id }}
+    steps:
+      - id: ci
+        name: Select the exact successful CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_run" ]; then
+            sha="$WORKFLOW_RUN_SHA"
+            run_id="$WORKFLOW_RUN_ID"
+          else
+            if ! [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+              echo "Release tags must be vMAJOR.MINOR.PATCH with an optional SemVer prerelease" >&2
+              exit 1
+            fi
+            sha="$GITHUB_SHA"
+            runs=$(gh api --method GET \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+              -f head_sha="$sha" -f event=push -f status=success -f per_page=100)
+            run_id=$(jq -r \
+              '[.workflow_runs[] | select(.head_branch == "main" and .conclusion == "success")][0].id // empty' \
+              <<< "$runs")
+            if [ -z "$run_id" ]; then
+              echo "No successful main CI run exists for tag commit $sha" >&2
+              exit 1
+            fi
+          fi
+          if ! [[ "$sha" =~ ^[a-f0-9]{40}$ && "$run_id" =~ ^[0-9]+$ ]]; then
+            echo "CI returned invalid immutable identifiers" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${sha:0:12}" >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Promote, sign and attest
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
       contents: read
       packages: write
-      # Keyless signing (§39.3): the OIDC token *is* the identity, so there is
-      # no long-lived signing key to leak, rotate, or lose. What a verifier
-      # checks is that this workflow, in this repository, produced this digest.
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
-
-      # `github.repository` keeps its capitals and a registry reference cannot.
-      # docker/metadata-action lowercases the tags it generates, which is why
-      # the push has always worked and everything *else* referring to $IMAGE
-      # by hand — cosign, the attestations — did not. Normalised once, here,
-      # rather than at each use.
-      - name: Normalise the image name
-        run: echo "IMAGE=${IMAGE,,}" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - id: image
+        name: Normalize the image name
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "name=$image" >> "$GITHUB_OUTPUT"
+      - name: Download dependency evidence from the same CI run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dependency-audit-${{ needs.resolve.outputs.sha }}
+          path: artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.resolve.outputs.run_id }}
+      - name: Download the gated image candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: image-candidate-${{ needs.resolve.outputs.sha }}
+          path: artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.resolve.outputs.run_id }}
+      - name: Verify exact lockfile audit and candidate identity
+        env:
+          EXPECTED_SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          node scripts/verify-dependency-attestation.mjs \
+            artifacts/dependency-audit.json --max-age-hours=168
+          jq -e \
+            --arg sha "$EXPECTED_SHA" \
+            --arg image "$IMAGE" \
+            '.schema == "freeholder/image-candidate/v1" and
+             .sha == $sha and .image == $image and
+             (.digest | test("^sha256:[a-f0-9]{64}$"))' \
+            artifacts/image-candidate.json >/dev/null
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          # The job-scoped token, not a personal one: it expires with the run
-          # and can only reach this repository's packages.
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ${{ env.IMAGE }}
-          # main publishes `edge`, never `latest`. Unreviewed main should not
-          # become the default pull for every self-hoster; `latest` is earned
-          # by a release tag.
+          images: ${{ steps.image.outputs.name }}
           tags: |
-            type=raw,value=edge,enable={{is_default_branch}}
-            type=sha,prefix=sha-,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-
-      - id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          # linux/amd64 only for now: it is what DigitalOcean droplets and
-          # Replit run. arm64 wants native runners rather than QEMU, which is
-          # a follow-up rather than a twenty-minute emulated build.
-          platforms: linux/amd64
-          # A plain manifest: provenance attestations add an unknown/unknown
-          # platform entry that some registry tooling reports as a broken image.
-          provenance: false
-
-      # §39.3: an auto-updater that runs unverified code is a supply-chain
-      # backdoor with a friendly button. Nothing in §39 can be switched on
-      # until an instance can prove an image came from here — so the proof is
-      # published alongside the image from the first release, rather than
-      # retrofitted once there are instances trusting it.
-      - uses: sigstore/cosign-installer@v3
-      - name: Sign the image (keyless, §39.3)
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_run' }}
+            type=raw,value=sha-${{ needs.resolve.outputs.short_sha }}
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+      - name: Verify candidate provenance and promote its immutable digest
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          # Signed by digest, never by tag: a tag is a moving pointer, and a
-          # signature over a pointer proves nothing about what it points at
-          # tomorrow.
-          cosign sign --yes "${IMAGE}@${DIGEST}"
-          echo "signed ${IMAGE}@${DIGEST}"
-
-      - name: Build provenance attestation
-        uses: actions/attest-build-provenance@v2
+          digest=$(jq -r .digest artifacts/image-candidate.json)
+          candidate="$IMAGE@$digest"
+          gh attestation verify "oci://$candidate" --repo "$GITHUB_REPOSITORY"
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker buildx imagetools create --tag "$tag" "$candidate"
+          done <<< "$TAGS"
+          echo "DIGEST=$digest" >> "$GITHUB_ENV"
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign the promoted digest
+        run: cosign sign --yes "$IMAGE@$DIGEST"
+      - name: Generate an SPDX SBOM from the promoted image
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          subject-name: ${{ env.IMAGE }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
-      - name: SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          image: ${{ env.IMAGE }}@${{ env.DIGEST }}
           format: spdx-json
           artifact-name: freeholder-sbom.spdx.json
           output-file: freeholder-sbom.spdx.json
-
       - name: Attest the SBOM
-        uses: actions/attest-sbom@v2
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-name: ${{ env.IMAGE }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ env.DIGEST }}
           sbom-path: freeholder-sbom.spdx.json
           push-to-registry: true
-
-      - name: What was published
+      - name: Publication summary
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           {
-            echo "### Published"
+            echo "### Promoted after complete CI"
             echo '```'
-            echo "${{ steps.meta.outputs.tags }}"
-            echo "digest: ${{ steps.build.outputs.digest }}"
-            echo '```'
-            echo "Signed keyless by \`${{ github.workflow_ref }}\`, with build provenance and an SPDX SBOM attached."
-            echo ""
-            echo "Verify before trusting it:"
-            echo '```sh'
-            echo "cosign verify ${IMAGE}@${{ steps.build.outputs.digest }} \\"
-            echo "  --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \\"
-            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
-            echo "gh attestation verify oci://${IMAGE}@${{ steps.build.outputs.digest }} --repo ${{ github.repository }}"
+            echo "$TAGS"
+            echo "digest: $DIGEST"
+            echo "source: ${{ needs.resolve.outputs.sha }}"
+            echo "CI run: ${{ needs.resolve.outputs.run_id }}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

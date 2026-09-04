@@ -32,7 +32,9 @@ create a parallel roadmap or backlog in another document.
 
 ## Running it locally
 
-You need Node 20+, pnpm, and a PostgreSQL 15+ you don't mind writing to.
+Use the exact Node release in `.node-version` (the supported floor is 20.19),
+the package-manager release pinned in `package.json`, and a PostgreSQL 15+
+database you do not mind writing to.
 
 ```bash
 pnpm install

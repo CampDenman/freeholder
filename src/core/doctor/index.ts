@@ -498,30 +498,47 @@ async function checkPayments(): Promise<Check> {
 }
 
 async function checkJobs(): Promise<Check> {
-  const { listJobs } = await import("@/core/jobs");
-  const jobs = [...listJobs().values()];
-  const scheduled = jobs.filter((job) => job.schedule).length;
+  const { getJobRuntimeEvidence } = await import("@/core/jobs/health");
+  const evidence = await getJobRuntimeEvidence();
 
-  if (env().FREEHOLDER_JOBS === "off") {
+  if (evidence.state === "disabled") {
     return warn(
       "jobs.worker",
       "Background work",
-      "Jobs are switched off in this process. Nothing sweeps expired sessions, and events a crash stranded are never redelivered.",
-      "Make sure another process runs the worker, or unset FREEHOLDER_JOBS.",
+      "No database is configured, so durable background work is unavailable.",
+      "Configure DATABASE_URL, apply migrations and start Freeholder again.",
     );
   }
-  if (jobs.length === 0) {
+  if (!evidence.ready) {
+    const details: Record<typeof evidence.reason, string> = {
+      database_unconfigured: "No database is configured for durable background work.",
+      no_live_producer: "No producer or worker has published a fresh heartbeat.",
+      no_live_worker: "A producer is alive, but no worker is consuming required background work.",
+      worker_version_mismatch: "Workers are alive, but none runs this Freeholder version.",
+      worker_starting: "The current worker is still mounting its job handlers.",
+      worker_degraded: "The current worker reports a degraded runtime.",
+      ready: "The worker reported an inconsistent readiness result.",
+    };
     return fail(
       "jobs.worker",
       "Background work",
-      "No jobs are registered, which should be impossible — core ships several.",
-      "The platform did not finish booting. Check the log for an error at startup.",
+      details[evidence.reason],
+      "Check the payload-free [jobs] startup and health codes, make sure one current-version process runs with FREEHOLDER_JOBS enabled, then wait for a fresh heartbeat.",
+    );
+  }
+  const detail = `${evidence.currentVersionWorkers} current worker(s); heartbeat ${evidence.heartbeatAgeSeconds ?? 0}s ago; ${evidence.readyJobs} ready job(s); ${evidence.queueLagSeconds}s queue lag; ${evidence.deadLetters} dead letter(s).`;
+  if (evidence.state === "degraded") {
+    return warn(
+      "jobs.worker",
+      "Background work",
+      detail,
+      "Inspect the background-work admin view and payload-free [jobs] alert codes; redrive or resolve dead letters after fixing their cause.",
     );
   }
   return ok(
     "jobs.worker",
     "Background work",
-    `${jobs.length} jobs registered, ${scheduled} on a schedule.`,
+    detail,
   );
 }
 

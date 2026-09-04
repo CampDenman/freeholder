@@ -27,12 +27,25 @@ export type SocialRights = (typeof SOCIAL_RIGHTS)[number];
 export const SOCIAL_PUBLICATION_STATUSES = [
   "ingested",
   "drafted",
+  "scheduled",
   "published",
+  "failed",
 ] as const;
 export type SocialPublicationStatus = (typeof SOCIAL_PUBLICATION_STATUSES)[number];
 
 export const SOCIAL_INTERACTION_KINDS = ["comment", "mention"] as const;
 export type SocialInteractionKind = (typeof SOCIAL_INTERACTION_KINDS)[number];
+
+export const SOCIAL_VARIANT_STATUSES = [
+  "draft",
+  "pending_review",
+  "approved",
+  "rejected",
+] as const;
+export type SocialVariantStatus = (typeof SOCIAL_VARIANT_STATUSES)[number];
+
+export const SOCIAL_ASPECTS = ["1:1", "4:5", "9:16", "16:9"] as const;
+export type SocialAspect = (typeof SOCIAL_ASPECTS)[number];
 
 export const SOCIAL_NETWORK_IDS = [
   "instagram",

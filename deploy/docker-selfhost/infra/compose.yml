@@ -7,6 +7,8 @@ services:
     ports:
       - "3000:3000"
     env_file: ../.env
+    environment:
+      DATABASE_URL: postgres://freeholder:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/freeholder
     depends_on:
       db:
         condition: service_healthy
@@ -26,7 +28,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: freeholder
-      POSTGRES_PASSWORD: freeholder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: freeholder
     volumes:
       - pgdata:/var/lib/postgresql/data

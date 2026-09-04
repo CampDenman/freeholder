@@ -6,8 +6,10 @@
 // request: the receiver has to be able to tell the message came from this
 // instance, and this instance has to refuse to be pointed at itself.
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { env } from "@/core/env";
 import { ServiceError } from "@/core/service";
+import { isPublicIpAddress, normalizeIpAddress } from "@/core/webhooks/address";
 
 export const SIGNATURE_HEADER = "freeholder-signature";
 export const EVENT_HEADER = "freeholder-event";
@@ -97,29 +99,6 @@ const BLOCKED_HOSTNAMES = new Set([
   "metadata",
 ]);
 
-/** Literal IPv4 in a private, loopback, link-local or reserved range. */
-function isPrivateIpv4(host: string): boolean {
-  const parts = host.split(".");
-  if (parts.length !== 4) return false;
-  const octets = parts.map((part) => Number(part));
-  if (octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-  const [a, b] = octets as [number, number, number, number];
-  if (a === 10 || a === 127 || a === 0) return true;
-  if (a === 169 && b === 254) return true; // link-local, incl. cloud metadata
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
-  if (a >= 224) return true; // multicast and reserved
-  return false;
-}
-
-function isPrivateIpv6(host: string): boolean {
-  const address = host.replace(/^\[|\]$/g, "").toLowerCase();
-  if (address === "::1" || address === "::") return true;
-  // Unique-local (fc00::/7) and link-local (fe80::/10).
-  return /^f[cd]/.test(address) || /^fe[89ab]/.test(address);
-}
-
 export interface UrlCheckOptions {
   /**
    * Development needs to be able to point a webhook at a local listener, and
@@ -132,11 +111,9 @@ export interface UrlCheckOptions {
 /**
  * Throw unless this URL is somewhere a delivery may go.
  *
- * Note what this does *not* claim: DNS can resolve a perfectly ordinary
- * hostname to a private address, and re-checking after resolution — then
- * pinning the connection to the address that was checked — is the only
- * complete defence. That is a fetch-layer concern and is recorded in the
- * backlog. This closes the case somebody reaches for first.
+ * Hostname resolution is repeated and pinned by transport.ts immediately
+ * before every delivery. This synchronous check catches prohibited literals
+ * at configuration time without creating network I/O inside a transaction.
  */
 export function assertDeliverableUrl(
   raw: string,
@@ -149,7 +126,8 @@ export function assertDeliverableUrl(
     throw new ServiceError("validation", "That is not a valid web address.");
   }
 
-  const allowLocal = options.allowLocal ?? env().NODE_ENV !== "production";
+  const allowLocal =
+    env().NODE_ENV !== "production" && options.allowLocal !== false;
 
   if (url.protocol !== "https:" && !(allowLocal && url.protocol === "http:")) {
     throw new ServiceError(
@@ -158,12 +136,18 @@ export function assertDeliverableUrl(
     );
   }
 
-  const host = url.hostname.toLowerCase();
+  if (url.username || url.password) {
+    throw new ServiceError(
+      "validation",
+      "Webhook credentials belong in the URL query or receiving service configuration, not URL user-info.",
+    );
+  }
+
+  const host = normalizeIpAddress(url.hostname);
   const blocked =
     BLOCKED_HOSTNAMES.has(host) ||
     host.endsWith(".localhost") ||
-    isPrivateIpv4(host) ||
-    isPrivateIpv6(host);
+    (isIP(host) !== 0 && !isPublicIpAddress(host));
 
   if (blocked && !allowLocal) {
     throw new ServiceError(

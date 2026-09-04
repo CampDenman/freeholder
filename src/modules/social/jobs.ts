@@ -25,4 +25,26 @@ export const socialIngest = defineJob({
   },
 });
 
-export default [socialHealth, socialIngest];
+export const socialPublish = defineJob({
+  name: "social.publishDue",
+  summary: "Publish scheduled social variants whose time has come.",
+  schedule: "*/5 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { runPublishJob } = await import("./compose");
+    return runPublishJob();
+  },
+});
+
+export const socialGbp = defineJob({
+  name: "social.gbpSync",
+  summary: "Sync Google Business Profile posts, hours and reviews.",
+  schedule: "17 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { runGbpJob } = await import("./gbp");
+    return runGbpJob();
+  },
+});
+
+export default [socialHealth, socialIngest, socialPublish, socialGbp];

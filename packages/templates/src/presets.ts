@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Business presets for @freeholder/templates (C3.15).
+// Starter descriptor portion of C3.15; product installation remains open.
 export const BENCH_TOKENS = {
   paper: "#f4f1ea",
   ink: "#1c1b19",

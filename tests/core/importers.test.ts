@@ -32,9 +32,12 @@ describe("importer contract (C3.21)", () => {
   });
 
   it("refuses private, link-local and credentialed origins", () => {
+    const credentialedOrigin = new URL("https://example.com");
+    credentialedOrigin.username = "fixture-user";
+    credentialedOrigin.password = "fixture-password";
     expect(() => assertPublicHttpUrl("http://127.0.0.1/wp-json")).toThrow(/not a public origin/);
     expect(() => assertPublicHttpUrl("http://169.254.169.254/latest")).toThrow(/not a public origin/);
-    expect(() => assertPublicHttpUrl("https://user:pass@example.com")).toThrow(/credentials/);
+    expect(() => assertPublicHttpUrl(credentialedOrigin.href)).toThrow(/credentials/);
     expect(() => assertPublicHttpUrl("https://example.com/blog")).not.toThrow();
   });
 

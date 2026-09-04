@@ -7,7 +7,13 @@ import postgres from "postgres";
 import { databaseUrl } from "@/core/env";
 
 function connect() {
-  const conn = postgres(databaseUrl(), { onnotice: () => {} });
+  const conn = postgres(databaseUrl(), {
+    // Readiness must fail promptly while liveness remains available. A dead
+    // database route otherwise occupies the pool and outlives the platform's
+    // five-second health-check budget.
+    connect_timeout: 3,
+    onnotice: () => {},
+  });
   return { conn, orm: drizzle(conn) };
 }
 

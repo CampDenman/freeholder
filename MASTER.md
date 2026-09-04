@@ -1,7 +1,7 @@
 # FREEHOLDER — Product Specification and Completion Plan
 
 **The open-source operating system for a one-person business.**
-Living edition · reconciled 2026-08-12 · created, authored, and owned by Tony Aly · Apache-2.0
+Living edition · reconciled 2026-09-04 · created, authored, and owned by Tony Aly · Apache-2.0
 
 This is the project's **only product and delivery source of truth**. It defines
 the product, architecture, complete scope, dependency order, current state, and
@@ -3254,12 +3254,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-08-27 |
-| Evidence snapshot | `feat/c8.03-client-galleries` (PR #208) implements C8.03 private client galleries and then audits and corrects them: session-scoped bytes, a durable download limit, secret rotation that closes the sessions it opened, and a guest magic link that can actually be sent. `feat/c8.04-gallery-variants` stacks on it: C8.04 is decomposed from the old eight-capability item and delivered — watermarked renditions and a `download_policy` that is finally read. Next product item is C8.05. C1.27 stays dependency-blocked on remaining C7–C9 items. |
+| Last reconciled | 2026-09-04 |
+| Evidence snapshot | On `feat/c9.27-gbp`, the completion-integrity audit and implementation pass now produce a warning-free Next production build and clean lint, typecheck, plan, licensing, workflow, package-artifact and diff gates. The package gate compiles all four packages; packs and offline-installs their tarballs; imports runtime exports; compiles a clean TypeScript consumer; and creates, installs and typechecks an integrity-checked transactional source scaffold. Webhooks use address-pinned, deadline-bounded delivery after rejecting every prohibited DNS answer. Readiness and Doctor consume durable, payload-free, current-version worker heartbeats and queue evidence while liveness stays process-only during dependency failure. CI/release workflows use immutable actions and images, isolate untrusted scans from installs, bind audit evidence to the lockfile, and promote/sign/attest only the exact successful candidate digest; GitHub dependency security updates plus secret scanning, push protection, validity checks and non-provider patterns are enabled. The focused risk suite passes 63 tests; shards 2 and 4 pass continuously (1,466 tests), while host suspension invalidated one file in each of shards 1 and 3 after all other 130 files passed; the affected CMS, media and transactional-job files pass independently (58 tests) on fresh processes. No continuous-green claim is made for those two distorted local shards; the first pushed isolated CI matrix remains required. Checked claims that remain shallower than their wording are reopened below. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C9.26 composer. Next after that: C9.27 GBP. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C1.35–C1.37 production-boundary hardening. C9.28 resumes only after those gates are truthful. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3331,7 +3331,8 @@ green test/build suite. Later checklist items name the remaining depth.
   transactional service composition, permissions, audits, timeline, contact
   resolution/merge, event bus, and transactional outbox.
 - [x] **B02 — Base operations:** configuration, environment validation,
-  migrations, pg-boss jobs, health, doctor, rate limiting, security headers,
+  migrations, pg-boss jobs, module-graph health, registry-level Doctor checks,
+  rate limiting, security headers,
   changelog/schema/merge/license gates, and signed container provenance.
 - [x] **B03 — Identity baseline:** owner setup, password/session login,
   password change/reset, CLI recovery, contacts CRUD, merge UI, API keys.
@@ -3349,18 +3350,22 @@ green test/build suite. Later checklist items name the remaining depth.
   public form block, spam traps/quarantine, contact resolution, notification
   mail, first-party pageviews/conversions, contact attribution, traffic UI.
 - [x] **B08 — Platform contract baseline:** registry-derived HTTP RPC API,
-  API-key scopes, OpenAPI inputs, outbound signed webhooks, registry-derived
+  API-key scopes, OpenAPI inputs, signed webhook envelopes and address-pinned
+  destination checks, registry-derived
   MCP tools, and enabled-module filtering.
 - [x] **B09 — Agent baseline:** agent connections/workers/tasks/runs/steps/
   approvals/spend schema and services; inbound claim leases, step reporting,
   completion, budgets, scopes, untrusted-input markers, and audit identity.
 - [x] **B10 — Connection baseline:** encrypted credential storage, rotation
   primitive, connected-account and capability model, and doctor validation.
-- [x] **B11 — Deployment baseline:** production container, GHCR publishing,
+- [x] **B11 — Deployment baseline:** production container, gated GHCR candidate publishing,
   DigitalOcean Droplet/Caddy/Postgres/S3-compatible recipe, backup script, and
   live health verification.
-- [x] **B12 — Quality snapshot:** lint, typecheck, build, license gate, and 867
-  tests pass with the C1.11 evidence change.
+- [x] **B12 — Quality snapshot:** PR #261's 2026-09-03 CI run passed lint,
+  typecheck, build, license, 2,764 tests across 258 files, Chromium journeys,
+  accessibility, the ownership drill, container boot and artifact checks.
+  Seventeen conditional recipe checks were skipped and remain explicit rather
+  than being counted as passes.
 
 ### 43.4 Dependency order
 
@@ -3395,7 +3400,7 @@ one with unchecked dependency items.
 - [x] **C0.08** Add a plan-consistency gate that rejects references to retired
   planning files and validates unique checklist IDs. *(`scripts/plan-gate.mjs`,
   six gate tests, and the `product-completion-plan.md` changeset.)*
-- [x] **C0.09** Reconcile `README.md`, setup text, package descriptions, and
+- [ ] **C0.09** Reconcile `README.md`, setup text, package descriptions, and
   deployment docs whenever a target capability becomes true; target language
   must never masquerade as current availability.
 - [x] **C0.10** License all Freeholder-authored code, documentation, deploy
@@ -3403,6 +3408,13 @@ one with unchecked dependency items.
   enforce the canonical license text, manifest fields, package copies, and
   source SPDX headers. *(`LICENSE`, `LICENSING.md`,
   `scripts/license-headers.mjs`, and changeset `apache-license.md`.)*
+- [ ] **C0.11** Audit every checked C-item against F01–F12, reopen or narrow
+  every claim that its executable evidence does not prove, retire stale
+  handoffs as planning authorities, and record the audit date and evidence.
+- [ ] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
+  carry resolvable repository evidence, the control block must be current, and
+  completion evidence must name the applicable human, agent, safety,
+  operational and integration proof—or an explicit not-applicable reason.
 
 **C0 exit:** there is exactly one live plan, ownership is legally documented,
 and every contributor or agent can identify the next valid work item without
@@ -3743,6 +3755,37 @@ reading chat logs.
   `contribute.recordStatus`, `contribute.reply` job; default-on when
   `APP_URL` is freeholder.ai; `tests/core/contribute.test.ts`; changeset
   `contribute-status-replies.md`)
+- [x] **C1.35** Close outbound-request SSRF completely: resolve every webhook
+  hostname, reject loopback/link-local/private/special-use addresses for every
+  address family, pin the checked connection, disable redirects, and prove DNS
+  rebinding plus mixed public/private answers cannot cross the boundary.
+  *(`webhooks/transport.ts` resolves all answers on every attempt, refuses the
+  whole mixed/prohibited set, connects to the checked IP with original TLS SNI
+  and Host, creates a fresh socket and never follows redirects; shared
+  IPv4/IPv6 classification in `webhooks/address.ts`; real receiver and hostile
+  resolver coverage in `tests/core/webhooks.test.ts`; operator contract in
+  `deploy/webhook-delivery.md`.)*
+- [ ] **C1.36** Make required background work operationally truthful: expose
+  producer/worker startup, heartbeat, queue lag and degraded state; separate
+  liveness from readiness; make Doctor test the live worker rather than the job
+  registry; drain leases on shutdown; alert without leaking payloads.
+  *(Durable payload-free runtime evidence, exact-version/staleness checks,
+  queue-lag/dead-letter metrics, readiness/Doctor integration, a distinct
+  process liveness route, dependency-failure startup retries and
+  transition-only sanitized alerts are implemented in `jobs/health.ts`,
+  `jobs/index.ts`, `instrumentation.ts`, `instrumentation.node.ts`, migration 0154 and
+  `deploy/background-jobs.md`. Framework-integrated shutdown draining still
+  needs a lifecycle hook that cannot race Next's own signal exit.)*
+- [ ] **C1.37** Make supply-chain and release provenance enforceable: split and
+  shard CI to meet an owned feedback SLO, key dependency-audit attestations to
+  the lockfile without weakening fresh scheduled checks, enable code/dependency
+  and secret scanning, pin third-party actions, and promote an image/package
+  only when that exact commit has passed the complete release gate.
+  *(The isolated CI fan-in, lockfile-bound audit evidence, weekly fresh scan,
+  full-SHA action policy, actionlint validation, repository-native scanning
+  controls and exact-digest image promotion/signing/SBOM path are implemented and documented in
+  `deploy/ci-release-gate.md`. This remains open until the first pushed workflow
+  proves the timing objective and end-to-end promotion boundary.)*
 
 **C1 exit:** several humans can safely administer one business; the foundation
 is recoverable, accessible, international, observable, able to talk to the
@@ -3882,11 +3925,10 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   public ops `security: []`, `FreeholderEvent` webhook component,
   `info.x-freeholder` platform/webhook/MCP versions. Coverage in
   `tests/core/contract-projections.test.ts`.)
-- [x] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
+- [ ] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
   service registry; remove every package scaffold/no-op build.
-  (`packages/sdk` `FreeholderClient.call` POSTs `/api/v1/<service>`; version
-  equals `PLATFORM_VERSION`; real `tsc` build. Coverage in
-  `tests/core/sdk.test.ts`.)
+  The generic `FreeholderClient.call` and clean-install-tested ESM artifact now
+  work, but concrete types are not generated from the registry yet.
 - [x] **C3.04** Make MCP discovery actor-aware—including actor kind, service
   opt-out and approval annotations—so listed tools are genuinely callable.
   (`ServiceDef.mcpExclude`; `hiddenFromMcp`; tool `annotations.actorKind` and
@@ -3905,8 +3947,8 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C3.07** Add webhook subscriptions, delivery inspection/replay, schema
   versioning, endpoint rotation and explicit sensitive-field redaction.
   (`webhooks.inspectDelivery` redacts; `webhooks.replay`;
-  `webhooks.rotateEndpoint`; envelope `schemaVersion`. Coverage in
-  `tests/core/webhooks.test.ts`.)
+  `webhooks.rotateEndpoint`; envelope `schemaVersion`; C1.35 address-pinned
+  transport. Coverage in `tests/core/webhooks.test.ts`.)
 
 #### Plugin system and registries
 
@@ -3937,28 +3979,36 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   tests and examples for a block, service, adapter, automation verb and route.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
   Coverage in `tests/core/plugin-scaffold.test.ts`.)
-- [x] **C3.13** Ship first-party plugins for gift options/registries, print-on-
+- [ ] **C3.13** Ship first-party plugins for gift options/registries, print-on-
   demand, advanced communities, voice and video artifacts, and marketplace
   channel sync seams, as assigned by §§4.14 and 36.
-  (`plugins/gift-registry`, `print-on-demand`, `community`, `voice-video`,
-  `marketplace`; contact_id tables register merge + privacy. Coverage in
-  `tests/core/first-party-plugins.test.ts`.)
+  The five plugin contracts, schemas and service seams exist and their
+  contact_id tables register merge/privacy behavior. Completion still requires
+  the human surfaces, provider sync and end-to-end failure/recovery proof that
+  F04, F07, F08 and F12 require.
 
 #### Packages, installation, export, and target parity
 
-- [x] **C3.14** Implement `create-freeholder` with explicit environment checks,
+- [ ] **C3.14** Implement `create-freeholder` with explicit environment checks,
   target selection, migration, setup URL, demo choice and actionable recovery.
-  (`packages/create-freeholder`; `missingEnv` / `recoverFromMissing`. Coverage
-  in `tests/core/create-freeholder.test.ts`.)
-- [x] **C3.15** Turn `@freeholder/templates` into tested business presets using
+  The compiled, integrity-manifested source scaffold is transactional, refuses
+  unsafe targets, applies country/payment/target/demo choices, and is exercised
+  from a clean-installed tarball. Completion still requires the CLI itself to
+  validate the generated environment, offer dependency install/migration, and
+  report a reachable setup URL instead of leaving those actions only in a
+  walkthrough.
+- [ ] **C3.15** Turn `@freeholder/templates` into tested business presets using
   Bench tokens, seeded content and full-page/entity/email templates.
-  (`PRESETS` + `BENCH_TOKENS`. Coverage in `tests/core/templates.test.ts`.)
+  The current package contains starter descriptors only; it is not installed
+  through the CMS/template services and its test proves shape, not usable
+  seeded pages, entities and messages.
 - [x] **C3.16** Provide working recipes for Replit, DigitalOcean App Platform,
   DigitalOcean Droplet, Railway, Render and bare Docker Compose with Postgres
   and S3-compatible storage.
-  (Current platform artifacts: `.replit`/`replit.nix`, `.do/app.yaml`,
-  `deploy/digitalocean-droplet/cloud-init.yaml`, `.railway/railway.ts`,
-  `render.yaml`, and `deploy/docker-selfhost/compose.yaml`. Every recipe binds
+  (Current platform artifacts: `.replit`/`replit.nix`,
+  `deploy/digitalocean-app/infra/app.yaml`,
+  `deploy/digitalocean-droplet/infra/cloud-init.yml`, `.railway/railway.ts`,
+  `render.yaml`, and `deploy/docker-selfhost/infra/compose.yml`. Every recipe binds
   PostgreSQL, private S3-compatible storage, health checks and secret inputs;
   `scripts/recipe-matrix.sh` boots the built image for all six target contracts
   against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.
@@ -3984,11 +4034,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   and Replit storage and verifies target byte length plus SHA-256. Both are
   exercised in CI; contracts in `tests/core/portability.test.ts` and transfer
   behavior in `tests/core/media-transfer.test.ts`.)
-- [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
+- [ ] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
-  (`platform.version` / `platform.compatibility`; `/api/health` `version`;
-  doctor `platform.version`; admin health. Coverage in
-  `tests/core/portability.test.ts`.)
+  Version projection and compatibility reporting exist, but all distributable
+  artifacts remain `0.0.0` and no package release/promotion workflow proves a
+  truthful installed release yet.
 - [x] **C3.21** Define the importer plugin contract and kit: typed source/auth
   config, least-privilege permissions, discovery/pagination/checkpoints,
   transforms into core service inputs, provenance, fixtures and hostile/
@@ -6960,13 +7010,33 @@ customer has one secure, comprehensible home for the relationship.
   but does not create a contact. Migration `0151_social_ingest.sql`.
   Tests in `tests/modules/social-ingest.test.ts`. Changeset
   `social-ingest.md`.)
-- [ ] **C9.26** Build multi-platform composer/cross-pollination from authored,
+- [x] **C9.26** Build multi-platform composer/cross-pollination from authored,
   ingested, phone and screen-captured media; generate editable safe-area crops,
   clips, thumbnails, captions/alt/hashtags and codec/size/duration variants via
   ffmpeg, require human review where generated, and schedule/publish/reconcile
   every selected account idempotently from one calendar.
-- [ ] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
+  (`social.composePackage` authors a package from library assets; ingested
+  and capture-confirmed assets are the same Assets. `social.createVariants`
+  makes one rendition per selected profile with that network's caption
+  limit, aspect, safe area and duration. Stills crop via sharp; video clips
+  via ffmpeg when it is on PATH. Generated crops and profiles with
+  approval-required stay `pending_review`. `social.schedulePublications`
+  is idempotent on `idempotency_key`; `social.publishDue` publishes due
+  rows and a failure on one profile does not retry a success on another.
+  `social.publicationCalendar` is the one calendar. Migration
+  `0152_social_composer.sql`. Tests in
+  `tests/modules/social-composer.test.ts`. Changeset `social-composer.md`.)
+- [x] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
   outbound social links to visits, contacts and revenue.
+  (`social.syncGbp` pulls owned GBP posts through ingest, pushes
+  `OpeningHours` via `social.syncGbpHours`, and imports reviews through
+  `reviews.ingestExternal` with source `google_business` — a reviewer email
+  resolves onto the contact spine, a handle does not. `social.publishDue`
+  stamps a first-party `utm_source`/`utm_medium=social`/`utm_campaign`
+  canonical URL on every publication. `social.attributionReport` joins
+  those visits to identified contacts and paid invoices. Migration
+  `0153_social_gbp.sql`. Tests in `tests/modules/social-gbp.test.ts`.
+  Changeset `social-gbp.md`.)
 - [ ] **C9.28** Build universal `ShareTarget`, native/channel intents, generated
   OG assets, tracked short links and entity-level controls.
 - [ ] **C9.29** Build scoped gallery/quote/product gift-registry sharing and

@@ -29,6 +29,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "plan:check": "node scripts/plan-gate.mjs",
+    "workflow:check": "node scripts/workflow-integrity-gate.mjs",
     "dependency:audit": "node scripts/dependency-audit.mjs",
     "artifact:check": "node scripts/standalone-artifact-gate.mjs",
     "changelog:gate": "node scripts/changelog-gate.mjs",
@@ -37,7 +38,9 @@
     "ownership:export": "node scripts/ownership-export.mjs",
     "ownership:drill": "node scripts/ownership-drill.mjs --all-pairs",
     "media:transfer": "node scripts/media-transfer.mjs",
-    "packages:build": "pnpm -r --filter './packages/*' build",
+    "packages:build": "pnpm -r --filter create-freeholder --filter @freeholder/plugin-kit --filter @freeholder/sdk --filter @freeholder/templates build",
+    "packages:lint": "pnpm -r --filter create-freeholder --filter @freeholder/plugin-kit --filter @freeholder/sdk --filter @freeholder/templates lint",
+    "packages:verify": "node scripts/package-artifact-gate.mjs",
     "doctor": "node scripts/doctor.mjs"
   },
   "dependencies": {

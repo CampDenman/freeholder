@@ -5,7 +5,7 @@
 // A plugin is a module plus the fields install, doctor and a registry need:
 // which platform versions it supports, which permissions it asks for, which
 // migrations it owns, and what extra capabilities it contributes.
-import { parseSemver, satisfies } from "./semver";
+import { parseSemver, satisfies } from "./semver.ts";
 
 export const PLUGIN_PERMISSION_PATTERN =
   /^(network:external|[a-z][a-z0-9-]*:(view|manage|read|create|write))$/;

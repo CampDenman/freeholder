@@ -23,6 +23,10 @@ export default defineModule({
       "social.profileAssigned",
       "social.profileUnhealthy",
       "social.ingested",
+      "social.variantsCreated",
+      "social.scheduled",
+      "social.gbpHoursSynced",
+      "social.gbpReviewsSynced",
     ],
   },
 });

@@ -19,11 +19,14 @@ import {
   SOCIAL_ASSIGNMENTS,
 } from "@/modules/social/contract";
 import {
+  attributionReport,
   interactionList,
   networks,
   packageList,
   profiles,
+  publicationCalendar,
   staffMembers,
+  variantList,
 } from "@/modules/social/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
@@ -36,7 +39,11 @@ import {
   healthSocialAction,
   ingestSocialAction,
   reviewSocialAction,
+  composeSocialAction,
+  reviewVariantAction,
+  scheduleSocialAction,
   setSocialPolicyAction,
+  syncGbpAction,
 } from "../../social-actions";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +69,7 @@ export default async function SocialPage({
   searchParams: Promise<{ saved?: string; error?: string; social?: string }>;
 }) {
   const actor = await requireStaffActor("social", "manage");
-  const [t, known, connected, staff, places, packs, threads, query] = await Promise.all([
+  const [t, known, connected, staff, places, packs, threads, variants, calendar, attributed, query] = await Promise.all([
     getT(),
     domainOrNull(networks.call({}, actor)),
     domainOrNull(profiles.call({}, actor)),
@@ -70,6 +77,9 @@ export default async function SocialPage({
     domainOrNull(listLocations.call({ includeHidden: true }, actor)),
     domainOrNull(packageList.call({}, actor)),
     domainOrNull(interactionList.call({}, actor)),
+    domainOrNull(variantList.call({}, actor)),
+    domainOrNull(publicationCalendar.call({}, actor)),
+    domainOrNull(attributionReport.call({ days: 30 }, actor)),
     searchParams,
   ]);
 
@@ -279,6 +289,14 @@ export default async function SocialPage({
                         </Button>
                       </form>
                     ) : null}
+                    {profile.status === "active" && profile.provider === "google_business" ? (
+                      <form action={syncGbpAction}>
+                        <input type="hidden" name="id" value={profile.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("social.action.syncGbp")}
+                        </Button>
+                      </form>
+                    ) : null}
                     <form action={healthSocialAction}>
                       <input type="hidden" name="id" value={profile.id} />
                       <Button type="submit" variant="quiet">
@@ -345,6 +363,140 @@ export default async function SocialPage({
               </ul>
             </div>
           ) : null}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("social.compose")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("social.composeHint")}</p>
+          <form action={composeSocialAction} className="mt-3 grid gap-3">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">{t("social.field.caption")}</span>
+              <textarea
+                name="body"
+                rows={4}
+                maxLength={8000}
+                className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+              />
+            </label>
+            <fieldset className="grid gap-1">
+              <legend className="text-sm font-medium">{t("social.field.profiles")}</legend>
+              {(connected ?? [])
+                .filter((profile) => profile.status === "active")
+                .map((profile) => (
+                  <label key={profile.id} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="profileIds" value={profile.id} />
+                    {profile.displayName}
+                  </label>
+                ))}
+            </fieldset>
+            <div>
+              <Button type="submit">{t("social.action.compose")}</Button>
+            </div>
+          </form>
+          {(variants ?? []).length > 0 ? (
+            <ul className="mt-4 grid list-none gap-2 p-0">
+              {(variants ?? []).map((variant) => (
+                <li key={variant.id} className="grid gap-2 rounded-md border border-rule p-3 text-sm">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Pill
+                      tone={
+                        variant.status === "approved"
+                          ? "success"
+                          : variant.status === "rejected"
+                            ? "danger"
+                            : "warning"
+                      }
+                    >
+                      {t(`social.variantStatus.${variant.status}`)}
+                    </Pill>
+                    <span className="text-xs text-ink-muted">{variant.aspectRatio}</span>
+                    {variant.generated ? (
+                      <span className="text-xs text-ink-muted">{t("social.generated")}</span>
+                    ) : null}
+                  </span>
+                  <p>{variant.caption}</p>
+                  {variant.status === "pending_review" || variant.status === "draft" ? (
+                    <div className="flex flex-wrap gap-2">
+                      <form action={reviewVariantAction}>
+                        <input type="hidden" name="id" value={variant.id} />
+                        <input type="hidden" name="approved" value="1" />
+                        <Button type="submit">{t("social.action.approve")}</Button>
+                      </form>
+                      <form action={reviewVariantAction}>
+                        <input type="hidden" name="id" value={variant.id} />
+                        <input type="hidden" name="approved" value="0" />
+                        <Button type="submit" variant="quiet">
+                          {t("social.action.reject")}
+                        </Button>
+                      </form>
+                    </div>
+                  ) : null}
+                  {variant.status === "approved" ? (
+                    <form action={scheduleSocialAction}>
+                      <input type="hidden" name="variantIds" value={variant.id} />
+                      <Button type="submit">{t("social.action.publish")}</Button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("social.calendar")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("social.calendarHint")}</p>
+          {(calendar ?? []).length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("social.calendarEmpty")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-2 p-0">
+              {(calendar ?? []).map((entry) => (
+                <li key={entry.id} className="flex flex-wrap items-center gap-2 rounded-md border border-rule p-3 text-sm">
+                  <Pill tone={entry.status === "published" ? "success" : entry.status === "failed" ? "danger" : "warning"}>
+                    {t(`social.publicationStatus.${entry.status}`)}
+                  </Pill>
+                  <span className="text-xs text-ink-muted">{entry.provider}</span>
+                  {entry.providerRef ? (
+                    <span className="font-mono text-xs text-ink-muted">{entry.providerRef}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("social.attribution")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("social.attributionHint")}</p>
+          {(attributed ?? []).length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("social.attributionEmpty")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-2 p-0">
+              {(attributed ?? []).map((row) => (
+                <li
+                  key={`${row.source}:${row.campaign ?? ""}`}
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-rule p-3 text-sm"
+                >
+                  <span className="font-medium">{row.source}</span>
+                  <span className="text-xs text-ink-muted">
+                    {t("social.attributionVisitors")}: {row.visitors}
+                  </span>
+                  <span className="text-xs text-ink-muted">
+                    {t("social.attributionContacts")}: {row.contacts}
+                  </span>
+                  <span className="text-xs text-ink-muted">
+                    {t("social.attributionRevenue")}: {row.revenueMinor}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardBody>
       </Card>
     </div>

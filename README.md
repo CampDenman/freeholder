@@ -10,23 +10,14 @@ replaces the stack with one self-hosted platform where a contact is **one
 record**: their bookings, orders, quotes, gallery access, messages, and email
 history all hang off one CRM timeline.
 
-> **Status: active product development.** The core platform, visual CMS,
-> forms, analytics, HTTP API, webhooks, MCP, agent task substrate and encrypted
-> connection model are implemented. Consent evidence, the customer privacy
-> centre, protected data exports/corrections, and audited erasure with legal
-> retention exceptions are also implemented. Background work now commits
-> atomically with its caller and has durable idempotency, bounded retry/backoff,
-> global concurrency, cancellation, heartbeat leases, an owner-visible run
-> ledger, retained dead letters, stuck-work warnings, and audited recovery
-> controls. Commerce now has a normalized, transaction-safe invoice/payment/
-> refund/credit-note spine, fixed-point tax calculation, currency-safe threshold
-> monitoring, source-attributed tax starters, manual/offline settlement, and
-> Stripe/PayPal hosted-provider adapters with authenticated replay-safe
-> webhooks, refunds, masked saved methods, and disputes. Public cart checkout,
-> catalog, inventory, shipping, orders, and complete tax templates remain
-> active C5 work rather than shipped claims.
-> The complete scope,
-> verified baseline and remaining checklist live only in
+> **Status: active product development; not a release candidate.** The core,
+> CMS, CRM, privacy, commerce, scheduling, communications, galleries, portal,
+> reporting, automation and growth foundations are implemented through the
+> current C9 work. Completion-integrity review, framework-integrated job
+> shutdown, remaining sharing/social/billing depth, updater/mobile work and the
+> final whole-product evidence program are still open. Checked items are reopened
+> whenever executable evidence does not prove their full wording. The complete
+> scope, verified baseline and remaining checklist live only in
 > [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
 
 ## Product-complete target
@@ -79,9 +70,10 @@ already implemented. `MASTER.md` §43 is authoritative about current status.
   notices are included. Customers use 15-minute one-use magic links that prove
   and link the existing Contact instead of creating a second identity
 
-Deployment targets one-click simplicity on vibe-coding platforms, starting
-with Replit: single-tenant by design (one deploy = one business), a monolith
-of toggleable modules, Postgres, S3-compatible media storage.
+Deployment recipes currently cover Replit, DigitalOcean App Platform,
+DigitalOcean Droplets, Railway, Render and Docker Compose. The architecture is
+single-tenant by design (one deploy = one business): one toggleable monolith,
+Postgres and durable object storage.
 
 ## Licensing
 
@@ -108,7 +100,7 @@ assigning it to the project.
 ```
 app/            Next.js App Router — public site, portal, admin, API (Apache-2.0)
 src/            core spine, feature modules, adapters, MCP server (Apache-2.0)
-packages/       separately published Apache-2.0 packages (@freeholder/sdk, …)
+packages/       pre-release distributable packages (@freeholder/sdk, …)
 MASTER.md       sole product specification, status, and completion plan
 ```
 

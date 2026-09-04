@@ -28,6 +28,8 @@ export function createNoSocial(): SocialAdapter {
     health: failure,
     listOwnedPosts: failure,
     listInteractions: failure,
+    listReviews: failure,
+    pushHours: failure,
     publish: failure,
     remove: failure,
     verifyWebhook: failure,

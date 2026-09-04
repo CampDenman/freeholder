@@ -14,6 +14,7 @@ import {
   getJob,
   isJobStuck,
   JobContractError,
+  listJobs,
   pruneJobIdempotencyKeys,
   registerJob,
   resolvedJobPolicy,
@@ -22,6 +23,7 @@ import {
   stopJobs,
   type EnqueuedJob,
 } from "@/core/jobs";
+import { getJobRuntimeEvidence } from "@/core/jobs/health";
 import {
   backgroundJobsBriefingContribution,
   cancelJobRun,
@@ -31,7 +33,7 @@ import {
   redriveJobDeadLetters,
   retryJobRun,
 } from "@/core/jobs/service";
-import { jobIdempotencyKeys } from "@/core/jobs/schema";
+import { jobIdempotencyKeys, jobRuntimeHeartbeats } from "@/core/jobs/schema";
 import { auditLog } from "@/core/events/schema";
 import { ready } from "@/core/runtime";
 import { defineService, ServiceError, type Tx } from "@/core/service";
@@ -190,6 +192,27 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     },
   });
 
+  const testJobs = [
+    transactional,
+    retries,
+    serial,
+    cancellable,
+    leased,
+    deadLettered,
+  ] as const;
+
+  async function clearQueueState(): Promise<void> {
+    const producer = await startJobProducer();
+    if (!producer) {
+      throw new Error("transactional job tests require an enabled producer");
+    }
+    await Promise.all(
+      [...testJobs.map((job) => job.name), DEAD_LETTER_QUEUE].map((name) =>
+        producer.deleteAllJobs(name),
+      ),
+    );
+  }
+
   const queueFromService = defineService({
     name: "test.queueFromService",
     summary: "Queue work from a service transaction.",
@@ -215,19 +238,16 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     process.env.FREEHOLDER_JOBS = "on";
     resetEnvForTests();
     await ready();
-    for (const job of [transactional, retries, serial, cancellable, leased, deadLettered]) {
-      registerJob(job);
-    }
-    await startJobProducer();
+    for (const job of testJobs) registerJob(job);
+    // pg-boss owns tables outside the module manifest, so truncateSpine()
+    // cannot clear queue rows left by an interrupted earlier run. Do that once
+    // before mounting workers or old scheduled work would race this suite.
+    await clearQueueState();
   });
 
   beforeEach(async () => {
     await truncateSpine();
-    const producer = await startJobProducer();
-    for (const job of [transactional, retries, serial, cancellable, leased, deadLettered]) {
-      await producer?.deleteAllJobs(job.name);
-    }
-    await producer?.deleteAllJobs(DEAD_LETTER_QUEUE);
+    await clearQueueState();
     attempts.clear();
     observedRetryAttempts.length = 0;
     active = 0;
@@ -442,6 +462,48 @@ describe.runIf(hasDatabase)("transactional background work", () => {
     },
     20_000,
   );
+
+  it("publishes current, payload-free worker evidence through Postgres", async () => {
+    const producer = await startJobProducer();
+    for (const name of listJobs().keys()) await producer?.deleteAllJobs(name);
+    await startJobs();
+    const evidence = await getJobRuntimeEvidence();
+    expect(evidence).toMatchObject({
+      ready: true,
+      reason: "ready",
+      currentVersionWorkers: 1,
+    });
+    expect(typeof evidence.registeredJobs).toBe("number");
+    expect(typeof evidence.mountedWorkers).toBe("number");
+    expect(typeof evidence.heartbeatAgeSeconds).toBe("number");
+    expect(evidence.registeredJobs).toBeGreaterThan(0);
+    expect(evidence.mountedWorkers).toBe(evidence.registeredJobs);
+
+    const rows = await db().select().from(jobRuntimeHeartbeats);
+    expect(rows).toHaveLength(1);
+    expect(Object.keys(rows[0]!).sort()).toEqual(
+      [
+        "activeJobs",
+        "deadLetters",
+        "failedJobs",
+        "heartbeatAt",
+        "instanceId",
+        "lastErrorAt",
+        "lastErrorCode",
+        "mountedWorkers",
+        "platformVersion",
+        "queueLagSeconds",
+        "queuedJobs",
+        "readyJobs",
+        "registeredJobs",
+        "role",
+        "scheduledJobs",
+        "startedAt",
+        "state",
+        "stoppedAt",
+      ].sort(),
+    );
+  });
 
   it("makes active cancellation visible and keeps a live lease refreshed", async () => {
     await startJobs();

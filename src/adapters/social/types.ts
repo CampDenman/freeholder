@@ -66,6 +66,22 @@ export interface SocialOwnedPost {
   media: readonly SocialOwnedMedia[];
 }
 
+export interface SocialExternalReview {
+  providerRef: string;
+  rating: number;
+  body: string;
+  displayName: string | null;
+  email: string | null;
+  occurredAt: string;
+}
+
+export interface SocialHoursPeriod {
+  weekday: number;
+  opens: string;
+  closes: string;
+  closed: boolean;
+}
+
 export interface SocialInteraction {
   providerRef: string;
   postProviderRef: string;
@@ -103,6 +119,11 @@ export interface SocialAdapter {
     accessToken: string,
     postProviderRef: string,
   ): Promise<readonly SocialInteraction[]>;
+  listReviews(accessToken: string): Promise<readonly SocialExternalReview[]>;
+  pushHours(
+    accessToken: string,
+    periods: readonly SocialHoursPeriod[],
+  ): Promise<void>;
   publish(request: SocialPublicationRequest): Promise<SocialPublicationResult>;
   remove(request: { providerRef: string; idempotencyKey: string }): Promise<void>;
   verifyWebhook(request: RawProviderRequest): Promise<readonly SocialProviderEvent[]>;

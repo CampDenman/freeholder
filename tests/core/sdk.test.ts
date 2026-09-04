@@ -1,11 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// @freeholder/sdk talks to the live RPC the OpenAPI document describes (C3.03).
+// Generic transport slice of C3.03; registry-generated concrete methods remain open.
 import { describe, expect, it } from "vitest";
 import { createClient, FreeholderError, PLATFORM_VERSION } from "../../packages/sdk/src/index";
 import { PLATFORM_VERSION as platform } from "@/core/platform";
 
-describe("freeholder sdk (C3.03)", () => {
+describe("freeholder sdk generic transport", () => {
   it("publishes the same version as the platform", () => {
     expect(PLATFORM_VERSION).toBe(platform);
   });
