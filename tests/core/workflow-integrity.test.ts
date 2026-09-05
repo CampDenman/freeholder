@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
 import {
+  inspectProtectedFanIn,
   inspectWorkflowDocument,
   inspectWorkflowSource,
 } from "../../scripts/workflow-integrity-gate.mjs";
@@ -97,5 +98,45 @@ jobs:
       expect.stringContaining("bind merge_group"),
       expect.stringContaining("verified/unknown findings and scan errors"),
     ]));
+  });
+});
+
+describe("protected fan-in check", () => {
+  const fanIn = (body: string) => `jobs:
+  application:
+    name: Application gates
+  tests:
+    name: Tests
+  release-gate:
+${body}
+`;
+
+  it("rejects a checks job that skips when a dependency fails", () => {
+    expect(
+      inspectProtectedFanIn(fanIn(`    name: checks
+    needs: [application, tests]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+`), ".github/workflows/ci.yml"),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining("if: always()"),
+      expect.stringContaining("fail unless every needed job result is success"),
+    ]));
+  });
+
+  it("accepts a fail-closed checks fan-in", () => {
+    expect(
+      inspectProtectedFanIn(fanIn(`    name: checks
+    if: \${{ always() }}
+    needs: [application, tests]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          NEEDS: \${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")'
+`), ".github/workflows/ci.yml"),
+    ).toEqual([]);
   });
 });

@@ -116,6 +116,58 @@ export function inspectWorkflowDocument(source, path = "workflow") {
   return errors;
 }
 
+/**
+ * Branch protection requires the check named `checks`. GitHub treats a skipped
+ * required check as success, so the fan-in job must keep running after a
+ * failed dependency and then fail unless every needed job succeeded.
+ */
+export function inspectProtectedFanIn(source, path = "workflow") {
+  let document;
+  try {
+    document = record(parse(source));
+  } catch (error) {
+    return [`${path}: invalid YAML (${error instanceof Error ? error.message : "parse error"})`];
+  }
+  const jobs = record(document?.jobs);
+  if (!jobs) return [`${path}: protected fan-in workflow must declare jobs`];
+  const errors = [];
+  const fanIn = Object.entries(jobs).find(([, jobValue]) => record(jobValue)?.name === "checks")
+    ?? Object.entries(jobs).find(([jobName]) => jobName === "checks");
+  if (!fanIn) {
+    return [`${path}: protected fan-in job named checks is missing`];
+  }
+  const [jobName, jobValue] = fanIn;
+  const job = record(jobValue) ?? {};
+  const condition = typeof job.if === "string" ? job.if : "";
+  if (!condition.includes("always()")) {
+    errors.push(
+      `${path}: job ${jobName} (checks) must use if: always() so a failed dependency cannot skip the required check`,
+    );
+  }
+  const needs = job.needs;
+  const needed = Array.isArray(needs) ? needs.filter((name) => typeof name === "string") : [];
+  if (needed.length === 0) {
+    errors.push(`${path}: job ${jobName} (checks) must declare needs for every required gate`);
+  }
+  const steps = Array.isArray(job.steps) ? job.steps : [];
+  const verifies = steps.some((stepValue) => {
+    const step = record(stepValue);
+    const script = typeof step?.run === "string" ? step.run : "";
+    const env = record(step?.env);
+    const needsJson = typeof env?.NEEDS === "string" ? env.NEEDS : "";
+    return (
+      (script.includes(".result") || needsJson.includes("toJSON(needs)") || script.includes("needs."))
+      && (script.includes("success") || script.includes('jq -e'))
+    );
+  });
+  if (!verifies) {
+    errors.push(
+      `${path}: job ${jobName} (checks) must fail unless every needed job result is success`,
+    );
+  }
+  return errors;
+}
+
 async function main() {
   const errors = [];
   for (const path of await yamlFiles(githubRoot)) {
@@ -123,6 +175,9 @@ async function main() {
     const source = await readFile(path, "utf8");
     errors.push(...inspectWorkflowSource(source, label));
     errors.push(...inspectWorkflowDocument(source, label));
+    if (label === ".github/workflows/ci.yml") {
+      errors.push(...inspectProtectedFanIn(source, label));
+    }
   }
   if (errors.length > 0) {
     throw new Error(`Workflow integrity failed:\n${errors.map((error) => `  - ${error}`).join("\n")}`);

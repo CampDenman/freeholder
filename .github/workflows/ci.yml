@@ -319,12 +319,21 @@ jobs:
   release-gate:
     # Keep the existing protected-branch context while changing its meaning
     # from one serial job to the fan-in of every independent required job.
+    # GitHub treats a skipped required check as success, so this job must run
+    # after a failed dependency and fail closed. Otherwise a red shard skips
+    # `checks` and the merge queue lands the candidate (merge-group 33993046449).
     name: checks
+    if: ${{ always() }}
     needs: [application, security, codeql, tests, ownership, browser, deployment]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - run: echo "Every required gate passed for $GITHUB_SHA"
+      - name: Fail unless every required gate succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS"
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")'
 
   candidate-image:
     name: Build attested release candidate
