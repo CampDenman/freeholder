@@ -18,6 +18,7 @@ import { env } from "@/core/env";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { requestMetadata } from "@/core/http/request-metadata";
+import { readBoundedText, RequestBodyError } from "@/core/http/body";
 import { ServiceError } from "@/core/service";
 import { ANON_COOKIE } from "@/modules/analytics/visitor";
 import {
@@ -43,13 +44,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (fetchSite === "cross-site" || (origin !== null && !allowed.has(origin))) {
     return refuse("Cross-site popup events are refused.", 403);
   }
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) {
-    return refuse("That payload is too large.", 413);
-  }
-
-  const raw = await request.text().catch(() => "");
-  if (new TextEncoder().encode(raw).byteLength > MAX_BODY) {
-    return refuse("That payload is too large.", 413);
+  let raw: string;
+  try {
+    raw = await readBoundedText(request, MAX_BODY);
+  } catch (error) {
+    if (error instanceof RequestBodyError) return refuse(error.message, error.status);
+    return refuse("That request could not be read.", 400);
   }
   let body: Record<string, unknown> = {};
   try {
