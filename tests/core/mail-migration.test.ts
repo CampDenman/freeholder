@@ -16,6 +16,7 @@ import { users } from "@/core/auth/schema";
 import { reviewMigration } from "../../scripts/schema-compat-gate.mjs";
 
 const MIGRATION = "db/migrations/0031_lucky_maria_hill.sql";
+const OUTBOX_MIGRATION = "db/migrations/0156_mail_outbox.sql";
 
 describe("the C1.14 migration artifact", () => {
   const migration = readFileSync(MIGRATION, "utf8");
@@ -47,6 +48,21 @@ describe("the C1.14 migration artifact", () => {
     expect(migration).not.toMatch(/access_token|refresh_token|client_secret|api_key/i);
     expect(migration).not.toMatch(/raw_(?:body|payload)/i);
     expect(migration).toContain('"raw_digest" text NOT NULL');
+  });
+});
+
+describe("the mail delivery boundary migration", () => {
+  const migration = readFileSync(OUTBOX_MIGRATION, "utf8");
+
+  it("adds only the encrypted transient outbox and its delivery foreign key", () => {
+    expect(reviewMigration(OUTBOX_MIGRATION, migration)).toMatchObject({
+      ok: true,
+      breaking: [],
+    });
+    expect(migration).toContain('CREATE TABLE "mail_outbox"');
+    expect(migration).toContain('"encrypted_message" text NOT NULL');
+    expect(migration).toContain("ON DELETE cascade");
+    expect(migration).not.toMatch(/\b(?:text|html|body|token)\b.*text/i);
   });
 });
 

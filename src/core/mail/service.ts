@@ -12,16 +12,22 @@ import type {
   MailAdapter,
   MailProvider,
   OutboundEmail,
+  SenderVerification,
 } from "@/adapters/mail/types";
+import { MailAdapterError } from "@/adapters/mail/types";
 import { users } from "@/core/auth/schema";
+import { db } from "@/core/db";
+import { enqueueJob } from "@/core/jobs";
 import { connectedAccounts, connectionCapabilities } from "@/core/connections/schema";
 import {
   mailDeliveries,
+  mailOutbox,
   mailProviderEvents,
   mailSenders,
   mailSuppressions,
 } from "@/core/mail/schema";
-import { oauthAccessToken } from "@/core/mail/oauth";
+import { oauthAccessTokenOutsideTransaction } from "@/core/mail/oauth";
+import { decryptMailOutbox, encryptMailOutbox } from "@/core/mail/outbox-crypto";
 import {
   defineService,
   ServiceError,
@@ -220,7 +226,7 @@ async function defaultSender(tx: Tx, purpose: Purpose): Promise<SenderRow | unde
   return row ? getSender(tx, row.id) : undefined;
 }
 
-async function adapterFor(tx: Tx, sender: SenderRow): Promise<MailAdapter> {
+function assertSenderReady(sender: SenderRow): void {
   if (sender.status !== "active") {
     throw new ServiceError("conflict", "That mail sender is paused or needs attention.");
   }
@@ -241,15 +247,10 @@ async function adapterFor(tx: Tx, sender: SenderRow): Promise<MailAdapter> {
         "That connected mailbox needs attention or mail-send permission is off.",
       );
     }
-    const provider = sender.provider === "gmail" ? "google" : "microsoft";
-    const accessToken = await oauthAccessToken(tx, {
-      id: sender.connectedAccountId,
-      provider,
-    });
-    return sender.provider === "gmail"
-      ? createGmailMail({ accessToken, from: sender.email })
-      : createOutlookMail({ accessToken, from: sender.email });
   }
+}
+
+function configuredAdapter(sender: SenderRow): MailAdapter {
   const configured = providerForPurpose(sender.purpose);
   if (configured.id !== sender.provider) {
     throw new ServiceError(
@@ -269,6 +270,34 @@ async function adapterFor(tx: Tx, sender: SenderRow): Promise<MailAdapter> {
   return configured;
 }
 
+function senderRoute(sender: SenderRow): {
+  provider: MailProvider;
+  delivers: boolean;
+  kind: MailAdapter["kind"];
+} {
+  assertSenderReady(sender);
+  if (sender.provider === "gmail" || sender.provider === "outlook") {
+    return { provider: sender.provider, delivers: true, kind: "transactional" };
+  }
+  const adapter = configuredAdapter(sender);
+  return { provider: adapter.id, delivers: adapter.delivers, kind: adapter.kind };
+}
+
+async function adapterFor(sender: SenderRow): Promise<MailAdapter> {
+  assertSenderReady(sender);
+  if (sender.provider === "gmail" || sender.provider === "outlook") {
+    const provider = sender.provider === "gmail" ? "google" : "microsoft";
+    const accessToken = await oauthAccessTokenOutsideTransaction({
+      id: sender.connectedAccountId!,
+      provider,
+    });
+    return sender.provider === "gmail"
+      ? createGmailMail({ accessToken, from: sender.email })
+      : createOutlookMail({ accessToken, from: sender.email });
+  }
+  return configuredAdapter(sender);
+}
+
 export interface MailSendOptions {
   purpose?: Purpose;
   senderId?: string;
@@ -284,12 +313,30 @@ export interface MailSendResult {
   duplicate: boolean;
 }
 
+const stagedMessage = z
+  .object({
+    to: address,
+    subject: z.string().min(1).max(998).refine((value) => !/[\r\n]/.test(value)),
+    text: z.string().max(2_000_000),
+    html: z.string().max(4_000_000).optional(),
+    replyTo: address.optional(),
+    from: z.string().max(500).refine((value) => !/[\r\n]/.test(value)).optional(),
+  })
+  .strict();
+type StagedMessage = z.output<typeof stagedMessage>;
+
+function providerDelivers(provider: MailProvider): boolean {
+  return provider !== "console" && provider !== "none";
+}
+
 /**
  * The one outbound mail path used by core and, later, campaign jobs.
  *
- * It records no body, consults suppression before any provider call, and
- * accepts a stable idempotency key for retrying callers. Bulk has no fallback:
- * a missing verified bulk sender is a refusal, never Gmail by accident.
+ * The body is encrypted into a short-lived outbox row and the transactional
+ * job enqueue commits beside it. No provider or OAuth request happens here:
+ * `deliverQueuedMail` runs after this transaction is gone. Bulk has no
+ * fallback: a missing verified bulk sender is a refusal, never Gmail by
+ * accident.
  */
 export async function sendMail(
   tx: Tx,
@@ -297,7 +344,8 @@ export async function sendMail(
   options: MailSendOptions = {},
 ): Promise<MailSendResult> {
   const purpose = options.purpose ?? "transactional";
-  const recipient = address.parse(message.to);
+  const prepared = stagedMessage.parse({ ...message, to: message.to });
+  const recipient = prepared.to;
   const [suppressed] = await tx
     .select({ email: mailSuppressions.email, reason: mailSuppressions.reason })
     .from(mailSuppressions)
@@ -327,8 +375,13 @@ export async function sendMail(
       "Choose and verify a default bulk sender before sending a campaign.",
     );
   }
-  const adapter = sender ? await adapterFor(tx, sender) : providerForPurpose(purpose);
-  if (purpose === "bulk" && adapter.kind === "transactional") {
+  const route = sender
+    ? senderRoute(sender)
+    : (() => {
+        const configured = providerForPurpose(purpose);
+        return { provider: configured.id, delivers: configured.delivers, kind: configured.kind };
+      })();
+  if (purpose === "bulk" && route.kind === "transactional") {
     throw new ServiceError(
       "conflict",
       "A personal or transactional mailbox cannot be used for a broadcast.",
@@ -344,9 +397,9 @@ export async function sendMail(
         id: deliveryId,
         senderId: sender?.id,
         purpose,
-        provider: adapter.id,
+        provider: route.provider,
         recipient,
-        subject: message.subject.slice(0, 998),
+        subject: prepared.subject,
         idempotencyKey: options.idempotencyKey,
         requestedBy: options.requestedBy ?? "system",
       })
@@ -371,7 +424,9 @@ export async function sendMail(
         provider: existing.provider,
         providerRef: existing.providerRef,
         delivers:
-          existing.status !== "failed" && existing.status !== "suppressed",
+          providerDelivers(existing.provider) &&
+          existing.status !== "failed" &&
+          existing.status !== "suppressed",
         duplicate: true,
       };
     }
@@ -382,60 +437,182 @@ export async function sendMail(
         id: deliveryId,
         senderId: sender?.id,
         purpose,
-        provider: adapter.id,
+        provider: route.provider,
         recipient,
-        subject: message.subject.slice(0, 998),
+        subject: prepared.subject,
         requestedBy: options.requestedBy ?? "system",
       })
       .returning({ id: mailDeliveries.id });
   }
+  if (!inserted) {
+    throw new Error("The queued mail delivery could not be created.");
+  }
+
+  const finalMessage: StagedMessage = {
+    ...prepared,
+    from:
+      prepared.from ??
+      (sender
+        ? sender.displayName
+          ? `${sender.displayName} <${sender.email}>`
+          : sender.email
+        : undefined),
+  };
+  const serialized = JSON.stringify(finalMessage);
+  if (Buffer.byteLength(serialized, "utf8") > 5_000_000) {
+    throw new ServiceError("validation", "That mail message is too large to queue safely.");
+  }
+  await tx.insert(mailOutbox).values({
+    deliveryId: inserted.id,
+    encryptedMessage: encryptMailOutbox(serialized, inserted.id),
+  });
+  await enqueueJob(
+    tx,
+    "core.deliverMail",
+    { deliveryId: inserted.id },
+    { idempotencyKey: `mail-delivery:${inserted.id}` },
+  );
+  return {
+    id: inserted.id,
+    provider: route.provider,
+    providerRef: null,
+    delivers: route.delivers,
+    duplicate: false,
+  };
+}
+
+function safeDeliveryError(error: unknown): string {
+  return error instanceof ServiceError || error instanceof MailAdapterError
+    ? error.message.slice(0, 500)
+    : "The mail provider could not submit this message.";
+}
+
+async function finishQueuedMail(
+  deliveryId: string,
+  values: Partial<typeof mailDeliveries.$inferInsert>,
+): Promise<void> {
+  await db().transaction(async (tx) => {
+    await tx
+      .update(mailDeliveries)
+      .set({ ...values, updatedAt: new Date() })
+      .where(eq(mailDeliveries.id, deliveryId));
+    await tx.delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+  });
+}
+
+/** Snapshot, provider call, apply: no database transaction spans the call. */
+export async function deliverQueuedMail(deliveryId: string): Promise<{
+  status: "missing" | "submitted" | "failed" | "suppressed";
+}> {
+  const [queued] = await db()
+    .select({
+      delivery: mailDeliveries,
+      encryptedMessage: mailOutbox.encryptedMessage,
+    })
+    .from(mailOutbox)
+    .innerJoin(mailDeliveries, eq(mailDeliveries.id, mailOutbox.deliveryId))
+    .where(eq(mailOutbox.deliveryId, deliveryId))
+    .limit(1);
+  if (!queued) return { status: "missing" };
+  if (!["queued", "failed"].includes(queued.delivery.status)) {
+    await db().delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+    return { status: "missing" };
+  }
+
+  let message: StagedMessage;
+  try {
+    message = stagedMessage.parse(
+      JSON.parse(decryptMailOutbox(queued.encryptedMessage, deliveryId)) as unknown,
+    );
+  } catch {
+    await finishQueuedMail(deliveryId, {
+      status: "failed",
+      lastError: "The encrypted mail payload could not be read safely.",
+    });
+    return { status: "failed" };
+  }
+
+  const [suppressed] = await db()
+    .select({ reason: mailSuppressions.reason })
+    .from(mailSuppressions)
+    .where(
+      and(
+        eq(mailSuppressions.email, queued.delivery.recipient),
+        eq(mailSuppressions.active, true),
+      ),
+    )
+    .limit(1);
+  if (suppressed) {
+    await finishQueuedMail(deliveryId, {
+      status: "suppressed",
+      lastError: `Suppressed after a ${suppressed.reason.replace("_", " ")}.`,
+    });
+    return { status: "suppressed" };
+  }
+
+  await db()
+    .update(mailDeliveries)
+    .set({ attempts: sql`${mailDeliveries.attempts} + 1`, updatedAt: new Date() })
+    .where(eq(mailDeliveries.id, deliveryId));
 
   try {
-    const result = await adapter.send({
-      ...message,
-      to: recipient,
-      from: message.from ??
-        (sender
-          ? sender.displayName
-            ? `${sender.displayName} <${sender.email}>`
-            : sender.email
-          : undefined),
-      deliveryId,
-    });
-    await tx
-      .update(mailDeliveries)
-      .set({
-        providerRef: result.providerRef,
-        status: adapter.delivers ? "submitted" : "failed",
-        attempts: sql`${mailDeliveries.attempts} + 1`,
-        submittedAt: adapter.delivers ? new Date() : null,
-        lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
-      })
-      .where(eq(mailDeliveries.id, inserted!.id));
-    return {
-      id: inserted!.id,
-      provider: adapter.id,
+    const sender = queued.delivery.senderId
+      ? await getSender(db() as unknown as Tx, queued.delivery.senderId)
+      : undefined;
+    const adapter = sender
+      ? await adapterFor(sender)
+      : providerForPurpose(queued.delivery.purpose);
+    if (adapter.id !== queued.delivery.provider) {
+      throw new MailAdapterError(
+        "The configured mail route changed after this message was queued.",
+      );
+    }
+    const result = await adapter.send({ ...message, deliveryId });
+    await finishQueuedMail(deliveryId, {
       providerRef: result.providerRef,
-      delivers: adapter.delivers,
-      duplicate: false,
-    };
+      status: adapter.delivers ? "submitted" : "failed",
+      submittedAt: adapter.delivers ? new Date() : null,
+      lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
+    });
+    return { status: adapter.delivers ? "submitted" : "failed" };
   } catch (error) {
-    await tx
+    const retryable =
+      error instanceof MailAdapterError
+        ? error.retryable
+        : !(error instanceof ServiceError);
+    await db()
       .update(mailDeliveries)
       .set({
-        status: "failed",
-        attempts: sql`${mailDeliveries.attempts} + 1`,
-        // Adapter errors are intentionally bounded and sanitized. Unknown
-        // exceptions may contain SMTP/provider internals, so never persist
-        // their raw message in audit-facing delivery evidence.
-        lastError:
-          error instanceof ServiceError
-            ? error.message.slice(0, 500)
-            : "The mail provider could not submit this message.",
+        status: retryable ? "queued" : "failed",
+        lastError: safeDeliveryError(error),
+        updatedAt: new Date(),
       })
-      .where(eq(mailDeliveries.id, inserted!.id));
-    throw error;
+      .where(eq(mailDeliveries.id, deliveryId));
+    if (retryable) throw error;
+    await db().delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
+    return { status: "failed" };
   }
+}
+
+export async function pruneExpiredMailOutbox(): Promise<number> {
+  const expired = await db().transaction(async (tx) => {
+    const rows = await tx
+      .delete(mailOutbox)
+      .where(sql`${mailOutbox.createdAt} < now() - interval '30 days'`)
+      .returning({ deliveryId: mailOutbox.deliveryId });
+    if (rows.length > 0) {
+      await tx
+        .update(mailDeliveries)
+        .set({
+          status: "failed",
+          lastError: "Queued mail expired before it could be delivered.",
+          updatedAt: new Date(),
+        })
+        .where(inArray(mailDeliveries.id, rows.map((row) => row.deliveryId)));
+    }
+    return rows;
+  });
+  return expired.length;
 }
 
 export const mailStatus = defineService({
@@ -616,7 +793,7 @@ export const registerMailSender = defineService({
 
 export const verifyMailSender = defineService({
   name: "mail.verifySender",
-  summary: "Ask the bulk provider whether a sender identity is verified.",
+  summary: "Queue a check of whether a bulk sender identity is verified.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
@@ -633,34 +810,169 @@ export const verifyMailSender = defineService({
     if (adapter.id !== sender.provider || !adapter.verifySender) {
       throw new ServiceError("conflict", "That provider cannot verify this sender here.");
     }
-    const result = await adapter.verifySender({
-      email: sender.email,
-      providerIdentity: sender.providerIdentity ?? undefined,
-    });
+    const requestId = randomUUID();
     const [updated] = await ctx.tx
       .update(mailSenders)
       .set({
-        verificationStatus: result.status,
-        verificationDetail: result.detail,
-        lastVerifiedAt: new Date(),
-        lastError: result.message ?? null,
-        status:
-          result.status === "failed"
-            ? "needs_attention"
-            : sender.status === "needs_attention"
-              ? "active"
-              : sender.status,
+        verificationStatus: "pending",
+        verificationDetail: { requestId },
+        lastError: null,
+        updatedAt: new Date(),
       })
       .where(eq(mailSenders.id, input.id))
       .returning();
+    await ctx.queueJob(
+      "core.verifyMailSender",
+      { senderId: input.id, requestId },
+      { idempotencyKey: `mail-sender-verification:${requestId}` },
+    );
+    ctx.setSubject("mail_sender", input.id);
+    ctx.queueEvent("mail.senderVerificationQueued", {
+      id: input.id,
+      requestId,
+    });
+    return updated!;
+  },
+});
+
+const senderVerificationResult = z.object({
+  status: z.enum(["pending", "verified", "failed"]),
+  detail: z.record(z.string(), z.unknown()),
+  message: z.string().max(500).optional(),
+});
+
+/** Apply provider evidence only if it belongs to the latest queued check. */
+export const applyMailSenderVerification = defineService({
+  name: "mail.applySenderVerification",
+  summary: "Apply a completed provider sender-verification check.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({
+    id: uuid,
+    requestId: uuid,
+    result: senderVerificationResult.nullable(),
+    error: z.string().max(500).nullable(),
+  }),
+  output: z.object({ applied: z.boolean() }),
+  handler: async (input, ctx) => {
+    const pendingRequest = sql`${mailSenders.verificationDetail}->>'requestId' = ${input.requestId}`;
+    const [current] = await ctx.tx
+      .select({ status: mailSenders.status })
+      .from(mailSenders)
+      .where(
+        and(
+          eq(mailSenders.id, input.id),
+          eq(mailSenders.verificationStatus, "pending"),
+          pendingRequest,
+        ),
+      )
+      .limit(1);
+    if (!current) return { applied: false };
+
+    if (!input.result) {
+      await ctx.tx
+        .update(mailSenders)
+        .set({ lastError: input.error, updatedAt: new Date() })
+        .where(and(eq(mailSenders.id, input.id), pendingRequest));
+      return { applied: true };
+    }
+
+    const [updated] = await ctx.tx
+      .update(mailSenders)
+      .set({
+        verificationStatus: input.result.status,
+        verificationDetail: input.result.detail,
+        lastVerifiedAt: new Date(),
+        lastError: input.result.message ?? null,
+        status:
+          input.result.status === "failed"
+            ? "needs_attention"
+            : current.status === "needs_attention"
+              ? "active"
+              : current.status,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(mailSenders.id, input.id),
+          eq(mailSenders.verificationStatus, "pending"),
+          pendingRequest,
+        ),
+      )
+      .returning({ id: mailSenders.id });
+    if (!updated) return { applied: false };
     ctx.setSubject("mail_sender", input.id);
     ctx.queueEvent("mail.senderVerified", {
       id: input.id,
-      status: result.status,
+      status: input.result.status,
     });
-    return updated;
+    return { applied: true };
   },
 });
+
+/** Snapshot, provider call, apply: verification never holds a DB transaction. */
+export async function runMailSenderVerification(
+  senderId: string,
+  requestId: string,
+): Promise<{ applied: boolean }> {
+  let sender: SenderRow;
+  try {
+    sender = await getSender(db() as unknown as Tx, senderId);
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "not_found") {
+      return { applied: false };
+    }
+    throw error;
+  }
+  if (
+    sender.purpose !== "bulk" ||
+    sender.verificationStatus !== "pending" ||
+    !sender.verificationDetail ||
+    typeof sender.verificationDetail !== "object" ||
+    (sender.verificationDetail as Record<string, unknown>).requestId !== requestId
+  ) {
+    return { applied: false };
+  }
+  const adapter = providerForPurpose("bulk");
+  if (adapter.id !== sender.provider || !adapter.verifySender) {
+    return applyMailSenderVerification.call(
+      {
+        id: senderId,
+        requestId,
+        result: {
+          status: "failed",
+          detail: {},
+          message: "That provider can no longer verify this sender here.",
+        },
+        error: null,
+      },
+      { kind: "system" },
+    );
+  }
+
+  let result: SenderVerification;
+  try {
+    result = await adapter.verifySender({
+      email: sender.email,
+      providerIdentity: sender.providerIdentity ?? undefined,
+    });
+  } catch (error) {
+    const message = safeDeliveryError(error);
+    const retryable = !(error instanceof MailAdapterError) || error.retryable;
+    if (retryable) {
+      await applyMailSenderVerification.call(
+        { id: senderId, requestId, result: null, error: message },
+        { kind: "system" },
+      );
+      throw error;
+    }
+    result = { status: "failed", detail: {}, message };
+  }
+  return applyMailSenderVerification.call(
+    { id: senderId, requestId, result, error: null },
+    { kind: "system" },
+  );
+}
 
 export const setDefaultMailSender = defineService({
   name: "mail.setDefaultSender",
@@ -1013,6 +1325,7 @@ export default [
   mailStatus,
   registerMailSender,
   verifyMailSender,
+  applyMailSenderVerification,
   setDefaultMailSender,
   updateMailSender,
   testMailSender,

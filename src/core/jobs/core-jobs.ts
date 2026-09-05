@@ -54,6 +54,50 @@ export const deliverSecurityNotices = defineJob({
   handler: () => deliverPendingSecurityNotices(),
 });
 
+/** Deliver one encrypted mail-outbox row after its business transaction commits. */
+export const deliverMail = defineJob({
+  name: "core.deliverMail",
+  summary: "Submit one transactionally queued message to its mail provider.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 4,
+  leaseSeconds: 5 * 60,
+  handler: async (data) => {
+    if (typeof data.deliveryId !== "string") {
+      throw new Error("core.deliverMail requires a delivery id");
+    }
+    const { deliverQueuedMail } = await import("@/core/mail/service");
+    return deliverQueuedMail(data.deliveryId);
+  },
+});
+
+/** Ciphertext is transient operational state, never a second mailbox. */
+export const pruneMailOutbox = defineJob({
+  name: "core.pruneMailOutbox",
+  summary: "Remove encrypted mail bodies stranded beyond the retry horizon.",
+  schedule: "13 4 * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { pruneExpiredMailOutbox } = await import("@/core/mail/service");
+    return { deleted: await pruneExpiredMailOutbox() };
+  },
+});
+
+/** Check provider identity ownership only after the settings transaction commits. */
+export const verifyMailSender = defineJob({
+  name: "core.verifyMailSender",
+  summary: "Check one bulk sender identity with its mail provider.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 2,
+  leaseSeconds: 2 * 60,
+  handler: async (data) => {
+    if (typeof data.senderId !== "string" || typeof data.requestId !== "string") {
+      throw new Error("core.verifyMailSender requires sender and request ids");
+    }
+    const { runMailSenderVerification } = await import("@/core/mail/service");
+    return runMailSenderVerification(data.senderId, data.requestId);
+  },
+});
+
 /** Coarse login history has a hard 90-day retention boundary. */
 export const sweepLoginSecurityEvents = defineJob({
   name: "core.sweepLoginSecurityEvents",
@@ -812,6 +856,9 @@ export const refreshCatalogue = defineJob({
 export default [
   sweepSessions,
   deliverSecurityNotices,
+  deliverMail,
+  pruneMailOutbox,
+  verifyMailSender,
   sweepLoginSecurityEvents,
   sweepRateLimits,
   sweepPasswordResets,

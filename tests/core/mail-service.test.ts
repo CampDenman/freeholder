@@ -1,27 +1,33 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Database-backed mail routing, permissions, idempotency and suppression.
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { resetMailForTests } from "@/adapters/mail";
 import { users } from "@/core/auth/schema";
 import { connectedAccounts, connectionCapabilities } from "@/core/connections/schema";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
+import { startJobProducer } from "@/core/jobs";
+import { ready } from "@/core/runtime";
 import {
   mailDeliveries,
+  mailOutbox,
   mailProviderEvents,
   mailSenders,
   mailSuppressions,
 } from "@/core/mail/schema";
 import {
   mailStatus,
+  deliverQueuedMail,
+  runMailSenderVerification,
   recordMailProviderEvent,
   registerMailSender,
   releaseMailSuppression,
   sendMail,
   setDefaultMailSender,
   updateMailSender,
+  verifyMailSender,
 } from "@/core/mail/service";
 import {
   closeDb,
@@ -53,7 +59,10 @@ async function seedOwner(): Promise<void> {
 }
 
 describe.runIf(hasDatabase)("mail services", () => {
+  beforeAll(ready, 60_000);
+
   beforeEach(async () => {
+    environment({ SESSION_SECRET: "mail-outbox-test-secret-material-32-bytes" });
     await truncateSpine();
     await seedOwner();
   });
@@ -183,7 +192,61 @@ describe.runIf(hasDatabase)("mail services", () => {
     ).toHaveLength(0);
   });
 
-  it("makes stable send keys idempotent without storing a message body", async () => {
+  it("checks sender verification only after the settings transaction commits", async () => {
+    environment({
+      MAIL_BULK_ADAPTER: "resend",
+      MAIL_BULK_FROM: "news@example.test",
+      RESEND_API_KEY: "test-key",
+      RESEND_WEBHOOK_SECRET: "whsec_test",
+    });
+    const [sender] = await db()
+      .insert(mailSenders)
+      .values({
+        purpose: "bulk",
+        provider: "resend",
+        email: "news@example.test",
+        verificationStatus: "pending",
+        status: "active",
+        createdBy: OWNER.userId,
+      })
+      .returning();
+    const providerCall = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ id: "domain-1", name: "example.test", status: "verified" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    const queued = await verifyMailSender.call({ id: sender!.id }, OWNER);
+    expect(queued.verificationStatus).toBe("pending");
+    expect(providerCall).not.toHaveBeenCalled();
+    const requestId = (queued.verificationDetail as { requestId?: string }).requestId;
+    expect(requestId).toMatch(/^[0-9a-f-]{36}$/);
+
+    await expect(
+      runMailSenderVerification(sender!.id, requestId!),
+    ).resolves.toEqual({ applied: true });
+    expect(providerCall).toHaveBeenCalledTimes(1);
+    const [verified] = await db()
+      .select()
+      .from(mailSenders)
+      .where(eq(mailSenders.id, sender!.id));
+    expect(verified).toMatchObject({
+      verificationStatus: "verified",
+      verificationDetail: {
+        id: "domain-1",
+        domain: "example.test",
+        providerStatus: "verified",
+      },
+      status: "active",
+      lastError: null,
+    });
+    expect(verified!.lastVerifiedAt).toBeInstanceOf(Date);
+  });
+
+  it("queues stable send keys idempotently without exposing a message body", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const message = {
       to: "person@example.test",
@@ -203,11 +266,114 @@ describe.runIf(hasDatabase)("mail services", () => {
     expect(rows[0]).toMatchObject({
       recipient: "person@example.test",
       subject: "Password reset",
-      status: "failed",
-      attempts: 1,
+      status: "queued",
+      attempts: 0,
     });
     expect(JSON.stringify(rows[0])).not.toContain("private reset body");
+    const [outbox] = await db().select().from(mailOutbox);
+    expect(outbox?.encryptedMessage).not.toContain("private reset body");
+    const queuedJobs = await (await startJobProducer())?.findJobs("core.deliverMail");
+    const queuedJob = queuedJobs?.find(
+      (job) => (job.data as { deliveryId?: string }).deliveryId === first.id,
+    );
+    expect(queuedJob?.data).toEqual({ deliveryId: first.id });
+    expect(JSON.stringify(queuedJob?.data)).not.toContain("private reset body");
+
+    await expect(deliverQueuedMail(first.id)).resolves.toEqual({ status: "failed" });
+    expect(await db().select().from(mailOutbox)).toEqual([]);
+    const [delivered] = await db().select().from(mailDeliveries);
+    expect(delivered).toMatchObject({ status: "failed", attempts: 1 });
+    expect(log).toHaveBeenCalled();
     log.mockRestore();
+  });
+
+  it("refuses to reroute a queued message after deployment mail settings change", async () => {
+    const queued = await db().transaction((tx) =>
+      sendMail(tx, {
+        to: "person@example.test",
+        subject: "Configuration boundary",
+        text: "This was queued for the console only.",
+      }),
+    );
+    environment({
+      MAIL_ADAPTER: "smtp",
+      SMTP_HOST: "smtp.example.test",
+      MAIL_FROM: "hello@example.test",
+    });
+
+    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "failed" });
+    const [delivery] = await db()
+      .select()
+      .from(mailDeliveries)
+      .where(eq(mailDeliveries.id, queued.id));
+    expect(delivery).toMatchObject({
+      provider: "console",
+      status: "failed",
+      attempts: 1,
+      lastError: "The configured mail route changed after this message was queued.",
+    });
+    expect(await db().select().from(mailOutbox)).toEqual([]);
+  });
+
+  it("keeps ciphertext and queued status while a retryable provider failure recovers", async () => {
+    environment({
+      MAIL_BULK_ADAPTER: "resend",
+      MAIL_BULK_FROM: "news@example.test",
+      RESEND_API_KEY: "test-key",
+      RESEND_WEBHOOK_SECRET: "whsec_test",
+    });
+    const [sender] = await db()
+      .insert(mailSenders)
+      .values({
+        purpose: "bulk",
+        provider: "resend",
+        email: "news@example.test",
+        verificationStatus: "verified",
+        status: "active",
+        isDefault: true,
+        createdBy: OWNER.userId,
+      })
+      .returning();
+    const providerCall = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new Error("temporary network failure"))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "provider-message-1" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    const queued = await db().transaction((tx) =>
+      sendMail(
+        tx,
+        { to: "person@example.test", subject: "Campaign", text: "Body" },
+        { purpose: "bulk", senderId: sender!.id },
+      ),
+    );
+
+    await expect(deliverQueuedMail(queued.id)).rejects.toThrow(
+      "mail provider could not be reached",
+    );
+    let [delivery] = await db()
+      .select()
+      .from(mailDeliveries)
+      .where(eq(mailDeliveries.id, queued.id));
+    expect(delivery).toMatchObject({ status: "queued", attempts: 1 });
+    expect(await db().select().from(mailOutbox)).toHaveLength(1);
+
+    await expect(deliverQueuedMail(queued.id)).resolves.toEqual({ status: "submitted" });
+    [delivery] = await db()
+      .select()
+      .from(mailDeliveries)
+      .where(eq(mailDeliveries.id, queued.id));
+    expect(delivery).toMatchObject({
+      status: "submitted",
+      attempts: 2,
+      providerRef: "provider-message-1",
+      lastError: null,
+    });
+    expect(providerCall).toHaveBeenCalledTimes(2);
+    expect(await db().select().from(mailOutbox)).toEqual([]);
   });
 
   it("refuses bulk mail without a verified default and refuses suppressed recipients before sending", async () => {

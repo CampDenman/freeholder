@@ -1093,6 +1093,13 @@
       "when": 1791043200000,
       "tag": "0155_share_targets",
       "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1791129600000,
+      "tag": "0156_mail_outbox",
+      "breakpoints": true
     }
   ]
 }

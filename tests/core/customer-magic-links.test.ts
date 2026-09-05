@@ -27,6 +27,7 @@ import {
   hasDatabase,
   truncateSpine,
 } from "../helpers/spine";
+import { flushQueuedMail } from "../helpers/mail";
 
 const EMAIL = "portal-customer@example.test";
 
@@ -77,6 +78,7 @@ describe.runIf(hasDatabase)("customer magic-link lifecycle", { timeout: 30_000 }
   async function requestToken(email = EMAIL): Promise<string> {
     logged = [];
     await requestCustomerMagicLink.call({ email }, ANONYMOUS);
+    await flushQueuedMail();
     return tokenFrom(logged);
   }
 
@@ -99,6 +101,7 @@ describe.runIf(hasDatabase)("customer magic-link lifecycle", { timeout: 30_000 }
   it("does not disclose whether a contact exists and stores only a token hash", async () => {
     await createContact();
     const known = await requestCustomerMagicLink.call({ email: EMAIL }, ANONYMOUS);
+    await flushQueuedMail();
     const token = tokenFrom(logged);
     const unknown = await requestCustomerMagicLink.call(
       { email: "nobody@example.test" },
@@ -127,6 +130,7 @@ describe.runIf(hasDatabase)("customer magic-link lifecycle", { timeout: 30_000 }
       preferredLocale: "fr",
     });
     await requestCustomerMagicLink.call({ email: EMAIL }, ANONYMOUS);
+    await flushQueuedMail();
     const output = logged.join("\n");
     expect(output).toContain("Votre lien de connexion à Atelier Rivage");
     expect(output).toContain("Le lien expire dans 15 minutes");
@@ -145,6 +149,7 @@ describe.runIf(hasDatabase)("customer magic-link lifecycle", { timeout: 30_000 }
     });
     await createContact();
     await requestCustomerMagicLink.call({ email: EMAIL, locale: "fr" }, ANONYMOUS);
+    await flushQueuedMail();
     expect(logged.join("\n")).toContain("Votre lien de connexion à Atelier Rivage");
     const result = await consumeCustomerMagicLink.call(
       { token: tokenFrom(logged) },
