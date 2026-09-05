@@ -20,6 +20,7 @@ import {
   networks,
   profiles,
   reviewProfile,
+  runProfileHealth,
   setPolicy,
 } from "@/modules/social/service";
 import {
@@ -259,7 +260,9 @@ describe.runIf(hasDatabase)("social connections", { timeout: 60_000 }, () => {
     );
     await reviewProfile.call({ id: done.id, approved: true }, OWNER);
     vi.stubGlobal("fetch", longLived);
-    const [health] = await checkHealth.call({ id: done.id }, OWNER);
+    const queued = await checkHealth.call({ id: done.id }, OWNER);
+    expect(queued).toMatchObject({ queued: 1 });
+    const health = await runProfileHealth(done.id);
     expect(health!.lastHealthStatus).toBe("ok");
   });
 

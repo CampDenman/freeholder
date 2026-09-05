@@ -12,7 +12,11 @@ import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { storage } from "@/adapters/storage";
 import { storageKey } from "@/adapters/storage/types";
-import { socialAdapters, type SocialOwnedPost } from "@/adapters/social";
+import {
+  socialAdapters,
+  type SocialInteraction,
+  type SocialOwnedPost,
+} from "@/adapters/social";
 import { downloadSocialMedia } from "@/adapters/social/media";
 import { decryptSecret } from "@/core/connections/crypto";
 import { registerContactReference } from "@/core/contacts/service";
@@ -35,6 +39,7 @@ import {
   socialProfiles,
   socialPublications,
 } from "./schema";
+import type { JobExecutionContext } from "@/core/jobs";
 
 function digestOf(body: string, checksums: readonly string[]): string {
   return createHash("sha256")
@@ -79,12 +84,44 @@ async function requireReadableProfile(ctx: ServiceContext, profileId: string) {
   return profile;
 }
 
+interface StagedMedia {
+  assetId: string;
+  checksumSha256: string;
+}
+
+interface ProfileIngestResult {
+  packagesCreated: number;
+  packagesSeen: number;
+  interactions: number;
+}
+
+const stagedMediaSchema: z.ZodType<StagedMedia> = z.object({
+  assetId: uuid,
+  checksumSha256: z.string().length(64),
+});
+
+const ownedPostSchema = z.object({
+  providerRef: z.string().min(1).max(500),
+  url: z.string().url().max(2_048).nullable(),
+  body: z.string().max(100_000),
+  publishedAt: z.iso.datetime(),
+});
+
+const interactionSchema = z.object({
+  providerRef: z.string().min(1).max(500),
+  postProviderRef: z.string().min(1).max(500),
+  kind: z.enum(SOCIAL_INTERACTION_KINDS),
+  body: z.string().min(1).max(100_000),
+  occurredAt: z.iso.datetime(),
+  authorHandle: z.string().min(1).max(500),
+  authorEmail: z.string().email().max(320).nullable(),
+});
+
 async function reclaimMedia(
-  ctx: ServiceContext,
   profile: { id: string; provider: string },
   post: SocialOwnedPost,
-): Promise<string[]> {
-  const assetIds: string[] = [];
+): Promise<StagedMedia[]> {
+  const staged: StagedMedia[] = [];
   const { registerStoredOriginal } = await import("@/core/media/service");
   for (const media of post.media) {
     let storedKey: string | undefined;
@@ -96,7 +133,8 @@ async function reclaimMedia(
       const store = storage();
       await store.put(key, bytes, media.mime);
       storedKey = key;
-      const asset = await ctx.callAsSystem(registerStoredOriginal, {
+      const asset = await registerStoredOriginal.call(
+        {
         key,
         filename: media.filename,
         contentType: media.mime,
@@ -110,16 +148,18 @@ async function reclaimMedia(
           note: `social:${profile.provider}:${post.providerRef}`,
         },
         metadata: {},
-      });
+        },
+        { kind: "system" },
+      );
       storedKey = undefined;
-      assetIds.push(asset.id);
+      staged.push({ assetId: asset.id, checksumSha256: checksum });
     } catch {
       if (storedKey) await storage().delete(storedKey).catch(() => undefined);
       // A missing image must not block the caption. The package still
       // records the post; the owner can see it has no file.
     }
   }
-  return assetIds;
+  return staged;
 }
 
 async function attachAssets(
@@ -179,11 +219,12 @@ async function presentPackage(ctx: ServiceContext, id: string) {
   };
 }
 
-async function ingestPost(
+async function applyIngestedPost(
   ctx: ServiceContext,
   profile: { id: string; provider: string },
-  post: SocialOwnedPost,
-): Promise<{ packageId: string; created: boolean }> {
+  post: z.infer<typeof ownedPostSchema>,
+  stagedMedia: readonly StagedMedia[],
+): Promise<{ packageId: string; created: boolean; usedMedia: boolean }> {
   const [seen] = await ctx.tx
     .select({ packageId: socialPublications.packageId })
     .from(socialPublications)
@@ -194,21 +235,13 @@ async function ingestPost(
       ),
     )
     .limit(1);
-  if (seen) return { packageId: seen.packageId, created: false };
+  if (seen) return { packageId: seen.packageId, created: false, usedMedia: false };
 
-  const assetIds = await reclaimMedia(ctx, profile, post);
-  const checksums = await Promise.all(
-    assetIds.map(async (assetId) => {
-      const { assets } = await import("@/core/media/schema");
-      const [row] = await ctx.tx
-        .select({ checksumSha256: assets.checksumSha256 })
-        .from(assets)
-        .where(eq(assets.id, assetId))
-        .limit(1);
-      return row?.checksumSha256 ?? "";
-    }),
+  const assetIds = stagedMedia.map((media) => media.assetId);
+  const contentDigest = digestOf(
+    post.body,
+    stagedMedia.map((media) => media.checksumSha256),
   );
-  const contentDigest = digestOf(post.body, checksums.filter(Boolean));
   const [same] = await ctx.tx
     .select({ id: socialPackages.id })
     .from(socialPackages)
@@ -251,7 +284,7 @@ async function ingestPost(
     status: "ingested",
     publishedAt: new Date(post.publishedAt),
   });
-  return { packageId, created };
+  return { packageId, created, usedMedia: stagedMedia.length > 0 };
 }
 
 async function ingestInteractions(
@@ -259,10 +292,8 @@ async function ingestInteractions(
   profile: { id: string; provider: string },
   packageId: string,
   postProviderRef: string,
-  accessToken: string,
+  items: readonly SocialInteraction[],
 ): Promise<number> {
-  const adapter = socialAdapters.get(profile.provider);
-  const items = await adapter.listInteractions(accessToken, postProviderRef);
   let stored = 0;
   for (const item of items) {
     const [existing] = await ctx.tx
@@ -308,44 +339,241 @@ async function ingestInteractions(
 export const ingestProfile = defineService({
   name: "social.ingestProfile",
   writeClass: "write",
-  summary: "Pull owned posts and comments from one connected profile.",
+  summary: "Queue owned posts and comments to be pulled from one connected profile.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({ profileId: uuid }),
   output: row({
-    packagesCreated: z.number().int(),
-    packagesSeen: z.number().int(),
-    interactions: z.number().int(),
+    profileId: uuid,
+    jobId: uuid,
+    queued: z.literal(true),
   }),
   handler: async (input, ctx) => {
     const profile = await requireReadableProfile(ctx, input.profileId);
-    const { accessToken } = tokensFor(profile);
-    const adapter = socialAdapters.get(profile.provider);
-    const posts = await adapter.listOwnedPosts(accessToken);
-    let packagesCreated = 0;
-    let packagesSeen = 0;
-    let interactions = 0;
-    for (const post of posts) {
-      const result = await ingestPost(ctx, profile, post);
-      packagesSeen += 1;
-      if (result.created) packagesCreated += 1;
-      interactions += await ingestInteractions(
-        ctx,
-        profile,
-        result.packageId,
-        post.providerRef,
-        accessToken,
-      );
+    const queued = await ctx.queueJob(
+      "social.ingestProfileOne",
+      { profileId: profile.id },
+      {
+        idempotencyKey: `social-ingest:${profile.id}:${Math.floor(Date.now() / 300_000)}`,
+        idempotencyTtlSeconds: 10 * 60,
+      },
+    );
+    ctx.setSubject("social_profile", profile.id);
+    return { profileId: profile.id, jobId: queued.id, queued: true as const };
+  },
+});
+
+export const ingestProfileSource = defineService({
+  name: "social.ingestProfileSource",
+  summary: "Read one active profile for the social ingestion worker.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ profileId: uuid }),
+  output: z
+    .object({ id: uuid, provider: z.string(), accessToken: z.string().min(1) })
+    .nullable(),
+  handler: async (input, ctx) => {
+    try {
+      const profile = await requireReadableProfile(ctx, input.profileId);
+      return {
+        id: profile.id,
+        provider: profile.provider,
+        accessToken: tokensFor(profile).accessToken,
+      };
+    } catch (error) {
+      if (
+        error instanceof ServiceError &&
+        ["not_found", "conflict", "permission"].includes(error.code)
+      ) {
+        return null;
+      }
+      throw error;
     }
+  },
+});
+
+export const ingestProfileIds = defineService({
+  name: "social.ingestProfileIds",
+  summary: "List active readable profiles for the scheduled ingestion fan-out.",
+  kind: "query",
+  permission: "system",
+  input: z.object({}),
+  output: z.array(uuid),
+  handler: async (_input, ctx) => {
+    const rows = await ctx.tx
+      .select({ id: socialProfiles.id })
+      .from(socialProfiles)
+      .where(and(eq(socialProfiles.status, "active"), eq(socialProfiles.allowRead, true)));
+    return rows.map((row) => row.id);
+  },
+});
+
+export const ingestedPost = defineService({
+  name: "social.ingestedPost",
+  summary: "Check whether a provider post already crossed the ingestion boundary.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ provider: z.string(), providerRef: z.string().min(1).max(500) }),
+  output: z.object({ packageId: uuid }).nullable(),
+  handler: async (input, ctx) => {
+    const [seen] = await ctx.tx
+      .select({ packageId: socialPublications.packageId })
+      .from(socialPublications)
+      .where(
+        and(
+          eq(socialPublications.provider, input.provider),
+          eq(socialPublications.providerRef, input.providerRef),
+        ),
+      )
+      .limit(1);
+    return seen ?? null;
+  },
+});
+
+const appliedPostResult = z.object({
+  created: z.boolean(),
+  interactions: z.number().int(),
+  usedMedia: z.boolean(),
+});
+
+export const applyIngestedProfilePost = defineService({
+  name: "social.applyIngestedProfilePost",
+  summary: "Atomically apply one provider post already fetched by the ingestion worker.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({
+    profileId: uuid,
+    provider: z.string(),
+    response: z.unknown(),
+  }),
+  output: appliedPostResult,
+  handler: async (input, ctx) => {
+    const response = z
+      .object({
+        post: ownedPostSchema,
+        media: z.array(stagedMediaSchema).max(20),
+        interactions: z.array(interactionSchema).max(1_000),
+      })
+      .parse(input.response);
+    const profile = await requireReadableProfile(ctx, input.profileId);
+    if (profile.provider !== input.provider) {
+      throw new ServiceError("conflict", "The social profile provider changed during ingestion.");
+    }
+    const applied = await applyIngestedPost(
+      ctx,
+      profile,
+      response.post,
+      response.media,
+    );
+    const interactions = await ingestInteractions(
+      ctx,
+      profile,
+      applied.packageId,
+      response.post.providerRef,
+      response.interactions,
+    );
+    ctx.setSubject("social_profile", profile.id);
+    return { created: applied.created, interactions, usedMedia: applied.usedMedia };
+  },
+});
+
+const profileIngestResult = row({
+  packagesCreated: z.number().int(),
+  packagesSeen: z.number().int(),
+  interactions: z.number().int(),
+});
+
+export const recordProfileIngest = defineService({
+  name: "social.recordProfileIngest",
+  summary: "Record the aggregate result of a completed social ingestion job.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({
+    profileId: uuid,
+    packagesCreated: z.number().int().nonnegative(),
+    packagesSeen: z.number().int().nonnegative(),
+    interactions: z.number().int().nonnegative(),
+  }),
+  output: profileIngestResult,
+  handler: async (input, ctx) => {
+    const [profile] = await ctx.tx
+      .select({ id: socialProfiles.id })
+      .from(socialProfiles)
+      .where(eq(socialProfiles.id, input.profileId))
+      .limit(1);
+    if (!profile) throw new ServiceError("not_found", "There is no such social profile.");
     ctx.setSubject("social_profile", profile.id);
     ctx.queueEvent("social.ingested", {
       profileId: profile.id,
-      packagesCreated,
-      packagesSeen,
+      packagesCreated: input.packagesCreated,
+      packagesSeen: input.packagesSeen,
     });
-    return { packagesCreated, packagesSeen, interactions };
+    return {
+      packagesCreated: input.packagesCreated,
+      packagesSeen: input.packagesSeen,
+      interactions: input.interactions,
+    };
   },
 });
+
+export async function runProfileIngest(
+  profileId: string,
+  context?: JobExecutionContext,
+): Promise<ProfileIngestResult> {
+  const profile = await ingestProfileSource.call({ profileId }, { kind: "system" });
+  if (!profile) return { packagesCreated: 0, interactions: 0, packagesSeen: 0 };
+  await context?.throwIfCancelled();
+  const adapter = socialAdapters.get(profile.provider);
+  const posts = await adapter.listOwnedPosts(profile.accessToken);
+  let packagesCreated = 0;
+  let interactions = 0;
+
+  for (const post of posts) {
+    await context?.throwIfCancelled();
+    const seen = await ingestedPost.call(
+      { provider: profile.provider, providerRef: post.providerRef },
+      { kind: "system" },
+    );
+    const media = seen ? [] : await reclaimMedia(profile, post);
+    const remoteInteractions = await adapter.listInteractions(
+      profile.accessToken,
+      post.providerRef,
+    );
+    await context?.throwIfCancelled();
+    const applied = await applyIngestedProfilePost.call(
+      {
+        profileId: profile.id,
+        provider: profile.provider,
+        response: {
+          post: {
+            providerRef: post.providerRef,
+            url: post.url,
+            body: post.body,
+            publishedAt: post.publishedAt,
+          },
+          media,
+          interactions: [...remoteInteractions],
+        },
+      },
+      { kind: "system" },
+    );
+    if (applied.created) packagesCreated += 1;
+    interactions += applied.interactions;
+  }
+
+  const totals = await recordProfileIngest.call(
+    {
+      profileId: profile.id,
+      packagesCreated,
+      packagesSeen: posts.length,
+      interactions,
+    },
+    { kind: "system" },
+  );
+  return totals;
+}
 
 export const packageList = defineService({
   name: "social.packageList",
@@ -442,13 +670,9 @@ export const interactionList = defineService({
 });
 
 export async function runIngestJob(): Promise<void> {
-  const { db } = await import("@/core/db");
-  const rows = await db()
-    .select({ id: socialProfiles.id })
-    .from(socialProfiles)
-    .where(and(eq(socialProfiles.status, "active"), eq(socialProfiles.allowRead, true)));
-  for (const row of rows) {
-    await ingestProfile.call({ profileId: row.id }, { kind: "system" });
+  const profileIds = await ingestProfileIds.call({}, { kind: "system" });
+  for (const profileId of profileIds) {
+    await ingestProfile.call({ profileId }, { kind: "system" });
   }
 }
 

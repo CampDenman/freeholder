@@ -26,6 +26,15 @@ delivery rows and immediate `core.deliverWebhooks` nudge are atomic. If queue
 storage is unavailable, the listener fails and the transactional outbox keeps
 the source event for retry.
 
+Any workflow that can wait on DNS, TLS, an object store, or a third-party API
+uses the same boundary. The request service validates the actor and inserts a
+job in its transaction; the worker reads a short service-layer snapshot,
+performs provider I/O with no database transaction open, and calls a narrow
+system mutation to apply the result. Catalogue refresh and social ingest,
+health, GBP and publication delivery are executable examples. The source gate
+in `tests/core/long-running-service-boundary.test.ts` prevents those provider
+calls from drifting back into their service handlers.
+
 ## Queue policy
 
 Every `defineJob()` declaration owns these limits beside its handler:

@@ -793,6 +793,22 @@ export const sendSmsKeywordReply = defineJob({
   },
 });
 
+/** Fetch outside a service transaction, then apply through a short mutation. */
+export const refreshCatalogue = defineJob({
+  name: "core.refreshCatalogue",
+  summary: "Fetch and atomically cache one followed catalogue.",
+  retry: { limit: 3, delaySeconds: 30, backoff: true, maxDelaySeconds: 15 * 60 },
+  concurrency: 2,
+  leaseSeconds: 2 * 60,
+  handler: async (data, context) => {
+    if (typeof data.sourceId !== "string") {
+      throw new Error("core.refreshCatalogue requires a source id");
+    }
+    const { runCatalogueRefresh } = await import("@/core/catalogue/service");
+    return runCatalogueRefresh(data.sourceId, context);
+  },
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
@@ -839,4 +855,5 @@ export default [
   replyContributions,
   sendSmsComplianceReply,
   sendSmsKeywordReply,
+  refreshCatalogue,
 ];

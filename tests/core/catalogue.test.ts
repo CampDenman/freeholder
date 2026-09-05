@@ -24,6 +24,7 @@ import {
   installCatalogueEntry,
   previewCatalogueEntry,
   refreshCatalogue,
+  runCatalogueRefresh,
 } from "@/core/catalogue/service";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
@@ -88,9 +89,20 @@ describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
       OWNER,
     );
     getPinnedBytes.mockImplementation(catalogueServing(entries));
-    await refreshCatalogue.call({ id: source.id }, OWNER);
+    await runCatalogueRefresh(source.id);
     return source;
   }
+
+  it("queues refresh work without opening the network inside its service transaction", async () => {
+    const source = await addCatalogueSource.call(
+      { name: "A catalogue", url: "https://catalogue.example.test/index.json" },
+      OWNER,
+    );
+    const queued = await refreshCatalogue.call({ id: source.id }, OWNER);
+    expect(queued).toMatchObject({ id: source.id, queued: true });
+    expect(queued.jobId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(getPinnedBytes).not.toHaveBeenCalled();
+  });
 
   it("follows a catalogue and caches what it offers", async () => {
     await following();
@@ -136,7 +148,7 @@ describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
         OWNER,
       );
       getPinnedBytes.mockImplementation(catalogueServing([{ ...GOOD, definition: poisoned }]));
-      const result = await refreshCatalogue.call({ id: source.id }, OWNER);
+      const result = await runCatalogueRefresh(source.id);
       // Refused at the door, so it never reaches a preview screen where
       // somebody might approve it.
       expect(result).toMatchObject({ entries: 0, refused: 1 });
@@ -219,7 +231,7 @@ describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
       ]),
     );
     const [source] = await db().select().from(catalogueSources);
-    await refreshCatalogue.call({ id: source!.id }, OWNER);
+    await runCatalogueRefresh(source!.id);
 
     const refused = await failure(
       installCatalogueEntry.call(
@@ -261,7 +273,7 @@ describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
       contentType: "text/plain",
       bytes: new TextEncoder().encode("nope"),
     });
-    const result = await refreshCatalogue.call({ id: source.id }, OWNER);
+    const result = await runCatalogueRefresh(source.id);
     // A state, not an exception: throwing here would roll back the very row
     // recording why it failed.
     expect(result).toMatchObject({ entries: 0, refused: 0 });

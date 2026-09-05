@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Social profiles: assignment, policy, review and health (MASTER.md §33, C9.24).
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { users } from "@/core/auth/schema";
@@ -9,6 +9,7 @@ import { businessLocations } from "@/core/locations/schema";
 import { decryptSecret } from "@/core/connections/crypto";
 import { socialAdapters } from "@/adapters/social";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
+import type { JobExecutionContext } from "@/core/jobs";
 import {
   SOCIAL_APPROVAL_POLICIES,
   SOCIAL_ASSIGNMENTS,
@@ -18,25 +19,42 @@ import {
 import { socialProfileLocations, socialProfiles } from "./schema";
 import { beginOAuth, completeOAuth } from "./oauth";
 import {
+  applyIngestedProfilePost,
   draftFromPackage,
   ingestProfile,
+  ingestProfileIds,
+  ingestProfileSource,
+  ingestedPost,
   interactionList,
   packageList,
+  recordProfileIngest,
   runIngestJob,
+  runProfileIngest,
 } from "./ingest";
 import {
   composePackage,
   createVariants,
+  publicationSource,
   publicationCalendar,
   publishDue,
+  recordPublicationResult,
   reviewVariant,
+  runPublication,
   runPublishJob,
   schedulePublications,
   variantList,
 } from "./compose";
 import {
+  applyGbpReviews,
   attributionReport,
+  gbpHoursSource,
+  gbpProfileIds,
+  gbpProfileSource,
+  recordGbpHours,
   runGbpJob,
+  runGbpHours,
+  runGbpReviews,
+  runGbpSync,
   syncGbp,
   syncGbpHours,
   syncGbpReviews,
@@ -364,71 +382,168 @@ export const setPolicy = defineService({
 export const checkHealth = defineService({
   name: "social.checkHealth",
   writeClass: "write",
-  summary: "Probe one profile's token and record whether it will survive post time.",
+  summary: "Queue token-health probes for connected social profiles.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({ id: uuid.optional() }),
-  output: listed(profileRow),
+  output: z.object({ queued: z.number().int(), jobIds: z.array(uuid) }),
   handler: async (input, ctx) => {
     const rows = await ctx.tx
-      .select()
+      .select({ id: socialProfiles.id })
       .from(socialProfiles)
       .where(
         input.id
           ? eq(socialProfiles.id, input.id)
           : inArray(socialProfiles.status, ["active", "needs_reconnect"]),
       );
-    const presented = [];
+    const jobIds = [];
     for (const profile of rows) {
-      let probeOk = false;
-      let message: string | null = null;
-      try {
-        if (!profile.credentials) {
-          message = "This profile has no stored credentials.";
-        } else {
-          const tokens = JSON.parse(
-            decryptSecret(profile.credentials, profile.id),
-          ) as { accessToken?: string };
-          const adapter = socialAdapters.get(profile.provider);
-          if (!tokens.accessToken) {
-            message = "The stored credentials have no access token.";
-          } else {
-            const result = await adapter.health(tokens.accessToken);
-            probeOk = result.ok;
-            message = result.ok ? null : result.message;
-          }
-        }
-      } catch (error) {
-        message = error instanceof Error ? error.message : "Health check failed.";
-      }
-      const health = healthFromExpiry(profile.tokenExpiresAt, probeOk);
-      const nextStatus =
-        health === "expired" || health === "error"
-          ? "needs_reconnect"
-          : profile.status === "needs_reconnect" && health === "ok"
-            ? "active"
-            : profile.status;
-      await ctx.tx
-        .update(socialProfiles)
-        .set({
-          lastHealthAt: new Date(),
-          lastHealthStatus: health,
-          lastError: message,
-          status: nextStatus,
-          updatedAt: new Date(),
-        })
-        .where(eq(socialProfiles.id, profile.id));
-      if (health === "expiring" || health === "expired" || health === "error") {
-        ctx.queueEvent("social.profileUnhealthy", {
-          id: profile.id,
-          health,
-        });
-      }
-      presented.push(await presentProfile(ctx, profile.id));
+      const queued = await ctx.queueJob(
+        "social.healthProfileOne",
+        { profileId: profile.id },
+        {
+          idempotencyKey: `social-health:${profile.id}:${Math.floor(Date.now() / 300_000)}`,
+          idempotencyTtlSeconds: 10 * 60,
+        },
+      );
+      jobIds.push(queued.id);
     }
-    return presented;
+    if (input.id) ctx.setSubject("social_profile", input.id);
+    return { queued: jobIds.length, jobIds };
   },
 });
+
+export const healthProfiles = defineService({
+  name: "social.healthProfiles",
+  summary: "List profiles whose provider grants need a health probe.",
+  kind: "query",
+  permission: "system",
+  input: z.object({}),
+  output: z.array(uuid),
+  handler: async (_input, ctx) => {
+    const rows = await ctx.tx
+      .select({ id: socialProfiles.id })
+      .from(socialProfiles)
+      .where(inArray(socialProfiles.status, ["active", "needs_reconnect"]));
+    return rows.map((row) => row.id);
+  },
+});
+
+export const healthProfileSource = defineService({
+  name: "social.healthProfileSource",
+  summary: "Read one social grant for its health worker.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ profileId: uuid }),
+  output: z.unknown(),
+  handler: async (input, ctx) => {
+    const [profile] = await ctx.tx
+      .select()
+      .from(socialProfiles)
+      .where(
+        and(
+          eq(socialProfiles.id, input.profileId),
+          inArray(socialProfiles.status, ["active", "needs_reconnect"]),
+        ),
+      )
+      .limit(1);
+    if (!profile) return null;
+    let accessToken: string | null = null;
+    let sourceError: string | null = null;
+    try {
+      if (!profile.credentials) {
+        sourceError = "This profile has no stored credentials.";
+      } else {
+        const tokens = JSON.parse(decryptSecret(profile.credentials, profile.id)) as {
+          accessToken?: string;
+        };
+        accessToken = tokens.accessToken ?? null;
+        if (!accessToken) sourceError = "The stored credentials have no access token.";
+      }
+    } catch {
+      sourceError = "The stored credentials could not be read.";
+    }
+    return { id: profile.id, provider: profile.provider, accessToken, sourceError };
+  },
+});
+
+export const applyProfileHealth = defineService({
+  name: "social.applyProfileHealth",
+  summary: "Record a provider health result fetched by the social worker.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({
+    profileId: uuid,
+    response: z.unknown(),
+  }),
+  output: profileRow.nullable(),
+  handler: async (input, ctx) => {
+    // Provider text is operational state but not audit input. The service
+    // redactor replaces a `response` field wholesale before writing AuditLog.
+    const response = z
+      .object({ probeOk: z.boolean(), message: z.string().max(1_000).nullable() })
+      .parse(input.response);
+    const [profile] = await ctx.tx
+      .select()
+      .from(socialProfiles)
+      .where(
+        and(
+          eq(socialProfiles.id, input.profileId),
+          inArray(socialProfiles.status, ["active", "needs_reconnect"]),
+        ),
+      )
+      .limit(1);
+    if (!profile) return null;
+    const health = healthFromExpiry(profile.tokenExpiresAt, response.probeOk);
+    const nextStatus =
+      health === "expired" || health === "error"
+        ? "needs_reconnect"
+        : profile.status === "needs_reconnect" && health === "ok"
+          ? "active"
+          : profile.status;
+    await ctx.tx
+      .update(socialProfiles)
+      .set({
+        lastHealthAt: new Date(),
+        lastHealthStatus: health,
+        lastError: response.message,
+        status: nextStatus,
+        updatedAt: new Date(),
+      })
+      .where(eq(socialProfiles.id, profile.id));
+    if (health === "expiring" || health === "expired" || health === "error") {
+      ctx.queueEvent("social.profileUnhealthy", { id: profile.id, health });
+    }
+    ctx.setSubject("social_profile", profile.id);
+    return presentProfile(ctx, profile.id);
+  },
+});
+
+export async function runProfileHealth(
+  profileId: string,
+  context?: JobExecutionContext,
+) {
+  const source = await healthProfileSource.call({ profileId }, { kind: "system" });
+  if (!source) return null;
+  await context?.throwIfCancelled();
+  let probeOk = false;
+  let message = source.sourceError;
+  if (source.accessToken) {
+    try {
+      const result = await socialAdapters.get(source.provider).health(source.accessToken);
+      probeOk = result.ok;
+      message = result.ok ? null : result.message;
+    } catch (error) {
+      message = error instanceof Error ? error.message.slice(0, 1_000) : "Health check failed.";
+    }
+  }
+  await context?.throwIfCancelled();
+  return applyProfileHealth.call(
+    { profileId: source.id, response: { probeOk, message } },
+    { kind: "system" },
+  );
+}
 
 export const disconnectProfile = defineService({
   name: "social.disconnectProfile",
@@ -455,8 +570,9 @@ export const disconnectProfile = defineService({
   },
 });
 
-export async function runHealthJob(): Promise<void> {
-  await checkHealth.call({}, { kind: "system" });
+export async function runHealthJob(context?: JobExecutionContext): Promise<void> {
+  const profileIds = await healthProfiles.call({}, { kind: "system" });
+  for (const profileId of profileIds) await runProfileHealth(profileId, context);
 }
 
 export {
@@ -467,19 +583,26 @@ export {
   draftFromPackage,
   interactionList,
   runIngestJob,
+  runProfileIngest,
   composePackage,
   createVariants,
   reviewVariant,
   variantList,
   schedulePublications,
   publishDue,
+  publicationSource,
+  recordPublicationResult,
   publicationCalendar,
   runPublishJob,
+  runPublication,
   syncGbpHours,
   syncGbpReviews,
   syncGbp,
   attributionReport,
   runGbpJob,
+  runGbpHours,
+  runGbpReviews,
+  runGbpSync,
 };
 
 export default [
@@ -492,8 +615,16 @@ export default [
   assignProfile,
   setPolicy,
   checkHealth,
+  healthProfiles,
+  healthProfileSource,
+  applyProfileHealth,
   disconnectProfile,
   ingestProfile,
+  ingestProfileIds,
+  ingestProfileSource,
+  ingestedPost,
+  applyIngestedProfilePost,
+  recordProfileIngest,
   packageList,
   draftFromPackage,
   interactionList,
@@ -503,9 +634,16 @@ export default [
   variantList,
   schedulePublications,
   publishDue,
+  publicationSource,
+  recordPublicationResult,
   publicationCalendar,
   syncGbpHours,
   syncGbpReviews,
   syncGbp,
+  gbpProfileSource,
+  gbpProfileIds,
+  gbpHoursSource,
+  recordGbpHours,
+  applyGbpReviews,
   attributionReport,
 ];

@@ -5,7 +5,11 @@ import { and, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, uuid } from "@/core/contract";
 import { env } from "@/core/env";
-import { socialAdapters, type SocialHoursPeriod } from "@/adapters/social";
+import {
+  socialAdapters,
+  type SocialExternalReview,
+  type SocialHoursPeriod,
+} from "@/adapters/social";
 import { decryptSecret } from "@/core/connections/crypto";
 import { businessLocations, openingHours } from "@/core/locations/schema";
 import { ingestExternal } from "@/modules/reviews/service";
@@ -16,8 +20,8 @@ import {
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
-import { ingestProfile } from "./ingest";
 import { socialGbpReviews, socialProfiles, socialProfileLocations } from "./schema";
+import type { JobExecutionContext } from "@/core/jobs";
 
 function tokenFor(profile: { id: string; credentials: string | null }): string {
   if (!profile.credentials) {
@@ -92,14 +96,48 @@ async function periodsFor(
     }));
 }
 
+type GbpOperation = "all" | "hours" | "reviews";
+
+const queuedGbpResult = row({
+  profileId: uuid,
+  jobId: uuid,
+  queued: z.literal(true),
+});
+
+const externalReviewSchema = z.object({
+  providerRef: z.string().min(1).max(500),
+  rating: z.number().int().min(1).max(5),
+  body: z.string().max(100_000),
+  displayName: z.string().max(500).nullable(),
+  email: z.string().email().max(320).nullable(),
+  occurredAt: z.iso.datetime(),
+});
+
+async function queueGbpWork(
+  ctx: ServiceContext,
+  input: { profileId: string; locationId?: string },
+  operation: GbpOperation,
+) {
+  const queued = await ctx.queueJob(
+    "social.gbpProfileOne",
+    { profileId: input.profileId, locationId: input.locationId, operation },
+    {
+      idempotencyKey: `social-gbp:${operation}:${input.profileId}:${input.locationId ?? "all"}:${Math.floor(Date.now() / 300_000)}`,
+      idempotencyTtlSeconds: 10 * 60,
+    },
+  );
+  ctx.setSubject("social_profile", input.profileId);
+  return { profileId: input.profileId, jobId: queued.id, queued: true as const };
+}
+
 export const syncGbpHours = defineService({
   name: "social.syncGbpHours",
   writeClass: "write",
-  summary: "Push this location's opening hours to Google Business Profile.",
+  summary: "Queue opening hours to be pushed to Google Business Profile.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({ profileId: uuid, locationId: uuid.optional() }),
-  output: row({ locations: z.number().int() }),
+  output: queuedGbpResult,
   handler: async (input, ctx) => {
     const profile = await requireGbp(ctx, input.profileId);
     const locationIds = input.locationId
@@ -111,32 +149,145 @@ export const syncGbpHours = defineService({
         "Assign this profile to a location, or add a primary location, before syncing hours.",
       );
     }
-    const adapter = socialAdapters.get(profile.provider);
-    const token = tokenFor(profile);
-    for (const locationId of locationIds) {
-      await adapter.pushHours(token, await periodsFor(ctx, locationId));
-    }
-    ctx.setSubject("social_profile", profile.id);
-    ctx.queueEvent("social.gbpHoursSynced", {
-      profileId: profile.id,
-      locations: locationIds.length,
-    });
-    return { locations: locationIds.length };
+    return queueGbpWork(ctx, input, "hours");
   },
 });
 
 export const syncGbpReviews = defineService({
   name: "social.syncGbpReviews",
   writeClass: "write",
-  summary: "Import Google Business Profile reviews into the reviews module.",
+  summary: "Queue Google Business Profile reviews for import.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({ profileId: uuid }),
-  output: row({ imported: z.number().int(), skipped: z.number().int() }),
+  output: queuedGbpResult,
   handler: async (input, ctx) => {
     const profile = await requireGbp(ctx, input.profileId);
-    const adapter = socialAdapters.get(profile.provider);
-    const remote = await adapter.listReviews(tokenFor(profile));
+    if (!profile.allowRead) {
+      throw new ServiceError("permission", "Reading this profile is not switched on.");
+    }
+    return queueGbpWork(ctx, input, "reviews");
+  },
+});
+
+export const syncGbp = defineService({
+  name: "social.syncGbp",
+  writeClass: "write",
+  summary: "Queue GBP posts, hours and reviews as one durable workflow.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({ profileId: uuid }),
+  output: queuedGbpResult,
+  handler: async (input, ctx) => {
+    await requireGbp(ctx, input.profileId);
+    return queueGbpWork(ctx, input, "all");
+  },
+});
+
+export const gbpProfileSource = defineService({
+  name: "social.gbpProfileSource",
+  summary: "Read one active Google Business Profile for its sync worker.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ profileId: uuid }),
+  output: z
+    .object({
+      id: uuid,
+      provider: z.string(),
+      accessToken: z.string().min(1),
+      allowRead: z.boolean(),
+    })
+    .nullable(),
+  handler: async (input, ctx) => {
+    try {
+      const profile = await requireGbp(ctx, input.profileId);
+      return {
+        id: profile.id,
+        provider: profile.provider,
+        accessToken: tokenFor(profile),
+        allowRead: profile.allowRead,
+      };
+    } catch (error) {
+      if (
+        error instanceof ServiceError &&
+        ["not_found", "conflict", "validation"].includes(error.code)
+      ) {
+        return null;
+      }
+      throw error;
+    }
+  },
+});
+
+export const gbpProfileIds = defineService({
+  name: "social.gbpProfileIds",
+  summary: "List active Google Business Profiles for scheduled sync fan-out.",
+  kind: "query",
+  permission: "system",
+  input: z.object({}),
+  output: z.array(uuid),
+  handler: async (_input, ctx) => {
+    const rows = await ctx.tx
+      .select({ id: socialProfiles.id })
+      .from(socialProfiles)
+      .where(
+        and(
+          eq(socialProfiles.status, "active"),
+          eq(socialProfiles.provider, "google_business"),
+        ),
+      );
+    return rows.map((row) => row.id);
+  },
+});
+
+export const gbpHoursSource = defineService({
+  name: "social.gbpHoursSource",
+  summary: "Read the local opening-hours snapshot for the GBP sync worker.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ profileId: uuid, locationId: uuid.optional() }),
+  output: z.unknown(),
+  handler: async (input, ctx) => {
+    const profile = await ctx.call(gbpProfileSource, { profileId: input.profileId });
+    if (!profile) return null;
+    const locationIds = input.locationId
+      ? [input.locationId]
+      : await gbpLocationIds(ctx, profile.id);
+    const locations = [];
+    for (const locationId of locationIds) {
+      locations.push({ id: locationId, periods: await periodsFor(ctx, locationId) });
+    }
+    return { ...profile, locations };
+  },
+});
+
+export const recordGbpHours = defineService({
+  name: "social.recordGbpHours",
+  summary: "Record a completed Google Business Profile hours push.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({ profileId: uuid, locations: z.number().int().nonnegative() }),
+  output: row({ locations: z.number().int() }),
+  handler: async (input, ctx) => {
+    const profile = await requireGbp(ctx, input.profileId);
+    ctx.setSubject("social_profile", profile.id);
+    ctx.queueEvent("social.gbpHoursSynced", input);
+    return { locations: input.locations };
+  },
+});
+
+export const applyGbpReviews = defineService({
+  name: "social.applyGbpReviews",
+  summary: "Atomically import GBP reviews already fetched by the sync worker.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({ profileId: uuid, response: z.unknown() }),
+  output: row({ imported: z.number().int(), skipped: z.number().int() }),
+  handler: async (input, ctx) => {
+    const remote = z.array(externalReviewSchema).max(1_000).parse(input.response);
+    const profile = await requireGbp(ctx, input.profileId);
     let imported = 0;
     let skipped = 0;
     for (const item of remote) {
@@ -169,44 +320,94 @@ export const syncGbpReviews = defineService({
   },
 });
 
-export const syncGbp = defineService({
-  name: "social.syncGbp",
-  writeClass: "write",
-  summary: "Pull GBP posts and reviews and push opening hours in one pass.",
-  kind: "mutation",
-  permission: "scoped",
-  input: z.object({ profileId: uuid }),
-  output: row({
-    packagesCreated: z.number().int(),
-    hoursLocations: z.number().int(),
-    reviewsImported: z.number().int(),
-    reviewsSkipped: z.number().int(),
-  }),
-  handler: async (input, ctx) => {
-    const profile = await requireGbp(ctx, input.profileId);
-    let packagesCreated = 0;
-    if (profile.allowRead) {
-      const ingested = await ctx.call(ingestProfile, { profileId: profile.id });
-      packagesCreated = ingested.packagesCreated;
-    }
-    let hoursLocations = 0;
-    try {
-      const hours = await ctx.call(syncGbpHours, { profileId: profile.id });
-      hoursLocations = hours.locations;
-    } catch (error) {
-      if (!(error instanceof ServiceError) || error.code !== "validation") throw error;
-    }
-    const reviews = profile.allowRead
-      ? await ctx.call(syncGbpReviews, { profileId: profile.id })
-      : { imported: 0, skipped: 0 };
+interface GbpSyncResult {
+  packagesCreated: number;
+  hoursLocations: number;
+  reviewsImported: number;
+  reviewsSkipped: number;
+}
+
+export async function runGbpHours(
+  profileId: string,
+  locationId?: string,
+  context?: JobExecutionContext,
+): Promise<{ locations: number }> {
+  const snapshot = (await gbpHoursSource.call(
+    { profileId, locationId },
+    { kind: "system" },
+  )) as
+    | {
+        id: string;
+        provider: string;
+        accessToken: string;
+        locations: { id: string; periods: SocialHoursPeriod[] }[];
+      }
+    | null;
+  if (!snapshot || snapshot.locations.length === 0) return { locations: 0 };
+  const adapter = socialAdapters.get(snapshot.provider);
+  for (const location of snapshot.locations) {
+    await context?.throwIfCancelled();
+    await adapter.pushHours(snapshot.accessToken, location.periods);
+  }
+  await context?.throwIfCancelled();
+  return recordGbpHours.call(
+    { profileId: snapshot.id, locations: snapshot.locations.length },
+    { kind: "system" },
+  );
+}
+
+export async function runGbpReviews(
+  profileId: string,
+  context?: JobExecutionContext,
+): Promise<{ imported: number; skipped: number }> {
+  const profile = await gbpProfileSource.call({ profileId }, { kind: "system" });
+  if (!profile || !profile.allowRead) return { imported: 0, skipped: 0 };
+  await context?.throwIfCancelled();
+  const reviews: readonly SocialExternalReview[] = await socialAdapters
+    .get(profile.provider)
+    .listReviews(profile.accessToken);
+  await context?.throwIfCancelled();
+  return applyGbpReviews.call(
+    { profileId: profile.id, response: [...reviews] },
+    { kind: "system" },
+  );
+}
+
+export async function runGbpSync(
+  profileId: string,
+  operation: GbpOperation = "all",
+  locationId?: string,
+  context?: JobExecutionContext,
+): Promise<GbpSyncResult> {
+  const profile = await gbpProfileSource.call({ profileId }, { kind: "system" });
+  if (!profile) {
     return {
-      packagesCreated,
-      hoursLocations,
-      reviewsImported: reviews.imported,
-      reviewsSkipped: reviews.skipped,
+      packagesCreated: 0,
+      hoursLocations: 0,
+      reviewsImported: 0,
+      reviewsSkipped: 0,
     };
-  },
-});
+  }
+  let packagesCreated = 0;
+  if (operation === "all" && profile.allowRead) {
+    const { runProfileIngest } = await import("./ingest");
+    packagesCreated = (await runProfileIngest(profile.id, context)).packagesCreated;
+  }
+  const hours =
+    operation === "all" || operation === "hours"
+      ? await runGbpHours(profile.id, locationId, context)
+      : { locations: 0 };
+  const reviews =
+    profile.allowRead && (operation === "all" || operation === "reviews")
+      ? await runGbpReviews(profile.id, context)
+      : { imported: 0, skipped: 0 };
+  return {
+    packagesCreated,
+    hoursLocations: hours.locations,
+    reviewsImported: reviews.imported,
+    reviewsSkipped: reviews.skipped,
+  };
+}
 
 export const attributionReport = defineService({
   name: "social.attributionReport",
@@ -362,14 +563,8 @@ export function outboundCampaignUrl(publicationId: string, provider: string): st
 }
 
 export async function runGbpJob(): Promise<void> {
-  const { db } = await import("@/core/db");
-  const rows = await db()
-    .select({ id: socialProfiles.id })
-    .from(socialProfiles)
-    .where(
-      and(eq(socialProfiles.status, "active"), eq(socialProfiles.provider, "google_business")),
-    );
-  for (const row of rows) {
-    await syncGbp.call({ profileId: row.id }, { kind: "system" });
+  const profileIds = await gbpProfileIds.call({}, { kind: "system" });
+  for (const profileId of profileIds) {
+    await syncGbp.call({ profileId }, { kind: "system" });
   }
 }

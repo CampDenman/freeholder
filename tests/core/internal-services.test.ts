@@ -38,6 +38,10 @@ const INTERNAL = [
   // after the request that started it has ended.
   "broadcasts.sendNext",
   "broadcasts.tick",
+  // Provider work is split around short system-only snapshot/apply services.
+  // These names are implementation seams for workers, never public verbs.
+  "catalogue.applyRefresh",
+  "catalogue.refreshSource",
   "entitlements.issuePass",
   "entitlements.issueUnlock",
   "entitlements.syncSubscription",
@@ -53,6 +57,21 @@ const INTERNAL = [
   "messaging.applySmsEvents",
   "notifications.create",
   "referrals.claimTouches",
+  "social.applyGbpReviews",
+  "social.applyIngestedProfilePost",
+  "social.applyProfileHealth",
+  "social.gbpHoursSource",
+  "social.gbpProfileIds",
+  "social.gbpProfileSource",
+  "social.healthProfileSource",
+  "social.healthProfiles",
+  "social.ingestProfileIds",
+  "social.ingestProfileSource",
+  "social.ingestedPost",
+  "social.publicationSource",
+  "social.recordGbpHours",
+  "social.recordProfileIngest",
+  "social.recordPublicationResult",
   // The renewal sweep (C9.13). System because a period ending is not
   // something anybody did: a job finds what is due and raises the invoice on
   // nobody's behalf, long after the person who subscribed has gone.
@@ -83,7 +102,7 @@ const wildcard: Actor = {
 describe("the system-service boundary", () => {
   beforeAll(async () => {
     await ready();
-  });
+  }, 120_000);
 
   it("keeps an explicit reviewed inventory", () => {
     const actual = [...listServices().values()]
