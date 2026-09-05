@@ -42,6 +42,7 @@ const steps = [
       "tests/core/inline-script-safety.test.ts",
       "tests/core/outbound-boundaries.test.ts",
       "tests/core/http-body-boundary.test.ts",
+      "tests/core/runtime-shutdown.test.ts",
     ].join(" "),
   },
 ];

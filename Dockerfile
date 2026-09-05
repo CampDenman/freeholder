@@ -28,6 +28,7 @@ RUN pnpm build
 FROM node:22.23.2-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
+    NEXT_MANUAL_SIG_HANDLE=true \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 # Never root: a web process that is compromised should not also own the disk.

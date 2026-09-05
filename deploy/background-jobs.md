@@ -144,6 +144,29 @@ During `next build`, neither producer nor worker starts. In tests, workers are
 off unless explicitly forced on, preventing maintenance schedules from racing
 database fixtures.
 
+## Graceful shutdown
+
+The production process owns `SIGINT` and `SIGTERM` through Next's documented
+`NEXT_MANUAL_SIG_HANDLE=true` contract. `pnpm start` sets the variable before
+loading the Next CLI, and the standalone container sets it before starting
+`server.js`. Do not remove either setting or add a second signal handler: two
+independent shutdown paths can race and return an active job to the queue while
+its original handler is still running.
+
+On either signal Freeholder stops startup retries, marks the queue runtime as
+stopping, asks pg-boss to drain active leases for up to 30 seconds, records the
+stopped heartbeat, and then exits with the signal's conventional status. The
+process-wide deadline is 35 seconds so the final heartbeat has time to commit.
+If draining fails or exceeds that deadline, Freeholder logs only the stable
+phase message and exits unsuccessfully; the expired lease is then recovered by
+pg-boss rather than being silently abandoned.
+
+Give the process at least 40 seconds of termination grace in Docker, a platform
+service definition, or a systemd unit. A shorter supervisor timeout can send
+`SIGKILL` before the queue lease is released. Development uses Next's normal
+signal handling; the manual contract is installed only by the production
+entrypoints.
+
 ## Runtime health and alerts
 
 Every queue runtime writes one complete heartbeat every 15 seconds. A row
