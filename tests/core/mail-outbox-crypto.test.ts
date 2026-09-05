@@ -54,8 +54,10 @@ describe("encrypted mail outbox envelopes", () => {
     configure({ SESSION_SECRET: "mail-outbox-test-secret-material-32-bytes" });
     const deliveryId = crypto.randomUUID();
     const envelope = encryptMailOutbox("message", deliveryId);
-    const final = envelope.at(-1)!;
-    const tampered = `${envelope.slice(0, -1)}${final === "A" ? "B" : "A"}`;
+    const [version, nonce, encodedCiphertext] = envelope.split(".");
+    const ciphertext = Buffer.from(encodedCiphertext!, "base64url");
+    ciphertext[0] = ciphertext[0]! ^ 1;
+    const tampered = `${version}.${nonce}.${ciphertext.toString("base64url")}`;
 
     expect(() => decryptMailOutbox(tampered, deliveryId)).toThrow(
       "cannot be decrypted",
