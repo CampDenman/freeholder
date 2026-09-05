@@ -87,6 +87,23 @@ const INTERNAL = [
   "reports.settleExportRun",
 ] as const;
 
+const CALLER_AUTHORIZED_PHASES = [
+  "connections.applyCalendarOAuthCompletion",
+  "connections.applyMailReadOAuthCompletion",
+  "connections.claimCalendarOAuthCompletion",
+  "connections.claimMailReadOAuthCompletion",
+  "mail.applyOAuthCompletion",
+  "mail.claimOAuthCompletion",
+  "signupContactImports.applyOAuthCompletion",
+  "signupContactImports.applyProviderContacts",
+  "signupContactImports.claimOAuthCompletion",
+  "signupContactImports.providerSource",
+  "social.applyOAuthCompletion",
+  "social.claimOAuthCompletion",
+] as const;
+
+const PRIVATE = [...INTERNAL, ...CALLER_AUTHORIZED_PHASES] as const;
+
 const wildcard: Actor = {
   kind: "agent",
   keyName: "boundary-test",
@@ -116,6 +133,14 @@ describe("the system-service boundary", () => {
     expect(actual).toEqual([...INTERNAL].sort());
   });
 
+  it("keeps an explicit reviewed inventory of caller-authorized phases", () => {
+    const actual = [...listServices().values()]
+      .filter((service) => service.def.external === false)
+      .map((service) => service.def.name)
+      .sort();
+    expect(actual).toEqual([...CALLER_AUTHORIZED_PHASES].sort());
+  });
+
   it("keeps every internal service out of every generated projection", () => {
     const openapi = buildOpenApi({
       origin: "https://example.test",
@@ -126,9 +151,11 @@ describe("the system-service boundary", () => {
     const projections = contractProjections();
     const tools = new Set(toolsFor(wildcard).map((tool) => tool.name));
 
-    for (const name of INTERNAL) {
+    for (const name of PRIVATE) {
       const service = getService(name);
-      expect(service.def.permission).toBe("system");
+      expect(
+        service.def.permission === "system" || service.def.external === false,
+      ).toBe(true);
       expect(hiddenFromMcp(service)).toBe(true);
       expect(listExternalServices().has(name)).toBe(false);
       expect(paths).not.toHaveProperty(`/api/v1/${name}`);
@@ -140,7 +167,7 @@ describe("the system-service boundary", () => {
   });
 
   it("answers an external name probe exactly like an unknown service", () => {
-    for (const name of INTERNAL) {
+    for (const name of PRIVATE) {
       let refusal: unknown;
       try {
         getExternalService(name);

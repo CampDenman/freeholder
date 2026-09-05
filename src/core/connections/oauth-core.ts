@@ -407,8 +407,8 @@ export async function accessTokenForAccount(
 
 /**
  * Resolve or refresh a token without a caller-owned transaction remaining
- * open across the provider request. Jobs use this boundary; service handlers
- * must stage work for those jobs instead of calling it while they own a tx.
+ * open across the provider request. Jobs and explicit service orchestrators
+ * use this boundary; transactional handlers must stage work instead.
  */
 export function accessTokenForAccountOutsideTransaction(
   account: { id: string; provider: OAuthProvider },

@@ -17,7 +17,12 @@ import {
   SOCIAL_PROFILE_STATUSES,
 } from "./contract";
 import { socialProfileLocations, socialProfiles } from "./schema";
-import { beginOAuth, completeOAuth } from "./oauth";
+import {
+  applySocialOAuthCompletion,
+  beginOAuth,
+  claimSocialOAuthCompletion,
+  completeOAuth,
+} from "./oauth";
 import {
   applyIngestedProfilePost,
   draftFromPackage,
@@ -611,6 +616,8 @@ export default [
   staffMembers,
   beginOAuth,
   completeOAuth,
+  claimSocialOAuthCompletion,
+  applySocialOAuthCompletion,
   reviewProfile,
   assignProfile,
   setPolicy,

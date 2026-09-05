@@ -10,11 +10,11 @@ import {
   grantCapability,
   upsertConnectedAccount,
 } from "@/core/connections/oauth-core";
-import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { mailOauthStates, mailSenders } from "@/core/mail/schema";
 import { uuid } from "@/core/contract";
 import {
+  defineOrchestratedService,
   defineService,
   ServiceError,
   type Actor,
@@ -135,50 +135,55 @@ export const beginMailOAuth = defineService({
   },
 });
 
-export const completeMailOAuth = defineService({
-  name: "mail.completeOAuth",
-  summary: "Finish a signed-in person's Gmail or Microsoft mail connection.",
+const mailOAuthCompletionInput = z.object({
+  provider: z.enum(["google", "microsoft"]),
+  state: z.string().min(30).max(200),
+  code: z.string().min(1).max(4000),
+});
+
+const mailOAuthCompletionOutput = z.object({
+  senderId: uuid,
+  email: z.string(),
+  returnTo: z.string(),
+});
+
+const oauthCredentials = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
+  expiresAt: z.string().datetime(),
+  tokenType: z.string().min(1),
+});
+
+const providerIdentity = z.object({
+  id: z.string().min(1),
+  email: z.string().optional(),
+  name: z.string().optional(),
+});
+
+const claimMailOAuthCompletion = defineService({
+  name: "mail.claimOAuthCompletion",
+  summary: "Atomically consume one mail OAuth state before its provider code is spent.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
   agentCallable: false,
+  external: false,
+  writeClass: "write",
   input: z.object({
     provider: z.enum(["google", "microsoft"]),
-    state: z.string().min(30).max(200),
-    code: z.string().min(1).max(4000),
+    stateToken: z.string().min(30).max(200),
   }),
-  output: z.object({
-    senderId: uuid,
-    email: z.string(),
-    returnTo: z.string(),
-  }),
+  output: z.object({ returnTo: z.string() }),
   handler: async (input, ctx) => {
     const actor = requirePerson(ctx.actor);
-    // Claim atomically. A select followed by an update allows two callbacks
-    // to observe the same unconsumed state before either update takes effect.
-    // Commit the one-time claim independently before exchanging the provider
-    // code. Provider codes are one-use too: if the network response is lost
-    // after the provider consumes it, rolling this claim back would advertise
-    // a retry that can never succeed and would weaken replay evidence.
-    //
-    // This is the codebase's ONE sanctioned exception to "one transaction per
-    // mutation" (CLAUDE.md; MASTER.md §2 principle 12) — recorded there, not
-    // just here. Caveat it carries: this handler holds its own pooled
-    // connection while `db()` takes a second one, so under total pool
-    // exhaustion the two acquisitions can deadlock. Keep the pool floor
-    // above the worst-case concurrent OAuth completions, and do not copy
-    // this shape anywhere else.
-    const [state] = await db()
+    const [state] = await ctx.tx
       .update(mailOauthStates)
       .set({ consumedAt: sql`now()` })
       .where(
         and(
-          eq(mailOauthStates.tokenHash, hashState(input.state)),
+          eq(mailOauthStates.tokenHash, hashState(input.stateToken)),
           eq(mailOauthStates.userId, actor.userId),
           eq(mailOauthStates.provider, input.provider),
-          // Since C4.11 the table serves calendars too, so purpose is part of
-          // the match: a code issued for a calendar must not be redeemable
-          // here, where it would be recorded as consent to send mail.
           eq(mailOauthStates.purpose, "mail"),
           isNull(mailOauthStates.consumedAt),
           gt(mailOauthStates.expiresAt, sql`now()`),
@@ -191,57 +196,66 @@ export const completeMailOAuth = defineService({
         "That mail connection has expired or does not belong to this session. Start again.",
       );
     }
-    const provider = input.provider;
-    const required = provider === "google" ? GOOGLE_SEND : MICROSOFT_SEND;
-    const exchanged = await exchangeAuthorizationCode({
-      provider,
-      code: input.code,
-      redirectUri: callbackUrl(input.provider),
-      requiredScope: required,
-      requiredScopeMessage:
-        "Mail-send permission was not granted. Reconnect and approve sending mail.",
-    });
-    const identity = await fetchProviderIdentity(
-      provider,
-      exchanged.credentials.accessToken,
-    );
-    // Shared with the calendar flow since C4.11, which is also what makes
-    // this incremental: an account already connected for calendars keeps that
-    // access when it is connected for sending, and the other way round.
+    ctx.setSubject("mail_oauth_state", state.tokenHash);
+    return { returnTo: state.returnTo };
+  },
+});
+
+const applyMailOAuthCompletion = defineService({
+  name: "mail.applyOAuthCompletion",
+  summary: "Atomically store a mail account after its provider handshake completes.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    provider: z.enum(["google", "microsoft"]),
+    returnTo: z.string(),
+    credentials: oauthCredentials,
+    scopes: z.array(z.string()),
+    identity: providerIdentity,
+  }),
+  output: mailOAuthCompletionOutput,
+  handler: async (input, ctx) => {
+    const actor = requirePerson(ctx.actor);
     const stored = await upsertConnectedAccount(ctx, {
       userId: actor.userId,
-      provider,
-      identity,
-      credentials: exchanged.credentials,
-      scopes: exchanged.scopes,
+      provider: input.provider,
+      identity: { ...input.identity, email: input.identity.email },
+      credentials: input.credentials,
+      scopes: input.scopes,
     });
-    const accountId = stored.accountId;
-    await grantCapability(ctx, accountId, "mail_send", required);
+    await grantCapability(
+      ctx,
+      stored.accountId,
+      "mail_send",
+      input.provider === "google" ? GOOGLE_SEND : MICROSOFT_SEND,
+    );
 
     await lockTransactionalDefault(ctx.tx);
-    // A sender is an address. A provider that authenticated somebody without
-    // telling us which mailbox is not something to guess at.
-    if (!identity.email) {
+    if (!input.identity.email) {
       throw new ServiceError(
         "validation",
         "The provider did not return an email address for that account. Reconnect and allow access to your profile.",
       );
     }
-    const senderEmail = identity.email;
+    const senderEmail = input.identity.email;
     const [defaultSender] = await ctx.tx
       .select({ id: mailSenders.id })
       .from(mailSenders)
       .where(and(eq(mailSenders.purpose, "transactional"), eq(mailSenders.isDefault, true)))
       .limit(1);
-    const mailProvider = provider === "google" ? "gmail" : "outlook";
+    const mailProvider = input.provider === "google" ? "gmail" : "outlook";
     const [sender] = await ctx.tx
       .insert(mailSenders)
       .values({
         purpose: "transactional",
         provider: mailProvider,
-        connectedAccountId: accountId,
+        connectedAccountId: stored.accountId,
         email: senderEmail,
-        displayName: identity.name,
+        displayName: input.identity.name,
         verificationStatus: "verified",
         status: "active",
         isDefault: !defaultSender,
@@ -251,8 +265,8 @@ export const completeMailOAuth = defineService({
       .onConflictDoUpdate({
         target: [mailSenders.purpose, mailSenders.provider, mailSenders.email],
         set: {
-          connectedAccountId: accountId,
-          displayName: identity.name,
+          connectedAccountId: stored.accountId,
+          displayName: input.identity.name,
           verificationStatus: "verified",
           status: "active",
           lastVerifiedAt: new Date(),
@@ -266,7 +280,54 @@ export const completeMailOAuth = defineService({
       provider: mailProvider,
       email: senderEmail,
     });
-    return { senderId: sender!.id, email: senderEmail, returnTo: state.returnTo };
+    return { senderId: sender!.id, email: senderEmail, returnTo: input.returnTo };
+  },
+});
+
+/**
+ * Claim and commit the one-time state, cross the provider boundary with no
+ * database transaction open, then atomically apply the validated response.
+ * A provider code is single-use, so a failed exchange leaves the state spent
+ * exactly as before; unlike the old nested-db shape, this never holds one pool
+ * connection while waiting for another.
+ */
+export const completeMailOAuth = defineOrchestratedService({
+  name: "mail.completeOAuth",
+  summary: "Finish a signed-in person's Gmail or Microsoft mail connection.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  input: mailOAuthCompletionInput,
+  output: mailOAuthCompletionOutput,
+  handler: async (input, actor) => {
+    const state = await claimMailOAuthCompletion.call(
+      { provider: input.provider, stateToken: input.state },
+      actor,
+    );
+    const required = input.provider === "google" ? GOOGLE_SEND : MICROSOFT_SEND;
+    const exchanged = await exchangeAuthorizationCode({
+      provider: input.provider,
+      code: input.code,
+      redirectUri: callbackUrl(input.provider),
+      requiredScope: required,
+      requiredScopeMessage:
+        "Mail-send permission was not granted. Reconnect and approve sending mail.",
+    });
+    const identity = await fetchProviderIdentity(
+      input.provider,
+      exchanged.credentials.accessToken,
+    );
+    return applyMailOAuthCompletion.call(
+      {
+        provider: input.provider,
+        returnTo: state.returnTo,
+        credentials: exchanged.credentials,
+        scopes: exchanged.scopes,
+        identity,
+      },
+      actor,
+    );
   },
 });
 
@@ -282,4 +343,9 @@ export { accessTokenForAccount as oauthAccessToken } from "@/core/connections/oa
 export { accessTokenForAccountOutsideTransaction as oauthAccessTokenOutsideTransaction } from "@/core/connections/oauth-core";
 
 
-export default [beginMailOAuth, completeMailOAuth];
+export default [
+  beginMailOAuth,
+  completeMailOAuth,
+  claimMailOAuthCompletion,
+  applyMailOAuthCompletion,
+];

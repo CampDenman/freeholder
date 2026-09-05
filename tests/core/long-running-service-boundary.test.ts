@@ -14,6 +14,7 @@ type FunctionNode =
 
 const PROVIDER_METHODS = new Set([
   "health",
+  "identity",
   "listInteractions",
   "listOwnedPosts",
   "listReviews",
@@ -21,8 +22,17 @@ const PROVIDER_METHODS = new Set([
   "pushHours",
   "send",
   "verifySender",
+  "exchangeCode",
 ]);
-const PROVIDER_FUNCTIONS = new Set(["downloadSocialMedia", "getPinnedBytes"]);
+const PROVIDER_FUNCTIONS = new Set([
+  "accessTokenForAccount",
+  "accessTokenForAccountOutsideTransaction",
+  "downloadSocialMedia",
+  "exchangeAuthorizationCode",
+  "fetchProviderIdentity",
+  "getPinnedBytes",
+  "providerContactsForSource",
+]);
 
 function isFunction(node: ts.Node | undefined): node is FunctionNode {
   return Boolean(
@@ -113,18 +123,24 @@ describe("long-running service transaction boundary", () => {
           async function hidden(adapter) { return adapter.listReviews("secret"); }
           defineService({ handler: async () => {
             await getPinnedBytes("https://example.test", {});
+            await exchangeAuthorizationCode({ code: "single-use" });
             return hidden(adapter);
           }});
         `,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
   });
 
-  it("keeps catalogue, social and mail provider I/O at worker boundaries", () => {
+  it("keeps catalogue, social, mail and OAuth provider I/O outside service transactions", () => {
     const files = [
       "src/core/catalogue/service.ts",
+      "src/core/connections/calendar-oauth.ts",
+      "src/core/connections/mail-read-oauth.ts",
+      "src/core/import/signup-contact-service.ts",
+      "src/core/mail/oauth.ts",
       "src/modules/social/ingest.ts",
       "src/modules/social/gbp.ts",
+      "src/modules/social/oauth.ts",
       "src/modules/social/service.ts",
       "src/modules/social/compose.ts",
       "src/core/mail/service.ts",

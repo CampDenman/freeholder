@@ -23,9 +23,9 @@ import {
 } from "@/core/connections/oauth-core";
 import { connectedAccounts, connectionCapabilities } from "@/core/connections/schema";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { db } from "@/core/db";
 import { mailOauthStates } from "@/core/mail/schema";
 import {
+  defineOrchestratedService,
   defineService,
   getService,
   ServiceError,
@@ -46,7 +46,8 @@ import {
   signupContactImportPolicies,
 } from "./contacts-schema";
 import {
-  providerContactsForUser,
+  providerContactSourceForUser,
+  providerContactsForSource,
   type SignupContactField,
 } from "./signup-contact-providers";
 import { parseVCard } from "./vcard";
@@ -703,35 +704,56 @@ export const beginSignupContactsOAuth = defineService({
   },
 });
 
-export const completeSignupContactsOAuth = defineService({
-  name: "signupContactImports.completeOAuth",
-  summary: "Finish a read-only contacts connection for this portal member.",
+const signupContactsOAuthCompletionInput = z.object({
+  provider: z.enum(["google", "microsoft"]),
+  state: z.string().min(30).max(200),
+  code: z.string().min(1).max(4_000),
+});
+
+const signupContactsOAuthCompletionOutput = row({
+  connectedAccountId: uuid,
+  provider: z.enum(["google", "microsoft"]),
+  email: z.string().nullable(),
+  returnTo: z.string(),
+});
+
+const oauthCredentials = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
+  expiresAt: z.string().datetime(),
+  tokenType: z.string().min(1),
+});
+
+const providerIdentity = z.object({
+  id: z.string().min(1),
+  email: z.string().optional(),
+  name: z.string().optional(),
+});
+
+const claimSignupContactsOAuthCompletion = defineService({
+  name: "signupContactImports.claimOAuthCompletion",
+  summary: "Atomically consume one signup-contacts OAuth state before its provider code is spent.",
   kind: "mutation",
   permission: "authenticated",
   agentCallable: false,
   mcpExclude: true,
+  external: false,
   writeClass: "write",
   input: z.object({
     provider: z.enum(["google", "microsoft"]),
-    state: z.string().min(30).max(200),
-    code: z.string().min(1).max(4_000),
+    stateToken: z.string().min(30).max(200),
   }),
-  output: row({
-    connectedAccountId: uuid,
-    provider: z.enum(["google", "microsoft"]),
-    email: z.string().nullable(),
-    returnTo: z.string(),
-  }),
+  output: row({ returnTo: z.string() }),
   handler: async (input, ctx) => {
     const identity = await customer(ctx.tx, ctx.actor);
     const policy = activePolicy(await loadPolicy(ctx.tx));
     sourceAllowed(policy, input.provider);
-    const [state] = await db()
+    const [state] = await ctx.tx
       .update(mailOauthStates)
       .set({ consumedAt: sql`now()` })
       .where(
         and(
-          eq(mailOauthStates.tokenHash, hashState(input.state)),
+          eq(mailOauthStates.tokenHash, hashState(input.stateToken)),
           eq(mailOauthStates.userId, identity.userId),
           eq(mailOauthStates.provider, input.provider),
           eq(mailOauthStates.purpose, "signup_contacts"),
@@ -741,23 +763,44 @@ export const completeSignupContactsOAuth = defineService({
       )
       .returning();
     if (!state) {
-      throw new ServiceError("permission", "That contacts connection expired or belongs to another session.");
+      throw new ServiceError(
+        "permission",
+        "That contacts connection expired or belongs to another session.",
+      );
     }
+    ctx.setSubject("mail_oauth_state", state.tokenHash);
+    return { returnTo: state.returnTo };
+  },
+});
+
+const applySignupContactsOAuthCompletion = defineService({
+  name: "signupContactImports.applyOAuthCompletion",
+  summary: "Atomically store a signup contacts account after its provider handshake completes.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  mcpExclude: true,
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    provider: z.enum(["google", "microsoft"]),
+    returnTo: z.string(),
+    credentials: oauthCredentials,
+    scopes: z.array(z.string()),
+    identity: providerIdentity,
+  }),
+  output: signupContactsOAuthCompletionOutput,
+  handler: async (input, ctx) => {
+    const identity = await customer(ctx.tx, ctx.actor);
+    const policy = activePolicy(await loadPolicy(ctx.tx));
+    sourceAllowed(policy, input.provider);
     const required = contactScope(input.provider);
-    const exchanged = await exchangeAuthorizationCode({
-      provider: input.provider,
-      code: input.code,
-      redirectUri: callbackUrl(CALLBACK_PATH, input.provider),
-      requiredScope: required,
-      requiredScopeMessage: "Read-only contacts access was not granted.",
-    });
-    const providerIdentity = await fetchProviderIdentity(input.provider, exchanged.credentials.accessToken);
     const stored = await upsertConnectedAccount(ctx, {
       userId: identity.userId,
       provider: input.provider,
-      identity: providerIdentity,
-      credentials: exchanged.credentials,
-      scopes: exchanged.scopes,
+      identity: { ...input.identity, email: input.identity.email },
+      credentials: input.credentials,
+      scopes: input.scopes,
       kind: "personal",
     });
     await grantCapability(ctx, stored.accountId, "contacts_read", required);
@@ -774,13 +817,95 @@ export const completeSignupContactsOAuth = defineService({
     return {
       connectedAccountId: stored.accountId,
       provider: input.provider,
-      email: providerIdentity.email ?? null,
-      returnTo: state.returnTo,
+      email: input.identity.email ?? null,
+      returnTo: input.returnTo,
     };
   },
 });
 
-export const listSignupProviderContacts = defineService({
+/** The provider exchange and identity lookup run between audited DB phases. */
+export const completeSignupContactsOAuth = defineOrchestratedService({
+  name: "signupContactImports.completeOAuth",
+  summary: "Finish a read-only contacts connection for this portal member.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  mcpExclude: true,
+  writeClass: "write",
+  input: signupContactsOAuthCompletionInput,
+  output: signupContactsOAuthCompletionOutput,
+  handler: async (input, actor) => {
+    const state = await claimSignupContactsOAuthCompletion.call(
+      { provider: input.provider, stateToken: input.state },
+      actor,
+    );
+    const required = contactScope(input.provider);
+    const exchanged = await exchangeAuthorizationCode({
+      provider: input.provider,
+      code: input.code,
+      redirectUri: callbackUrl(CALLBACK_PATH, input.provider),
+      requiredScope: required,
+      requiredScopeMessage: "Read-only contacts access was not granted.",
+    });
+    const identity = await fetchProviderIdentity(
+      input.provider,
+      exchanged.credentials.accessToken,
+    );
+    return applySignupContactsOAuthCompletion.call(
+      {
+        provider: input.provider,
+        returnTo: state.returnTo,
+        credentials: exchanged.credentials,
+        scopes: exchanged.scopes,
+        identity,
+      },
+      actor,
+    );
+  },
+});
+
+const signupProviderSourceOutput = row({
+  accountId: uuid,
+  provider: z.enum(["google", "microsoft"]),
+  fields: z.array(field),
+  maxContacts: z.number().int().positive(),
+});
+
+const signupProviderContactsOutput = row({
+  provider: z.enum(["google", "microsoft"]),
+  fields: z.array(field),
+  maxContacts: z.number().int().positive(),
+  contacts: listed(providerContactRow),
+});
+
+const signupProviderSource = defineService({
+  name: "signupContactImports.providerSource",
+  summary: "Read and authorize the bounded source for a signup contacts provider call.",
+  kind: "query",
+  permission: "authenticated",
+  agentCallable: false,
+  mcpExclude: true,
+  external: false,
+  input: z.object({ accountId: z.string().uuid() }),
+  output: signupProviderSourceOutput,
+  handler: async (input, ctx) => {
+    const identity = await customer(ctx.tx, ctx.actor);
+    const policy = activePolicy(await loadPolicy(ctx.tx));
+    await mayStart(ctx.tx, identity.userId);
+    const source = await providerContactSourceForUser(ctx.tx, {
+      userId: identity.userId,
+      accountId: input.accountId,
+    });
+    sourceAllowed(policy, source.provider);
+    return {
+      ...source,
+      fields: policy.allowedFields as SignupContactField[],
+      maxContacts: policy.maxContacts,
+    };
+  },
+});
+
+export const listSignupProviderContacts = defineOrchestratedService({
   name: "signupContactImports.listProviderContacts",
   summary: "List only owner-enabled fields for selection before import.",
   kind: "query",
@@ -788,29 +913,81 @@ export const listSignupProviderContacts = defineService({
   agentCallable: false,
   mcpExclude: true,
   input: z.object({ accountId: z.string().uuid() }),
-  output: row({
-    provider: z.enum(["google", "microsoft"]),
-    fields: z.array(field),
-    maxContacts: z.number().int(),
-    contacts: listed(providerContactRow),
+  output: signupProviderContactsOutput,
+  handler: async (input, actor) => {
+    const source = await signupProviderSource.call(input, actor);
+    const result = await providerContactsForSource({
+      ...source,
+      limit: source.maxContacts,
+    });
+    return {
+      ...result,
+      fields: source.fields,
+      maxContacts: source.maxContacts,
+    };
+  },
+});
+
+const applySignupProviderContacts = defineService({
+  name: "signupContactImports.applyProviderContacts",
+  summary: "Revalidate policy and atomically stage contacts fetched outside the transaction.",
+  kind: "mutation",
+  permission: "authenticated",
+  agentCallable: false,
+  mcpExclude: true,
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    accountId: z.string().uuid(),
+    externalIds: z.array(z.string().min(1).max(300)).min(1).max(500),
+    response: z.object({
+      provider: z.enum(["google", "microsoft"]),
+      contacts: listed(providerContactRow),
+    }),
   }),
+  output: batchView,
   handler: async (input, ctx) => {
     const identity = await customer(ctx.tx, ctx.actor);
     const policy = activePolicy(await loadPolicy(ctx.tx));
     await mayStart(ctx.tx, identity.userId);
-    const fields = policy.allowedFields as SignupContactField[];
-    const result = await providerContactsForUser(ctx.tx, {
+    const source = await providerContactSourceForUser(ctx.tx, {
       userId: identity.userId,
       accountId: input.accountId,
-      fields,
-      limit: policy.maxContacts,
     });
-    sourceAllowed(policy, result.provider);
-    return { ...result, fields, maxContacts: policy.maxContacts };
+    if (source.provider !== input.response.provider) {
+      throw new ServiceError(
+        "conflict",
+        "That contacts connection changed while its address book was being read.",
+      );
+    }
+    sourceAllowed(policy, source.provider);
+    const fields = policy.allowedFields as SignupContactField[];
+    const selected = new Set(input.externalIds);
+    if (selected.size > policy.maxContacts) {
+      throw new ServiceError(
+        "validation",
+        `Choose no more than ${policy.maxContacts} contacts.`,
+      );
+    }
+    const contacts = input.response.contacts.filter((contact) =>
+      selected.has(contact.externalId),
+    );
+    if (contacts.length !== selected.size) {
+      throw new ServiceError(
+        "validation",
+        "One of those provider contacts is no longer available.",
+      );
+    }
+    return stage(ctx, identity, policy, {
+      source: source.provider,
+      filename: `${source.provider}-selection.contacts`,
+      fields,
+      ...structuredRows(contacts, fields),
+    });
   },
 });
 
-export const stageSignupProviderContacts = defineService({
+export const stageSignupProviderContacts = defineOrchestratedService({
   name: "signupContactImports.stageProvider",
   summary: "Stage the exact provider contacts this portal member selected.",
   kind: "mutation",
@@ -823,29 +1000,23 @@ export const stageSignupProviderContacts = defineService({
     externalIds: z.array(z.string().min(1).max(300)).min(1).max(500),
   }),
   output: batchView,
-  handler: async (input, ctx) => {
-    const identity = await customer(ctx.tx, ctx.actor);
-    const policy = activePolicy(await loadPolicy(ctx.tx));
-    await mayStart(ctx.tx, identity.userId);
-    const fields = policy.allowedFields as SignupContactField[];
-    const result = await providerContactsForUser(ctx.tx, {
-      userId: identity.userId,
-      accountId: input.accountId,
-      fields,
-      limit: policy.maxContacts,
+  handler: async (input, actor) => {
+    const source = await signupProviderSource.call(
+      { accountId: input.accountId },
+      actor,
+    );
+    const response = await providerContactsForSource({
+      ...source,
+      limit: source.maxContacts,
     });
-    sourceAllowed(policy, result.provider);
-    const selected = new Set(input.externalIds);
-    const contacts = result.contacts.filter((contact) => selected.has(contact.externalId));
-    if (contacts.length !== selected.size) {
-      throw new ServiceError("validation", "One of those provider contacts is no longer available.");
-    }
-    return stage(ctx, identity, policy, {
-      source: result.provider,
-      filename: `${result.provider}-selection.contacts`,
-      fields,
-      ...structuredRows(contacts, fields),
-    });
+    return applySignupProviderContacts.call(
+      {
+        accountId: input.accountId,
+        externalIds: input.externalIds,
+        response,
+      },
+      actor,
+    );
   },
 });
 
@@ -896,7 +1067,11 @@ export default [
   skipSignupContactImport,
   beginSignupContactsOAuth,
   completeSignupContactsOAuth,
+  claimSignupContactsOAuthCompletion,
+  applySignupContactsOAuthCompletion,
   listSignupProviderContacts,
+  signupProviderSource,
   stageSignupProviderContacts,
+  applySignupProviderContacts,
   disconnectSignupContacts,
 ];
