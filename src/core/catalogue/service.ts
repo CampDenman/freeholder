@@ -21,7 +21,8 @@ import { z } from "zod";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { satisfies } from "@freeholder/plugin-kit";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { requestWithTimeout, providerJson } from "@/adapters/mail/http";
+import { providerJson } from "@/adapters/mail/http";
+import { getPinnedBytes } from "@/core/http/pinned-download";
 import { violates } from "@/core/db/errors";
 import {
   catalogueEntries,
@@ -263,9 +264,17 @@ export const refreshCatalogue = defineService({
 
     let parsed: z.infer<typeof catalogueIndex>;
     try {
-      const response = await requestWithTimeout(globalThis.fetch, source.url, {
-        method: "GET",
+      const downloaded = await getPinnedBytes(source.url, {
+        maxBytes: 256 * 1024,
+        timeoutMs: 30_000,
+        allowLocal: false,
         headers: { accept: "application/json" },
+      });
+      const response = new Response(downloaded.bytes, {
+        status: downloaded.status,
+        headers: downloaded.contentType
+          ? { "content-type": downloaded.contentType }
+          : undefined,
       });
       parsed = catalogueIndex.parse(await providerJson(response, "The catalogue"));
     } catch (error) {

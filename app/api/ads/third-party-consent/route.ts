@@ -8,6 +8,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/core/env";
 import { THIRD_PARTY_CREATIVE_CONSENT_COOKIE } from "@/core/http/csp";
+import { readBoundedText, RequestBodyError } from "@/core/http/body";
 
 const MAX_AGE = 60 * 60 * 24 * 365;
 
@@ -36,11 +37,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Cross-site third-party ads choice refused." }, { status: 403 });
   }
 
-  if (Number(request.headers.get("content-length") ?? 0) > 4_096) {
-    return NextResponse.json({ error: "Choice payload is too large." }, { status: 413 });
+  let raw: string;
+  try {
+    raw = await readBoundedText(request, 4_096);
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return NextResponse.json({ error: "Choice payload could not be read." }, { status });
   }
-
-  const raw = await request.text().catch(() => "");
   const form = new URLSearchParams(raw);
   const decision = form.get("decision");
   const state = decision === "grant" ? "granted" : decision === "deny" ? "denied" : null;

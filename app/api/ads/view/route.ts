@@ -12,6 +12,7 @@ import {
   SESSION_COOKIE_NAME,
   parseAnalyticsConsentState,
 } from "@/modules/analytics/visitor";
+import { readBoundedText, RequestBodyError } from "@/core/http/body";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +21,10 @@ const ANONYMOUS = { kind: "anonymous" } as const;
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ counted: false }, { status: 400 });
+    body = JSON.parse(await readBoundedText(request, 16_384)) as unknown;
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return NextResponse.json({ counted: false }, { status });
   }
   const bag = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const kind = bag.kind === "viewable" || bag.kind === "impression" ? bag.kind : null;

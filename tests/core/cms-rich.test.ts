@@ -74,15 +74,28 @@ describe("typed rich text", () => {
 });
 
 describe("owner HTML", () => {
-  it("strips script, handlers and javascript urls", () => {
+  it("strips executable markup and browser-decoded unsafe URLs", () => {
     const cleaned = sanitizeOwnerHtml(
-      `<p onclick="steal()">Hi</p><script>alert(1)</script><a href="javascript:alert(1)">x</a>`,
+      `<p onclick="steal()">Hi</p><script>alert(1)</script>` +
+      `<a href="javascript:alert(1)">x</a>` +
+      `<a href="jav&#x61;script:alert(2)">y</a>` +
+      `<a href="data:text/html,<script>alert(3)</script>">z</a>`,
     );
     expect(cleaned).not.toContain("script");
     expect(cleaned).not.toContain("onclick");
     expect(cleaned).not.toContain("javascript:");
+    expect(cleaned).not.toContain("data:");
     expect(cleaned).toContain("<p>");
     expect(cleaned).toContain("Hi");
+  });
+
+  it("keeps safe links while encoding their attribute values", () => {
+    expect(sanitizeOwnerHtml(`<a href="/about?a=1&amp;b=2">About</a>`)).toBe(
+      `<a href="/about?a=1&amp;b=2">About</a>`,
+    );
+    expect(sanitizeOwnerHtml(`<a href="mailto:hello@example.com">Mail</a>`)).toContain(
+      `href="mailto:hello@example.com"`,
+    );
   });
 });
 

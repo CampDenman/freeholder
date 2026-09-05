@@ -33,6 +33,7 @@ import {
   humanizeSegment,
   organizationJsonLd,
   productJsonLd,
+  serializeJsonLd,
   serviceJsonLd,
   websiteJsonLd,
 } from "@/core/seo/jsonld";
@@ -357,7 +358,7 @@ export default async function PublicPage({
           key={i}
           nonce={nonce}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(entry) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(entry) }}
         />
       ))}
       <article className="grid gap-8">{rendered}</article>

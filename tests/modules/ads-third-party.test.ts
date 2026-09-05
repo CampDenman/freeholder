@@ -99,6 +99,13 @@ describe("third-party tags", () => {
     );
     expect(markup).toContain("securepubads.g.doubleclick.net");
     expect(markup).toContain("/123/unit");
+    const hostile = providerMarkup(
+      { network: "google.com", unitPath: "</script><script>alert('owned')</script>" },
+      { width: 728, height: 90 },
+      "fh-gpt-1",
+    );
+    expect(hostile).toContain("\\u003c/script\\u003e");
+    expect(hostile).not.toContain("</script><script>alert");
     expect(providerMarkup({ network: "other.com", unitPath: "/x" }, { width: 1, height: 1 }, "id")).toBeNull();
   });
 });

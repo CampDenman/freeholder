@@ -59,4 +59,22 @@ describe.runIf(hasDatabase)("design settings", { timeout: 30_000 }, () => {
     expect(restored.origin).toBe("system");
     expect(restored.theme.light.accent).toBe(colors.light.accent);
   });
+
+  it("refuses font stacks that can escape their CSS declaration", async () => {
+    const refused = await failure(
+      updateDesign.call(
+        { fontSans: 'system-ui; background: url("https://attacker.invalid/seen")' },
+        OWNER,
+      ),
+    );
+    expect(refused.code).toBe("validation");
+
+    const saved = await updateDesign.call(
+      { fontSans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+      OWNER,
+    );
+    expect(saved.extras.fontSans).toBe(
+      'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    );
+  });
 });

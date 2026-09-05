@@ -25,7 +25,13 @@ import {
   CALENDAR_STATUSES,
   MEMBERSHIP_ROLES,
 } from "@/core/scheduling/schema";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { getBusiness } from "@/core/settings/service";
+import {
+  defineService,
+  ServiceError,
+  type ServiceContext,
+  type Tx,
+} from "@/core/service";
 // Booked time, as a funnel stage (§4.7, C9.07).
 import "./funnel";
 
@@ -94,9 +100,8 @@ const definition = {
 };
 
 /** The business's zone is the sensible default for a calendar that names none. */
-async function defaultTimezone(): Promise<string> {
-  const { currentBusiness } = await import("@/core/settings/read");
-  const business = await currentBusiness().catch(() => null);
+async function defaultTimezone(ctx: ServiceContext): Promise<string> {
+  const business = await ctx.call(getBusiness, {}).catch(() => null);
   return business?.timezone ?? "UTC";
 }
 
@@ -223,7 +228,7 @@ export const createCalendar = defineService({
         slug: input.slug ?? slugify(input.name),
         userId: input.userId ?? null,
         locationId: input.locationId ?? null,
-        timezone: input.timezone ?? (await defaultTimezone()),
+        timezone: input.timezone ?? (await defaultTimezone(ctx)),
         capacityDefault: input.capacityDefault ?? 1,
         colour: input.colour ?? null,
         externalCalendarId: input.externalCalendarId ?? null,

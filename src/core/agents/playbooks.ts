@@ -24,7 +24,7 @@ import {
   type ServiceContext,
 } from "@/core/service";
 import { agentPlaybooks, agentPlaybookVersions } from "@/core/agents/schema";
-import { assertSchedule, nextOccurrence, scheduleZone } from "@/core/agents/cron";
+import { assertSchedule, nextOccurrence, scheduleZoneIn } from "@/core/agents/cron";
 import { createTask } from "@/core/agents/service";
 import {
   parseParamsSchema,
@@ -116,7 +116,7 @@ async function checkTrigger(input: {
   scheduleCron?: string | null;
   eventPattern?: string | null;
   timezone?: string | null;
-}): Promise<Date | null> {
+}, ctx: ServiceContext): Promise<Date | null> {
   if (input.trigger === "schedule") {
     if (!input.scheduleCron) {
       throw new ServiceError(
@@ -124,7 +124,7 @@ async function checkTrigger(input: {
         "A scheduled playbook needs a five-field cron expression, such as 0 9 * * 1.",
       );
     }
-    const timezone = await scheduleZone({ timezone: input.timezone ?? null });
+    const timezone = await scheduleZoneIn(ctx, { timezone: input.timezone ?? null });
     assertSchedule(input.scheduleCron, timezone);
     return nextOccurrence(input.scheduleCron, timezone, new Date());
   }
@@ -225,7 +225,7 @@ export const createPlaybook = defineService({
   output: playbookRow,
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "write a playbook");
-    const nextRunAt = await checkTrigger(input);
+    const nextRunAt = await checkTrigger(input, ctx);
     const { note, ...values } = input;
     const [created] = await ctx.tx
       .insert(agentPlaybooks)
@@ -303,7 +303,7 @@ export const updatePlaybook = defineService({
       eventPattern:
         changes.eventPattern === undefined ? before.eventPattern : changes.eventPattern,
       timezone: before.timezone,
-    });
+    }, ctx);
     // An unchanged schedule keeps the cursor it was already counting down to;
     // rewriting it here would push every window forward on every edit.
     const scheduleChanged =
@@ -547,7 +547,7 @@ export const importPlaybook = defineService({
   handler: async (input, ctx) => {
     refuseAgents(ctx.actor, "import a playbook");
     const document = input.document;
-    await checkTrigger(document);
+    await checkTrigger(document, ctx);
     // An imported playbook arrives switched off and unassigned. Somebody
     // else's instructions should not start running against this business's
     // data because a file was opened — the owner turns it on deliberately.

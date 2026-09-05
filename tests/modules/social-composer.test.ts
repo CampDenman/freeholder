@@ -24,6 +24,9 @@ import {
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const changedEnvironment = new Map<string, string | undefined>();
+const downloadSocialMedia = vi.hoisted(() => vi.fn());
+
+vi.mock("@/adapters/social/media", () => ({ downloadSocialMedia }));
 
 function environment(values: Record<string, string | undefined>): void {
   for (const [name, value] of Object.entries(values)) {
@@ -114,6 +117,7 @@ describe.runIf(hasDatabase)("social composer", { timeout: 60_000 }, () => {
       email: "owner@example.test",
       role: "owner",
     });
+    downloadSocialMedia.mockResolvedValue(png);
     environment({
       APP_URL: "https://freeholder.example",
       META_OAUTH_CLIENT_ID: "meta-id",

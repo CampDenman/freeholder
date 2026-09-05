@@ -28,10 +28,12 @@ import {
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { db } from "@/core/db";
+import { getModuleConfig } from "@/core/settings/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { analyticsAttributions, analyticsEvents } from "./schema";
 import { currentAnalyticsSettings } from "./read";
+import { analyticsSettingsSchema } from "./settings";
 import type { VisitorKind } from "./classify";
 import type { AnalyticsConsentState } from "./visitor";
 // The top of the funnel (§4.7, C9.07). Imported for the registration.
@@ -1087,7 +1089,9 @@ export const exportAnonymizedAnalytics = defineService({
       poor: Number(row.poor),
     }));
 
-    const settings = await currentAnalyticsSettings();
+    const settings = analyticsSettingsSchema.parse(
+      await ctx.call(getModuleConfig, { module: "analytics" }),
+    );
     const content = JSON.stringify({
       schema: "freeholder.analytics.anonymized.v1",
       generatedAt: new Date().toISOString(),

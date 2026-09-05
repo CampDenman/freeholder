@@ -14,6 +14,12 @@ import {
 } from "@/core/http/cookies";
 import { errorResponse } from "@/core/http/respond";
 import { serviceRoute } from "@/core/http/route";
+import {
+  DEFAULT_JSON_BODY_LIMIT,
+  readBoundedFormData,
+  readBoundedText,
+  RequestBodyError,
+} from "@/core/http/body";
 import { defineService, ServiceError, type Actor } from "@/core/service";
 
 const ANON: Actor = { kind: "anonymous" };
@@ -117,6 +123,38 @@ describe("errorResponse()", () => {
     expect(body).not.toContain("postgres://");
     expect(body).toContain("Something went wrong");
   });
+
+  it("preserves the payload-too-large status without exposing internals", async () => {
+    const response = errorResponse(
+      new RequestBodyError(413, "The request body is too large."),
+      ANON,
+    );
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({
+      error: { code: "validation", message: "The request body is too large." },
+    });
+  });
+});
+
+describe("bounded request bodies", () => {
+  it("stops a streamed body at the byte boundary", async () => {
+    await expect(
+      readBoundedText(request("https://example.test/", {
+        method: "POST",
+        body: "four",
+      }), 3),
+    ).rejects.toMatchObject({ status: 413 });
+  });
+
+  it("parses multipart only after the real streamed bytes fit", async () => {
+    const form = new FormData();
+    form.set("name", "Ada");
+    const parsed = await readBoundedFormData(
+      request("https://example.test/", { method: "POST", body: form }),
+      1_024,
+    );
+    expect(parsed.get("name")).toBe("Ada");
+  });
 });
 
 describe("serviceRoute()", () => {
@@ -179,6 +217,18 @@ describe("serviceRoute()", () => {
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: { code: string } };
     expect(body.error.code).toBe("validation");
+    expect(seen).toBeUndefined();
+  });
+
+  it("refuses an oversized body before parsing it", async () => {
+    const response = await serviceRoute(echo)(
+      request("https://example.test/api/echo", {
+        method: "POST",
+        headers: { "content-length": String(DEFAULT_JSON_BODY_LIMIT + 1) },
+        body: "{}",
+      }),
+    );
+    expect(response.status).toBe(413);
     expect(seen).toBeUndefined();
   });
 

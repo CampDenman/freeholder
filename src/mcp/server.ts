@@ -28,6 +28,11 @@ import { actorFromRequest } from "@/core/http/actor";
 import { CONTRACT, PLATFORM_VERSION } from "@/core/platform";
 import { ready } from "@/core/runtime";
 import {
+  DEFAULT_JSON_BODY_LIMIT,
+  readBoundedText,
+  RequestBodyError,
+} from "@/core/http/body";
+import {
   listExternalServices,
   ServiceError,
   type Actor,
@@ -210,8 +215,13 @@ export async function handleMcp(
 
   let body: unknown;
   try {
-    body = (await request.json()) as unknown;
-  } catch {
+    body = JSON.parse(await readBoundedText(request, DEFAULT_JSON_BODY_LIMIT)) as unknown;
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return Response.json(failure(null, PARSE_ERROR, error.message), {
+        status: error.status,
+      });
+    }
     return Response.json(failure(null, PARSE_ERROR, "Body is not JSON."), {
       status: 400,
     });

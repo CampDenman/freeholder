@@ -35,6 +35,13 @@ const steps = [
       "tests/core/cms-a11y.test.ts",
       "tests/core/a11y-smoke.test.ts",
       "tests/core/internal-services.test.ts",
+      "tests/core/service-composition.test.ts",
+      "tests/core/social-http.test.ts",
+      "tests/core/seo-surface.test.ts",
+      "tests/core/cms-rich.test.ts",
+      "tests/core/inline-script-safety.test.ts",
+      "tests/core/outbound-boundaries.test.ts",
+      "tests/core/http-body-boundary.test.ts",
     ].join(" "),
   },
 ];
