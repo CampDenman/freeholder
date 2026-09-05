@@ -12,7 +12,8 @@
 // prettier than somebody else's dashboard, but that an owner can find out what
 // they mean and check them against their own invoices.
 import type { Metadata } from "next";
-import { ChartBar } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
+import { ChartBar, FileArrowDown } from "@phosphor-icons/react/dist/ssr";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
 import { currentBusiness } from "@/core/settings/read";
 import { formatMoney } from "@/core/i18n";
@@ -90,6 +91,17 @@ export default async function ReportsPage({
           {t("reports.title")}
         </h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("reports.intro")}</p>
+        {/* Reading a report and handing one to an accountant every month are
+            different jobs (C9.32), so they are different screens — but the
+            second is found from the first, where somebody looking at a figure
+            decides they want it in a file. */}
+        <Link
+          href="/admin/reports/exports"
+          className="mt-2 inline-flex items-center gap-1 text-sm text-accent underline"
+        >
+          <FileArrowDown size={14} weight="bold" />
+          {t("reports.exportsLink")}
+        </Link>
       </div>
 
       {query.error ? (

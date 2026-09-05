@@ -7260,12 +7260,66 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 
 #### Safe update system
 
-- [ ] **C9.32** Build scheduled exports and the accounting export shapes
+- [x] **C9.32** Build scheduled exports and the accounting export shapes
   (CSV, QuickBooks, Xero).
   (Split from C9.08 under §43.17.1. §2535 is explicit about the scope: "the
   platform does not do bookkeeping; it refuses to make bookkeeping harder" —
   so this is the shapes those two packages actually accept, delivered on a
-  schedule, and not a general ledger.)
+  schedule, and not a general ledger.
+  Delivered as three tables on the `reporting` module: what an owner configured,
+  what happened to each run, and each recipient copy tied to the mail ledger.
+  The latter two are the point. A report an owner
+  reads is wrong *loudly* — they look at it and disbelieve it — while a report
+  emailed to a bookkeeper on the first of the month fails by **not arriving**,
+  which nobody notices for a quarter. So a run writes a row before it can
+  succeed, the row is identified by the period it covers rather than by a
+  timer, and every recipient copy points at the durable `mail_deliveries` row
+  that says what the provider actually did. Building commits first; preparation
+  then writes only recipient, encrypted-mail outbox and queue rows; provider I/O
+  runs after that transaction; and `reports.settleExportRun` applies the ledger
+  outcome in another short transaction. Queue acceptance is never called a
+  delivery, and the five-minute reconciler catches both a stranded attempt and
+  a provider failure reported after initial submission.
+  **One export is one currency**, enforced on the query rather than applied
+  afterwards, so there is no moment at which two currencies sit in one array
+  waiting to be added. §4.9 forbids converting at charge time and both packages
+  import one file into one company file, so a mixed file is either rejected or
+  — worse — posted at a rate nobody chose. What the filter excluded is counted
+  on the run and printed in the email: a reconciliation that comes up short
+  always carries its own explanation.
+  **The exported lines add up to the invoice, exactly.** C9.08's `lines` basis
+  deliberately does not, because spreading an invoice's discount and postage
+  across its items by proportion invents a rounding decision the business never
+  made — but both packages total an invoice by adding its lines, so a file
+  short by the postage produces a wrong number *inside the accounting system*.
+  The resolution is a row rather than a proportion: invoice-level charges get
+  their own line, and the identity is integer addition that cancels to the
+  `invoices_total_consistent` check. The same rule governs quantity: a quantity
+  and a rate are written only when `quantity × rate` reconstructs the amount
+  exactly, and otherwise the row is quantity 1 at the net amount with the real
+  quantity in the description, where it informs a human and cannot move a
+  total.
+  The boundary is held by *carrying* rather than inventing: account code, tax
+  code and item code are the bookkeeper's, typed once and repeated verbatim,
+  and saving a Xero export without the two it requires is refused rather than
+  guessed. Date format is a setting for the same reason — `03/04` is two
+  different days in two countries and the platform cannot know which. Refunds
+  are reported beside the total, never turned into credit notes.
+  Delivery is a link, not an attachment: an accounting export names every
+  customer and what they paid, and an attachment copies that into an inbox, a
+  sent-items folder and every mail server between. Each recipient gets a
+  separate high-entropy, 30-day bearer URL; only its HMAC is stored, and it is
+  usable only once a delivering provider has accepted that recipient's mail.
+  The run also freezes the definition name and timezone, so an edit made while
+  queued cannot rename the message or move the period's displayed boundary.
+  A non-delivering adapter is refused before the credential reaches even a
+  console sink. Recipients are plain addresses and deliberately not contacts —
+  the person receiving this is the bookkeeper, and resolving them would file an
+  accountant in the customer list.
+  Admin at `/admin/reports/exports`, linked from reports, with the last
+  delivery's outcome on every row and an overdue export said out loud at the
+  top. Migration `0158_scheduled_exports.sql`;
+  `tests/modules/reporting-exports.test.ts`.)
 - [ ] **C9.33** Build the automatic subscription billing modes — `provider`
   (Stripe/PayPal schedules and their webhook reconciliation) and `platform`
   (off-session charges against a stored payment method) — and plan changes with

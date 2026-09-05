@@ -128,6 +128,7 @@ describe("long-running service transaction boundary", () => {
       "src/modules/social/service.ts",
       "src/modules/social/compose.ts",
       "src/core/mail/service.ts",
+      "src/modules/reporting/export-service.ts",
     ];
     const found = files.flatMap((file) =>
       findings(file, readFileSync(resolve(process.cwd(), file), "utf8")),

@@ -303,6 +303,8 @@ export interface MailSendOptions {
   senderId?: string;
   requestedBy?: string;
   idempotencyKey?: string;
+  /** Refuse before staging when the selected route is only a local sink. */
+  requireDelivery?: boolean;
 }
 
 export interface MailSendResult {
@@ -385,6 +387,12 @@ export async function sendMail(
     throw new ServiceError(
       "conflict",
       "A personal or transactional mailbox cannot be used for a broadcast.",
+    );
+  }
+  if (options.requireDelivery && !route.delivers) {
+    throw new ServiceError(
+      "conflict",
+      "This instance has no delivering mail adapter. Connect a mailbox or configure SMTP.",
     );
   }
 

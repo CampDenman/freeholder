@@ -82,6 +82,9 @@ const INTERNAL = [
   // or takes the final action on nobody's behalf.
   "subscriptions.advanceDunning",
   "subscriptions.recoverDunning",
+  // Provider submission happens outside service transactions; this applies
+  // the durable mail ledger's outcome afterwards on nobody's behalf.
+  "reports.settleExportRun",
 ] as const;
 
 const wildcard: Actor = {
