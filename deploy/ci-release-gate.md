@@ -7,6 +7,13 @@ browser tests, and the deployment recipe matrix have passed. Do not add a
 required check outside that fan-in without updating the branch-protection
 contract.
 
+GitHub treats a skipped required check as success. The fan-in job therefore
+uses `if: always()` and fails unless every needed job result is `success`.
+Without that, a failed shard skips `checks` and the merge queue can land the
+candidate: merge-group run `33993046449` failed `Tests (19/20)` and still
+merged #270. `pnpm workflow:check` rejects a `checks` job that can skip after
+a failed dependency.
+
 ## Feedback objective
 
 The pull-request objective is a 95th-percentile failing-job result within 12
