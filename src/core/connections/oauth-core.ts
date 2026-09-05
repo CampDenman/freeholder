@@ -405,6 +405,20 @@ export async function accessTokenForAccount(
   return next.accessToken;
 }
 
+/**
+ * Resolve or refresh a token without a caller-owned transaction remaining
+ * open across the provider request. Jobs use this boundary; service handlers
+ * must stage work for those jobs instead of calling it while they own a tx.
+ */
+export function accessTokenForAccountOutsideTransaction(
+  account: { id: string; provider: OAuthProvider },
+): Promise<string> {
+  // The pool and transaction expose the same Drizzle query surface. Passing
+  // the pool is deliberate: its SELECT releases the connection before the
+  // token endpoint is contacted.
+  return accessTokenForAccount(db() as unknown as Tx, account);
+}
+
 async function markAccount(
   accountId: string,
   encryptedCredentials: string,

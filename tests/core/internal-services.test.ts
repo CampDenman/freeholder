@@ -50,6 +50,7 @@ const INTERNAL = [
   "galleries.buildArchive",
   "galleries.expireSessions",
   "invoicing.briefingOverdue",
+  "mail.applySenderVerification",
   "mail.recordProviderEvent",
   "media.backfillWatermarks",
   "media.purgeExpired",

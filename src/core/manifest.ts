@@ -100,6 +100,7 @@ export default defineModule({
       "connection.rotated",
       "mail.senderConnected",
       "mail.senderRegistered",
+      "mail.senderVerificationQueued",
       "mail.senderVerified",
       "mail.defaultSenderChanged",
       "mail.senderUpdated",

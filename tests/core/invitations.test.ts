@@ -30,6 +30,7 @@ import {
   OWNER,
   truncateSpine,
 } from "../helpers/spine";
+import { flushQueuedMail } from "../helpers/mail";
 
 const EMAIL = "teammate@example.test";
 const PASSWORD = "a-staff-password-long-enough";
@@ -66,6 +67,7 @@ describe.runIf(hasDatabase)("staff invitations", () => {
       { email: EMAIL, roleKey, expiresInDays: 7 },
       OWNER,
     );
+    await flushQueuedMail();
     return { ...result, token: tokenFrom(logged) };
   }
 
@@ -148,6 +150,7 @@ describe.runIf(hasDatabase)("staff invitations", () => {
     const first = await invite();
     logged = [];
     await resendInvitation.call({ id: first.id }, OWNER);
+    await flushQueuedMail();
     const second = tokenFrom(logged);
 
     expect(second).not.toBe(first.token);
@@ -245,6 +248,7 @@ describe.runIf(hasDatabase)("staff invitations", () => {
         ANONYMOUS,
       ),
     ]);
+    await flushQueuedMail();
     expect(attempts.filter((attempt) => attempt.status === "fulfilled")).toHaveLength(1);
     const [row] = await db().select().from(staffInvitations);
     if (row?.status === "pending") {
@@ -292,6 +296,7 @@ describe.runIf(hasDatabase)("staff invitations", () => {
       { email: EMAIL, roleKey: "editor", expiresInDays: 3 },
       OWNER,
     );
+    await flushQueuedMail();
     expect(second.id).not.toBe(first.id);
     const rows = await db().select().from(staffInvitations);
     expect(rows.find((row) => row.id === first.id)?.status).toBe("expired");
@@ -302,6 +307,7 @@ describe.runIf(hasDatabase)("staff invitations", () => {
       .where(eq(staffInvitations.id, second.id));
     logged = [];
     await resendInvitation.call({ id: first.id }, OWNER);
+    await flushQueuedMail();
     expect(tokenFrom(logged)).toBeTruthy();
     expect(
       (await db().select().from(staffInvitations).where(eq(staffInvitations.id, first.id)))[0]

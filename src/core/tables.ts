@@ -63,6 +63,7 @@ export {
 } from "@/core/connections/schema";
 export {
   mailDeliveries,
+  mailOutbox,
   mailOauthStates,
   mailProviderEvents,
   mailSenders,

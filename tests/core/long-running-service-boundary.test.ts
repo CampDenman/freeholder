@@ -19,6 +19,8 @@ const PROVIDER_METHODS = new Set([
   "listReviews",
   "publish",
   "pushHours",
+  "send",
+  "verifySender",
 ]);
 const PROVIDER_FUNCTIONS = new Set(["downloadSocialMedia", "getPinnedBytes"]);
 
@@ -118,13 +120,14 @@ describe("long-running service transaction boundary", () => {
     ).toHaveLength(2);
   });
 
-  it("keeps catalogue and social provider I/O at worker boundaries", () => {
+  it("keeps catalogue, social and mail provider I/O at worker boundaries", () => {
     const files = [
       "src/core/catalogue/service.ts",
       "src/modules/social/ingest.ts",
       "src/modules/social/gbp.ts",
       "src/modules/social/service.ts",
       "src/modules/social/compose.ts",
+      "src/core/mail/service.ts",
     ];
     const found = files.flatMap((file) =>
       findings(file, readFileSync(resolve(process.cwd(), file), "utf8")),

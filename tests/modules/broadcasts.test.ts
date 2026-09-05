@@ -38,6 +38,7 @@ import { resolveContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
 import { ready } from "@/core/runtime";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { flushQueuedMail } from "../helpers/mail";
 
 const BUSINESS = {
   name: "Aurora Coast Studio",
@@ -540,6 +541,7 @@ describe.runIf(hasDatabase)("broadcasts", () => {
     );
     await startBroadcast.call({ id: saved.id }, OWNER);
     await sendNext.call({ id: saved.id }, { kind: "system" });
+    await flushQueuedMail();
 
     const [copy] = await db()
       .select()

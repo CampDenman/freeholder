@@ -279,6 +279,7 @@ export const completeMailOAuth = defineService({
  * from being written twice.
  */
 export { accessTokenForAccount as oauthAccessToken } from "@/core/connections/oauth-core";
+export { accessTokenForAccountOutsideTransaction as oauthAccessTokenOutsideTransaction } from "@/core/connections/oauth-core";
 
 
 export default [beginMailOAuth, completeMailOAuth];
