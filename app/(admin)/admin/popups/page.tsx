@@ -140,6 +140,10 @@ export default async function PopupsPage({
                           ))}
                         <form action={deletePopupAction}>
                           <input type="hidden" name="id" value={popup.id} />
+                          <label className="flex items-center gap-2 text-sm text-ink-muted">
+                            <input type="checkbox" name="confirm" value="1" required />
+                            {t("popups.deleteConfirm")}
+                          </label>
                           <button
                             type="submit"
                             className="rounded-md border border-rule px-3 py-1.5 text-sm text-danger"

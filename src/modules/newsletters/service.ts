@@ -28,6 +28,14 @@ const slug = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .max(180);
 const expectedVersion = z.number().int().positive();
+const subscriptionConsent = z.object({
+  termsVersion: z.string().trim().min(1).max(100),
+  sourceUrl: z.string().trim().max(2_048).nullable(),
+  evidence: z.object({
+    popup: z.string().trim().min(1).max(180),
+    statement: z.string().trim().min(1).max(500),
+  }),
+});
 
 const newsletterRow = row({
   id: uuid,
@@ -455,6 +463,7 @@ export const subscribeToNewsletter = defineService({
     newsletterId: id,
     email: z.string().trim().email().toLowerCase(),
     name: z.string().trim().min(1).max(200).optional(),
+    consent: subscriptionConsent.optional(),
   }),
   output: z.object({
     status: z.enum(["confirmed", "pending"]),
@@ -497,6 +506,11 @@ export const subscribeToNewsletter = defineService({
             confirmToken,
             unsubscribeToken,
             unsubscribedAt: null,
+            consentTermsVersion: input.consent?.termsVersion ?? null,
+            consentSourceUrl: input.consent?.sourceUrl ?? null,
+            consentIp: ctx.actor.request?.ip ?? null,
+            consentEvidence: input.consent?.evidence ?? {},
+            updatedAt: new Date(),
           })
           .where(eq(newsletterSubscriptions.id, existing.id))
           .returning()
@@ -508,6 +522,10 @@ export const subscribeToNewsletter = defineService({
             status: "pending",
             confirmToken,
             unsubscribeToken,
+            consentTermsVersion: input.consent?.termsVersion ?? null,
+            consentSourceUrl: input.consent?.sourceUrl ?? null,
+            consentIp: ctx.actor.request?.ip ?? null,
+            consentEvidence: input.consent?.evidence ?? {},
           })
           .returning();
     const origin = siteOrigin();
@@ -576,6 +594,10 @@ export const confirmSubscription = defineService({
       channel: "email" as const,
       state: "granted" as const,
       method: "double_opt_in" as const,
+      termsVersion: row.consentTermsVersion,
+      sourceUrl: row.consentSourceUrl,
+      sourceIp: row.consentIp,
+      evidence: row.consentEvidence,
     });
 
     ctx.setSubject("newsletterSubscription", row.id);

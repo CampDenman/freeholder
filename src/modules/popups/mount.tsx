@@ -13,10 +13,9 @@
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { renderBlocks } from "@/modules/cms/render";
 import type { Translate } from "@/core/i18n";
+import type { Actor } from "@/core/service";
 import { decidePopup } from "./service";
 import { PopupSurface } from "./PopupSurface";
-
-const ANONYMOUS = { kind: "anonymous" } as const;
 
 export interface PopupMountProps {
   path: string;
@@ -33,6 +32,8 @@ export interface PopupMountProps {
   visitorKey: string | null;
   /** The raw cap cookie, decoded by the service rather than by the caller. */
   tally: string | null;
+  /** The signed-in identity, used only for contact-segment targeting. */
+  actor: Actor;
 }
 
 export async function PopupMount(props: PopupMountProps) {
@@ -44,7 +45,7 @@ export async function PopupMount(props: PopupMountProps) {
         visitorKey: props.visitorKey,
         tally: props.tally,
       },
-      ANONYMOUS,
+      props.actor,
     )
     // A popup is the least important thing on the page. If deciding one fails
     // — a module half-migrated, a segment that no longer compiles — the page
@@ -65,7 +66,6 @@ export async function PopupMount(props: PopupMountProps) {
   return (
     <PopupSurface
       id={popup.id}
-      slug={popup.slug}
       title={popup.title}
       surface={popup.surface}
       trigger={popup.trigger}
@@ -79,6 +79,8 @@ export async function PopupMount(props: PopupMountProps) {
         join: props.t("popups.public.join"),
         sending: props.t("popups.public.sending"),
         failed: props.t("popups.public.failed"),
+        pending: props.t("popups.public.pending"),
+        success: props.t("popups.public.success"),
       }}
     >
       {body}

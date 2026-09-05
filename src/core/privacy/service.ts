@@ -275,6 +275,8 @@ const recordConsentInput = z
     method: consentMethod,
     termsVersion: z.string().trim().max(100).nullable().optional(),
     sourceUrl: z.string().trim().max(2_048).nullable().optional(),
+    /** Original request address preserved by trusted, deferred workflows. */
+    sourceIp: z.string().trim().max(64).nullable().optional(),
     evidence: boundedEvidence.default({}),
     occurredAt: z.string().datetime().optional(),
     expiresAt: z.string().datetime().nullable().optional(),
@@ -314,7 +316,7 @@ async function insertConsent(
       method: input.method,
       termsVersion: input.termsVersion ?? null,
       sourceUrl: input.sourceUrl ?? null,
-      ip: actor.request?.ip ?? null,
+      ip: input.sourceIp ?? actor.request?.ip ?? null,
       evidence: input.evidence,
       actor: actorString(actor),
       occurredAt: input.occurredAt ? new Date(input.occurredAt) : new Date(),
@@ -431,6 +433,9 @@ export const recordConsent = defineService({
   input: recordConsentInput,
   output: consentRow,
   handler: async (input, ctx) => {
+    if (input.sourceIp !== undefined && ctx.actor.kind !== "system") {
+      throw new ServiceError("permission", "Only a trusted workflow may preserve a source address.");
+    }
     const record = await insertConsent(ctx.tx, input, ctx.actor);
     ctx.setSubject("consent", record.id);
     await ctx.emitTimeline({

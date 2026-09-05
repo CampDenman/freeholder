@@ -17,6 +17,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/core/env";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
+import { requestMetadata } from "@/core/http/request-metadata";
 import { ServiceError } from "@/core/service";
 import { ANON_COOKIE } from "@/modules/analytics/visitor";
 import {
@@ -24,6 +25,7 @@ import {
   POPUP_TALLY_MAX_AGE,
 } from "@/modules/popups/tally";
 import { capturePopup, recordPopupEvent } from "@/modules/popups/service";
+import { localPopupPath } from "@/modules/popups/http";
 
 const MAX_BODY = 8_192;
 
@@ -63,16 +65,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Only a path on this site. It is stored on the event and becomes the
   // `source_url` on a consent record, and evidence saying somebody agreed on
   // https://somewhere.else is evidence that misleads.
-  const path =
-    typeof body.path === "string" && body.path.startsWith("/")
-      ? body.path.slice(0, 2048)
-      : null;
+  const path = localPopupPath(body.path, request.nextUrl.origin);
   const event = body.event;
 
   // Read here, never accepted from the caller.
   const visitorKey = request.cookies.get(ANON_COOKIE)?.value ?? null;
   const tally = request.cookies.get(POPUP_TALLY_COOKIE)?.value ?? null;
-  const actor = await actorFromToken(request.cookies.get(SESSION_COOKIE)?.value);
+  const identity = await actorFromToken(request.cookies.get(SESSION_COOKIE)?.value);
+  const actor = { ...identity, request: requestMetadata(request) };
 
   try {
     if (event === "shown" || event === "dismissed") {

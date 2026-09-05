@@ -10,10 +10,12 @@
 // A module rather than core, because plenty of instances will never want one,
 // and the honest way to make something optional is to make it removable.
 //
-// `requires: ["cms"]` is load-bearing twice over. A popup's body is a block
+// `requires: ["cms", "newsletters"]` is load-bearing. A popup's body is a block
 // tree validated against the CMS registry, and its accessibility is analysed
 // by the CMS's own hint pass — so the popup gets the platform's answers to
 // "what may this contain" and "is this readable" rather than growing its own.
+// Email capture requires newsletter double opt-in so an anonymous request
+// cannot grant consent for an address it does not control.
 //
 // No `routes` and no `blocks`. A popup does not join the palette: it is a
 // surface that renders *around* the page rather than inside it, mounted once
@@ -24,7 +26,7 @@ import { defineModule } from "@/core/module";
 export default defineModule({
   name: "popups",
   version: "0.1.0",
-  requires: ["core", "cms"],
+  requires: ["core", "cms", "newsletters"],
   tables: () => import("./tables"),
   services: () => import("./service"),
   events: {

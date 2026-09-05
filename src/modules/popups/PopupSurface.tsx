@@ -45,11 +45,12 @@ export interface PopupSurfaceLabels {
   join: string;
   sending: string;
   failed: string;
+  pending: string;
+  success: string;
 }
 
 export interface PopupSurfaceProps {
   id: string;
-  slug: string;
   title: string;
   surface: "modal" | "banner" | "corner";
   trigger: "immediate" | "delay" | "scroll" | "exitIntent";
@@ -298,6 +299,7 @@ export function PopupChrome({
   return (
     <section
       aria-labelledby={`popup-title-${id}`}
+      aria-live="polite"
       className={
         surface === "banner"
           ? "fixed inset-x-0 bottom-0 z-40 grid gap-3 border-t border-rule bg-surface px-6 py-4 text-ink shadow-float"
@@ -353,14 +355,14 @@ function CaptureForm({
         })
           .then(async (response) => {
             const result = (await response.json().catch(() => null)) as
-              | { ok?: true; message?: string; error?: string }
+              | { ok?: true; message?: string | null; pending?: boolean; error?: string }
               | null;
             if (!response.ok || !result?.ok) {
               setState("failed");
               setError(result?.error ?? labels.failed);
               return;
             }
-            onCaptured(result.message ?? "");
+            onCaptured(result.message ?? (result.pending ? labels.pending : labels.success));
           })
           .catch(() => {
             setState("failed");

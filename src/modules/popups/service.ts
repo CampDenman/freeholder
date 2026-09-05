@@ -18,19 +18,19 @@
 // `ctx.callAsSystem`, because an anonymous visitor is entitled to the audience
 // they belong to without being entitled to read segments.
 //
-// **Capture writes consent evidence through the same path everything else
-// uses.** §36 is explicit: "newsletter capture wired to §30 consent records".
-// When the popup names a newsletter, `newsletters.subscribe` runs and the
-// double opt-in writes the record; when it does not, `contacts.recordConsent`
-// writes it directly with the exact words the visitor was shown. There is no
-// third consent model here, and the database refuses to hold a capture popup
-// that has no words to show (see the check constraint in schema.ts).
+// **Capture proves address control before it grants consent.** §36 is explicit:
+// "newsletter capture wired to §30 consent records". Every email popup names
+// a newsletter, `newsletters.subscribe` starts double opt-in, and only the
+// confirmation writes consent with the exact words the visitor was shown.
+// There is no anonymous path that can grant marketing consent to somebody
+// else's existing address.
 import { z } from "zod";
 import { and, asc, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid as uuidSchema } from "@/core/contract";
 import {
   defineService,
   getService,
+  actorString,
   ServiceError,
   type Actor,
   type Service,
@@ -38,7 +38,7 @@ import {
   type Tx,
 } from "@/core/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
-import { registerContactPrivacySource, recordConsent } from "@/core/privacy/service";
+import { registerContactPrivacySource } from "@/core/privacy/service";
 import { contacts } from "@/core/contacts/schema";
 import { blockTreeSchema } from "@/modules/cms/blocks/registry";
 import {
@@ -123,7 +123,6 @@ const popupRow = row({
  */
 const publicPopup = row({
   id: uuidSchema,
-  slug: z.string(),
   title: z.string(),
   surface: z.enum(POPUP_SURFACES),
   trigger: z.enum(POPUP_TRIGGERS),
@@ -331,6 +330,14 @@ const saveInput = z
           "A popup that asks for an email address has to say what you will do with it. Those words become the consent record.",
       });
     }
+    if (input.captureMode === "email" && !input.newsletterId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["newsletterId"],
+        message:
+          "Choose the newsletter this address will join. Confirmation by email proves the address belongs to the person consenting.",
+      });
+    }
     if (input.startsAt && input.endsAt && input.endsAt <= input.startsAt) {
       ctx.addIssue({
         code: "custom",
@@ -393,7 +400,11 @@ export const savePopup = defineService({
     };
 
     const [saved] = input.id
-      ? await ctx.tx.update(popups).set(values).where(eq(popups.id, input.id)).returning()
+      ? await ctx.tx
+          .update(popups)
+          .set({ ...values, updatedAt: new Date() })
+          .where(eq(popups.id, input.id))
+          .returning()
       : await ctx.tx.insert(popups).values(values).returning();
     if (!saved) throw new ServiceError("not_found", "That popup is not here.");
     ctx.setSubject("popup", saved.id);
@@ -421,7 +432,7 @@ export const savePopupBlocks = defineService({
     const popup = await loadPopup(ctx.tx, input.id);
     const [saved] = await ctx.tx
       .update(popups)
-      .set({ blocks: input.blocks })
+      .set({ blocks: input.blocks, updatedAt: new Date() })
       .where(eq(popups.id, popup.id))
       .returning();
     ctx.setSubject("popup", popup.id);
@@ -456,11 +467,22 @@ export const setPopupStatus = defineService({
           publishA11yMessage(hints) ?? "This popup is not accessible enough to publish.",
         );
       }
+      if (popup.captureMode === "email" && popup.newsletterId) {
+        const target = (await ctx.callAsSystem(getService("newsletters.get"), {
+          id: popup.newsletterId,
+        })) as { newsletter: { status: "active" | "paused" } };
+        if (target.newsletter.status !== "active") {
+          throw new ServiceError(
+            "validation",
+            "Activate the selected newsletter before making this popup live.",
+          );
+        }
+      }
     }
 
     const [saved] = await ctx.tx
       .update(popups)
-      .set({ status: input.status })
+      .set({ status: input.status, updatedAt: new Date() })
       .where(eq(popups.id, popup.id))
       .returning();
     ctx.setSubject("popup", popup.id);
@@ -478,7 +500,7 @@ export const removePopup = defineService({
   summary: "Delete a popup and everything recorded about it.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: uuidSchema }),
+  input: z.object({ id: uuidSchema, confirm: z.literal(true) }),
   output: row({ ok: z.literal(true) }),
   handler: async (input, ctx) => {
     const popup = await loadPopup(ctx.tx, input.id);
@@ -551,7 +573,6 @@ export const decidePopup = defineService({
 
       return {
         id: popup.id,
-        slug: popup.slug,
         title: popup.title,
         surface: popup.surface,
         trigger: popup.trigger,
@@ -587,21 +608,26 @@ export const recordPopupEvent = defineService({
     visitorKey: z.string().trim().max(64).nullish(),
     tally: z.string().max(1024).nullish(),
   }),
-  // A public write needs a ceiling that does not depend on anybody being
-  // signed in. Per popup rather than per visitor, for the same reason
-  // `forms.submit` is: an anonymous surface has no trustworthy identity to
-  // key on. The number is generous — a site turning over ten popup
-  // impressions a second is not the business this platform is for — and the
-  // point of it is to bound a script, not to shape traffic.
+  // The route adds deployment-validated request metadata. A popup id alone is
+  // a global denial-of-service bucket; pairing it with a signed-in identity or
+  // source address lets one caller exhaust only their own allowance.
   rateLimit: {
     limit: 600,
     windowSeconds: 60,
-    subject: (input) => `popup:${input.popupId}`,
+    subject: (input, actor) =>
+      `popup:${input.popupId}:${
+        actor.kind === "user" || actor.kind === "agent"
+          ? actorString(actor)
+          : `ip:${actor.request?.ip ?? "unknown"}`
+      }`,
     message: "This popup has been reported a lot just now. Try again shortly.",
   },
   output: recordOutput,
   handler: async (input, ctx) => {
     const popup = await loadPopup(ctx.tx, input.popupId);
+    if (input.kind === "shown" && popup.status !== "active") {
+      throw new ServiceError("not_found", "This popup is no longer running.");
+    }
     const now = new Date();
     const contactId = await callerContactId(ctx.tx, ctx.actor);
 
@@ -635,11 +661,14 @@ export const recordPopupEvent = defineService({
  * already aborted the transaction, and that trap is why this is done here
  * rather than around the call itself.
  */
-function newsletterSubscribeService(): Service | null {
+function newsletterSubscribeService(): Service {
   try {
     return getService("newsletters.subscribe");
   } catch {
-    return null;
+    throw new ServiceError(
+      "conflict",
+      "Newsletter confirmation is unavailable. Enable the newsletters module before collecting addresses.",
+    );
   }
 }
 
@@ -661,12 +690,17 @@ export const capturePopup = defineService({
   rateLimit: {
     limit: 30,
     windowSeconds: 10 * 60,
-    subject: (input) => `popup-capture:${input.popupId}`,
+    subject: (input, actor) =>
+      `popup-capture:${input.popupId}:${
+        actor.kind === "user" || actor.kind === "agent"
+          ? actorString(actor)
+          : `ip:${actor.request?.ip ?? "unknown"}`
+      }`,
     message: "This popup has taken a lot of sign-ups just now. Try again shortly.",
   },
   output: row({
     ok: z.literal(true),
-    message: z.string(),
+    message: z.string().nullable(),
     /** True when the address still has a confirmation email to answer. */
     pending: z.boolean(),
     tally: z.string(),
@@ -700,28 +734,19 @@ export const capturePopup = defineService({
     // it. Naming a newsletter means a double opt-in, and the confirmation
     // link is the moment consent exists — writing "granted" here as well
     // would contradict the email that has not been answered yet.
-    const subscribe = popup.newsletterId ? newsletterSubscribeService() : null;
-    let pending = false;
-    if (popup.newsletterId && subscribe) {
-      const result = (await ctx.callAsSystem(subscribe, {
-        newsletterId: popup.newsletterId,
-        email: input.email,
-      })) as { status: "confirmed" | "pending" };
-      pending = result.status === "pending";
-    } else {
-      await ctx.callAsSystem(recordConsent, {
-        contactId,
-        purpose: "marketing" as const,
-        channel: "email" as const,
-        state: "granted" as const,
-        method: "form" as const,
-        // The words they were actually shown, so the evidence can be read
-        // back against the version of the statement that was on screen.
+    if (!popup.newsletterId) {
+      throw new ServiceError("conflict", "This popup has no newsletter to join.");
+    }
+    const result = (await ctx.callAsSystem(newsletterSubscribeService(), {
+      newsletterId: popup.newsletterId,
+      email: input.email,
+      consent: {
         termsVersion: popup.consentVersion ?? popup.slug,
         sourceUrl: input.path ?? null,
         evidence: { popup: popup.slug, statement: popup.consentStatement ?? "" },
-      });
-    }
+      },
+    })) as { status: "confirmed" | "pending" };
+    const pending = result.status === "pending";
 
     await ctx.tx.insert(popupEvents).values({
       popupId: popup.id,
@@ -744,11 +769,7 @@ export const capturePopup = defineService({
 
     return {
       ok: true as const,
-      message:
-        popup.successMessage ??
-        (pending
-          ? "Almost there — check your email and confirm."
-          : "Thank you. You are on the list."),
+      message: popup.successMessage,
       pending,
       tally: serializeTally(recordCapturedInTally(parseTally(input.tally), popup.id, now)),
     };

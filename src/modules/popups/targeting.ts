@@ -52,11 +52,18 @@ export const NO_HISTORY: PopupHistory = {
  * rule that can hang the server is not a feature.
  */
 export function pathMatches(pattern: string, path: string): boolean {
-  const escaped = pattern
-    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*\*/g, " ")
-    .replace(/\*/g, "[^/]*")
-    .replace(/ /g, ".*");
+  let escaped = "";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index]!;
+    if (character === "*" && pattern[index + 1] === "*") {
+      escaped += ".*";
+      index += 1;
+    } else if (character === "*") {
+      escaped += "[^/]*";
+    } else {
+      escaped += character.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+    }
+  }
   return new RegExp(`^${escaped}$`).test(path);
 }
 

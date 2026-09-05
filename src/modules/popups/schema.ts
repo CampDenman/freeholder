@@ -40,6 +40,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { contacts } from "@/core/contacts/schema";
 import { segments } from "@/core/segments/schema";
+import { newsletters } from "@/modules/newsletters/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 /** Where it appears. A modal interrupts; a banner does not. */
@@ -81,7 +82,7 @@ export const popups = pgTable(
     /* ------------------------------------------------------------- who */
     audience: text("audience", { enum: POPUP_AUDIENCES }).notNull().default("everyone"),
     segmentId: uuid("segment_id").references(() => segments.id, {
-      onDelete: "set null",
+      onDelete: "restrict",
     }),
     /** Glob-ish paths: `/`, `/shop/*`, `/blog/**`. Empty means anywhere. */
     pathPatterns: jsonb("path_patterns").notNull().default([]),
@@ -99,18 +100,10 @@ export const popups = pgTable(
 
     /* ---------------------------------------------------------- capture */
     captureMode: text("capture_mode", { enum: POPUP_CAPTURES }).notNull().default("none"),
-    /**
-     * Which newsletter a captured address joins, when the owner names one.
-     *
-     * A plain uuid rather than a foreign key, deliberately, the same way
-     * `ad_campaigns.invoice_id` is: newsletters is a module, and an instance
-     * that only ever uses a popup to announce opening hours should not carry a
-     * hard dependency on it. When it is set and the module is installed,
-     * capture hands off to `newsletters.subscribe` and the double opt-in
-     * writes the consent record — which is §36's "wired to §30 consent
-     * records" taken literally rather than reimplemented.
-     */
-    newsletterId: uuid("newsletter_id"),
+    /** The double-opt-in list that proves control of a captured address. */
+    newsletterId: uuid("newsletter_id").references(() => newsletters.id, {
+      onDelete: "restrict",
+    }),
     /**
      * The exact words shown beside the tick box.
      *
@@ -136,7 +129,24 @@ export const popups = pgTable(
     uniqueIndex("popups_slug_idx").on(t.slug),
     index("popups_status_idx").on(t.status, t.priority),
     check("popups_slug_shape", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
+    check("popups_slug_bounded", sql`char_length(${t.slug}) <= 180`),
+    check("popups_name_bounded", sql`char_length(${t.name}) between 1 and 120`),
     check("popups_title", sql`char_length(${t.title}) between 1 and 160`),
+    check("popups_surface_allowed", sql`${t.surface} in ('modal', 'banner', 'corner')`),
+    check(
+      "popups_trigger_allowed",
+      sql`${t.trigger} in ('immediate', 'delay', 'scroll', 'exitIntent')`,
+    ),
+    check(
+      "popups_trigger_value",
+      sql`${t.triggerValue} between 0 and 600 and (${t.trigger} <> 'scroll' or ${t.triggerValue} between 1 and 100)`,
+    ),
+    check(
+      "popups_audience_allowed",
+      sql`${t.audience} in ('everyone', 'inSegment', 'notInSegment')`,
+    ),
+    check("popups_paths_array", sql`jsonb_typeof(${t.pathPatterns}) = 'array'`),
+    check("popups_locales_array", sql`jsonb_typeof(${t.locales}) = 'array'`),
     // An audience that names no segment is a rule that cannot be evaluated,
     // and the evaluation would have to guess. Guessing widens the audience.
     check(
@@ -148,14 +158,30 @@ export const popups = pgTable(
     // could defend, so the database refuses to hold one.
     check(
       "popups_capture_consent",
-      sql`${t.captureMode} <> 'email' or ${t.consentStatement} is not null`,
+      sql`${t.captureMode} <> 'email' or (${t.consentStatement} is not null and ${t.newsletterId} is not null)`,
+    ),
+    check("popups_capture_allowed", sql`${t.captureMode} in ('none', 'email')`),
+    check(
+      "popups_consent_bounded",
+      sql`${t.consentStatement} is null or char_length(${t.consentStatement}) <= 500`,
+    ),
+    check(
+      "popups_consent_version_bounded",
+      sql`${t.consentVersion} is null or char_length(${t.consentVersion}) <= 60`,
+    ),
+    check(
+      "popups_success_message_bounded",
+      sql`${t.successMessage} is null or char_length(${t.successMessage}) <= 400`,
     ),
     check(
       "popups_frequency_cap_positive",
       sql`${t.frequencyCap} is null or ${t.frequencyCap} > 0`,
     ),
-    check("popups_frequency_period", sql`${t.frequencyPeriodHours} > 0`),
-    check("popups_dismiss_suppress", sql`${t.dismissSuppressHours} >= 0`),
+    check("popups_frequency_cap_bounded", sql`${t.frequencyCap} is null or ${t.frequencyCap} <= 100`),
+    check("popups_frequency_period", sql`${t.frequencyPeriodHours} between 1 and 8760`),
+    check("popups_dismiss_suppress", sql`${t.dismissSuppressHours} between 0 and 8760`),
+    check("popups_priority_bounded", sql`${t.priority} between 0 and 1000`),
+    check("popups_status_allowed", sql`${t.status} in ('draft', 'active', 'paused')`),
     check(
       "popups_window",
       sql`${t.endsAt} is null or ${t.startsAt} is null or ${t.endsAt} > ${t.startsAt}`,
@@ -213,5 +239,11 @@ export const popupEvents = pgTable(
     // The owner's question: how has this popup done.
     index("popup_events_report_idx").on(t.popupId, t.kind, t.occurredAt),
     index("popup_events_contact_idx").on(t.contactId),
+    check("popup_events_kind_allowed", sql`${t.kind} in ('shown', 'dismissed', 'captured')`),
+    check(
+      "popup_events_visitor_bounded",
+      sql`${t.visitorKey} is null or char_length(${t.visitorKey}) <= 64`,
+    ),
+    check("popup_events_path_bounded", sql`${t.path} is null or char_length(${t.path}) <= 2048`),
   ],
 );

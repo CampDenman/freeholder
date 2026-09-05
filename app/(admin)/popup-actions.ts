@@ -14,6 +14,7 @@ import {
   savePopupBlocks,
   setPopupStatus,
 } from "@/modules/popups/service";
+import { popupAdminReturnTo } from "@/modules/popups/http";
 // Written out rather than imported from the schema: §15.5 keeps a route
 // handler off the database, and the file already spells its other unions this
 // way. The service validates the value regardless, so a typo here is refused
@@ -141,7 +142,7 @@ export async function savePopupBlocksAction(
 export async function setPopupStatusAction(form: FormData): Promise<void> {
   const caller = await actor();
   const id = text(form, "id");
-  const back = text(form, "returnTo") || "/admin/popups";
+  const back = popupAdminReturnTo(text(form, "returnTo"));
   try {
     await setPopupStatus.call(
       { id, status: (text(form, "status") || "draft") as Status },
@@ -157,7 +158,10 @@ export async function setPopupStatusAction(form: FormData): Promise<void> {
 export async function deletePopupAction(form: FormData): Promise<void> {
   const caller = await actor();
   try {
-    await removePopup.call({ id: text(form, "id") }, caller);
+    await removePopup.call(
+      { id: text(form, "id"), confirm: form.get("confirm") === "1" },
+      caller,
+    );
   } catch (error) {
     done("/admin/popups", error);
   }

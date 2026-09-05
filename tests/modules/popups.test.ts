@@ -31,7 +31,14 @@ import { ready } from "@/core/runtime";
 import { updateBusiness } from "@/core/settings/service";
 import { saveSegment } from "@/core/segments/service";
 import { canContact } from "@/core/privacy/service";
+import { consentRecords } from "@/core/privacy/schema";
+import {
+  confirmSubscription,
+  createNewsletter,
+} from "@/modules/newsletters/service";
+import { newsletterSubscriptions } from "@/modules/newsletters/schema";
 import { popupEvents } from "@/modules/popups/schema";
+import { localPopupPath, popupAdminReturnTo } from "@/modules/popups/http";
 import {
   capturePopup,
   decidePopup,
@@ -101,6 +108,21 @@ describe("who a popup may interrupt", () => {
     // A pattern an owner typed is never compiled as a regular expression, so
     // the characters that would make one dangerous are literal here.
     expect(pathMatches("/a.b", "/axb")).toBe(false);
+    expect(pathMatches("/sale today", "/sale today")).toBe(true);
+    expect(pathMatches("/sale today", "/sale-anything-today")).toBe(false);
+  });
+
+  it("keeps public evidence paths and admin returns on this site", () => {
+    const origin = "https://example.test";
+    expect(localPopupPath("/offers?from=popup", origin)).toBe("/offers?from=popup");
+    expect(localPopupPath("//elsewhere.test/path", origin)).toBeNull();
+    expect(localPopupPath("/\\elsewhere.test/path", origin)).toBeNull();
+    expect(localPopupPath("https://elsewhere.test/path", origin)).toBeNull();
+
+    const id = "11111111-1111-4111-8111-111111111111";
+    expect(popupAdminReturnTo(`/admin/popups/${id}`)).toBe(`/admin/popups/${id}`);
+    expect(popupAdminReturnTo("//elsewhere.test")).toBe("/admin/popups");
+    expect(popupAdminReturnTo("/admin/popups/../../settings")).toBe("/admin/popups");
   });
 
   it("treats an empty list as everywhere rather than nowhere", () => {
@@ -411,6 +433,23 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
     expect(refused.code).toBe("validation");
   });
 
+  it("requires address ownership to be proved through a newsletter confirmation", async () => {
+    const refused = await failure(
+      savePopup.call(
+        {
+          slug: "no-confirmation",
+          name: "No confirmation",
+          title: "Join",
+          captureMode: "email",
+          consentStatement: "Send me studio news.",
+        },
+        OWNER,
+      ),
+    );
+    expect(refused.code).toBe("validation");
+    expect(refused.message).toContain("newsletter");
+  });
+
   it("shows a live popup and tells the visitor nothing about its targeting", async () => {
     const popup = await livePopup();
     const decided = await decidePopup.call({ path: "/", locale: "en" }, ANONYMOUS);
@@ -420,6 +459,7 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
     expect(decided).not.toHaveProperty("frequencyCap");
     expect(decided).not.toHaveProperty("segmentId");
     expect(decided).not.toHaveProperty("audience");
+    expect(decided).not.toHaveProperty("slug");
   });
 
   it("does not show a draft, a paused one, or one off its path", async () => {
@@ -432,6 +472,18 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
     expect(
       await decidePopup.call({ path: "/shop/mugs", locale: "en" }, ANONYMOUS),
     ).toBeNull();
+  });
+
+  it("does not record a shown event after a popup stops running", async () => {
+    const popup = await livePopup();
+    await setPopupStatus.call({ id: popup.id, status: "paused" }, OWNER);
+    const refused = await failure(
+      recordPopupEvent.call({ popupId: popup.id, kind: "shown" }, ANONYMOUS),
+    );
+    expect(refused.code).toBe("not_found");
+    expect(
+      await db().select().from(popupEvents).where(eq(popupEvents.popupId, popup.id)),
+    ).toEqual([]);
   });
 
   it("caps a visitor the server can identify, and the cap survives the tab closing", async () => {
@@ -569,8 +621,13 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
   });
 
   it("takes an address only with consent, and writes the evidence on the spine", async () => {
+    const newsletter = await createNewsletter.call(
+      { name: "Studio notes", slug: "studio-notes" },
+      OWNER,
+    );
     const popup = await livePopup({
       captureMode: "email",
+      newsletterId: newsletter.id,
       consentStatement: "One email a month about new work. Unsubscribe any time.",
       consentVersion: "2026-09",
     });
@@ -588,9 +645,11 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
 
     const taken = await capturePopup.call(
       { popupId: popup.id, email: "reader@example.test", consent: true, path: "/" },
-      ANONYMOUS,
+      { kind: "anonymous", request: { ip: "203.0.113.9" } },
     );
     expect(taken.ok).toBe(true);
+    expect(taken.pending).toBe(true);
+    expect(taken.message).toBeNull();
 
     // One contact, resolved rather than created, on the same spine as
     // everything else (§4.1).
@@ -600,13 +659,37 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
       .where(eq(contacts.email, "reader@example.test"));
     expect(contact?.source).toBe("popup:spring-offer");
 
-    // And the consent record the rest of the platform reads, written through
-    // the platform's own consent service rather than a second model.
+    // The tick box starts double opt-in; it does not let somebody grant
+    // marketing consent for an address they have not proved they control.
+    const beforeConfirmation = await canContact.call(
+      { contactId: contact!.id, purpose: "marketing", channel: "email" },
+      OWNER,
+    );
+    expect(beforeConfirmation.allowed).toBe(false);
+    const [subscription] = await db()
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.contactId, contact!.id));
+    await confirmSubscription.call({ token: subscription!.confirmToken }, ANONYMOUS);
+
     const allowed = await canContact.call(
       { contactId: contact!.id, purpose: "marketing", channel: "email" },
       OWNER,
     );
     expect(allowed.allowed).toBe(true);
+    const [evidence] = await db()
+      .select()
+      .from(consentRecords)
+      .where(eq(consentRecords.contactId, contact!.id));
+    expect(evidence).toMatchObject({
+      termsVersion: "2026-09",
+      sourceUrl: "/",
+      ip: "203.0.113.9",
+      evidence: {
+        popup: "spring-offer",
+        statement: "One email a month about new work. Unsubscribe any time.",
+      },
+    });
 
     // Not asked again, because they have already answered.
     expect(
@@ -635,7 +718,11 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
     expect(clash.code).toBe("conflict");
 
     await recordPopupEvent.call({ popupId: popup.id, kind: "shown" }, ANONYMOUS);
-    await removePopup.call({ id: popup.id }, OWNER);
+    const unconfirmed = await failure(
+      removePopup.call({ id: popup.id, confirm: false }, OWNER),
+    );
+    expect(unconfirmed.code).toBe("validation");
+    await removePopup.call({ id: popup.id, confirm: true }, OWNER);
     expect(await listPopups.call({}, OWNER)).toEqual([]);
     expect(
       await db().select().from(popupEvents).where(eq(popupEvents.popupId, popup.id)),

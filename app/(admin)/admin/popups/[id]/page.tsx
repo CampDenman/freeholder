@@ -356,7 +356,7 @@ export default async function PopupDetailPage({
                     id="consentStatement"
                     name="consentStatement"
                     rows={3}
-                    maxLength={600}
+                    maxLength={500}
                     className={CONTROL}
                     defaultValue={popup.consentStatement ?? ""}
                   />

@@ -222,6 +222,7 @@ export default async function PublicLayout({
         localizeHref={ctx.localizeHref}
         visitorKey={visitorId ?? cookieJar.get(ANON_COOKIE)?.value ?? null}
         tally={cookieJar.get(POPUP_TALLY_COOKIE)?.value ?? null}
+        actor={publicActor}
       />
       <AnalyticsConsentControl
         policy={analytics.consentPolicy}
