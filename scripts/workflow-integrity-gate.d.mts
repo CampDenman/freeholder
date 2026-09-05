@@ -3,3 +3,4 @@
 
 export function inspectWorkflowSource(source: string, path?: string): string[];
 export function inspectWorkflowDocument(source: string, path?: string): string[];
+export function inspectProtectedFanIn(source: string, path?: string): string[];
