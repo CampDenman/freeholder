@@ -3425,6 +3425,9 @@ one with unchecked dependency items.
   their replay-resistant state claims, exchange and identify with no database
   transaction open, then atomically apply credentials; signup contact listing
   and staging likewise page providers between authorized source/apply phases.
+  Media alt-text generation snapshots a verified image, reads its preview and
+  calls the configured model with no transaction open, then re-locks and
+  compares the snapshot before storing a reviewable proposal.
   `defineOrchestratedService` rejects transactional composition, and
   `tests/core/long-running-service-boundary.test.ts` prevents regression.
   The complete checked-item × F01–F12 evidence matrix remains open.)*

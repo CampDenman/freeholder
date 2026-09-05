@@ -21,6 +21,7 @@ const PROVIDER_METHODS = new Set([
   "publish",
   "pushHours",
   "send",
+  "suggest",
   "verifySender",
   "exchangeCode",
 ]);
@@ -138,6 +139,7 @@ describe("long-running service transaction boundary", () => {
       "src/core/connections/mail-read-oauth.ts",
       "src/core/import/signup-contact-service.ts",
       "src/core/mail/oauth.ts",
+      "src/core/media/service.ts",
       "src/modules/social/ingest.ts",
       "src/modules/social/gbp.ts",
       "src/modules/social/oauth.ts",

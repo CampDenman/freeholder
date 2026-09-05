@@ -1,197 +1,322 @@
-# Freeholder restart handoff — 2026-08-31
+<!--
+Copyright (C) 2026 Tony Aly
+SPDX-License-Identifier: Apache-2.0
+-->
 
-`MASTER.md` §43 is the only product, architecture, status, and delivery source
-of truth. This file is the *session* handoff: where the work stopped, what is
-in flight, and what this stretch learned. It is tracked from 2026-08-31 at the
-owner's instruction; earlier copies said "do not commit this file" and that
-line no longer applies. Rewrite it in place rather than adding another.
+# Freeholder restart handoff — 2026-09-05
 
-## Exact repository state
+This is the current session handoff for the next large sprint. `MASTER.md` §43
+remains the only product, architecture, status, and delivery source of truth.
+This file records operational state, audit findings, and work that is still in
+flight; when it disagrees with live GitHub state, GitHub wins.
 
-- Repo: `C:\users\tony\code\freeholder`
+## Executive outcome
+
+This sprint removed the highest-risk known provider waits from service-owned
+database transactions, cleaned one stale export PR, began repairing the stale
+dependency queue, and found a nondeterministic cryptography test in the merge
+queue.
+
+Landed on `main`:
+
+- **#269** replaced dirty export PR #244 with a clean, audited export boundary.
+  Actual merge commit: `19372669ea1cb631b0d287ec455a3bddaebdb96d`.
+- **#206** upgraded Vitest from 4.1.10 to 4.1.11 after a fresh rebase and full
+  PR plus merge-group CI. Actual merge commit:
+  `24c48079fccde4444917a84298a2475ce15b1fcf`.
+- **#270** introduced explicit transaction-free orchestration and moved the
+  OAuth/signup-provider workflows onto it. Actual merge commit:
+  `62d7b73cdf653aa421b110812339011c8c5a0cc6`.
+
+The plan gate at the last local run reported **282 unique IDs, 222 checked, 60
+open**. Run `npm run plan:check` for the live count.
+
+## Exact local state
+
+- Repository: `C:\Users\tony\code\freeholder`
 - Remote: `https://github.com/CampDenman/freeholder.git`
-- `main` is at `02e788f` (C9.07 funnel, PR #237)
-- Plan gate on `main`: **275 unique IDs, 206 checked, 69 open**
-- With the two open PRs below merged: **276 IDs, 208 checked, 68 open**
+- Current root branch: `fix/media-alt-text-transaction-boundary`
+- Current implementation commit before this documentation follow-up:
+  `e3edf3822e362611d2e2489cac1f05c98c0fe968`
+- Current root PR: **#273**
+- Temporary worktree: `C:\tmp\freeholder-eslint-clean`
+- The temporary worktree is currently on `fix/mail-outbox-tamper-test`, the
+  branch for **#272**. Its earlier `chore/eslint-10-9-1-clean` commit is already
+  pushed for **#271**; switching the worktree did not alter that remote branch.
 
-## In flight — one stack, two PRs
+Do not remove the temporary worktree while a process is using it. Once #271
+and #272 are merged, it can be removed with `git worktree remove` after first
+checking `git status` in both worktrees.
 
-| PR | Item | Branch | Base |
-|---|---|---|---|
-| #238 | C9.08 reporting | `feat/c9.08-reporting` | `feat/c9.07-funnel` → retarget to `main` |
-| #239 | C7.17 one audience | `feat/c7.17-one-audience` | `feat/c9.08-reporting` |
+## In-flight PRs and required order
 
-Both were stacked while C9.07 was still open. **C9.07 has since squash-merged**,
-so #238 needs retargeting to `main` and rebasing with
-`git rebase --onto origin/main <old-c9.07-sha> feat/c9.08-reporting`, then #239
-onto the rewritten #238. A plain `git rebase main` replays the old copy of the
-already-merged commit and conflicts; `--onto` drops it.
+GitHub state changes while this file is read. Refresh each row with
+`gh pr view <number> --json state,mergedAt,mergeCommit,headRefOid,baseRefOid,mergeStateStatus,statusCheckRollup`.
 
-**Merging to `main` publishes the container image** (`.github/workflows/
-publish-image.yml`). That is the whole deploy path: a self-hoster runs
-`docker compose pull`. There is no separate deploy step.
+| Order | PR | Purpose | State at handoff |
+|---|---:|---|---|
+| 1 | #272 | Make the mail-outbox tamper test deterministic | Fresh PR CI running |
+| 2 | #271 | Clean ESLint 10.9.1 replacement for dirty #205 | Rebased onto #270; fresh PR CI running |
+| 3 | #273 | Release the media DB transaction before preview/AI alt-text work | Documentation follow-up is on the branch; refresh the restarted PR CI |
 
-## Landed 2026-08-31
+Land them in that order through the merge queue. For each PR:
 
-**C9.05** message templates · **C9.06** broadcasts · **C9.07** funnel.
-C9.08 and C7.17 are built and awaiting CI.
+1. Wait for every fresh PR check, including all 20 shards, browser,
+   image/recipes/upgrade, security, backup, CodeQL, DCO, and aggregate
+   `checks`.
+2. Run `gh pr merge <number> --merge`. GitHub will say that `main` uses the
+   merge queue; that is expected.
+3. Find the new merge-group run with
+   `gh run list --event merge_group --limit 5`.
+4. Wait for that run, then verify `state: MERGED` and a non-null `mergedAt` on
+   the PR. A green PR or a queue command is not evidence that it merged.
 
-**C9.08 was split before coding**, per §43.17.1: scheduled exports and the
-QuickBooks/Xero shapes moved to a new item at the end of the C9 block, defined
-in PR #238. Reading a report and delivering one on a schedule have different
-failure modes. (Not named by ID here: the plan gate rightly refuses a reference
-to a checklist ID that is not yet on `main`.)
+Do not queue #271 before #272 is actually merged. Do not queue #273 before
+#271 is actually merged. Rebase/update a later PR only if GitHub reports a
+real conflict or its current evidence is invalidated; the merge queue itself
+tests the exact integration commit.
 
-## What is left (68, once the stack lands)
+## Dirty PR #205 and its clean replacement
 
-| Stream | Open |
-|---|---|
-| C9 | ~21 — C9.11 onward, plus the new exports/accounting item split from C9.08 |
-| C10 | 18 — updater + React Native, untouched |
-| C11 | 17 — journeys through the C11.17 final gate, untouched |
-| F01–F12 | 12 |
-| C1.27 | 1 — dependency-blocked on the remaining C5–C9 work |
+PR **#205** is the stale Dependabot ESLint update. Its automatic rebase onto
+main produced malformed YAML:
 
-C7.17 is no longer blocked or open: broadcasts, automations and reports now all
-ask §30's segment model.
+- original pre-rebase head:
+  `f53456686aa48f7a5cbb11cb98fd67e9ce7e5b5b`
+- malformed rebased head:
+  `ac97c357293a8ea9c860a0ed47b9ae746e2bafda`
+- failure: duplicate `picomatch@4.0.7` package and snapshot mapping keys in
+  `pnpm-lock.yaml`; every CI job failed during `pnpm install --frozen-lockfile`
+  before tests could run.
 
-## Next item
+Clean replacement **#271** was regenerated from current `main`, passed a
+frozen install, dependency audit, typecheck, lint, and its first complete PR
+CI, then was rebased onto #270 to obtain fresh evidence. A provenance comment
+is on #205:
+`https://github.com/CampDenman/freeholder/pull/205#issuecomment-5554869419`.
 
-The first unchecked item whose dependencies are complete — expect that to be in
-the C9.11+ block once #238 and #239 land. **C10.19** (collapse the migration
-chain into one reviewed baseline) is deliberately scheduled after C10's own
-tables and before C11; do not pull it forward.
+**Leave #205 open until #271 is actually merged.** Then add a final comment
+linking the replacement merge commit and close #205 as superseded. This is the
+same rule used for export PR #244: replacement code must be on `main` before a
+dirty original is closed.
 
-## Standing instruction from the owner
+## Remaining safe dependency queue
 
-**Every feature ships its admin screens in the same change as its services.**
-"Definitely always need full admin functionality." A service-layer-only PR is
-unfinished.
+After #271 is actually merged and #205 is closed, advance exactly one safe PR
+at a time:
 
-**The standard is a diamond, not a shippable v1.** Until V1.0 the objective is
-a codebase with no detectable flaw; refactoring is what happens after release,
-not now. Where a choice is between "works" and "true", take true and write down
-why at the call site.
+1. **#204** — `@types/react-dom` 19.2.3 → 19.2.5
+2. **#202** — Nodemailer 9.0.3 → 9.1.1
+3. **#108** — `typescript-eslint` 8.65.0 → 8.67.0
+4. **#87** — `@types/node` 26.1.1 → 26.4.1
 
-## Things this stretch learned the hard way
+For each: rebase with `gh pr update-branch <n> --rebase`, record the new head,
+wait for the complete fresh PR matrix, queue it, and verify the actual merge
+before touching the next one. A rebase can mechanically corrupt a lockfile, as
+#205 proved; always inspect the dependency diff and frozen-install log.
 
-- **A stored column that nothing reads is a defect, not a placeholder.**
-  `automations.entry_segment_id` had been written since C9.01 and never read,
-  so an automation given an audience ran for everybody — including the people
-  it was written to exclude. Its admin form also never submitted the field, and
-  `saveAutomation` writes `?? null`, so renaming a rule silently widened it.
-  When adopting a stored-but-unused field, check the write path *and* the form.
-- **Consent has to be recorded by somebody.** C9.06's send gate asked
-  `contacts.canContact("marketing", "email")`, which treats absent evidence as
-  refusal — and nothing on the platform had ever recorded that evidence, so
-  every confirmed subscriber was "denied". §2096 says the double opt-in *is*
-  the evidence; `newsletters.confirm` now records the grant and `unsubscribe`
-  the withdrawal. A gate is only as good as the thing that feeds it.
-- **A test that accepts either outcome is not a test.** `broadcasts` asserted
-  `sent + failed === 3` and passed while every send was being refused for want
-  of a verified bulk sender. Assert the outcome you mean.
-- **Provider feedback must be matched on the delivery, not the address.** The
-  same person is usually on several campaigns; crediting a bounce to whichever
-  mailed them most recently is a wrong number rather than a missing one.
-- **Registries beat cross-module imports.** Both the funnel (C9.07) and the
-  revenue dimensions (C9.08) put the vocabulary in core and let modules
-  register at import time — a module that is not installed simply has no stage
-  or source. Core still may not import a module: the "revenue by location"
-  source lives in `invoicing` rather than `core/scheduling` for exactly that
-  reason.
-- **Say the basis on the screen.** A cut that counts line values will not add
-  up to the revenue total, and an owner who notices without being told assumes
-  something is broken.
-- **Drizzle's builder can qualify a column in `group by` and not in `select`**,
-  which Postgres rejects. For a grouped expression, write the query with
-  `ctx.tx.execute(sql\`…\`)` and `group by 1, 2`.
-- **Raw `sql\`\`` will not bind a `Date`.** Pass
-  `${d.toISOString()}::timestamptz`.
-- **`.next/types` poisons `tsc`** after switching branches — `rm -rf .next`
-  before believing a typecheck failure.
-- **Do not stack heavy local runs.** Two `eslint` runs plus a `tsc` starved
-  each other into 10-minute timeouts. Run `node scripts/fast-gates.mjs` once,
-  in the foreground.
+Do not blindly merge these deliberate compatibility changes:
 
-## Running several branches at once
+- **#203 Next 16.3.4.** Current head
+  `de5cc9237c2df3cd1990766550c0126130fde7cc` fails application, browser, and
+  image builds because Turbopack tries to hash the Sharp platform package
+  `@img/sharp-libvips-linux-x64` as a file and receives `EISDIR` / `os error
+  21`. Its separate unit-shard failure was a statement-timeout/flaky truncate.
+  Treat this as dedicated Next/Sharp compatibility work.
+- **#201 @changesets/cli 3.0.1.** Major release-tooling change; review release
+  automation and generated notes before updating.
+- **#109 TypeScript 6.0.3.** Major compiler change; validate with the final
+  typescript-eslint combination rather than in isolation.
+- **#83 @types/jsdom 30.0.0.** Major ambient-type change; review together with
+  the runtime/testing stack.
 
-Parallel authoring works; the machinery around it is what costs time, and it is
-now built. What was learned setting it up:
+## Transaction-boundary architecture now on main
 
-- **`MASTER.md` is 515 KB.** An agent told to "read §4.16" will open the whole
-  file and stall. Extract the range it needs (`sed -n 'A,Bp'`) into a small
-  brief beside its worktree, and edit the file with a targeted `Edit` on a
-  unique string rather than reading it back.
-- **`node scripts/fast-gates.mjs` with no arguments takes over ten minutes**
-  here — lint alone has hit 491s — which is longer than a subagent's stall
-  watchdog allows for one command. Run it in slices: typecheck/license/release
-  notes/plan gate together, then contract suites, then `npx eslint .` alone.
-- **One database per worktree.** Two vitest processes on the same database
-  truncate each other's fixtures, and the failure looks exactly like a flaky
-  test in an unrelated suite. `freeholder_test_1..6` exist for this; each
-  worktree's `.env` points at its own.
-- Worktrees live beside the repo (`../fh-<lane>`), never inside it — git
-  refuses a worktree it discovers under another checkout.
-- Reserve a migration number range per lane before starting. Two branches
-  taking the same number cannot be fixed downstream.
+`src/core/service.ts` now exports `defineOrchestratedService`.
 
-## Restacking: the places that always collide
+Use it only for a public synchronous workflow that must cross a slow provider
+boundary:
 
-Every squash puts the other branches behind. All are "keep both":
+- It runs the public handler with **no database transaction open**.
+- It uses the same permission, human/agent, step-up, input, rate-limit, and
+  output gates as an ordinary service.
+- It refuses `options.tx`, so `ctx.call` cannot accidentally move provider I/O
+  back underneath another service transaction.
+- Every database mutation remains a short ordinary `defineService` phase and
+  therefore retains atomic writes, caller authorization, audit records, and
+  post-commit event dispatch.
+- Private caller-authorized phases declare `external: false`. They retain the
+  original caller identity but are omitted from HTTP, OpenAPI, and MCP.
+- Add every `external: false` phase to the exact inventory in
+  `tests/core/internal-services.test.ts`.
+- Register every phase in its module service array. An unregistered phase is
+  not a structural boundary.
 
-1. `db/migrations/meta/_journal.json` — keep both entries, ordered by `idx`.
-   Reserve numbers across in-flight branches: C9.06 took `0137` and C9.08 was
-   numbered `0138` up front to avoid the collision.
-2. `src/modules/index.ts` — keep both manifests.
-3. `MASTER.md` §43 — the other branch's checked item plus this one's.
-4. All three `locales/*.json`, at the same closing brace.
+Do not use `permission: "system"` merely to hide a phase. That would erase the
+caller authorization property. Do not call `db()` from a transactional service
+to obtain a second connection. Do not pass public OAuth `code`, raw state, or
+credentials through an audit-visible field; the new phase inputs deliberately
+use redacted key names such as `stateToken`, `credentials`, and `response`.
 
-**Do not resolve 1 or 4 by hand.** `node scripts/resolve-append-conflicts.mjs`,
-run inside the conflicted worktree mid-rebase, does both by meaning rather than
-by text: it keeps what main has and adds what the branch added, computed from
-git's own three stages. It refuses, loudly, when both sides changed the same
-key — that is a real disagreement about one string and not a merge to automate.
+The structural guard is
+`tests/core/long-running-service-boundary.test.ts`. It follows local helpers
+reachable from `defineService` handlers and rejects known provider methods and
+functions there. Extend its reviewed provider-name set whenever a new adapter
+operation is introduced.
 
-Locale files are **not sorted**, so append before the closing brace rather than
-re-sorting.
+## Provider workflows completed in #270
 
-## How we land work
+All five OAuth completion paths now follow claim → provider → apply:
 
-- Name the §43 ID in the product change. Check a box only in the same change
-  that supplies the evidence MASTER.md asks for.
-- If an item is too large for one reviewable change, **split it in §43 first**
-  (§43.17.1), with the reasoning in the entry.
-- If an item's entities are not in §§1–42, the doc entry lands in the same PR
-  (CLAUDE.md), or in a spec-only PR first.
-- Commits are DCO signed-off (`git commit -s`).
-- `main` is protected: PR + green checks only, merged through a **merge queue**
-  (ruleset "main merge queue"). `gh pr merge <n> --auto --squash` arms an entry;
-  the queue picks the strategy, so it will say so rather than take yours.
-  "Require branches to be up to date" is deliberately **off** — the queue tests
-  the batch against what it will actually merge into, so forcing every open PR
-  to re-run after each merge was the ~50-minute serial floor and bought
-  nothing. The queue needs `merge_group` in `ci.yml`; without it every merge
-  stalls an hour and is dropped.
-- Retargeting a PR after its base merges can leave a **stale DCO check** that
-  never re-runs and never passes. Amending the commit (`git commit --amend
-  --no-edit -s`) gives a fresh sha and a fresh check. Closing and reopening
-  does not, and it clears auto-merge.
-- Apache-2.0 SPDX on new files. One contact spine. One transaction via
-  `ctx.call` / `ctx.callAsSystem`. Integer minor-unit money. Light+dark
-  EN/FR/ES WCAG AA.
+- `mail.completeOAuth`
+- `connections.completeCalendarOAuth`
+- `connections.completeMailReadOAuth`
+- `signupContactImports.completeOAuth`
+- `social.completeOAuth`
 
-## Constraints
+The one-time state claim commits before the single-use provider code is spent.
+A failed provider exchange therefore leaves the state consumed, preserving
+the prior replay semantics without holding one pool connection while asking
+for another. The provider exchange and identity lookup run outside every DB
+transaction; a new short phase atomically stores the validated credentials,
+capabilities, senders, or profile.
 
-- Vitest `testTimeout` / `hookTimeout` are 30s, and `fileParallelism` is off.
-  Charge `await ready()` to `beforeAll(..., 60_000)`: boot wires every module
-  and takes several seconds, and paying for it inside the first `beforeEach`
-  fails as an unrelated timeout.
-- Tests run against `TEST_DATABASE_URL` (`freeholder_test`) and migrate
-  themselves through `tests/setup/migrate.ts`. The dev database is separate and
-  is not what a test failure is talking about.
-- Migrations are hand-written. Only `_journal.json` and four legacy snapshots
-  are tracked, so `db:generate` dumps the whole schema and is the wrong tool.
-- `npm run gates` is the first filter, not the last word: the browser, recipe,
-  SEO and upgrade gates need Docker or a built app and only run in CI.
-- Do not check C3/C4/C6 boxes without the evidence line §43 shows.
-- **Never merge Law Firm Edition #104 or the Dependabot PRs unless asked.**
+Signup provider contact list/stage flows were also split:
+
+- a private source query verifies the portal customer, current policy,
+  start eligibility, account ownership, provider, capability, allowed fields,
+  and limit;
+- token refresh and provider paging happen with no service transaction open;
+- staging revalidates customer, policy, account/provider identity, and the
+  current maximum before writing the selected rows.
+
+Public service names and input/output shapes are unchanged. The changeset
+`provider-workflows-without-open-transactions.md` is the owner-facing release
+note and has been rewritten for clarity in the #273 documentation follow-up.
+
+## Media alt-text follow-up in #273
+
+PR #273 applies the same boundary to `media.generateAltTextSuggestion`:
+
+- private source query verifies a ready, non-trashed image and snapshots its
+  storage key, MIME type, variants, checksum, and authored alt text;
+- preview reads and `provider.suggest()` run outside a transaction;
+- private apply mutation locks the current asset and compares source identity
+  plus authored text before superseding/storing suggestions;
+- a concurrent image or alt-text edit wins and produces a safe conflict rather
+  than being overwritten;
+- the public human-only service name, hourly rate limit, output, review flow,
+  audit, and event behavior remain intact.
+
+Local evidence for #273:
+
+- `npm run typecheck` — passed
+- `npm run lint` — passed
+- media/projection/boundary suite — 4 files, 48 tests passed
+- changelog gate — passed
+- schema compatibility gate — no migrations changed
+- `git diff --check` — passed
+
+Release note: `.changeset/generate-alt-text-without-open-transactions.md`.
+
+## Remaining long-running media transactions
+
+Do these as bounded, separately reviewable PRs. `src/core/media/service.ts` is
+large and several flows need failure semantics, not a mechanical wrapper.
+
+Highest priority:
+
+1. **Direct/proxy upload lifecycle:** `uploadAsset`, `beginUpload`,
+   `uploadStatus`, `signUploadParts`, `completeUpload`,
+   `registerStoredOriginal`, and `abortUpload` currently mix storage,
+   multipart-provider, scanning/rendition, and DB work inside service
+   transactions. Preserve the invariant from the file header: an object with
+   no row is recoverable litter; a row pointing to a missing object is a broken
+   customer asset.
+2. **Rescan:** `media.rescan` reads storage, calls the malware scanner, builds
+   renditions, and writes storage inside its transaction. Use a source snapshot
+   and apply-time comparison like alt text. Track newly written objects so a
+   losing apply can leave only sweepable orphans, never attach stale variants.
+3. **Watermark backfill:** `media.backfillWatermarks` performs a batch of
+   storage reads, image processing, storage writes, and row updates in one
+   transaction. Prefer one durable unit per asset with short claim/apply phases
+   rather than moving the whole batch into one orchestrator.
+4. **Permanent purge:** `media.purge` and `media.purgeExpired` delete external
+   objects before deleting the DB row. A storage success followed by DB rollback
+   leaves a visible row whose bytes are gone. Design this around durable cleanup
+   or DB-first invisibility plus orphan sweeping; do not merely move the same
+   calls around. Preserve owner confirmation and the 30-day trash window.
+5. **Resolution queries:** `resolveImage` and `resolveAsset` await storage URL
+   generation inside query transactions. Determine whether each configured
+   adapter performs network I/O before changing them; do not assume every
+   async method is slow.
+
+Also inspect scheduled cleanup helpers near the end of the media service. They
+are not necessarily service-owned transactions, but the same external/DB
+partial-failure rules apply.
+
+## Merge-queue failure that must not be forgotten
+
+PR #270 passed its entire PR matrix. Its merge-group run **33993046449** then
+failed `Tests (19/20)` at `tests/core/mail-outbox-crypto.test.ts:60`, yet GitHub
+still reports #270 merged at `2026-09-05T21:34:13Z` with merge commit
+`62d7b73cdf653aa421b110812339011c8c5a0cc6`.
+
+Root cause of the test failure: the test changed only the final Base64URL
+character. When that character contains unused padding bits, two characters
+can decode to identical ciphertext, so authenticated decryption correctly did
+not throw. PR #272 flips a decoded ciphertext byte and re-encodes it, making
+the tamper real and deterministic.
+
+Separate from the test fix, audit the GitHub ruleset/required-check mapping:
+the merge-group workflow concluded `failure`, aggregate `checks` was skipped,
+and the PR nevertheless merged. Do not assume branch protection is enforcing
+the intended aggregate until that configuration is explained and tested. No
+repository ruleset was changed in this sprint.
+
+## Validation and local-process lessons
+
+The #270 focused suite passed 10 files / 89 tests. A second focused run initially
+showed foreign-key and duplicate-key errors because the interrupted session
+had left an older Vitest process running against the same test database. After
+stopping only those orphaned Freeholder processes, the isolated suite passed.
+
+`fileParallelism: false` protects files within one Vitest process; it cannot
+protect one process from a second process using the same database. Before a
+database suite, check for orphaned commands with a read-only process query and
+never run two Freeholder Vitest processes against the same `TEST_DATABASE_URL`.
+
+Avoid running multiple full ESLint/typecheck processes simultaneously on this
+machine. They remained correct but starved each other and took several times
+longer. Run the database suite serially and the CPU-heavy gates sequentially.
+
+## Release notes updated here
+
+Freeholder assembles release notes from `.changeset/*.md`; there is no manually
+maintained root `CHANGELOG.md`. This handoff update refreshes the two notes for
+the transaction work:
+
+- `.changeset/provider-workflows-without-open-transactions.md`
+- `.changeset/generate-alt-text-without-open-transactions.md`
+
+Both are written for an owner: they explain the reliability/concurrency effect
+and preserved behavior without exposing internal implementation as the headline.
+Do not add a changeset for #272 because it changes only a flaky test.
+
+## Immediate restart checklist
+
+1. Read `CLAUDE.md`, then run `git status` in both worktrees.
+2. Refresh PRs #272, #271, and #273 from GitHub; this file is only a snapshot.
+3. Push the release-note/handoff follow-up on #273 if it is still local.
+4. Land #272 through the merge queue and verify the actual merge.
+5. Land #271, verify the actual merge, then close dirty #205 with provenance.
+6. Land #273 after rebasing/updating only as needed and obtaining fresh CI.
+7. Audit why failed merge-group run 33993046449 did not prevent #270 merging.
+8. Advance safe dependency PR #204, then #202, #108, and #87 one at a time.
+9. Start the next media transaction PR with `media.rescan` or the upload
+   lifecycle; do not combine every media flow into one review.
+
+The next sprint should optimize for proven invariants, not PR count. A queue
+command, a green stale check, and an apparently harmless lockfile rebase have
+all been shown insufficient in this exact repository; verify the artifact and
+the actual merge each time.

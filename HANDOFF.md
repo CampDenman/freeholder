@@ -5,6 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # Handoff — 2026-08-28
 
+> Historical snapshot only. The current sprint state, active PR order, audit
+> findings, and restart checklist are in `RESTART_HANDOFF.md` (2026-09-05).
+
 Written for whoever picks this up next, human or agent. `MASTER.md` remains the
 only source of truth for product, architecture and status; this document is a
 snapshot of *where the work is* and *what is worth knowing that the code does
