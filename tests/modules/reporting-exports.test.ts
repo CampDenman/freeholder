@@ -14,32 +14,54 @@
 // adding its lines and a file that is short by the postage produces a wrong
 // number *inside the accounting system*, where a business is least equipped to
 // notice it.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { resetMailForTests } from "@/adapters/mail";
 import { db } from "@/core/db";
+import { resetEnvForTests } from "@/core/env";
 import { users } from "@/core/auth/schema";
-import { mailSuppressions } from "@/core/mail/schema";
+import { auditLog } from "@/core/events/schema";
+import { mailDeliveries, mailOutbox, mailSuppressions } from "@/core/mail/schema";
+import { decryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { parseCsv } from "@/core/import/csv";
 import { csvFile, data, text as textCell } from "@/core/reporting/csv";
 import { moneyDecimal } from "@/core/i18n";
 import { invoiceLines, invoices } from "@/modules/invoicing/schema";
 import { resolveContact } from "@/core/contacts/service";
-import { exportRuns } from "@/modules/reporting/export-schema";
-import { headerFor, linesFor } from "@/modules/reporting/export-shapes";
+import {
+  exportDefinitions,
+  exportRunDeliveries,
+  exportRuns,
+} from "@/modules/reporting/export-schema";
+import { exportDate, headerFor, linesFor } from "@/modules/reporting/export-shapes";
+import { deliverScheduledExports } from "@/modules/reporting/jobs";
 import {
   deleteExport,
-  deliverExportRun,
+  downloadExportForRecipient,
   exportFile,
   listExportRuns,
   listExports,
-  reclaimExportRuns,
+  queueExportRunDelivery,
   runExport,
   saveExport,
+  settleExportRun,
 } from "@/modules/reporting/service";
 import { ready } from "@/core/runtime";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const SYSTEM = { kind: "system" } as const;
+
+const changedEnvironment = new Map<string, string | undefined>();
+
+function environment(values: Record<string, string | undefined>): void {
+  for (const [name, value] of Object.entries(values)) {
+    if (!changedEnvironment.has(name)) changedEnvironment.set(name, process.env[name]);
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+  resetEnvForTests();
+  resetMailForTests();
+}
 
 let sequence = 0;
 
@@ -149,6 +171,7 @@ async function defineExport(options: {
   recipients?: string[];
   scheduled?: boolean;
   basis?: "paid" | "issued";
+  timezone?: string;
   accountCode?: string | null;
   taxCode?: string | null;
 }) {
@@ -158,7 +181,7 @@ async function defineExport(options: {
       shape: options.shape,
       currency: options.currency,
       period: "previous_month",
-      timezone: "UTC",
+      timezone: options.timezone ?? "UTC",
       basis: options.basis ?? "paid",
       scheduled: options.scheduled ?? false,
       recipients: options.recipients ?? [],
@@ -366,6 +389,8 @@ describe("the accounting column shapes", () => {
     const [, row] = parseCsv(file);
     expect(row![0]).toBe("'=HYPERLINK(\"http://evil\")");
     expect(row![1]).toBe("-12.34");
+    const [, newline] = parseCsv(csvFile(["Customer"], [[textCell("\n=1+1")]]));
+    expect(newline![0]).toBe("'\n=1+1");
   });
 
   it("writes money as an exact decimal without dividing", () => {
@@ -386,11 +411,27 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
   }, 60_000);
 
   beforeEach(async () => {
+    environment({
+      SESSION_SECRET: "report-export-test-secret-material-32-bytes",
+      MAIL_ADAPTER: "console",
+      SMTP_HOST: undefined,
+      MAIL_FROM: undefined,
+    });
     await truncateSpine();
     await db()
       .insert(users)
       .values({ id: OWNER.userId, email: "owner@example.test", role: "owner" })
       .onConflictDoNothing();
+  });
+
+  afterEach(() => {
+    for (const [name, value] of changedEnvironment) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    changedEnvironment.clear();
+    resetEnvForTests();
+    resetMailForTests();
   });
 
   afterAll(async () => {
@@ -537,7 +578,7 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
     const built = await runExport.call({ id: definition.id, trigger: "schedule" }, OWNER);
     expect(built.status).toBe("pending");
 
-    const settled = await deliverExportRun.call({ runId: built.id }, OWNER);
+    const settled = await queueExportRunDelivery.call({ runId: built.id }, OWNER);
     expect(settled.status).toBe("failed");
     expect(settled.deliveredCount).toBe(0);
     expect(settled.deliveredAt).toBeNull();
@@ -576,14 +617,78 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
       scheduled: true,
     });
     const built = await runExport.call({ id: definition.id }, OWNER);
-    const settled = await deliverExportRun.call({ runId: built.id }, OWNER);
+    const settled = await queueExportRunDelivery.call({ runId: built.id }, OWNER);
 
     expect(settled.status).toBe("failed");
     expect(settled.error).toContain("no delivering mail adapter");
   });
 
-  it("reclaims a delivery that stopped part-way, and leaves a fresh one alone", async () => {
-    const buyer = await person("stalled");
+  it("fails the run when one recipient fails, without duplicating an address", async () => {
+    environment({
+      MAIL_ADAPTER: "smtp",
+      SMTP_HOST: "smtp.example.test",
+      MAIL_FROM: "books@example.test",
+    });
+    await db().insert(mailSuppressions).values({
+      email: "bad@example.test",
+      reason: "hard_bounce",
+      provider: "ses",
+    });
+    const buyer = await person("partial");
+    await invoice({
+      contactId: buyer.id,
+      currency: "CAD",
+      at: inPreviousMonth(),
+      lines: [
+        {
+          description: "Work",
+          quantityMicros: 1_000_000,
+          unitAmountMinor: 1_500,
+          subtotalMinor: 1_500,
+        },
+      ],
+    });
+    const definition = await defineExport({
+      name: "Two recipients",
+      shape: "csv",
+      currency: "CAD",
+      recipients: ["GOOD@example.test", "bad@example.test", "good@example.test"],
+      scheduled: true,
+    });
+    expect(definition.recipients).toEqual(["good@example.test", "bad@example.test"]);
+
+    const built = await runExport.call({ id: definition.id }, OWNER);
+    const prepared = await queueExportRunDelivery.call({ runId: built.id }, OWNER);
+    expect(prepared).toMatchObject({ status: "pending", attempts: 1 });
+    const copies = await db()
+      .select()
+      .from(exportRunDeliveries)
+      .where(eq(exportRunDeliveries.runId, built.id));
+    expect(copies).toHaveLength(2);
+    expect(copies.find((each) => each.recipient === "bad@example.test")?.state).toBe(
+      "failed",
+    );
+    const good = copies.find((each) => each.recipient === "good@example.test")!;
+    await db()
+      .update(mailDeliveries)
+      .set({ status: "submitted", submittedAt: new Date() })
+      .where(eq(mailDeliveries.id, good.mailDeliveryId!));
+
+    const settled = await settleExportRun.call({ runId: built.id, attempt: 1 }, SYSTEM);
+    expect(settled).toMatchObject({
+      state: "failed",
+      run: { status: "failed", deliveredCount: 1, attempts: 1 },
+    });
+    expect(settled.run.error).toContain("bad@example.test");
+  });
+
+  it("settles only from provider evidence and gives the outsider an expiring private link", async () => {
+    environment({
+      MAIL_ADAPTER: "smtp",
+      SMTP_HOST: "smtp.example.test",
+      MAIL_FROM: "books@example.test",
+    });
+    const buyer = await person("ledger");
     await invoice({
       contactId: buyer.id,
       currency: "CAD",
@@ -591,29 +696,148 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
       lines: [{ description: "Work", quantityMicros: 1_000_000, unitAmountMinor: 2_500, subtotalMinor: 2_500 }],
     });
     const definition = await defineExport({
-      name: "Crashy",
+      name: "Provider truth",
       shape: "csv",
       currency: "CAD",
       recipients: ["accounts@example.test"],
       scheduled: true,
+      timezone: "America/Vancouver",
     });
     const built = await runExport.call({ id: definition.id }, OWNER);
+    expect(built).toMatchObject({
+      definitionName: "Provider truth",
+      timezone: "America/Vancouver",
+    });
+    // A queued/recovered run describes the definition that built it, even if
+    // the owner edits next month's name and timezone before preparation runs.
+    await saveExport.call(
+      {
+        id: definition.id,
+        name: "Renamed for next month",
+        shape: definition.shape,
+        basis: definition.basis,
+        currency: definition.currency,
+        period: definition.period,
+        timezone: "UTC",
+        scheduled: definition.scheduled,
+        recipients: definition.recipients,
+        dateFormat: definition.dateFormat,
+        itemCode: definition.itemCode,
+        accountCode: definition.accountCode,
+        taxCode: definition.taxCode,
+      },
+      OWNER,
+    );
+    const prepared = await queueExportRunDelivery.call({ runId: built.id }, OWNER);
+    expect(prepared).toMatchObject({ status: "pending", attempts: 1, deliveredCount: 0 });
+    const repeated = await queueExportRunDelivery.call({ runId: built.id }, OWNER);
+    expect(repeated).toMatchObject({ status: "pending", attempts: 1 });
 
-    // A run that has only just started is still going, and must not be
-    // declared dead by a sweep that happens to run a second later.
-    expect((await reclaimExportRuns.call({}, SYSTEM)).reclaimed).toBe(0);
+    const copies = await db()
+      .select()
+      .from(exportRunDeliveries)
+      .where(eq(exportRunDeliveries.runId, built.id));
+    expect(copies).toHaveLength(1);
+    const [copy] = copies;
+    const [mail] = await db()
+      .select()
+      .from(mailDeliveries)
+      .where(eq(mailDeliveries.id, copy!.mailDeliveryId!));
+    expect(copy).toMatchObject({ recipient: "accounts@example.test", state: "queued" });
+    expect(mail).toMatchObject({ status: "queued", attempts: 0 });
 
-    // The transaction that was delivering it died: nothing wrote an outcome,
-    // and nothing in that transaction could have.
+    // Queue acceptance is not provider submission and cannot paint the run green.
+    const waiting = await settleExportRun.call({ runId: built.id, attempt: 1 }, SYSTEM);
+    expect(waiting.state).toBe("pending");
+    expect(waiting.run.status).toBe("pending");
+
+    const [outbox] = await db()
+      .select()
+      .from(mailOutbox)
+      .where(eq(mailOutbox.deliveryId, mail!.id));
+    const message = JSON.parse(
+      decryptMailOutbox(outbox!.encryptedMessage, mail!.id),
+    ) as { text: string };
+    const inclusiveEnd = new Date(built.periodTo.getTime() - 1);
+    const localEnd = exportDate(inclusiveEnd, "iso", "America/Vancouver");
+    const utcEnd = exportDate(inclusiveEnd, "iso", "UTC");
+    expect(localEnd).not.toBe(utcEnd);
+    expect(message.text).toContain("Your Provider truth export");
+    expect(message.text).not.toContain("Renamed for next month");
+    expect(message.text).toContain(`to ${localEnd}`);
+    expect(message.text).not.toContain(`to ${utcEnd}`);
+    const token = /\/report-exports\/([A-Za-z0-9_-]+)/.exec(message.text)?.[1];
+    expect(token).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(copy!.tokenHash).not.toBe(token);
+    expect(outbox!.encryptedMessage).not.toContain(token!);
+    expect((await failure(downloadExportForRecipient.call({ token: token! }, SYSTEM))).code).toBe(
+      "not_found",
+    );
+
     await db()
-      .update(exportRuns)
-      .set({ startedAt: sql`now() - interval '2 hours'` })
-      .where(eq(exportRuns.id, built.id));
+      .update(mailDeliveries)
+      .set({ status: "submitted", submittedAt: new Date() })
+      .where(eq(mailDeliveries.id, mail!.id));
+    const sent = await settleExportRun.call({ runId: built.id, attempt: 1 }, SYSTEM);
+    expect(sent).toMatchObject({
+      state: "delivered",
+      run: { status: "delivered", deliveredCount: 1, attempts: 1 },
+    });
+    const download = await downloadExportForRecipient.call({ token: token! }, SYSTEM);
+    expect(download.filename).toMatch(/\.csv$/);
+    expect(download.csv).toContain("Invoice Number");
+    expect(JSON.stringify(await db().select().from(auditLog))).not.toContain(token!);
+    expect(
+      (await failure(queueExportRunDelivery.call({ runId: built.id }, OWNER))).code,
+    ).toBe("conflict");
 
-    expect((await reclaimExportRuns.call({}, SYSTEM)).reclaimed).toBe(1);
-    const [after] = await db().select().from(exportRuns).where(eq(exportRuns.id, built.id));
-    expect(after!.status).toBe("failed");
-    expect(after!.error).toContain("never reported an outcome");
+    await db()
+      .update(exportRunDeliveries)
+      .set({ expiresAt: new Date(copy!.createdAt.getTime() + 1) })
+      .where(eq(exportRunDeliveries.id, copy!.id));
+    expect((await failure(downloadExportForRecipient.call({ token: token! }, SYSTEM))).code).toBe(
+      "not_found",
+    );
+
+    // Provider feedback remains authoritative after initial acceptance. A
+    // late bounce removes the green state and disables that recipient's link.
+    await db()
+      .update(exportRunDeliveries)
+      .set({ expiresAt: sql`now() + interval '1 day'` })
+      .where(eq(exportRunDeliveries.id, copy!.id));
+    await db()
+      .update(mailDeliveries)
+      .set({ status: "bounced", lastError: "Mailbox rejected it" })
+      .where(eq(mailDeliveries.id, mail!.id));
+    const bounced = await settleExportRun.call({ runId: built.id, attempt: 1 }, SYSTEM);
+    expect(bounced).toMatchObject({
+      state: "failed",
+      run: { status: "failed", deliveredCount: 0, attempts: 1 },
+    });
+    expect((await failure(downloadExportForRecipient.call({ token: token! }, SYSTEM))).code).toBe(
+      "not_found",
+    );
+
+    // An explicit retry picks up a corrected address from the definition;
+    // attempt one remains an immutable record of the bounced address.
+    await db()
+      .update(exportDefinitions)
+      .set({ recipients: ["corrected@example.test"] })
+      .where(eq(exportDefinitions.id, definition.id));
+    const retried = await queueExportRunDelivery.call({ runId: built.id }, OWNER);
+    expect(retried).toMatchObject({
+      status: "pending",
+      attempts: 2,
+      recipients: ["corrected@example.test"],
+    });
+    const allCopies = await db()
+      .select()
+      .from(exportRunDeliveries)
+      .where(eq(exportRunDeliveries.runId, built.id));
+    expect(allCopies).toHaveLength(2);
+    expect(allCopies.find((each) => each.attempt === 2)?.recipient).toBe(
+      "corrected@example.test",
+    );
   });
 
   it("asks for a period once, however many times it is asked", async () => {
@@ -629,6 +853,27 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
     const first = await runExport.call({ id: definition.id }, OWNER);
     const second = await runExport.call({ id: definition.id }, OWNER);
     expect(second.id).toBe(first.id);
+    expect(await listExportRuns.call({ id: definition.id }, OWNER)).toHaveLength(1);
+
+    // A delivery is never silently repeated, but a build refusal has no file
+    // to deliver and can recover in place once its cause is corrected.
+    await db()
+      .update(exportRuns)
+      .set({
+        status: "failed",
+        content: null,
+        filename: null,
+        bytes: null,
+        sha256: null,
+        failedAt: new Date(),
+        error: "The source was temporarily too large.",
+      })
+      .where(eq(exportRuns.id, first.id));
+    const rebuilt = await runExport.call({ id: definition.id }, OWNER);
+    expect(rebuilt).toMatchObject({ id: first.id, status: "built", attempts: 0 });
+    expect((await exportFile.call({ runId: rebuilt.id }, OWNER)).csv).toContain(
+      "Invoice Number",
+    );
     expect(await listExportRuns.call({ id: definition.id }, OWNER)).toHaveLength(1);
   });
 
@@ -690,6 +935,23 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
     );
     expect(refused.code).toBe("validation");
     expect(refused.message).toContain("recipient");
+
+    // Keep the invariant below the service too. PostgreSQL's array_length on
+    // an empty array is NULL (and CHECK accepts NULL), so this specifically
+    // guards the cardinality expression used by the migration.
+    const databaseRefused = await db()
+      .insert(exportDefinitions)
+      .values({
+        name: "Impossible empty schedule",
+        shape: "csv",
+        currency: "CAD",
+        scheduled: true,
+        recipients: [],
+      })
+      .catch((error: unknown) => error);
+    expect(
+      String((databaseRefused as { cause?: unknown })?.cause ?? databaseRefused),
+    ).toContain("export_definitions_scheduled_has_recipient");
   });
 
   it("will not let the database record a delivery to nobody", async () => {
@@ -716,6 +978,53 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
     );
   });
 
+  it("lets a new period run after the preceding period failed", async () => {
+    const buyer = await person("next-period");
+    await invoice({
+      contactId: buyer.id,
+      currency: "CAD",
+      at: inPreviousMonth(),
+      lines: [
+        {
+          description: "Work",
+          quantityMicros: 1_000_000,
+          unitAmountMinor: 500,
+          subtotalMinor: 500,
+        },
+      ],
+    });
+    const definition = await defineExport({
+      name: "Keeps scheduling",
+      shape: "csv",
+      currency: "CAD",
+      recipients: ["accounts@example.test"],
+      scheduled: true,
+    });
+    const built = await runExport.call({ id: definition.id }, OWNER);
+    expect((await queueExportRunDelivery.call({ runId: built.id }, OWNER)).status).toBe(
+      "failed",
+    );
+    await db()
+      .update(exportRuns)
+      .set({
+        periodFrom: sql`${exportRuns.periodFrom} - interval '1 year'`,
+        periodTo: sql`${exportRuns.periodTo} - interval '1 year'`,
+      })
+      .where(eq(exportRuns.id, built.id));
+
+    environment({
+      MAIL_ADAPTER: "smtp",
+      SMTP_HOST: "smtp.example.test",
+      MAIL_FROM: "books@example.test",
+    });
+    await expect(deliverScheduledExports.handler({})).resolves.toEqual({
+      built: 1,
+      queued: 1,
+      failed: 0,
+    });
+    expect(await listExportRuns.call({ id: definition.id }, OWNER)).toHaveLength(2);
+  });
+
   it("shows a scheduled export as due until it has actually been delivered", async () => {
     const buyer = await person("due");
     await invoice({
@@ -740,23 +1049,34 @@ describe.runIf(hasDatabase)("scheduled accounting exports", () => {
     const dayOld = Date.now() - before[0]!.periodTo.getTime() > 24 * 60 * 60 * 1000;
     expect(before[0]!.overdue).toBe(dayOld);
 
-    // Building the file does not settle anything. "Due" means *delivered*, so
-    // a run sitting in `pending` leaves the export due and the next sweep
-    // tries the delivery again — which is the behaviour that turns a bad hour
-    // at the mail provider into a late report rather than a missing month.
+    // Building the file does not settle anything. "Due" means provider-
+    // accepted, so a run sitting in `pending` remains due while the reconciler
+    // follows its durable mail rows.
     const built = await runExport.call({ id: definition.id }, OWNER);
     expect(built.status).toBe("pending");
     expect((await listExports.call({}, OWNER))[0]!.due).toBe(true);
 
     await db()
       .update(exportRuns)
-      .set({ status: "delivered", deliveredAt: new Date(), deliveredCount: 1 })
+      .set({
+        status: "delivered",
+        deliveredAt: new Date(),
+        deliveredCount: 1,
+        attempts: 1,
+      })
       .where(eq(exportRuns.id, built.id));
     const after = await listExports.call({}, OWNER);
     expect(after[0]!.due).toBe(false);
     expect(after[0]!.overdue).toBe(false);
 
-    await deleteExport.call({ id: definition.id }, OWNER);
+    const unconfirmed = await failure(
+      deleteExport.call({ id: definition.id, confirm: false as true }, OWNER),
+    );
+    expect(unconfirmed.code).toBe("validation");
+    expect(await listExportRuns.call({ id: definition.id }, OWNER)).toHaveLength(1);
+
+    await deleteExport.call({ id: definition.id, confirm: true }, OWNER);
     expect(await listExports.call({}, OWNER)).toHaveLength(0);
+    expect(await db().select().from(exportRuns)).toHaveLength(0);
   });
 });

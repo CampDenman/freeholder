@@ -7266,18 +7266,20 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   platform does not do bookkeeping; it refuses to make bookkeeping harder" —
   so this is the shapes those two packages actually accept, delivered on a
   schedule, and not a general ledger.
-  Delivered as two tables on the `reporting` module: what an owner configured,
-  and what actually happened to it. The second is the point. A report an owner
+  Delivered as three tables on the `reporting` module: what an owner configured,
+  what happened to each run, and each recipient copy tied to the mail ledger.
+  The latter two are the point. A report an owner
   reads is wrong *loudly* — they look at it and disbelieve it — while a report
   emailed to a bookkeeper on the first of the month fails by **not arriving**,
   which nobody notices for a quarter. So a run writes a row before it can
   succeed, the row is identified by the period it covers rather than by a
-  timer, and `reports.reclaimExportRuns` — the one `system` service here —
-  marks a run whose delivery transaction died as failed, because a transaction
-  that died cannot write its own failure. The orchestration therefore lives in
-  the job rather than in a service: reclaim, build, deliver, three commits.
-  Building and sending in one transaction would let a failed send roll back the
-  evidence that it failed, which is the same silence with extra steps.
+  timer, and every recipient copy points at the durable `mail_deliveries` row
+  that says what the provider actually did. Building commits first; preparation
+  then writes only recipient, encrypted-mail outbox and queue rows; provider I/O
+  runs after that transaction; and `reports.settleExportRun` applies the ledger
+  outcome in another short transaction. Queue acceptance is never called a
+  delivery, and the five-minute reconciler catches both a stranded attempt and
+  a provider failure reported after initial submission.
   **One export is one currency**, enforced on the query rather than applied
   afterwards, so there is no moment at which two currencies sit in one array
   waiting to be added. §4.9 forbids converting at charge time and both packages
@@ -7305,11 +7307,15 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   are reported beside the total, never turned into credit notes.
   Delivery is a link, not an attachment: an accounting export names every
   customer and what they paid, and an attachment copies that into an inbox, a
-  sent-items folder and every mail server between. A non-delivering adapter is
-  recorded as a failure rather than a delivery, or the console sink would put a
-  green tick on a report reaching nobody. Recipients are plain addresses and
-  deliberately not contacts — the person receiving this is the bookkeeper, and
-  resolving them would file an accountant in the customer list.
+  sent-items folder and every mail server between. Each recipient gets a
+  separate high-entropy, 30-day bearer URL; only its HMAC is stored, and it is
+  usable only once a delivering provider has accepted that recipient's mail.
+  The run also freezes the definition name and timezone, so an edit made while
+  queued cannot rename the message or move the period's displayed boundary.
+  A non-delivering adapter is refused before the credential reaches even a
+  console sink. Recipients are plain addresses and deliberately not contacts —
+  the person receiving this is the bookkeeper, and resolving them would file an
+  accountant in the customer list.
   Admin at `/admin/reports/exports`, linked from reports, with the last
   delivery's outcome on every row and an overdue export said out loud at the
   top. Migration `0158_scheduled_exports.sql`;

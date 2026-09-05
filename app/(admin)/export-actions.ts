@@ -14,7 +14,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
   deleteExport,
-  deliverExportRun,
+  queueExportRunDelivery,
   runExport,
   saveExport,
 } from "@/modules/reporting/service";
@@ -85,7 +85,10 @@ export async function saveExportAction(form: FormData): Promise<void> {
 export async function deleteExportAction(form: FormData): Promise<void> {
   const caller = await actor();
   try {
-    await deleteExport.call({ id: text(form, "id") }, caller);
+    await deleteExport.call(
+      { id: text(form, "id"), confirm: form.get("confirm") === "1" },
+      caller,
+    );
   } catch (error) {
     done("", error);
   }
@@ -99,7 +102,7 @@ export async function runExportAction(form: FormData): Promise<void> {
     const run = await runExport.call({ id, trigger: "manual" }, caller);
     // Committed. Whatever the delivery does next, the run exists and says so.
     if (run.status === "pending") {
-      await deliverExportRun.call({ runId: run.id }, caller);
+      await queueExportRunDelivery.call({ runId: run.id }, caller);
     }
   } catch (error) {
     done("", error);
@@ -111,7 +114,7 @@ export async function retryExportDeliveryAction(form: FormData): Promise<void> {
   const caller = await actor();
   const id = text(form, "id");
   try {
-    await deliverExportRun.call({ runId: text(form, "runId") }, caller);
+    await queueExportRunDelivery.call({ runId: text(form, "runId") }, caller);
   } catch (error) {
     done("", error);
   }

@@ -1,67 +1,95 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Delivering a report on a schedule (MASTER.md §2535, §43 C9.32).
+// Crash-safe accounting export preparation and mail-ledger reconciliation.
 //
-// The orchestration lives here rather than inside one service on purpose, and
-// it is the single most important decision in this item.
-//
-// A service is one transaction (§2 principle 12). Building the file and
-// emailing it in that one transaction would mean that a failed send rolls the
-// run row back with it — so the evidence that a report did not arrive would be
-// destroyed by the very failure that stopped it arriving, and the next sweep
-// would find no trace and try again from nothing. A job handler is *outside*
-// any transaction, so it can do the one thing a service cannot: commit "I am
-// about to deliver this" before attempting the delivery, and commit the
-// outcome afterwards.
-//
-// So one pass is three commits:
-//
-//   1. reclaim  — runs that started delivering and never came back are marked
-//                 failed. Something that crashed cannot write its own
-//                 epitaph; this is what does.
-//   2. build    — the file for the completed period, committed as `pending`.
-//   3. deliver  — the mail, then `delivered` or `failed`.
-//
-// Every step is idempotent on the period, so a worker that was down all
-// weekend makes a report late rather than losing it, and a worker that runs
-// twice does not send an accountant the same month twice.
+// No job holds a service transaction open across provider I/O. Building the
+// file commits first; preparing a delivery writes only export, encrypted-mail
+// outbox and queue rows; core.deliverMail contacts the provider; settlement
+// then reads the durable mail ledger in another short transaction.
 import { defineJob } from "@/core/jobs";
 
 const SYSTEM = { kind: "system" } as const;
 
+export const prepareExportRun = defineJob({
+  name: "reports.prepareExportRun",
+  summary: "Stage one built accounting export in the encrypted mail outbox.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 2,
+  leaseSeconds: 2 * 60,
+  handler: async (data) => {
+    if (typeof data.runId !== "string") {
+      throw new Error("reports.prepareExportRun requires a run id");
+    }
+    const { queueExportRunDelivery } = await import("./export-service");
+    return queueExportRunDelivery.call({ runId: data.runId }, SYSTEM);
+  },
+});
+
+export const settleExportRunDelivery = defineJob({
+  name: "reports.settleExportRun",
+  summary: "Settle one accounting export from durable mail-provider evidence.",
+  retry: { limit: 12, delaySeconds: 30, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 4,
+  leaseSeconds: 2 * 60,
+  handler: async (data) => {
+    if (typeof data.runId !== "string" || !Number.isInteger(data.attempt)) {
+      throw new Error("reports.settleExportRun requires a run id and attempt");
+    }
+    const { settleExportRun } = await import("./export-service");
+    const result = await settleExportRun.call(
+      { runId: data.runId, attempt: Number(data.attempt) },
+      SYSTEM,
+    );
+    // Mail owns its retry policy. This job waits and rechecks; it never calls
+    // the provider itself. The scheduled reconciler remains the durable
+    // backstop if this targeted job exhausts its own retries first.
+    if (result.state === "pending") throw new Error("Mail delivery is still pending.");
+    return result;
+  },
+});
+
+export const reconcileExportDeliveries = defineJob({
+  name: "reports.reconcileExportDeliveries",
+  summary: "Reconcile in-flight exports and late mail-provider failures.",
+  schedule: "*/5 * * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { reconcileExportRuns } = await import("./export-service");
+    return reconcileExportRuns();
+  },
+});
+
 /**
- * Hourly, not on the first of the month at nine.
+ * Hourly, not only on the first of the month.
  *
- * Due-ness is a question about the data ("is there a delivered run for the
- * period that has ended?"), never about the clock, so a sweep that misses its
- * window simply catches up on the next one. A cron that fired once a month
- * would give a single missed tick a month-long consequence.
+ * Due-ness is a data question: whether the completed period has a run accepted
+ * by the configured mail provider. A missed worker tick therefore makes a file
+ * late, never lost. A terminally failed period waits for an explicit retry so
+ * a bad address does not generate an email and notification every hour.
  */
 export const deliverScheduledExports = defineJob({
   name: "reports.deliverScheduledExports",
-  summary: "Build and deliver every scheduled export whose period has closed.",
+  summary: "Build and queue scheduled exports whose closed period has no sent run.",
   schedule: "23 * * * *",
-  // One sender. Two workers picking up the same definition would both build
-  // the same period, and while the unique index on (definition, period) stops
-  // the second copy going out, it would do so by failing a run rather than by
-  // not starting one.
   concurrency: 1,
   handler: async () => {
-    const {
-      listExports,
-      runExport,
-      deliverExportRun,
-      reclaimExportRuns,
-    } = await import("./export-service");
-
-    const { reclaimed } = await reclaimExportRuns.call({}, SYSTEM);
-
+    const { listExports, runExport, queueExportRunDelivery } = await import(
+      "./export-service"
+    );
     const due = (await listExports.call({}, SYSTEM)).filter((each) => each.due);
     let built = 0;
-    let delivered = 0;
+    let queued = 0;
     let failed = 0;
 
     for (const each of due) {
+      const failedThisPeriod =
+        each.lastRun?.status === "failed" &&
+        each.lastRun.periodFrom.getTime() === each.periodFrom.getTime() &&
+        each.lastRun.periodTo.getTime() === each.periodTo.getTime();
+      if (failedThisPeriod) {
+        failed += 1;
+        continue;
+      }
       const run = await runExport.call(
         { id: each.definition.id, trigger: "schedule" },
         SYSTEM,
@@ -72,19 +100,18 @@ export const deliverScheduledExports = defineJob({
       }
       built += 1;
       if (run.status !== "pending") continue;
-
-      // A second transaction, deliberately. See the note at the top: the run
-      // row is already committed, so however this ends there is a row saying
-      // what happened to it.
-      const settled = await deliverExportRun.call({ runId: run.id }, SYSTEM);
-      if (settled.status === "delivered") delivered += 1;
-      else failed += 1;
+      const prepared = await queueExportRunDelivery.call({ runId: run.id }, SYSTEM);
+      if (prepared.status === "failed") failed += 1;
+      else queued += 1;
     }
 
-    // Counts rather than nothing, because a scheduled job whose only output is
-    // a side effect is one nobody can tell has stopped working.
-    return { reclaimed, built, delivered, failed };
+    return { built, queued, failed };
   },
 });
 
-export default [deliverScheduledExports];
+export default [
+  prepareExportRun,
+  settleExportRunDelivery,
+  reconcileExportDeliveries,
+  deliverScheduledExports,
+];

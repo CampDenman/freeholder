@@ -50,7 +50,7 @@ export function data(value: string | number | null | undefined): DataCell {
   return { kind: "data", value: value == null ? "" : value };
 }
 
-const FORMULA_LEAD = /^[=+\-@\t\r]/;
+const FORMULA_LEAD = /^[=+\-@\t\r\n]/;
 
 function render(cell: CsvCell): string {
   const raw = String(cell.value);

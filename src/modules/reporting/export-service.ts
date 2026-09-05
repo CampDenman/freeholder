@@ -18,17 +18,19 @@
 //
 // **A delivery is a thing that can fail.** A report an owner opens is wrong
 // loudly. A report emailed on the first of the month fails by *not arriving*,
-// which nobody notices for a quarter. So the file is built and committed in
-// one transaction and delivered in the next, a run that never finished
-// delivering is reclaimed as a failure rather than left pending, and a failure
-// is a row and a notification rather than an absence.
+// which nobody notices for a quarter. So building, encrypted-outbox staging,
+// provider submission and settlement are separate phases. Recipient copies
+// point at the durable mail ledger, and a failure is a row and a notification
+// rather than an absence.
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid as uuidSchema } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
+import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { formatMoney, translator } from "@/core/i18n";
+import { mailDeliveries } from "@/core/mail/schema";
 import { sendMail } from "@/core/mail/service";
 import { actorString, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { getBusiness } from "@/core/settings/service";
@@ -40,8 +42,10 @@ import {
   EXPORT_RUN_STATUSES,
   EXPORT_SHAPES,
   exportDefinitions,
+  exportRunDeliveries,
   exportRuns,
 } from "./export-schema";
+import { hashExportToken, newExportToken } from "./export-tokens";
 import {
   buildExportCsv,
   exportDate,
@@ -67,7 +71,7 @@ const MAX_ROWS = 20_000;
  * scheduled runs — so a crash is noticed within the hour rather than at the
  * end of the quarter.
  */
-const STALLED_MINUTES = 30;
+const DOWNLOAD_DAYS = 30;
 
 const email = z.string().trim().toLowerCase().email().max(320);
 
@@ -82,7 +86,10 @@ const email = z.string().trim().toLowerCase().email().max(320);
  * `mail_deliveries` and notification deliveries already address an outsider by
  * address alone, for the same reason.
  */
-const recipients = z.array(email).max(20);
+const recipients = z
+  .array(email)
+  .max(20)
+  .transform((values) => [...new Set(values)]);
 
 const definitionRow = row({
   id: uuidSchema,
@@ -104,6 +111,7 @@ const definitionRow = row({
 const runRow = row({
   id: uuidSchema,
   definitionId: uuidSchema,
+  definitionName: z.string(),
   trigger: z.enum(["schedule", "manual"]),
   status: z.enum(EXPORT_RUN_STATUSES),
   periodFrom: timestamp,
@@ -111,6 +119,7 @@ const runRow = row({
   shape: z.enum(EXPORT_SHAPES),
   basis: z.enum(EXPORT_BASES),
   currency: z.string(),
+  timezone: z.string(),
   rowCount: z.number().int(),
   invoiceCount: z.number().int(),
   totalMinor: z.number().int(),
@@ -253,6 +262,43 @@ async function gather(
   // would have the accountant reverse a document that never counted.
   const inWindow = and(dated, ne(invoices.status, "void"));
 
+  // Count and total before materializing anything. At least one output row is
+  // required per invoice, so more invoices than the row ceiling is already a
+  // refusal; loading their item lines first could turn a deliberate 20k bound
+  // into millions of objects in one service transaction.
+  const [included] = await ctx.tx
+    .select({
+      count: sql<number>`count(*)::int`,
+      totalMinor: sql<string>`coalesce(sum(${invoices.totalMinor}), 0)::bigint`,
+      refundedMinor: sql<string>`coalesce(sum(${invoices.refundedMinor}), 0)::bigint`,
+    })
+    .from(invoices)
+    .where(and(inWindow, eq(invoices.currency, definition.currency)));
+  const invoiceCount = Number(included?.count ?? 0);
+  const totalMinor = Number(included?.totalMinor ?? 0);
+  const refundedMinor = Number(included?.refundedMinor ?? 0);
+
+  const excluded = await ctx.tx
+    .select({
+      currency: invoices.currency,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(invoices)
+    .where(and(inWindow, ne(invoices.currency, definition.currency)))
+    .groupBy(invoices.currency)
+    .orderBy(asc(invoices.currency));
+
+  const refusal = (rows: ExportRow[]): Gathered => ({
+    rows,
+    invoiceCount,
+    totalMinor,
+    refundedMinor,
+    excludedCurrencies: excluded.map((each) => each.currency),
+    excludedInvoiceCount: excluded.reduce((sum, each) => sum + Number(each.count), 0),
+    truncated: true,
+  });
+  if (invoiceCount > MAX_ROWS) return refusal([]);
+
   const found = await ctx.tx
     .select({
       id: invoices.id,
@@ -278,20 +324,7 @@ async function gather(
     .from(invoices)
     .innerJoin(contacts, eq(contacts.id, invoices.contactId))
     .where(and(inWindow, eq(invoices.currency, definition.currency)))
-    .orderBy(asc(invoices.issuedAt), asc(invoices.number))
-    // One past the ceiling, so "there is more than this" is a fact rather than
-    // an inference from a full page.
-    .limit(MAX_ROWS + 1);
-
-  const excluded = await ctx.tx
-    .select({
-      currency: invoices.currency,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(invoices)
-    .where(and(inWindow, ne(invoices.currency, definition.currency)))
-    .groupBy(invoices.currency)
-    .orderBy(asc(invoices.currency));
+    .orderBy(asc(invoices.issuedAt), asc(invoices.number));
 
   const lines =
     found.length === 0
@@ -314,7 +347,10 @@ async function gather(
               found.map((each) => each.id),
             ),
           )
-          .orderBy(asc(invoiceLines.invoiceId), asc(invoiceLines.position));
+          .orderBy(asc(invoiceLines.invoiceId), asc(invoiceLines.position))
+          .limit(MAX_ROWS + 1);
+
+  if (lines.length > MAX_ROWS) return refusal([]);
 
   const byInvoice = new Map<string, typeof lines>();
   for (const line of lines) {
@@ -324,26 +360,23 @@ async function gather(
   }
 
   const rows: ExportRow[] = [];
-  let totalMinor = 0;
-  let refundedMinor = 0;
   for (const each of found) {
     const invoice: ExportInvoice = {
       ...each,
       billingAddress: addressOf(each.billingAddress),
     };
     rows.push(...linesFor(invoice, byInvoice.get(each.id) ?? []));
-    totalMinor += each.totalMinor;
-    refundedMinor += each.refundedMinor;
+    if (rows.length > MAX_ROWS) break;
   }
 
   return {
     rows,
-    invoiceCount: found.length,
+    invoiceCount,
     totalMinor,
     refundedMinor,
     excludedCurrencies: excluded.map((each) => each.currency),
     excludedInvoiceCount: excluded.reduce((sum, each) => sum + Number(each.count), 0),
-    truncated: found.length > MAX_ROWS || rows.length > MAX_ROWS,
+    truncated: rows.length > MAX_ROWS,
   };
 }
 
@@ -361,7 +394,12 @@ function slug(name: string): string {
 
 const saveInput = z.object({
   id: uuidSchema.optional(),
-  name: z.string().trim().min(1).max(120),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .refine((value) => !/[\r\n]/.test(value), "An export name must fit on one line."),
   shape: z.enum(EXPORT_SHAPES),
   basis: z.enum(EXPORT_BASES).default("paid"),
   currency: z
@@ -452,11 +490,11 @@ export const saveExport = defineService({
 
 export const deleteExport = defineService({
   name: "reports.deleteExport",
-  writeClass: "write",
+  writeClass: "destructive",
   summary: "Forget an export and its delivery history.",
   kind: "mutation",
   permission: "scoped",
-  input: z.object({ id: uuidSchema }),
+  input: z.object({ id: uuidSchema, confirm: z.literal(true) }),
   output: row({ deleted: z.boolean() }),
   handler: async (input, ctx) => {
     const gone = await ctx.tx
@@ -471,7 +509,7 @@ export const deleteExport = defineService({
 
 /**
  * Every export, with the answer to the only question that matters about a
- * scheduled one: did the last one actually arrive?
+ * scheduled one: did the provider accept every copy, with no later failure?
  *
  * `due` and `overdue` are computed from the same period helper the job uses,
  * so the screen and the scheduler cannot disagree. `overdue` is the important
@@ -520,9 +558,9 @@ export const listExports = defineService({
     const settled = new Set<string>();
     for (const run of runs) {
       if (!latest.has(run.definitionId)) latest.set(run.definitionId, run);
-      // "Built" counts: the file for that period exists, and re-running it
-      // would send an accountant the same month twice.
-      if (run.status === "delivered" || run.status === "built") {
+      // Only provider-accepted mail settles a scheduled period. A file built
+      // for manual download is not evidence that any recipient received it.
+      if (run.status === "delivered") {
         settled.add(`${run.definitionId}:${run.periodFrom.toISOString()}`);
       }
     }
@@ -582,16 +620,27 @@ export const runExport = defineService({
           eq(exportRuns.periodTo, period.to),
         ),
       );
-    if (already && already.status !== "failed") return summarize(already);
+    // A queued/sent file is immutable for the period, and a failed delivery
+    // has its own explicit retry. A build refusal has no content, however, so
+    // it may be rebuilt after the owner reduces the data or changes the shape.
+    if (
+      already &&
+      already.status !== "built" &&
+      !(already.status === "failed" && !already.content)
+    ) {
+      return summarize(already);
+    }
 
     const shared = {
       definitionId: definition.id,
+      definitionName: definition.name,
       trigger: input.trigger,
       periodFrom: period.from,
       periodTo: period.to,
       shape: definition.shape,
       basis: definition.basis,
       currency: definition.currency,
+      timezone: definition.timezone,
       recipients: definition.recipients,
       startedAt: new Date(),
       updatedAt: new Date(),
@@ -688,6 +737,18 @@ export const runExport = defineService({
       definitionId: definition.id,
       rows: built.rowCount,
     });
+    if (built.status === "pending") {
+      // Atomic with the built file: a request process may stop after commit,
+      // but the work needed to stage its mail cannot disappear in that gap.
+      await ctx.queueJob(
+        "reports.prepareExportRun",
+        { runId: built.id },
+        {
+          idempotencyKey: `export-prepare:${built.id}`,
+          idempotencyTtlSeconds: 365 * 24 * 60 * 60,
+        },
+      );
+    }
     return summarize(built);
   },
 });
@@ -733,47 +794,74 @@ export const listExportRuns = defineService({
 /* -------------------------------------------------------------- delivering */
 
 /**
- * Send one built run, and say so either way.
+ * Stage one built run for delivery, without contacting a provider.
  *
  * Deliberately a *second* transaction, called after the one that built the
  * file has committed. Building and sending in one transaction would mean a
  * failed send rolls the run row back too, and the evidence that a report did
  * not arrive would be destroyed by the same failure that stopped it arriving.
  *
- * Partial delivery counts as failure. If two of three accountants got the
- * file, the one who did not is the one who matters, and the row says which
- * address failed rather than rounding up to success.
+ * `sendMail` writes encrypted outbox and ledger rows only. A worker submits
+ * them after this transaction commits, and `settleExportRun` later derives the
+ * run's state from those ledger rows. Queue acceptance is never called delivery.
  */
-export const deliverExportRun = defineService({
-  name: "reports.deliverExportRun",
+export const queueExportRunDelivery = defineService({
+  name: "reports.queueExportRunDelivery",
   writeClass: "write",
-  summary: "Email a built export to its recipients and record the outcome.",
+  summary: "Queue a built export for its recipients and track every copy.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({ runId: uuidSchema }),
   output: runRow,
   handler: async (input, ctx) => {
+    // Serializes initial delivery, explicit retries and the recovery job. The
+    // per-attempt unique key is the backstop; the row lock avoids turning an
+    // ordinary race into a transaction error first.
+    await ctx.tx.execute(sql`select id from export_runs where id = ${input.runId} for update`);
     const [run] = await ctx.tx.select().from(exportRuns).where(eq(exportRuns.id, input.runId));
     if (!run) throw new ServiceError("not_found", "There is no such export run.");
     if (!run.content || !run.filename) {
       throw new ServiceError("conflict", "That run has no file to deliver.");
     }
-    if (run.recipients.length === 0) {
+    if (run.status === "delivered") {
+      throw new ServiceError("conflict", "That export was already sent.");
+    }
+    if (run.status === "pending" && run.attempts > 0) {
+      const [current] = await ctx.tx
+        .select({ id: exportRunDeliveries.id })
+        .from(exportRunDeliveries)
+        .where(
+          and(
+            eq(exportRunDeliveries.runId, run.id),
+            eq(exportRunDeliveries.attempt, run.attempts),
+          ),
+        )
+        .limit(1);
+      if (current) return summarize(run);
+    }
+    // A failed run is retried only by an explicit action. Use the definition's
+    // current addresses then, so correcting a typo is sufficient to recover;
+    // every previous attempt keeps its own immutable recipient rows.
+    const [currentDefinition] =
+      run.status === "failed"
+        ? await ctx.tx
+            .select({ recipients: exportDefinitions.recipients })
+            .from(exportDefinitions)
+            .where(eq(exportDefinitions.id, run.definitionId))
+        : [];
+    const targetRecipients = currentDefinition?.recipients ?? run.recipients;
+    if (targetRecipients.length === 0) {
       throw new ServiceError("conflict", "That export has nobody to deliver to.");
     }
+    const attempt = run.attempts + 1;
 
-    const [definition] = await ctx.tx
-      .select({ name: exportDefinitions.name })
-      .from(exportDefinitions)
-      .where(eq(exportDefinitions.id, run.definitionId));
     const business = await ctx.call(getBusiness, {});
     const locale = business?.defaultLocale ?? "en";
     const t = translator(locale);
     const site = business?.name ?? "Freeholder";
-    const name = definition?.name ?? run.filename;
-    const from = exportDate(run.periodFrom, "iso", "UTC");
-    const to = exportDate(new Date(run.periodTo.getTime() - 1), "iso", "UTC");
-    const link = `${env().APP_URL.replace(/\/+$/, "")}/admin/reports/exports/${run.id}/download`;
+    const name = run.definitionName;
+    const from = exportDate(run.periodFrom, "iso", run.timezone);
+    const to = exportDate(new Date(run.periodTo.getTime() - 1), "iso", run.timezone);
 
     /*
      * A link, not an attachment, and on purpose.
@@ -781,8 +869,8 @@ export const deliverExportRun = defineService({
      * This file names every customer and what they paid. Attached, it is
      * copied into an inbox, a sent-items folder and every mail server between
      * here and there, none of which the business controls, and it stays there
-     * for years. The link needs a sign-in, so the same file reaches the same
-     * person and nowhere else. The email carries the figures that let the
+     * for years. Each recipient instead gets a separate expiring bearer link;
+     * only its HMAC is stored. The email carries the figures that let the
      * recipient tell at a glance whether the run is the one they expected.
      */
     const lines = [
@@ -805,21 +893,23 @@ export const deliverExportRun = defineService({
             currency: run.currency,
           })
         : "",
-      "",
-      t("exports.email.link"),
-      link,
     ].filter(Boolean);
 
     const failures: string[] = [];
-    let delivered = 0;
-    for (const recipient of run.recipients) {
+    let queued = 0;
+    for (const recipient of targetRecipients) {
       try {
+        const token = newExportToken();
+        const expiresAt = new Date(Date.now() + DOWNLOAD_DAYS * 24 * 60 * 60 * 1000);
+        const link = `${env().APP_URL.replace(/\/+$/, "")}/report-exports/${token}`;
         const sent = await sendMail(
           ctx.tx,
           {
             to: recipient,
             subject: t("exports.email.subject", { name, from, to }),
-            text: lines.join("\n"),
+            text: [...lines, "", t("exports.email.link", { days: DOWNLOAD_DAYS }), link].join(
+              "\n",
+            ),
           },
           {
             purpose: "transactional",
@@ -827,51 +917,55 @@ export const deliverExportRun = defineService({
             // Stable per run, per recipient and per attempt: a retried
             // delivery is a new attempt and must actually go out, while the
             // same attempt twice must not.
-            idempotencyKey: `export-run:${run.id}:${run.attempts}:${recipient}`,
+            idempotencyKey: `export-run:${run.id}:${attempt}:${recipient}`,
+            requireDelivery: true,
           },
         );
-        // A non-delivering adapter — the console sink on an instance where
-        // nobody has connected a mailbox — accepts the message and discards
-        // it. Counting that as delivered would put a green tick on the exact
-        // state this whole table exists to expose: a report that reaches
-        // nobody, month after month, while the screen says it went.
-        if (!sent.delivers) {
-          failures.push(
-            `${recipient}: this instance has no delivering mail adapter, so nothing was sent. Connect a mailbox or configure SMTP.`,
-          );
-          continue;
-        }
-        delivered += 1;
+        await ctx.tx.insert(exportRunDeliveries).values({
+          runId: run.id,
+          attempt,
+          recipient,
+          state: "queued",
+          mailDeliveryId: sent.id,
+          tokenHash: hashExportToken(token),
+          expiresAt,
+        });
+        queued += 1;
       } catch (error) {
-        // `sendMail` records its own failure and rethrows a ServiceError; the
-        // transaction is intact, so this row can still be written. Anything
-        // else would have aborted the transaction and must be allowed to roll
-        // this whole attempt back — the reclaim sweep then records it, in a
-        // transaction of its own, rather than this one lying about it.
+        // Suppression and missing configuration are ordinary, non-database
+        // refusals. They still get a recipient row. A database/provider-queue
+        // failure aborts the transaction so it can be retried atomically.
         if (!(error instanceof ServiceError)) throw error;
-        failures.push(`${recipient}: ${error.message}`);
+        const detail = error.message.slice(0, 500);
+        failures.push(`${recipient}: ${detail}`);
+        await ctx.tx.insert(exportRunDeliveries).values({
+          runId: run.id,
+          attempt,
+          recipient,
+          state: "failed",
+          detail,
+        });
       }
     }
 
-    const ok = failures.length === 0;
+    const allFailed = queued === 0;
     const [settled] = await ctx.tx
       .update(exportRuns)
       .set({
-        status: ok ? "delivered" : "failed",
-        deliveredCount: delivered,
-        attempts: run.attempts + 1,
-        deliveredAt: ok ? new Date() : null,
-        failedAt: ok ? null : new Date(),
-        error: ok ? null : failures.join(" · ").slice(0, 2000),
+        status: allFailed ? "failed" : "pending",
+        deliveredCount: 0,
+        attempts: attempt,
+        recipients: targetRecipients,
+        deliveredAt: null,
+        failedAt: allFailed ? new Date() : null,
+        error: allFailed ? failures.join(" · ").slice(0, 2000) : null,
         updatedAt: new Date(),
       })
       .where(eq(exportRuns.id, run.id))
       .returning();
 
     ctx.setSubject("exportRun", run.id);
-    if (ok) {
-      ctx.queueEvent("report.exportDelivered", { runId: run.id, recipients: delivered });
-    } else {
+    if (allFailed) {
       // The event the notification hangs off. A failed delivery has to reach a
       // person: the whole failure mode here is that nobody notices.
       ctx.queueEvent("report.exportFailed", {
@@ -879,61 +973,243 @@ export const deliverExportRun = defineService({
         name,
         detail: failures.join(" · ").slice(0, 500),
       });
+    } else {
+      await ctx.queueJob(
+        "reports.settleExportRun",
+        { runId: run.id, attempt },
+        {
+          idempotencyKey: `export-settle:${run.id}:${attempt}`,
+          idempotencyTtlSeconds: 365 * 24 * 60 * 60,
+          startAfter: 30,
+        },
+      );
     }
     return summarize(settled!);
   },
 });
 
-/**
- * Runs that started delivering and never said what happened.
- *
- * The one service here that is `system`, because it is the one nobody
- * triggers: it exists for the case where the transaction that was delivering a
- * run died — a worker killed, a connection lost, a database error that aborted
- * everything including the row that would have recorded it. That row cannot
- * write its own failure, so something later has to, in a transaction of its
- * own. This is that something.
- *
- * Without it a crashed delivery stays `pending` forever, which reads exactly
- * like "still going" and never like "this never arrived".
- */
-export const reclaimExportRuns = defineService({
-  name: "reports.reclaimExportRuns",
+/** Settle one attempt from core/mail's durable provider evidence. */
+export const settleExportRun = defineService({
+  name: "reports.settleExportRun",
   writeClass: "write",
-  summary: "Mark deliveries that stopped part-way as failed rather than pending.",
+  summary: "Settle an export attempt from its mail-delivery ledger rows.",
   kind: "mutation",
   permission: "system",
-  input: z.object({}),
-  output: row({ reclaimed: z.number().int() }),
-  handler: async (_input, ctx) => {
+  input: z.object({ runId: uuidSchema, attempt: z.number().int().positive() }),
+  output: row({
+    state: z.enum(["pending", "delivered", "failed", "stale"]),
+    run: runRow,
+  }),
+  handler: async (input, ctx) => {
     if (ctx.actor.kind !== "system") {
-      throw new ServiceError("permission", "Only trusted platform work reclaims a run.");
+      throw new ServiceError("permission", "Only trusted platform work settles a run.");
     }
-    const stalled = await ctx.tx
-      .update(exportRuns)
-      .set({
-        status: "failed",
-        failedAt: new Date(),
-        error: "The delivery stopped part-way and never reported an outcome.",
-        updatedAt: new Date(),
+    await ctx.tx.execute(sql`select id from export_runs where id = ${input.runId} for update`);
+    const [run] = await ctx.tx.select().from(exportRuns).where(eq(exportRuns.id, input.runId));
+    if (!run) throw new ServiceError("not_found", "There is no such export run.");
+    if (run.attempts !== input.attempt) {
+      return { state: "stale" as const, run: summarize(run) };
+    }
+
+    const copies = await ctx.tx
+      .select({
+        recipient: exportRunDeliveries.recipient,
+        stage: exportRunDeliveries.state,
+        detail: exportRunDeliveries.detail,
+        mailDeliveryId: exportRunDeliveries.mailDeliveryId,
+        mailStatus: mailDeliveries.status,
+        mailError: mailDeliveries.lastError,
+        submittedAt: mailDeliveries.submittedAt,
+        deliveredAt: mailDeliveries.deliveredAt,
       })
+      .from(exportRunDeliveries)
+      .leftJoin(mailDeliveries, eq(mailDeliveries.id, exportRunDeliveries.mailDeliveryId))
       .where(
         and(
-          eq(exportRuns.status, "pending"),
-          lt(exportRuns.startedAt, new Date(Date.now() - STALLED_MINUTES * 60_000)),
+          eq(exportRunDeliveries.runId, run.id),
+          eq(exportRunDeliveries.attempt, input.attempt),
         ),
-      )
-      .returning({ id: exportRuns.id, definitionId: exportRuns.definitionId });
-    for (const run of stalled) {
+      );
+
+    const successes = copies.filter(
+      (copy) => copy.stage === "queued" && ["submitted", "delivered"].includes(copy.mailStatus ?? ""),
+    );
+    const pending = copies.filter(
+      (copy) => copy.stage === "queued" && copy.mailStatus === "queued",
+    );
+    if (pending.length > 0) {
+      return { state: "pending" as const, run: summarize(run) };
+    }
+
+    const failures = copies
+      .filter((copy) => !successes.includes(copy))
+      .map((copy) => {
+        const reason =
+          copy.detail ??
+          copy.mailError ??
+          (copy.mailDeliveryId ? `mail status ${copy.mailStatus ?? "missing"}` : "mail record missing");
+        return `${copy.recipient}: ${reason}`;
+      });
+    if (copies.length === 0) failures.push("No recipient delivery records survived this attempt.");
+    else if (copies.length !== run.recipients.length) {
+      failures.push(
+        `${run.recipients.length - copies.length} recipient delivery record(s) are missing from this attempt.`,
+      );
+    }
+
+    const failed = failures.length > 0;
+    const error = failed ? failures.join(" · ").slice(0, 2000) : null;
+    const previousStatus = run.status;
+    const deliveredAt = successes.reduce<Date | null>((latest, copy) => {
+      const candidate = copy.deliveredAt ?? copy.submittedAt;
+      return candidate && (!latest || candidate > latest) ? candidate : latest;
+    }, null);
+    const [settled] = await ctx.tx
+      .update(exportRuns)
+      .set({
+        status: failed ? "failed" : "delivered",
+        deliveredCount: successes.length,
+        deliveredAt: failed ? null : (deliveredAt ?? new Date()),
+        failedAt: failed ? new Date() : null,
+        error,
+        updatedAt: new Date(),
+      })
+      .where(eq(exportRuns.id, run.id))
+      .returning();
+
+    ctx.setSubject("exportRun", run.id);
+    if (failed && previousStatus !== "failed") {
       ctx.queueEvent("report.exportFailed", {
         id: run.id,
-        name: "",
-        detail: "The delivery stopped part-way and never reported an outcome.",
+        name: run.definitionName,
+        detail: error?.slice(0, 500) ?? "Delivery failed.",
+      });
+    } else if (!failed && previousStatus !== "delivered") {
+      ctx.queueEvent("report.exportDelivered", {
+        runId: run.id,
+        recipients: successes.length,
       });
     }
-    return { reclaimed: stalled.length };
+    return {
+      state: failed ? ("failed" as const) : ("delivered" as const),
+      run: summarize(settled!),
+    };
   },
 });
+
+/**
+ * Recipient download: an expiring bearer grant, not a staff session.
+ *
+ * The token is HMACed before lookup and redacted by the service audit layer.
+ * It becomes usable only after core/mail has evidence that a delivering
+ * provider accepted that exact recipient's message.
+ */
+export const downloadExportForRecipient = defineService({
+  name: "reports.downloadExport",
+  writeClass: "write",
+  summary: "Download the export named by an unexpired recipient link.",
+  kind: "mutation",
+  permission: "public",
+  agentCallable: false,
+  mcpExclude: true,
+  rateLimit: {
+    limit: 30,
+    windowSeconds: 15 * 60,
+    subject: (input) => `report-export:${hashExportToken(input.token)}`,
+    message: "Too many download attempts. Wait a few minutes and try again.",
+  },
+  input: z.object({ token: z.string().min(20).max(200) }),
+  output: row({ filename: z.string(), csv: z.string(), rowCount: z.number().int() }),
+  handler: async (input, ctx) => {
+    const [found] = await ctx.tx
+      .select({
+        deliveryId: exportRunDeliveries.id,
+        runId: exportRuns.id,
+        filename: exportRuns.filename,
+        csv: exportRuns.content,
+        rowCount: exportRuns.rowCount,
+      })
+      .from(exportRunDeliveries)
+      .innerJoin(exportRuns, eq(exportRuns.id, exportRunDeliveries.runId))
+      .innerJoin(mailDeliveries, eq(mailDeliveries.id, exportRunDeliveries.mailDeliveryId))
+      .where(
+        and(
+          eq(exportRunDeliveries.tokenHash, hashExportToken(input.token)),
+          isNull(exportRunDeliveries.revokedAt),
+          gt(exportRunDeliveries.expiresAt, new Date()),
+          inArray(mailDeliveries.status, ["submitted", "delivered"]),
+        ),
+      )
+      .limit(1);
+    if (!found?.filename || !found.csv) {
+      throw new ServiceError("not_found", "That download link is invalid or has expired.");
+    }
+    await ctx.tx
+      .update(exportRunDeliveries)
+      .set({
+        downloadedAt: new Date(),
+        downloadCount: sql`${exportRunDeliveries.downloadCount} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(exportRunDeliveries.id, found.deliveryId));
+    ctx.setSubject("exportRun", found.runId);
+    return { filename: found.filename, csv: found.csv, rowCount: found.rowCount };
+  },
+});
+
+/** Reconcile in-flight runs and late provider failures, one short transaction each. */
+export async function reconcileExportRuns(limit = 200): Promise<{
+  checked: number;
+  delivered: number;
+  failed: number;
+  pending: number;
+}> {
+  const candidates = await db()
+    .selectDistinct({
+      id: exportRuns.id,
+      attempt: exportRuns.attempts,
+      startedAt: exportRuns.startedAt,
+    })
+    .from(exportRuns)
+    .leftJoin(
+      exportRunDeliveries,
+      and(
+        eq(exportRunDeliveries.runId, exportRuns.id),
+        eq(exportRunDeliveries.attempt, exportRuns.attempts),
+      ),
+    )
+    .leftJoin(mailDeliveries, eq(mailDeliveries.id, exportRunDeliveries.mailDeliveryId))
+    .where(
+      or(
+        eq(exportRuns.status, "pending"),
+        and(
+          eq(exportRuns.status, "delivered"),
+          inArray(mailDeliveries.status, ["bounced", "complained", "failed", "suppressed"]),
+        ),
+      ),
+    )
+    .orderBy(asc(exportRuns.startedAt))
+    .limit(limit);
+
+  const totals = { checked: 0, delivered: 0, failed: 0, pending: 0 };
+  for (const candidate of candidates) {
+    totals.checked += 1;
+    if (candidate.attempt === 0) {
+      const run = await queueExportRunDelivery.call({ runId: candidate.id }, { kind: "system" });
+      if (run.status === "failed") totals.failed += 1;
+      else totals.pending += 1;
+      continue;
+    }
+    const result = await settleExportRun.call(
+      { runId: candidate.id, attempt: candidate.attempt },
+      { kind: "system" },
+    );
+    if (result.state === "delivered") totals.delivered += 1;
+    else if (result.state === "failed") totals.failed += 1;
+    else totals.pending += 1;
+  }
+  return totals;
+}
 
 export default [
   saveExport,
@@ -942,6 +1218,7 @@ export default [
   runExport,
   exportFile,
   listExportRuns,
-  deliverExportRun,
-  reclaimExportRuns,
+  queueExportRunDelivery,
+  settleExportRun,
+  downloadExportForRecipient,
 ];

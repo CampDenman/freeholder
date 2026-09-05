@@ -11,10 +11,16 @@ attached, because it lists every customer and what they paid, and an inbox is
 not a safe place for that.
 
 The list shows the one thing that matters about a scheduled file: whether the
-last one actually arrived. A delivery that failed says so in red, keeps the
-file so you can send it by hand, and tries again on the next run. An export
-that should have gone out and did not is flagged at the top of the page rather
-than quietly not happening.
+mail provider accepted every recipient's copy. A later bounce changes that
+answer back to failed. A failed delivery says so in red, keeps the file so you
+can send it by hand, and waits for an explicit retry instead of mailing a bad
+address every hour. An export that should have gone out and did not is flagged
+at the top of the page rather than quietly not happening.
+
+Every recipient gets a separate private link that expires after 30 days. The
+raw token exists only inside the encrypted mail outbox and the email; Freeholder
+stores its HMAC and allows the download only after a delivering provider has
+accepted that recipient's message.
 
 Two things it deliberately will not do. It will not add two currencies
 together — one export covers one currency, and any invoices in another are left

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Scheduled exports and the accounting shapes (MASTER.md §2535, §43 C9.32).
 //
-// Two tables, and the second one is the point. §2535 draws the boundary this
+// Three tables, and the latter two are the point. §2535 draws the boundary this
 // module lives inside — "the platform does not do bookkeeping; it refuses to
 // make bookkeeping harder" — so there is no chart of accounts here, no journal
-// and no double entry. There is a definition of a file, and a permanent record
-// of every attempt to deliver one.
+// and no double entry. There is a definition of a file, a permanent record of
+// every run, and one recipient copy tied to the durable mail ledger.
 //
 // The record exists because of what a scheduled export fails like. A report an
 // owner reads is wrong loudly: they look at it and disbelieve it. A report
@@ -30,6 +30,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { mailDeliveries } from "@/core/mail/schema";
 
 /** Which column layout the file is written in. */
 export const EXPORT_SHAPES = ["csv", "quickbooks", "xero"] as const;
@@ -73,6 +74,9 @@ export const EXPORT_DATE_FORMATS = ["iso", "dmy", "mdy"] as const;
 export const EXPORT_RUN_STATUSES = ["pending", "built", "delivered", "failed"] as const;
 
 export const EXPORT_TRIGGERS = ["schedule", "manual"] as const;
+
+/** Whether a recipient row reached the durable mail queue or failed before it. */
+export const EXPORT_DELIVERY_STATES = ["queued", "failed"] as const;
 
 export const exportDefinitions = pgTable(
   "export_definitions",
@@ -126,12 +130,16 @@ export const exportDefinitions = pgTable(
     index("export_definitions_scheduled_idx").on(t.scheduled),
     check("export_definitions_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("export_definitions_name_present", sql`length(btrim(${t.name})) > 0`),
+    check(
+      "export_definitions_name_single_line",
+      sql`position(chr(10) in ${t.name}) = 0 and position(chr(13) in ${t.name}) = 0`,
+    ),
     // A scheduled export with nobody to send it to is a job that runs forever
     // and delivers nothing — the silent failure this table exists to make
     // impossible, written into the schema so it cannot be configured at all.
     check(
       "export_definitions_scheduled_has_recipient",
-      sql`${t.scheduled} = false or array_length(${t.recipients}, 1) >= 1`,
+      sql`${t.scheduled} = false or cardinality(${t.recipients}) >= 1`,
     ),
   ],
 );
@@ -143,6 +151,8 @@ export const exportRuns = pgTable(
     definitionId: uuid("definition_id")
       .notNull()
       .references(() => exportDefinitions.id, { onDelete: "cascade" }),
+    /** Frozen with the run so a later edit cannot rename an email already queued. */
+    definitionName: text("definition_name").notNull(),
     trigger: text("trigger", { enum: EXPORT_TRIGGERS }).notNull(),
     status: text("status", { enum: EXPORT_RUN_STATUSES }).notNull().default("pending"),
     /*
@@ -163,6 +173,8 @@ export const exportRuns = pgTable(
     shape: text("shape", { enum: EXPORT_SHAPES }).notNull(),
     basis: text("basis", { enum: EXPORT_BASES }).notNull(),
     currency: text("currency").notNull(),
+    /** The zone that defined the period boundaries and their human labels. */
+    timezone: text("timezone").notNull(),
     rowCount: integer("row_count").notNull().default(0),
     invoiceCount: integer("invoice_count").notNull().default(0),
     /** Safe as one figure only because a run is one currency. */
@@ -197,7 +209,7 @@ export const exportRuns = pgTable(
     content: text("content"),
     bytes: integer("bytes"),
     sha256: text("sha256"),
-    /** Frozen at build time: who this copy was for, whatever the list says now. */
+    /** Targets for the latest attempt; every attempt's recipient rows are immutable. */
     recipients: text("recipients").array().notNull().default([]),
     deliveredCount: integer("delivered_count").notNull().default(0),
     attempts: integer("attempts").notNull().default(0),
@@ -215,17 +227,93 @@ export const exportRuns = pgTable(
     // stops two workers producing March twice.
     uniqueIndex("export_runs_period_idx").on(t.definitionId, t.periodFrom, t.periodTo),
     check("export_runs_currency_valid", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("export_runs_definition_name_present", sql`length(btrim(${t.definitionName})) > 0`),
+    check("export_runs_timezone_present", sql`length(btrim(${t.timezone})) > 0`),
     check("export_runs_period_ordered", sql`${t.periodFrom} < ${t.periodTo}`),
     check("export_runs_counts_nonnegative", sql`${t.rowCount} >= 0 and ${t.invoiceCount} >= 0 and ${t.deliveredCount} >= 0 and ${t.attempts} >= 0 and ${t.excludedInvoiceCount} >= 0`),
     // A run that says it was delivered must be able to say when, and to how
     // many people. "Delivered to nobody" is the state this forbids.
     check(
       "export_runs_delivered_consistent",
-      sql`${t.status} <> 'delivered' or (${t.deliveredAt} is not null and ${t.deliveredCount} > 0)`,
+      sql`${t.status} <> 'delivered' or (${t.deliveredAt} is not null and ${t.failedAt} is null and ${t.error} is null and ${t.attempts} > 0 and ${t.deliveredCount} = cardinality(${t.recipients}))`,
+    ),
+    check(
+      "export_runs_delivered_count_bounded",
+      sql`${t.deliveredCount} <= cardinality(${t.recipients})`,
     ),
     check(
       "export_runs_failed_consistent",
-      sql`${t.status} <> 'failed' or (${t.failedAt} is not null and ${t.error} is not null)`,
+      sql`${t.status} <> 'failed' or (${t.failedAt} is not null and ${t.deliveredAt} is null and ${t.error} is not null)`,
+    ),
+    check(
+      "export_runs_unsettled_consistent",
+      sql`${t.status} not in ('pending', 'built') or (${t.deliveredAt} is null and ${t.failedAt} is null and ${t.error} is null and ${t.deliveredCount} = 0)`,
+    ),
+  ],
+);
+
+/**
+ * One recipient's copy in one delivery attempt.
+ *
+ * The mail ledger is the delivery truth. This row supplies the missing domain
+ * context (which export attempt the message belongs to) and the hash of the
+ * recipient's short-lived download credential. The raw credential exists only
+ * in the encrypted mail outbox and, after submission, in the recipient's mail.
+ */
+export const exportRunDeliveries = pgTable(
+  "export_run_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => exportRuns.id, { onDelete: "cascade" }),
+    attempt: integer("attempt").notNull(),
+    recipient: text("recipient").notNull(),
+    state: text("state", { enum: EXPORT_DELIVERY_STATES }).notNull(),
+    /** Null only when staging failed before core/mail created a ledger row. */
+    mailDeliveryId: uuid("mail_delivery_id").references(() => mailDeliveries.id, {
+      onDelete: "restrict",
+    }),
+    /** HMAC of the bearer value; never enough to reconstruct the emailed URL. */
+    tokenHash: text("token_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /** Safe, bounded staging refusal. Provider failures remain on mail_deliveries. */
+    detail: text("detail"),
+    downloadedAt: timestamp("downloaded_at", { withTimezone: true }),
+    downloadCount: integer("download_count").notNull().default(0),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("export_run_deliveries_recipient_idx").on(t.runId, t.attempt, t.recipient),
+    uniqueIndex("export_run_deliveries_mail_idx")
+      .on(t.mailDeliveryId)
+      .where(sql`${t.mailDeliveryId} is not null`),
+    uniqueIndex("export_run_deliveries_token_idx")
+      .on(t.tokenHash)
+      .where(sql`${t.tokenHash} is not null`),
+    index("export_run_deliveries_run_idx").on(t.runId, t.attempt),
+    check("export_run_deliveries_attempt_positive", sql`${t.attempt} > 0`),
+    check("export_run_deliveries_recipient_lower", sql`${t.recipient} = lower(${t.recipient})`),
+    check("export_run_deliveries_recipient_bounded", sql`length(${t.recipient}) <= 320`),
+    check("export_run_deliveries_state_valid", sql`${t.state} in ('queued', 'failed')`),
+    check(
+      "export_run_deliveries_token_format",
+      sql`${t.tokenHash} is null or ${t.tokenHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check("export_run_deliveries_downloads_nonnegative", sql`${t.downloadCount} >= 0`),
+    check(
+      "export_run_deliveries_staging_consistent",
+      sql`(${t.state} = 'queued' and ${t.mailDeliveryId} is not null and ${t.tokenHash} is not null and ${t.expiresAt} is not null and ${t.detail} is null) or (${t.state} = 'failed' and ${t.mailDeliveryId} is null and ${t.tokenHash} is null and ${t.expiresAt} is null and ${t.detail} is not null)`,
+    ),
+    check(
+      "export_run_deliveries_expiry_ordered",
+      sql`${t.expiresAt} is null or ${t.expiresAt} > ${t.createdAt}`,
+    ),
+    check(
+      "export_run_deliveries_revocation_ordered",
+      sql`${t.revokedAt} is null or ${t.revokedAt} >= ${t.createdAt}`,
     ),
   ],
 );

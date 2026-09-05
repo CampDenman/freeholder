@@ -381,6 +381,18 @@ describe.runIf(hasDatabase)("mail services", () => {
       db().transaction((tx) =>
         sendMail(
           tx,
+          { to: "private-link@example.test", subject: "Private link", text: "secret" },
+          { requireDelivery: true },
+        ),
+      ),
+    ).rejects.toThrow("no delivering mail adapter");
+    expect(await db().select().from(mailDeliveries)).toHaveLength(0);
+    expect(await db().select().from(mailOutbox)).toHaveLength(0);
+
+    await expect(
+      db().transaction((tx) =>
+        sendMail(
+          tx,
           { to: "person@example.test", subject: "Campaign", text: "Text" },
           { purpose: "bulk" },
         ),

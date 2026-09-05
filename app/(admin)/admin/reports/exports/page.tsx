@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Scheduled exports and the accounting shapes (MASTER.md §2535, §43 C9.32).
 //
-// The screen is arranged around one question — *did the last one arrive?* —
+// The screen is arranged around one question — *did the last one send?* —
 // because that is the question a scheduled delivery fails at. A wrong figure
 // on the reports page is wrong loudly; a file that stopped being emailed is
 // wrong by being absent, and an absence needs somewhere to be shown.
@@ -56,7 +56,13 @@ const STATUS_TONE = {
 export default async function ReportExportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string; error?: string; saved?: string; ran?: string }>;
+  searchParams: Promise<{
+    id?: string;
+    edit?: string;
+    error?: string;
+    saved?: string;
+    ran?: string;
+  }>;
 }) {
   const actor = await requireStaffActor("reporting");
   const query = await searchParams;
@@ -69,6 +75,7 @@ export default async function ReportExportsPage({
 
   const all = exports ?? [];
   const selected = all.find((each) => each.definition.id === query.id) ?? all[0] ?? null;
+  const editing = query.edit === "1" ? (selected?.definition ?? null) : null;
   const history = selected
     ? ((await domainOrNull(
         listExportRuns.call({ id: selected.definition.id }, actor),
@@ -80,6 +87,13 @@ export default async function ReportExportsPage({
   const money = (amountMinor: number, currency: string) =>
     formatMoney(amountMinor, currency, locale);
   const when = (at: Date | null) => (at ? formatDateTime(at, zone, locale) : "—");
+  const periodDate = (at: Date, timeZone: string) =>
+    new Intl.DateTimeFormat(locale, {
+      timeZone,
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }).format(at);
   const overdue = all.filter((each) => each.overdue);
 
   return (
@@ -137,7 +151,7 @@ export default async function ReportExportsPage({
                     {due && !late ? <Pill tone="warning">{t("exports.due")}</Pill> : null}
                   </div>
 
-                  {/* The answer to "did it arrive?", on the row rather than a
+                  {/* The answer to "did it send?", on the row rather than a
                       click away. */}
                   <p className="mt-2 text-sm text-ink-muted">
                     {lastRun ? (
@@ -209,9 +223,19 @@ export default async function ReportExportsPage({
                         {t("exports.history")}
                       </Button>
                     </form>
-                    <form action={deleteExportAction} className="ms-auto">
+                    <Link
+                      href={`/admin/reports/exports?id=${definition.id}&edit=1`}
+                      className="text-sm text-accent underline"
+                    >
+                      {t("exports.edit")}
+                    </Link>
+                    <form action={deleteExportAction} className="ms-auto flex items-center gap-2">
                       <input type="hidden" name="id" value={definition.id} />
-                      <Button type="submit" variant="quiet">
+                      <label className="flex items-center gap-1.5 text-xs text-ink-muted">
+                        <input type="checkbox" name="confirm" value="1" required />
+                        {t("exports.deleteConfirm")}
+                      </label>
+                      <Button type="submit" variant="danger">
                         {t("exports.delete")}
                       </Button>
                     </form>
@@ -245,8 +269,11 @@ export default async function ReportExportsPage({
                     {history.map((run) => (
                       <tr key={run.id} className="border-t border-rule align-top">
                         <td className="p-2 font-mono text-xs">
-                          {run.periodFrom.toISOString().slice(0, 10)} →{" "}
-                          {run.periodTo.toISOString().slice(0, 10)}
+                          {periodDate(run.periodFrom, run.timezone)} →{" "}
+                          {periodDate(
+                            new Date(run.periodTo.getTime() - 1),
+                            run.timezone,
+                          )}
                         </td>
                         <td className="p-2">
                           <Pill tone={STATUS_TONE[run.status]}>
@@ -286,12 +313,25 @@ export default async function ReportExportsPage({
       ) : null}
 
       <Card>
-        <CardHeader title={t("exports.newTitle")} />
+        <CardHeader
+          title={
+            editing
+              ? t("exports.editTitle", { name: editing.name })
+              : t("exports.newTitle")
+          }
+        />
         <CardBody>
           <p className="mb-4 max-w-prose text-sm text-ink-muted">{t("exports.newIntro")}</p>
           <form action={saveExportAction} className="grid gap-4 sm:grid-cols-2">
+            {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
             <Field label={t("exports.field.name")} htmlFor="export-name">
-              <Input id="export-name" name="name" required maxLength={120} />
+              <Input
+                id="export-name"
+                name="name"
+                required
+                maxLength={120}
+                defaultValue={editing?.name ?? ""}
+              />
             </Field>
 
             <Field
@@ -299,7 +339,7 @@ export default async function ReportExportsPage({
               htmlFor="export-shape"
               hint={t("exports.field.shapeHint")}
             >
-              <Select id="export-shape" name="shape" defaultValue="csv">
+              <Select id="export-shape" name="shape" defaultValue={editing?.shape ?? "csv"}>
                 {SHAPES.map((shape) => (
                   <option key={shape} value={shape}>
                     {t(`exports.shape.${shape}`)}
@@ -318,7 +358,7 @@ export default async function ReportExportsPage({
                 name="currency"
                 required
                 maxLength={3}
-                defaultValue={business?.baseCurrency ?? "CAD"}
+                defaultValue={editing?.currency ?? business?.baseCurrency ?? "CAD"}
               />
             </Field>
 
@@ -327,7 +367,7 @@ export default async function ReportExportsPage({
               htmlFor="export-basis"
               hint={t("exports.field.basisHint")}
             >
-              <Select id="export-basis" name="basis" defaultValue="paid">
+              <Select id="export-basis" name="basis" defaultValue={editing?.basis ?? "paid"}>
                 {BASES.map((basis) => (
                   <option key={basis} value={basis}>
                     {t(`exports.basis.${basis}`)}
@@ -337,7 +377,11 @@ export default async function ReportExportsPage({
             </Field>
 
             <Field label={t("exports.field.period")} htmlFor="export-period">
-              <Select id="export-period" name="period" defaultValue="previous_month">
+              <Select
+                id="export-period"
+                name="period"
+                defaultValue={editing?.period ?? "previous_month"}
+              >
                 {PERIODS.map((period) => (
                   <option key={period} value={period}>
                     {t(`exports.period.${period}`)}
@@ -351,7 +395,11 @@ export default async function ReportExportsPage({
               htmlFor="export-date-format"
               hint={t("exports.field.dateFormatHint")}
             >
-              <Select id="export-date-format" name="dateFormat" defaultValue="iso">
+              <Select
+                id="export-date-format"
+                name="dateFormat"
+                defaultValue={editing?.dateFormat ?? "iso"}
+              >
                 {DATE_FORMATS.map((format) => (
                   <option key={format} value={format}>
                     {t(`exports.dateFormat.${format}`)}
@@ -361,7 +409,12 @@ export default async function ReportExportsPage({
             </Field>
 
             <Field label={t("exports.field.timezone")} htmlFor="export-timezone">
-              <Input id="export-timezone" name="timezone" defaultValue={zone} maxLength={100} />
+              <Input
+                id="export-timezone"
+                name="timezone"
+                defaultValue={editing?.timezone ?? zone}
+                maxLength={100}
+              />
             </Field>
 
             <Field
@@ -369,7 +422,12 @@ export default async function ReportExportsPage({
               htmlFor="export-recipients"
               hint={t("exports.field.recipientsHint")}
             >
-              <Input id="export-recipients" name="recipients" maxLength={2000} />
+              <Input
+                id="export-recipients"
+                name="recipients"
+                maxLength={2000}
+                defaultValue={editing?.recipients.join(", ") ?? ""}
+              />
             </Field>
 
             <Field
@@ -377,7 +435,12 @@ export default async function ReportExportsPage({
               htmlFor="export-item-code"
               hint={t("exports.field.itemCodeHint")}
             >
-              <Input id="export-item-code" name="itemCode" maxLength={200} />
+              <Input
+                id="export-item-code"
+                name="itemCode"
+                maxLength={200}
+                defaultValue={editing?.itemCode ?? ""}
+              />
             </Field>
 
             <Field
@@ -385,7 +448,12 @@ export default async function ReportExportsPage({
               htmlFor="export-account-code"
               hint={t("exports.field.accountCodeHint")}
             >
-              <Input id="export-account-code" name="accountCode" maxLength={50} />
+              <Input
+                id="export-account-code"
+                name="accountCode"
+                maxLength={50}
+                defaultValue={editing?.accountCode ?? ""}
+              />
             </Field>
 
             <Field
@@ -393,7 +461,12 @@ export default async function ReportExportsPage({
               htmlFor="export-tax-code"
               hint={t("exports.field.taxCodeHint")}
             >
-              <Input id="export-tax-code" name="taxCode" maxLength={80} />
+              <Input
+                id="export-tax-code"
+                name="taxCode"
+                maxLength={80}
+                defaultValue={editing?.taxCode ?? ""}
+              />
             </Field>
 
             <div className="grid gap-1.5">
@@ -406,6 +479,7 @@ export default async function ReportExportsPage({
                   name="scheduled"
                   type="checkbox"
                   className="size-4 accent-accent"
+                  defaultChecked={editing?.scheduled ?? false}
                 />
                 {t("exports.field.scheduled")}
               </label>
@@ -413,7 +487,14 @@ export default async function ReportExportsPage({
             </div>
 
             <div className="sm:col-span-2">
-              <Button type="submit">{t("exports.save")}</Button>
+              <Button type="submit">
+                {editing ? t("exports.update") : t("exports.save")}
+              </Button>{" "}
+              {editing ? (
+                <Link href="/admin/reports/exports" className="text-sm text-accent underline">
+                  {t("exports.new")}
+                </Link>
+              ) : null}
             </div>
           </form>
         </CardBody>

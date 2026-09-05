@@ -519,8 +519,10 @@ export {
   runExport,
   exportFile,
   listExportRuns,
-  deliverExportRun,
-  reclaimExportRuns,
+  queueExportRunDelivery,
+  settleExportRun,
+  downloadExportForRecipient,
+  reconcileExportRuns,
 } from "./export-service";
 
 export default [

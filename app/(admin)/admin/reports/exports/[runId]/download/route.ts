@@ -3,14 +3,9 @@
 // The export as a file (MASTER.md §2535, §43 C9.32).
 //
 // A route rather than a block of text on a page, because handing a file to an
-// accounting package means handing over a file. It is also where the emailed
-// link lands: the email carries the figures and a link, never the file itself
-// — an accounting export names every customer and what they paid, and an
-// attachment copies that into an inbox, a sent-items folder and every mail
-// server in between, none of which the business controls.
-//
-// So the link needs a sign-in, and the service behind it is `scoped`: the same
-// file reaches the same person and nowhere else.
+// accounting package means handing over a file. This is the staff-only
+// recovery door. Emailed recipients use a separate expiring bearer route
+// because they are deliberately external addresses rather than users.
 import { actorFromRequest } from "@/core/http/actor";
 import { exportFile } from "@/modules/reporting/service";
 import { ServiceError } from "@/core/service";
