@@ -19,6 +19,7 @@ import {
 } from "@/core/media/schema";
 import {
   actorString,
+  defineOrchestratedService,
   defineService,
   ServiceError,
   type Actor,
@@ -1614,11 +1615,25 @@ function requireHumanReview(actor: Actor): void {
   }
 }
 
-function sourceIdentity(asset: typeof assets.$inferSelect): string {
+type AltTextSuggestionSource = Pick<
+  typeof assets.$inferSelect,
+  "id" | "storageKey" | "mime" | "variants" | "checksumSha256" | "altText"
+>;
+
+const altTextSuggestionSource = z.object({
+  id: uuid,
+  storageKey: z.string(),
+  mime: z.string(),
+  variants: z.unknown(),
+  checksumSha256: z.string().nullable(),
+  altText: z.string().nullable(),
+});
+
+function sourceIdentity(asset: AltTextSuggestionSource): string {
   return asset.checksumSha256 ?? `storage:${asset.storageKey}`;
 }
 
-async function suggestionPreview(asset: typeof assets.$inferSelect): Promise<{
+async function suggestionPreview(asset: AltTextSuggestionSource): Promise<{
   image: Uint8Array<ArrayBuffer>;
   contentType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 }> {
@@ -1726,20 +1741,15 @@ export const listAltTextSuggestionStates = defineService({
  * is unavailable to API keys because each call can have provider cost and the
  * workflow is intentionally initiated by a person looking at the image.
  */
-export const generateAltTextSuggestion = defineService({
-  name: "media.generateAltTextSuggestion",
-  summary: "Generate an image description for explicit human review.",
-  kind: "mutation",
+const altTextSuggestionSourceService = defineService({
+  name: "media.altTextSuggestionSource",
+  summary: "Authorize and snapshot an image before provider-assisted alt-text generation.",
+  kind: "query",
   permission: "scoped",
   agentCallable: false,
-  rateLimit: {
-    windowSeconds: 60 * 60,
-    limit: 5,
-    subject: (input) => input.id,
-    message: "That image has had several suggestions generated recently. Review one or try again later.",
-  },
+  external: false,
   input: z.object({ id: z.string().uuid() }),
-  output: suggestionRow,
+  output: altTextSuggestionSource,
   handler: async (input, ctx) => {
     requireHumanReview(ctx.actor);
     const [asset] = await ctx.tx
@@ -1756,6 +1766,107 @@ export const generateAltTextSuggestion = defineService({
         "Only a ready, verified image can be sent for an alt-text suggestion.",
       );
     }
+    return asset;
+  },
+});
+
+const applyAltTextSuggestion = defineService({
+  name: "media.applyAltTextSuggestion",
+  summary: "Revalidate an image and atomically store a provider-generated alt-text proposal.",
+  kind: "mutation",
+  permission: "scoped",
+  agentCallable: false,
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    id: z.string().uuid(),
+    suggestion: z.string().trim().min(1).max(500),
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    sourceChecksum: z.string().min(1),
+    authoredAltTextAtRequest: z.string().nullable(),
+  }),
+  output: suggestionRow,
+  handler: async (input, ctx) => {
+    requireHumanReview(ctx.actor);
+    const now = new Date();
+    const reviewer = actorString(ctx.actor);
+    // The provider runs outside this transaction. Re-lock and compare its
+    // source snapshot so newer image bytes or authored text always win.
+    const [currentAsset] = await ctx.tx
+      .select()
+      .from(assets)
+      .where(eq(assets.id, input.id))
+      .limit(1)
+      .for("update");
+    if (
+      !currentAsset ||
+      currentAsset.status !== "ready" ||
+      currentAsset.kind !== "image" ||
+      sourceIdentity(currentAsset) !== input.sourceChecksum ||
+      currentAsset.altText !== input.authoredAltTextAtRequest
+    ) {
+      throw new ServiceError(
+        "conflict",
+        "The image or its authored alt text changed while the suggestion was generated. Nothing was overwritten; try again from the current image.",
+      );
+    }
+    await ctx.tx
+      .update(mediaAltTextSuggestions)
+      .set({
+        status: "superseded",
+        reviewedBy: reviewer,
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(mediaAltTextSuggestions.assetId, currentAsset.id),
+          eq(mediaAltTextSuggestions.status, "ready"),
+        ),
+      );
+    const [stored] = await ctx.tx
+      .insert(mediaAltTextSuggestions)
+      .values({
+        assetId: currentAsset.id,
+        suggestion: input.suggestion,
+        provider: input.provider,
+        model: input.model,
+        promptVersion: ALT_TEXT_PROMPT_VERSION,
+        sourceChecksum: input.sourceChecksum,
+        authoredAltTextAtRequest: input.authoredAltTextAtRequest,
+        requestedBy: reviewer,
+      })
+      .returning();
+    ctx.setSubject("asset", currentAsset.id);
+    ctx.queueEvent("media.altTextSuggested", {
+      assetId: currentAsset.id,
+      suggestionId: stored!.id,
+      provider: stored!.provider,
+      model: stored!.model,
+    });
+    return stored!;
+  },
+});
+
+export const generateAltTextSuggestion = defineOrchestratedService({
+  name: "media.generateAltTextSuggestion",
+  summary: "Generate an image description for explicit human review.",
+  kind: "mutation",
+  permission: "scoped",
+  agentCallable: false,
+  writeClass: "write",
+  rateLimit: {
+    windowSeconds: 60 * 60,
+    limit: 5,
+    subject: (input) => input.id,
+    message: "That image has had several suggestions generated recently. Review one or try again later.",
+  },
+  input: z.object({ id: z.string().uuid() }),
+  output: suggestionRow,
+  handler: async (input, actor) => {
+    requireHumanReview(actor);
+    const asset = await altTextSuggestionSourceService.call(input, actor);
     const provider = altTextSuggester();
     if (!provider.available) {
       throw new ServiceError(
@@ -1783,64 +1894,17 @@ export const generateAltTextSuggestion = defineService({
         "The provider returned a suggestion that cannot be reviewed safely.",
       );
     }
-
-    const now = new Date();
-    const reviewer = actorString(ctx.actor);
-    // The provider call happens without a row lock. Re-lock and compare now,
-    // so a person can author text while it runs and that newer work wins.
-    const [currentAsset] = await ctx.tx
-      .select()
-      .from(assets)
-      .where(eq(assets.id, asset.id))
-      .limit(1)
-      .for("update");
-    if (
-      !currentAsset ||
-      currentAsset.status !== "ready" ||
-      currentAsset.kind !== "image" ||
-      sourceIdentity(currentAsset) !== sourceIdentity(asset) ||
-      currentAsset.altText !== asset.altText
-    ) {
-      throw new ServiceError(
-        "conflict",
-        "The image or its authored alt text changed while the suggestion was generated. Nothing was overwritten; try again from the current image.",
-      );
-    }
-    await ctx.tx
-      .update(mediaAltTextSuggestions)
-      .set({
-        status: "superseded",
-        reviewedBy: reviewer,
-        reviewedAt: now,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(mediaAltTextSuggestions.assetId, asset.id),
-          eq(mediaAltTextSuggestions.status, "ready"),
-        ),
-      );
-    const [stored] = await ctx.tx
-      .insert(mediaAltTextSuggestions)
-      .values({
-        assetId: currentAsset.id,
+    return applyAltTextSuggestion.call(
+      {
+        id: asset.id,
         suggestion,
         provider: generated.provider,
         model: generated.model,
-        promptVersion: ALT_TEXT_PROMPT_VERSION,
-        sourceChecksum: sourceIdentity(currentAsset),
-        authoredAltTextAtRequest: currentAsset.altText,
-        requestedBy: reviewer,
-      })
-      .returning();
-    ctx.setSubject("asset", asset.id);
-    ctx.queueEvent("media.altTextSuggested", {
-      assetId: asset.id,
-      suggestionId: stored!.id,
-      provider: stored!.provider,
-      model: stored!.model,
-    });
-    return stored!;
+        sourceChecksum: sourceIdentity(asset),
+        authoredAltTextAtRequest: asset.altText,
+      },
+      actor,
+    );
   },
 });
 
@@ -2425,6 +2489,8 @@ export default [
   altTextSuggestionState,
   listAltTextSuggestionStates,
   generateAltTextSuggestion,
+  altTextSuggestionSourceService,
+  applyAltTextSuggestion,
   acceptAltTextSuggestion,
   dismissAltTextSuggestion,
   setAltText,
