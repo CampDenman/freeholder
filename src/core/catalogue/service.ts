@@ -36,6 +36,7 @@ import {
   ServiceError,
   type Actor,
 } from "@/core/service";
+import type { JobExecutionContext } from "@/core/jobs";
 
 /** The version this instance reports for compatibility checks. */
 const PLATFORM_VERSION = process.env.npm_package_version ?? "0.0.0";
@@ -114,6 +115,33 @@ const catalogueIndex = z.object({
   name: z.string().trim().max(200).optional(),
   entries: z.array(catalogueEntryDocument).max(MAX_ENTRIES),
 });
+
+const catalogueRefreshResponse = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    entries: z.array(catalogueEntryDocument).max(MAX_ENTRIES),
+  }),
+  z.object({
+    ok: z.literal(false),
+    error: z.string().min(1).max(400),
+  }),
+]);
+
+const catalogueRefreshResult = z.object({
+  id: uuid,
+  entries: z.number().int(),
+  refused: z.number().int(),
+  error: z.string().nullable(),
+  applied: z.boolean(),
+});
+
+interface CatalogueRefreshResult {
+  id: string;
+  entries: number;
+  refused: number;
+  error: string | null;
+  applied: boolean;
+}
 
 const sourceRow = row({
   id: uuid,
@@ -240,7 +268,7 @@ export const listCatalogueSources = defineService({
 
 export const refreshCatalogue = defineService({
   name: "catalogue.refresh",
-  summary: "Fetch what a catalogue is offering now.",
+  summary: "Queue a refresh of what a catalogue is offering now.",
   kind: "mutation",
   permission: "scoped",
   agentCallable: false,
@@ -248,56 +276,105 @@ export const refreshCatalogue = defineService({
   input: z.object({ id: z.uuid() }),
   output: z.object({
     id: uuid,
-    entries: z.number().int(),
-    refused: z.number().int(),
-    /** Set when the catalogue could not be read. A state, not an exception. */
-    error: z.string().nullable(),
+    jobId: uuid,
+    queued: z.literal(true),
   }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
     const [source] = await ctx.tx
-      .select()
+      .select({ id: catalogueSources.id, enabled: catalogueSources.enabled })
       .from(catalogueSources)
       .where(eq(catalogueSources.id, input.id))
       .limit(1);
     if (!source) throw new ServiceError("not_found", "No such catalogue.");
+    if (!source.enabled) {
+      throw new ServiceError("conflict", "That catalogue is not enabled.");
+    }
+    const queued = await ctx.queueJob(
+      "core.refreshCatalogue",
+      { sourceId: source.id },
+      {
+        // Collapse impatient double-clicks without preventing a deliberate
+        // refresh later. The apply step is idempotent as well.
+        idempotencyKey: `catalogue-refresh:${source.id}:${Math.floor(Date.now() / 60_000)}`,
+        idempotencyTtlSeconds: 120,
+      },
+    );
+    ctx.setSubject("catalogue_source", source.id);
+    return { id: source.id, jobId: queued.id, queued: true as const };
+  },
+});
 
-    let parsed: z.infer<typeof catalogueIndex>;
-    try {
-      const downloaded = await getPinnedBytes(source.url, {
-        maxBytes: 256 * 1024,
-        timeoutMs: 30_000,
-        allowLocal: false,
-        headers: { accept: "application/json" },
-      });
-      const response = new Response(downloaded.bytes, {
-        status: downloaded.status,
-        headers: downloaded.contentType
-          ? { "content-type": downloaded.contentType }
-          : undefined,
-      });
-      parsed = catalogueIndex.parse(await providerJson(response, "The catalogue"));
-    } catch (error) {
-      // A catalogue that cannot be read is a **state**, not an exception —
-      // the same posture §41 takes towards a connection whose grant was
-      // revoked. This is also the only shape that works: throwing here would
-      // roll back the very row recording why it failed, and the owner would
-      // be told nothing twice.
-      const reason =
-        error instanceof Error
-          ? error.message.slice(0, 400)
-          : "The catalogue could not be read.";
+/** A short, system-only snapshot taken before the worker crosses the network. */
+export const catalogueRefreshSource = defineService({
+  name: "catalogue.refreshSource",
+  summary: "Read the enabled source needed by the catalogue refresh worker.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ id: uuid }),
+  output: z.object({ id: uuid, url: z.string() }).nullable(),
+  handler: async (input, ctx) => {
+    const [source] = await ctx.tx
+      .select({ id: catalogueSources.id, url: catalogueSources.url })
+      .from(catalogueSources)
+      .where(and(eq(catalogueSources.id, input.id), eq(catalogueSources.enabled, true)))
+      .limit(1);
+    return source ?? null;
+  },
+});
+
+/**
+ * Apply bytes the worker already fetched. `response` is audit-redacted by the
+ * service boundary: the audit needs the source id, not a duplicate of every
+ * third-party definition.
+ */
+export const applyCatalogueRefresh = defineService({
+  name: "catalogue.applyRefresh",
+  summary: "Atomically cache a bounded catalogue response fetched by the worker.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({
+    id: uuid,
+    expectedUrl: z.string().url().max(500),
+    response: z.unknown(),
+  }),
+  output: catalogueRefreshResult,
+  handler: async (input, ctx) => {
+    const response = catalogueRefreshResponse.parse(input.response);
+    const [source] = await ctx.tx
+      .select({
+        id: catalogueSources.id,
+        url: catalogueSources.url,
+        enabled: catalogueSources.enabled,
+      })
+      .from(catalogueSources)
+      .where(eq(catalogueSources.id, input.id))
+      .limit(1);
+    if (!source || !source.enabled || source.url !== input.expectedUrl) {
+      return { id: input.id, entries: 0, refused: 0, error: null, applied: false };
+    }
+
+    ctx.setSubject("catalogue_source", source.id);
+    if (!response.ok) {
+      // An unreadable catalogue is a state, not an exception. This mutation
+      // commits the reason after the network transaction has already ended.
       await ctx.tx
         .update(catalogueSources)
-        .set({ lastError: reason, updatedAt: sql`now()` })
+        .set({ lastError: response.error, updatedAt: sql`now()` })
         .where(eq(catalogueSources.id, source.id));
-      ctx.setSubject("catalogue_source", source.id);
-      return { id: source.id, entries: 0, refused: 0, error: reason };
+      return {
+        id: source.id,
+        entries: 0,
+        refused: 0,
+        error: response.error,
+        applied: true,
+      };
     }
 
     let stored = 0;
     let refused = 0;
-    for (const entry of parsed.entries) {
+    for (const entry of response.entries) {
       try {
         // Refused at the door, so a definition carrying authority never
         // reaches a preview screen where somebody might approve it.
@@ -350,9 +427,58 @@ export const refreshCatalogue = defineService({
 
     ctx.setSubject("catalogue_source", source.id);
     ctx.queueEvent("catalogue.refreshed", { id: source.id, entries: stored, refused });
-    return { id: source.id, entries: stored, refused, error: null };
+    return { id: source.id, entries: stored, refused, error: null, applied: true };
   },
 });
+
+/**
+ * Worker orchestration deliberately lives outside defineService: no database
+ * transaction exists while DNS, TLS and response streaming are in flight.
+ * Both database phases still cross the service registry and keep their normal
+ * validation, permission and audit contracts.
+ */
+export async function runCatalogueRefresh(
+  id: string,
+  context?: JobExecutionContext,
+): Promise<CatalogueRefreshResult> {
+  const source = await catalogueRefreshSource.call({ id }, { kind: "system" });
+  if (!source) return { id, entries: 0, refused: 0, error: null, applied: false };
+  await context?.throwIfCancelled();
+
+  let response: unknown;
+  try {
+    const downloaded = await getPinnedBytes(source.url, {
+      maxBytes: 256 * 1024,
+      timeoutMs: 30_000,
+      allowLocal: false,
+      headers: { accept: "application/json" },
+    });
+    const providerResponse = new Response(downloaded.bytes, {
+      status: downloaded.status,
+      headers: downloaded.contentType
+        ? { "content-type": downloaded.contentType }
+        : undefined,
+    });
+    const parsed = catalogueIndex.parse(
+      await providerJson(providerResponse, "The catalogue"),
+    );
+    response = { ok: true, entries: parsed.entries };
+  } catch (error) {
+    response = {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message.slice(0, 400)
+          : "The catalogue could not be read.",
+    };
+  }
+
+  await context?.throwIfCancelled();
+  return applyCatalogueRefresh.call(
+    { id, expectedUrl: source.url, response },
+    { kind: "system" },
+  );
+}
 
 export const browseCatalogue = defineService({
   name: "catalogue.list",
@@ -590,6 +716,8 @@ export default [
   removeCatalogueSource,
   listCatalogueSources,
   refreshCatalogue,
+  catalogueRefreshSource,
+  applyCatalogueRefresh,
   browseCatalogue,
   previewCatalogueEntry,
   installCatalogueEntry,

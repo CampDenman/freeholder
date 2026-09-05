@@ -3418,7 +3418,11 @@ one with unchecked dependency items.
   closed provider-media SSRF/token disclosure/unbounded reads, unsafe inline
   JSON serialization and the regex custom-HTML sanitizer; the inbound pass
   replaced post-allocation size checks with shared streaming HTTP/API/MCP,
-  upload and provider-callback bounds, with focused tests.
+  upload and provider-callback bounds, with focused tests. Catalogue refresh
+  plus social ingest, health, GBP and publication provider calls now run in
+  durable workers outside service transactions; short system services take and
+  apply their validated snapshots, and
+  `tests/core/long-running-service-boundary.test.ts` prevents regression.
   The complete checked-item × F01–F12 evidence matrix remains open.)*
 - [ ] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
   carry resolvable repository evidence, the control block must be current, and
@@ -7022,7 +7026,9 @@ customer has one secure, comprehensible home for the relationship.
   client; Instagram and Facebook share Meta. Profiles land
   `pending_review` until a person approves them. Assignment is user /
   business / locations; read, respond, publish and approval policy are
-  separate switches. Health probes the token and warns before expiry.
+  separate switches. `social.checkHealth` queues a bounded worker probe, which
+  records health only after the provider request has left the service
+  transaction and warns before expiry.
   Migration `0150_social_profiles.sql`. Tests in
   `tests/modules/social.test.ts` and
   `tests/adapters/social-conformance.test.ts`. Changeset
@@ -7031,7 +7037,8 @@ customer has one secure, comprehensible home for the relationship.
   checksum, source/publication ancestry and provenance; reclaim Assets, prevent
   repost loops, resolve identifiable contacts conservatively and route social
   threads to the unified inbox.
-  (`social.ingestProfile` pulls owned posts through `adapters/social`
+  (`social.ingestProfile` transactionally queues `social.ingestProfileOne`,
+  whose worker pulls owned posts through `adapters/social`
   `listOwnedPosts` / `listInteractions`. Media is stored as Assets with
   checksum and provenance (`source: import`). Provider-supplied media URLs are
   fetched without account credentials through a redirect-free, DNS-pinned,
@@ -7055,17 +7062,20 @@ customer has one secure, comprehensible home for the relationship.
   limit, aspect, safe area and duration. Stills crop via sharp; video clips
   via ffmpeg when it is on PATH. Generated crops and profiles with
   approval-required stay `pending_review`. `social.schedulePublications`
-  is idempotent on `idempotency_key`; `social.publishDue` publishes due
-  rows and a failure on one profile does not retry a success on another.
+  is idempotent on `idempotency_key` and atomically schedules the targeted
+  `social.publishPublication` job; `social.publishDue` only queues legacy/due
+  rows. Provider delivery has no database transaction open, records its result
+  through a short system mutation, and a failure on one profile cannot retry a
+  success on another.
   `social.publicationCalendar` is the one calendar. Migration
   `0152_social_composer.sql`. Tests in
   `tests/modules/social-composer.test.ts`. Changeset `social-composer.md`.)
 - [x] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
   outbound social links to visits, contacts and revenue.
-  (`social.syncGbp` pulls owned GBP posts through ingest, pushes
-  `OpeningHours` via `social.syncGbpHours`, and imports reviews through
+  (`social.syncGbp` queues a durable per-profile workflow that pulls owned GBP
+  posts through ingest, pushes `OpeningHours` via the GBP worker, and imports reviews through
   `reviews.ingestExternal` with source `google_business` — a reviewer email
-  resolves onto the contact spine, a handle does not. `social.publishDue`
+  resolves onto the contact spine, a handle does not. The publication worker
   stamps a first-party `utm_source`/`utm_medium=social`/`utm_campaign`
   canonical URL on every publication. `social.attributionReport` joins
   those visits to identified contacts and paid invoices. Migration

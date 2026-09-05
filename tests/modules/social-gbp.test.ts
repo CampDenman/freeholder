@@ -18,13 +18,16 @@ import {
   completeOAuth,
   composePackage,
   createVariants,
-  publishDue,
   reviewProfile,
+  runGbpHours,
+  runGbpReviews,
+  runPublication,
   schedulePublications,
   setPolicy,
   syncGbpHours,
   syncGbpReviews,
 } from "@/modules/social/service";
+import { socialPublications } from "@/modules/social/schema";
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const changedEnvironment = new Map<string, string | undefined>();
@@ -181,7 +184,10 @@ describe.runIf(hasDatabase)("social GBP", { timeout: 60_000 }, () => {
     );
     const hoursBody: { periods?: unknown }[] = [];
     vi.stubGlobal("fetch", gbpApi({ hoursBody }));
-    const synced = await syncGbpHours.call({ profileId }, OWNER);
+    const queued = await syncGbpHours.call({ profileId }, OWNER);
+    expect(queued).toMatchObject({ profileId, queued: true });
+    expect(hoursBody).toEqual([]);
+    const synced = await runGbpHours(profileId);
     expect(synced.locations).toBe(1);
     expect(hoursBody[0]).toMatchObject({
       periods: [{ weekday: 1, opens: "09:00", closes: "17:00", closed: false }],
@@ -191,7 +197,9 @@ describe.runIf(hasDatabase)("social GBP", { timeout: 60_000 }, () => {
   it("imports GBP reviews into the reviews module once, and emails onto the spine", async () => {
     const profileId = await readyGbp();
     vi.stubGlobal("fetch", gbpApi());
-    const first = await syncGbpReviews.call({ profileId }, OWNER);
+    const queued = await syncGbpReviews.call({ profileId }, OWNER);
+    expect(queued).toMatchObject({ profileId, queued: true });
+    const first = await runGbpReviews(profileId);
     expect(first.imported).toBe(2);
     expect(first.skipped).toBe(0);
     const stored = await db().select().from(reviews);
@@ -205,7 +213,7 @@ describe.runIf(hasDatabase)("social GBP", { timeout: 60_000 }, () => {
     expect(handleOnly?.contactId).toBeNull();
     expect(handleOnly?.body).toBe("");
 
-    const second = await syncGbpReviews.call({ profileId }, OWNER);
+    const second = await runGbpReviews(profileId);
     expect(second.imported).toBe(0);
     expect(second.skipped).toBe(2);
     expect(await db().select().from(reviews)).toHaveLength(2);
@@ -222,7 +230,8 @@ describe.runIf(hasDatabase)("social GBP", { timeout: 60_000 }, () => {
     );
     expect(variant!.status).toBe("approved");
     await schedulePublications.call({ variantIds: [variant!.id] }, OWNER);
-    const [publication] = await publishDue.call({}, OWNER);
+    const [scheduled] = await db().select().from(socialPublications);
+    const publication = await runPublication(scheduled!.id);
     expect(publication?.status).toBe("published");
     expect(publication?.canonicalUrl).toContain("utm_medium=social");
     expect(publication?.canonicalUrl).toContain(`utm_campaign=${publication!.id}`);

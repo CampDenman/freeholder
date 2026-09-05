@@ -31,6 +31,7 @@ import {
   socialPublications,
   socialVariants,
 } from "./schema";
+import type { JobExecutionContext } from "@/core/jobs";
 
 function digestOf(body: string, checksums: readonly string[]): string {
   return createHash("sha256")
@@ -396,6 +397,14 @@ export const schedulePublications = defineService({
         .limit(1);
       if (existing) {
         out.push(presentPublication(existing));
+        await ctx.queueJob(
+          "social.publishPublication",
+          { publicationId: existing.id },
+          {
+            idempotencyKey: `social-publish-job:${existing.id}`,
+            startAfter: when,
+          },
+        );
         continue;
       }
       const [saved] = await ctx.tx
@@ -411,6 +420,14 @@ export const schedulePublications = defineService({
         })
         .returning();
       out.push(presentPublication(saved!));
+      await ctx.queueJob(
+        "social.publishPublication",
+        { publicationId: saved!.id },
+        {
+          idempotencyKey: `social-publish-job:${saved!.id}`,
+          startAfter: when,
+        },
+      );
     }
     ctx.queueEvent("social.scheduled", { count: out.length });
     return out;
@@ -437,11 +454,11 @@ function presentPublication(row: typeof socialPublications.$inferSelect) {
 export const publishDue = defineService({
   name: "social.publishDue",
   writeClass: "write",
-  summary: "Publish every due scheduled variant. Partial failure does not retry successes.",
+  summary: "Queue every due scheduled variant for provider delivery.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({}),
-  output: listed(publicationRow),
+  output: z.object({ queued: z.number().int(), jobIds: z.array(uuid) }),
   handler: async (_input, ctx) => {
     const due = await ctx.tx
       .select()
@@ -455,86 +472,222 @@ export const publishDue = defineService({
           ),
         ),
       );
-    const out = [];
+    const jobIds = [];
     for (const publication of due) {
-      if (!publication.variantId || !publication.profileId) continue;
-      const [variant] = await ctx.tx
-        .select()
-        .from(socialVariants)
-        .where(eq(socialVariants.id, publication.variantId))
-        .limit(1);
-      const [profile] = await ctx.tx
-        .select()
-        .from(socialProfiles)
-        .where(eq(socialProfiles.id, publication.profileId))
-        .limit(1);
-      if (!variant || !profile) continue;
-      try {
-        const adapter = socialAdapters.get(profile.provider);
-        const token = accessTokenFor(profile);
-        const media = [];
-        for (const assetId of variant.assetIds) {
-          const [asset] = await ctx.tx
-            .select()
-            .from(assets)
-            .where(eq(assets.id, assetId))
-            .limit(1);
-          if (!asset) continue;
-          media.push({
-            url: await storage().url(asset.storageKey, { expiresIn: 3_600 }),
-            altText: asset.altText ?? undefined,
-          });
-        }
-        const tracked = outboundCampaignUrl(publication.id, profile.provider);
-        const policy = policyFor(profile.provider);
-        const room = Math.max(0, policy.captionLimit - tracked.length - 1);
-        const clipped = clipCaption(variant.caption, room);
-        const text = clipped ? `${clipped}\n${tracked}` : tracked;
-        const result = await adapter.publish({
-          accountRef: token,
-          text,
-          media,
-          idempotencyKey: publication.idempotencyKey ?? publication.id,
-        });
-        const [saved] = await ctx.tx
-          .update(socialPublications)
-          .set({
-            status: "published",
-            providerRef: result.providerRef,
-            publishedAt: new Date(),
-            attempts: publication.attempts + 1,
-            lastError: null,
-            canonicalUrl: tracked,
-          })
-          .where(eq(socialPublications.id, publication.id))
-          .returning();
-        await ctx.tx
-          .update(socialPackages)
-          .set({ canonicalUrl: tracked, updatedAt: new Date() })
-          .where(
-            and(
-              eq(socialPackages.id, publication.packageId),
-              sql`${socialPackages.canonicalUrl} is null`,
-            ),
-          );
-        out.push(presentPublication(saved!));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Publish failed.";
-        const [saved] = await ctx.tx
-          .update(socialPublications)
-          .set({
-            status: "failed",
-            attempts: publication.attempts + 1,
-            lastError: message.slice(0, 1_000),
-          })
-          .where(eq(socialPublications.id, publication.id))
-          .returning();
-        out.push(presentPublication(saved!));
-      }
+      const queued = await ctx.queueJob(
+        "social.publishPublication",
+        { publicationId: publication.id },
+        { idempotencyKey: `social-publish-job:${publication.id}` },
+      );
+      jobIds.push(queued.id);
     }
-    return out;
+    return { queued: jobIds.length, jobIds };
   },
 });
+
+export const publicationSource = defineService({
+  name: "social.publicationSource",
+  summary: "Read one due publication for its provider-delivery worker.",
+  kind: "query",
+  permission: "system",
+  input: z.object({ publicationId: uuid }),
+  output: z.unknown(),
+  handler: async (input, ctx) => {
+    const [publication] = await ctx.tx
+      .select()
+      .from(socialPublications)
+      .where(eq(socialPublications.id, input.publicationId))
+      .limit(1);
+    if (
+      !publication ||
+      !["scheduled", "failed"].includes(publication.status) ||
+      (publication.scheduledAt && publication.scheduledAt > new Date())
+    ) {
+      return null;
+    }
+    const unavailable = (sourceError: string) => ({
+      id: publication.id,
+      packageId: publication.packageId,
+      provider: publication.provider,
+      accessToken: null,
+      sourceError,
+      caption: "",
+      media: [],
+      idempotencyKey: publication.idempotencyKey ?? publication.id,
+    });
+    if (!publication.variantId) {
+      return unavailable("The publication variant is missing.");
+    }
+    if (!publication.profileId) {
+      return unavailable("The publishing profile is missing.");
+    }
+    const [variant] = await ctx.tx
+      .select()
+      .from(socialVariants)
+      .where(eq(socialVariants.id, publication.variantId))
+      .limit(1);
+    const [profile] = await ctx.tx
+      .select()
+      .from(socialProfiles)
+      .where(eq(socialProfiles.id, publication.profileId))
+      .limit(1);
+    if (!variant || variant.status !== "approved") {
+      return unavailable("The publication variant is unavailable or no longer approved.");
+    }
+    if (!profile || profile.status !== "active" || !profile.allowPublish) {
+      return unavailable("The publishing profile is unavailable or publishing is disabled.");
+    }
+    const media = [];
+    for (const assetId of variant.assetIds) {
+      const [asset] = await ctx.tx
+        .select({ storageKey: assets.storageKey, altText: assets.altText })
+        .from(assets)
+        .where(eq(assets.id, assetId))
+        .limit(1);
+      if (asset) media.push(asset);
+    }
+    let accessToken: string | null = null;
+    let sourceError: string | null = null;
+    try {
+      accessToken = accessTokenFor(profile);
+    } catch (error) {
+      sourceError = error instanceof Error ? error.message.slice(0, 1_000) : "Credentials failed.";
+    }
+    return {
+      id: publication.id,
+      packageId: publication.packageId,
+      provider: profile.provider,
+      accessToken,
+      sourceError,
+      caption: variant.caption,
+      media,
+      idempotencyKey: publication.idempotencyKey ?? publication.id,
+    };
+  },
+});
+
+const publicationProviderResponse = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    providerRef: z.string().min(1).max(500),
+    canonicalUrl: z.string().url().max(2_048),
+  }),
+  z.object({ ok: z.literal(false), error: z.string().min(1).max(1_000) }),
+]);
+
+export const recordPublicationResult = defineService({
+  name: "social.recordPublicationResult",
+  summary: "Record a social provider result after its network request finishes.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({ publicationId: uuid, attempt: z.number().int().positive(), response: z.unknown() }),
+  output: publicationRow.nullable(),
+  handler: async (input, ctx) => {
+    const response = publicationProviderResponse.parse(input.response);
+    const [publication] = await ctx.tx
+      .select()
+      .from(socialPublications)
+      .where(eq(socialPublications.id, input.publicationId))
+      .limit(1);
+    if (!publication || publication.status === "published") return null;
+    const attempts = Math.max(publication.attempts + 1, input.attempt);
+    const [saved] = await ctx.tx
+      .update(socialPublications)
+      .set(
+        response.ok
+          ? {
+              status: "published",
+              providerRef: response.providerRef,
+              publishedAt: new Date(),
+              attempts,
+              lastError: null,
+              canonicalUrl: response.canonicalUrl,
+            }
+          : { status: "failed", attempts, lastError: response.error },
+      )
+      .where(eq(socialPublications.id, publication.id))
+      .returning();
+    if (response.ok) {
+      await ctx.tx
+        .update(socialPackages)
+        .set({ canonicalUrl: response.canonicalUrl, updatedAt: new Date() })
+        .where(
+          and(
+            eq(socialPackages.id, publication.packageId),
+            sql`${socialPackages.canonicalUrl} is null`,
+          ),
+        );
+    }
+    ctx.setSubject("social_publication", publication.id);
+    return presentPublication(saved!);
+  },
+});
+
+export async function runPublication(
+  publicationId: string,
+  context?: JobExecutionContext,
+) {
+  const source = (await publicationSource.call(
+    { publicationId },
+    { kind: "system" },
+  )) as
+    | {
+        id: string;
+        provider: string;
+        accessToken: string | null;
+        sourceError: string | null;
+        caption: string;
+        media: { storageKey: string; altText: string | null }[];
+        idempotencyKey: string;
+      }
+    | null;
+  if (!source) return null;
+  await context?.throwIfCancelled();
+  try {
+    if (!source.accessToken) throw new Error(source.sourceError ?? "Credentials failed.");
+    const media = [];
+    for (const asset of source.media) {
+      media.push({
+        url: await storage().url(asset.storageKey, { expiresIn: 3_600 }),
+        altText: asset.altText ?? undefined,
+      });
+    }
+    const tracked = outboundCampaignUrl(source.id, source.provider);
+    const policy = policyFor(source.provider);
+    const room = Math.max(0, policy.captionLimit - tracked.length - 1);
+    const clipped = clipCaption(source.caption, room);
+    const text = clipped ? `${clipped}\n${tracked}` : tracked;
+    const result = await socialAdapters.get(source.provider).publish({
+      accountRef: source.accessToken,
+      text,
+      media,
+      idempotencyKey: source.idempotencyKey,
+    });
+    // Once the provider accepted the idempotent side effect, recording that
+    // result outranks a newly-arrived shutdown request. A retry is safe, but
+    // deliberately abandoning the provider reference here is not.
+    return recordPublicationResult.call(
+      {
+        publicationId: source.id,
+        attempt: context?.attempt ?? 1,
+        response: { ok: true, providerRef: result.providerRef, canonicalUrl: tracked },
+      },
+      { kind: "system" },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 1_000) : "Publish failed.";
+    await recordPublicationResult.call(
+      {
+        publicationId: source.id,
+        attempt: context?.attempt ?? 1,
+        response: { ok: false, error: message },
+      },
+      { kind: "system" },
+    );
+    throw error;
+  }
+}
 
 export const publicationCalendar = defineService({
   name: "social.publicationCalendar",

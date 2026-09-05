@@ -20,6 +20,7 @@ import {
   interactionList,
   packageList,
   reviewProfile,
+  runProfileIngest,
   setPolicy,
 } from "@/modules/social/service";
 import { socialPublications } from "@/modules/social/schema";
@@ -179,7 +180,7 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
   it("reclaims an owned post into a package and an asset with checksum provenance", async () => {
     const profileId = await connectedProfile();
     vi.stubGlobal("fetch", api(png));
-    const result = await ingestProfile.call({ profileId }, OWNER);
+    const result = await runProfileIngest(profileId);
     expect(result.packagesCreated).toBe(1);
 
     const [pack] = await packageList.call({}, OWNER);
@@ -202,9 +203,9 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
   it("does not ingest the same provider post twice", async () => {
     const profileId = await connectedProfile();
     vi.stubGlobal("fetch", api(png));
-    await ingestProfile.call({ profileId }, OWNER);
+    await runProfileIngest(profileId);
     vi.stubGlobal("fetch", api(png));
-    const second = await ingestProfile.call({ profileId }, OWNER);
+    const second = await runProfileIngest(profileId);
     expect(second.packagesCreated).toBe(0);
     expect(second.packagesSeen).toBe(1);
     expect(await packageList.call({}, OWNER)).toHaveLength(1);
@@ -217,7 +218,7 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
     const remove = vi.spyOn(storage(), "delete");
     downloadSocialMedia.mockResolvedValue(new Uint8Array([1, 2, 3]));
 
-    await ingestProfile.call({ profileId }, OWNER);
+    await runProfileIngest(profileId);
 
     const [pack] = await packageList.call({}, OWNER);
     expect(pack!.assetIds).toEqual([]);
@@ -227,7 +228,7 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
   it("routes a comment with an email onto the spine, and leaves a handle-only comment off it", async () => {
     const profileId = await connectedProfile();
     vi.stubGlobal("fetch", api(png));
-    await ingestProfile.call({ profileId }, OWNER);
+    await runProfileIngest(profileId);
     const threads = await interactionList.call({}, OWNER);
     expect(threads).toHaveLength(2);
     const withEmail = threads.find((row) => row.authorEmail === "sam@example.com");
@@ -257,7 +258,7 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
   it("turns an ingested post into a draft without copy-paste", async () => {
     const profileId = await connectedProfile();
     vi.stubGlobal("fetch", api(png));
-    await ingestProfile.call({ profileId }, OWNER);
+    await runProfileIngest(profileId);
     const [source] = await packageList.call({}, OWNER);
     const draft = await draftFromPackage.call({ id: source!.id }, OWNER);
     expect(draft.sourceKind).toBe("draft");
@@ -280,5 +281,15 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
     );
     const error = await failure(ingestProfile.call({ profileId }, OWNER));
     expect(error.code).toBe("permission");
+  });
+
+  it("queues provider work without calling the provider inside the service transaction", async () => {
+    const profileId = await connectedProfile();
+    const provider = api(png);
+    vi.stubGlobal("fetch", provider);
+    const queued = await ingestProfile.call({ profileId }, OWNER);
+    expect(queued).toMatchObject({ profileId, queued: true });
+    expect(queued.jobId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(provider).not.toHaveBeenCalled();
   });
 });

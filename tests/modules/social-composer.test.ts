@@ -12,12 +12,12 @@ import {
   completeOAuth,
   composePackage,
   createVariants,
-  ingestProfile,
   packageList,
   publicationCalendar,
-  publishDue,
   reviewProfile,
   reviewVariant,
+  runPublication,
+  runProfileIngest,
   schedulePublications,
   setPolicy,
 } from "@/modules/social/service";
@@ -163,7 +163,7 @@ describe.runIf(hasDatabase)("social composer", { timeout: 60_000 }, () => {
   it("makes a generated crop that must be reviewed before it can be scheduled", async () => {
     const profileId = await readyProfile();
     vi.stubGlobal("fetch", api(png));
-    await ingestProfile.call({ profileId }, OWNER);
+    await runProfileIngest(profileId);
     const [pack] = await packageList.call({}, OWNER);
     const [variant] = await createVariants.call(
       { packageId: pack!.id, profileIds: [profileId] },
@@ -186,7 +186,7 @@ describe.runIf(hasDatabase)("social composer", { timeout: 60_000 }, () => {
   it("publishes an approved variant once, even if schedule is asked twice", async () => {
     const profileId = await readyProfile();
     vi.stubGlobal("fetch", api(png));
-    await ingestProfile.call({ profileId }, OWNER);
+    await runProfileIngest(profileId);
     const [pack] = await packageList.call({}, OWNER);
     const [variant] = await createVariants.call(
       { packageId: pack!.id, profileIds: [profileId] },
@@ -204,11 +204,44 @@ describe.runIf(hasDatabase)("social composer", { timeout: 60_000 }, () => {
       OWNER,
     );
     expect(second[0]!.id).toBe(first[0]!.id);
-    await publishDue.call({}, OWNER);
+    await runPublication(first[0]!.id);
     const calendar = await publicationCalendar.call({}, OWNER);
     const published = calendar.filter((row) => row.status === "published");
     expect(published).toHaveLength(1);
     expect(published[0]!.providerRef).toBe("net-unique");
+  });
+
+  it("records a durable failure when a scheduled destination becomes unavailable", async () => {
+    const profileId = await readyProfile();
+    vi.stubGlobal("fetch", api(png));
+    await runProfileIngest(profileId);
+    const [pack] = await packageList.call({}, OWNER);
+    const [variant] = await createVariants.call(
+      { packageId: pack!.id, profileIds: [profileId] },
+      OWNER,
+    );
+    await reviewVariant.call({ id: variant!.id, approved: true }, OWNER);
+    const [publication] = await schedulePublications.call(
+      { variantIds: [variant!.id], publishAt: "2020-01-01T00:00:00.000Z" },
+      OWNER,
+    );
+    await setPolicy.call(
+      {
+        id: profileId,
+        allowRead: true,
+        allowRespond: false,
+        allowPublish: false,
+        approvalPolicy: "required",
+      },
+      OWNER,
+    );
+
+    await expect(runPublication(publication!.id)).rejects.toThrow("publishing is disabled");
+    const calendar = await publicationCalendar.call({}, OWNER);
+    expect(calendar.find((row) => row.id === publication!.id)).toMatchObject({
+      status: "failed",
+      lastError: "The publishing profile is unavailable or publishing is disabled.",
+    });
   });
 
   it("composes an authored package without ingesting first", async () => {
