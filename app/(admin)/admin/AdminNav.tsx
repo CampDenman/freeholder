@@ -43,6 +43,7 @@ import {
   CalendarBlank,
   Newspaper,
   Megaphone,
+  ShareNetwork,
   ChatCircleText,
   PuzzlePiece,
   DownloadSimple,
@@ -50,7 +51,6 @@ import {
   Key,
   Lock,
   Robot,
-  ShareNetwork,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -100,6 +100,7 @@ export interface AdminNavLabels {
   ads: string;
   assistant: string;
   social: string;
+  sharing: string;
   automations: string;
   documents: string;
   loyalty: string;
@@ -172,6 +173,7 @@ const LINKS = [
   { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
   { href: "/admin/assistant", key: "assistant", module: "assistant", Icon: Robot },
   { href: "/admin/social", key: "social", module: "social", Icon: ShareNetwork },
+  { href: "/admin/sharing", key: "sharing", module: "share", Icon: ShareNetwork },
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   {
     href: "/admin/subscriptions",

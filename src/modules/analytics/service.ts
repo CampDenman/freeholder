@@ -779,6 +779,85 @@ export const campaignAttribution = defineService({
   },
 });
 
+/**
+ * The same figures as `campaignAttribution`, for campaigns you can name.
+ *
+ * `campaignAttribution` answers "what are my biggest campaigns" and therefore
+ * takes the top twenty. That is the wrong question for a caller holding a list
+ * of specific campaign names — a tracked share link that got four visitors is
+ * absent from a leaderboard and present in reality, and a screen that showed
+ * nothing for it would be lying by omission.
+ *
+ * It lives here rather than in the module that asks, and that is the whole
+ * reason it exists (C9.28). Sharing needs to know how a link performed;
+ * counting visitors is analytics' job, under analytics' definition of a human,
+ * a session and a conversion. A second module writing its own version of this
+ * query would grow a second set of numbers that disagrees with the traffic
+ * report the first time either definition changed.
+ */
+export const campaignTotals = defineService({
+  name: "analytics.campaignTotals",
+  summary: "Visitors and conversions for a named list of campaigns.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    campaigns: z.array(z.string().min(1).max(160)).min(1).max(500),
+    days: since,
+    includeBots,
+    model: z.enum(["first_touch", "last_touch"]).default("last_touch"),
+  }),
+  output: listed(
+    z.object({
+      campaign: z.string(),
+      visitors: z.number().int(),
+      conversions: z.number().int(),
+    }),
+  ),
+  handler: async (input, ctx) => {
+    const first = input.model === "first_touch";
+    const campaign = first
+      ? analyticsAttributions.firstCampaign
+      : analyticsAttributions.lastCampaign;
+    const touchedAt = first
+      ? analyticsAttributions.firstAt
+      : analyticsAttributions.lastAt;
+    const human = sql`exists (
+      select 1 from ${analyticsEvents} "human_event"
+      where "human_event"."anon_id" = ${analyticsAttributions.anonId}
+        and coalesce(
+          "human_event"."classification_override",
+          "human_event"."visitor_kind"
+        ) = 'human'
+    )`;
+    const converted = sql`exists (
+      select 1 from ${analyticsEvents} "conversion_event"
+      where "conversion_event"."anon_id" = ${analyticsAttributions.anonId}
+        and "conversion_event"."name" = 'form.submitted'
+        and "conversion_event"."at" >= ${touchedAt}
+    )`;
+    const rows = await ctx.tx
+      .select({
+        campaign,
+        visitors: count(),
+        conversions: sql<number>`count(*) filter (where ${converted})`,
+      })
+      .from(analyticsAttributions)
+      .where(
+        and(
+          inArray(campaign, input.campaigns),
+          gte(touchedAt, new Date(Date.now() - input.days * 86_400_000)),
+          input.includeBots ? undefined : human,
+        ),
+      )
+      .groupBy(campaign);
+    return rows.map((each) => ({
+      campaign: each.campaign ?? "",
+      visitors: Number(each.visitors),
+      conversions: Number(each.conversions),
+    }));
+  },
+});
+
 export const classificationCandidates = defineService({
   name: "analytics.classificationCandidates",
   summary: "Recent automated traffic an owner may correct.",
@@ -1289,6 +1368,7 @@ export default [
   dailyViews,
   webVitalsSummary,
   campaignAttribution,
+  campaignTotals,
   classificationCandidates,
   correctClassification,
   exportAnonymizedAnalytics,
