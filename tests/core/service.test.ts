@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   actorString,
+  defineOrchestratedService,
   defineService,
   getExternalService,
   getService,
@@ -212,6 +213,54 @@ describe("rejection happens before the handler", () => {
   });
 });
 
+describe("orchestrated services", () => {
+  let runs = 0;
+  const workflow = defineOrchestratedService({
+    name: "probe.workflow",
+    summary: "Cross a slow boundary between short service calls.",
+    kind: "mutation",
+    permission: "scoped",
+    input: z.object({ n: z.number().int() }),
+    output: z.object({ n: z.number().int() }),
+    handler: async (input) => {
+      runs += 1;
+      return input;
+    },
+  });
+
+  beforeEach(() => {
+    runs = 0;
+  });
+
+  it("shares the ordinary authorization and validation gate", async () => {
+    expect((await failure(workflow.call({ n: 1 }, ANON))).code).toBe("permission");
+    expect(
+      (
+        await failure(
+          workflow.call(
+            { n: "wrong" },
+            user("owner", [{ module: "*", access: "manage" }]),
+          ),
+        )
+      ).code,
+    ).toBe("validation");
+    expect(runs).toBe(0);
+  });
+
+  it("refuses composition inside another service transaction", async () => {
+    const error = await failure(
+      workflow.call(
+        { n: 1 },
+        user("owner", [{ module: "*", access: "manage" }]),
+        { tx: {} as never },
+      ),
+    );
+    expect(error).toMatchObject({ code: "internal" });
+    expect(error.message).toContain("outside a service transaction");
+    expect(runs).toBe(0);
+  });
+});
+
 describe("redact()", () => {
   it("removes secrets at any depth, by key name", () => {
     expect(
@@ -269,6 +318,15 @@ describe("the registry", () => {
     input: z.object({}),
     handler: async () => null,
   });
+  const humanInternal = defineService({
+    name: "registry.humanInternal",
+    summary: "An authorized phase behind a public orchestrator.",
+    kind: "mutation",
+    permission: "scoped",
+    external: false,
+    input: z.object({}),
+    handler: async () => null,
+  });
 
   beforeEach(() => {
     resetRegistryForTests();
@@ -293,6 +351,14 @@ describe("the registry", () => {
       refusal = error;
     }
     expect(refusal).toMatchObject({ code: "not_found" });
+  });
+
+  it("keeps caller-authorized orchestration phases off external projections", () => {
+    registerService(one);
+    registerService(humanInternal);
+    expect(getService("registry.humanInternal")).toBe(humanInternal);
+    expect([...listExternalServices().keys()]).toEqual(["registry.one"]);
+    expect(() => getExternalService("registry.humanInternal")).toThrow(ServiceError);
   });
 
   it("accepts the same service twice, because boot is a precondition", () => {

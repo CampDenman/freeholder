@@ -26,14 +26,12 @@ or backlog.
   opens a second transaction on a second connection, so half the mutation can
   commit while the other half rolls back. Elevation is `ctx.callAsSystem` and
   nothing else — it is deliberately greppable.
-  One sanctioned exception exists: `mail.completeOAuth` commits its one-time
-  state claim on a second connection before exchanging the provider code,
-  because provider codes are single-use and rolling the claim back would
-  advertise an impossible retry. The rationale and its pool-deadlock caveat
-  live at the call site in `src/core/mail/oauth.ts`. The same pattern, for the
-  same reason, is used by `connections.completeCalendarOAuth` and
-  `social.completeOAuth`. Do not add another exception without recording it
-  here.
+  Provider I/O never happens in a service transaction. A synchronous flow
+  that must cross a provider boundary uses `defineOrchestratedService` around
+  ordinary short claim/apply services; an orchestrator refuses `ctx.call`, so
+  it cannot be moved back under a caller's transaction by composition. OAuth
+  state claims commit before single-use codes are exchanged, and provider
+  responses are applied in a fresh transaction afterwards.
 - **Single-tenant.** One deploy = one business. No tenant-isolation
   abstractions.
 - **Monolith + toggleable modules.** No microservices. Adapters for the

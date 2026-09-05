@@ -2,22 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 // Social OAuth handshake (MASTER.md §33, C9.24).
 //
-// Provider codes are single-use. The one-time state claim is committed on a
-// second connection *before* the code is exchanged — the same sanctioned
-// exception as `mail.completeOAuth` and `connections.completeCalendarOAuth`,
-// recorded in CLAUDE.md. Rolling the claim back would advertise a retry that
-// can never succeed. The caveat is the same: this must not run inside a
-// request that already holds another pool connection, or the pool of one can
-// deadlock.
+// Provider codes are single-use. A short service commits the one-time state
+// claim before an orchestrator exchanges the code with no transaction open;
+// a second short service then stores the validated provider response.
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { uuid } from "@/core/contract";
-import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { encryptSecret } from "@/core/connections/crypto";
 import { socialAdapters } from "@/adapters/social";
-import { defineService, ServiceError, type Actor } from "@/core/service";
+import {
+  defineOrchestratedService,
+  defineService,
+  ServiceError,
+  type Actor,
+} from "@/core/service";
 import { socialOauthStates, socialProfiles } from "./schema";
 
 const CALLBACK_PATH = "/api/social";
@@ -106,38 +106,68 @@ export const beginOAuth = defineService({
   },
 });
 
-export const completeOAuth = defineService({
-  name: "social.completeOAuth",
-  summary: "Finish connecting a social profile and store its credentials pending review.",
+const socialOAuthCompletionInput = z.object({
+  provider: z.string().trim().min(1).max(80),
+  state: z.string().min(30).max(200),
+  code: z.string().min(1).max(4000),
+});
+
+const socialOAuthCompletionOutput = z.object({
+  id: uuid,
+  provider: z.string(),
+  displayName: z.string(),
+  status: z.literal("pending_review"),
+  returnTo: z.string(),
+});
+
+const socialCredentials = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().nullable(),
+  expiresAt: z.string().nullable(),
+  tokenType: z.string().min(1),
+  scopes: z.array(z.string()),
+});
+
+const socialIdentity = z.object({
+  providerAccountId: z.string().min(1),
+  displayName: z.string().min(1),
+  handle: z.string().nullable(),
+});
+
+const socialCapabilities = z.object({
+  read: z.boolean(),
+  respond: z.boolean(),
+  publish: z.boolean(),
+  extras: z.array(z.string()),
+});
+
+export const claimSocialOAuthCompletion = defineService({
+  name: "social.claimOAuthCompletion",
+  summary: "Atomically consume one social OAuth state before its provider code is spent.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
   agentCallable: false,
+  external: false,
+  writeClass: "write",
   input: z.object({
     provider: z.string().trim().min(1).max(80),
-    state: z.string().min(30).max(200),
-    code: z.string().min(1).max(4000),
+    stateToken: z.string().min(30).max(200),
   }),
   output: z.object({
-    id: uuid,
-    provider: z.string(),
-    displayName: z.string(),
-    status: z.literal("pending_review"),
     returnTo: z.string(),
+    codeVerifier: z.string().nullable(),
   }),
   handler: async (input, ctx) => {
     const actor = requirePerson(ctx.actor);
-    const adapter = adapterFor(input.provider);
-    // Second connection: claim the one-time state before spending the
-    // provider code. See the file header and CLAUDE.md.
-    const [state] = await db()
+    const [state] = await ctx.tx
       .update(socialOauthStates)
       .set({ consumedAt: sql`now()` })
       .where(
         and(
-          eq(socialOauthStates.tokenHash, hashState(input.state)),
+          eq(socialOauthStates.tokenHash, hashState(input.stateToken)),
           eq(socialOauthStates.userId, actor.userId),
-          eq(socialOauthStates.provider, adapter.id),
+          eq(socialOauthStates.provider, input.provider),
           isNull(socialOauthStates.consumedAt),
           gt(socialOauthStates.expiresAt, sql`now()`),
         ),
@@ -149,42 +179,57 @@ export const completeOAuth = defineService({
         "That social connection has expired or does not belong to this session. Start again.",
       );
     }
+    ctx.setSubject("social_oauth_state", state.id);
+    return { returnTo: state.returnTo, codeVerifier: state.codeVerifier };
+  },
+});
 
-    const tokens = await adapter.exchangeCode({
-      code: input.code,
-      redirectUri: callbackUrl(adapter.id),
-      ...(state.codeVerifier ? { codeVerifier: state.codeVerifier } : {}),
-    });
-    const identity = await adapter.identity(tokens.accessToken);
-    const discovered = adapter.capabilities(tokens.scopes);
-    const capabilities = {
-      read: discovered.read,
-      respond: discovered.respond,
-      publish: discovered.publish,
-      extras: [...discovered.extras],
-    };
-
+export const applySocialOAuthCompletion = defineService({
+  name: "social.applyOAuthCompletion",
+  summary: "Atomically store a social profile after its provider handshake completes.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    provider: z.string().trim().min(1).max(80),
+    returnTo: z.string(),
+    credentials: socialCredentials,
+    identity: socialIdentity,
+    capabilities: socialCapabilities,
+  }),
+  output: socialOAuthCompletionOutput,
+  handler: async (input, ctx) => {
+    const actor = requirePerson(ctx.actor);
+    const adapter = adapterFor(input.provider);
     const [existing] = await ctx.tx
       .select({ id: socialProfiles.id })
       .from(socialProfiles)
       .where(
         and(
           eq(socialProfiles.provider, adapter.id),
-          eq(socialProfiles.providerAccountId, identity.providerAccountId),
+          eq(socialProfiles.providerAccountId, input.identity.providerAccountId),
         ),
       )
       .limit(1);
     const profileId = existing?.id ?? crypto.randomUUID();
-    const credentials = encryptSecret(JSON.stringify(tokens), profileId);
+    const credentials = encryptSecret(
+      JSON.stringify(input.credentials),
+      profileId,
+    );
     const values = {
       provider: adapter.id,
-      providerAccountId: identity.providerAccountId,
-      displayName: identity.displayName,
-      handle: identity.handle,
+      providerAccountId: input.identity.providerAccountId,
+      displayName: input.identity.displayName,
+      handle: input.identity.handle,
       credentials,
       status: "pending_review" as const,
-      capabilities,
-      tokenExpiresAt: tokens.expiresAt ? new Date(tokens.expiresAt) : null,
+      capabilities: input.capabilities,
+      tokenExpiresAt: input.credentials.expiresAt
+        ? new Date(input.credentials.expiresAt)
+        : null,
       lastError: null,
       connectedBy: actor.userId,
       reviewedAt: null,
@@ -206,9 +251,50 @@ export const completeOAuth = defineService({
     return {
       id: profileId,
       provider: adapter.id,
-      displayName: identity.displayName,
+      displayName: input.identity.displayName,
       status: "pending_review" as const,
-      returnTo: state.returnTo,
+      returnTo: input.returnTo,
     };
+  },
+});
+
+/** The provider exchange and identity lookup run between audited DB phases. */
+export const completeOAuth = defineOrchestratedService({
+  name: "social.completeOAuth",
+  summary: "Finish connecting a social profile and store its credentials pending review.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  input: socialOAuthCompletionInput,
+  output: socialOAuthCompletionOutput,
+  handler: async (input, actor) => {
+    const adapter = adapterFor(input.provider);
+    const state = await claimSocialOAuthCompletion.call(
+      { provider: adapter.id, stateToken: input.state },
+      actor,
+    );
+    const credentials = await adapter.exchangeCode({
+      code: input.code,
+      redirectUri: callbackUrl(adapter.id),
+      ...(state.codeVerifier ? { codeVerifier: state.codeVerifier } : {}),
+    });
+    const identity = await adapter.identity(credentials.accessToken);
+    const discovered = adapter.capabilities(credentials.scopes);
+    return applySocialOAuthCompletion.call(
+      {
+        provider: adapter.id,
+        returnTo: state.returnTo,
+        credentials,
+        identity,
+        capabilities: {
+          read: discovered.read,
+          respond: discovered.respond,
+          publish: discovered.publish,
+          extras: [...discovered.extras],
+        },
+      },
+      actor,
+    );
   },
 });

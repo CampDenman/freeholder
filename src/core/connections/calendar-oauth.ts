@@ -23,7 +23,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { uuid } from "@/core/contract";
-import { db } from "@/core/db";
 import { mailOauthStates } from "@/core/mail/schema";
 import {
   authorizationUrl,
@@ -38,7 +37,12 @@ import {
   MICROSOFT_CALENDAR_WRITE,
   type OAuthProvider,
 } from "@/core/connections/oauth-core";
-import { defineService, ServiceError, type Actor } from "@/core/service";
+import {
+  defineOrchestratedService,
+  defineService,
+  ServiceError,
+  type Actor,
+} from "@/core/service";
 
 const CALLBACK_PATH = "/api/connections/calendar";
 const RETURN_TO = /^\/admin(?:\/|$)/;
@@ -110,39 +114,58 @@ export const beginCalendarOAuth = defineService({
   },
 });
 
-export const completeCalendarOAuth = defineService({
-  name: "connections.completeCalendarOAuth",
-  summary: "Finish connecting a calendar and store its credentials.",
+const calendarOAuthCompletionInput = z.object({
+  provider: z.enum(["google", "microsoft"]),
+  state: z.string().min(30).max(200),
+  code: z.string().min(1).max(4000),
+});
+
+const calendarOAuthCompletionOutput = z.object({
+  connectedAccountId: uuid,
+  email: z.string().nullable(),
+  access: z.enum(["read", "write"]),
+  scopes: z.array(z.string()),
+  returnTo: z.string(),
+});
+
+const oauthCredentials = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
+  expiresAt: z.string().datetime(),
+  tokenType: z.string().min(1),
+});
+
+const providerIdentity = z.object({
+  id: z.string().min(1),
+  email: z.string().optional(),
+  name: z.string().optional(),
+});
+
+const claimCalendarOAuthCompletion = defineService({
+  name: "connections.claimCalendarOAuthCompletion",
+  summary: "Atomically consume one calendar OAuth state before its provider code is spent.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
   agentCallable: false,
+  external: false,
+  writeClass: "write",
   input: z.object({
     provider: z.enum(["google", "microsoft"]),
-    state: z.string().min(30).max(200),
-    code: z.string().min(1).max(4000),
+    stateToken: z.string().min(30).max(200),
   }),
   output: z.object({
-    connectedAccountId: uuid,
-    email: z.string().nullable(),
     access: z.enum(["read", "write"]),
-    scopes: z.array(z.string()),
     returnTo: z.string(),
   }),
   handler: async (input, ctx) => {
     const actor = requirePerson(ctx.actor);
-    // The one-time claim, committed independently before the provider code is
-    // spent — the sanctioned second-transaction exception recorded in
-    // CLAUDE.md and MASTER.md §2 principle 12, for the same reason as mail:
-    // provider codes are single-use, so rolling the claim back would
-    // advertise a retry that can never succeed. The purpose is part of the
-    // match, so a code issued for calendars cannot be redeemed as mail.
-    const [state] = await db()
+    const [state] = await ctx.tx
       .update(mailOauthStates)
       .set({ consumedAt: sql`now()` })
       .where(
         and(
-          eq(mailOauthStates.tokenHash, hashState(input.state)),
+          eq(mailOauthStates.tokenHash, hashState(input.stateToken)),
           eq(mailOauthStates.userId, actor.userId),
           eq(mailOauthStates.provider, input.provider),
           eq(mailOauthStates.purpose, "calendar"),
@@ -157,33 +180,41 @@ export const completeCalendarOAuth = defineService({
         "That calendar connection has expired or does not belong to this session. Start again.",
       );
     }
+    ctx.setSubject("mail_oauth_state", state.tokenHash);
+    return { access: state.access, returnTo: state.returnTo };
+  },
+});
 
-    const access = state.access;
-    const required = calendarScope(input.provider, access);
-    const exchanged = await exchangeAuthorizationCode({
-      provider: input.provider,
-      code: input.code,
-      redirectUri: callbackUrl(CALLBACK_PATH, input.provider),
-      requiredScope: required,
-      requiredScopeMessage:
-        access === "write"
-          ? "Calendar editing was not granted. Reconnect and allow changes to events."
-          : "Calendar access was not granted. Reconnect and allow reading the calendar.",
-    });
-    const identity = await fetchProviderIdentity(
-      input.provider,
-      exchanged.credentials.accessToken,
-    );
+const applyCalendarOAuthCompletion = defineService({
+  name: "connections.applyCalendarOAuthCompletion",
+  summary: "Atomically store a calendar account after its provider handshake completes.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    provider: z.enum(["google", "microsoft"]),
+    access: z.enum(["read", "write"]),
+    returnTo: z.string(),
+    credentials: oauthCredentials,
+    scopes: z.array(z.string()),
+    identity: providerIdentity,
+  }),
+  output: calendarOAuthCompletionOutput,
+  handler: async (input, ctx) => {
+    const actor = requirePerson(ctx.actor);
+    const required = calendarScope(input.provider, input.access);
     const stored = await upsertConnectedAccount(ctx, {
       userId: actor.userId,
       provider: input.provider,
-      identity,
-      credentials: exchanged.credentials,
-      scopes: exchanged.scopes,
+      identity: { ...input.identity, email: input.identity.email },
+      credentials: input.credentials,
+      scopes: input.scopes,
     });
-
     await grantCapability(ctx, stored.accountId, "calendar_read", required);
-    if (access === "write") {
+    if (input.access === "write") {
       await grantCapability(ctx, stored.accountId, "calendar_write", required);
     }
 
@@ -191,16 +222,65 @@ export const completeCalendarOAuth = defineService({
     ctx.queueEvent("connection.calendarConnected", {
       id: stored.accountId,
       provider: input.provider,
-      access,
+      access: input.access,
     });
     return {
       connectedAccountId: stored.accountId,
-      email: identity.email ?? null,
-      access,
+      email: input.identity.email ?? null,
+      access: input.access,
       scopes: stored.scopes,
-      returnTo: state.returnTo,
+      returnTo: input.returnTo,
     };
   },
 });
 
-export default [beginCalendarOAuth, completeCalendarOAuth];
+/** The provider exchange runs only between two committed, audited phases. */
+export const completeCalendarOAuth = defineOrchestratedService({
+  name: "connections.completeCalendarOAuth",
+  summary: "Finish connecting a calendar and store its credentials.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  input: calendarOAuthCompletionInput,
+  output: calendarOAuthCompletionOutput,
+  handler: async (input, actor) => {
+    const state = await claimCalendarOAuthCompletion.call(
+      { provider: input.provider, stateToken: input.state },
+      actor,
+    );
+    const required = calendarScope(input.provider, state.access);
+    const exchanged = await exchangeAuthorizationCode({
+      provider: input.provider,
+      code: input.code,
+      redirectUri: callbackUrl(CALLBACK_PATH, input.provider),
+      requiredScope: required,
+      requiredScopeMessage:
+        state.access === "write"
+          ? "Calendar editing was not granted. Reconnect and allow changes to events."
+          : "Calendar access was not granted. Reconnect and allow reading the calendar.",
+    });
+    const identity = await fetchProviderIdentity(
+      input.provider,
+      exchanged.credentials.accessToken,
+    );
+    return applyCalendarOAuthCompletion.call(
+      {
+        provider: input.provider,
+        access: state.access,
+        returnTo: state.returnTo,
+        credentials: exchanged.credentials,
+        scopes: exchanged.scopes,
+        identity,
+      },
+      actor,
+    );
+  },
+});
+
+export default [
+  beginCalendarOAuth,
+  completeCalendarOAuth,
+  claimCalendarOAuthCompletion,
+  applyCalendarOAuthCompletion,
+];

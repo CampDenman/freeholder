@@ -17,7 +17,6 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { uuid } from "@/core/contract";
-import { db } from "@/core/db";
 import { mailOauthStates } from "@/core/mail/schema";
 import {
   authorizationUrl,
@@ -28,7 +27,12 @@ import {
   upsertConnectedAccount,
   type OAuthProvider,
 } from "@/core/connections/oauth-core";
-import { defineService, ServiceError, type Actor } from "@/core/service";
+import {
+  defineOrchestratedService,
+  defineService,
+  ServiceError,
+  type Actor,
+} from "@/core/service";
 
 const CALLBACK_PATH = "/api/connections/mail-read";
 const RETURN_TO = /^\/admin(?:\/|$)/;
@@ -96,37 +100,54 @@ export const beginMailReadOAuth = defineService({
   },
 });
 
-export const completeMailReadOAuth = defineService({
-  name: "connections.completeMailReadOAuth",
-  summary: "Finish connecting a mailbox and store its credentials.",
+const mailReadOAuthCompletionInput = z.object({
+  provider: z.enum(["google", "microsoft"]),
+  state: z.string().min(30).max(200),
+  code: z.string().min(1).max(4000),
+});
+
+const mailReadOAuthCompletionOutput = z.object({
+  connectedAccountId: uuid,
+  email: z.string().nullable(),
+  scopes: z.array(z.string()),
+  returnTo: z.string(),
+});
+
+const oauthCredentials = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
+  expiresAt: z.string().datetime(),
+  tokenType: z.string().min(1),
+});
+
+const providerIdentity = z.object({
+  id: z.string().min(1),
+  email: z.string().optional(),
+  name: z.string().optional(),
+});
+
+const claimMailReadOAuthCompletion = defineService({
+  name: "connections.claimMailReadOAuthCompletion",
+  summary: "Atomically consume one mail-read OAuth state before its provider code is spent.",
   kind: "mutation",
   permission: "scoped",
   stepUp: true,
   agentCallable: false,
+  external: false,
+  writeClass: "write",
   input: z.object({
     provider: z.enum(["google", "microsoft"]),
-    state: z.string().min(30).max(200),
-    code: z.string().min(1).max(4000),
+    stateToken: z.string().min(30).max(200),
   }),
-  output: z.object({
-    connectedAccountId: uuid,
-    email: z.string().nullable(),
-    scopes: z.array(z.string()),
-    returnTo: z.string(),
-  }),
+  output: z.object({ returnTo: z.string() }),
   handler: async (input, ctx) => {
     const actor = requirePerson(ctx.actor);
-    // The one-time claim, committed independently before the provider code is
-    // spent — the sanctioned second-transaction exception recorded in
-    // CLAUDE.md and MASTER.md §2 principle 12. The purpose is part of the
-    // match, so a code issued to read mail cannot be redeemed as consent to
-    // send it.
-    const [state] = await db()
+    const [state] = await ctx.tx
       .update(mailOauthStates)
       .set({ consumedAt: sql`now()` })
       .where(
         and(
-          eq(mailOauthStates.tokenHash, hashState(input.state)),
+          eq(mailOauthStates.tokenHash, hashState(input.stateToken)),
           eq(mailOauthStates.userId, actor.userId),
           eq(mailOauthStates.provider, input.provider),
           eq(mailOauthStates.purpose, "mail_read"),
@@ -141,7 +162,69 @@ export const completeMailReadOAuth = defineService({
         "That mailbox connection has expired or does not belong to this session. Start again.",
       );
     }
+    ctx.setSubject("mail_oauth_state", state.tokenHash);
+    return { returnTo: state.returnTo };
+  },
+});
 
+const applyMailReadOAuthCompletion = defineService({
+  name: "connections.applyMailReadOAuthCompletion",
+  summary: "Atomically store a mail-read account after its provider handshake completes.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    provider: z.enum(["google", "microsoft"]),
+    returnTo: z.string(),
+    credentials: oauthCredentials,
+    scopes: z.array(z.string()),
+    identity: providerIdentity,
+  }),
+  output: mailReadOAuthCompletionOutput,
+  handler: async (input, ctx) => {
+    const actor = requirePerson(ctx.actor);
+    const required = mailReadScope(input.provider);
+    const stored = await upsertConnectedAccount(ctx, {
+      userId: actor.userId,
+      provider: input.provider,
+      identity: { ...input.identity, email: input.identity.email },
+      credentials: input.credentials,
+      scopes: input.scopes,
+    });
+    await grantCapability(ctx, stored.accountId, "mail_read", required);
+
+    ctx.setSubject("connected_account", stored.accountId);
+    ctx.queueEvent("connection.mailReadConnected", {
+      id: stored.accountId,
+      provider: input.provider,
+    });
+    return {
+      connectedAccountId: stored.accountId,
+      email: input.identity.email ?? null,
+      scopes: stored.scopes,
+      returnTo: input.returnTo,
+    };
+  },
+});
+
+/** The provider exchange runs only between two committed, audited phases. */
+export const completeMailReadOAuth = defineOrchestratedService({
+  name: "connections.completeMailReadOAuth",
+  summary: "Finish connecting a mailbox and store its credentials.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  agentCallable: false,
+  input: mailReadOAuthCompletionInput,
+  output: mailReadOAuthCompletionOutput,
+  handler: async (input, actor) => {
+    const state = await claimMailReadOAuthCompletion.call(
+      { provider: input.provider, stateToken: input.state },
+      actor,
+    );
     const required = mailReadScope(input.provider);
     const exchanged = await exchangeAuthorizationCode({
       provider: input.provider,
@@ -155,27 +238,22 @@ export const completeMailReadOAuth = defineService({
       input.provider,
       exchanged.credentials.accessToken,
     );
-    const stored = await upsertConnectedAccount(ctx, {
-      userId: actor.userId,
-      provider: input.provider,
-      identity,
-      credentials: exchanged.credentials,
-      scopes: exchanged.scopes,
-    });
-    await grantCapability(ctx, stored.accountId, "mail_read", required);
-
-    ctx.setSubject("connected_account", stored.accountId);
-    ctx.queueEvent("connection.mailReadConnected", {
-      id: stored.accountId,
-      provider: input.provider,
-    });
-    return {
-      connectedAccountId: stored.accountId,
-      email: identity.email ?? null,
-      scopes: stored.scopes,
-      returnTo: state.returnTo,
-    };
+    return applyMailReadOAuthCompletion.call(
+      {
+        provider: input.provider,
+        returnTo: state.returnTo,
+        credentials: exchanged.credentials,
+        scopes: exchanged.scopes,
+        identity,
+      },
+      actor,
+    );
   },
 });
 
-export default [beginMailReadOAuth, completeMailReadOAuth];
+export default [
+  beginMailReadOAuth,
+  completeMailReadOAuth,
+  claimMailReadOAuthCompletion,
+  applyMailReadOAuthCompletion,
+];
