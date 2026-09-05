@@ -524,7 +524,11 @@ export function defineService<In extends z.ZodType, Out>(
             enqueueJob(tx, name, data, jobOptions),
           call: (service, input) => service.call(input, actor, { tx, queued }),
           callAsSystem: (service, input) =>
-            service.call(input, { kind: "system" }, { tx, queued }),
+            service.call(
+              input,
+              { kind: "system", request: actor.request },
+              { tx, queued },
+            ),
           callAsAgent: (keyName, scopes, service, input) =>
             service.call(
               input,

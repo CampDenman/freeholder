@@ -45,6 +45,7 @@ import {
   Megaphone,
   ShareNetwork,
   ChatCircleText,
+  ChatCircleDots,
   PuzzlePiece,
   DownloadSimple,
   Kanban,
@@ -101,6 +102,7 @@ export interface AdminNavLabels {
   assistant: string;
   social: string;
   sharing: string;
+  popups: string;
   automations: string;
   documents: string;
   loyalty: string;
@@ -174,6 +176,7 @@ const LINKS = [
   { href: "/admin/assistant", key: "assistant", module: "assistant", Icon: Robot },
   { href: "/admin/social", key: "social", module: "social", Icon: ShareNetwork },
   { href: "/admin/sharing", key: "sharing", module: "share", Icon: ShareNetwork },
+  { href: "/admin/popups", key: "popups", module: "popups", Icon: ChatCircleDots },
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
   {
     href: "/admin/subscriptions",

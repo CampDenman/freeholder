@@ -336,6 +336,36 @@ test.describe("real-browser product journeys", () => {
       await expect(page.getByRole("button", { name: "Send journey" })).toBeVisible();
     });
 
+    await test.step("a popup is composed, published, dismissed and then stays dismissed", async () => {
+      await page.goto("/admin/popups");
+      await page.getByLabel("Name").last().fill("Journey announcement");
+      await page.getByLabel("Handle").last().fill("journey-announcement");
+      await page.getByLabel("Heading").last().fill("A small announcement");
+      await page.getByLabel("Appears").last().selectOption("immediate");
+      await page.getByRole("button", { name: "Create it" }).click();
+      await expect(page).toHaveURL(/\/admin\/popups\/[0-9a-f-]+\?saved=1$/);
+
+      await page.getByRole("button", { name: "Add a block" }).click();
+      await page.getByRole("button", { name: "Heading", exact: true }).click();
+      await page.getByLabel("Text").fill("Only once after you close it");
+      await expect(page.getByRole("status")).toHaveText("Saved", { timeout: 15_000 });
+      await page.getByRole("button", { name: "Make it live" }).click();
+      await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
+
+      await page.goto("/journey");
+      await expect(page.getByRole("heading", { name: "A small announcement" })).toBeVisible();
+      const dismissed = page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/popups") &&
+          response.request().postData()?.includes('"event":"dismissed"') === true,
+      );
+      await page.getByRole("button", { name: "Close" }).click();
+      expect((await dismissed).status()).toBe(200);
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "A small announcement" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Send journey" })).toBeVisible();
+    });
+
     await test.step("public form creates a visible submission and contact", async () => {
       // Let the signed form timestamp clear its intentional three-second trap.
       await page.waitForTimeout(3_100);

@@ -65,6 +65,13 @@ import {
 } from "@/modules/social/contract";
 import { ASSISTANT_ACTION_IDS } from "@/modules/assistant/actions";
 import { SHARE_CHANNELS } from "@/modules/share/intents";
+import {
+  POPUP_AUDIENCES,
+  POPUP_CAPTURES,
+  POPUP_STATUSES,
+  POPUP_SURFACES,
+  POPUP_TRIGGERS,
+} from "@/modules/popups/schema";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
 import { WRITE_KINDS } from "@/core/agents/previews";
 import en from "../../locales/en.json";
@@ -275,6 +282,14 @@ describe("the families built from a template key", () => {
     // C9.28: the share bar renders one button per channel, so a channel added
     // without its label would ship a raw dotted key onto every public page.
     ["share.channel", SHARE_CHANNELS],
+    // The popup screens name every one of these from a template key (C9.30),
+    // so adding a surface or a trigger without its copy fails here.
+    ["popups.status", POPUP_STATUSES],
+    ["popups.setStatus", POPUP_STATUSES],
+    ["popups.surface", POPUP_SURFACES],
+    ["popups.trigger", POPUP_TRIGGERS],
+    ["popups.audienceSummary", POPUP_AUDIENCES],
+    ["popups.captureMode", POPUP_CAPTURES],
     [
       "imports.status",
       IMPORT_STATUSES,
