@@ -5,12 +5,12 @@ import { AdapterError } from "../types";
 
 const MAX_RESPONSE_BYTES = 256 * 1024;
 
-export async function socialJson(
+async function boundedBody(
   response: Response,
   adapterId: string,
-): Promise<unknown> {
-  const raw = await response.text();
-  if (raw.length > MAX_RESPONSE_BYTES) {
+): Promise<Uint8Array<ArrayBuffer>> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
     throw new AdapterError(
       "social",
       adapterId,
@@ -19,6 +19,44 @@ export async function socialJson(
       true,
     );
   }
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      received += part.value.byteLength;
+      if (received > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new AdapterError(
+          "social",
+          adapterId,
+          "provider_failure",
+          "The provider returned an oversized response.",
+          true,
+        );
+      }
+      chunks.push(part.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+export async function socialJson(
+  response: Response,
+  adapterId: string,
+): Promise<unknown> {
+  const raw = new TextDecoder().decode(await boundedBody(response, adapterId));
   let parsed: unknown = {};
   if (raw) {
     try {
@@ -47,22 +85,6 @@ export async function socialJson(
   return parsed;
 }
 
-export async function socialBytes(
-  response: Response,
-  adapterId: string,
-): Promise<Uint8Array<ArrayBuffer>> {
-  if (!response.ok) {
-    throw new AdapterError(
-      "social",
-      adapterId,
-      "provider_failure",
-      `The provider refused the media (HTTP ${response.status}).`,
-      response.status >= 500,
-    );
-  }
-  return new Uint8Array(await response.arrayBuffer());
-}
-
 export async function socialFetch(
   adapterId: string,
   input: string,
@@ -71,6 +93,7 @@ export async function socialFetch(
   try {
     return await fetch(input, {
       ...init,
+      redirect: init.redirect ?? "error",
       signal: init.signal ?? AbortSignal.timeout(30_000),
     });
   } catch (error) {

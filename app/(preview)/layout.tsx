@@ -14,6 +14,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { CSP_NONCE_HEADER } from "@/core/http/csp";
+import { serializeInlineJson } from "@/core/http/inline-json";
 import { getT } from "../i18n";
 
 export const dynamic = "force-dynamic";
@@ -246,7 +247,7 @@ export default async function PreviewLayout({
   const nonce = requestHeaders.get(CSP_NONCE_HEADER) ?? undefined;
   // The grip's tooltip is copy, so it comes from the catalog like the rest —
   // injected as a constant the script reads rather than hardcoded in it.
-  const dragLabel = JSON.stringify(t("cms.editor.dragBlock"));
+  const dragLabel = serializeInlineJson(t("cms.editor.dragBlock"));
   return (
     <>
       <style nonce={nonce} dangerouslySetInnerHTML={{ __html: CANVAS_CSS }} />

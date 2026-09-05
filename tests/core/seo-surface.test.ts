@@ -21,6 +21,7 @@ import {
   collectionPageJsonLd,
   creativeWorkJsonLd,
   productJsonLd,
+  serializeJsonLd,
   serviceJsonLd,
 } from "@/core/seo/jsonld";
 import {
@@ -92,6 +93,19 @@ describe("the public entity registry", () => {
 });
 
 describe("JSON-LD builders for products, services and articles", () => {
+  it("serializes owner content without allowing a script-tag breakout", () => {
+    const serialized = serializeJsonLd({
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "</script><script>alert('owned')</script>&\u2028",
+    });
+    expect(serialized).not.toContain("<");
+    expect(serialized).not.toContain("&");
+    expect(JSON.parse(serialized)).toMatchObject({
+      headline: "</script><script>alert('owned')</script>&\u2028",
+    });
+  });
+
   it("emits Product + Offer with a decimal price it did not invent", () => {
     const json = productJsonLd({
       name: "Print set",

@@ -27,6 +27,7 @@ import type {
   SmsProviderEvent,
   SmsSendResult,
 } from "./types";
+import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
 
 const ID = "twilio";
 const MAX_RESPONSE_BYTES = 1_048_576;
@@ -58,9 +59,14 @@ function fail(
 }
 
 async function twilioJson(response: Response): Promise<Record<string, unknown>> {
-  const body = await response.text();
-  if (body.length > MAX_RESPONSE_BYTES) {
-    fail("provider_failure", "Twilio returned an oversized response.", true);
+  let body: string;
+  try {
+    body = new TextDecoder().decode(await readBoundedBytes(response, MAX_RESPONSE_BYTES));
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      fail("provider_failure", "Twilio returned an oversized response.", true);
+    }
+    throw error;
   }
   let parsed: unknown;
   try {
@@ -280,7 +286,10 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
       if (parsed.protocol !== "https:" || parsed.origin !== apiOrigin) {
         return fail("invalid_request", "Twilio media must come from the configured Twilio API origin.");
       }
-      const response = await doFetch(parsed, { headers: { authorization: auth() } });
+      const response = await doFetch(parsed, {
+        headers: { authorization: auth() },
+        redirect: "error",
+      });
       if (!response.ok) {
         return fail(
           response.status === 401 || response.status === 403
@@ -293,12 +302,16 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
         );
       }
       const maxMediaBytes = 10 * 1024 * 1024;
-      const announced = Number(response.headers.get("content-length"));
-      if (Number.isFinite(announced) && announced > maxMediaBytes) {
-        return fail("invalid_request", "Twilio sent a media file larger than 10 MB.");
+      let bytes: Uint8Array<ArrayBuffer>;
+      try {
+        bytes = await readBoundedBytes(response, maxMediaBytes);
+      } catch (error) {
+        if (error instanceof RequestBodyError) {
+          return fail("invalid_request", "Twilio sent a media file larger than 10 MB.");
+        }
+        throw error;
       }
-      const buffer = await response.arrayBuffer();
-      if (buffer.byteLength === 0 || buffer.byteLength > maxMediaBytes) {
+      if (bytes.byteLength === 0) {
         return fail("invalid_request", "Twilio sent an empty or oversized media file.");
       }
       const contentType = (response.headers.get("content-type") ?? "application/octet-stream")
@@ -325,7 +338,7 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
         sourceUrl: parsed.toString(),
         filename,
         contentType,
-        bytes: new Uint8Array(buffer),
+        bytes,
       };
     },
 

@@ -25,6 +25,7 @@ import { serviceRoute } from "@/core/http/route";
 import { errorResponse } from "@/core/http/respond";
 import { actorFromRequest } from "@/core/http/actor";
 import { ready } from "@/core/runtime";
+import { DEFAULT_JSON_BODY_LIMIT, readBoundedText } from "@/core/http/body";
 
 /** The prefix every dispatched call lives under. Versioned from day one. */
 export const API_BASE = "/api/v1";
@@ -113,7 +114,7 @@ export async function dispatch(
       if (req.method.toUpperCase() === "GET") {
         return coerceQuery(new URL(req.url));
       }
-      const text = await req.text();
+      const text = await readBoundedText(req, DEFAULT_JSON_BODY_LIMIT);
       if (!text) return {};
       try {
         // Typed as unknown rather than any: the service's Zod parse is what

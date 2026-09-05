@@ -9,6 +9,7 @@
 // redirect in disguise, stamp the request nonce so a reviewed inline script
 // can run under the strict CSP, and generate the one provider snippet this
 // module knows how to write (Google Ad Manager via GPT).
+import { serializeInlineJson } from "@/core/http/inline-json";
 
 export const CREATIVE_KINDS = ["image", "native", "html_tag", "provider"] as const;
 export type CreativeKind = (typeof CREATIVE_KINDS)[number];
@@ -73,8 +74,8 @@ export function providerMarkup(
   slotDomId: string,
 ): string | null {
   if (!knownProviderNetwork(provider.network)) return null;
-  const unit = JSON.stringify(provider.unitPath);
-  const id = JSON.stringify(slotDomId);
+  const unit = serializeInlineJson(provider.unitPath);
+  const id = serializeInlineJson(slotDomId);
   const width = String(size.width);
   const height = String(size.height);
   return [

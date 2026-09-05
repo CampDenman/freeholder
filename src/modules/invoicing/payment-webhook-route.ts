@@ -8,23 +8,12 @@ import type { HostedPaymentProviderId } from "@/adapters/payments/providers";
 import { AdapterError } from "@/adapters/types";
 import { ServiceError } from "@/core/service";
 import { processPaymentProviderEvents } from "./payment-provider-service";
+import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
 
 const MAX_WEBHOOK_BYTES = 1_048_576;
 
-class PaymentWebhookError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
-
 async function rawRequest(request: Request) {
-  const announced = Number(request.headers.get("content-length"));
-  if (Number.isFinite(announced) && announced > MAX_WEBHOOK_BYTES) {
-    throw new PaymentWebhookError(413, "Payment feedback is too large.");
-  }
-  const buffer = await request.arrayBuffer();
-  if (buffer.byteLength > MAX_WEBHOOK_BYTES) throw new PaymentWebhookError(413, "Payment feedback is too large.");
-  return new Uint8Array(buffer);
+  return readBoundedBytes(request, MAX_WEBHOOK_BYTES);
 }
 
 export function paymentWebhookRoute(provider: HostedPaymentProviderId) {
@@ -45,7 +34,7 @@ export function paymentWebhookRoute(provider: HostedPaymentProviderId) {
       );
       return Response.json({ ok: true, received: events.length, ...result });
     } catch (error) {
-      if (error instanceof PaymentWebhookError) return Response.json({ error: error.message }, { status: error.status });
+      if (error instanceof RequestBodyError) return Response.json({ error: error.message }, { status: error.status });
       if (error instanceof AdapterError) {
         const status = error.code === "authentication" || error.code === "invalid_request" ? 400 : 503;
         return Response.json({ error: error.message }, { status, headers: status === 503 ? { "retry-after": "30" } : undefined });

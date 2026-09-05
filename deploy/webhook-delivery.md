@@ -22,3 +22,15 @@ DNS failures and prohibited answers are ordinary failed delivery attempts:
 they appear in the owner-visible delivery ledger, retry with bounded backoff,
 and participate in automatic endpoint pausing. Payloads and signing secrets
 must never be copied into process logs while diagnosing transport failures.
+
+## Other externally supplied URLs
+
+The same address-pinned boundary protects remote catalogue indexes, imported
+ICS feeds, provider-supplied social media, and contribution hub/status-reply
+delivery. Those paths are not webhooks, but the risk is identical: content or
+configuration outside the process chooses where the server connects.
+
+Unlike a developer-created webhook receiver, these download paths do not gain
+a non-production loopback exception. Media and document responses are capped
+while streaming, redirects are refused, and account credentials are never
+attached to a provider-supplied media URL.

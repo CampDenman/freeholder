@@ -3255,11 +3255,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-04 |
-| Evidence snapshot | On `feat/c9.27-gbp`, the completion-integrity audit and implementation pass now produce a warning-free Next production build and clean lint, typecheck, plan, licensing, workflow, package-artifact and diff gates. The package gate compiles all four packages; packs and offline-installs their tarballs; imports runtime exports; compiles a clean TypeScript consumer; and creates, installs and typechecks an integrity-checked transactional source scaffold. Webhooks use address-pinned, deadline-bounded delivery after rejecting every prohibited DNS answer. Readiness and Doctor consume durable, payload-free, current-version worker heartbeats and queue evidence while liveness stays process-only during dependency failure. CI/release workflows use immutable actions and images, isolate untrusted scans from installs, bind audit evidence to the lockfile, and promote/sign/attest only the exact successful candidate digest; GitHub dependency security updates plus secret scanning, push protection, validity checks and non-provider patterns are enabled. The focused risk suite passes 63 tests; shards 2 and 4 pass continuously (1,466 tests), while host suspension invalidated one file in each of shards 1 and 3 after all other 130 files passed; the affected CMS, media and transactional-job files pass independently (58 tests) on fresh processes. No continuous-green claim is made for those two distorted local shards; the first pushed isolated CI matrix remains required. Checked claims that remain shallower than their wording are reopened below. |
+| Evidence snapshot | On `main` at `8516f45`, the completion-integrity and production-boundary pass produces a warning-free Next production build and clean lint, typecheck, plan, licensing, workflow, package-artifact and diff gates. The package gate compiles all four packages; packs and offline-installs their tarballs; imports runtime exports; compiles a clean TypeScript consumer; and creates, installs and typechecks an integrity-checked transactional source scaffold. Webhooks use address-pinned, deadline-bounded delivery after rejecting every prohibited DNS answer. Readiness and Doctor consume durable, payload-free, current-version worker heartbeats and queue evidence while liveness stays process-only during dependency failure. CI/release workflows use immutable actions and images, isolate untrusted scans from installs, bind audit evidence to the lockfile, and promote/sign/attest only the exact successful candidate digest; GitHub dependency security updates plus secret scanning, push protection, validity checks and non-provider patterns are enabled. Main CI run `33917963081` passed the isolated 20-shard matrix, CodeQL, browser, ownership, image, recipe, public and upgrade gates; its protected fan-in finished in 8 minutes 29 seconds and its complete candidate workflow in 15 minutes 7 seconds. Publish run `33919195071` then verified and promoted that exact candidate digest, signed it and attached provenance plus an SPDX SBOM. Checked claims that remain shallower than their wording are reopened below. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C1.35–C1.37 production-boundary hardening. C9.28 resumes only after those gates are truthful. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C1.36 framework-integrated shutdown. C9.28 resumes only after those gates are truthful. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3361,11 +3361,12 @@ green test/build suite. Later checklist items name the remaining depth.
 - [x] **B11 — Deployment baseline:** production container, gated GHCR candidate publishing,
   DigitalOcean Droplet/Caddy/Postgres/S3-compatible recipe, backup script, and
   live health verification.
-- [x] **B12 — Quality snapshot:** PR #261's 2026-09-03 CI run passed lint,
-  typecheck, build, license, 2,764 tests across 258 files, Chromium journeys,
-  accessibility, the ownership drill, container boot and artifact checks.
-  Seventeen conditional recipe checks were skipped and remain explicit rather
-  than being counted as passes.
+- [x] **B12 — Quality snapshot:** `main` CI run `33917963081` on 2026-09-04
+  passed lint, typecheck, build, license, all 20 isolated test shards, CodeQL,
+  Chromium journeys, accessibility, the ownership drill, container boot,
+  recipe/public/upgrade gates and artifact checks; publish run `33919195071`
+  promoted and signed the exact gated digest. Conditional recipe checks remain
+  explicit rather than being counted as passes.
 
 ### 43.4 Dependency order
 
@@ -3411,6 +3412,14 @@ one with unchecked dependency items.
 - [ ] **C0.11** Audit every checked C-item against F01–F12, reopen or narrow
   every claim that its executable evidence does not prove, retire stale
   handoffs as planning authorities, and record the audit date and evidence.
+  *(2026-09-04 pass: the service call graph exposed nine nested-transaction
+  paths and now has executable enforcement in
+  `tests/core/service-composition.test.ts`; the outbound/script-content pass
+  closed provider-media SSRF/token disclosure/unbounded reads, unsafe inline
+  JSON serialization and the regex custom-HTML sanitizer; the inbound pass
+  replaced post-allocation size checks with shared streaming HTTP/API/MCP,
+  upload and provider-callback bounds, with focused tests.
+  The complete checked-item × F01–F12 evidence matrix remains open.)*
 - [ ] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
   carry resolvable repository evidence, the control block must be current, and
   completion evidence must name the applicable human, agent, safety,
@@ -3468,8 +3477,10 @@ reading chat logs.
   keys, retry/backoff policy, concurrency limits, cancellation, and leases.
   (`0025_transactional-jobs.sql`;
   `tests/core/transactional-jobs.test.ts`; transactional webhook fan-out in
-  `tests/core/webhooks.test.ts`; changeset `transactional-jobs.md`; operator
-  runbook `deploy/background-jobs.md`)
+  `tests/core/webhooks.test.ts`; handler call-graph enforcement in
+  `tests/core/service-composition.test.ts`; changesets `transactional-jobs.md`
+  and `transaction-composition-integrity.md`; operator runbook
+  `deploy/background-jobs.md`)
 - [x] **C1.10** Build owner job history, run detail, retry/cancel controls,
   dead-letter queue, stuck-job detection, and briefing contribution.
   (`src/core/jobs/service.ts`; `/admin/jobs`; live routing/redrive, permissions,
@@ -3763,8 +3774,12 @@ reading chat logs.
   whole mixed/prohibited set, connects to the checked IP with original TLS SNI
   and Host, creates a fresh socket and never follows redirects; shared
   IPv4/IPv6 classification in `webhooks/address.ts`; real receiver and hostile
-  resolver coverage in `tests/core/webhooks.test.ts`; operator contract in
-  `deploy/webhook-delivery.md`.)*
+  resolver coverage in `tests/core/webhooks.test.ts`. The same pinned GET
+  boundary now covers externally supplied social media, ICS feeds and remote
+  catalogues, while contribution hub/reply POSTs reuse the pinned webhook
+  transport; `tests/core/social-http.test.ts` and
+  `tests/core/outbound-boundaries.test.ts` keep that inventory explicit.
+  Operator contract in `deploy/webhook-delivery.md`.)*
 - [ ] **C1.36** Make required background work operationally truthful: expose
   producer/worker startup, heartbeat, queue lag and degraded state; separate
   liveness from readiness; make Doctor test the live worker rather than the job
@@ -3776,7 +3791,7 @@ reading chat logs.
   `jobs/index.ts`, `instrumentation.ts`, `instrumentation.node.ts`, migration 0154 and
   `deploy/background-jobs.md`. Framework-integrated shutdown draining still
   needs a lifecycle hook that cannot race Next's own signal exit.)*
-- [ ] **C1.37** Make supply-chain and release provenance enforceable: split and
+- [x] **C1.37** Make supply-chain and release provenance enforceable: split and
   shard CI to meet an owned feedback SLO, key dependency-audit attestations to
   the lockfile without weakening fresh scheduled checks, enable code/dependency
   and secret scanning, pin third-party actions, and promote an image/package
@@ -3784,8 +3799,11 @@ reading chat logs.
   *(The isolated CI fan-in, lockfile-bound audit evidence, weekly fresh scan,
   full-SHA action policy, actionlint validation, repository-native scanning
   controls and exact-digest image promotion/signing/SBOM path are implemented and documented in
-  `deploy/ci-release-gate.md`. This remains open until the first pushed workflow
-  proves the timing objective and end-to-end promotion boundary.)*
+  `deploy/ci-release-gate.md`. Main CI run `33917963081` proved the complete
+  candidate path in 15 minutes 7 seconds (protected fan-in in 8 minutes 29
+  seconds), inside the 35-minute objective; publish run `33919195071` verified
+  and promoted that exact digest, signed it, and attached provenance plus an
+  SPDX SBOM.)*
 
 **C1 exit:** several humans can safely administer one business; the foundation
 is recoverable, accessible, international, observable, able to talk to the
@@ -3819,6 +3837,9 @@ project without silent telemetry, and ready to carry money.
 
 - [x] **C2.07** Finish foundational blocks: rich text, heading, image, video,
   button, columns/container, divider/spacer and admin-only custom HTML.
+  *(Custom HTML is parsed and rebuilt from an element, attribute and URL-scheme
+  allowlist in `src/modules/cms/blocks/html.ts`; encoded-scheme and executable
+  markup coverage lives in `tests/core/cms-rich.test.ts`.)*
 - [x] **C2.08** Finish trust/content blocks: FAQ with schema, testimonial/
   review, gallery, map/location, social embed, share and knowledge-base blocks.
 - [x] **C2.09** Finish conversion blocks: live product/service card, booking,
@@ -3891,7 +3912,8 @@ project without silent telemetry, and ready to carry money.
   `/products` and `/products/{slug}` CMS pages; events write `/events` and
   `/events/{slug}`; newsletters write `/newsletters` and `/newsletters/{slug}`.
   `cms.publishedPaths` classifies those slugs and Atom feeds render the same
-  set. Coverage in `tests/core/seo-surface.test.ts`,
+  set. Coverage in `tests/core/seo-surface.test.ts` (including
+  script-breakout-safe JSON-LD serialization),
   `tests/core/seo-public-entities.test.ts`,
   `tests/core/catalog-public-pages.test.ts`, `tests/core/events.test.ts` and
   `tests/core/newsletters.test.ts`; changeset `events-newsletters-seo.md`.)*
@@ -4294,8 +4316,8 @@ deployments are portable, testable and incapable of silently forking the truth.
   holding it ("still running from 07:00", or waiting for approval) rather than
   finding a pile-up. **The advance happens in every branch**, refusals
   included, or a refused window would be retried every minute for as long as
-  its reason lasted. Occurrences are computed in a named zone through
-  `cron-parser` (promoted from a transitive pg-boss dependency to a direct one
+  its reason lasted. Occurrences are computed in a named zone through supported
+  `cron-parser` 5.x (promoted from a transitive pg-boss dependency to a direct one
   rather than hand-rolling DST arithmetic), so "every weekday at 07:00" is
   12:00Z in March and 11:00Z in July. Writing this found that a playbook
   created or imported as scheduled never received a `next_run_at` at all: it
@@ -4598,7 +4620,7 @@ owner operations, never substitute for them.
   Stripe Checkout and PayPal Orders v2; exact-minor-unit conversion across
   ISO zero/two/three/four-decimal currencies; authenticated raw-byte Stripe
   signatures with rotation and timestamp bounds plus PayPal provider-side
-  signature verification; 1 MiB webhook bounds, digest-only unique receipts,
+  signature verification; streaming 1 MiB webhook bounds, digest-only unique receipts,
   retry-safe out-of-order handling and amount/currency/overpay refusal; the
   existing transaction-safe payment/refund ledger owns capture, async
   settlement and provider refunds; consent-bound masked saved methods,
@@ -4906,7 +4928,9 @@ payment, tax, inventory and reporting path, with no floating-point money.
   shape from the catalog by name rather than by import (§11), and refuses
   clearly on an instance with no catalog rather than inventing a duration.
   Coverage in `tests/core/resolver.test.ts` — each of the seven subtractions
-  tested on its own against one simple week, so a failure names what broke.)
+  tested on its own against one simple week, so a failure names what broke.
+  The catalog and business reads reuse the public call's transaction, enforced
+  repository-wide by `tests/core/service-composition.test.ts`.)
 - [x] **C6.04** Enforce no-overlap/exclusion constraints in Postgres and prove
   concurrent attempts cannot double-book.
   (Two shapes of calendar need two mechanisms, and only one of them is the
@@ -4967,7 +4991,8 @@ payment, tax, inventory and reporting path, with no floating-point money.
   `src/core/scheduling/ics-service.ts` gives every calendar a subscribable feed
   behind a rotatable token, every customer their own appointment as an
   attachment, and every owner the ability to block time from somebody else's
-  published feed over HTTPS only. The provider path
+  published feed over HTTPS only. Imported feeds use a redirect-free, bounded,
+  DNS-pinned transport that refuses every private/special-use answer. The provider path
   (`src/core/connections/calendar-write.ts`) writes only the bookings
   Freeholder made, to the account the busy time is already read from, and only
   where the calendar is marked `bookable` **and** the owner switched
@@ -5678,7 +5703,8 @@ equipment, classes and expertise without double-booking or duplicated records.
   `conversations.record` like every other channel, so a text from a stranger
   becomes a real contact on a thread with their email (C7.08) — which is why
   that item came first. The webhook boundary verifies before any database
-  effect, and maps a bad signature to 400 (never retry a forgery) and a
+  effect, streams the callback through a 1 MiB cap before retaining it, and
+  maps a bad signature to 400 (never retry a forgery) and a
   transient failure to 503 (never drop a customer's text). C7.09's reply now
   sends by SMS instead of refusing. `/admin/messaging`, `/api/sms/webhooks/twilio`.
   `0110_messaging_numbers.sql`. Coverage in `tests/core/sms.test.ts`.)
@@ -7002,7 +7028,10 @@ customer has one secure, comprehensible home for the relationship.
   threads to the unified inbox.
   (`social.ingestProfile` pulls owned posts through `adapters/social`
   `listOwnedPosts` / `listInteractions`. Media is stored as Assets with
-  checksum and provenance (`source: import`). `(provider, provider_ref)`
+  checksum and provenance (`source: import`). Provider-supplied media URLs are
+  fetched without account credentials through a redirect-free, DNS-pinned,
+  private-address-refusing and size-bounded transport; failed registrations
+  remove their staged objects. `(provider, provider_ref)`
   on `social_publications` plus `content_digest` stop a post coming back
   in as a new package. `social.draftFromPackage` copies an ingested post
   into a reviewable draft. Comments with an email become

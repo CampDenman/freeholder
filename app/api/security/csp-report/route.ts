@@ -3,6 +3,7 @@
 // Same-origin CSP report intake. Raw browser metadata is never persisted.
 import { consume, rateLimitKey } from "@/core/security/rate-limit";
 import { recordCspPayload } from "@/core/security/csp-reports";
+import { readBoundedText, RequestBodyError } from "@/core/http/body";
 
 const MAX_BYTES = 64 * 1_024;
 
@@ -14,11 +15,12 @@ function empty(status = 204): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_BYTES) {
-    return empty(413);
+  let raw: string;
+  try {
+    raw = await readBoundedText(request, MAX_BYTES);
+  } catch (error) {
+    return empty(error instanceof RequestBodyError ? error.status : 400);
   }
-  const raw = await request.text().catch(() => "");
-  if (new TextEncoder().encode(raw).byteLength > MAX_BYTES) return empty(413);
   let payload: unknown;
   try {
     payload = JSON.parse(raw);

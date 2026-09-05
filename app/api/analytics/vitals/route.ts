@@ -12,20 +12,19 @@ import {
   SESSION_COOKIE_NAME,
   parseAnalyticsConsentState,
 } from "@/modules/analytics/visitor";
+import { readBoundedText, RequestBodyError } from "@/core/http/body";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
 export async function POST(request: NextRequest): Promise<Response> {
-  if (Number(request.headers.get("content-length") ?? 0) > 8_192) {
-    return Response.json({ error: "Metric payload is too large." }, { status: 413 });
+  let rawBody: string;
+  try {
+    rawBody = await readBoundedText(request, 8_192);
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return Response.json({ error: "Metric payload could not be read." }, { status });
   }
-  const [settings, rawBody] = await Promise.all([
-    currentAnalyticsSettings(),
-    request.text().catch(() => ""),
-  ]);
-  if (new TextEncoder().encode(rawBody).byteLength > 8_192) {
-    return Response.json({ error: "Metric payload is too large." }, { status: 413 });
-  }
+  const settings = await currentAnalyticsSettings();
   let body: Record<string, unknown> | null = null;
   try {
     const parsed: unknown = JSON.parse(rawBody);

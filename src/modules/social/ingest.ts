@@ -13,7 +13,7 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { storage } from "@/adapters/storage";
 import { storageKey } from "@/adapters/storage/types";
 import { socialAdapters, type SocialOwnedPost } from "@/adapters/social";
-import { socialBytes, socialFetch } from "@/adapters/social/http";
+import { downloadSocialMedia } from "@/adapters/social/media";
 import { decryptSecret } from "@/core/connections/crypto";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -83,21 +83,19 @@ async function reclaimMedia(
   ctx: ServiceContext,
   profile: { id: string; provider: string },
   post: SocialOwnedPost,
-  accessToken: string,
 ): Promise<string[]> {
   const assetIds: string[] = [];
   const { registerStoredOriginal } = await import("@/core/media/service");
   for (const media of post.media) {
+    let storedKey: string | undefined;
     try {
-      const response = await socialFetch(profile.provider, media.url, {
-        method: "GET",
-        headers: { authorization: `Bearer ${accessToken}` },
-      });
-      const bytes = await socialBytes(response, profile.provider);
+      const bytes = await downloadSocialMedia(profile.provider, media.url);
       if (bytes.byteLength === 0) continue;
       const checksum = createHash("sha256").update(bytes).digest("hex");
       const key = storageKey(media.filename, new Date(), randomUUID());
-      await storage().put(key, bytes, media.mime);
+      const store = storage();
+      await store.put(key, bytes, media.mime);
+      storedKey = key;
       const asset = await ctx.callAsSystem(registerStoredOriginal, {
         key,
         filename: media.filename,
@@ -113,8 +111,10 @@ async function reclaimMedia(
         },
         metadata: {},
       });
+      storedKey = undefined;
       assetIds.push(asset.id);
     } catch {
+      if (storedKey) await storage().delete(storedKey).catch(() => undefined);
       // A missing image must not block the caption. The package still
       // records the post; the owner can see it has no file.
     }
@@ -183,7 +183,6 @@ async function ingestPost(
   ctx: ServiceContext,
   profile: { id: string; provider: string },
   post: SocialOwnedPost,
-  accessToken: string,
 ): Promise<{ packageId: string; created: boolean }> {
   const [seen] = await ctx.tx
     .select({ packageId: socialPublications.packageId })
@@ -197,7 +196,7 @@ async function ingestPost(
     .limit(1);
   if (seen) return { packageId: seen.packageId, created: false };
 
-  const assetIds = await reclaimMedia(ctx, profile, post, accessToken);
+  const assetIds = await reclaimMedia(ctx, profile, post);
   const checksums = await Promise.all(
     assetIds.map(async (assetId) => {
       const { assets } = await import("@/core/media/schema");
@@ -327,7 +326,7 @@ export const ingestProfile = defineService({
     let packagesSeen = 0;
     let interactions = 0;
     for (const post of posts) {
-      const result = await ingestPost(ctx, profile, post, accessToken);
+      const result = await ingestPost(ctx, profile, post);
       packagesSeen += 1;
       if (result.created) packagesCreated += 1;
       interactions += await ingestInteractions(

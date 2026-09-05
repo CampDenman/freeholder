@@ -29,7 +29,7 @@ import {
   type BriefingContribution,
 } from "@/core/briefing/registry";
 import { zonedDate } from "@/core/i18n/zoned";
-import { currentBusiness } from "@/core/settings/read";
+import { getBusiness } from "@/core/settings/service";
 import {
   defineService,
   getService,
@@ -61,14 +61,25 @@ function requirePerson(actor: Actor): string {
 }
 
 /** The business's today, which is the only "today" a briefing is about. */
-export async function businessToday(): Promise<{ onDate: string; timezone: string }> {
-  const business = await currentBusiness().catch(() => null);
-  const timezone = business?.timezone ?? "UTC";
+function todayIn(timezone: string): { onDate: string; timezone: string } {
   const date = zonedDate(new Date(), timezone);
   return {
     onDate: `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`,
     timezone,
   };
+}
+
+export async function businessToday(): Promise<{ onDate: string; timezone: string }> {
+  const business = await getBusiness.call({}, { kind: "anonymous" }).catch(() => null);
+  const timezone = business?.timezone ?? "UTC";
+  return todayIn(timezone);
+}
+
+async function businessTodayIn(
+  ctx: ServiceContext,
+): Promise<{ onDate: string; timezone: string }> {
+  const business = await ctx.call(getBusiness, {}).catch(() => null);
+  return todayIn(business?.timezone ?? "UTC");
 }
 
 /**
@@ -116,7 +127,7 @@ export const assembleBriefing = defineService({
         "Briefings are assembled by the scheduler, not on request.",
       );
     }
-    const today = await businessToday();
+    const today = await businessTodayIn(ctx);
     const onDate = input.onDate ?? today.onDate;
     const timezone = input.timezone ?? today.timezone;
 
@@ -219,7 +230,7 @@ export const readBriefing = defineService({
     .nullable(),
   handler: async (input, ctx) => {
     const userId = requirePerson(ctx.actor);
-    const onDate = input.onDate ?? (await businessToday()).onDate;
+    const onDate = input.onDate ?? (await businessTodayIn(ctx)).onDate;
 
     const [briefing] = await ctx.tx
       .select()

@@ -27,6 +27,10 @@ import {
 } from "@/core/catalogue/service";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
+const getPinnedBytes = vi.hoisted(() => vi.fn());
+
+vi.mock("@/core/http/pinned-download", () => ({ getPinnedBytes }));
+
 /** A well-behaved definition: instructions and nothing else. */
 const GOOD = {
   slug: "morning-triage",
@@ -48,13 +52,19 @@ const GOOD = {
 };
 
 function catalogueServing(entries: unknown[]) {
-  return vi.fn(async () =>
-    Response.json({ freeholderCatalogue: 1, name: "A catalogue", entries }),
-  );
+  return vi.fn(async () => {
+    const bytes = new TextEncoder().encode(JSON.stringify({
+      freeholderCatalogue: 1,
+      name: "A catalogue",
+      entries,
+    }));
+    return { status: 200, contentType: "application/json", bytes };
+  });
 }
 
 describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
   beforeEach(async () => {
+    getPinnedBytes.mockReset();
     await ready();
     await truncateSpine();
     await db()
@@ -77,7 +87,7 @@ describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
       { name: "A catalogue", url: "https://catalogue.example.test/index.json" },
       OWNER,
     );
-    vi.stubGlobal("fetch", catalogueServing(entries));
+    getPinnedBytes.mockImplementation(catalogueServing(entries));
     await refreshCatalogue.call({ id: source.id }, OWNER);
     return source;
   }
@@ -125,7 +135,7 @@ describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
         { name: "A catalogue", url: "https://catalogue.example.test/index.json" },
         OWNER,
       );
-      vi.stubGlobal("fetch", catalogueServing([{ ...GOOD, definition: poisoned }]));
+      getPinnedBytes.mockImplementation(catalogueServing([{ ...GOOD, definition: poisoned }]));
       const result = await refreshCatalogue.call({ id: source.id }, OWNER);
       // Refused at the door, so it never reaches a preview screen where
       // somebody might approve it.
@@ -197,8 +207,7 @@ describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
     const staleChecksum = entry!.checksum;
 
     // The catalogue quietly rewrites the entry.
-    vi.stubGlobal(
-      "fetch",
+    getPinnedBytes.mockImplementation(
       catalogueServing([
         {
           ...GOOD,
@@ -247,7 +256,11 @@ describe.runIf(hasDatabase)("the catalogue", { timeout: 60_000 }, () => {
       { name: "Offline", url: "https://offline.example.test/index.json" },
       OWNER,
     );
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 503 })));
+    getPinnedBytes.mockResolvedValue({
+      status: 503,
+      contentType: "text/plain",
+      bytes: new TextEncoder().encode("nope"),
+    });
     const result = await refreshCatalogue.call({ id: source.id }, OWNER);
     // A state, not an exception: throwing here would roll back the very row
     // recording why it failed.

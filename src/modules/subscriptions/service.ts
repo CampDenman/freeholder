@@ -36,7 +36,7 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
 import { contacts } from "@/core/contacts/schema";
 import { listLocations } from "@/core/locations/service";
-import { currentBusiness } from "@/core/settings/read";
+import { getBusiness } from "@/core/settings/service";
 import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
@@ -598,7 +598,7 @@ export const subscribe = defineService({
       );
     }
 
-    const business = await currentBusiness();
+    const business = await ctx.call(getBusiness, {});
     const currency = input.currency ?? business?.baseCurrency;
     if (!currency) {
       throw new ServiceError("conflict", "Set the business's base currency before selling a plan.");

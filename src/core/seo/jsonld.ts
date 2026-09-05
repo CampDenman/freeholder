@@ -11,6 +11,7 @@
 // owner has to find: the home page describes the site and the business, every
 // other page carries a breadcrumb trail, and blocks contribute their own
 // (an FAQ block emits FAQPage — see the block registry).
+import { serializeInlineJson } from "@/core/http/inline-json";
 
 export interface BusinessFacts {
   name: string;
@@ -23,6 +24,11 @@ export interface BusinessFacts {
 export type JsonLd = Record<string, unknown>;
 
 const CONTEXT = "https://schema.org";
+
+/** Serialize structured data without letting content close its script tag. */
+export function serializeJsonLd(value: JsonLd): string {
+  return serializeInlineJson(value);
+}
 
 /** The site itself. Home page only — it describes the whole domain. */
 export function websiteJsonLd(origin: string, business: BusinessFacts): JsonLd {

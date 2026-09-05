@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
+import { storage } from "@/adapters/storage";
 import { contacts } from "@/core/contacts/schema";
 import { conversations, messages } from "@/core/messaging/schema";
 import { assets } from "@/core/media/schema";
@@ -25,6 +26,9 @@ import { socialPublications } from "@/modules/social/schema";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const changedEnvironment = new Map<string, string | undefined>();
+const downloadSocialMedia = vi.hoisted(() => vi.fn());
+
+vi.mock("@/adapters/social/media", () => ({ downloadSocialMedia }));
 
 function environment(values: Record<string, string | undefined>): void {
   for (const [name, value] of Object.entries(values)) {
@@ -128,6 +132,7 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
       email: "owner@example.test",
       role: "owner",
     });
+    downloadSocialMedia.mockResolvedValue(png);
     environment({
       APP_URL: "https://freeholder.example",
       META_OAUTH_CLIENT_ID: "meta-id",
@@ -143,6 +148,7 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
     changedEnvironment.clear();
     resetEnvForTests();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   afterAll(async () => {
@@ -204,6 +210,18 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
     expect(await packageList.call({}, OWNER)).toHaveLength(1);
     const pubs = await db().select().from(socialPublications);
     expect(pubs).toHaveLength(1);
+  });
+
+  it("removes a staged object when media registration rejects it", async () => {
+    const profileId = await connectedProfile();
+    const remove = vi.spyOn(storage(), "delete");
+    downloadSocialMedia.mockResolvedValue(new Uint8Array([1, 2, 3]));
+
+    await ingestProfile.call({ profileId }, OWNER);
+
+    const [pack] = await packageList.call({}, OWNER);
+    expect(pack!.assetIds).toEqual([]);
+    expect(remove).toHaveBeenCalledOnce();
   });
 
   it("routes a comment with an email onto the spine, and leaves a handle-only comment off it", async () => {

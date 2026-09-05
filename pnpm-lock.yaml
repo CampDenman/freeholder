@@ -40,8 +40,8 @@ importers:
         specifier: ^1.0.20
         version: 1.0.20
       cron-parser:
-        specifier: 5.6.2
-        version: 5.6.2
+        specifier: 5.10.0
+        version: 5.10.0
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(pg@8.23.0)(postgres@3.4.9)
@@ -57,6 +57,9 @@ importers:
       nodemailer:
         specifier: ^9.0.3
         version: 9.0.3
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
       pg-boss:
         specifier: ^12.26.2
         version: 12.27.0
@@ -1498,11 +1501,6 @@ packages:
   cron-parser@5.10.0:
     resolution: {integrity: sha512-izNAxJyRWUP8ljBoDSub5WyrVOUlT4SLGShswE7eoRBpp6QUsSycYxLBMJlbshgPBMcPT/nrfgjNY2918ayv2A==}
     engines: {node: '>=18'}
-
-  cron-parser@5.6.2:
-    resolution: {integrity: sha512-yJ/G1LVir6CnlkLI40CsampPLKl1SprGGlUagWtGJxewytRVYezv5xVyzzbT+Pvzx+VIRvZVF7/a0eEMTxdnTA==}
-    engines: {node: '>=18'}
-    deprecated: 'Published tarball was built from a stale dist/ and is missing the fixes from #414 and #415 — its contents are effectively v5.6.1. Upgrade to v5.7.0.'
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -4158,10 +4156,6 @@ snapshots:
   convert-source-map@2.0.0: {}
 
   cron-parser@5.10.0:
-    dependencies:
-      luxon: 3.7.2
-
-  cron-parser@5.6.2:
     dependencies:
       luxon: 3.7.2
 
