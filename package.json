@@ -17,7 +17,7 @@
     "dev": "next dev",
     "build": "next build",
     "postbuild": "node scripts/standalone-artifact-gate.mjs --scrub",
-    "start": "next start",
+    "start": "node scripts/start.mjs",
     "start:replit": "next dev",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

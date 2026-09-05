@@ -2,21 +2,35 @@
 // SPDX-License-Identifier: Apache-2.0
 // Node-only process bootstrap. The shared instrumentation entrypoint imports
 // this module only after Next confirms that it is running the Node runtime.
+import { createGracefulShutdown } from "@/core/runtime/shutdown";
+
 const RETRY_MAX_MS = 30_000;
+const SHUTDOWN_TIMEOUT_MS = 35_000;
 let runtimeInitialization: Promise<void> | undefined;
 let lastFailureLogAt = 0;
+let shutdownInstalled = false;
+let runtimeAbort = new AbortController();
 
 function retryDelay(attempt: number): number {
   return Math.min(1_000 * 2 ** Math.min(attempt, 5), RETRY_MAX_MS);
 }
 
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, milliseconds);
+    timer.unref?.();
+    signal.addEventListener("abort", done, { once: true });
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+  });
 }
 
 async function initializeRuntime(): Promise<void> {
   let attempt = 0;
-  for (;;) {
+  while (!runtimeAbort.signal.aborted) {
     let phase = "migration";
     try {
       // Before boot, and before the first request: a fresh deploy otherwise
@@ -62,12 +76,36 @@ async function initializeRuntime(): Promise<void> {
         );
         lastFailureLogAt = now;
       }
-      await wait(retryDelay(attempt));
+      if (runtimeAbort.signal.aborted) return;
+      await wait(retryDelay(attempt), runtimeAbort.signal);
       attempt += 1;
     }
   }
 }
 
+export async function stopNodeRuntime(): Promise<void> {
+  runtimeAbort.abort();
+  await runtimeInitialization?.catch(() => undefined);
+  const { stopJobs } = await import("@/core/jobs");
+  await stopJobs();
+  runtimeInitialization = undefined;
+}
+
+function installShutdownHandlers(): void {
+  if (process.env.NEXT_MANUAL_SIG_HANDLE !== "true" || shutdownInstalled) return;
+  shutdownInstalled = true;
+  const shutdown = createGracefulShutdown({
+    drain: stopNodeRuntime,
+    exit: (code) => process.exit(code),
+    timeoutMs: SHUTDOWN_TIMEOUT_MS,
+    log: (level, message) => console[level](message),
+  });
+  process.once("SIGINT", () => void shutdown.handle("SIGINT"));
+  process.once("SIGTERM", () => void shutdown.handle("SIGTERM"));
+}
+
 export function startNodeRuntime(): void {
+  installShutdownHandlers();
+  if (runtimeAbort.signal.aborted) runtimeAbort = new AbortController();
   runtimeInitialization ??= initializeRuntime();
 }

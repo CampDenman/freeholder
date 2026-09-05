@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C1.36 framework-integrated shutdown. C9.28 resumes only after those gates are truthful. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.28. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3780,10 +3780,15 @@ reading chat logs.
   transport; `tests/core/social-http.test.ts` and
   `tests/core/outbound-boundaries.test.ts` keep that inventory explicit.
   Operator contract in `deploy/webhook-delivery.md`.)*
-- [ ] **C1.36** Make required background work operationally truthful: expose
+- [x] **C1.36** Make required background work operationally truthful: expose
   producer/worker startup, heartbeat, queue lag and degraded state; separate
   liveness from readiness; make Doctor test the live worker rather than the job
   registry; drain leases on shutdown; alert without leaking payloads.
+  *(`src/core/jobs/health.ts`, `app/api/health/route.ts`,
+  `app/api/health/live/route.ts`, `src/core/doctor/index.ts`,
+  `instrumentation.node.ts`, `src/core/runtime/shutdown.ts`,
+  `scripts/start.mjs`, `deploy/background-jobs.md`, and focused runtime/job
+  health plus signal-ownership tests.)*
   *(Durable payload-free runtime evidence, exact-version/staleness checks,
   queue-lag/dead-letter metrics, readiness/Doctor integration, a distinct
   process liveness route, dependency-failure startup retries and
