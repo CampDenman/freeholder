@@ -1910,32 +1910,41 @@ export const authorizeObjectDelivery = defineService({
   },
 });
 
-/**
- * Add the marks that did not exist when a photograph was uploaded (C8.04).
- *
- * Watermarked renditions are built on upload, which leaves every image
- * already in the library unmarked — and a gallery that refuses to serve an
- * unmarked file would render an empty grid the first time an owner ticks
- * "watermark" on work they delivered last year. This walks that backlog a
- * batch at a time.
- *
- * An image that cannot be marked records an empty `watermarked` set rather
- * than nothing, so the next batch moves past it instead of retrying the
- * same unmarkable file forever.
- */
-export const backfillWatermarks = defineService({
-  name: "media.backfillWatermarks",
-  summary: "Add missing watermarked renditions to images already in the library.",
-  kind: "mutation",
+const watermarkBackfillSource = row({
+  id: uuid,
+  storageKey: z.string(),
+  mime: z.string(),
+  variants: z.unknown(),
+});
+
+const watermarkedRendition = z.object({
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  bytes: z.number(),
+  key: z.string().min(1),
+});
+
+function alreadyWatermarked(variants: unknown): boolean {
+  return Boolean(
+    variants && typeof variants === "object" && "watermarked" in variants,
+  );
+}
+
+const listWatermarkBackfill = defineService({
+  name: "media.listWatermarkBackfill",
+  summary: "Snapshot unmarked ready images for one backfill batch.",
+  kind: "query",
   permission: "system",
-  writeClass: "write",
-  input: z.object({ limit: z.number().int().min(1).max(100).default(20) }),
-  output: row({ marked: z.number().int(), skipped: z.number().int() }),
+  input: z.object({ limit: z.number().int().min(1).max(100) }),
+  output: listed(watermarkBackfillSource),
   handler: async (input, ctx) => {
-    const mark = await watermarkMark(ctx.tx);
-    if (!mark) return { marked: 0, skipped: 0 };
-    const candidates = await ctx.tx
-      .select()
+    return ctx.tx
+      .select({
+        id: assets.id,
+        storageKey: assets.storageKey,
+        mime: assets.mime,
+        variants: assets.variants,
+      })
       .from(assets)
       .where(
         and(
@@ -1945,11 +1954,95 @@ export const backfillWatermarks = defineService({
         ),
       )
       .limit(input.limit);
+  },
+});
+
+const applyWatermarkBackfill = defineService({
+  name: "media.applyWatermarkBackfill",
+  summary: "Attach one asset's watermarked renditions after storage work.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({
+    id: uuid,
+    storageKey: z.string().min(1),
+    mime: z.string().min(1),
+    variantKeys: z.array(z.string().min(1)).max(64),
+    watermarked: z.object({
+      avif: z.array(watermarkedRendition).optional(),
+      webp: z.array(watermarkedRendition).optional(),
+    }),
+  }),
+  output: z.object({ attached: z.boolean() }),
+  handler: async (input, ctx) => {
+    const [current] = await ctx.tx
+      .select()
+      .from(assets)
+      .where(eq(assets.id, input.id))
+      .limit(1)
+      .for("update");
+    if (
+      !current ||
+      current.status !== "ready" ||
+      current.kind !== "image" ||
+      current.storageKey !== input.storageKey ||
+      current.mime !== input.mime ||
+      alreadyWatermarked(current.variants)
+    ) {
+      // Storage may already have written pending objects. Leave them
+      // sweepable rather than attaching marks to a file that moved on.
+      return { attached: false };
+    }
+    const currentSet = current.variants as VariantSet;
+    if (input.variantKeys.length > 0) {
+      await attachObjects(ctx.tx, input.variantKeys, current.id);
+    }
+    await ctx.tx
+      .update(assets)
+      .set({
+        variants: { ...currentSet, watermarked: input.watermarked },
+        updatedAt: new Date(),
+      })
+      .where(eq(assets.id, current.id));
+    ctx.setSubject("asset", current.id);
+    return { attached: input.variantKeys.length > 0 };
+  },
+});
+
+/**
+ * Add the marks that did not exist when a photograph was uploaded (C8.04).
+ *
+ * Watermarked renditions are built on upload, which leaves every image
+ * already in the library unmarked — and a gallery that refuses to serve an
+ * unmarked file would render an empty grid the first time an owner ticks
+ * "watermark" on work they delivered last year. This walks that backlog a
+ * batch at a time, one durable asset at a time: storage I/O is outside the
+ * short list/apply transactions, and a losing apply leaves only sweepable
+ * pending objects.
+ *
+ * An image that cannot be marked records an empty `watermarked` set rather
+ * than nothing, so the next batch moves past it instead of retrying the
+ * same unmarkable file forever.
+ */
+export const backfillWatermarks = defineOrchestratedService({
+  name: "media.backfillWatermarks",
+  summary: "Add missing watermarked renditions to images already in the library.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({ limit: z.number().int().min(1).max(100).default(20) }),
+  output: row({ marked: z.number().int(), skipped: z.number().int() }),
+  handler: async (input, actor) => {
+    const mark = await loadWatermarkMark();
+    if (!mark) return { marked: 0, skipped: 0 };
+    const candidates = await listWatermarkBackfill.call(
+      { limit: input.limit },
+      actor,
+    );
 
     let marked = 0;
     let skipped = 0;
     for (const asset of candidates) {
-      const set = asset.variants as VariantSet;
       const body = isRasterImage(asset.mime)
         ? await storage().get(asset.storageKey)
         : undefined;
@@ -1960,32 +2053,28 @@ export const backfillWatermarks = defineService({
               `${asset.storageKey}.wm.${width}.${format}`,
             )
           : [];
-      if (!built.length) {
-        await ctx.tx
-          .update(assets)
-          .set({ variants: { ...set, watermarked: {} } })
-          .where(eq(assets.id, asset.id));
-        skipped += 1;
-        continue;
+      if (built.length > 0) {
+        await putTrackedObjects(
+          built.map((rendition) => ({
+            key: rendition.key,
+            body: rendition.body,
+            contentType: rendition.contentType,
+            role: "variant" as const,
+          })),
+        );
       }
-      await putTrackedObjects(
-        built.map((rendition) => ({
-          key: rendition.key,
-          body: rendition.body,
-          contentType: rendition.contentType,
-          role: "variant" as const,
-        })),
+      const result = await applyWatermarkBackfill.call(
+        {
+          id: asset.id,
+          storageKey: asset.storageKey,
+          mime: asset.mime,
+          variantKeys: built.map((rendition) => rendition.key),
+          watermarked: withWatermarked({}, built).watermarked ?? {},
+        },
+        actor,
       );
-      await attachObjects(
-        ctx.tx,
-        built.map((rendition) => rendition.key),
-        asset.id,
-      );
-      await ctx.tx
-        .update(assets)
-        .set({ variants: withWatermarked(set, built) })
-        .where(eq(assets.id, asset.id));
-      marked += 1;
+      if (result.attached) marked += 1;
+      else skipped += 1;
     }
     return { marked, skipped };
   },
@@ -3047,6 +3136,8 @@ export default [
   authorizeAssetDownload,
   authorizeObjectDelivery,
   backfillWatermarks,
+  listWatermarkBackfill,
+  applyWatermarkBackfill,
   assetUsage,
   altTextSuggestionState,
   listAltTextSuggestionStates,

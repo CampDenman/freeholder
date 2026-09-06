@@ -27,12 +27,19 @@ import {
 } from "@/core/media/variants";
 import { buildWatermarked } from "@/core/media/watermark";
 import { backfillWatermarks } from "@/core/media/service";
-import { assets } from "@/core/media/schema";
+import { assets, mediaObjects } from "@/core/media/schema";
 import { storage } from "@/adapters/storage";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
+import { getService } from "@/core/service";
 import { updateBusiness } from "@/core/settings/service";
-import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import {
+  closeDb,
+  failure,
+  hasDatabase,
+  OWNER,
+  truncateSpine,
+} from "../helpers/spine";
 
 const FACTS = { width: 2000, height: 1200 };
 
@@ -240,5 +247,62 @@ describe.runIf(hasDatabase)("backfilling marks onto an existing library", { time
 
     const second = await backfillWatermarks.call({ limit: 10 }, { kind: "system" });
     expect(second.marked + second.skipped).toBe(0);
+  });
+
+  it("refuses to run inside another service transaction", async () => {
+    const error = await failure(
+      backfillWatermarks.call(
+        { limit: 1 },
+        { kind: "system" },
+        { tx: {} as never, queued: [] },
+      ),
+    );
+    expect(error).toMatchObject({ code: "internal" });
+    expect(error.message).toContain("outside a service transaction");
+  });
+
+  it("leaves newly written marks sweepable when the file is already marked", async () => {
+    const asset = await storedImage("raced.jpg", await flatImage());
+    await db()
+      .update(assets)
+      .set({ variants: { watermarked: {} } })
+      .where(eq(assets.id, asset.id));
+    await db().insert(mediaObjects).values({
+      key: `${asset.storageKey}.wm.800.webp`,
+      contentType: "image/webp",
+      role: "variant",
+      bytes: 12,
+      state: "pending",
+    });
+
+    const apply = getService("media.applyWatermarkBackfill");
+    const result = await apply.call(
+      {
+        id: asset.id,
+        storageKey: asset.storageKey,
+        mime: asset.mime,
+        variantKeys: [`${asset.storageKey}.wm.800.webp`],
+        watermarked: {
+          webp: [
+            {
+              width: 800,
+              height: 480,
+              bytes: 12,
+              key: `${asset.storageKey}.wm.800.webp`,
+            },
+          ],
+        },
+      },
+      { kind: "system" },
+    );
+    expect(result).toEqual({ attached: false });
+
+    const [object] = await db()
+      .select()
+      .from(mediaObjects)
+      .where(eq(mediaObjects.key, `${asset.storageKey}.wm.800.webp`));
+    expect(object).toMatchObject({ state: "pending", assetId: null });
+    const [after] = await db().select().from(assets).where(eq(assets.id, asset.id));
+    expect((after!.variants as Record<string, unknown>).watermarked).toEqual({});
   });
 });
