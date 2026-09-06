@@ -3254,12 +3254,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-04 |
-| Evidence snapshot | On `main` at `8516f45`, the completion-integrity and production-boundary pass produces a warning-free Next production build and clean lint, typecheck, plan, licensing, workflow, package-artifact and diff gates. The package gate compiles all four packages; packs and offline-installs their tarballs; imports runtime exports; compiles a clean TypeScript consumer; and creates, installs and typechecks an integrity-checked transactional source scaffold. Webhooks use address-pinned, deadline-bounded delivery after rejecting every prohibited DNS answer. Readiness and Doctor consume durable, payload-free, current-version worker heartbeats and queue evidence while liveness stays process-only during dependency failure. CI/release workflows use immutable actions and images, isolate untrusted scans from installs, bind audit evidence to the lockfile, and promote/sign/attest only the exact successful candidate digest; GitHub dependency security updates plus secret scanning, push protection, validity checks and non-provider patterns are enabled. Main CI run `33917963081` passed the isolated 20-shard matrix, CodeQL, browser, ownership, image, recipe, public and upgrade gates; its protected fan-in finished in 8 minutes 29 seconds and its complete candidate workflow in 15 minutes 7 seconds. Publish run `33919195071` then verified and promoted that exact candidate digest, signed it and attached provenance plus an SPDX SBOM. Checked claims that remain shallower than their wording are reopened below. |
+| Last reconciled | 2026-09-06 |
+| Evidence snapshot | On `main` at `23a2de7` after C1.12 media transaction-boundary PRs #276–#279. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `plan:check` now refuses a checked C-item with no repository citation and a Current focus line that names already-checked work. Main CI run `33917963081` passed the isolated 20-shard matrix, CodeQL, browser, ownership, image, recipe, public and upgrade gates; publish run `33919195071` promoted and signed that candidate digest. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.28. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.29. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3384,15 +3384,18 @@ one with unchecked dependency items.
 ### 43.5 C0 — Truth, stewardship, and planning integrity
 
 - [x] **C0.01** Consolidate product specification, current state, dependency
-  order, and remaining work into this document.
+  order, and remaining work into this document. *(`MASTER.md` §43.)*
 - [x] **C0.02** Retire the root roadmap and JSON session backlog; remove every
-  instruction that treats either as live planning.
+  instruction that treats either as live planning. *(`scripts/plan-gate.mjs`
+  `retired-file` / `retired-reference`.)*
 - [x] **C0.03** Record Tony Aly as owner of the original Freeholder copyright
-  across code, documentation, and package notices.
+  across code, documentation, and package notices. *(`LICENSE`, `LICENSING.md`.)*
 - [x] **C0.04** Credit Tony Aly (`tony@paradisemodern.com`, `tonyaly.com`) as
   Freeholder's creator and original author in project and package metadata.
+  *(`package.json` author field.)*
 - [x] **C0.05** Describe the `CampDenman` GitHub organization only as the
   repository host, never as Freeholder's author, owner, or rights holder.
+  *(`MASTER.md` §43.1 Repository host.)*
 - [x] **C0.06** Merge the translation-admin branch to `main` and reconcile its
   checked status here. *(PR #57, `bb16555`, 2026-08-10.)*
 - [x] **C0.07** Require CI and DCO on protected `main`, including administrators,
@@ -3400,7 +3403,7 @@ one with unchecked dependency items.
   API on 2026-08-10: strict `checks` + `DCO`, admin enforcement on.)*
 - [x] **C0.08** Add a plan-consistency gate that rejects references to retired
   planning files and validates unique checklist IDs. *(`scripts/plan-gate.mjs`,
-  six gate tests, and the `product-completion-plan.md` changeset.)*
+  plan-gate tests, and the `product-completion-plan.md` changeset.)*
 - [ ] **C0.09** Reconcile `README.md`, setup text, package descriptions, and
   deployment docs whenever a target capability becomes true; target language
   must never masquerade as current availability.
@@ -3435,6 +3438,9 @@ one with unchecked dependency items.
   carry resolvable repository evidence, the control block must be current, and
   completion evidence must name the applicable human, agent, safety,
   operational and integration proof—or an explicit not-applicable reason.
+  *(Evidence citations on checked C-items and a Current focus that cannot name
+  already-checked work landed with `scripts/plan-gate.mjs`; the F04/F05/F07/
+  F09/F12-or-N/A clause is still open.)*
 
 **C0 exit:** there is exactly one live plan, ownership is legally documented,
 and every contributor or agent can identify the next valid work item without
@@ -3831,6 +3837,8 @@ project without silent telemetry, and ready to carry money.
 
 - [x] **C2.01** Separate working drafts from published revisions for every
   public entity; autosave must never mutate the live version.
+  (`cms.savePage` / `publishPage`; `tests/core/cms-lifecycle.test.ts`;
+  changeset `cms-content-lifecycle.md`)
 - [x] **C2.02** Add preview links, scheduled publish/unpublish, approval state,
   compare/diff, named revisions, restore-as-draft and complete author history.
   (`cms.createPreviewLink` / `schedulePage` / `requestApproval` /
@@ -3842,12 +3850,18 @@ project without silent telemetry, and ready to carry money.
   changeset `cms-author-history.md`.)
 - [x] **C2.03** Add optimistic concurrency/version tokens, presence, edit
   leases, conflict detection and an explicit merge/reload workflow.
+  (`cms.savePage` version tokens; `tests/core/cms-lifecycle.test.ts`;
+  changeset `cms-collab-presence-comments.md`)
 - [x] **C2.04** Add comments, mentions, review requests and resolved threads
   attached to blocks/revisions without contaminating published content.
+  (`cms.commentCreated` events; `tests/core/cms-lifecycle.test.ts`;
+  changeset `cms-collab-presence-comments.md`)
 - [x] **C2.05** Specify and implement constrained typed rich-text inline nodes
   for emphasis, links, code and lists—never stored HTML soup.
+  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md`)
 - [x] **C2.06** Add slash-command insertion, keyboard block movement, undo/
   redo, duplicate/copy/paste, multi-select and reliable nested drag semantics.
+  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md`)
 
 #### Complete block and design vocabulary
 
@@ -3858,12 +3872,16 @@ project without silent telemetry, and ready to carry money.
   markup coverage lives in `tests/core/cms-rich.test.ts`.)*
 - [x] **C2.08** Finish trust/content blocks: FAQ with schema, testimonial/
   review, gallery, map/location, social embed, share and knowledge-base blocks.
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md`)
 - [x] **C2.09** Finish conversion blocks: live product/service card, booking,
   form, quote request, newsletter signup, tip/support and site-chat assistant.
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md`)
 - [x] **C2.10** Finish controlled-access/revenue blocks: paywall gate and ad
   slot with server-side content exclusion and layout-shift-safe sizing.
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md`)
 - [x] **C2.11** Make headers, footers, navigation, announcement bars and menus
   first-class synced Sections with accessible responsive behavior.
+  (`tests/core/cms-sections.test.ts`; changeset `cms-chrome-sections.md`)
 - [x] **C2.12** Support save-as-Section, synced instances, detach-to-copy,
   dependency-aware deletion, and searchable palettes.
   (`sectionInstance` block; `cms.saveAsSection` / `detachSection` /

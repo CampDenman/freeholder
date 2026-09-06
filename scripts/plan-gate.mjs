@@ -1,11 +1,13 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// The single-source planning gate (MASTER.md §43, C0.08).
+// The single-source planning gate (MASTER.md §43, C0.08 / C0.12).
 //
 // Product work used to be split across MASTER.md, ROADMAP.md, and an
 // append-only JSON session backlog. That made all three individually plausible
 // and collectively untrustworthy. This gate protects the replacement contract:
-// one live plan, stable unique IDs, no gaps, and no dangling references.
+// one live plan, stable unique IDs, no gaps, no dangling references, checked
+// C-items carrying repository evidence, and a current-focus line that still
+// names open work.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -20,8 +22,9 @@ const REFERENCE_ALLOW = new Set(["tests/core/plan-gate.test.ts"]);
 const REQUIRED_WORKSTREAMS = Array.from({ length: 12 }, (_, i) => `C${i}`);
 const TEXT_FILE = /(?:\.md|\.json|\.ts|\.tsx|\.js|\.mjs|\.mts|\.yml|\.yaml|\.txt)$/i;
 const LOCAL_TOOL_STATE = [".agents/", ".claude/", ".codex/"];
-const CHECKLIST = /^- \[([ x])\] \*\*((F\d{2}|B\d{2}|C\d{1,2}\.\d{2}))(?=\*\*|\s+—)/gm;
+const CHECKLIST_LINE = /^- \[([ x])\] \*\*((F\d{2}|B\d{2}|C\d{1,2}\.\d{2}))(?=\*\*|\s+—)/;
 const REFERENCE = /\b(F\d{2}|B\d{2}|C\d{1,2}\.\d{2})\b/g;
+const EVIDENCE = /`[^`\n]+`|\bchangeset\b|PR #\d+/i;
 
 function issue(code, message, path = "MASTER.md") {
   return { code, path, message };
@@ -29,10 +32,70 @@ function issue(code, message, path = "MASTER.md") {
 
 /** Every checklist definition in document order. */
 export function checklistItems(master) {
-  return [...master.matchAll(CHECKLIST)].map((match) => ({
-    id: match[2],
-    checked: match[1] === "x",
-  }));
+  return checklistBlocks(master).map(({ id, checked }) => ({ id, checked }));
+}
+
+/** Title plus following prose, so evidence on wrapped lines is visible. */
+export function checklistBlocks(master) {
+  const items = [];
+  let current;
+  for (const line of master.split(/\r?\n/)) {
+    const match = line.match(CHECKLIST_LINE);
+    if (match) {
+      if (current) items.push(current);
+      current = { id: match[2], checked: match[1] === "x", body: line };
+      continue;
+    }
+    if (current) current.body += `\n${line}`;
+  }
+  if (current) items.push(current);
+  return items;
+}
+
+function evidenceIssues(blocks) {
+  const problems = [];
+  for (const { id, checked, body } of blocks) {
+    if (!checked || !id.startsWith("C")) continue;
+    if (!EVIDENCE.test(body)) {
+      problems.push(
+        issue(
+          "missing-evidence",
+          `${id} is checked but cites no repository evidence (path, changeset, or PR)`,
+        ),
+      );
+    }
+  }
+  return problems;
+}
+
+function controlBlockIssues(master, items) {
+  const problems = [];
+  if (!/\|\s*Last reconciled\s*\|/.test(master)) {
+    problems.push(
+      issue("missing-control-block", "§43.1 must include a Last reconciled row"),
+    );
+  }
+  const focus = master.match(/\|\s*Current focus\s*\|\s*([^|\n]+)\|/);
+  if (!focus) {
+    problems.push(
+      issue("missing-control-block", "§43.1 must include a Current focus row"),
+    );
+    return problems;
+  }
+  const checked = new Set(
+    items.filter((item) => item.checked).map((item) => item.id),
+  );
+  for (const match of focus[1].matchAll(/\b(C\d{1,2}\.\d{2})\b/g)) {
+    if (checked.has(match[1])) {
+      problems.push(
+        issue(
+          "stale-focus",
+          `Current focus names ${match[1]}, which is already checked`,
+        ),
+      );
+    }
+  }
+  return problems;
 }
 
 /** A missing number is usually a deleted work item whose obligation vanished. */
@@ -106,11 +169,14 @@ export function validatePlan(files) {
     }
   }
 
-  const items = checklistItems(master);
+  const blocks = checklistBlocks(master);
+  const items = blocks.map(({ id, checked }) => ({ id, checked }));
   if (items.length === 0) {
     problems.push(issue("missing-items", "MASTER.md contains no §43 checklist IDs"));
     return problems;
   }
+  problems.push(...controlBlockIssues(master, items));
+  problems.push(...evidenceIssues(blocks));
 
   const counts = new Map();
   for (const { id } of items) counts.set(id, (counts.get(id) ?? 0) + 1);
