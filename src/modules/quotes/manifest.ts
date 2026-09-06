@@ -26,6 +26,8 @@ export default defineModule({
       "quote.accepted",
       "quote.declined",
       "quote.expired",
+      "quote.partnerInvited",
+      "quote.partnerRevoked",
     ],
   },
 });

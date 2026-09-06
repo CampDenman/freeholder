@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.34. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.35. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7213,9 +7213,18 @@ customer has one secure, comprehensible home for the relationship.
   `tests/core/gallery-partner-share.test.ts`. Migration
   `0159_client_gallery_partner_share.sql`. Changeset
   `gallery-partner-share.md`.)
-- [ ] **C9.34** Let a prospect share a quote internally before accepting:
+- [x] **C9.34** Let a prospect share a quote internally before accepting:
   "send to my business partner" issues a view-only link.
-  (Split from C9.29 under §43.17.1. §34's quote half.)
+  (Split from C9.29 under §43.17.1. §34's quote half.
+  The prospect's `view_token` remains the authorisation to decide. A
+  partner link is a different row, hashed, and a different address
+  (`/portal/quotes/partner/{token}`), so forwarding it cannot spend the
+  offer. Invites call `contacts.resolve` via `ctx.callAsSystem`. A partner
+  view does not mark the quote `viewed` — that mutation is still the
+  prospect opening it. Merge repoints both contact columns; erasure of
+  either person deletes the link. Eight tests in
+  `tests/core/quote-partner-share.test.ts`. Migration
+  `0160_quote_partner_links.sql`. Changeset `quote-partner-share.md`.)
 - [ ] **C9.35** Build gift-card/registry-style sharing on products.
   (Split from C9.29 under §43.17.1. §34's product half.)
 - [ ] **C9.36** Emit copy-paste embed codes for galleries, review walls,

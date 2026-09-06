@@ -1121,6 +1121,13 @@
       "when": 1791388800000,
       "tag": "0159_client_gallery_partner_share",
       "breakpoints": true
+    },
+    {
+      "idx": 160,
+      "version": "7",
+      "when": 1791475200000,
+      "tag": "0160_quote_partner_links",
+      "breakpoints": true
     }
   ]
 }
