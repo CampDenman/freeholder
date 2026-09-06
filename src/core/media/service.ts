@@ -1629,7 +1629,10 @@ const altTextSuggestionSource = z.object({
   altText: z.string().nullable(),
 });
 
-function sourceIdentity(asset: AltTextSuggestionSource): string {
+function sourceIdentity(asset: {
+  checksumSha256: string | null;
+  storageKey: string;
+}): string {
   return asset.checksumSha256 ?? `storage:${asset.storageKey}`;
 }
 
@@ -2306,13 +2309,28 @@ export const purgeExpiredAsset = defineService({
   },
 });
 
-export const rescanAsset = defineService({
-  name: "media.rescan",
-  summary: "Run the configured malware scanner against an original again.",
-  kind: "mutation",
+const rescanSource = z.object({
+  id: uuid,
+  storageKey: z.string(),
+  filename: z.string(),
+  mime: z.string(),
+  bytes: z.number(),
+  kind: z.enum(["image", "video", "doc", "audio"]),
+  status: z.enum(["processing", "ready", "quarantined", "failed", "trashed"]),
+  variants: z.unknown(),
+  checksumSha256: z.string().nullable(),
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+});
+
+const rescanSourceService = defineService({
+  name: "media.rescanSource",
+  summary: "Authorize and snapshot a file before scanning it again.",
+  kind: "query",
   permission: "scoped",
+  external: false,
   input: z.object({ id: z.string().uuid() }),
-  output: assetRow,
+  output: rescanSource,
   handler: async (input, ctx) => {
     const [asset] = await ctx.tx
       .select()
@@ -2322,24 +2340,128 @@ export const rescanAsset = defineService({
     if (!asset || asset.status === "trashed") {
       throw new ServiceError("not_found", "That file is not here.");
     }
-    const scan = await scanStored(
-      asset.storageKey,
-      asset.filename,
-      asset.mime,
-      asset.bytes,
-    );
+    return asset;
+  },
+});
+
+const applyRescan = defineService({
+  name: "media.applyRescan",
+  summary: "Revalidate a file and atomically store a completed rescan.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    id: z.string().uuid(),
+    sourceChecksum: z.string().min(1),
+    storageKey: z.string().min(1),
+    bytes: z.number(),
+    mime: z.string().min(1),
+    scanStatus: z.enum(["pending", "clean", "not_configured", "infected", "error"]),
+    scanEngine: z.string().nullable(),
+    scanMessage: z.string().nullable(),
+    scannedAt: timestamp.nullable(),
+    status: z.enum(["processing", "ready", "quarantined", "failed", "trashed"]),
+    variantKeys: z.array(z.string().min(1)).max(64),
+    variants: z.unknown(),
+    width: z.number().int().nullable(),
+    height: z.number().int().nullable(),
+  }),
+  output: assetRow,
+  handler: async (input, ctx) => {
+    // Scanner and storage work ran outside this transaction. Re-lock and
+    // compare the source snapshot so a concurrent edit always wins, and so
+    // newly written renditions stay sweepable pending objects instead of
+    // attaching to a file that is no longer the one we scanned.
+    const [current] = await ctx.tx
+      .select()
+      .from(assets)
+      .where(eq(assets.id, input.id))
+      .limit(1)
+      .for("update");
+    if (!current || current.status === "trashed") {
+      throw new ServiceError("not_found", "That file is not here.");
+    }
+    if (
+      sourceIdentity(current) !== input.sourceChecksum ||
+      current.storageKey !== input.storageKey ||
+      current.bytes !== input.bytes ||
+      current.mime !== input.mime
+    ) {
+      throw new ServiceError(
+        "conflict",
+        "The file changed while it was being scanned. Nothing was overwritten; try again from the current file.",
+      );
+    }
+    const currentVariants = current.variants as VariantSet;
+    const attachKeys =
+      input.variantKeys.length > 0 && Object.keys(currentVariants).length === 0
+        ? input.variantKeys
+        : [];
+    if (attachKeys.length > 0) {
+      await attachObjects(ctx.tx, attachKeys, current.id);
+    }
+    const [updated] = await ctx.tx
+      .update(assets)
+      .set({
+        scanStatus: input.scanStatus,
+        scanEngine: input.scanEngine,
+        scanMessage: input.scanMessage,
+        scannedAt: input.scannedAt,
+        status: input.status,
+        variants: attachKeys.length > 0 ? input.variants : current.variants,
+        width: attachKeys.length > 0 ? input.width : current.width,
+        height: attachKeys.length > 0 ? input.height : current.height,
+        updatedAt: new Date(),
+      })
+      .where(eq(assets.id, current.id))
+      .returning();
+    ctx.setSubject("asset", current.id);
+    ctx.queueEvent("media.scanned", {
+      assetId: current.id,
+      scanStatus: updated!.scanStatus,
+    });
+    return updated!;
+  },
+});
+
+export const rescanAsset = defineOrchestratedService({
+  name: "media.rescan",
+  summary: "Run the configured malware scanner against an original again.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({ id: z.string().uuid() }),
+  output: assetRow,
+  handler: async (input, actor) => {
+    const asset = await rescanSourceService.call(input, actor);
+    let scan;
+    try {
+      scan = await scanStored(
+        asset.storageKey,
+        asset.filename,
+        asset.mime,
+        asset.bytes,
+      );
+    } catch {
+      throw new ServiceError(
+        "conflict",
+        "The original file is missing or could not be scanned.",
+      );
+    }
     const fields = scanFields(scan);
     const status =
       scan.status === "not_configured" && asset.status === "quarantined"
         ? ("quarantined" as const)
         : fields.status;
-    let variants = asset.variants as VariantSet;
+    let variants = asset.variants;
     let width = asset.width;
     let height = asset.height;
+    const variantKeys: string[] = [];
     if (
       status === "ready" &&
       asset.kind === "image" &&
-      Object.keys(variants).length === 0
+      Object.keys(asset.variants as VariantSet).length === 0
     ) {
       const body = await storage().get(asset.storageKey);
       const facts = body ? await readImageFacts(body) : undefined;
@@ -2360,30 +2482,27 @@ export const rescanAsset = defineService({
           role: "variant" as const,
         })),
       );
-      const keys = built.map((rendition) => rendition.key);
-      await attachObjects(ctx.tx, keys, asset.id);
+      variantKeys.push(...built.map((rendition) => rendition.key));
       variants = toVariantSet(built);
       width = facts.width;
       height = facts.height;
     }
-    const [updated] = await ctx.tx
-      .update(assets)
-      .set({
+    return applyRescan.call(
+      {
+        id: asset.id,
+        sourceChecksum: sourceIdentity(asset),
+        storageKey: asset.storageKey,
+        bytes: asset.bytes,
+        mime: asset.mime,
         ...fields,
         status,
+        variantKeys,
         variants,
         width,
         height,
-        updatedAt: new Date(),
-      })
-      .where(eq(assets.id, asset.id))
-      .returning();
-    ctx.setSubject("asset", asset.id);
-    ctx.queueEvent("media.scanned", {
-      assetId: asset.id,
-      scanStatus: updated!.scanStatus,
-    });
-    return updated!;
+      },
+      actor,
+    );
   },
 });
 
@@ -2501,5 +2620,7 @@ export default [
   purgeAsset,
   purgeExpiredAsset,
   rescanAsset,
+  rescanSourceService,
+  applyRescan,
   ...captureServices,
 ];

@@ -60,7 +60,10 @@ import {
   resolvePage,
 } from "@/modules/cms/service";
 import { resetStorageForTests, storage } from "@/adapters/storage";
-import { resetMalwareScannerForTests } from "@/adapters/malware";
+import {
+  resetMalwareScannerForTests,
+  setMalwareScannerForTests,
+} from "@/adapters/malware";
 import {
   resetAltTextSuggesterForTests,
   setAltTextSuggesterForTests,
@@ -291,6 +294,7 @@ describe.runIf(hasDatabase)("the asset library", () => {
 
   afterEach(() => {
     resetAltTextSuggesterForTests();
+    resetMalwareScannerForTests();
   });
 
   afterAll(async () => {
@@ -465,6 +469,153 @@ describe.runIf(hasDatabase)("the asset library", () => {
       resetEnvForTests();
       resetMalwareScannerForTests();
     }
+  });
+
+  it("releases a quarantined image and builds renditions after a clean rescan", async () => {
+    const previous = { ...process.env };
+    let scannerReply = "stream: Eicar-Test-Signature FOUND";
+    const server = createServer((socket) => {
+      let received = Buffer.alloc(0);
+      socket.on("data", (chunk) => {
+        received = Buffer.concat([
+          received,
+          typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+        ]);
+        if (
+          received.length >= 4 &&
+          received.subarray(-4).every((byte) => byte === 0)
+        ) {
+          socket.end(`${scannerReply}\0`);
+        }
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      Object.assign(process.env, {
+        MALWARE_SCANNER: "clamav",
+        CLAMAV_HOST: "127.0.0.1",
+        CLAMAV_PORT: String((server.address() as AddressInfo).port),
+      });
+      resetEnvForTests();
+      resetMalwareScannerForTests();
+      const asset = await uploadAsset.call(
+        {
+          filename: "caught.png",
+          contentType: "image/png",
+          bytes: await png(800, 600),
+        },
+        STAFF,
+      );
+      expect(asset).toMatchObject({
+        status: "quarantined",
+        scanStatus: "infected",
+      });
+      expect(asset.variants).toEqual({});
+
+      scannerReply = "stream: OK";
+      const rescanned = await rescanAsset.call({ id: asset.id }, STAFF);
+      expect(rescanned).toMatchObject({
+        status: "ready",
+        scanStatus: "clean",
+        width: 800,
+        height: 600,
+      });
+      const variants = rescanned.variants as { webp?: { key: string }[] };
+      expect(variants.webp?.length).toBeGreaterThan(0);
+      const attached = await db()
+        .select()
+        .from(mediaObjects)
+        .where(eq(mediaObjects.assetId, asset.id));
+      expect(attached.some((object) => object.role === "variant")).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      process.env = previous;
+      resetEnvForTests();
+      resetMalwareScannerForTests();
+    }
+  });
+
+  it("leaves newly written renditions sweepable when the file changes during scan", async () => {
+    const previous = { ...process.env };
+    const scannerReply = "stream: Eicar-Test-Signature FOUND";
+    const server = createServer((socket) => {
+      let received = Buffer.alloc(0);
+      socket.on("data", (chunk) => {
+        received = Buffer.concat([
+          received,
+          typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+        ]);
+        if (
+          received.length >= 4 &&
+          received.subarray(-4).every((byte) => byte === 0)
+        ) {
+          socket.end(`${scannerReply}\0`);
+        }
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      Object.assign(process.env, {
+        MALWARE_SCANNER: "clamav",
+        CLAMAV_HOST: "127.0.0.1",
+        CLAMAV_PORT: String((server.address() as AddressInfo).port),
+      });
+      resetEnvForTests();
+      resetMalwareScannerForTests();
+      const asset = await uploadAsset.call(
+        {
+          filename: "race.png",
+          contentType: "image/png",
+          bytes: await png(400, 300),
+        },
+        STAFF,
+      );
+      expect(asset.status).toBe("quarantined");
+
+      setMalwareScannerForTests({
+        id: "clamav",
+        async scan(input) {
+          for await (const _chunk of input.body) {
+            /* drain the original so the scanner boundary stays honest */
+          }
+          await db()
+            .update(assets)
+            .set({ checksumSha256: "changed-during-scan" })
+            .where(eq(assets.id, asset.id));
+          return { status: "clean", engine: "clamav" };
+        },
+      });
+      const error = await failure(rescanAsset.call({ id: asset.id }, STAFF));
+      expect(error.code).toBe("conflict");
+      const current = await getAsset.call({ id: asset.id }, STAFF);
+      expect(current).toMatchObject({
+        status: "quarantined",
+        scanStatus: "infected",
+        variants: {},
+      });
+      const pending = await db()
+        .select()
+        .from(mediaObjects)
+        .where(eq(mediaObjects.state, "pending"));
+      expect(pending.length).toBeGreaterThan(0);
+      expect(pending.every((object) => object.assetId === null)).toBe(true);
+      expect(pending.every((object) => object.role === "variant")).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      process.env = previous;
+      resetEnvForTests();
+      resetMalwareScannerForTests();
+    }
+  });
+
+  it("refuses to rescan a trashed file", async () => {
+    const asset = await uploadAsset.call(
+      { filename: "gone.png", contentType: "image/png", bytes: await png(50, 50) },
+      STAFF,
+    );
+    await deleteAsset.call({ id: asset.id }, OWNER);
+    const error = await failure(rescanAsset.call({ id: asset.id }, STAFF));
+    expect(error.code).toBe("not_found");
   });
 
   it("refuses an empty file", async () => {
