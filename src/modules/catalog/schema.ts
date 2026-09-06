@@ -1149,11 +1149,19 @@ export const wishlists = pgTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     name: text("name").notNull().default("Wishlist"),
+    /**
+     * HMAC of the public registry token (C9.35). Null until the owner of
+     * this list shares it; rotating mints a new hash and the old link dies.
+     */
+    shareTokenHash: text("share_token_hash"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("wishlists_contact_idx").on(t.contactId),
+    uniqueIndex("wishlists_share_token_idx")
+      .on(t.shareTokenHash)
+      .where(sql`${t.shareTokenHash} is not null`),
     check("wishlists_name_valid", sql`char_length(${t.name}) between 1 and 80`),
   ],
 );
@@ -1453,11 +1461,19 @@ export const giftCards = pgTable(
     status: text("status", { enum: GIFT_CARD_STATUSES }).notNull().default("active"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     note: text("note"),
+    /**
+     * HMAC of the claim link (C9.35). The code stays off the public URL;
+     * holding this token is how a recipient opens the card.
+     */
+    shareTokenHash: text("share_token_hash"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("gift_cards_code_idx").on(t.code),
+    uniqueIndex("gift_cards_share_token_idx")
+      .on(t.shareTokenHash)
+      .where(sql`${t.shareTokenHash} is not null`),
     index("gift_cards_contact_idx").on(t.contactId, t.status),
     check("gift_cards_code_valid", sql`${t.code} ~ '^[A-Z0-9][A-Z0-9-]{7,31}$'`),
     check("gift_cards_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),

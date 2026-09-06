@@ -10,8 +10,11 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { createNotification } from "@/core/notifications/service";
-import { registerContactReference } from "@/core/contacts/service";
+import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { sendMail } from "@/core/mail/service";
+import { businessProfile } from "@/core/settings/schema";
+import { env } from "@/core/env";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { decimalToMinor } from "@/adapters/payments/currency";
 import {
@@ -33,6 +36,7 @@ import {
   productVariants,
   products,
 } from "./schema";
+import { hashCatalogShareToken, newCatalogShareToken } from "./tokens";
 
 const id = z.string().uuid();
 
@@ -425,6 +429,142 @@ export const issueGiftCard = defineService({
   },
 });
 
+export const sendGiftCard = defineService({
+  name: "catalog.sendGiftCard",
+  summary: "Send a gift card to someone as a claim link, resolved as a Contact.",
+  kind: "mutation",
+  permission: "scoped",
+  writeClass: "write",
+  input: z.object({
+    id,
+    email: z.string().trim().email().toLowerCase(),
+    name: z.string().trim().min(1).max(200).optional(),
+  }),
+  rateLimit: {
+    limit: 8,
+    windowSeconds: 15 * 60,
+    subject: (input) => `gift-card-send:${input.id}`,
+    message: "Too many sends. Wait a few minutes and try again.",
+  },
+  output: z.object({
+    id: uuid,
+    contactId: uuid,
+    token: z.string(),
+    link: z.string(),
+    delivers: z.boolean(),
+  }),
+  handler: async (input, ctx) => {
+    const [card] = await ctx.tx.select().from(giftCards).where(eq(giftCards.id, input.id)).limit(1);
+    if (!card) throw new ServiceError("not_found", "That gift card is not here.");
+    if (card.status !== "active" || card.remainingMinor <= 0) {
+      throw new ServiceError("conflict", "That gift card cannot be sent.");
+    }
+    const resolved = await ctx.callAsSystem(resolveContact, {
+      email: input.email,
+      name: input.name,
+      source: "gift-card",
+    });
+    const token = newCatalogShareToken();
+    const shareTokenHash = hashCatalogShareToken("gift-card", token);
+    await ctx.tx
+      .update(giftCards)
+      .set({
+        contactId: resolved.contact.id,
+        shareTokenHash,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(giftCards.id, card.id));
+    const link = `${env().APP_URL.replace(/\/+$/, "")}/gift/${encodeURIComponent(token)}`;
+    const [business] = await ctx.tx
+      .select({ name: businessProfile.name })
+      .from(businessProfile)
+      .limit(1);
+    const site = business?.name ?? "this Freeholder site";
+    let delivers = false;
+    try {
+      const sent = await sendMail(
+        ctx.tx,
+        {
+          to: resolved.contact.email ?? input.email,
+          subject: `A gift card from ${site}`,
+          text: [
+            `${site} sent you a gift card.`,
+            "",
+            "Open it here. This link is private to you:",
+            link,
+            "",
+            card.expiresAt
+              ? `It stops working ${card.expiresAt.toISOString()}.`
+              : "Please do not forward this link.",
+          ].join("\n"),
+        },
+        {
+          requestedBy: "system",
+          idempotencyKey: `gift-card:${card.id}:${shareTokenHash.slice(0, 32)}`,
+        },
+      );
+      delivers = sent.delivers;
+    } catch {
+      delivers = false;
+    }
+    ctx.setSubject("giftCard", card.id);
+    await ctx.emitTimeline({
+      contactId: resolved.contact.id,
+      eventType: "catalog.giftCardSent",
+      subjectType: "contact",
+      subjectId: resolved.contact.id,
+      payload: { giftCardId: card.id },
+    });
+    ctx.queueEvent("catalog.giftCardSent", {
+      giftCardId: card.id,
+      contactId: resolved.contact.id,
+    });
+    return {
+      id: card.id,
+      contactId: resolved.contact.id,
+      token,
+      link,
+      delivers,
+    };
+  },
+});
+
+export const giftCardByShareToken = defineService({
+  name: "catalog.giftCardByShareToken",
+  summary: "Open a gift card from its claim link.",
+  kind: "query",
+  permission: "public",
+  mcpExclude: true,
+  agentCallable: false,
+  input: z.object({ token: z.string().trim().min(16).max(200) }),
+  output: z
+    .object({
+      remainingMinor: z.number().int(),
+      issuedMinor: z.number().int(),
+      currency: z.string(),
+      code: z.string(),
+      expiresAt: timestamp.nullable(),
+      status: z.enum(GIFT_CARD_STATUSES),
+    })
+    .nullable(),
+  handler: async (input, ctx) => {
+    const [card] = await ctx.tx
+      .select()
+      .from(giftCards)
+      .where(eq(giftCards.shareTokenHash, hashCatalogShareToken("gift-card", input.token)))
+      .limit(1);
+    if (!card) return null;
+    return {
+      remainingMinor: card.remainingMinor,
+      issuedMinor: card.issuedMinor,
+      currency: card.currency,
+      code: card.code,
+      expiresAt: card.expiresAt,
+      status: card.status,
+    };
+  },
+});
+
 export const listGiftCards = defineService({
   name: "catalog.listGiftCards",
   summary: "Issued gift cards, newest first.",
@@ -629,6 +769,8 @@ export default [
   quoteCartPromotions,
   recordCouponRedemption,
   issueGiftCard,
+  sendGiftCard,
+  giftCardByShareToken,
   listGiftCards,
   applyGiftCardToInvoice,
   createOfferRule,
