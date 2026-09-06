@@ -76,6 +76,14 @@ export const galleries = pgTable(
      * a watermarked variant.
      */
     watermark: boolean("watermark").notNull().default(false),
+    /**
+     * Owner-permitted client partner sharing (C9.29 / §34). Off until the
+     * owner opts this gallery in; a client cannot mint guests on a gallery
+     * the owner has not opened to that.
+     */
+    clientCanInvitePartner: boolean("client_can_invite_partner")
+      .notNull()
+      .default(false),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -155,6 +163,16 @@ export const galleryGuests = pgTable(
     invitedByUserId: uuid("invited_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    /**
+     * Who issued this invite when it was the client, not staff. Null on
+     * owner-issued guests so a client cannot rotate an invitation they did
+     * not send. Merge and erasure repoint or null this; they do not delete
+     * the guest the partner still holds.
+     */
+    invitedByContactId: uuid("invited_by_contact_id").references(
+      () => contacts.id,
+      { onDelete: "set null" },
+    ),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -164,6 +182,7 @@ export const galleryGuests = pgTable(
       .on(t.tokenHash)
       .where(sql`${t.tokenHash} is not null`),
     index("gallery_guests_contact_idx").on(t.contactId),
+    index("gallery_guests_invited_by_contact_idx").on(t.invitedByContactId),
     check("gallery_guests_role", sql`${t.role} in ('client', 'partner')`),
   ],
 );

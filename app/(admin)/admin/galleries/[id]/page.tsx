@@ -178,6 +178,14 @@ export default async function GalleryEditorPage({
               <input type="checkbox" name="watermark" defaultChecked={gallery.watermark} />
               {t("galleries.field.watermark")}
             </label>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input
+                type="checkbox"
+                name="clientCanInvitePartner"
+                defaultChecked={gallery.clientCanInvitePartner}
+              />
+              {t("galleries.field.clientCanInvitePartner")}
+            </label>
             <div>
               <Button type="submit">{t("galleries.action.save")}</Button>
             </div>
@@ -248,6 +256,9 @@ export default async function GalleryEditorPage({
                 >
                   <span>
                     {guest.contactName ?? guest.contactEmail} · {t(`galleries.role.${guest.role}`)}
+                    {guest.invitedByContactId
+                      ? ` · ${t("galleries.invite.byClient")}`
+                      : ` · ${t("galleries.invite.byOwner")}`}
                   </span>
                   {guest.revokedAt ? null : (
                     <form action={revokeGalleryGuestAction}>

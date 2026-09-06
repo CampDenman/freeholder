@@ -529,7 +529,7 @@ Series:   active → paused → completed | cancelled   (per-occurrence override
 |---|---|---|
 | `Asset` | Any uploaded file. | kind (image/video/doc/audio), storage_key, mime, bytes, width/height/duration, variants (jsonb: thumbs, web, watermarked), alt_text, blurhash |
 | `MediaCaptureSession` | One explicit browser, device, share-target or upload-link capture/import session that converges on normal Assets. | created_by_user_id, source (camera/microphone/screen/share_sheet/camera_roll/upload_link/import/social), status, target_type + target_id, upload_count, expires_at, completed_at |
-| `Gallery` | Collection of assets. `kind: portfolio \| client_delivery` | title, slug, kind, contact_id (client galleries), cover_asset_id, access (public/password/pin/login), expires_at, download_policy (none/web_res/full_res/limit_n), watermark (bool) |
+| `Gallery` | Collection of assets. `kind: portfolio \| client_delivery` | title, slug, kind, contact_id (client galleries), cover_asset_id, access (public/password/pin/login), expires_at, download_policy (none/web_res/full_res/limit_n), watermark (bool), client_can_invite_partner (bool — the client may invite a scoped partner only when the owner has allowed it) |
 | `GalleryItem` | Ordered membership. | gallery_id, asset_id, position |
 | `GallerySelection` | Client proofing. | gallery_id, contact_id, asset_id, kind (favorite/select/reject), comment |
 | `GalleryAccessLog` | Views/downloads → also emits TimelineEvents. | gallery_id, contact_id, action, asset_id, at |
@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.29. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.34. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7179,10 +7179,48 @@ customer has one secure, comprehensible home for the relationship.
   "how many distinct ways it could be shared", which nobody asked. The share
   bar is a server action rather than a script, so it works with JavaScript off;
   the Web Share API is offered on top, only where the browser actually has it.
-  §34's client-side sharing — scoped gallery and quote links, gift registries —
-  and its embeds remain C9.29.)
-- [ ] **C9.29** Build scoped gallery/quote/product gift-registry sharing and
-  embeds for galleries, reviews, bookings and newsletter forms with backlinks.
+  §34's remaining client-side sharing is C9.29 (gallery partners), C9.34
+  (quote view-only links), C9.35 (product/gift-registry sharing) and C9.36
+  (embeds with backlinks).)
+- [x] **C9.29** Let a client share their proofing gallery with a partner:
+  scoped guest access, owner-permitted, issued from the gallery the client
+  already opened.
+  (Split under §43.17.1. Quote links, product/gift-registry sharing and
+  embeds are C9.34–C9.36.
+  The owner-invite path C8.03 already had is unchanged. What this item
+  adds is the other direction §34 named: the *client* issues the partner
+  guest, and only when the owner has opted that gallery in.
+  **Owner-permitted is a column, not a policy remembered in the UI.**
+  `galleries.client_can_invite_partner` defaults false; the owner ticks it
+  on the gallery they are delivering. A client session that asks
+  `galleries.invitePartner` without that flag is refused the same way a
+  partner session is — "this gallery cannot be shared that way" — so
+  turning the flag off is not a hidden form.
+  **The speaker is the session, not a second login.** PIN, magic-link and
+  login already bind a session to a contact. The named client, or a
+  client-role guest, may invite; a partner may not, because one share
+  becoming unbounded is the failure this item exists to prevent. The
+  invite is `role: partner`, `can_download: false`, expiry inherited from
+  the gallery, and `contacts.resolve` via `ctx.callAsSystem` because the
+  public gallery is anonymous. Owner-issued guests keep
+  `invited_by_user_id` and a null `invited_by_contact_id`, so a client
+  cannot rotate or revoke an invitation they did not send.
+  The link is shown once on `/g/{slug}` (cookie, five minutes) the same
+  way the admin invite is shown once, because an undeliverable address
+  reports `delivers: false` rather than refusing the guest. Merge
+  repoints `invited_by_contact_id`; erasure of the client nulls it and
+  keeps the partner guest. Nine tests in
+  `tests/core/gallery-partner-share.test.ts`. Migration
+  `0159_client_gallery_partner_share.sql`. Changeset
+  `gallery-partner-share.md`.)
+- [ ] **C9.34** Let a prospect share a quote internally before accepting:
+  "send to my business partner" issues a view-only link.
+  (Split from C9.29 under §43.17.1. §34's quote half.)
+- [ ] **C9.35** Build gift-card/registry-style sharing on products.
+  (Split from C9.29 under §43.17.1. §34's product half.)
+- [ ] **C9.36** Emit copy-paste embed codes for galleries, review walls,
+  booking widgets and newsletter signup blocks, with backlinks.
+  (Split from C9.29 under §43.17.1. §34's embed half.)
 - [x] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,
   targeting, consent-aware capture and accessibility-safe dismissal.
   (New `popups` module, migration `0157_popups.sql`. §36 names the four

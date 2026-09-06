@@ -15,3 +15,10 @@ export const GALLERY_SESSION_COOKIE = "fh_gallery_session";
  * is stored, so the invite response is the last place the raw link exists.
  */
 export const GALLERY_INVITE_COOKIE = "fh_gallery_invite";
+
+/**
+ * A partner magic link, handed back to the client once. Same reason as
+ * `GALLERY_INVITE_COOKIE`: only the hash is stored, so this cookie is the
+ * last place the raw link exists on the public gallery.
+ */
+export const GALLERY_PARTNER_INVITE_COOKIE = "fh_gallery_partner_invite";

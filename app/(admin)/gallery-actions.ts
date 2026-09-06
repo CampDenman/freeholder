@@ -79,6 +79,7 @@ export async function updateGalleryAction(form: FormData): Promise<void> {
         downloadPolicy: downloadPolicy || undefined,
         downloadLimit: text(form, "downloadLimit") ? Number(text(form, "downloadLimit")) : undefined,
         watermark: form.get("watermark") === "on",
+        clientCanInvitePartner: form.get("clientCanInvitePartner") === "on",
       },
       await actor(),
     );
