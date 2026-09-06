@@ -209,6 +209,39 @@ export const quoteMessages = pgTable(
   ],
 );
 
+/**
+ * A view-only link the prospect issued so a business partner can read the
+ * offer without being able to accept it (C9.34 / §34).
+ *
+ * Separate from `quotes.view_token`: that token is the authorisation to
+ * decide. This one is only the authorisation to look.
+ */
+export const quotePartnerLinks = pgTable(
+  "quote_partner_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    quoteId: uuid("quote_id")
+      .notNull()
+      .references(() => quotes.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "restrict" }),
+    invitedByContactId: uuid("invited_by_contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "restrict" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("quote_partner_links_person_idx").on(t.quoteId, t.contactId),
+    uniqueIndex("quote_partner_links_token_idx").on(t.tokenHash),
+    index("quote_partner_links_invited_by_idx").on(t.invitedByContactId),
+  ],
+);
+
 /** Sequence for the human-facing reference, one per instance (single-tenant). */
 export const quoteSequences = pgTable("quote_sequences", {
   id: text("id").primaryKey(),

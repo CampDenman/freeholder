@@ -25,16 +25,20 @@
 import "./view-entity";
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
-import { listed, row, timestamp, uuid } from "@/core/contract";
+import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
-import { registerContactReference } from "@/core/contacts/service";
+import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { sendMail } from "@/core/mail/service";
+import { businessProfile } from "@/core/settings/schema";
+import { env } from "@/core/env";
 import {
   defineService,
   ServiceError,
   type Actor,
   type ServiceContext,
+  type Tx,
 } from "@/core/service";
 import { extendMinor, sumMinor } from "@/modules/invoicing/money";
 import {
@@ -43,9 +47,11 @@ import {
   QUOTE_STATUSES,
   quoteItems,
   quoteMessages,
+  quotePartnerLinks,
   quoteSequences,
   quotes,
 } from "./schema";
+import { hashQuotePartnerToken, newQuotePartnerToken } from "./tokens";
 // Claims this module's room in the customer portal (C8.11). Imported for
 // its side effect: core owns the registry so it never imports a module,
 // and something has to make the claim at load time.
@@ -446,11 +452,53 @@ const publicView = z.object({
       createdAt: timestamp,
     }),
   ),
+  /** The prospect may share while the offer is still open. */
+  canInvitePartner: z.boolean(),
+  invitedPartners: listed(
+    row({
+      id: uuid,
+      contactName: z.string().optional(),
+      contactEmail: z.string().nullable().optional(),
+    }),
+  ),
+  /** A partner looks; they do not decide. */
+  viewOnly: z.boolean(),
 });
+
+async function partnersInvitedBy(
+  ctx: ServiceContext,
+  quoteId: string,
+  contactId: string,
+) {
+  const rows = await ctx.tx
+    .select({
+      id: quotePartnerLinks.id,
+      name: contacts.name,
+      email: contacts.email,
+    })
+    .from(quotePartnerLinks)
+    .innerJoin(contacts, eq(contacts.id, quotePartnerLinks.contactId))
+    .where(
+      and(
+        eq(quotePartnerLinks.quoteId, quoteId),
+        eq(quotePartnerLinks.invitedByContactId, contactId),
+        isNull(quotePartnerLinks.revokedAt),
+      ),
+    )
+    .orderBy(desc(quotePartnerLinks.createdAt));
+  return rows.map((row) => ({
+    id: row.id,
+    contactName: row.name,
+    contactEmail: row.email,
+  }));
+}
 
 async function viewFor(
   ctx: ServiceContext,
   quote: typeof quotes.$inferSelect,
+  options: { viewOnly: boolean; invitedByContactId?: string | null } = {
+    viewOnly: false,
+  },
 ): Promise<z.infer<typeof publicView>> {
   const items = await liveItems(ctx, quote);
   const thread = await ctx.tx
@@ -463,6 +511,8 @@ async function viewFor(
     .from(quoteMessages)
     .where(eq(quoteMessages.quoteId, quote.id))
     .orderBy(asc(quoteMessages.createdAt));
+  const open = OPEN_STATUSES.includes(quote.status as never);
+  const invitedBy = options.invitedByContactId ?? quote.contactId;
   return {
     id: quote.id,
     reference: quote.reference,
@@ -473,13 +523,61 @@ async function viewFor(
     validUntil: quote.validUntil,
     depositMinor: quote.depositMinor,
     terms: quote.terms,
-    open: OPEN_STATUSES.includes(quote.status as never),
+    open,
     items,
     totals: totalsFor(items),
     // The owner's private notes are deliberately absent. `notes` is what the
     // business writes *about* a job, and a quote page is not the place for it.
     messages: thread,
+    canInvitePartner: open && !options.viewOnly,
+    invitedPartners:
+      options.viewOnly || !invitedBy
+        ? []
+        : await partnersInvitedBy(ctx, quote.id, invitedBy),
+    viewOnly: options.viewOnly,
   };
+}
+
+function partnerLink(token: string): string {
+  return `${env().APP_URL.replace(/\/+$/, "")}/portal/quotes/partner/${encodeURIComponent(token)}`;
+}
+
+async function sendPartnerInvite(
+  tx: Tx,
+  input: {
+    to: string;
+    site: string;
+    title: string;
+    reference: string;
+    link: string;
+    expiresAt: Date | null;
+    idempotencyKey: string;
+  },
+): Promise<boolean> {
+  try {
+    const sent = await sendMail(
+      tx,
+      {
+        to: input.to,
+        subject: `${input.title} — a quote to look at`,
+        text: [
+          `${input.site} sent "${input.title}" (${input.reference}) to someone at your business.`,
+          "",
+          "This link is view-only. It does not let you accept or decline.",
+          "",
+          input.link,
+          "",
+          input.expiresAt
+            ? `This private link stops working ${input.expiresAt.toISOString()}.`
+            : "This link is private. Please do not forward it.",
+        ].join("\n"),
+      },
+      { requestedBy: "system", idempotencyKey: input.idempotencyKey },
+    );
+    return sent.delivers;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -829,6 +927,210 @@ export const postQuoteMessage = defineService({
   },
 });
 
+const partnerInviteRow = row({
+  id: uuid,
+  quoteId: uuid,
+  contactId: uuid,
+  contactName: z.string().optional(),
+  contactEmail: z.string().nullable().optional(),
+  token: z.string(),
+  link: z.string(),
+  delivers: z.boolean(),
+});
+
+export const inviteQuotePartner = defineService({
+  name: "quotes.invitePartner",
+  summary: "The prospect shares this quote as a view-only link for a business partner.",
+  kind: "mutation",
+  permission: "public",
+  mcpExclude: true,
+  agentCallable: false,
+  writeClass: "write",
+  input: z.object({
+    token: z.string().trim().min(16).max(200),
+    email: z.string().trim().email().toLowerCase(),
+    name: z.string().trim().min(1).max(200).optional(),
+  }),
+  rateLimit: {
+    limit: 8,
+    windowSeconds: 15 * 60,
+    subject: (input) => `quote-partner:${hashQuotePartnerToken(input.token)}`,
+    message: "Too many invites. Wait a few minutes and try again.",
+  },
+  output: partnerInviteRow,
+  handler: async (input, ctx) => {
+    const [quote] = await ctx.tx
+      .select()
+      .from(quotes)
+      .where(eq(quotes.viewToken, input.token))
+      .limit(1);
+    if (!quote) throw new ServiceError("not_found", "That link is no longer valid.");
+    if (!OPEN_STATUSES.includes(quote.status as never)) {
+      throw new ServiceError("conflict", "This quote is closed.");
+    }
+    const resolved = await ctx.callAsSystem(resolveContact, {
+      email: input.email,
+      name: input.name,
+      source: "quote-partner",
+    });
+    if (resolved.contact.id === quote.contactId) {
+      throw new ServiceError("validation", "Invite someone else. This quote is already yours.");
+    }
+    const token = newQuotePartnerToken();
+    const tokenHash = hashQuotePartnerToken(token);
+    const existing = await ctx.tx
+      .select()
+      .from(quotePartnerLinks)
+      .where(
+        and(
+          eq(quotePartnerLinks.quoteId, quote.id),
+          eq(quotePartnerLinks.contactId, resolved.contact.id),
+        ),
+      )
+      .limit(1);
+    let linkRow: typeof quotePartnerLinks.$inferSelect;
+    if (existing[0]) {
+      if (existing[0].invitedByContactId !== quote.contactId) {
+        throw new ServiceError("conflict", "That person already has access to this quote.");
+      }
+      const [updated] = await ctx.tx
+        .update(quotePartnerLinks)
+        .set({
+          tokenHash,
+          expiresAt: quote.validUntil,
+          revokedAt: null,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(quotePartnerLinks.id, existing[0].id))
+        .returning();
+      linkRow = updated!;
+    } else {
+      const [created] = await ctx.tx
+        .insert(quotePartnerLinks)
+        .values({
+          quoteId: quote.id,
+          contactId: resolved.contact.id,
+          invitedByContactId: quote.contactId,
+          tokenHash,
+          expiresAt: quote.validUntil,
+        })
+        .returning();
+      linkRow = created!;
+    }
+    const link = partnerLink(token);
+    const [business] = await ctx.tx
+      .select({ name: businessProfile.name })
+      .from(businessProfile)
+      .limit(1);
+    const site = business?.name ?? "this Freeholder site";
+    const sent = await sendPartnerInvite(ctx.tx, {
+      to: resolved.contact.email ?? input.email,
+      site,
+      title: quote.title,
+      reference: quote.reference,
+      link,
+      expiresAt: linkRow.expiresAt,
+      idempotencyKey: `quote-partner:${linkRow.id}:${tokenHash.slice(0, 32)}`,
+    });
+    ctx.setSubject("quote", quote.id);
+    await ctx.emitTimeline({
+      contactId: resolved.contact.id,
+      eventType: "quote.partnerInvited",
+      subjectType: "quote",
+      subjectId: quote.id,
+      payload: { reference: quote.reference },
+    });
+    ctx.queueEvent("quote.partnerInvited", {
+      id: linkRow.id,
+      quoteId: quote.id,
+      contactId: resolved.contact.id,
+    });
+    return {
+      id: linkRow.id,
+      quoteId: quote.id,
+      contactId: resolved.contact.id,
+      contactName: resolved.contact.name,
+      contactEmail: resolved.contact.email,
+      token,
+      link,
+      delivers: sent,
+    };
+  },
+});
+
+export const revokeQuotePartner = defineService({
+  name: "quotes.revokePartner",
+  summary: "The prospect takes back a view-only partner link they issued.",
+  kind: "mutation",
+  permission: "public",
+  mcpExclude: true,
+  agentCallable: false,
+  writeClass: "write",
+  input: z.object({
+    token: z.string().trim().min(16).max(200),
+    id,
+  }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const [quote] = await ctx.tx
+      .select()
+      .from(quotes)
+      .where(eq(quotes.viewToken, input.token))
+      .limit(1);
+    if (!quote) throw new ServiceError("not_found", "That link is no longer valid.");
+    const [linkRow] = await ctx.tx
+      .update(quotePartnerLinks)
+      .set({ revokedAt: new Date(), updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(quotePartnerLinks.id, input.id),
+          eq(quotePartnerLinks.quoteId, quote.id),
+          eq(quotePartnerLinks.invitedByContactId, quote.contactId),
+          isNull(quotePartnerLinks.revokedAt),
+        ),
+      )
+      .returning();
+    if (!linkRow) throw new ServiceError("not_found", "That guest is not here.");
+    ctx.setSubject("quote", quote.id);
+    await ctx.emitTimeline({
+      contactId: linkRow.contactId,
+      eventType: "quote.partnerRevoked",
+      subjectType: "quote",
+      subjectId: quote.id,
+      payload: { reference: quote.reference },
+    });
+    ctx.queueEvent("quote.partnerRevoked", { id: linkRow.id, quoteId: quote.id });
+    return { ok: true as const };
+  },
+});
+
+export const quoteByPartnerToken = defineService({
+  name: "quotes.byPartnerToken",
+  summary: "A view-only quote, for a business partner the prospect invited.",
+  kind: "query",
+  permission: "public",
+  mcpExclude: true,
+  agentCallable: false,
+  input: z.object({ token: z.string().trim().min(16).max(200) }),
+  output: publicView.nullable(),
+  handler: async (input, ctx) => {
+    const [linkRow] = await ctx.tx
+      .select()
+      .from(quotePartnerLinks)
+      .where(eq(quotePartnerLinks.tokenHash, hashQuotePartnerToken(input.token)))
+      .limit(1);
+    if (!linkRow || linkRow.revokedAt) return null;
+    if (linkRow.expiresAt && linkRow.expiresAt.getTime() <= Date.now()) return null;
+    const [quote] = await ctx.tx
+      .select()
+      .from(quotes)
+      .where(eq(quotes.id, linkRow.quoteId))
+      .limit(1);
+    if (!quote) return null;
+    return viewFor(ctx, quote, { viewOnly: true });
+  },
+});
+
 export const listQuotes = defineService({
   name: "quotes.list",
   summary: "Offers out, accepted and gone quiet.",
@@ -1026,6 +1328,81 @@ export const expireQuotes = defineService({
  * record that no longer exists is money the business cannot find.
  */
 registerContactReference({
+  table: "quote_partner_links",
+  repoint: async (tx, duplicateId, survivingId) => {
+    const duplicateLinks = await tx
+      .select()
+      .from(quotePartnerLinks)
+      .where(eq(quotePartnerLinks.contactId, duplicateId));
+    for (const link of duplicateLinks) {
+      const [survivor] = await tx
+        .select({ id: quotePartnerLinks.id })
+        .from(quotePartnerLinks)
+        .where(
+          and(
+            eq(quotePartnerLinks.quoteId, link.quoteId),
+            eq(quotePartnerLinks.contactId, survivingId),
+          ),
+        )
+        .limit(1);
+      if (survivor) {
+        await tx.delete(quotePartnerLinks).where(eq(quotePartnerLinks.id, link.id));
+      } else {
+        await tx
+          .update(quotePartnerLinks)
+          .set({ contactId: survivingId })
+          .where(eq(quotePartnerLinks.id, link.id));
+      }
+    }
+    await tx
+      .update(quotePartnerLinks)
+      .set({ invitedByContactId: survivingId })
+      .where(eq(quotePartnerLinks.invitedByContactId, duplicateId));
+  },
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx
+      .select({
+        id: quotePartnerLinks.id,
+        contactId: quotePartnerLinks.contactId,
+        invitedByContactId: quotePartnerLinks.invitedByContactId,
+      })
+      .from(quotePartnerLinks)
+      .where(
+        or(
+          inArray(quotePartnerLinks.contactId, [duplicateId, survivingId]),
+          inArray(quotePartnerLinks.invitedByContactId, [duplicateId, survivingId]),
+        ),
+      ),
+    undoable: true,
+  }),
+  restoreAfterUndo: async (tx, beforeState, _afterState, duplicateId) => {
+    const rows = z
+      .array(
+        z.object({
+          id: z.string().uuid(),
+          contactId: z.string().uuid(),
+          invitedByContactId: z.string().uuid(),
+        }),
+      )
+      .parse(beforeState);
+    const moved = rows.filter((link) => link.contactId === duplicateId);
+    if (moved.length) {
+      await tx
+        .update(quotePartnerLinks)
+        .set({ contactId: duplicateId })
+        .where(inArray(quotePartnerLinks.id, moved.map((link) => link.id)));
+    }
+    const invited = rows.filter((link) => link.invitedByContactId === duplicateId);
+    if (invited.length) {
+      await tx
+        .update(quotePartnerLinks)
+        .set({ invitedByContactId: duplicateId })
+        .where(inArray(quotePartnerLinks.id, invited.map((link) => link.id)));
+    }
+  },
+});
+
+registerContactReference({
   table: "quotes",
   repoint: (tx, duplicateId, survivingId) =>
     tx.update(quotes).set({ contactId: survivingId }).where(eq(quotes.contactId, duplicateId)),
@@ -1060,7 +1437,7 @@ registerContactReference({
  */
 registerContactPrivacySource({
   scope: "contact.quotes",
-  tables: ["quotes", "quote_messages"],
+  tables: ["quotes", "quote_messages", "quote_partner_links"],
   exportData: async (tx, contactId) => {
     const offers = await tx
       .select()
@@ -1073,7 +1450,16 @@ registerContactPrivacySource({
           .from(quoteMessages)
           .where(inArray(quoteMessages.quoteId, offers.map((quote) => quote.id)))
       : [];
-    return { quotes: offers, messages: thread };
+    const partners = await tx
+      .select()
+      .from(quotePartnerLinks)
+      .where(
+        or(
+          eq(quotePartnerLinks.contactId, contactId),
+          eq(quotePartnerLinks.invitedByContactId, contactId),
+        ),
+      );
+    return { quotes: offers, messages: thread, partners };
   },
   erase: async (tx, contactId) => {
     const offers = await tx
@@ -1093,6 +1479,14 @@ registerContactPrivacySource({
         .delete(quoteMessages)
         .where(inArray(quoteMessages.quoteId, offers.map((quote) => quote.id)));
     }
+    await tx
+      .delete(quotePartnerLinks)
+      .where(
+        or(
+          eq(quotePartnerLinks.contactId, contactId),
+          eq(quotePartnerLinks.invitedByContactId, contactId),
+        ),
+      );
     return { affected: offers.length };
   },
 });
@@ -1111,6 +1505,9 @@ export default [
   acceptQuote,
   declineQuote,
   postQuoteMessage,
+  inviteQuotePartner,
+  revokeQuotePartner,
+  quoteByPartnerToken,
   listQuotes,
   getQuote,
   expireQuotes,
