@@ -70,6 +70,8 @@ import {
   setAltTextSuggesterForTests,
 } from "@/adapters/alt-text";
 import { resetEnvForTests } from "@/core/env";
+import { ready } from "@/core/runtime";
+import { getService } from "@/core/service";
 import {
   ANONYMOUS,
   closeDb,
@@ -1029,6 +1031,40 @@ describe.runIf(hasDatabase)("the asset library", () => {
       ),
     ).resolves.toMatchObject({ assetId: asset.id });
     expect((await listAssets.call({ status: "trashed" }, STAFF)).total).toBe(0);
+  });
+
+  it("refuses to purge inside another service transaction", async () => {
+    const error = await failure(
+      purgeAsset.call(
+        { id: "00000000-0000-4000-8000-000000000099", confirmation: "x.png" },
+        OWNER,
+        { tx: {} as never, queued: [] },
+      ),
+    );
+    expect(error).toMatchObject({ code: "internal" });
+    expect(error.message).toContain("outside a service transaction");
+  });
+
+  it("hides the library row before bytes are deleted", async () => {
+    const asset = await uploadAsset.call(
+      { filename: "claimed.png", contentType: "image/png", bytes: await png(50, 50) },
+      STAFF,
+    );
+    await deleteAsset.call({ id: asset.id }, OWNER);
+    await ready();
+    const claimed = (await getService("media.purgeClaim").call(
+      { id: asset.id, confirmation: asset.filename },
+      OWNER,
+    )) as { keys: string[] };
+    expect(claimed.keys).toContain(asset.storageKey);
+    expect((await listAssets.call({ status: "trashed" }, STAFF)).total).toBe(0);
+    expect(await storage().get(asset.storageKey)).toBeDefined();
+    const pending = await db()
+      .select()
+      .from(mediaObjects)
+      .where(eq(mediaObjects.state, "pending"));
+    expect(pending.some((object) => object.key === asset.storageKey)).toBe(true);
+    expect(pending.every((object) => object.assetId === null)).toBe(true);
   });
 
   it("stores focal point, metadata, and provenance edits", async () => {

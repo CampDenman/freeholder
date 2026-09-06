@@ -2736,32 +2736,94 @@ export const restoreAsset = defineService({
   },
 });
 
-async function purgeStoredAsset(tx: Tx, asset: typeof assets.$inferSelect) {
+function contentTypeForPurgeKey(
+  key: string,
+  asset: typeof assets.$inferSelect,
+): string {
+  if (key === asset.storageKey) return asset.mime;
+  if (key.endsWith(".webp")) return "image/webp";
+  if (key.endsWith(".avif")) return "image/avif";
+  return asset.mime;
+}
+
+function collectPurgeKeys(asset: typeof assets.$inferSelect, inventoryKeys: string[]): string[] {
+  const keys = new Set(inventoryKeys);
+  keys.add(asset.storageKey);
+  for (const key of allRenditionKeys(asset.variants as VariantSet)) keys.add(key);
+  return [...keys];
+}
+
+/**
+ * Make the library row disappear first. Bytes stay as pending objects so a
+ * crash after this commit is sweepable litter, never a visible file with
+ * missing originals.
+ */
+async function claimPurge(
+  tx: Tx,
+  asset: typeof assets.$inferSelect,
+): Promise<{ assetId: string; keys: string[] }> {
   const inventory = await tx
     .select({ key: mediaObjects.key })
     .from(mediaObjects)
     .where(eq(mediaObjects.assetId, asset.id));
-  const keys = new Set(inventory.map((row) => row.key));
-  keys.add(asset.storageKey);
-  const variants = asset.variants as VariantSet;
-  for (const key of allRenditionKeys(variants)) keys.add(key);
-  for (const key of keys) await storage().delete(key);
+  const keys = collectPurgeKeys(
+    asset,
+    inventory.map((row) => row.key),
+  );
+  if (inventory.length > 0) {
+    await tx
+      .update(mediaObjects)
+      .set({ assetId: null, state: "pending", updatedAt: new Date() })
+      .where(eq(mediaObjects.assetId, asset.id));
+  }
+  const tracked = new Set(inventory.map((row) => row.key));
+  const untracked = keys.filter((key) => !tracked.has(key));
+  if (untracked.length > 0) {
+    await tx
+      .insert(mediaObjects)
+      .values(
+        untracked.map((key) => ({
+          key,
+          contentType: contentTypeForPurgeKey(key, asset),
+          role:
+            key === asset.storageKey
+              ? ("original" as const)
+              : ("variant" as const),
+          state: "pending" as const,
+        })),
+      )
+      .onConflictDoNothing();
+  }
   await tx.delete(assets).where(eq(assets.id, asset.id));
-  return { assetId: asset.id, objects: keys.size };
+  return { assetId: asset.id, keys };
 }
 
-export const purgeAsset = defineService({
-  name: "media.purge",
-  summary: "Permanently purge one trashed file after typed owner confirmation.",
+async function deleteStoredKeys(keys: string[]): Promise<void> {
+  for (const key of keys) {
+    try {
+      await storage().delete(key);
+    } catch {
+      // The row is already gone. A failed delete stays as a pending object
+      // the orphan sweep can finish; throwing here would look like the
+      // library file survived when it did not.
+    }
+  }
+}
+
+const purgeClaimOutput = z.object({
+  assetId: uuid,
+  keys: z.array(z.string().min(1)),
+});
+
+const purgeClaim = defineService({
+  name: "media.purgeClaim",
+  summary: "Hide a trashed file from the library before its bytes are deleted.",
   kind: "mutation",
   permission: "scoped",
-  stepUp: true,
+  external: false,
+  writeClass: "write",
   input: z.object({ id: z.string().uuid(), confirmation: z.string().max(255) }),
-  output: z.object({
-    ok: z.literal(true),
-    assetId: uuid,
-    objects: z.number().int(),
-  }),
+  output: purgeClaimOutput,
   handler: async (input, ctx) => {
     if (
       ctx.actor.kind !== "system" &&
@@ -2776,7 +2838,8 @@ export const purgeAsset = defineService({
       .select()
       .from(assets)
       .where(eq(assets.id, input.id))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!asset || asset.status !== "trashed") {
       throw new ServiceError("not_found", "That trashed file is not here.");
     }
@@ -2786,27 +2849,27 @@ export const purgeAsset = defineService({
         "Type the exact filename to confirm permanent deletion.",
       );
     }
-    const result = await purgeStoredAsset(ctx.tx, asset);
-    ctx.setSubject("asset", asset.id);
-    ctx.queueEvent("media.purged", result);
-    return { ok: true, ...result };
+    const result = await claimPurge(ctx.tx, asset);
+    ctx.setSubject("asset", result.assetId);
+    ctx.queueEvent("media.purged", {
+      assetId: result.assetId,
+      objects: result.keys.length,
+    });
+    return result;
   },
 });
 
-/** Scheduler-only purge lane; still goes through audit and event invariants. */
-export const purgeExpiredAsset = defineService({
-  name: "media.purgeExpired",
-  summary: "Purge one asset after its recoverable trash window expires.",
+const purgeExpiredClaim = defineService({
+  name: "media.purgeExpiredClaim",
+  summary: "Hide expired trash from the library before its bytes are deleted.",
   kind: "mutation",
   permission: "system",
+  writeClass: "write",
   input: z.object({
     id: z.string().uuid(),
     asOf: z.string().datetime().optional(),
   }),
-  output: z.object({
-    assetId: uuid,
-    objects: z.number().int(),
-  }),
+  output: purgeClaimOutput,
   handler: async (input, ctx) => {
     if (ctx.actor.kind !== "system") {
       throw new ServiceError("permission", "Only lifecycle maintenance can run this operation.");
@@ -2815,7 +2878,8 @@ export const purgeExpiredAsset = defineService({
       .select()
       .from(assets)
       .where(eq(assets.id, input.id))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (
       !asset ||
       asset.status !== "trashed" ||
@@ -2824,10 +2888,77 @@ export const purgeExpiredAsset = defineService({
     ) {
       throw new ServiceError("conflict", "That asset is not due for purge.");
     }
-    const result = await purgeStoredAsset(ctx.tx, asset);
-    ctx.setSubject("asset", asset.id);
-    ctx.queueEvent("media.purged", result);
+    const result = await claimPurge(ctx.tx, asset);
+    ctx.setSubject("asset", result.assetId);
+    ctx.queueEvent("media.purged", {
+      assetId: result.assetId,
+      objects: result.keys.length,
+    });
     return result;
+  },
+});
+
+const purgeApply = defineService({
+  name: "media.purgeApply",
+  summary: "Drop pending object rows after purge has deleted provider bytes.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  writeClass: "write",
+  input: z.object({ keys: z.array(z.string().min(1)).max(256) }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    if (input.keys.length === 0) return { ok: true as const };
+    await ctx.tx
+      .delete(mediaObjects)
+      .where(
+        and(inArray(mediaObjects.key, input.keys), eq(mediaObjects.state, "pending")),
+      );
+    return { ok: true as const };
+  },
+});
+
+export const purgeAsset = defineOrchestratedService({
+  name: "media.purge",
+  summary: "Permanently purge one trashed file after typed owner confirmation.",
+  kind: "mutation",
+  permission: "scoped",
+  stepUp: true,
+  writeClass: "write",
+  input: z.object({ id: z.string().uuid(), confirmation: z.string().max(255) }),
+  output: z.object({
+    ok: z.literal(true),
+    assetId: uuid,
+    objects: z.number().int(),
+  }),
+  handler: async (input, actor) => {
+    const claimed = await purgeClaim.call(input, actor);
+    await deleteStoredKeys(claimed.keys);
+    await purgeApply.call({ keys: claimed.keys }, actor);
+    return { ok: true as const, assetId: claimed.assetId, objects: claimed.keys.length };
+  },
+});
+
+/** Scheduler-only purge lane; still goes through audit and event invariants. */
+export const purgeExpiredAsset = defineOrchestratedService({
+  name: "media.purgeExpired",
+  summary: "Purge one asset after its recoverable trash window expires.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "write",
+  input: z.object({
+    id: z.string().uuid(),
+    asOf: z.string().datetime().optional(),
+  }),
+  output: z.object({
+    assetId: uuid,
+    objects: z.number().int(),
+  }),
+  handler: async (input, actor) => {
+    const claimed = await purgeExpiredClaim.call(input, actor);
+    await deleteStoredKeys(claimed.keys);
+    await purgeApply.call({ keys: claimed.keys }, actor);
+    return { assetId: claimed.assetId, objects: claimed.keys.length };
   },
 });
 
@@ -3152,7 +3283,10 @@ export default [
   trashAsset,
   restoreAsset,
   purgeAsset,
+  purgeClaim,
   purgeExpiredAsset,
+  purgeExpiredClaim,
+  purgeApply,
   rescanAsset,
   rescanSourceService,
   applyRescan,
