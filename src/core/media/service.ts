@@ -10,7 +10,7 @@ import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
-import { db } from "@/core/db";
+import { db, type Database } from "@/core/db";
 import {
   assets,
   mediaAltTextSuggestions,
@@ -395,39 +395,66 @@ interface CreateAssetInput {
  * business — there is nothing to mark with yet, and an unnamed watermark is
  * worse than none.
  */
-async function watermarkMark(tx: Tx): Promise<WatermarkMark | undefined> {
-  const [business] = await tx
+async function watermarkMarkFrom(
+  reader: { select: Database["select"] },
+): Promise<{ text: string; logoKey: string | null } | undefined> {
+  const [business] = await reader
     .select({ name: businessProfile.name })
     .from(businessProfile)
     .limit(1);
   if (!business?.name) return undefined;
-  const [design] = await tx
+  const [design] = await reader
     .select({ logoAssetId: designSettings.logoAssetId })
     .from(designSettings)
     .limit(1);
-  let logo: Uint8Array<ArrayBuffer> | undefined;
-  if (design?.logoAssetId) {
-    const [asset] = await tx
-      .select({ storageKey: assets.storageKey })
-      .from(assets)
-      .where(eq(assets.id, design.logoAssetId))
-      .limit(1);
-    // A missing logo object falls through to the name rather than failing:
-    // the upload is not the place to discover a broken brand setting.
-    if (asset) logo = (await storage().get(asset.storageKey)) ?? undefined;
-  }
-  return { logo, text: business.name };
+  if (!design?.logoAssetId) return { text: business.name, logoKey: null };
+  const [asset] = await reader
+    .select({ storageKey: assets.storageKey })
+    .from(assets)
+    .where(eq(assets.id, design.logoAssetId))
+    .limit(1);
+  return { text: business.name, logoKey: asset?.storageKey ?? null };
 }
 
-async function createAssetFromStoredOriginal(
-  input: CreateAssetInput,
-  ctx: ServiceContext,
-) {
+async function watermarkMark(tx: Tx): Promise<WatermarkMark | undefined> {
+  const source = await watermarkMarkFrom(tx);
+  if (!source) return undefined;
+  let logo: Uint8Array<ArrayBuffer> | undefined;
+  // A missing logo object falls through to the name rather than failing:
+  // the upload is not the place to discover a broken brand setting.
+  if (source.logoKey) logo = (await storage().get(source.logoKey)) ?? undefined;
+  return { logo, text: source.text };
+}
+
+/** Brand mark for orchestrators: DB snapshot, then logo bytes with no tx held. */
+async function loadWatermarkMark(): Promise<WatermarkMark | undefined> {
+  const source = await watermarkMarkFrom(db());
+  if (!source) return undefined;
+  let logo: Uint8Array<ArrayBuffer> | undefined;
+  if (source.logoKey) logo = (await storage().get(source.logoKey)) ?? undefined;
+  return { logo, text: source.text };
+}
+
+interface PreparedOriginal {
+  facts?: { width: number; height: number };
+  variants: VariantSet | Record<string, never>;
+  trackedKeys: string[];
+}
+
+async function prepareDerivedObjects(
+  input: {
+    key: string;
+    kind: MediaKind;
+    scan: MalwareScanResult;
+    body?: Uint8Array<ArrayBuffer>;
+    uploadId?: string;
+  },
+  mark: WatermarkMark | undefined,
+): Promise<PreparedOriginal> {
+  const scan = scanFields(input.scan);
+  const trackedKeys = [input.key];
   let facts: Awaited<ReturnType<typeof readImageFacts>>;
   let variants: VariantSet = {};
-  const trackedKeys = [input.key];
-  const scan = scanFields(input.scan);
-
   if (input.kind === "image" && scan.status === "ready") {
     const body = input.body ?? (await storage().get(input.key));
     if (!body) throw new Error(`storage: ${input.key} disappeared during processing`);
@@ -454,7 +481,6 @@ async function createAssetFromStoredOriginal(
 
     // Marked renditions are built here, with the ladder, so serving a proof
     // is a key lookup rather than an image job on the client's first view.
-    const mark = await watermarkMark(ctx.tx);
     const marked = mark
       ? await buildWatermarked(body, facts, mark, (format, width) =>
           `${input.key}.wm.${width}.${format}`,
@@ -474,7 +500,15 @@ async function createAssetFromStoredOriginal(
       variants = withWatermarked(variants, marked);
     }
   }
+  return { facts, variants, trackedKeys };
+}
 
+async function insertPreparedAsset(
+  input: CreateAssetInput,
+  prepared: PreparedOriginal,
+  ctx: ServiceContext,
+) {
+  const scan = scanFields(input.scan);
   const [asset] = await ctx.tx
     .insert(assets)
     .values({
@@ -484,10 +518,10 @@ async function createAssetFromStoredOriginal(
       mime: input.mime,
       bytes: input.bytes,
       legacyBytes: Math.min(input.bytes, LEGACY_MAX_BYTES),
-      width: facts?.width ?? input.metadata.width,
-      height: facts?.height ?? input.metadata.height,
+      width: prepared.facts?.width ?? input.metadata.width,
+      height: prepared.facts?.height ?? input.metadata.height,
       durationSeconds: input.metadata.durationSeconds,
-      variants,
+      variants: prepared.variants,
       altText: input.altText,
       checksumSha256: input.checksumSha256,
       metadata: input.metadata,
@@ -506,7 +540,7 @@ async function createAssetFromStoredOriginal(
       updatedAt: new Date(),
     })
     .where(eq(mediaObjects.key, input.key));
-  await attachObjects(ctx.tx, trackedKeys, asset!.id);
+  await attachObjects(ctx.tx, prepared.trackedKeys, asset!.id);
   if (input.uploadId) {
     await ctx.tx
       .update(mediaUploads)
@@ -529,25 +563,178 @@ async function createAssetFromStoredOriginal(
   return asset!;
 }
 
-export const uploadAsset = defineService({
+async function createAssetFromStoredOriginal(
+  input: CreateAssetInput,
+  ctx: ServiceContext,
+) {
+  const prepared = await prepareDerivedObjects(input, await watermarkMark(ctx.tx));
+  return insertPreparedAsset(input, prepared, ctx);
+}
+
+const proxyUploadInput = z.object({
+  filename: z.string().min(1).max(255),
+  contentType: z.string().min(1).max(255),
+  bytes: z.instanceof(Uint8Array),
+  altText: z.string().max(500).optional(),
+  uploadId: z.string().uuid().optional(),
+  source: sourceSchema.default("upload"),
+  provenance: provenanceSchema,
+  metadata: mediaMetadataSchema,
+});
+
+const claimProxyUpload = defineService({
+  name: "media.claimProxyUpload",
+  summary: "Authorize a proxied upload reservation before scanner and storage work.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    uploadId: z.string().uuid(),
+    filename: z.string().min(1).max(255),
+    bytes: z.number().int().positive(),
+  }),
+  output: z.object({
+    key: z.string(),
+    uploadId: uuid,
+    asset: assetRow.nullable(),
+  }),
+  handler: async (input, ctx) => {
+    const [session] = await ctx.tx
+      .select()
+      .from(mediaUploads)
+      .where(eq(mediaUploads.id, input.uploadId))
+      .limit(1)
+      .for("update");
+    if (!session || session.strategy !== "proxy") {
+      throw new ServiceError("not_found", "That upload is not here.");
+    }
+    requireUploadAccess(ctx.actor, session.uploadedBy);
+    if (session.state === "complete" && session.assetId) {
+      const [asset] = await ctx.tx
+        .select()
+        .from(assets)
+        .where(eq(assets.id, session.assetId))
+        .limit(1);
+      if (asset) {
+        return { key: session.storageKey, uploadId: session.id, asset };
+      }
+    }
+    if (session.expiresAt <= new Date()) {
+      throw new ServiceError("conflict", "That upload reservation has expired.");
+    }
+    if (!["created", "processing"].includes(session.state)) {
+      throw new ServiceError("conflict", "That upload is no longer accepting bytes.");
+    }
+    if (
+      session.filename !== input.filename ||
+      session.expectedBytes !== input.bytes
+    ) {
+      throw new ServiceError(
+        "validation",
+        "The selected file no longer matches the upload reservation.",
+      );
+    }
+    if (session.state === "created") {
+      await ctx.tx
+        .update(mediaUploads)
+        .set({ state: "processing", updatedAt: new Date() })
+        .where(eq(mediaUploads.id, session.id));
+    }
+    return { key: session.storageKey, uploadId: session.id, asset: null };
+  },
+});
+
+const applyStoredOriginal = defineService({
+  name: "media.applyStoredOriginal",
+  summary: "Attach a scanned original and its derived objects as a library asset.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    filename: z.string().min(1).max(255),
+    mime: z.string().min(1).max(255),
+    kind: z.enum(["image", "video", "doc", "audio"]),
+    bytes: z.number(),
+    key: z.string().min(1),
+    altText: z.string().max(500).optional(),
+    source: sourceSchema,
+    provenance: provenanceSchema,
+    metadata: mediaMetadataSchema,
+    scan: z.object({
+      status: z.enum(["clean", "infected", "not_configured", "error"]),
+      engine: z.string(),
+      message: z.string().optional(),
+    }),
+    checksumSha256: z.string().min(1),
+    uploadId: z.string().uuid().optional(),
+    method: z.enum(["proxy", "direct_multipart"]),
+    variants: z.unknown(),
+    trackedKeys: z.array(z.string().min(1)).min(1).max(64),
+    width: z.number().int().nullable().optional(),
+    height: z.number().int().nullable().optional(),
+  }),
+  output: assetRow,
+  handler: async (input, ctx) => {
+    if (input.uploadId) {
+      const session = await lockedUploadSession(ctx.tx, input.uploadId);
+      if (!session) throw new ServiceError("not_found", "That upload is not here.");
+      requireUploadAccess(ctx.actor, session.uploadedBy);
+      if (session.state === "complete" && session.assetId) {
+        const [asset] = await ctx.tx
+          .select()
+          .from(assets)
+          .where(eq(assets.id, session.assetId))
+          .limit(1);
+        if (asset) return asset;
+      }
+      if (["aborted", "expired", "failed"].includes(session.state)) {
+        throw new ServiceError(
+          "conflict",
+          "That upload can no longer become a library file.",
+        );
+      }
+    }
+    return insertPreparedAsset(
+      {
+        filename: input.filename,
+        mime: input.mime,
+        kind: input.kind,
+        bytes: input.bytes,
+        key: input.key,
+        altText: input.altText,
+        source: input.source,
+        provenance: safeProvenance(ctx, input.source, input.provenance, input.method),
+        metadata: input.metadata,
+        scan: input.scan,
+        checksumSha256: input.checksumSha256,
+        uploadId: input.uploadId,
+      },
+      {
+        facts:
+          input.width != null && input.height != null
+            ? { width: input.width, height: input.height }
+            : undefined,
+        variants: (input.variants ?? {}),
+        trackedKeys: input.trackedKeys,
+      },
+      ctx,
+    );
+  },
+});
+
+export const uploadAsset = defineOrchestratedService({
   name: "media.upload",
   summary: "Validate and store a bounded proxied upload.",
   kind: "mutation",
   permission: "public",
-  input: z.object({
-    filename: z.string().min(1).max(255),
-    contentType: z.string().min(1).max(255),
-    bytes: z.instanceof(Uint8Array),
-    altText: z.string().max(500).optional(),
-    uploadId: z.string().uuid().optional(),
-    source: sourceSchema.default("upload"),
-    provenance: provenanceSchema,
-    metadata: mediaMetadataSchema,
-  }),
+  writeClass: "write",
+  input: proxyUploadInput,
   output: assetRow,
-  handler: async (input, ctx) => {
+  handler: async (input, actor) => {
     if (
-      ctx.actor.kind === "anonymous" &&
+      actor.kind === "anonymous" &&
       !input.uploadId &&
       !input.provenance.captureToken &&
       !input.provenance.captureSessionId
@@ -573,48 +760,21 @@ export const uploadAsset = defineService({
             : new Uint8Array(),
         ),
       });
-      let session:
-        | typeof mediaUploads.$inferSelect
-        | undefined;
+      let key = storageKey(input.filename, new Date(), randomUUID().slice(0, 8));
+      let uploadId = input.uploadId;
       if (input.uploadId) {
-        [session] = await ctx.tx
-          .select()
-          .from(mediaUploads)
-          .where(eq(mediaUploads.id, input.uploadId))
-          .limit(1)
-          .for("update");
-        if (!session || session.strategy !== "proxy") {
-          throw new ServiceError("not_found", "That upload is not here.");
-        }
-        requireUploadAccess(ctx.actor, session.uploadedBy);
-        if (session.state === "complete" && session.assetId) {
-          const [asset] = await ctx.tx
-            .select()
-            .from(assets)
-            .where(eq(assets.id, session.assetId))
-            .limit(1);
-          if (asset) return asset;
-        }
-        if (session.expiresAt <= new Date()) {
-          throw new ServiceError("conflict", "That upload reservation has expired.");
-        }
-        if (session.state !== "created") {
-          throw new ServiceError("conflict", "That upload is no longer accepting bytes.");
-        }
-        if (
-          session.filename !== input.filename ||
-          session.expectedBytes !== body.byteLength
-        ) {
-          throw new ServiceError(
-            "validation",
-            "The selected file no longer matches the upload reservation.",
-          );
-        }
+        const claimed = await claimProxyUpload.call(
+          {
+            uploadId: input.uploadId,
+            filename: input.filename,
+            bytes: body.byteLength,
+          },
+          actor,
+        );
+        if (claimed.asset) return claimed.asset;
+        key = claimed.key;
+        uploadId = claimed.uploadId;
       }
-
-      const key =
-        session?.storageKey ??
-        storageKey(input.filename, new Date(), randomUUID().slice(0, 8));
       const scan = await scanBytes(body, input.filename, validated.mime);
       if (
         storage().id === "s3" && storage().isPublic &&
@@ -630,32 +790,40 @@ export const uploadAsset = defineService({
         body,
         contentType: validated.mime,
         role: "original",
-        uploadId: session?.id,
+        uploadId,
       });
-      const asset = await createAssetFromStoredOriginal(
+      const prepared = await prepareDerivedObjects(
+        {
+          key,
+          kind: validated.kind,
+          scan,
+          body,
+          uploadId,
+        },
+        await loadWatermarkMark(),
+      );
+      return applyStoredOriginal.call(
         {
           filename: input.filename,
           mime: validated.mime,
           kind: validated.kind,
           bytes: body.byteLength,
-          body,
           key,
           altText: input.altText,
           source: input.source,
-          provenance: safeProvenance(
-            ctx,
-            input.source,
-            input.provenance,
-            "proxy",
-          ),
+          provenance: input.provenance,
           metadata: input.metadata,
           scan,
           checksumSha256: createHash("sha256").update(body).digest("hex"),
-          uploadId: session?.id,
+          uploadId,
+          method: "proxy",
+          variants: prepared.variants,
+          trackedKeys: prepared.trackedKeys,
+          width: prepared.facts?.width ?? null,
+          height: prepared.facts?.height ?? null,
         },
-        ctx,
+        actor,
       );
-      return asset;
     } catch (error) {
       return serviceValidation(error);
     }
@@ -672,22 +840,78 @@ const uploadIntent = z.object({
   metadata: mediaMetadataSchema,
 });
 
+const beginUploadOutput = z.object({
+  id: uuid,
+  strategy: z.enum(["direct_multipart", "proxy"]),
+  partSize: z.number().int().nullable(),
+  partCount: z.number().int().nullable(),
+  expiresAt: timestamp,
+});
+
+const beginUploadApply = defineService({
+  name: "media.beginUploadApply",
+  summary: "Record a reserved upload after the storage provider has accepted it.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: uploadIntent.extend({
+    key: z.string().min(1),
+    strategy: z.enum(["direct_multipart", "proxy"]),
+    providerUploadId: z.string().min(1).optional(),
+  }),
+  output: beginUploadOutput,
+  handler: async (input, ctx) => {
+    const [session] = await ctx.tx
+      .insert(mediaUploads)
+      .values({
+        strategy: input.strategy,
+        storageKey: input.key,
+        filename: input.filename,
+        declaredMime: input.contentType,
+        expectedBytes: input.bytes,
+        providerUploadId: input.providerUploadId,
+        uploadedBy: input.provenance.captureToken
+          ? `capture:${input.provenance.captureToken}`
+          : actorString(ctx.actor),
+        source: input.provenance.captureToken ? "capture" : input.source,
+        provenance: input.provenance,
+        mediaMetadata: input.metadata,
+        expiresAt: new Date(Date.now() + UPLOAD_TTL_MS),
+      })
+      .returning();
+    await ctx.tx.insert(mediaObjects).values({
+      key: input.key,
+      uploadId: session!.id,
+      role: "staged",
+      state: "pending",
+      contentType: input.contentType,
+    });
+    ctx.setSubject("mediaUpload", session!.id);
+    return {
+      id: session!.id,
+      strategy: input.strategy,
+      partSize: input.strategy === "direct_multipart" ? MULTIPART_PART_BYTES : null,
+      partCount:
+        input.strategy === "direct_multipart"
+          ? Math.ceil(input.bytes / MULTIPART_PART_BYTES)
+          : null,
+      expiresAt: session!.expiresAt,
+    };
+  },
+});
+
 /** Reserve a durable upload and choose the capability the active adapter has. */
-export const beginUpload = defineService({
+export const beginUpload = defineOrchestratedService({
   name: "media.beginUpload",
   summary: "Reserve a resumable direct upload or bounded proxy fallback.",
   kind: "mutation",
   permission: "public",
+  writeClass: "write",
   input: uploadIntent,
-  output: z.object({
-    id: uuid,
-    strategy: z.enum(["direct_multipart", "proxy"]),
-    partSize: z.number().int().nullable(),
-    partCount: z.number().int().nullable(),
-    expiresAt: timestamp,
-  }),
-  handler: async (input, ctx) => {
-    if (ctx.actor.kind === "anonymous" && !input.provenance.captureToken) {
+  output: beginUploadOutput,
+  handler: async (input, actor) => {
+    if (actor.kind === "anonymous" && !input.provenance.captureToken) {
       throw new ServiceError("permission", "Sign in or use an upload link.");
     }
     let kind: MediaKind;
@@ -725,42 +949,15 @@ export const beginUpload = defineService({
           await store.directMultipart.create(key, input.contentType)
         ).uploadId;
       }
-      const [session] = await ctx.tx
-        .insert(mediaUploads)
-        .values({
+      return await beginUploadApply.call(
+        {
+          ...input,
+          key,
           strategy,
-          storageKey: key,
-          filename: input.filename,
-          declaredMime: input.contentType,
-          expectedBytes: input.bytes,
           providerUploadId,
-          uploadedBy: input.provenance.captureToken
-            ? `capture:${input.provenance.captureToken}`
-            : actorString(ctx.actor),
-          source: input.provenance.captureToken ? "capture" : input.source,
-          provenance: input.provenance,
-          mediaMetadata: input.metadata,
-          expiresAt: new Date(Date.now() + UPLOAD_TTL_MS),
-        })
-        .returning();
-      await ctx.tx.insert(mediaObjects).values({
-        key,
-        uploadId: session!.id,
-        role: "staged",
-        state: "pending",
-        contentType: input.contentType,
-      });
-      ctx.setSubject("mediaUpload", session!.id);
-      return {
-        id: session!.id,
-        strategy,
-        partSize: strategy === "direct_multipart" ? MULTIPART_PART_BYTES : null,
-        partCount:
-          strategy === "direct_multipart"
-            ? Math.ceil(input.bytes / MULTIPART_PART_BYTES)
-            : null,
-        expiresAt: session!.expiresAt,
-      };
+        },
+        actor,
+      );
     } catch (error) {
       if (providerUploadId && store.directMultipart) {
         await store.directMultipart.abort(key, providerUploadId).catch(() => undefined);
@@ -802,45 +999,81 @@ async function assetForCompletedUpload(
   return asset;
 }
 
-export const uploadStatus = defineService({
+const uploadStatusOutput = z.object({
+  id: uuid,
+  strategy: z.enum(["direct_multipart", "proxy"]),
+  state: z.enum([
+    "created",
+    "uploading",
+    "uploaded",
+    "processing",
+    "complete",
+    "failed",
+    "aborted",
+    "expired",
+  ]),
+  filename: z.string(),
+  contentType: z.string(),
+  expectedBytes: z.number(),
+  partSize: z.number().int().nullable(),
+  partCount: z.number().int().nullable(),
+  parts: listed(
+    z.object({
+      partNumber: z.number().int(),
+      etag: z.string(),
+      bytes: z.number().optional(),
+    }),
+  ),
+  assetId: uuid.nullable(),
+  failureReason: z.string().nullable(),
+  expiresAt: timestamp,
+  storageKey: z.string(),
+  providerUploadId: z.string().nullable(),
+});
+
+const uploadStatusSource = defineService({
+  name: "media.uploadStatusSource",
+  summary: "Authorize and snapshot an upload reservation before listing provider parts.",
+  kind: "query",
+  permission: "public",
+  external: false,
+  input: z.object({ id: z.string().uuid() }),
+  output: uploadStatusOutput.omit({ parts: true }),
+  handler: async (input, ctx) => {
+    const session = await uploadSession(ctx.tx, input.id);
+    if (!session) throw new ServiceError("not_found", "That upload is not here.");
+    requireUploadAccess(ctx.actor, session.uploadedBy);
+    return {
+      id: session.id,
+      strategy: session.strategy,
+      state: session.state,
+      filename: session.filename,
+      contentType: session.declaredMime,
+      expectedBytes: session.expectedBytes,
+      partSize:
+        session.strategy === "direct_multipart" ? MULTIPART_PART_BYTES : null,
+      partCount:
+        session.strategy === "direct_multipart"
+          ? Math.ceil(session.expectedBytes / MULTIPART_PART_BYTES)
+          : null,
+      assetId: session.assetId,
+      failureReason: session.failureReason,
+      expiresAt: session.expiresAt,
+      storageKey: session.storageKey,
+      providerUploadId: session.providerUploadId,
+    };
+  },
+});
+
+export const uploadStatus = defineOrchestratedService({
   name: "media.uploadStatus",
   summary: "Report durable progress for an interrupted upload.",
   kind: "query",
   permission: "public",
   input: z.object({ id: z.string().uuid() }),
-  output: z.object({
-    id: uuid,
-    strategy: z.enum(["direct_multipart", "proxy"]),
-    state: z.enum([
-      "created",
-      "uploading",
-      "uploaded",
-      "processing",
-      "complete",
-      "failed",
-      "aborted",
-      "expired",
-    ]),
-    filename: z.string(),
-    contentType: z.string(),
-    expectedBytes: z.number(),
-    partSize: z.number().int().nullable(),
-    partCount: z.number().int().nullable(),
-    parts: listed(
-      z.object({
-        partNumber: z.number().int(),
-        etag: z.string(),
-        bytes: z.number().optional(),
-      }),
-    ),
-    assetId: uuid.nullable(),
-    failureReason: z.string().nullable(),
-    expiresAt: timestamp,
-  }),
-  handler: async (input, ctx) => {
-    const session = await uploadSession(ctx.tx, input.id);
-    if (!session) throw new ServiceError("not_found", "That upload is not here.");
-    requireUploadAccess(ctx.actor, session.uploadedBy);
+  output: uploadStatusOutput.omit({ storageKey: true, providerUploadId: true }),
+  handler: async (input, actor) => {
+    const session = await uploadStatusSource.call(input, actor);
     let parts: MultipartPart[] = [];
     if (
       session.strategy === "direct_multipart" &&
@@ -860,14 +1093,10 @@ export const uploadStatus = defineService({
       strategy: session.strategy,
       state: session.state,
       filename: session.filename,
-      contentType: session.declaredMime,
+      contentType: session.contentType,
       expectedBytes: session.expectedBytes,
-      partSize:
-        session.strategy === "direct_multipart" ? MULTIPART_PART_BYTES : null,
-      partCount:
-        session.strategy === "direct_multipart"
-          ? Math.ceil(session.expectedBytes / MULTIPART_PART_BYTES)
-          : null,
+      partSize: session.partSize,
+      partCount: session.partCount,
       parts,
       assetId: session.assetId,
       failureReason: session.failureReason,
@@ -876,11 +1105,65 @@ export const uploadStatus = defineService({
   },
 });
 
-export const signUploadParts = defineService({
+const signUploadClaim = defineService({
+  name: "media.signUploadClaim",
+  summary: "Mark a direct upload as accepting parts before signing provider URLs.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    id: z.string().uuid(),
+    partNumbers: z.array(z.number().int().min(1).max(MAX_MULTIPART_PARTS)).min(1).max(25),
+  }),
+  output: z.object({
+    storageKey: z.string(),
+    providerUploadId: z.string(),
+    expiresAt: timestamp,
+    partNumbers: z.array(z.number().int()),
+  }),
+  handler: async (input, ctx) => {
+    const session = await lockedUploadSession(ctx.tx, input.id);
+    if (!session || session.strategy !== "direct_multipart") {
+      throw new ServiceError("not_found", "That direct upload is not here.");
+    }
+    requireUploadAccess(ctx.actor, session.uploadedBy);
+    if (session.expiresAt <= new Date()) {
+      throw new ServiceError("conflict", "That upload reservation has expired.");
+    }
+    if (!["created", "uploading"].includes(session.state)) {
+      throw new ServiceError("conflict", "That upload is no longer accepting parts.");
+    }
+    if (!session.providerUploadId) {
+      throw new ServiceError("conflict", "Direct uploads are unavailable.");
+    }
+    const partCount = Math.ceil(session.expectedBytes / MULTIPART_PART_BYTES);
+    const partNumbers = [...new Set(input.partNumbers)].sort((a, b) => a - b);
+    if (partNumbers.some((part) => part > partCount)) {
+      throw new ServiceError("validation", "A requested upload part is outside the file.");
+    }
+    if (session.state === "created") {
+      await ctx.tx
+        .update(mediaUploads)
+        .set({ state: "uploading", updatedAt: new Date() })
+        .where(eq(mediaUploads.id, session.id));
+    }
+    ctx.setSubject("mediaUpload", session.id);
+    return {
+      storageKey: session.storageKey,
+      providerUploadId: session.providerUploadId,
+      expiresAt: session.expiresAt,
+      partNumbers,
+    };
+  },
+});
+
+export const signUploadParts = defineOrchestratedService({
   name: "media.signUploadParts",
   summary: "Sign a bounded set of direct multipart upload requests.",
   kind: "mutation",
   permission: "public",
+  writeClass: "write",
   input: z.object({
     id: z.string().uuid(),
     partNumbers: z.array(z.number().int().min(1).max(MAX_MULTIPART_PARTS)).min(1).max(25),
@@ -895,89 +1178,149 @@ export const signUploadParts = defineService({
     ),
     expiresAt: timestamp,
   }),
-  handler: async (input, ctx) => {
-    const session = await uploadSession(ctx.tx, input.id);
-    if (!session || session.strategy !== "direct_multipart") {
-      throw new ServiceError("not_found", "That direct upload is not here.");
-    }
-    requireUploadAccess(ctx.actor, session.uploadedBy);
-    if (session.expiresAt <= new Date()) {
-      throw new ServiceError("conflict", "That upload reservation has expired.");
-    }
-    if (!["created", "uploading"].includes(session.state)) {
-      throw new ServiceError("conflict", "That upload is no longer accepting parts.");
-    }
+  handler: async (input, actor) => {
+    const claimed = await signUploadClaim.call(input, actor);
     const multipart = storage().directMultipart;
-    if (!multipart || !session.providerUploadId) {
+    if (!multipart) {
       throw new ServiceError("conflict", "Direct uploads are unavailable.");
     }
-    const partCount = Math.ceil(session.expectedBytes / MULTIPART_PART_BYTES);
-    const partNumbers = [...new Set(input.partNumbers)].sort((a, b) => a - b);
-    if (partNumbers.some((part) => part > partCount)) {
-      throw new ServiceError("validation", "A requested upload part is outside the file.");
-    }
     const signed = await Promise.all(
-      partNumbers.map(async (partNumber) => ({
+      claimed.partNumbers.map(async (partNumber) => ({
         partNumber,
         ...(await multipart.signPart(
-          session.storageKey,
-          session.providerUploadId!,
+          claimed.storageKey,
+          claimed.providerUploadId,
           partNumber,
         )),
       })),
     );
-    await ctx.tx
-      .update(mediaUploads)
-      .set({ state: "uploading", updatedAt: new Date() })
-      .where(eq(mediaUploads.id, session.id));
-    ctx.setSubject("mediaUpload", session.id);
-    return { parts: signed, expiresAt: session.expiresAt };
+    return { parts: signed, expiresAt: claimed.expiresAt };
   },
 });
 
-async function failCompletedUpload(
-  session: typeof mediaUploads.$inferSelect,
-  message: string,
-  ctx: ServiceContext,
-) {
-  await storage().delete(session.storageKey);
-  await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, session.storageKey));
-  await ctx.tx
-    .update(mediaUploads)
-    .set({ state: "failed", failureReason: message, updatedAt: new Date() })
-    .where(eq(mediaUploads.id, session.id));
-  ctx.setSubject("mediaUpload", session.id);
-  return { ok: false as const, message };
-}
+const failDirectUpload = defineService({
+  name: "media.failDirectUpload",
+  summary: "Record that a direct upload failed validation after provider work.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    id: z.string().uuid(),
+    storageKey: z.string().min(1),
+    message: z.string().min(1).max(500),
+  }),
+  output: z.object({ ok: z.literal(false), message: z.string() }),
+  handler: async (input, ctx) => {
+    const session = await lockedUploadSession(ctx.tx, input.id);
+    if (!session) throw new ServiceError("not_found", "That upload is not here.");
+    requireUploadAccess(ctx.actor, session.uploadedBy);
+    if (session.state === "failed") {
+      return {
+        ok: false as const,
+        message: session.failureReason ?? input.message,
+      };
+    }
+    if (session.state === "complete") {
+      throw new ServiceError("conflict", "That upload already became a library file.");
+    }
+    await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, input.storageKey));
+    await ctx.tx
+      .update(mediaUploads)
+      .set({ state: "failed", failureReason: input.message, updatedAt: new Date() })
+      .where(eq(mediaUploads.id, session.id));
+    ctx.setSubject("mediaUpload", session.id);
+    return { ok: false as const, message: input.message };
+  },
+});
+
+const applyCaptureComplete = defineService({
+  name: "media.applyCaptureComplete",
+  summary: "Hold a finished direct upload on a capture session and close the reservation.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    uploadId: z.string().uuid(),
+    token: z.string().optional(),
+    sessionId: z.string().uuid().optional(),
+    filename: z.string().min(1).max(255),
+    contentType: z.string().min(1).max(255),
+    key: z.string().min(1),
+    bytes: z.number().int().positive(),
+    checksumSha256: z.string().length(64).optional(),
+    detectedMime: z.string().min(1),
+  }),
+  output: completeUploadResult,
+  handler: async (input, ctx) => {
+    const { stageCompletedUpload } = await import("./capture");
+    await ctx.callAsSystem(stageCompletedUpload, {
+      uploadId: input.uploadId,
+      token: input.token,
+      sessionId: input.sessionId,
+      filename: input.filename,
+      contentType: input.contentType,
+      key: input.key,
+      bytes: input.bytes,
+      checksumSha256: input.checksumSha256,
+    });
+    await ctx.tx
+      .update(mediaUploads)
+      .set({
+        state: "complete",
+        detectedMime: input.detectedMime,
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(mediaUploads.id, input.uploadId));
+    return { ok: true as const, asset: null };
+  },
+});
 
 const multipartPartSchema = z.object({
   partNumber: z.number().int().min(1).max(MAX_MULTIPART_PARTS),
   etag: z.string().trim().min(1).max(256),
 });
 
-export const completeUpload = defineService({
-  name: "media.completeUpload",
-  summary: "Assemble, validate, scan, and register a direct upload.",
-  kind: "mutation",
+const completeUploadSource = defineService({
+  name: "media.completeUploadSource",
+  summary: "Authorize a direct upload before assembling and scanning stored bytes.",
+  kind: "query",
   permission: "public",
+  external: false,
   input: z.object({
     id: z.string().uuid(),
     parts: z.array(multipartPartSchema).min(1).max(MAX_MULTIPART_PARTS),
-    altText: z.string().max(500).optional(),
   }),
-  output: completeUploadResult,
+  output: z.union([
+    z.object({ kind: z.literal("done"), result: completeUploadResult }),
+    z.object({
+      kind: z.literal("open"),
+      id: uuid,
+      storageKey: z.string(),
+      filename: z.string(),
+      declaredMime: z.string(),
+      expectedBytes: z.number(),
+      providerUploadId: z.string(),
+      source: sourceSchema,
+      provenance: provenanceSchema,
+      metadata: mediaMetadataSchema,
+      parts: z.array(multipartPartSchema),
+    }),
+  ]),
   handler: async (input, ctx) => {
-    const session = await lockedUploadSession(ctx.tx, input.id);
+    const session = await uploadSession(ctx.tx, input.id);
     if (!session || session.strategy !== "direct_multipart") {
       throw new ServiceError("not_found", "That direct upload is not here.");
     }
     requireUploadAccess(ctx.actor, session.uploadedBy);
     if (session.state === "complete") {
       const asset = await assetForCompletedUpload(ctx.tx, session);
-      if (asset) return { ok: true as const, asset };
+      if (asset) return { kind: "done" as const, result: { ok: true as const, asset } };
       const provenance = session.provenance as { captureToken?: string; captureSessionId?: string };
       if (provenance.captureToken || provenance.captureSessionId) {
-        return { ok: true as const, asset: null };
+        return { kind: "done" as const, result: { ok: true as const, asset: null } };
       }
       throw new ServiceError(
         "conflict",
@@ -986,18 +1329,20 @@ export const completeUpload = defineService({
     }
     if (session.state === "failed") {
       return {
-        ok: false as const,
-        message: session.failureReason ?? "That upload failed validation.",
+        kind: "done" as const,
+        result: {
+          ok: false as const,
+          message: session.failureReason ?? "That upload failed validation.",
+        },
       };
     }
     if (session.expiresAt <= new Date()) {
       throw new ServiceError("conflict", "That upload reservation has expired.");
     }
-    if (!["created", "uploading"].includes(session.state)) {
+    if (!["created", "uploading", "processing"].includes(session.state)) {
       throw new ServiceError("conflict", "That upload cannot be completed again.");
     }
-    const multipart = storage().directMultipart;
-    if (!multipart || !session.providerUploadId) {
+    if (!session.providerUploadId) {
       throw new ServiceError("conflict", "Direct uploads are unavailable.");
     }
     const expectedParts = Math.ceil(session.expectedBytes / MULTIPART_PART_BYTES);
@@ -1011,45 +1356,84 @@ export const completeUpload = defineService({
         `This file requires exactly ${expectedParts} ordered upload parts.`,
       );
     }
+    return {
+      kind: "open" as const,
+      id: session.id,
+      storageKey: session.storageKey,
+      filename: session.filename,
+      declaredMime: session.declaredMime,
+      expectedBytes: session.expectedBytes,
+      providerUploadId: session.providerUploadId,
+      source: session.source,
+      provenance: session.provenance as z.output<typeof provenanceSchema>,
+      metadata: session.mediaMetadata as z.output<typeof mediaMetadataSchema>,
+      parts,
+    };
+  },
+});
+
+export const completeUpload = defineOrchestratedService({
+  name: "media.completeUpload",
+  summary: "Assemble, validate, scan, and register a direct upload.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({
+    id: z.string().uuid(),
+    parts: z.array(multipartPartSchema).min(1).max(MAX_MULTIPART_PARTS),
+    altText: z.string().max(500).optional(),
+  }),
+  output: completeUploadResult,
+  handler: async (input, actor) => {
+    const source = await completeUploadSource.call(
+      { id: input.id, parts: input.parts },
+      actor,
+    );
+    if (source.kind === "done") return source.result;
+    const multipart = storage().directMultipart;
+    if (!multipart) {
+      throw new ServiceError("conflict", "Direct uploads are unavailable.");
+    }
 
     // If the object store completed the upload but the process died before the
-    // database transaction committed, HEAD turns the retry into recovery.
+    // database apply committed, HEAD turns the retry into recovery.
     const completed =
-      (await storage().head(session.storageKey)) ??
+      (await storage().head(source.storageKey)) ??
       (await multipart.complete(
-        session.storageKey,
-        session.providerUploadId,
-        parts,
+        source.storageKey,
+        source.providerUploadId,
+        source.parts,
       ));
-    await ctx.tx
-      .update(mediaUploads)
-      .set({ state: "processing", updatedAt: new Date() })
-      .where(eq(mediaUploads.id, session.id));
-    if (completed.bytes !== session.expectedBytes) {
-      return failCompletedUpload(
-        session,
-        `The object store received ${completed.bytes} bytes; ${session.expectedBytes} were expected.`,
-        ctx,
+    const fail = async (message: string) => {
+      await storage().delete(source.storageKey).catch(() => undefined);
+      return failDirectUpload.call(
+        { id: source.id, storageKey: source.storageKey, message },
+        actor,
+      );
+    };
+    if (completed.bytes !== source.expectedBytes) {
+      return fail(
+        `The object store received ${completed.bytes} bytes; ${source.expectedBytes} were expected.`,
       );
     }
 
     const prefix = await storage().readRange(
-      session.storageKey,
+      source.storageKey,
       0,
       SIGNATURE_BYTES - 1,
     );
     const suffixStart = Math.max(0, completed.bytes - SIGNATURE_BYTES);
     const suffix = suffixStart > 0
       ? await storage().readRange(
-          session.storageKey,
+          source.storageKey,
           suffixStart,
           completed.bytes - 1,
         )
       : undefined;
     try {
       const validated = validateMediaFile({
-        filename: session.filename,
-        declaredMime: session.declaredMime,
+        filename: source.filename,
+        declaredMime: source.declaredMime,
         bytes: completed.bytes,
         prefix: mediaSignatureSample(
           prefix ?? new Uint8Array(),
@@ -1057,61 +1441,63 @@ export const completeUpload = defineService({
         ),
       });
       const verified = await scanStoredAndHash(
-        session.storageKey,
-        session.filename,
+        source.storageKey,
+        source.filename,
         validated.mime,
         completed.bytes,
       );
-      const provenance = session.provenance as z.output<typeof provenanceSchema>;
+      const provenance = source.provenance;
       if (provenance.captureToken || provenance.captureSessionId) {
-        const { stageCompletedUpload } = await import("./capture");
-        await ctx.callAsSystem(stageCompletedUpload, {
-          uploadId: session.id,
-          token: provenance.captureToken,
-          sessionId: provenance.captureSessionId,
-          filename: session.filename,
-          contentType: validated.mime,
-          key: session.storageKey,
-          bytes: completed.bytes,
-          checksumSha256: verified.checksumSha256,
-        });
-        await ctx.tx
-          .update(mediaUploads)
-          .set({
-            state: "complete",
+        return applyCaptureComplete.call(
+          {
+            uploadId: source.id,
+            token: provenance.captureToken,
+            sessionId: provenance.captureSessionId,
+            filename: source.filename,
+            contentType: validated.mime,
+            key: source.storageKey,
+            bytes: completed.bytes,
+            checksumSha256: verified.checksumSha256,
             detectedMime: validated.mime,
-            completedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(mediaUploads.id, session.id));
-        return { ok: true as const, asset: null };
+          },
+          actor,
+        );
       }
-      const asset = await createAssetFromStoredOriginal(
+      const prepared = await prepareDerivedObjects(
         {
-          filename: session.filename,
+          key: source.storageKey,
+          kind: validated.kind,
+          scan: verified.scan,
+          uploadId: source.id,
+        },
+        await loadWatermarkMark(),
+      );
+      const asset = await applyStoredOriginal.call(
+        {
+          filename: source.filename,
           mime: validated.mime,
           kind: validated.kind,
           bytes: completed.bytes,
-          key: session.storageKey,
+          key: source.storageKey,
           altText: input.altText,
-          source: session.source,
-          provenance: safeProvenance(
-            ctx,
-            session.source,
-            provenance,
-            "direct_multipart",
-          ),
-          metadata: session.mediaMetadata as z.output<typeof mediaMetadataSchema>,
+          source: source.source,
+          provenance,
+          metadata: source.metadata,
           scan: verified.scan,
           checksumSha256: verified.checksumSha256,
-          uploadId: session.id,
+          uploadId: source.id,
+          method: "direct_multipart",
+          variants: prepared.variants,
+          trackedKeys: prepared.trackedKeys,
+          width: prepared.facts?.width ?? null,
+          height: prepared.facts?.height ?? null,
         },
-        ctx,
+        actor,
       );
       return { ok: true as const, asset };
     } catch (error) {
       if (error instanceof MediaValidationError) {
-        return failCompletedUpload(session, error.message, ctx);
+        return fail(error.message);
       }
       throw error;
     }
@@ -1174,32 +1560,79 @@ export const registerStoredOriginal = defineService({
   },
 });
 
-export const abortUpload = defineService({
-  name: "media.abortUpload",
-  summary: "Abort an unfinished upload and remove its staged bytes.",
+const abortUploadClaim = defineService({
+  name: "media.abortUploadClaim",
+  summary: "Mark an unfinished upload aborted before deleting provider bytes.",
   kind: "mutation",
   permission: "public",
+  external: false,
+  writeClass: "write",
   input: z.object({ id: z.string().uuid() }),
-  output: okResult,
+  output: z.object({
+    alreadyTerminal: z.boolean(),
+    storageKey: z.string(),
+    providerUploadId: z.string().nullable(),
+  }),
   handler: async (input, ctx) => {
     const session = await lockedUploadSession(ctx.tx, input.id);
     if (!session) throw new ServiceError("not_found", "That upload is not here.");
     requireUploadAccess(ctx.actor, session.uploadedBy);
     if (["complete", "failed", "aborted", "expired"].includes(session.state)) {
-      return { ok: true };
+      return {
+        alreadyTerminal: true,
+        storageKey: session.storageKey,
+        providerUploadId: session.providerUploadId,
+      };
     }
-    const multipart = storage().directMultipart;
-    if (multipart && session.providerUploadId) {
-      await multipart.abort(session.storageKey, session.providerUploadId);
-    }
-    await storage().delete(session.storageKey);
-    await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, session.storageKey));
     await ctx.tx
       .update(mediaUploads)
       .set({ state: "aborted", completedAt: new Date(), updatedAt: new Date() })
       .where(eq(mediaUploads.id, session.id));
     ctx.setSubject("mediaUpload", session.id);
+    return {
+      alreadyTerminal: false,
+      storageKey: session.storageKey,
+      providerUploadId: session.providerUploadId,
+    };
+  },
+});
+
+const abortUploadApply = defineService({
+  name: "media.abortUploadApply",
+  summary: "Drop the staged object ledger after provider bytes are gone.",
+  kind: "mutation",
+  permission: "public",
+  external: false,
+  writeClass: "write",
+  input: z.object({ id: z.string().uuid(), storageKey: z.string().min(1) }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, input.storageKey));
+    ctx.setSubject("mediaUpload", input.id);
     return { ok: true };
+  },
+});
+
+export const abortUpload = defineOrchestratedService({
+  name: "media.abortUpload",
+  summary: "Abort an unfinished upload and remove its staged bytes.",
+  kind: "mutation",
+  permission: "public",
+  writeClass: "write",
+  input: z.object({ id: z.string().uuid() }),
+  output: okResult,
+  handler: async (input, actor) => {
+    const claimed = await abortUploadClaim.call(input, actor);
+    if (claimed.alreadyTerminal) return { ok: true };
+    const multipart = storage().directMultipart;
+    if (multipart && claimed.providerUploadId) {
+      await multipart.abort(claimed.storageKey, claimed.providerUploadId);
+    }
+    await storage().delete(claimed.storageKey);
+    return abortUploadApply.call(
+      { id: input.id, storageKey: claimed.storageKey },
+      actor,
+    );
   },
 });
 
@@ -2591,12 +3024,22 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
 
 export default [
   uploadAsset,
+  claimProxyUpload,
+  applyStoredOriginal,
   beginUpload,
+  beginUploadApply,
   uploadStatus,
+  uploadStatusSource,
   signUploadParts,
+  signUploadClaim,
   completeUpload,
+  completeUploadSource,
+  failDirectUpload,
+  applyCaptureComplete,
   registerStoredOriginal,
   abortUpload,
+  abortUploadClaim,
+  abortUploadApply,
   listAssets,
   getAsset,
   resolveImage,

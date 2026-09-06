@@ -31,6 +31,7 @@ import {
 import {
   acceptAltTextSuggestion,
   altTextSuggestionState,
+  abortUpload,
   assetUsage,
   beginUpload,
   cleanupOrphanedMedia,
@@ -1212,6 +1213,36 @@ describe.runIf(hasDatabase)("the asset library", () => {
       resetStorageForTests();
       resetMalwareScannerForTests();
     }
+  });
+
+  it("aborts an unfinished reservation so completion cannot attach leftover bytes", async () => {
+    const reservation = await beginUpload.call(
+      {
+        filename: "cancel.pdf",
+        contentType: "application/pdf",
+        bytes: 12,
+      },
+      STAFF,
+    );
+    await abortUpload.call({ id: reservation.id }, STAFF);
+    const [session] = await db()
+      .select()
+      .from(mediaUploads)
+      .where(eq(mediaUploads.id, reservation.id));
+    expect(session).toMatchObject({ state: "aborted" });
+    expect((await db().select().from(mediaObjects)).length).toBe(0);
+    const error = await failure(
+      uploadAsset.call(
+        {
+          filename: "cancel.pdf",
+          contentType: "application/pdf",
+          bytes: new Uint8Array(Buffer.from("%PDF-1.7\n")),
+          uploadId: reservation.id,
+        },
+        STAFF,
+      ),
+    );
+    expect(error.code).toBe("conflict");
   });
 
   it("sweeps expired upload reservations and their staged object ledger", async () => {
