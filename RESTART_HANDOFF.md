@@ -5,10 +5,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Freeholder restart handoff — 2026-09-05
 
-This is the current session handoff for the next large sprint. `MASTER.md` §43
-remains the only product, architecture, status, and delivery source of truth.
-This file records operational state, audit findings, and work that is still in
-flight; when it disagrees with live GitHub state, GitHub wins.
+**Historical snapshot only. Not a planning authority.** `MASTER.md` §43 is the
+only product, architecture, status, and delivery source of truth. Do not pick
+the next work item from this file. In-flight PR tables here are frozen at
+write time; live GitHub state wins.
 
 ## Executive outcome
 

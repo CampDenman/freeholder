@@ -5,13 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # Handoff — 2026-08-28
 
-> Historical snapshot only. The current sprint state, active PR order, audit
-> findings, and restart checklist are in `RESTART_HANDOFF.md` (2026-09-05).
-
-Written for whoever picks this up next, human or agent. `MASTER.md` remains the
-only source of truth for product, architecture and status; this document is a
-snapshot of *where the work is* and *what is worth knowing that the code does
-not say out loud*. If the two ever disagree, MASTER wins and this file is stale.
+> Historical snapshot only. Not a planning authority. `MASTER.md` §43 is the
+> only product, architecture, status, and delivery source of truth. Do not pick
+> the next work item from this file or from `RESTART_HANDOFF.md`.
 
 ---
 
@@ -118,8 +114,8 @@ the portal is a second audience for them, never a second implementation.
 Do not start it on top of the stack above; land the stack first, or it
 becomes four deep.
 
-`RESTART_HANDOFF.md` is pre-existing untracked scratch. Do not modify or stage
-it.
+`RESTART_HANDOFF.md` is a later historical snapshot of the same kind. Neither
+file is a planning authority.
 
 ### Deploying freeholder.ai
 
@@ -178,8 +174,7 @@ rules that bite most often in practice:
 - **Tick a box only with the evidence §43.2 requires**, and write the evidence
   note in the same PR. The notes on checked items are the only record of *why*
   something is the way it is.
-- **Never `git add -A`.** Stage explicit paths. `RESTART_HANDOFF.md` in the repo
-  root is scratch and must never be committed.
+- **Never `git add -A`.** Stage explicit paths.
 - **`git commit -s`** — DCO, no CLA.
 - **`main` is protected.** PR + green checks, squash-merge, do not delete
   branches.
@@ -434,8 +429,7 @@ Two notes worth carrying:
 
 ## 8. Things I would check early
 
-- **`RESTART_HANDOFF.md`** is untracked scratch in the repo root. It is not this
-  file. Leave it alone or delete it; never stage it.
+- **`RESTART_HANDOFF.md`** is another historical snapshot, not a live plan.
 - **The `none` SMS adapter is not a placeholder.** It is what an unconfigured
   instance resolves to, and it refuses clearly. Do not remove it when adding a
   second provider.
