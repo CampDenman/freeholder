@@ -416,16 +416,6 @@ async function watermarkMarkFrom(
   return { text: business.name, logoKey: asset?.storageKey ?? null };
 }
 
-async function watermarkMark(tx: Tx): Promise<WatermarkMark | undefined> {
-  const source = await watermarkMarkFrom(tx);
-  if (!source) return undefined;
-  let logo: Uint8Array<ArrayBuffer> | undefined;
-  // A missing logo object falls through to the name rather than failing:
-  // the upload is not the place to discover a broken brand setting.
-  if (source.logoKey) logo = (await storage().get(source.logoKey)) ?? undefined;
-  return { logo, text: source.text };
-}
-
 /** Brand mark for orchestrators: DB snapshot, then logo bytes with no tx held. */
 async function loadWatermarkMark(): Promise<WatermarkMark | undefined> {
   const source = await watermarkMarkFrom(db());
@@ -561,14 +551,6 @@ async function insertPreparedAsset(
     scanStatus: asset!.scanStatus,
   });
   return asset!;
-}
-
-async function createAssetFromStoredOriginal(
-  input: CreateAssetInput,
-  ctx: ServiceContext,
-) {
-  const prepared = await prepareDerivedObjects(input, await watermarkMark(ctx.tx));
-  return insertPreparedAsset(input, prepared, ctx);
 }
 
 const proxyUploadInput = z.object({
@@ -1504,11 +1486,12 @@ export const completeUpload = defineOrchestratedService({
   },
 });
 
-export const registerStoredOriginal = defineService({
+export const registerStoredOriginal = defineOrchestratedService({
   name: "media.registerStoredOriginal",
   summary: "Turn an already-stored original into a library Asset.",
   kind: "mutation",
   permission: "system",
+  writeClass: "write",
   input: z.object({
     key: z.string().min(1).max(500),
     filename: z.string().min(1).max(255),
@@ -1521,7 +1504,7 @@ export const registerStoredOriginal = defineService({
     checksumSha256: z.string().length(64).optional(),
   }),
   output: assetRow,
-  handler: async (input, ctx) => {
+  handler: async (input, actor) => {
     const head = await storage().head(input.key);
     if (!head) throw new ServiceError("not_found", "The staged file is gone.");
     const prefix = await storage().readRange(input.key, 0, SIGNATURE_BYTES - 1);
@@ -1537,8 +1520,21 @@ export const registerStoredOriginal = defineService({
         bytes: input.bytes,
         prefix: mediaSignatureSample(prefix ?? new Uint8Array(), suffix ?? new Uint8Array()),
       });
-      const verified = await scanStoredAndHash(input.key, input.filename, validated.mime, input.bytes);
-      return createAssetFromStoredOriginal(
+      const verified = await scanStoredAndHash(
+        input.key,
+        input.filename,
+        validated.mime,
+        input.bytes,
+      );
+      const prepared = await prepareDerivedObjects(
+        {
+          key: input.key,
+          kind: validated.kind,
+          scan: verified.scan,
+        },
+        await loadWatermarkMark(),
+      );
+      return applyStoredOriginal.call(
         {
           filename: input.filename,
           mime: validated.mime,
@@ -1547,12 +1543,17 @@ export const registerStoredOriginal = defineService({
           key: input.key,
           altText: input.altText,
           source: input.source,
-          provenance: safeProvenance(ctx, input.source, input.provenance, "proxy"),
+          provenance: input.provenance,
           metadata: input.metadata,
           scan: verified.scan,
           checksumSha256: input.checksumSha256 ?? verified.checksumSha256,
+          method: "proxy",
+          variants: prepared.variants,
+          trackedKeys: prepared.trackedKeys,
+          width: prepared.facts?.width ?? null,
+          height: prepared.facts?.height ?? null,
         },
-        ctx,
+        actor,
       );
     } catch (error) {
       return serviceValidation(error);

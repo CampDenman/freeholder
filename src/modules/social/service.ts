@@ -39,6 +39,8 @@ import {
 import {
   composePackage,
   createVariants,
+  createVariantsApply,
+  createVariantsSource,
   publicationSource,
   publicationCalendar,
   publishDue,
@@ -637,6 +639,8 @@ export default [
   interactionList,
   composePackage,
   createVariants,
+  createVariantsApply,
+  createVariantsSource,
   reviewVariant,
   variantList,
   schedulePublications,

@@ -110,6 +110,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "media.beginUploadApply",
   "media.claimProxyUpload",
   "media.completeUploadSource",
+  "media.confirmCaptureApply",
+  "media.confirmCaptureSource",
   "media.failDirectUpload",
   "media.purgeApply",
   "media.purgeClaim",
@@ -122,6 +124,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "signupContactImports.providerSource",
   "social.applyOAuthCompletion",
   "social.claimOAuthCompletion",
+  "social.createVariantsApply",
+  "social.createVariantsSource",
 ] as const;
 
 const PRIVATE = [...INTERNAL, ...CALLER_AUTHORIZED_PHASES] as const;
