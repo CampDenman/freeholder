@@ -12,6 +12,7 @@ import { decryptSecret } from "@/core/connections/crypto";
 import { assets } from "@/core/media/schema";
 import { registerStoredOriginal } from "@/core/media/service";
 import {
+  defineOrchestratedService,
   defineService,
   ServiceError,
   type ServiceContext,
@@ -130,7 +131,6 @@ export const composePackage = defineService({
 });
 
 async function storeRendition(
-  ctx: ServiceContext,
   bytes: Uint8Array,
   mime: string,
   filename: string,
@@ -140,31 +140,54 @@ async function storeRendition(
   const body = new Uint8Array(bytes.byteLength);
   body.set(bytes);
   await storage().put(key, body, mime);
-  const asset = await ctx.callAsSystem(registerStoredOriginal, {
-    key,
-    filename,
-    contentType: mime,
-    bytes: bytes.byteLength,
-    source: "generated",
-    checksumSha256: checksum,
-    provenance: { note: "social-variant" },
-    metadata: {},
-  });
+  const asset = await registerStoredOriginal.call(
+    {
+      key,
+      filename,
+      contentType: mime,
+      bytes: bytes.byteLength,
+      source: "generated",
+      checksumSha256: checksum,
+      provenance: { note: "social-variant" },
+      metadata: {},
+    },
+    { kind: "system" },
+  );
   return asset.id;
 }
 
-export const createVariants = defineService({
-  name: "social.createVariants",
-  writeClass: "write",
-  summary: "Make a reviewable rendition of one package for each selected profile.",
-  kind: "mutation",
+const createVariantsInput = z.object({
+  packageId: uuid,
+  profileIds: z.array(uuid).min(1).max(20),
+  caption: z.string().trim().max(8_000).optional(),
+});
+
+export const createVariantsSource = defineService({
+  name: "social.createVariantsSource",
+  summary: "Authorize a package and snapshot originals before rendering variants.",
+  kind: "query",
   permission: "scoped",
-  input: z.object({
+  external: false,
+  input: createVariantsInput,
+  output: z.object({
     packageId: uuid,
-    profileIds: z.array(uuid).min(1).max(20),
-    caption: z.string().trim().max(8_000).optional(),
+    body: z.string(),
+    originals: listed(
+      z.object({
+        id: uuid,
+        storageKey: z.string(),
+        kind: z.enum(["image", "video", "doc", "audio"]),
+        filename: z.string(),
+      }),
+    ),
+    profiles: listed(
+      z.object({
+        id: uuid,
+        provider: z.string(),
+        approvalPolicy: z.string(),
+      }),
+    ),
   }),
-  output: listed(variantRow),
   handler: async (input, ctx) => {
     const [pack] = await ctx.tx
       .select()
@@ -178,7 +201,12 @@ export const createVariants = defineService({
       .where(eq(socialPackageAssets.packageId, pack.id));
     const originals = attached.length
       ? await ctx.tx
-          .select()
+          .select({
+            id: assets.id,
+            storageKey: assets.storageKey,
+            kind: assets.kind,
+            filename: assets.filename,
+          })
           .from(assets)
           .where(
             inArray(
@@ -187,7 +215,7 @@ export const createVariants = defineService({
             ),
           )
       : [];
-    const created = [];
+    const profiles = [];
     for (const profileId of input.profileIds) {
       const [profile] = await ctx.tx
         .select()
@@ -197,53 +225,64 @@ export const createVariants = defineService({
       if (!profile || profile.status !== "active") {
         throw new ServiceError("not_found", "One of those profiles is not active.");
       }
-      const policy = policyFor(profile.provider);
-      const caption = clipCaption(input.caption ?? pack.body, policy.captionLimit);
-      const hashtags = parseHashtags(caption);
-      const assetIds: string[] = [];
-      let generated = false;
-      for (const original of originals) {
-        const stored = await storage().get(original.storageKey);
-        if (!stored) {
-          assetIds.push(original.id);
-          continue;
-        }
-        if (original.kind === "image") {
-          const crop = await cropStill(stored, policy.aspect, original.filename);
-          generated = generated || crop.generated;
-          assetIds.push(await storeRendition(ctx, crop.bytes, crop.mime, crop.filename));
-          const thumb = await stillThumbnail(stored, original.filename);
-          assetIds.push(await storeRendition(ctx, thumb.bytes, thumb.mime, thumb.filename));
-        } else if (original.kind === "video") {
-          const clip = await clipVideo(
-            stored,
-            policy.aspect,
-            policy.maxDurationSeconds,
-            original.filename,
-          );
-          if (clip) {
-            generated = true;
-            assetIds.push(await storeRendition(ctx, clip.bytes, clip.mime, clip.filename));
-          } else {
-            assetIds.push(original.id);
-          }
-        } else {
-          assetIds.push(original.id);
-        }
-      }
-      const needsReview = generated || profile.approvalPolicy === "required";
+      profiles.push({
+        id: profile.id,
+        provider: profile.provider,
+        approvalPolicy: profile.approvalPolicy,
+      });
+    }
+    return {
+      packageId: pack.id,
+      body: pack.body,
+      originals,
+      profiles,
+    };
+  },
+});
+
+export const createVariantsApply = defineService({
+  name: "social.createVariantsApply",
+  summary: "Record rendered social variants after their files are stored.",
+  kind: "mutation",
+  permission: "scoped",
+  external: false,
+  writeClass: "write",
+  input: z.object({
+    packageId: uuid,
+    variants: listed(
+      z.object({
+        profileId: uuid,
+        caption: z.string(),
+        hashtags: z.array(z.string()),
+        assetIds: z.array(uuid),
+        aspectRatio: z.enum(SOCIAL_ASPECTS),
+        safeArea: z.object({
+          top: z.number(),
+          bottom: z.number(),
+          start: z.number(),
+          end: z.number(),
+        }),
+        generated: z.boolean(),
+        status: z.enum(SOCIAL_VARIANT_STATUSES),
+      }),
+    ),
+  }),
+  output: listed(variantRow),
+  handler: async (input, ctx) => {
+    const created = [];
+    for (const variant of input.variants) {
       const [saved] = await ctx.tx
         .insert(socialVariants)
         .values({
-          packageId: pack.id,
-          profileId: profile.id,
-          caption,
-          hashtags,
-          assetIds,
-          aspectRatio: policy.aspect,
-          safeArea: policy.safeArea,
-          generated,
-          status: needsReview ? "pending_review" : "approved",
+          packageId: input.packageId,
+          profileId: variant.profileId,
+          caption: variant.caption,
+          hashtags: variant.hashtags,
+          assetIds: variant.assetIds,
+          aspectRatio: variant.aspectRatio,
+          safeArea: variant.safeArea,
+          generated: variant.generated,
+          status: variant.status,
         })
         .returning();
       created.push({
@@ -259,12 +298,74 @@ export const createVariants = defineService({
         createdAt: saved!.createdAt,
       });
     }
-    ctx.setSubject("social_package", pack.id);
+    ctx.setSubject("social_package", input.packageId);
     ctx.queueEvent("social.variantsCreated", {
-      packageId: pack.id,
+      packageId: input.packageId,
       count: created.length,
     });
     return created;
+  },
+});
+
+export const createVariants = defineOrchestratedService({
+  name: "social.createVariants",
+  writeClass: "write",
+  summary: "Make a reviewable rendition of one package for each selected profile.",
+  kind: "mutation",
+  permission: "scoped",
+  input: createVariantsInput,
+  output: listed(variantRow),
+  handler: async (input, actor) => {
+    const source = await createVariantsSource.call(input, actor);
+    const variants = [];
+    for (const profile of source.profiles) {
+      const policy = policyFor(profile.provider);
+      const caption = clipCaption(input.caption ?? source.body, policy.captionLimit);
+      const hashtags = parseHashtags(caption);
+      const assetIds: string[] = [];
+      let generated = false;
+      for (const original of source.originals) {
+        const stored = await storage().get(original.storageKey);
+        if (!stored) {
+          assetIds.push(original.id);
+          continue;
+        }
+        if (original.kind === "image") {
+          const crop = await cropStill(stored, policy.aspect, original.filename);
+          generated = generated || crop.generated;
+          assetIds.push(await storeRendition(crop.bytes, crop.mime, crop.filename));
+          const thumb = await stillThumbnail(stored, original.filename);
+          assetIds.push(await storeRendition(thumb.bytes, thumb.mime, thumb.filename));
+        } else if (original.kind === "video") {
+          const clip = await clipVideo(
+            stored,
+            policy.aspect,
+            policy.maxDurationSeconds,
+            original.filename,
+          );
+          if (clip) {
+            generated = true;
+            assetIds.push(await storeRendition(clip.bytes, clip.mime, clip.filename));
+          } else {
+            assetIds.push(original.id);
+          }
+        } else {
+          assetIds.push(original.id);
+        }
+      }
+      const needsReview = generated || profile.approvalPolicy === "required";
+      variants.push({
+        profileId: profile.id,
+        caption,
+        hashtags,
+        assetIds,
+        aspectRatio: policy.aspect,
+        safeArea: policy.safeArea,
+        generated,
+        status: needsReview ? "pending_review" : "approved",
+      });
+    }
+    return createVariantsApply.call({ packageId: source.packageId, variants }, actor);
   },
 });
 

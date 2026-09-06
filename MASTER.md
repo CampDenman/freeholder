@@ -3434,12 +3434,12 @@ one with unchecked dependency items.
   `defineOrchestratedService` rejects transactional composition, and
   `tests/core/long-running-service-boundary.test.ts` prevents regression.
   2026-09-06 pass: media rescan/upload/watermark-backfill/purge (#276–#279)
-  no longer hold a service transaction across provider I/O; `plan:check`
-  refuses missing C-item citations and a Current focus that names checked
-  work (#280); `HANDOFF.md` / `RESTART_HANDOFF.md` declare themselves
-  historical. Still open: the F01–F12 matrix (C11.09 and remaining C0.12),
-  and `media.registerStoredOriginal` which capture/social still compose
-  under a caller transaction.)*
+  no longer hold a service transaction across provider I/O; capture confirm
+  and social variant rendering register staged originals through
+  `media.registerStoredOriginal` as an orchestrator; `plan:check` refuses
+  missing C-item citations and a Current focus that names checked work
+  (#280); `HANDOFF.md` / `RESTART_HANDOFF.md` declare themselves historical.
+  Still open: the F01–F12 matrix (C11.09 and remaining C0.12).)*
 - [ ] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
   carry resolvable repository evidence, the control block must be current, and
   completion evidence must name the applicable human, agent, safety,
