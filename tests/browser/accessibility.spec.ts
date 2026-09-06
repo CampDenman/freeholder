@@ -348,9 +348,7 @@ async function installFixtures() {
     email: "owner-a11y@example.test",
     role: "owner",
   });
-  await db().transaction((tx) =>
-    installDemo.call({ publish: true }, OWNER, { tx, queued: [] }),
-  );
+  await installDemo.call({ publish: true }, OWNER);
   await db().insert(totpFactors).values({
     userId: OWNER.userId,
     // Session validation only needs proof that a factor exists. No code is

@@ -56,6 +56,7 @@ const INTERNAL = [
   "media.purgeExpired",
   "media.registerStoredOriginal",
   "messaging.applySmsEvents",
+  "messaging.applySmsEventsApply",
   "notifications.create",
   "referrals.claimTouches",
   "social.applyGbpReviews",
@@ -88,6 +89,8 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "demo.installApply",
+  "demo.installGuard",
   "connections.applyCalendarOAuthCompletion",
   "connections.applyMailReadOAuthCompletion",
   "connections.claimCalendarOAuthCompletion",
