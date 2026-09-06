@@ -96,6 +96,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "mail.claimOAuthCompletion",
   "media.altTextSuggestionSource",
   "media.applyAltTextSuggestion",
+  "media.applyRescan",
+  "media.rescanSource",
   "signupContactImports.applyOAuthCompletion",
   "signupContactImports.applyProviderContacts",
   "signupContactImports.claimOAuthCompletion",
