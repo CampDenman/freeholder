@@ -13,12 +13,17 @@ import {
   viewGallerySession,
 } from "@/modules/galleries/service";
 import { getT } from "../../i18n";
-import { GALLERY_SESSION_COOKIE } from "@/modules/galleries/cookies";
+import {
+  GALLERY_PARTNER_INVITE_COOKIE,
+  GALLERY_SESSION_COOKIE,
+} from "@/modules/galleries/cookies";
 import {
   clearGallerySelectionAction,
+  inviteGalleryPartnerAction,
   openGalleryWithLoginAction,
   redeemGalleryGuestAction,
   requestGalleryArchiveAction,
+  revokeGalleryPartnerAction,
   setGallerySelectionAction,
   submitGalleryRoundAction,
   unlockGalleryAction,
@@ -43,7 +48,7 @@ export default async function ClientGalleryPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ error?: string; token?: string }>;
+  searchParams: Promise<{ error?: string; token?: string; invited?: string }>;
 }) {
   const { slug } = await params;
   const query = await searchParams;
@@ -87,6 +92,69 @@ export default async function ClientGalleryPage({
         <SkipLink target="main">{t("a11y.skipToContent")}</SkipLink>
         <main id="main-content" tabIndex={-1} className="grid gap-6">
           <h1 className="text-2xl font-bold tracking-tight">{opened.gallery.title}</h1>
+          {query.error ? (
+            <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+              {query.error}
+            </p>
+          ) : null}
+          {query.invited && jar.get(GALLERY_PARTNER_INVITE_COOKIE)?.value ? (
+            <div className="grid gap-2 rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+              <p>{t("galleries.partner.invited")}</p>
+              <label className="grid gap-1">
+                <span>{t("galleries.guestLink")}</span>
+                <input
+                  readOnly
+                  value={jar.get(GALLERY_PARTNER_INVITE_COOKIE)?.value}
+                  className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                />
+              </label>
+            </div>
+          ) : null}
+          {opened.canInvitePartner || opened.invitedPartners.length > 0 ? (
+            <section className="grid gap-3 rounded-md border border-rule bg-surface p-4">
+              <h2 className="text-lg font-semibold">{t("galleries.partner.share")}</h2>
+              {opened.canInvitePartner ? (
+                <>
+                  <p className="text-sm text-ink-muted">{t("galleries.partner.intro")}</p>
+                  <form action={inviteGalleryPartnerAction} className="flex flex-wrap items-end gap-3">
+                    <input type="hidden" name="slug" value={slug} />
+                    <label className="grid gap-1 text-sm">
+                      <span className="text-ink-muted">{t("galleries.field.email")}</span>
+                      <input
+                        type="email"
+                        name="email"
+                        required
+                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                      />
+                    </label>
+                    <Button type="submit">{t("galleries.partner.invite")}</Button>
+                  </form>
+                </>
+              ) : null}
+              {opened.invitedPartners.length > 0 ? (
+                <div className="grid gap-2">
+                  <h3 className="text-sm font-medium">{t("galleries.partner.list")}</h3>
+                  <ul className="grid list-none gap-2 p-0">
+                    {opened.invitedPartners.map((partner) => (
+                      <li
+                        key={partner.id}
+                        className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm"
+                      >
+                        <span>{partner.contactName ?? partner.contactEmail}</span>
+                        <form action={revokeGalleryPartnerAction}>
+                          <input type="hidden" name="slug" value={slug} />
+                          <input type="hidden" name="id" value={partner.id} />
+                          <Button type="submit" variant="quiet">
+                            {t("galleries.action.revoke")}
+                          </Button>
+                        </form>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
           {/* Where the conversation stands. A client who has sent their
               choices needs to know they landed; one whose round came back
               needs to know what to look at again. */}
