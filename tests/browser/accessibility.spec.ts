@@ -6,28 +6,14 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Frame, type Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
+import { API_BASE } from "@/core/api/dispatch";
 import { contacts } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { users, totpFactors } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
+import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { pages } from "@/modules/cms/schema";
-import { registerBlock } from "@/modules/cms/blocks/registry";
-import eventBlocks from "@/modules/events/blocks";
-import formBlocks from "@/modules/forms/blocks";
-import newsletterBlocks from "@/modules/newsletters/blocks";
-import projectBlocks from "@/modules/projects/blocks";
-import proofBlocks from "@/modules/proof/blocks";
-import { installDemo } from "@/modules/seed/service";
-
-/** Every module that declares `blocks` in its manifest (§11). */
-const MODULE_BLOCKS = [
-  ...eventBlocks,
-  ...formBlocks,
-  ...newsletterBlocks,
-  ...projectBlocks,
-  ...proofBlocks,
-];
 import {
   closeDb,
   CUSTOMER,
@@ -325,32 +311,33 @@ async function assertReducedMotion(page: Page) {
   await page.emulateMedia({ reducedMotion: "no-preference" });
 }
 
+async function installDemoThroughApp(sessionToken: string): Promise<void> {
+  // `demo.install` is an orchestrator, so `.call()` always awaits `ready()`.
+  // Playwright cannot boot: manifests load services through dynamic `@/`
+  // imports, and this runner only rewrites static ones. The standalone
+  // server already booted, which is also the path an owner uses.
+  const csrf = issueCsrfToken();
+  const response = await fetch(`${BASE_URL}${API_BASE}/demo.install`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie: `${SESSION_COOKIE}=${encodeURIComponent(sessionToken)}; ${CSRF_COOKIE}=${encodeURIComponent(csrf)}`,
+      [CSRF_HEADER]: csrf,
+    },
+    body: JSON.stringify({ publish: true }),
+  });
+  if (response.ok) return;
+  throw new Error(
+    `The running app refused demo.install (${response.status}): ${await response.text()}`,
+  );
+}
+
 async function installFixtures() {
-  // Every module block, not a hand-picked one.
-  //
-  // `installDemo` seeds pages from CMS templates, and those templates
-  // reference blocks that modules contribute — C8.02 added a portfolio index
-  // to them, which is what broke this test. Registering only the form block
-  // was correct until the day it wasn't, and the failure it produced named
-  // the block rather than the cause.
-  //
-  // `ready()` is the real registration path but cannot run here: boot
-  // resolves modules through dynamic `@/` imports, and Playwright's
-  // transform only rewrites static ones. Static imports of each module's
-  // block list are the closest equivalent this runner allows. A module that
-  // adds a block list and forgets this line fails here loudly, naming the
-  // block `installDemo` could not resolve.
-  for (const block of MODULE_BLOCKS) {
-    registerBlock(block as unknown as Parameters<typeof registerBlock>[0]);
-  }
   await db().insert(users).values({
     id: OWNER.userId,
     email: "owner-a11y@example.test",
     role: "owner",
   });
-  await db().transaction((tx) =>
-    installDemo.call({ publish: true }, OWNER, { tx, queued: [] }),
-  );
   await db().insert(totpFactors).values({
     userId: OWNER.userId,
     // Session validation only needs proof that a factor exists. No code is
@@ -360,6 +347,7 @@ async function installFixtures() {
   const ownerSession = await db().transaction((tx) =>
     createSession(tx, OWNER.userId, { twoFactorVerified: true }),
   );
+  await installDemoThroughApp(ownerSession.token);
 
   await db().insert(users).values({
     id: CUSTOMER.userId,
