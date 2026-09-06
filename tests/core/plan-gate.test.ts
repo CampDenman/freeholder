@@ -88,4 +88,13 @@ describe("plan consistency", () => {
     );
     expect(codes(workspace(value))).toContain("stale-focus");
   });
+
+  it("refuses a handoff file that still claims to be current", () => {
+    const files = workspace();
+    files.set(
+      "RESTART_HANDOFF.md",
+      "This is the current session handoff for the next sprint.",
+    );
+    expect(codes(files)).toContain("stale-handoff");
+  });
 });

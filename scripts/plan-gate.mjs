@@ -25,6 +25,9 @@ const LOCAL_TOOL_STATE = [".agents/", ".claude/", ".codex/"];
 const CHECKLIST_LINE = /^- \[([ x])\] \*\*((F\d{2}|B\d{2}|C\d{1,2}\.\d{2}))(?=\*\*|\s+—)/;
 const REFERENCE = /\b(F\d{2}|B\d{2}|C\d{1,2}\.\d{2})\b/g;
 const EVIDENCE = /`[^`\n]+`|\bchangeset\b|PR #\d+/i;
+const HANDOFF_FILES = ["HANDOFF.md", "RESTART_HANDOFF.md"];
+const HANDOFF_HISTORICAL =
+  /historical snapshot only|not a planning authority/i;
 
 function issue(code, message, path = "MASTER.md") {
   return { code, path, message };
@@ -208,6 +211,20 @@ export function validatePlan(files) {
           ),
         );
       }
+    }
+  }
+
+  for (const path of HANDOFF_FILES) {
+    const text = files.get(path);
+    if (!text) continue;
+    if (!HANDOFF_HISTORICAL.test(text) || !text.includes("MASTER.md")) {
+      problems.push(
+        issue(
+          "stale-handoff",
+          `${path} must declare itself historical and defer to MASTER.md §43`,
+          path,
+        ),
+      );
     }
   }
 

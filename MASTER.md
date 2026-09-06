@@ -3255,7 +3255,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-06 |
-| Evidence snapshot | On `main` at `23a2de7` after C1.12 media transaction-boundary PRs #276–#279. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `plan:check` now refuses a checked C-item with no repository citation and a Current focus line that names already-checked work. Main CI run `33917963081` passed the isolated 20-shard matrix, CodeQL, browser, ownership, image, recipe, public and upgrade gates; publish run `33919195071` promoted and signed that candidate digest. |
+| Evidence snapshot | On `main` at `8cd2d4d` after C0.12 plan-evidence gate #280 and C1.12 media transaction-boundary PRs #276–#279. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. Main CI run `33917963081` passed the isolated 20-shard matrix, CodeQL, browser, ownership, image, recipe, public and upgrade gates; publish run `33919195071` promoted and signed that candidate digest. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
@@ -3433,7 +3433,13 @@ one with unchecked dependency items.
   compares the snapshot before storing a reviewable proposal.
   `defineOrchestratedService` rejects transactional composition, and
   `tests/core/long-running-service-boundary.test.ts` prevents regression.
-  The complete checked-item × F01–F12 evidence matrix remains open.)*
+  2026-09-06 pass: media rescan/upload/watermark-backfill/purge (#276–#279)
+  no longer hold a service transaction across provider I/O; `plan:check`
+  refuses missing C-item citations and a Current focus that names checked
+  work (#280); `HANDOFF.md` / `RESTART_HANDOFF.md` declare themselves
+  historical. Still open: the F01–F12 matrix (C11.09 and remaining C0.12),
+  and `media.registerStoredOriginal` which capture/social still compose
+  under a caller transaction.)*
 - [ ] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
   carry resolvable repository evidence, the control block must be current, and
   completion evidence must name the applicable human, agent, safety,
