@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.35. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.36. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7225,8 +7225,16 @@ customer has one secure, comprehensible home for the relationship.
   either person deletes the link. Eight tests in
   `tests/core/quote-partner-share.test.ts`. Migration
   `0160_quote_partner_links.sql`. Changeset `quote-partner-share.md`.)
-- [ ] **C9.35** Build gift-card/registry-style sharing on products.
-  (Split from C9.29 under §43.17.1. §34's product half.)
+- [x] **C9.35** Build gift-card/registry-style sharing on products.
+  (Split from C9.29 under §43.17.1. §34's product half.
+  A wishlist is the registry: `catalog.shareWishlist` mints a hashed token
+  and `/registry/{token}` shows the products, never the contact. Rotating
+  the share kills the old link. A gift card is sent with
+  `catalog.sendGiftCard` through `contacts.resolve`; the email carries a
+  claim URL, not the bearer code, and `/gift/{token}` is how the recipient
+  reads it. Four tests in `tests/core/product-gift-share.test.ts`.
+  Migration `0161_product_gift_share.sql`. Changeset
+  `product-gift-share.md`.)
 - [ ] **C9.36** Emit copy-paste embed codes for galleries, review walls,
   booking widgets and newsletter signup blocks, with backlinks.
   (Split from C9.29 under §43.17.1. §34's embed half.)

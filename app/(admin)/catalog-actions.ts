@@ -8,6 +8,10 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
+import {
+  GIFT_CARD_SHARE_COOKIE,
+  WISHLIST_SHARE_COOKIE,
+} from "@/modules/catalog/cookies";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
@@ -20,6 +24,8 @@ import {
   createFulfillment,
   createOfferRule,
   issueGiftCard,
+  sendGiftCard,
+  shareWishlist,
   decideReturn,
   deliverFulfillment,
   failFulfillment,
@@ -807,6 +813,36 @@ export async function productAction(form: FormData): Promise<void> {
           actor,
         );
         destination = "/admin/promotions?saved=issueGiftCard";
+      } else if (intent === "sendGiftCard") {
+        const sent = await sendGiftCard.call(
+          {
+            id: field(form, "id"),
+            email: field(form, "email"),
+            ...(field(form, "name") ? { name: field(form, "name") } : {}),
+          },
+          actor,
+        );
+        (await cookies()).set(GIFT_CARD_SHARE_COOKIE, sent.link, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/admin/promotions",
+          maxAge: 300,
+        });
+        destination = "/admin/promotions?saved=sendGiftCard";
+      } else if (intent === "shareWishlist") {
+        const shared = await shareWishlist.call(
+          { contactId: field(form, "contactId") },
+          actor,
+        );
+        (await cookies()).set(WISHLIST_SHARE_COOKIE, shared.link, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+          path: "/admin/contacts",
+          maxAge: 300,
+        });
+        destination = `/admin/contacts/${field(form, "contactId")}?saved=shareWishlist`;
       } else if (intent === "createOfferRule") {
         await createOfferRule.call(
           {

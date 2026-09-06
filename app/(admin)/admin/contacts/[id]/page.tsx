@@ -12,9 +12,12 @@ import {
 } from "@/core/contacts/service";
 import { formatDateTime, type Translate } from "@/core/i18n";
 import { hasModuleAccess, ServiceError } from "@/core/service";
+import { cookies } from "next/headers";
 import { listOrders, listWishlist } from "@/modules/catalog/service";
+import { WISHLIST_SHARE_COOKIE } from "@/modules/catalog/cookies";
+import { productAction } from "../../../catalog-actions";
 import { listInvoices } from "@/modules/invoicing/invoice-service";
-import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { invoiceTone, money } from "../../invoices/format";
 import { getT } from "../../../../i18n";
 import { contactFormLabels, mergePanelLabels } from "../contactLabels";
@@ -105,6 +108,7 @@ export default async function ContactDetailPage({
     invoices,
     orders,
     wishlist,
+    jar,
   ] = await Promise.all([
     currentBusiness(),
     contactTimeline.call({ contactId: contact.id }, actor),
@@ -119,6 +123,7 @@ export default async function ContactDetailPage({
     canSeeCatalog
       ? listWishlist.call({ contactId: contact.id }, actor)
       : Promise.resolve({ wishlist: null, items: [] }),
+    cookies(),
   ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -237,9 +242,28 @@ export default async function ContactDetailPage({
               </ul>
             )}
             {wishlist.items.length ? (
-              <p className="mt-4 text-sm text-ink-muted">
-                {t("catalog.carts.wishlist")}: {wishlist.items.map((item) => item.sku).join(", ")}
-              </p>
+              <div className="mt-4 grid gap-2">
+                <p className="text-sm text-ink-muted">
+                  {t("catalog.carts.wishlist")}: {wishlist.items.map((item) => item.sku).join(", ")}
+                </p>
+                {query.saved === "shareWishlist" && jar.get(WISHLIST_SHARE_COOKIE)?.value ? (
+                  <label className="grid gap-1 text-sm">
+                    <span className="text-ink-muted">{t("catalog.registry.link")}</span>
+                    <input
+                      readOnly
+                      value={jar.get(WISHLIST_SHARE_COOKIE)?.value}
+                      className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                    />
+                  </label>
+                ) : null}
+                <form action={productAction}>
+                  <input type="hidden" name="intent" value="shareWishlist" />
+                  <input type="hidden" name="contactId" value={contact.id} />
+                  <Button type="submit" variant="quiet">
+                    {t("catalog.registry.share")}
+                  </Button>
+                </form>
+              </div>
             ) : null}
           </CardBody>
         </Card>

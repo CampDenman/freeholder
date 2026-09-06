@@ -8,14 +8,17 @@
 
 import { and, asc, desc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
-import { listed, row, timestamp, uuid } from "@/core/contract";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { env } from "@/core/env";
 import {
   defineService,
+  hasModuleAccess,
   permits,
   ServiceError,
+  type Actor,
   type ServiceContext,
   type Tx,
 } from "@/core/service";
@@ -23,6 +26,7 @@ import { CART_KINDS, CART_STATUSES } from "./contract";
 import { availability, releaseReservation, reserveStock } from "./inventory";
 import { resolvePrice } from "./pricing";
 import { cartItems, carts, productVariants, products, wishlistItems, wishlists } from "./schema";
+import { hashCatalogShareToken, newCatalogShareToken } from "./tokens";
 
 const id = z.string().uuid();
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
@@ -712,13 +716,17 @@ export const listWishlist = defineService({
   summary: "The contact's wishlist variants.",
   kind: "query",
   permission: "public",
-  input: z.object({ contactId: id }),
+  input: z.object({ contactId: id.optional() }),
   output: z.object({
     wishlist: wishlistRow.nullable(),
     items: listed(wishlistItemRow),
   }),
   handler: async (input, ctx) => {
-    const [list] = await ctx.tx.select().from(wishlists).where(eq(wishlists.contactId, input.contactId)).limit(1);
+    const contactId =
+      input.contactId ??
+      (ctx.actor.kind === "user" ? await contactForUser(ctx.tx, ctx.actor.userId) : null);
+    if (!contactId) return { wishlist: null, items: [] };
+    const [list] = await ctx.tx.select().from(wishlists).where(eq(wishlists.contactId, contactId)).limit(1);
     if (!list) return { wishlist: null, items: [] };
     const items = await ctx.tx
       .select({
@@ -733,6 +741,145 @@ export const listWishlist = defineService({
       .where(eq(wishlistItems.wishlistId, list.id))
       .orderBy(asc(products.name));
     return { wishlist: list, items };
+  },
+});
+
+async function contactForUser(tx: Tx, userId: string): Promise<string | null> {
+  const [contact] = await tx
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(eq(contacts.userId, userId))
+    .limit(1);
+  return contact?.id ?? null;
+}
+
+async function wishlistContactId(actor: Actor, tx: Tx, requested?: string): Promise<string> {
+  const own = actor.kind === "user" ? await contactForUser(tx, actor.userId) : null;
+  const staff = actor.kind === "user" && hasModuleAccess(actor, "catalog", "manage");
+  if (staff && requested) return requested;
+  if (own && (!requested || requested === own)) return own;
+  throw new ServiceError("permission", "Sign in to share a gift list.");
+}
+
+export const shareWishlist = defineService({
+  name: "catalog.shareWishlist",
+  summary: "Turn this contact's wishlist into a public gift-registry link.",
+  kind: "mutation",
+  permission: "authenticated",
+  writeClass: "write",
+  input: z.object({ contactId: id.optional() }),
+  output: z.object({
+    id: uuid,
+    token: z.string(),
+    link: z.string(),
+  }),
+  handler: async (input, ctx) => {
+    const contactId = await wishlistContactId(ctx.actor, ctx.tx, input.contactId);
+    const [list] = await ctx.tx
+      .select()
+      .from(wishlists)
+      .where(eq(wishlists.contactId, contactId))
+      .limit(1);
+    if (!list) throw new ServiceError("not_found", "There is nothing on this gift list yet.");
+    const items = await ctx.tx
+      .select({ id: wishlistItems.id })
+      .from(wishlistItems)
+      .where(eq(wishlistItems.wishlistId, list.id))
+      .limit(1);
+    if (items.length === 0) {
+      throw new ServiceError("validation", "Add something to the list before sharing it.");
+    }
+    const token = newCatalogShareToken();
+    const shareTokenHash = hashCatalogShareToken("wishlist", token);
+    await ctx.tx
+      .update(wishlists)
+      .set({ shareTokenHash, updatedAt: sql`now()` })
+      .where(eq(wishlists.id, list.id));
+    ctx.setSubject("wishlist", list.id);
+    ctx.queueEvent("catalog.wishlistShared", { id: list.id, contactId });
+    return {
+      id: list.id,
+      token,
+      link: `${env().APP_URL.replace(/\/+$/, "")}/registry/${encodeURIComponent(token)}`,
+    };
+  },
+});
+
+export const revokeWishlistShare = defineService({
+  name: "catalog.revokeWishlistShare",
+  summary: "Take down the public gift-registry link.",
+  kind: "mutation",
+  permission: "authenticated",
+  writeClass: "write",
+  input: z.object({ contactId: id.optional() }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const contactId = await wishlistContactId(ctx.actor, ctx.tx, input.contactId);
+    const [updated] = await ctx.tx
+      .update(wishlists)
+      .set({ shareTokenHash: null, updatedAt: sql`now()` })
+      .where(eq(wishlists.contactId, contactId))
+      .returning({ id: wishlists.id });
+    if (!updated) throw new ServiceError("not_found", "There is nothing on this gift list yet.");
+    ctx.setSubject("wishlist", updated.id);
+    return { ok: true as const };
+  },
+});
+
+export const wishlistByShareToken = defineService({
+  name: "catalog.wishlistByShareToken",
+  summary: "A public gift list, for anyone holding the share link.",
+  kind: "query",
+  permission: "public",
+  mcpExclude: true,
+  agentCallable: false,
+  input: z.object({ token: z.string().trim().min(16).max(200) }),
+  output: z
+    .object({
+      name: z.string(),
+      items: listed(
+        row({
+          id: uuid,
+          sku: z.string(),
+          productName: z.string(),
+          href: z.string().nullable(),
+        }),
+      ),
+    })
+    .nullable(),
+  handler: async (input, ctx) => {
+    const [list] = await ctx.tx
+      .select()
+      .from(wishlists)
+      .where(eq(wishlists.shareTokenHash, hashCatalogShareToken("wishlist", input.token)))
+      .limit(1);
+    if (!list) return null;
+    const items = await ctx.tx
+      .select({
+        id: wishlistItems.id,
+        sku: productVariants.sku,
+        productName: products.name,
+        slug: products.slug,
+        status: products.status,
+        visibility: products.visibility,
+      })
+      .from(wishlistItems)
+      .innerJoin(productVariants, eq(productVariants.id, wishlistItems.variantId))
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(eq(wishlistItems.wishlistId, list.id))
+      .orderBy(asc(products.name));
+    return {
+      name: list.name,
+      items: items.map((item) => ({
+        id: item.id,
+        sku: item.sku,
+        productName: item.productName,
+        href:
+          item.status === "active" && item.visibility === "public"
+            ? `/products/${item.slug}`
+            : null,
+      })),
+    };
   },
 });
 
@@ -888,6 +1035,9 @@ export default [
   addWishlistItem,
   removeWishlistItem,
   listWishlist,
+  shareWishlist,
+  revokeWishlistShare,
+  wishlistByShareToken,
   listSellableVariants,
   listCarts,
   abandonStaleCarts,

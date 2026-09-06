@@ -52,6 +52,8 @@ export default defineModule({
       "catalog.returnRefunded",
       "catalog.couponCreated",
       "catalog.giftCardIssued",
+      "catalog.giftCardSent",
+      "catalog.wishlistShared",
     ],
   },
 });
