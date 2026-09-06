@@ -16,6 +16,8 @@ function master(overrides = ""): string {
   return [
     "# Plan",
     "This is the only product and delivery source of truth.",
+    "| Last reconciled | 2026-09-06 |",
+    "| Current focus | C0.01 |",
     "- [ ] **F01 — Model:** prove it",
     "- [x] **B01 — Baseline:** proved",
     workstreams,
@@ -72,5 +74,18 @@ describe("plan consistency", () => {
 
   it("the current repository passes its own gate", () => {
     expect(validatePlan(readWorkspaceFiles())).toEqual([]);
+  });
+
+  it("refuses a checked C-item that cites no repository evidence", () => {
+    const value = master("- [x] **C0.02** Done with no proof");
+    expect(codes(workspace(value))).toContain("missing-evidence");
+  });
+
+  it("refuses current focus that names a checked item", () => {
+    const value = master("- [x] **C0.02** Done (`src/core/service.ts`)").replace(
+      "| Current focus | C0.01 |",
+      "| Current focus | C0.02 |",
+    );
+    expect(codes(workspace(value))).toContain("stale-focus");
   });
 });
