@@ -9,8 +9,9 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["catalog:write"],
   requires: ["core"],
-  migrations: ["0075_first_party_plugins.sql"],
+  migrations: ["0075_first_party_plugins.sql", "0163_first_party_plugin_surfaces.sql"],
   capabilities: { adapters: ["storage"] },
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
 });

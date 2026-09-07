@@ -3255,7 +3255,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `993af21` after C1.27 complete demo scenarios #290. C3.03 generates `@freeholder/sdk` types and methods from `listExternalServices()`. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `99c1a7a` after C3.03 typed SDK #291. C3.13 ships first-party plugin admin/public surfaces and provider retry. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
@@ -4022,7 +4022,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `withToken` / `paginate` wrappers are typed against that layer. Drift gate in
   `tests/core/sdk.test.ts`; schema conversion in
   `tests/core/sdk-schema.test.ts`; regenerate with `pnpm sdk:generate`.
-  Changeset `typed-sdk.md`.)
+  Changeset `typed-sdk.md`. PR #291, `99c1a7a`.)
 - [x] **C3.04** Make MCP discovery actor-aware—including actor kind, service
   opt-out and approval annotations—so listed tools are genuinely callable.
   (`ServiceDef.mcpExclude`; `hiddenFromMcp`; tool `annotations.actorKind` and
@@ -4073,13 +4073,20 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   tests and examples for a block, service, adapter, automation verb and route.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
   Coverage in `tests/core/plugin-scaffold.test.ts`.)
-- [ ] **C3.13** Ship first-party plugins for gift options/registries, print-on-
+- [x] **C3.13** Ship first-party plugins for gift options/registries, print-on-
   demand, advanced communities, voice and video artifacts, and marketplace
   channel sync seams, as assigned by §§4.14 and 36.
-  The five plugin contracts, schemas and service seams exist and their
-  contact_id tables register merge/privacy behavior. Completion still requires
-  the human surfaces, provider sync and end-to-end failure/recovery proof that
-  F04, F07, F08 and F12 require.
+  (`plugins/gift-registry`, `print-on-demand`, `community`, `voice-video`,
+  `marketplace`. Admin screens plus `/gifts/<slug>` and `/community/<slug>`.
+  Fixture adapters with claim/apply around provider I/O; failed jobs/channels/
+  recordings retry in place. Gift contributions and marketplace orders land on
+  invoices through `contacts.resolve`. **F04** empty/error/retry on each admin
+  screen and the two public pages. **F07** unique-slug/member conflicts, gated
+  join refusal, provider `fail-` recovery. **F08**
+  `tests/core/first-party-plugins.test.ts` and
+  `tests/browser/first-party-plugins.spec.ts`. **F12** gift → invoice and
+  marketplace order → invoice. Changeset `first-party-plugin-surfaces.md`;
+  `deploy/first-party-plugins.md`.)
 
 #### Packages, installation, export, and target parity
 

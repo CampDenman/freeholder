@@ -133,6 +133,16 @@ const CALLER_AUTHORIZED_PHASES = [
   "social.claimOAuthCompletion",
   "social.createVariantsApply",
   "social.createVariantsSource",
+  "giftRegistry.applyItemInvoice",
+  "giftRegistry.claimItemInvoice",
+  "marketplace.applyConnect",
+  "marketplace.applySync",
+  "marketplace.claimConnect",
+  "marketplace.claimSync",
+  "printOnDemand.applySubmit",
+  "printOnDemand.claimSubmit",
+  "voiceVideo.applyCapture",
+  "voiceVideo.claimCapture",
 ] as const;
 
 const PRIVATE = [...INTERNAL, ...CALLER_AUTHORIZED_PHASES] as const;

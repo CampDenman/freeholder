@@ -10,6 +10,7 @@ export const communitySpaces = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
+    access: text("access").notNull().default("open"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const marketplaceChannels = pgTable(
@@ -11,6 +11,9 @@ export const marketplaceChannels = pgTable(
     provider: text("provider").notNull(),
     status: text("status").notNull().default("disconnected"),
     config: jsonb("config").notNull().default({}),
+    externalRef: text("external_ref"),
+    lastError: text("last_error"),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
