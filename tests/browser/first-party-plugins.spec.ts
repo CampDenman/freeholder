@@ -61,7 +61,7 @@ test.describe("first-party plugin journeys", () => {
     await page.getByLabel("Slug").fill("sitting-gifts");
     await page.getByRole("button", { name: "Create registry" }).click();
     await expect(page.getByText("Saved.")).toBeVisible();
-    await expect(page.getByText("Sitting gifts")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sitting gifts" })).toBeVisible();
     await expect(page.getByText("No items on this registry yet.")).toBeVisible();
 
     await page.getByLabel("Item").fill("Harbour print");
