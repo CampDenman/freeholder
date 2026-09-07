@@ -257,15 +257,17 @@ export const chargePlatformInvoice = defineOrchestratedService({
   output: row({ advanced: z.boolean(), skipped: z.boolean() }),
   handler: async (input, _actor) => {
     const claimed = await claimCharge.call(input, { kind: "system" });
-    if (claimed.skip || !claimed.paymentId || !claimed.methodRef || !claimed.provider) {
+    if (claimed.skip || !claimed.paymentId || !claimed.methodRef || !claimed.provider || !claimed.invoiceId) {
       return { advanced: false, skipped: true };
     }
     const adapter = paymentAdapter(claimed.provider);
+    const invoiceId = claimed.invoiceId;
+    const paymentId = claimed.paymentId;
     try {
       const result = await adapter.chargeSavedMethod({
         methodRef: claimed.methodRef,
         customerRef: claimed.customerRef ?? undefined,
-        invoiceId: claimed.invoiceId!,
+        invoiceId,
         contactId: claimed.contactId,
         currency: claimed.currency,
         amountMinor: claimed.amountMinor,
@@ -275,8 +277,8 @@ export const chargePlatformInvoice = defineOrchestratedService({
       const applied = await applyCharge.call(
         {
           subscriptionId: claimed.subscriptionId,
-          invoiceId: claimed.invoiceId!,
-          paymentId: claimed.paymentId,
+          invoiceId,
+          paymentId,
           providerRef: result.providerRef,
           succeeded: result.status === "succeeded",
           failureMessage: result.failureMessage,
@@ -289,9 +291,9 @@ export const chargePlatformInvoice = defineOrchestratedService({
       await applyCharge.call(
         {
           subscriptionId: claimed.subscriptionId,
-          invoiceId: claimed.invoiceId!,
-          paymentId: claimed.paymentId,
-          providerRef: `failed:${claimed.paymentId}`,
+          invoiceId,
+          paymentId,
+          providerRef: `failed:${paymentId}`,
           succeeded: false,
           failureMessage: message.slice(0, 500),
         },

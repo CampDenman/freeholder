@@ -200,9 +200,8 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
         ? value.subscription
         : text(object(value.subscription)?.id);
     if (!subscriptionRef) return [];
-    const firstLine = Array.isArray(object(value.lines)?.data)
-      ? object((object(value.lines)?.data as unknown[])[0] as Record<string, unknown>)
-      : undefined;
+    const lineData = object(value.lines)?.data;
+    const firstLine = Array.isArray(lineData) ? object(lineData[0]) : undefined;
     const linePeriod = object(firstLine?.period);
     return [{
       id,
@@ -394,9 +393,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         method: "GET",
       });
       const items = object(current.items);
-      const first = Array.isArray(items?.data)
-        ? object((items.data as unknown[])[0] as Record<string, unknown>)
-        : undefined;
+      const first = Array.isArray(items?.data) ? object(items.data[0]) : undefined;
       const itemId = text(first?.id);
       const form = new URLSearchParams({
         proration_behavior: request.proration === "create_prorations" ? "create_prorations" : "none",

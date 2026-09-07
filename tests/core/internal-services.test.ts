@@ -85,6 +85,13 @@ const INTERNAL = [
   // something anybody did: a job finds who is past due and sends the notice
   // or takes the final action on nobody's behalf.
   "subscriptions.advanceDunning",
+  // Platform charges against a stored method (C9.33). The period ending is
+  // not something anybody did; a job raises the invoice and charges on
+  // nobody's behalf.
+  "subscriptions.chargePlatformDue",
+  // Provider schedules are the truth (C9.33). A verified webhook applies the
+  // period on nobody's behalf.
+  "subscriptions.reconcileProviderPeriod",
   "subscriptions.recoverDunning",
   // Provider submission happens outside service transactions; this applies
   // the durable mail ledger's outcome afterwards on nobody's behalf.

@@ -36,7 +36,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/adapters/payments", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/adapters/payments")>();
+  const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
     paymentAdapter: vi.fn(() => ({
