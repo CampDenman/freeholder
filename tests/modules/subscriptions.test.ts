@@ -360,7 +360,7 @@ describe.runIf(hasDatabase)("subscriptions", () => {
         OWNER,
       ),
     );
-    expect(error.message).toMatch(/manual billing/i);
+    expect(error.message).toMatch(/subscription schedule/i);
   });
 
   it("refuses to sell a plan that is not on sale", async () => {

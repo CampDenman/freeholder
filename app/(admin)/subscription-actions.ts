@@ -8,11 +8,12 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
-  cancelSubscription,
+  cancelAgreement,
+  changePlan,
+  enroll,
   pauseSubscription,
   resumeSubscription,
   savePlan,
-  subscribe,
 } from "@/modules/subscriptions/service";
 
 async function actor() {
@@ -51,6 +52,8 @@ export async function savePlanAction(form: FormData): Promise<void> {
         intervalCount: digits(form, "intervalCount", 1) || 1,
         trialDays: digits(form, "trialDays", 0),
         setupFeeMinor: digits(form, "setupFeeMinor", 0),
+        billingMode: (text(form, "billingMode") || "manual") as "provider" | "platform" | "manual",
+        proration: (text(form, "proration") || "create_prorations") as "create_prorations" | "none",
         cancelBehaviour: (text(form, "cancelBehaviour") || "period_end") as
           | "period_end"
           | "immediate",
@@ -86,15 +89,30 @@ export async function savePlanAction(form: FormData): Promise<void> {
 
 export async function subscribeAction(form: FormData): Promise<void> {
   const caller = await actor();
+  const paymentMethodId = text(form, "paymentMethodId");
   try {
-    await subscribe.call(
-      { contactId: text(form, "contactId"), planId: text(form, "planId") },
+    await enroll.call(
+      {
+        contactId: text(form, "contactId"),
+        planId: text(form, "planId"),
+        ...(paymentMethodId ? { paymentMethodId } : {}),
+      },
       caller,
     );
   } catch (error) {
     done(error);
   }
   done(undefined, "enrolled");
+}
+
+export async function changePlanAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  try {
+    await changePlan.call({ id: text(form, "id"), planId: text(form, "planId") }, caller);
+  } catch (error) {
+    done(error);
+  }
+  done(undefined, "changed");
 }
 
 export async function pauseSubscriptionAction(form: FormData): Promise<void> {
@@ -120,7 +138,7 @@ export async function resumeSubscriptionAction(form: FormData): Promise<void> {
 export async function cancelSubscriptionAction(form: FormData): Promise<void> {
   const caller = await actor();
   try {
-    await cancelSubscription.call(
+    await cancelAgreement.call(
       {
         id: text(form, "id"),
         // The owner's override of the plan's stated behaviour, for the case

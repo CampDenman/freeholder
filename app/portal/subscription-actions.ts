@@ -15,7 +15,7 @@ import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
 import { ServiceError } from "@/core/service";
-import { cancelMySubscription } from "@/modules/subscriptions/service";
+import { cancelMyAgreement, changeMyPlan } from "@/modules/subscriptions/service";
 import { getLocale } from "../i18n";
 
 function text(form: FormData, name: string): string {
@@ -39,7 +39,7 @@ export async function cancelMySubscriptionAction(form: FormData): Promise<void> 
     request: requestMetadataFromHeaders(await headers()),
   };
   try {
-    await cancelMySubscription.call({ id }, actor);
+    await cancelMyAgreement.call({ id }, actor);
   } catch (error) {
     if (error instanceof ServiceError) {
       redirect(`${back}?error=1`);
@@ -47,4 +47,23 @@ export async function cancelMySubscriptionAction(form: FormData): Promise<void> 
     throw error;
   }
   redirect(`${back}?cancelled=1`);
+}
+
+export async function changeMyPlanAction(form: FormData): Promise<void> {
+  const id = text(form, "id");
+  const planId = text(form, "planId");
+  const back = await portalHref(id ? `/portal/subscriptions/${id}` : "/portal/subscriptions");
+  const actor = {
+    ...(await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value)),
+    request: requestMetadataFromHeaders(await headers()),
+  };
+  try {
+    const result = await changeMyPlan.call({ id, planId }, actor);
+    redirect(`${back}?${result.deferred ? "deferred" : "changed"}=1`);
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      redirect(`${back}?error=1`);
+    }
+    throw error;
+  }
 }

@@ -22,12 +22,14 @@ import {
 import { listContacts } from "@/core/contacts/service";
 import { currentBusiness } from "@/core/settings/read";
 import { listProducts } from "@/modules/catalog/service";
+import { listSavedPaymentMethods } from "@/modules/invoicing/payment-provider-service";
 import { listPlans, listSubscriptions } from "@/modules/subscriptions/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
 import {
   cancelSubscriptionAction,
+  changePlanAction,
   pauseSubscriptionAction,
   resumeSubscriptionAction,
   savePlanAction,
@@ -52,18 +54,25 @@ const TONE = {
 export default async function SubscriptionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string; error?: string; saved?: string; enrolled?: string }>;
+  searchParams: Promise<{
+    plan?: string;
+    error?: string;
+    saved?: string;
+    enrolled?: string;
+    changed?: string;
+  }>;
 }) {
   const actor = await requireStaffActor("subscriptions", "manage");
   const query = await searchParams;
 
-  const [t, business, plans, people, products, contacts] = await Promise.all([
+  const [t, business, plans, people, products, contacts, methods] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(listPlans.call({}, actor)),
     domainOrNull(listSubscriptions.call({ limit: 100 }, actor)),
     domainOrNull(listProducts.call({ status: "active" }, actor)),
     listContacts.call({ limit: 100 }, actor).catch(() => ({ rows: [], total: 0 })),
+    domainOrNull(listSavedPaymentMethods.call({ limit: 200 }, actor)),
   ]);
 
   const chosen = query.plan ? (plans ?? []).find((each) => each.id === query.plan) : null;
@@ -100,6 +109,11 @@ export default async function SubscriptionsPage({
           {t("subscriptions.enrolled")}
         </p>
       ) : null}
+      {query.changed ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("subscriptions.changed")}
+        </p>
+      ) : null}
 
       <Card>
         <CardHeader title={t("subscriptions.plans")} />
@@ -132,6 +146,7 @@ export default async function SubscriptionsPage({
                   <Pill tone={plan.status === "active" ? "success" : "neutral"}>
                     {t(`subscriptions.planStatus.${plan.status}`)}
                   </Pill>
+                  <Pill tone="neutral">{t(`subscriptions.billing.${plan.billingMode}`)}</Pill>
                 </li>
               ))}
             </ul>
@@ -146,7 +161,7 @@ export default async function SubscriptionsPage({
               means, rather than something an owner discovers when the first
               renewal does not charge a card. */}
           <p className="mb-3 max-w-prose text-sm text-ink-muted">
-            {t("subscriptions.manualOnly")}
+            {t("subscriptions.billing.intro")}
           </p>
           <form action={savePlanAction} className="grid gap-3 md:grid-cols-3">
             {chosen ? <input type="hidden" name="id" value={chosen.id} /> : null}
@@ -214,6 +229,27 @@ export default async function SubscriptionsPage({
                 min={0}
                 defaultValue={chosen?.setupFeeMinor ?? 0}
               />
+            </Field>
+            <Field
+              label={t("subscriptions.field.billingMode")}
+              htmlFor="billingMode"
+              hint={t("subscriptions.billing.hint")}
+            >
+              <Select id="billingMode" name="billingMode" defaultValue={chosen?.billingMode ?? "manual"}>
+                <option value="manual">{t("subscriptions.billing.manual")}</option>
+                <option value="platform">{t("subscriptions.billing.platform")}</option>
+                <option value="provider">{t("subscriptions.billing.provider")}</option>
+              </Select>
+            </Field>
+            <Field
+              label={t("subscriptions.field.proration")}
+              htmlFor="proration"
+              hint={t("subscriptions.proration.hint")}
+            >
+              <Select id="proration" name="proration" defaultValue={chosen?.proration ?? "create_prorations"}>
+                <option value="create_prorations">{t("subscriptions.proration.create_prorations")}</option>
+                <option value="none">{t("subscriptions.proration.none")}</option>
+              </Select>
             </Field>
             <Field label={t("subscriptions.field.cancelBehaviour")} htmlFor="cancelBehaviour">
               <Select
@@ -327,6 +363,22 @@ export default async function SubscriptionsPage({
                     ))}
                 </Select>
               </Field>
+              <Field
+                label={t("subscriptions.enroll.paymentMethod")}
+                htmlFor="paymentMethodId"
+                hint={t("subscriptions.enroll.paymentMethodHint")}
+              >
+                <Select id="paymentMethodId" name="paymentMethodId" defaultValue="">
+                  <option value="">{t("subscriptions.enroll.chooseMethod")}</option>
+                  {(methods ?? []).map((method) => (
+                    <option key={method.id} value={method.id}>
+                      {(contacts.rows.find((contact) => contact.id === method.contactId)?.name ?? method.contactId)
+                      }{" "}
+                      · {method.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <div className="self-end">
                 <Button type="submit">{t("subscriptions.enroll.submit")}</Button>
               </div>
@@ -353,6 +405,7 @@ export default async function SubscriptionsPage({
                   <Pill tone={TONE[subscription.status]}>
                     {t(`subscriptions.status.${subscription.status}`)}
                   </Pill>
+                  <Pill tone="neutral">{t(`subscriptions.billing.${subscription.billingMode}`)}</Pill>
                   <span className="text-ink-muted">
                     {t(
                       subscription.cancelAtPeriodEnd
@@ -361,6 +414,13 @@ export default async function SubscriptionsPage({
                       { date: when(subscription.currentPeriodEnd) },
                     )}
                   </span>
+                  {subscription.pendingPlanId ? (
+                    <Pill tone="accent">
+                      {t("subscriptions.changePlan.pending", {
+                        plan: planName.get(subscription.pendingPlanId) ?? subscription.pendingPlanId,
+                      })}
+                    </Pill>
+                  ) : null}
                   {/* Cancelled-but-running says so plainly. It is the state an
                       owner is most likely to misread as still selling. */}
                   {subscription.cancelAtPeriodEnd && subscription.status !== "expired" ? (
@@ -375,6 +435,24 @@ export default async function SubscriptionsPage({
                   ) : null}
 
                   <span className="ms-auto flex flex-wrap gap-2">
+                    {subscription.status === "active" || subscription.status === "trialing" ? (
+                      <form action={changePlanAction} className="flex flex-wrap items-center gap-2">
+                        <input type="hidden" name="id" value={subscription.id} />
+                        <Select name="planId" defaultValue="" aria-label={t("subscriptions.changePlan.choose")}>
+                          <option value="">{t("subscriptions.changePlan.choose")}</option>
+                          {(plans ?? [])
+                            .filter((plan) => plan.status === "active" && plan.id !== subscription.planId)
+                            .map((plan) => (
+                              <option key={plan.id} value={plan.id}>
+                                {plan.name}
+                              </option>
+                            ))}
+                        </Select>
+                        <Button type="submit" variant="quiet">
+                          {t("subscriptions.action.changePlan")}
+                        </Button>
+                      </form>
+                    ) : null}
                     {subscription.status === "active" ||
                     subscription.status === "trialing" ||
                     subscription.status === "past_due" ? (

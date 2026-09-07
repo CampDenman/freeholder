@@ -29,7 +29,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { contacts } from "@/core/contacts/schema";
 import { products, productVariants } from "@/modules/catalog/schema";
-import { invoices } from "@/modules/invoicing/schema";
+import { invoices, paymentMethods } from "@/modules/invoicing/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const PLAN_INTERVALS = ["day", "week", "month", "year"] as const;
@@ -92,9 +92,8 @@ export const plans = pgTable(
     /**
      * Whether a trial takes a card up front.
      *
-     * Recorded even though this item bills manually, because it is a promise
-     * made to the customer at signup and the answer must not change when
-     * C9.33 switches the automatic modes on.
+     * Recorded because it is a promise made to the customer at signup:
+     * platform and provider billing honour it when they take a card.
      */
     trialRequiresCard: boolean("trial_requires_card").notNull().default(false),
     setupFeeMinor: bigint("setup_fee_minor", { mode: "number" }).notNull().default(0),
@@ -104,9 +103,7 @@ export const plans = pgTable(
       .default("period_end"),
     /**
      * Stated per plan, as §4.15 insists, "rather than discovered at the first
-     * mid-cycle change". Nothing reads it until C9.33 builds plan changes; it
-     * is here because the answer belongs to the offer rather than to the
-     * moment somebody asks to switch.
+     * mid-cycle change".
      */
     proration: text("proration", { enum: PRORATION_MODES }).notNull().default("create_prorations"),
     status: text("status", { enum: PLAN_STATUSES }).notNull().default("draft"),
@@ -152,9 +149,18 @@ export const subscriptions = pgTable(
     currency: text("currency").notNull(),
     /** Copied from the plan, because a plan can be edited and this cannot. */
     billingMode: text("billing_mode", { enum: BILLING_MODES }).notNull(),
-    /** Whose schedule this is, once C9.33 gives the answer away to a provider. */
+    /** Whose schedule this is, when billing mode is `provider`. */
     provider: text("provider"),
     providerRef: text("provider_ref"),
+    /** Stored method used by platform charges and provider schedules. */
+    paymentMethodId: uuid("payment_method_id").references(
+      () => paymentMethods.id,
+      { onDelete: "set null" },
+    ),
+    /** Plan waiting for period end when proration is `none`. */
+    pendingPlanId: uuid("pending_plan_id").references(() => plans.id, {
+      onDelete: "set null",
+    }),
     status: text("status", { enum: SUBSCRIPTION_STATUSES }).notNull().default("active"),
     currentPeriodStart: timestamp("current_period_start", { withTimezone: true }).notNull(),
     /** When the next invoice is due. The renewal sweep's only question. */

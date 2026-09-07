@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.11–C0.12 F-matrix integrity, then C9.33. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C1.27 is unblocked. Next product work is leftover C3, then C10+C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7435,17 +7435,39 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   delivery's outcome on every row and an overdue export said out loud at the
   top. Migration `0158_scheduled_exports.sql`;
   `tests/modules/reporting-exports.test.ts`.)
-- [ ] **C9.33** Build the automatic subscription billing modes — `provider`
+- [x] **C9.33** Build the automatic subscription billing modes — `provider`
   (Stripe/PayPal schedules and their webhook reconciliation) and `platform`
   (off-session charges against a stored payment method) — and plan changes with
   proration.
-  (Split from C9.13 under §43.17.1. Both modes need what the payments adapter
-  contract does not yet offer: an off-session charge. `provider` is then a
-  reconciliation problem — the provider's schedule is the truth and the local
-  row follows it — and `platform` is the same charge run from `core/jobs`
-  instead. Proration comes with them because a mid-cycle plan change is where
-  the money question actually arises, and §4.15 insists it is stated per plan
-  rather than discovered at the first change.)
+  (Split from C9.13 under §43.17.1. The payments adapter now has
+  `chargeSavedMethod`, `createRecurringSchedule` / `updateRecurringSchedule` /
+  `cancelRecurringSchedule`, an `offSessionCharges` capability, and webhook
+  kinds `subscription_period_paid` | `subscription_period_failed` |
+  `subscription_cancelled`. Stripe PaymentIntents confirm `off_session`;
+  Stripe subscriptions carry `price_data` and `proration_behavior`; PayPal
+  vault tokens CAPTURE and Billing Plans/Subscriptions revise or cancel.
+  Other adapters refuse. `platform` charges from `subscriptions.renewDue` →
+  `chargePlatformDue` (claim invoice/payment, provider I/O, apply settle or
+  dunning). `provider` skips that sweep: the provider calendar is the truth
+  and `reconcileProviderPeriod` follows the webhook, settling the period
+  invoice without double-advancing a period that is still current.
+  Proration is the plan's: `none` writes `pending_plan_id` and applies it at
+  period end; `create_prorations` charges the unused-fraction net as an
+  ordinary invoice (provider mode lets Stripe/PayPal raise that money).
+  **F01** Migration `0162_subscription_billing.sql` (`payment_method_id`,
+  `pending_plan_id`). **F02** Orchestrators `enroll`, `changePlan`,
+  `chargePlatformInvoice`, `attachProviderSchedule`, `cancelAgreement` —
+  claim/apply services, no provider I/O under a service transaction.
+  **F03** Money is still `invoicing` (`source_type = 'subscription'`);
+  merge already repoints `subscriptions.contact_id`. **F04** Admin
+  `/admin/subscriptions` billing-mode and proration fields, stored-method
+  enroll, per-subscriber plan change; portal change-plan beside click-to-
+  cancel. **F05** The same services are the HTTP/MCP surface. **F07**
+  `tests/modules/subscription-billing.test.ts`, Stripe adapter coverage in
+  `tests/core/payment-adapters.test.ts`, transaction-boundary scan includes
+  `billing.ts`. **F09** Apache-2.0 SPDX on the new files. **F12** N/A as a
+  help-centre article — the help centre is the CMS — user-facing copy is
+  changeset `subscription-billing.md`. EN/FR/ES.)
 - [ ] **C10.01** Enforce customization seams—database, plugins, configuration,
   uploads—and detect unsupported live core-file modifications.
 - [ ] **C10.02** Implement semantic stable/security/edge channels and

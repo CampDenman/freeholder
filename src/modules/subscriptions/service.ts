@@ -39,7 +39,9 @@ import { listLocations } from "@/core/locations/service";
 import { getBusiness } from "@/core/settings/service";
 import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
+import { paymentAdapter } from "@/adapters/payments";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
+import { paymentMethods } from "@/modules/invoicing/schema";
 import { invoices } from "@/modules/invoicing/schema";
 import {
   BILLING_MODES,
@@ -146,6 +148,10 @@ const subscriptionRow = row({
   currentPeriodStart: timestamp,
   currentPeriodEnd: timestamp,
   trialEndsAt: timestamp.nullable(),
+  paymentMethodId: uuidSchema.nullable(),
+  pendingPlanId: uuidSchema.nullable(),
+  provider: z.string().nullable(),
+  providerRef: z.string().nullable(),
   cancelAtPeriodEnd: z.boolean(),
   pausedAt: timestamp.nullable(),
   cancelledAt: timestamp.nullable(),
@@ -164,7 +170,7 @@ function retryOffsets(retries: number[]): number[] {
 }
 
 /** Append one moment. Never updates: the history is the point. */
-async function record(
+export async function record(
   ctx: ServiceContext,
   subscriptionId: string,
   kind: (typeof SUBSCRIPTION_EVENT_KINDS)[number],
@@ -242,7 +248,7 @@ async function writePolicy(
   await tx.insert(dunningPolicies).values({ planId, ...values });
 }
 
-async function keepAccess(
+export async function keepAccess(
   ctx: ServiceContext,
   subscription: typeof subscriptions.$inferSelect,
   planName: string,
@@ -278,7 +284,34 @@ async function notifyDunning(
   });
 }
 
-async function beginDunning(
+/** Apply a period-end plan change that proration `none` deferred. */
+export async function applyPendingPlan(
+  ctx: ServiceContext,
+  subscription: typeof subscriptions.$inferSelect,
+): Promise<typeof subscriptions.$inferSelect> {
+  if (!subscription.pendingPlanId || subscription.cancelAtPeriodEnd) return subscription;
+  const [nextPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.pendingPlanId));
+  if (!nextPlan) return subscription;
+  await ctx.tx
+    .update(subscriptions)
+    .set({ planId: nextPlan.id, pendingPlanId: null, billingMode: nextPlan.billingMode })
+    .where(eq(subscriptions.id, subscription.id));
+  await ctx.tx.insert(subscriptionEvents).values({
+    subscriptionId: subscription.id,
+    kind: "plan_changed",
+    fromPlanId: subscription.planId,
+    toPlanId: nextPlan.id,
+    detail: "period_end",
+  });
+  return {
+    ...subscription,
+    planId: nextPlan.id,
+    pendingPlanId: null,
+    billingMode: nextPlan.billingMode,
+  };
+}
+
+export async function beginDunning(
   ctx: ServiceContext,
   subscription: typeof subscriptions.$inferSelect,
   extra: { detail?: string; invoiceId?: string | null } = {},
@@ -368,14 +401,24 @@ export const savePlan = defineService({
       .where(eq(products.id, input.productId));
     if (!product) throw new ServiceError("not_found", "That product is not here.");
 
-    // The automatic modes are C9.33's, and both need an off-session charge the
-    // payments adapter does not offer yet. Refusing here is better than
-    // accepting a plan that would silently never bill anybody.
     if (input.billingMode !== "manual") {
-      throw new ServiceError(
-        "validation",
-        "Only manual billing is available so far: automatic renewals need a saved-card charge the payment provider adapter does not support yet.",
-      );
+      const adapter = paymentAdapter();
+      const capabilities = adapter.capabilities();
+      if (input.billingMode === "platform" && !capabilities.offSessionCharges) {
+        throw new ServiceError(
+          "validation",
+          "Platform billing needs a payment provider that can charge a stored method off-session.",
+        );
+      }
+      if (input.billingMode === "provider" && !capabilities.subscriptions) {
+        throw new ServiceError(
+          "validation",
+          "Provider billing needs a payment provider that can run its own subscription schedule.",
+        );
+      }
+      if (!adapter.status.available) {
+        throw new ServiceError("conflict", adapter.status.message);
+      }
     }
 
     const values = {
@@ -429,6 +472,22 @@ export const listPlans = defineService({
   },
 });
 
+export const listOfferedPlans = defineService({
+  name: "subscriptions.listOffered",
+  summary: "Plans a customer may move to from the portal.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({}),
+  output: listed(planRow),
+  handler: async (_input, ctx) =>
+    ctx.tx
+      .select()
+      .from(plans)
+      .where(eq(plans.status, "active"))
+      .orderBy(desc(plans.createdAt))
+      .limit(200),
+});
+
 /* -------------------------------------------------------- subscribing */
 
 /**
@@ -446,7 +505,7 @@ export const listPlans = defineService({
  * anything has been written; an unexpected error is left to propagate. That is
  * the honest division — a refusal is a recorded outcome, a bug is not.
  */
-async function priceFor(
+export async function priceFor(
   ctx: ServiceContext,
   subscription: typeof subscriptions.$inferSelect,
 ): Promise<{ amountMinor: number } | { refused: string }> {
@@ -470,7 +529,7 @@ async function priceFor(
  * §4.6's single money object, raised through `invoicing.createDraft` with
  * `source_type = 'subscription'`; this module keeps no total of its own.
  */
-async function raiseInvoice(
+export async function raiseInvoice(
   ctx: ServiceContext,
   subscription: typeof subscriptions.$inferSelect,
   options: {
@@ -564,6 +623,8 @@ export const subscribe = defineService({
     /** Which variant is being bought, when the product has more than one. */
     productVariantId: uuidSchema.optional(),
     currency: z.string().trim().length(3).optional(),
+    /** Required for platform and provider billing. */
+    paymentMethodId: uuidSchema.optional(),
   }),
   output: row({
     subscription: subscriptionRow,
@@ -604,6 +665,28 @@ export const subscribe = defineService({
       throw new ServiceError("conflict", "Set the business's base currency before selling a plan.");
     }
 
+    let paymentMethod: typeof paymentMethods.$inferSelect | null = null;
+    if (plan.billingMode !== "manual") {
+      if (!input.paymentMethodId) {
+        throw new ServiceError(
+          "validation",
+          "Automatic billing needs a stored payment method on this contact.",
+        );
+      }
+      const [method] = await ctx.tx
+        .select()
+        .from(paymentMethods)
+        .where(eq(paymentMethods.id, input.paymentMethodId))
+        .limit(1);
+      if (!method || method.contactId !== input.contactId || method.status !== "active") {
+        throw new ServiceError(
+          "not_found",
+          "That stored payment method is not available for this contact.",
+        );
+      }
+      paymentMethod = method;
+    }
+
     const now = new Date();
     const trialing = plan.trialDays > 0;
     // A trial *is* the first period. Treating it as a prelude would leave a
@@ -622,6 +705,8 @@ export const subscribe = defineService({
         productVariantId: variantId,
         currency,
         billingMode: plan.billingMode,
+        provider: paymentMethod?.provider ?? null,
+        paymentMethodId: paymentMethod?.id ?? null,
         status: trialing ? "trialing" : "active",
         currentPeriodStart: start,
         currentPeriodEnd: end,
@@ -711,6 +796,13 @@ export const renewDue = defineService({
     let failed = 0;
 
     for (const subscription of due) {
+      if (subscription.billingMode === "provider") {
+        continue;
+      }
+      if (subscription.billingMode === "platform" && !subscription.cancelAtPeriodEnd) {
+        continue;
+      }
+      Object.assign(subscription, await applyPendingPlan(ctx, subscription));
       // Somebody who asked to stop leaves at the end of the period they paid
       // for — §4.15's rule, applied at the only moment it can be applied.
       if (subscription.cancelAtPeriodEnd) {
@@ -1360,7 +1452,12 @@ export const cancelMySubscription = defineService({
   kind: "mutation",
   permission: "authenticated",
   input: z.object({ id: uuidSchema }),
-  output: row({ cancelled: z.boolean(), endsAt: timestamp }),
+  output: row({
+    cancelled: z.boolean(),
+    endsAt: timestamp,
+    provider: z.string().nullable(),
+    providerRef: z.string().nullable(),
+  }),
   handler: async (input, ctx) => {
     // Resolved from the session exactly as the portal does, so a customer can
     // only ever reach their own row: the contact comes from `users.id`, never
@@ -1382,8 +1479,18 @@ export const cancelMySubscription = defineService({
 
     const ended = (await ctx.callAsSystem(getService("subscriptions.cancel"), {
       id: input.id,
-    })) as { currentPeriodEnd: Date; endedAt: Date | null };
-    return { cancelled: true, endsAt: ended.endedAt ?? ended.currentPeriodEnd };
+    })) as {
+      currentPeriodEnd: Date;
+      endedAt: Date | null;
+      provider: string | null;
+      providerRef: string | null;
+    };
+    return {
+      cancelled: true,
+      endsAt: ended.endedAt ?? ended.currentPeriodEnd,
+      provider: ended.provider,
+      providerRef: ended.providerRef,
+    };
   },
 });
 
@@ -1456,18 +1563,53 @@ registerContactPrivacySource({
 
 // The customer's own copy of all this (§4.15's mandatory self-service).
 import "./portal";
+import {
+  attachProviderSchedule,
+  cancelAgreement,
+  cancelMyAgreement,
+  changeMyPlan,
+  changePlan,
+  chargePlatformDue,
+  chargePlatformInvoice,
+  enroll,
+  proratedDifference,
+  reconcileProviderPeriod,
+} from "./billing";
+
+export {
+  attachProviderSchedule,
+  cancelAgreement,
+  cancelMyAgreement,
+  changeMyPlan,
+  changePlan,
+  chargePlatformDue,
+  chargePlatformInvoice,
+  enroll,
+  proratedDifference,
+  reconcileProviderPeriod,
+};
 
 export default [
   savePlan,
   listPlans,
+  listOfferedPlans,
   subscribe,
+  enroll,
   renewDue,
+  chargePlatformDue,
+  chargePlatformInvoice,
+  attachProviderSchedule,
+  changePlan,
+  changeMyPlan,
+  reconcileProviderPeriod,
   pauseSubscription,
   resumeSubscription,
   cancelSubscription,
+  cancelAgreement,
   listSubscriptions,
   getSubscription,
   cancelMySubscription,
+  cancelMyAgreement,
   advanceDunning,
   recoverDunning,
 ];

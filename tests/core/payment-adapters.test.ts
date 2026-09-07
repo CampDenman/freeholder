@@ -99,11 +99,85 @@ describe("Stripe payment adapter", () => {
     expect(form.get("line_items[0][price_data][unit_amount]")).toBe("12345");
     expect(form.get("metadata[freeholder_invoice_id]")).toBe(invoice.invoiceId);
     expect(form.get("payment_intent_data[setup_future_usage]")).toBe("off_session");
-    expect(adapter.capabilities()).toMatchObject({ subscriptions: false, payouts: false });
+    expect(adapter.capabilities()).toMatchObject({
+      subscriptions: true,
+      offSessionCharges: true,
+      payouts: false,
+    });
     expect(calls.map((call) => bodyText(call.init?.body)).join("\n")).not.toContain("sk_test_private");
 
     await expect(adapter.refund({ paymentId: "local", providerRef: "pi_test_1", currency: "CAD", amountMinor: 345, reason: "Returned", idempotencyKey: "refund-1" })).resolves.toEqual({ providerRef: "re_test_1", status: "pending" });
     await expect(adapter.revokeSavedMethod({ providerRef: "pm_test_1", idempotencyKey: "revoke-1" })).resolves.toBeUndefined();
+  });
+
+  it("charges a stored method off-session and creates a recurring schedule", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = requestUrl(input);
+      calls.push({ url, init });
+      if (url.endsWith("/v1/payment_intents")) {
+        return Response.json({ id: "pi_off_1", status: "succeeded", amount: 2500, currency: "cad", created: 1_700_000_000 });
+      }
+      if (url.endsWith("/v1/subscriptions")) {
+        return Response.json({ id: "sub_1" });
+      }
+      if (url.includes("/v1/subscriptions/sub_1")) {
+        if (init?.method === "GET") return Response.json({ id: "sub_1", items: { data: [{ id: "si_1" }] } });
+        if (init?.method === "DELETE") return Response.json({ id: "sub_1", status: "canceled" });
+        return Response.json({ id: "sub_1" });
+      }
+      return new Response("not found", { status: 404 });
+    }) as typeof fetch;
+    const adapter = createStripePayments({
+      secretKey: "sk_test_private",
+      webhookSecrets: ["whsec_current"],
+      apiBase: "https://stripe.example.test",
+      fetch: fetcher,
+    });
+    await expect(
+      adapter.chargeSavedMethod({
+        methodRef: "pm_1",
+        customerRef: "cus_1",
+        invoiceId: invoice.invoiceId,
+        contactId: invoice.contactId,
+        currency: "CAD",
+        amountMinor: 2500,
+        description: "Membership",
+        idempotencyKey: "charge-1",
+      }),
+    ).resolves.toMatchObject({ providerRef: "pi_off_1", status: "succeeded", amountMinor: 2500 });
+    const charge = new URLSearchParams(bodyText(calls[0]?.init?.body));
+    expect(charge.get("off_session")).toBe("true");
+    expect(charge.get("confirm")).toBe("true");
+    expect(charge.get("payment_method")).toBe("pm_1");
+    await expect(
+      adapter.createRecurringSchedule({
+        customerRef: "cus_1",
+        methodRef: "pm_1",
+        currency: "CAD",
+        amountMinor: 2500,
+        interval: "month",
+        intervalCount: 1,
+        description: "Monthly",
+        idempotencyKey: "sched-1",
+        metadata: { subscriptionId: invoice.invoiceId, contactId: invoice.contactId, planId: invoice.invoiceId },
+      }),
+    ).resolves.toEqual({ providerRef: "sub_1", customerRef: "cus_1" });
+    await expect(
+      adapter.updateRecurringSchedule({
+        providerRef: "sub_1",
+        amountMinor: 3000,
+        currency: "CAD",
+        interval: "month",
+        intervalCount: 1,
+        description: "Monthly plus",
+        proration: "create_prorations",
+        idempotencyKey: "sched-upd-1",
+      }),
+    ).resolves.toEqual({ providerRef: "sub_1" });
+    const update = new URLSearchParams(bodyText(calls.at(-1)?.init?.body));
+    expect(update.get("proration_behavior")).toBe("create_prorations");
+    await expect(adapter.cancelRecurringSchedule({ providerRef: "sub_1", idempotencyKey: "sched-cancel-1" })).resolves.toBeUndefined();
   });
 
   it("accepts rotating signatures, maps settlement evidence, and refuses stale or forged bodies", async () => {
@@ -126,6 +200,36 @@ describe("Stripe payment adapter", () => {
     ]);
     await expect(adapter.verifyWebhook({ ...request, receivedAt: new Date((timestamp + 301) * 1_000).toISOString() })).rejects.toMatchObject({ code: "authentication" });
     await expect(adapter.verifyWebhook({ ...request, body: bytes(`${payload} `) })).rejects.toMatchObject({ code: "authentication" });
+
+    const invoicePaid = JSON.stringify({
+      id: "evt_sub_1",
+      type: "invoice.paid",
+      created: 1_700_000_000,
+      data: {
+        object: {
+          id: "in_1",
+          subscription: "sub_1",
+          amount_paid: 2500,
+          currency: "cad",
+          lines: { data: [{ period: { start: 1_700_000_000, end: 1_702_678_400 } }] },
+        },
+      },
+    });
+    const invoiceSignature = createHmac("sha256", "new-secret").update(`${timestamp}.${invoicePaid}`).digest("hex");
+    await expect(
+      adapter.verifyWebhook({
+        headers: { "stripe-signature": `t=${timestamp},v1=${invoiceSignature}` },
+        body: bytes(invoicePaid),
+        receivedAt: new Date(timestamp * 1_000).toISOString(),
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        kind: "subscription_period_paid",
+        providerRef: "sub_1",
+        amountMinor: 2500,
+        currency: "CAD",
+      }),
+    ]);
   });
 
   it("normalizes disputes and masked saved methods", async () => {
