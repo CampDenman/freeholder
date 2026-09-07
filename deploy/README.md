@@ -66,6 +66,8 @@ whole story, which is the point.
 
 - [`customization-seams.md`](customization-seams.md) — which owner data survives
   an image swap, and why editing core files on a live server is unsupported.
+- [`release-channels.md`](release-channels.md) — stable, security and edge, and
+  the metadata a release must declare instead of inferring from a version.
 - [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
   database/media restore, update and rollback acceptance for every Tier-1
   target.

@@ -50,6 +50,8 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
       "update.seams.configuration",
       "update.seams.uploads",
       "update.coreFiles",
+      "update.release",
+      "update.channel",
     ]) {
       expect({ id, checked: ids.includes(id) }).toEqual({ id, checked: true });
     }
