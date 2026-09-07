@@ -1,9 +1,10 @@
 # packages/ — pre-release distributable packages
 
 Freeholder-authored packages use Apache-2.0 and each packed artifact carries
-the same `LICENSE` as the repository root. The packages build, pack, install
-and execute outside the workspace, but public registry publication remains
-open under C3.20. See the root `LICENSING.md` for the full policy.
+the same `LICENSE` as the repository root. The packages build, pack, install and execute outside the workspace. A
+`vX.Y.Z` tag publishes them to the public registry at the same version health,
+admin, Doctor and the contract report. See the root `LICENSING.md` for the
+full policy.
 
 `@freeholder/sdk` is the typed HTTP client generated from the live service
 registry.

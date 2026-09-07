@@ -18,6 +18,7 @@ import { Bell } from "@phosphor-icons/react/dist/ssr";
 import { SkipLink } from "@/ui/SkipLink";
 import { listGuidanceContexts } from "@/core/guidance/service";
 import { AdminGuidanceHelp } from "./AdminGuidanceHelp";
+import { PLATFORM_VERSION } from "@/core/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,9 @@ export default async function AdminLayout({
           </a>
           <span className="rounded-full bg-surface-muted px-2 py-0.5 font-mono text-xs text-ink-muted">
             {actor.kind === "user" ? actor.role : ""}
+          </span>
+          <span className="font-mono text-xs text-ink-muted">
+            {t("admin.platformVersion", { version: PLATFORM_VERSION })}
           </span>
           <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3">
             <AdminGuidanceHelp

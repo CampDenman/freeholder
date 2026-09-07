@@ -1,6 +1,6 @@
 {
   "name": "@freeholder/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Typed HTTP client for a Freeholder instance, generated from the live service registry",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
@@ -21,6 +21,7 @@
       "import": "./dist/index.js"
     }
   },
+  "publishConfig": { "access": "public" },
   "files": ["dist", "LICENSE", "README.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",

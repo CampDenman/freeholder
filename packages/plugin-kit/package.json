@@ -1,6 +1,6 @@
 {
   "name": "@freeholder/plugin-kit",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Authoring contract for Freeholder plugins — definePlugin, permissions, compatibility (MASTER.md §24, C3.08)",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
@@ -21,6 +21,7 @@
       "import": "./dist/index.js"
     }
   },
+  "publishConfig": { "access": "public" },
   "files": ["dist", "LICENSE", "README.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",

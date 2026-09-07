@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `1629536` after C3.14 create-freeholder setup #301. C3.15 ships tested business presets with Bench tokens and installable page, entity and email trees. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `d035a48` after C3.15 business presets #302. C3.20 ships SemVer 0.1.0 across platform and packages, a tag-matched npm publish workflow, and the same version in health, admin, Doctor and the contract. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is leftover C3 (C3.20), then C10+C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10+C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3408,14 +3408,14 @@ one with unchecked dependency items.
 - [x] **C0.09** Reconcile `README.md`, setup text, package descriptions, and
   deployment docs whenever a target capability becomes true; target language
   must never masquerade as current availability.
-  (`README.md` status vs product-complete target; `packages/README.md` names
-  open C3.20; SDK is the typed client (C3.03); create-freeholder checks env,
-  can install/migrate, and prints the setup URL (C3.14); `@freeholder/templates`
-  ships installable Bench presets (C3.15); deploy image tags distinguish
-  `edge` from unreleased SemVer. Setup copy does not promise an updater, mobile
-  app or auto-billing. Gate in `tests/core/docs-availability.test.ts`.
-  Changeset `docs-availability.md`. F08/F11 apply; F04/F05/F07/F09/F12 are
-  N/A — this item is documentation honesty, not a product surface.)
+  (`README.md` status vs product-complete target; SDK is the typed client
+  (C3.03); create-freeholder checks env, can install/migrate, and prints the
+  setup URL (C3.14); `@freeholder/templates` ships installable Bench presets
+  (C3.15); a `vX.Y.Z` tag publishes packages and SemVer image tags (C3.20).
+  Setup copy does not promise an updater, mobile app or auto-billing. Gate in
+  `tests/core/docs-availability.test.ts`. Changeset `docs-availability.md`.
+  F08/F11 apply; F04/F05/F07/F09/F12 are N/A — this item is documentation
+  honesty, not a product surface.)
 - [x] **C0.10** License all Freeholder-authored code, documentation, deploy
   tooling, and packages under Apache-2.0 while retaining third-party notices;
   enforce the canonical license text, manifest fields, package copies, and
@@ -4158,11 +4158,18 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   and Replit storage and verifies target byte length plus SHA-256. Both are
   exercised in CI; contracts in `tests/core/portability.test.ts` and transfer
   behavior in `tests/core/media-transfer.test.ts`.)
-- [ ] **C3.20** Add semantic platform/plugin/API versions, compatibility
+- [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
-  Version projection and compatibility reporting exist, but all distributable
-  artifacts remain `0.0.0` and no package release/promotion workflow proves a
-  truthful installed release yet.
+  (Platform and packages are `0.1.0`; SDK `PLATFORM_VERSION` is stamped from
+  `package.json`. Health, OpenAPI, Doctor, provenance, catalogue compatibility
+  and admin chrome report that same string. `.github/workflows/publish-packages.yml`
+  publishes packed tarballs on a matching `vX.Y.Z` tag; `scripts/release-packages.mjs`
+  refuses a tag that does not match. **F01–F03** N/A. **F04** admin header
+  shows the version. **F05** health/OpenAPI/SDK. **F06** `admin.platformVersion`
+  in en/es/fr. **F07** tag mismatch and missing `NPM_TOKEN` refuse publish.
+  **F08** `tests/core/release-packages.test.ts`. **F09** N/A. **F10** N/A.
+  **F11** deploy README, packages README, changeset `versioned-release.md`.
+  **F12** `pnpm packages:verify` asserts aligned versions on packed tarballs.)
 - [x] **C3.21** Define the importer plugin contract and kit: typed source/auth
   config, least-privilege permissions, discovery/pagination/checkpoints,
   transforms into core service inputs, provenance, fixtures and hostile/

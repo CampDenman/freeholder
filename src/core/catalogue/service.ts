@@ -20,6 +20,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { satisfies } from "@freeholder/plugin-kit";
+import { PLATFORM_VERSION } from "@/core/platform";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { providerJson } from "@/adapters/mail/http";
 import { getPinnedBytes } from "@/core/http/pinned-download";
@@ -38,8 +39,6 @@ import {
 } from "@/core/service";
 import type { JobExecutionContext } from "@/core/jobs";
 
-/** The version this instance reports for compatibility checks. */
-const PLATFORM_VERSION = process.env.npm_package_version ?? "0.0.0";
 const MAX_ENTRIES = 200;
 
 function requirePerson(actor: Actor): string {
