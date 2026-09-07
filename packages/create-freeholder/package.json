@@ -1,7 +1,7 @@
 {
   "name": "create-freeholder",
   "version": "0.0.0",
-  "description": "npx create-freeholder — scaffold a deployable Freeholder source project (MASTER.md §22)",
+  "description": "npx create-freeholder — scaffold a Freeholder source project; environment validation and migration remain C3.14",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {

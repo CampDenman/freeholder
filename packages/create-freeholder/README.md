@@ -18,4 +18,6 @@ The package carries an integrity-manifested source template. Generation is
 staged and moved into place only after every file is verified and target
 configuration succeeds. Existing non-empty directories are never overwritten.
 The resulting `GETTING_STARTED.md` describes installation, setup, Doctor and
-the selected deployment recipe without hiding any infrastructure step.
+the selected deployment recipe without hiding any infrastructure step. The CLI
+does not yet validate the generated environment, run migrations, or probe a
+reachable setup URL — those remain `MASTER.md` C3.14.

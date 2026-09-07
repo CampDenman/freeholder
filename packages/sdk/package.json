@@ -1,7 +1,7 @@
 {
   "name": "@freeholder/sdk",
   "version": "0.0.0",
-  "description": "Client SDK for Freeholder sites — typed access to the API and MCP surface",
+  "description": "Generic versioned HTTP client for a Freeholder instance; registry-generated methods remain C3.03",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {

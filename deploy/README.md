@@ -50,9 +50,9 @@ Every recipe pulls the same image from
 
 | Tag | What it is |
 |---|---|
-| `edge` | current `main` |
+| `edge` | current `main` (what CI publishes today) |
 | `sha-<short>` | one exact commit |
-| `X.Y.Z`, `X.Y`, `latest` | a release tag |
+| `X.Y.Z`, `X.Y`, `latest` | only when a release is tagged; there is no versioned updater yet (C3.20, C10) |
 
 Publishing is the *only* thing CI does for your deploy. Running Freeholder
 needs no GitHub account, no runner and no fork — `docker compose pull` is the
