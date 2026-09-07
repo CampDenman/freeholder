@@ -68,6 +68,7 @@ describe("C5.01 honest none adapters", () => {
       partialRefunds: false,
       savedMethods: false,
       subscriptions: false,
+      offSessionCharges: false,
       disputes: false,
       payouts: false,
       inPerson: false,

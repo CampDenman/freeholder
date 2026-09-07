@@ -17,8 +17,10 @@ export const renewSubscriptions = defineJob({
   // one, it would do so by failing rather than by not trying.
   concurrency: 1,
   handler: async () => {
-    const { renewDue } = await import("./service");
-    return renewDue.call({}, { kind: "system" });
+    const { chargePlatformDue, renewDue } = await import("./service");
+    const manual = await renewDue.call({}, { kind: "system" });
+    const platform = await chargePlatformDue.call({}, { kind: "system" });
+    return { ...manual, charged: platform.charged };
   },
 });
 

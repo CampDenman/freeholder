@@ -8,10 +8,12 @@ import { env } from "@/core/env";
 import { number, object, paymentFetch, providerJson, text } from "./http";
 import type {
   CheckoutCaptureResult,
+  OffSessionChargeResult,
   PaymentAdapter,
   PaymentAdapterCapabilities,
   PaymentMethodOffer,
   PaymentProviderEvent,
+  RecurringScheduleResult,
   SavedPaymentMethodEvidence,
 } from "./types";
 
@@ -19,7 +21,8 @@ const capabilities: PaymentAdapterCapabilities = {
   refunds: true,
   partialRefunds: true,
   savedMethods: true,
-  subscriptions: false,
+  subscriptions: true,
+  offSessionCharges: true,
   disputes: true,
   payouts: false,
   inPerson: false,
@@ -190,6 +193,38 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
       occurredAt: created,
     }];
   }
+
+  if (type === "invoice.paid" || type === "invoice.payment_failed") {
+    const subscriptionRef =
+      typeof value.subscription === "string"
+        ? value.subscription
+        : text(object(value.subscription)?.id);
+    if (!subscriptionRef) return [];
+    const lineData = object(value.lines)?.data;
+    const firstLine = Array.isArray(lineData) ? object(lineData[0]) : undefined;
+    const linePeriod = object(firstLine?.period);
+    return [{
+      id,
+      kind: type === "invoice.paid" ? "subscription_period_paid" : "subscription_period_failed",
+      providerRef: subscriptionRef,
+      occurredAt: created,
+      amountMinor: number(value.amount_paid) ?? amount,
+      currency,
+      periodStart: stripeOptionalTime(linePeriod?.start ?? object(value.period)?.start),
+      periodEnd: stripeOptionalTime(linePeriod?.end ?? object(value.period)?.end),
+      invoiceProviderRef: text(value.id),
+    }];
+  }
+  if (type === "customer.subscription.deleted") {
+    const providerRef = text(value.id);
+    if (!providerRef) return [];
+    return [{
+      id,
+      kind: "subscription_cancelled",
+      providerRef,
+      occurredAt: created,
+    }];
+  }
   return [];
 }
 
@@ -285,6 +320,105 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     },
     async revokeSavedMethod(request) {
       await api(`/v1/payment_methods/${encodeURIComponent(request.providerRef)}/detach`, { method: "POST", headers: { "idempotency-key": request.idempotencyKey } });
+    },
+    async chargeSavedMethod(request): Promise<OffSessionChargeResult> {
+      const form = new URLSearchParams({
+        amount: String(request.amountMinor),
+        currency: request.currency.toLowerCase(),
+        payment_method: request.methodRef,
+        confirm: "true",
+        off_session: "true",
+        "metadata[freeholder_invoice_id]": request.invoiceId,
+        "metadata[freeholder_contact_id]": request.contactId,
+        description: request.description.slice(0, 1000),
+      });
+      if (request.customerRef) form.set("customer", request.customerRef);
+      const value = await api("/v1/payment_intents", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "idempotency-key": request.idempotencyKey,
+        },
+        body: form,
+      });
+      const providerRef = text(value.id);
+      if (!providerRef) {
+        throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a payment reference.");
+      }
+      const status =
+        value.status === "succeeded"
+          ? "succeeded"
+          : value.status === "processing"
+            ? "pending"
+            : "failed";
+      return {
+        providerRef,
+        status,
+        amountMinor: number(value.amount),
+        currency: text(value.currency)?.toUpperCase(),
+        occurredAt: stripeOptionalTime(value.created),
+        failureMessage: text(object(value.last_payment_error)?.message),
+      };
+    },
+    async createRecurringSchedule(request): Promise<RecurringScheduleResult> {
+      const form = new URLSearchParams({
+        customer: request.customerRef,
+        default_payment_method: request.methodRef,
+        collection_method: "charge_automatically",
+        "items[0][price_data][currency]": request.currency.toLowerCase(),
+        "items[0][price_data][unit_amount]": String(request.amountMinor),
+        "items[0][price_data][recurring][interval]": request.interval,
+        "items[0][price_data][recurring][interval_count]": String(request.intervalCount),
+        "items[0][price_data][product_data][name]": request.description.slice(0, 250),
+        "metadata[freeholder_subscription_id]": request.metadata.subscriptionId,
+        "metadata[freeholder_contact_id]": request.metadata.contactId,
+        "metadata[freeholder_plan_id]": request.metadata.planId,
+      });
+      const value = await api("/v1/subscriptions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "idempotency-key": request.idempotencyKey,
+        },
+        body: form,
+      });
+      const providerRef = text(value.id);
+      if (!providerRef) {
+        throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return a subscription reference.");
+      }
+      return { providerRef, customerRef: request.customerRef };
+    },
+    async updateRecurringSchedule(request): Promise<RecurringScheduleResult> {
+      const current = await api(`/v1/subscriptions/${encodeURIComponent(request.providerRef)}`, {
+        method: "GET",
+      });
+      const items = object(current.items);
+      const first = Array.isArray(items?.data) ? object(items.data[0]) : undefined;
+      const itemId = text(first?.id);
+      const form = new URLSearchParams({
+        proration_behavior: request.proration === "create_prorations" ? "create_prorations" : "none",
+        "items[0][price_data][currency]": request.currency.toLowerCase(),
+        "items[0][price_data][unit_amount]": String(request.amountMinor),
+        "items[0][price_data][recurring][interval]": request.interval,
+        "items[0][price_data][recurring][interval_count]": String(request.intervalCount),
+        "items[0][price_data][product_data][name]": request.description.slice(0, 250),
+      });
+      if (itemId) form.set("items[0][id]", itemId);
+      const value = await api(`/v1/subscriptions/${encodeURIComponent(request.providerRef)}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "idempotency-key": request.idempotencyKey,
+        },
+        body: form,
+      });
+      return { providerRef: text(value.id) ?? request.providerRef };
+    },
+    async cancelRecurringSchedule(request) {
+      await api(`/v1/subscriptions/${encodeURIComponent(request.providerRef)}`, {
+        method: "DELETE",
+        headers: { "idempotency-key": request.idempotencyKey },
+      });
     },
     async verifyWebhook(request) {
       if (webhookSecrets.length === 0) throw new AdapterError("payments", "stripe", "unavailable", "Stripe webhook verification is not configured.");
