@@ -47,6 +47,7 @@
   "dependencies": {
     "@formatjs/icu-messageformat-parser": "^3.5.15",
     "@freeholder/plugin-kit": "workspace:*",
+    "@freeholder/templates": "workspace:*",
     "@phosphor-icons/react": "^2.1.10",
     "@replit/object-storage": "^1.0.0",
     "@simplewebauthn/browser": "^13.3.0",

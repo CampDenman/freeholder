@@ -1,6 +1,14 @@
 # @freeholder/templates (Apache-2.0)
 
-Pre-release starter descriptors for three business presets: Bench token
-overrides plus intended page, entity and email shapes. They are data contracts,
-not yet CMS-installed templates or complete seeded businesses; that remaining
-work is tracked by `MASTER.md` C3.15.
+Business presets for Freeholder: Bench token overrides plus full page, entity
+and email trees. `seed.installPreset` installs them through CMS, catalog, forms
+and design services so a creator, service-business or shop instance starts with
+usable seeded pages, a catalog entity and a transactional letter — not just
+shape descriptors.
+
+```ts
+import { listPresets, preset } from "@freeholder/templates";
+
+const shop = preset("shop");
+shop.pages.map((page) => page.slug); // home, products, about, contact
+```

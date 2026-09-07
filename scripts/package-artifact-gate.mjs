@@ -111,7 +111,7 @@ async function main() {
       `import assert from "node:assert/strict";
 import { createClient, PLATFORM_VERSION, SERVICE_NAMES } from "@freeholder/sdk";
 import { definePlugin } from "@freeholder/plugin-kit";
-import { listPresets } from "@freeholder/templates";
+import { listPresets, preset } from "@freeholder/templates";
 assert.equal(typeof createClient, "function");
 assert.equal(typeof definePlugin, "function");
 assert.match(PLATFORM_VERSION, /^\\d+\\.\\d+\\.\\d+/);
@@ -122,6 +122,10 @@ const client = createClient({
 });
 assert.equal(typeof client.api.contacts.create, "function");
 assert.deepEqual(listPresets().sort(), ["creator", "service-business", "shop"].sort());
+const shop = preset("shop");
+assert.ok(shop.pages.some((page) => page.blocks.some((block) => block.type === "heading")));
+assert.ok(shop.emails.some((email) => email.blocks.length > 0));
+assert.ok(shop.entities.some((entity) => entity.slug === "featured-product"));
 `,
     );
     await run(process.execPath, [join(consumer, "smoke.mjs")], consumer);

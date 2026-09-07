@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `f1520dd` after C3.13 first-party plugin surfaces #292. C3.14 ships create-freeholder environment checks, install, migration and setup URL. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `1629536` after C3.14 create-freeholder setup #301. C3.15 ships tested business presets with Bench tokens and installable page, entity and email trees. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is leftover C3 (C3.15, C3.20), then C10+C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is leftover C3 (C3.20), then C10+C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3409,13 +3409,13 @@ one with unchecked dependency items.
   deployment docs whenever a target capability becomes true; target language
   must never masquerade as current availability.
   (`README.md` status vs product-complete target; `packages/README.md` names
-  open C3.15/C3.20; SDK is the typed client (C3.03); create-freeholder checks
-  env, can install/migrate, and prints the setup URL (C3.14); deploy image tags
-  distinguish `edge` from unreleased SemVer. Setup copy does not promise an
-  updater, mobile app or auto-billing. Gate in
-  `tests/core/docs-availability.test.ts`. Changeset `docs-availability.md`.
-  F08/F11 apply; F04/F05/F07/F09/F12 are N/A — this item is documentation
-  honesty, not a product surface.)
+  open C3.20; SDK is the typed client (C3.03); create-freeholder checks env,
+  can install/migrate, and prints the setup URL (C3.14); `@freeholder/templates`
+  ships installable Bench presets (C3.15); deploy image tags distinguish
+  `edge` from unreleased SemVer. Setup copy does not promise an updater, mobile
+  app or auto-billing. Gate in `tests/core/docs-availability.test.ts`.
+  Changeset `docs-availability.md`. F08/F11 apply; F04/F05/F07/F09/F12 are
+  N/A — this item is documentation honesty, not a product surface.)
 - [x] **C0.10** License all Freeholder-authored code, documentation, deploy
   tooling, and packages under Apache-2.0 while retaining third-party notices;
   enforce the canonical license text, manifest fields, package copies, and
@@ -4110,11 +4110,22 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   **F11** MASTER §22/§43, package README, changeset
   `create-freeholder-setup.md`. **F12** env → install → migrate → setup URL
   with an injected runner; packed tarball in the package artifact gate.)
-- [ ] **C3.15** Turn `@freeholder/templates` into tested business presets using
+- [x] **C3.15** Turn `@freeholder/templates` into tested business presets using
   Bench tokens, seeded content and full-page/entity/email templates.
-  The current package contains starter descriptors only; it is not installed
-  through the CMS/template services and its test proves shape, not usable
-  seeded pages, entities and messages.
+  (`packages/templates/src/presets.ts` ships creator, service-business and shop
+  trees; `seed.installPreset` applies Bench tokens through
+  `settings.updateDesign`, pages through `cms.createPage` /
+  `cms.createFromTemplate`, entities through `catalog.createProduct`, contact
+  forms through `forms.create`, and emails through `cms.ensureTemplates`.
+  **F01–F03** N/A — no new tables; existing CMS/catalog/forms rows.
+  **F04** N/A as a new screen — the CMS template list already shows seeded
+  letters. **F05** `seed.installPreset` on HTTP/MCP. **F06** N/A — seed copy is
+  English starter text the owner replaces. **F07** unknown preset refused;
+  existing slugs/forms skipped. **F08** `tests/core/templates.test.ts` and
+  `tests/core/cms-templates.test.ts`. **F09** N/A. **F10** `--preset` plus
+  `seed.installPreset`. **F11** package README, MASTER §32/§43, changeset
+  `business-presets.md`. **F12** creator/service/shop install yields pages, a
+  catalog entity and a slotted email template.)
 - [x] **C3.16** Provide working recipes for Replit, DigitalOcean App Platform,
   DigitalOcean Droplet, Railway, Render and bare Docker Compose with Postgres
   and S3-compatible storage.

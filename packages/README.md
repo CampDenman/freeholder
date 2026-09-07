@@ -10,6 +10,7 @@ registry.
 `create-freeholder` scaffolds verified source, checks the generated
 environment, can install dependencies and run migrations, and prints a setup
 URL with reachable-or-recovery guidance.
-`@freeholder/templates` currently exports starter descriptors; installing
-usable seeded pages, entities and messages remains open under C3.15.
+`@freeholder/templates` ships creator, service-business and shop presets with
+Bench tokens and full page, entity and email trees; `seed.installPreset`
+installs them through CMS, catalog and design services.
 `@freeholder/plugin-kit` is the plugin authoring contract (C3.08–C3.12).
