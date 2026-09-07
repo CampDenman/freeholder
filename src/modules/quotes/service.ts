@@ -1492,8 +1492,10 @@ registerContactPrivacySource({
 });
 
 import conversionServices from "./conversion";
+import demoServices from "./demo";
 
 export default [
+  ...demoServices,
   ...conversionServices,
   createQuote,
   setQuoteItems,

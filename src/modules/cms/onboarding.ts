@@ -10,7 +10,13 @@ const contribution: OnboardingModuleExport = {
     {
       key: "cms.current-modules",
       version: 1,
-      scenarioKeys: ["seed.current-modules"],
+      scenarioKeys: [
+        "seed.current-modules",
+        "seed.creator",
+        "seed.service-business",
+        "seed.shop",
+        "seed.everything",
+      ],
       dependsOn: [],
       requiredModules: ["cms"],
       requiredCapabilities: ["cms:view"],

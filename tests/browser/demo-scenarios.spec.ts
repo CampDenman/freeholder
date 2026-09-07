@@ -61,7 +61,12 @@ test.describe("deterministic demo scenario journey", () => {
     await expect(page.getByText("Current-module foundation")).toBeVisible();
     await expect(page.getByText(/tied to exact run provenance/i)).toBeVisible();
 
-    await page.getByRole("button", { name: "Load scenario" }).click();
+    await page
+      .locator("div")
+      .filter({ hasText: "Current-module foundation" })
+      .filter({ has: page.getByRole("button", { name: "Load scenario" }) })
+      .getByRole("button", { name: "Load scenario" })
+      .click();
     await expect(page.getByText(/scenario is loaded/i)).toBeVisible();
     await expect(page.getByText("Active", { exact: true })).toBeVisible();
     await expect(page.getByText(/generation 1/i)).toBeVisible();
