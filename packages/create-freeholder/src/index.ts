@@ -191,8 +191,9 @@ export function parseEnvFile(text: string): Record<string, string> {
 }
 
 export function setupUrlFromEnv(env: Record<string, string>): string {
-  const raw = env.APP_URL?.trim() || "http://localhost:3000";
-  return `${raw.replace(/\/+$/, "")}/setup`;
+  let raw = env.APP_URL?.trim() || "http://localhost:3000";
+  while (raw.endsWith("/")) raw = raw.slice(0, -1);
+  return `${raw}/setup`;
 }
 
 function isPresent(value: string | undefined): value is string {

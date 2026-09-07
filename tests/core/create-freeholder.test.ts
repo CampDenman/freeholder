@@ -86,6 +86,9 @@ describe("create-freeholder (C3.14)", () => {
     expect(env.DATABASE_URL).toMatch(/^postgres:/);
     expect(env.SESSION_SECRET).toBe("");
     expect(setupUrlFromEnv(env)).toBe("https://studio.example/setup");
+    expect(setupUrlFromEnv({ APP_URL: "https://studio.example///" })).toBe(
+      "https://studio.example/setup",
+    );
     expect(setupUrlFromEnv({})).toBe("http://localhost:3000/setup");
   });
 
