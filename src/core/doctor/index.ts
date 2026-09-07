@@ -840,6 +840,85 @@ function checkPlatformVersion(): Check {
   );
 }
 
+async function checkUpdateSeams(): Promise<Check[]> {
+  const e = env();
+  const { inspectCoreFiles } = await import("@/core/update/integrity");
+  const instanceConfig = (await import("../../../freeholder.config")).default;
+  const checks: Check[] = [];
+  checks.push(
+    ok(
+      "update.seams.configuration",
+      "Configuration seam",
+      "Instance configuration is loaded separately from replaceable core.",
+    ),
+  );
+  const storage = e.FREEHOLDER_STORAGE ?? instanceConfig.adapters.storage;
+  if (storage === "local" && e.NODE_ENV === "production" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE !== "1") {
+    checks.push(
+      fail(
+        "update.seams.uploads",
+        "Uploads seam",
+        "Uploads are on this machine's disk, which does not survive a rebuild.",
+        "Set adapters.storage to s3 or replit, or only use local disk in development.",
+      ),
+    );
+  } else if (storage === "local" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
+    checks.push(
+      warn(
+        "update.seams.uploads",
+        "Uploads seam",
+        "Uploads are on this machine's disk because FREEHOLDER_UNSAFE_LOCAL_STORAGE=1.",
+        "Move media to object storage before relying on updates to replace this instance.",
+      ),
+    );
+  } else {
+    checks.push(
+      ok(
+        "update.seams.uploads",
+        "Uploads seam",
+        storage === "local"
+          ? "Local disk storage is for development. Production must use object storage."
+          : `Uploads use ${storage} object storage, not instance disk.`,
+      ),
+    );
+  }
+  const core = await inspectCoreFiles({
+    root: process.cwd(),
+    expectedDigest: e.FREEHOLDER_CORE_DIGEST ?? null,
+    hash: Boolean(e.FREEHOLDER_CORE_DIGEST),
+  });
+  if (core.matches === false) {
+    checks.push(
+      fail(
+        "update.coreFiles",
+        "Core files",
+        "Replaceable core does not match the release digest. Live edits of core files are not supported.",
+        "Move the behaviour into a plugin or configuration, or treat this instance as a fork.",
+      ),
+    );
+  } else if (core.modified.length > 0) {
+    checks.push(
+      warn(
+        "update.coreFiles",
+        "Core files",
+        `${core.modified.length} core file${core.modified.length === 1 ? " was" : "s were"} edited on this instance. Updates will not overwrite them safely.`,
+        "Use a plugin, a configuration change, or the fork lane. Editing core files on a live server is not supported.",
+      ),
+    );
+  } else {
+    checks.push(
+      ok(
+        "update.coreFiles",
+        "Core files",
+        core.expected
+          ? "Replaceable core matches the release digest."
+          : "No live core-file edits detected.",
+      ),
+    );
+  }
+  return checks;
+}
+
 /**
  * Run every check.
  *
@@ -863,6 +942,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...(await checkPlugins()),
     ...(await checkManagedAgentConnections()),
     checkPlatformVersion(),
+    ...(await checkUpdateSeams()),
   ];
 
   const verdict: Verdict = checks.some((check) => check.verdict === "fail")

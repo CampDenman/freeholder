@@ -47,6 +47,9 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
       "notifications.sms",
       "notifications.push",
       "jobs.worker",
+      "update.seams.configuration",
+      "update.seams.uploads",
+      "update.coreFiles",
     ]) {
       expect({ id, checked: ids.includes(id) }).toEqual({ id, checked: true });
     }
