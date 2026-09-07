@@ -31,6 +31,9 @@
       ],
       "@freeholder/plugin-kit": [
         "./packages/plugin-kit/src/index.ts"
+      ],
+      "@freeholder/templates": [
+        "./packages/templates/src/presets.ts"
       ]
     }
   },

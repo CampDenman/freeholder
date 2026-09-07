@@ -60,6 +60,9 @@ export default defineConfig({
       "@freeholder/plugin-kit": fileURLToPath(
         new URL("./packages/plugin-kit/src/index.ts", import.meta.url),
       ),
+      "@freeholder/templates": fileURLToPath(
+        new URL("./packages/templates/src/presets.ts", import.meta.url),
+      ),
     },
   },
   test: {

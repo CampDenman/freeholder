@@ -5,6 +5,12 @@
 // §32: "Default templates ship per business preset as seed data, so day one
 // still looks designed." These are starting trees, never cages — create-from-
 // template copies them, reset-to-default restores them.
+import {
+  emailTemplateKey,
+  listPresets,
+  preset as packagePreset,
+  type PresetKey,
+} from "@freeholder/templates";
 import type { BlockNode } from "./blocks/types";
 import type { TemplateKind, TemplatePreset } from "./schema";
 
@@ -24,7 +30,7 @@ export const TEMPLATE_KEYS = [
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
 export interface SeedTemplate {
-  key: TemplateKey;
+  key: string;
   kind: TemplateKind;
   name: string;
   blocks: BlockNode[];
@@ -284,7 +290,23 @@ export function seedTemplates(preset: TemplatePreset): SeedTemplate[] {
       ],
       variables: ["contact.first_name", "business.name", "booking.starts_at_local"],
     },
+    ...extraPresetTemplates(preset),
   ];
+}
+
+export function extraPresetTemplates(preset: TemplatePreset): SeedTemplate[] {
+  const keys: PresetKey[] =
+    preset === "everything" || preset === "custom" ? listPresets() : listPresets().filter((key) => key === preset);
+  return keys.flatMap((key) => {
+    const pack = packagePreset(key);
+    return pack.emails.map((email) => ({
+      key: emailTemplateKey(email.key),
+      kind: "email" as const,
+      name: email.name,
+      blocks: email.blocks,
+      variables: [...email.variables],
+    }));
+  });
 }
 
 export function slugFromTitle(title: string): string {

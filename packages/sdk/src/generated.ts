@@ -1099,6 +1099,7 @@ export const SERVICE_NAMES = [
   "scoring.rules",
   "scoring.saveRule",
   "scoring.why",
+  "seed.installPreset",
   "segments.capture",
   "segments.contains",
   "segments.fields",
@@ -5621,6 +5622,10 @@ export interface ServiceCatalog {
     input: { contactId: string; limit?: number };
     output: { score: number; awards: { id: string; ruleName: string; eventName: string; points: number; remaining: number; decayDays: number; daysLeft: number | null; occurredAt: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
+  "seed.installPreset": {
+    input: { preset: "creator" | "service-business" | "shop"; locale?: string };
+    output: { preset: "creator" | "service-business" | "shop"; pages: string[]; entities: string[]; emails: string[]; tokensApplied: boolean };
+  };
   "segments.capture": {
     input: { id: string };
     output: { id: string; count: number; capturedAt: string; [key: string]: unknown };
@@ -7408,6 +7413,9 @@ export interface FreeholderApi {
     rules: (input?: ServiceCatalog["scoring.rules"]["input"]) => Promise<ServiceCatalog["scoring.rules"]["output"]>;
     saveRule: (input: ServiceCatalog["scoring.saveRule"]["input"]) => Promise<ServiceCatalog["scoring.saveRule"]["output"]>;
     why: (input: ServiceCatalog["scoring.why"]["input"]) => Promise<ServiceCatalog["scoring.why"]["output"]>;
+  };
+  seed: {
+    installPreset: (input: ServiceCatalog["seed.installPreset"]["input"]) => Promise<ServiceCatalog["seed.installPreset"]["output"]>;
   };
   segments: {
     capture: (input: ServiceCatalog["segments.capture"]["input"]) => Promise<ServiceCatalog["segments.capture"]["output"]>;

@@ -17,7 +17,7 @@ import { defineModule } from "@/core/module";
 export default defineModule({
   name: "seed",
   version: "0.1.0",
-  requires: ["core", "cms"],
+  requires: ["core", "cms", "catalog", "forms"],
   services: () => import("./service"),
   onboarding: () => import("./onboarding"),
   events: { emits: ["demo.installed"] },

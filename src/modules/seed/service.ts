@@ -35,6 +35,9 @@ import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
 import { createForm } from "@/modules/forms/service";
 import { setTranslation } from "@/core/i18n/service";
 import * as demo from "../../../seed/demo/content";
+import { installPreset } from "./preset-install";
+
+export { installPreset };
 
 const installDemoGuard = defineService({
   name: "demo.installGuard",
@@ -230,4 +233,4 @@ export const installDemo = defineOrchestratedService({
   },
 });
 
-export default [installDemo, installDemoGuard, installDemoApply];
+export default [installDemo, installDemoGuard, installDemoApply, installPreset];
