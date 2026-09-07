@@ -1859,10 +1859,11 @@ npx create-freeholder my-business
 ? Country?                      › CA  → defaults: en+fr, CAD, America/Vancouver, GST/PST
 ? Payments now or later?        › Stripe / Later
 → writes freeholder.config.ts, .env.example (target-specific), copies infra/
-→ prints the recipe's 5-step walkthrough with your values filled in
+→ checks .env, offers pnpm install and db:migrate, prints the setup URL
+→ names what is still missing and how to recover
 ```
 
-The generator never hides steps behind magic — it prints what it did and what remains, because the target user is learning to own their stack, and the tool should teach while it scaffolds.
+The generator never hides steps behind magic — it prints what it did and what remains, because the target user is learning to own their stack, and the tool should teach while it scaffolds. `--non-interactive` requires every choice as a flag and skips install/migrate unless `--install` / `--migrate` are passed, so a packed tarball can be exercised without a database. `--migrate` refuses to run until `DATABASE_URL` is set.
 
 ---
 
@@ -3255,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `99c1a7a` after C3.03 typed SDK #291. C3.13 ships first-party plugin admin/public surfaces and provider retry. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `f1520dd` after C3.13 first-party plugin surfaces #292. C3.14 ships create-freeholder environment checks, install, migration and setup URL. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is leftover C3, then C10+C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is leftover C3 (C3.15, C3.20), then C10+C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3408,12 +3409,13 @@ one with unchecked dependency items.
   deployment docs whenever a target capability becomes true; target language
   must never masquerade as current availability.
   (`README.md` status vs product-complete target; `packages/README.md` names
-  open C3.03/C3.14/C3.15/C3.20; SDK and create-freeholder descriptions no
-  longer read as finished clients; deploy image tags distinguish `edge` from
-  unreleased SemVer. Setup copy does not promise an updater, mobile app or
-  auto-billing. Gate in `tests/core/docs-availability.test.ts`. Changeset
-  `docs-availability.md`. F08/F11 apply; F04/F05/F07/F09/F12 are N/A — this
-  item is documentation honesty, not a product surface.)
+  open C3.15/C3.20; SDK is the typed client (C3.03); create-freeholder checks
+  env, can install/migrate, and prints the setup URL (C3.14); deploy image tags
+  distinguish `edge` from unreleased SemVer. Setup copy does not promise an
+  updater, mobile app or auto-billing. Gate in
+  `tests/core/docs-availability.test.ts`. Changeset `docs-availability.md`.
+  F08/F11 apply; F04/F05/F07/F09/F12 are N/A — this item is documentation
+  honesty, not a product surface.)
 - [x] **C0.10** License all Freeholder-authored code, documentation, deploy
   tooling, and packages under Apache-2.0 while retaining third-party notices;
   enforce the canonical license text, manifest fields, package copies, and
@@ -4090,14 +4092,24 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 
 #### Packages, installation, export, and target parity
 
-- [ ] **C3.14** Implement `create-freeholder` with explicit environment checks,
+- [x] **C3.14** Implement `create-freeholder` with explicit environment checks,
   target selection, migration, setup URL, demo choice and actionable recovery.
-  The compiled, integrity-manifested source scaffold is transactional, refuses
-  unsafe targets, applies country/payment/target/demo choices, and is exercised
-  from a clean-installed tarball. Completion still requires the CLI itself to
-  validate the generated environment, offer dependency install/migration, and
-  report a reachable setup URL instead of leaving those actions only in a
-  walkthrough.
+  (`packages/create-freeholder/src/index.ts`: transactional integrity-manifested
+  scaffold; `inspectProjectEnv` / `prepareGeneratedProject` validate `.env`,
+  offer `pnpm install --frozen-lockfile` and `pnpm db:migrate`, probe the setup
+  URL, and name recovery when keys are missing. `--migrate` refuses without
+  `DATABASE_URL`. `--non-interactive` skips install/migrate unless flagged.
+  **F01–F03, F05** N/A — installer CLI, no schema/services/spine/HTTP.
+  **F04** CLI empty/error/recovery: missing `.env`, incomplete keys, migrate
+  refusal, unreachable setup URL. **F06** N/A — terminal installer.
+  **F07** existing unsafe-target refusals; migrate blocked until
+  `DATABASE_URL`; recovery names the fix. **F08**
+  `tests/core/create-freeholder.test.ts`; tarball exercise in
+  `scripts/package-artifact-gate.mjs`. **F09** N/A — no jobs; Doctor remains
+  after owner claim. **F10** `--demo`, `GETTING_STARTED.md`, printed setup URL.
+  **F11** MASTER §22/§43, package README, changeset
+  `create-freeholder-setup.md`. **F12** env → install → migrate → setup URL
+  with an injected runner; packed tarball in the package artifact gate.)
 - [ ] **C3.15** Turn `@freeholder/templates` into tested business presets using
   Bench tokens, seeded content and full-page/entity/email templates.
   The current package contains starter descriptors only; it is not installed

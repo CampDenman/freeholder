@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // npx create-freeholder (C3.14, MASTER.md §22).
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   access,
@@ -95,6 +96,52 @@ interface CliArguments {
   demo: boolean;
   nonInteractive: boolean;
   help: boolean;
+  install?: boolean;
+  migrate?: boolean;
+}
+
+export const REQUIRED_ENV_KEYS = [
+  "DATABASE_URL",
+  "SESSION_SECRET",
+  "CREDENTIAL_KEY",
+  "APP_URL",
+] as const;
+
+const S3_ENV_KEYS = [
+  "S3_ENDPOINT",
+  "S3_REGION",
+  "S3_BUCKET",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+] as const;
+
+export type CommandSpec = {
+  command: string;
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+};
+
+export type CommandRunner = (spec: CommandSpec) => Promise<void>;
+export type SetupProbe = (url: string) => Promise<{ ok: boolean }>;
+
+export interface EnvInspection {
+  envPath: string | null;
+  env: Record<string, string>;
+  missing: string[];
+  recovery: string[];
+  setupUrl: string;
+  readyToMigrate: boolean;
+  complete: boolean;
+}
+
+export interface PrepareOptions {
+  install?: boolean;
+  migrate?: boolean;
+  probe?: boolean;
+  target?: CreateOptions["target"];
+  runner?: CommandRunner;
+  probeSetup?: SetupProbe;
 }
 
 const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
@@ -112,10 +159,201 @@ export function recoverFromMissing(keys: string[]): string[] {
     if (key === "SESSION_SECRET") {
       return 'Set SESSION_SECRET to at least 32 random characters: node -e "console.log(require(\'node:crypto\').randomBytes(32).toString(\'hex\'))"';
     }
-    if (key === "CREDENTIAL_KEY") return "Set CREDENTIAL_KEY to a 32-byte key so connected accounts can be encrypted.";
+    if (key === "CREDENTIAL_KEY") {
+      return 'Set CREDENTIAL_KEY to a 32-byte key: node -e "console.log(require(\'node:crypto\').randomBytes(32).toString(\'hex\'))"';
+    }
     if (key === "APP_URL") return "Set APP_URL to the public HTTPS address visitors will use.";
+    if (key.startsWith("S3_")) return `Set ${key} for object storage on this target.`;
     return `Set ${key} in .env.`;
   });
+}
+
+export function parseEnvFile(text: string): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const body = line.startsWith("export ") ? line.slice("export ".length).trim() : line;
+    const separator = body.indexOf("=");
+    if (separator < 1) continue;
+    const key = body.slice(0, separator).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    let value = body.slice(separator + 1).trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
+export function setupUrlFromEnv(env: Record<string, string>): string {
+  const raw = env.APP_URL?.trim() || "http://localhost:3000";
+  return `${raw.replace(/\/+$/, "")}/setup`;
+}
+
+function isPresent(value: string | undefined): value is string {
+  return Boolean(value && value.trim());
+}
+
+export async function inspectProjectEnv(
+  root: string,
+  target?: CreateOptions["target"],
+): Promise<EnvInspection> {
+  const envPath = join(root, ".env");
+  let env: Record<string, string> = {};
+  let resolvedPath: string | null = null;
+  if (await exists(envPath)) {
+    env = parseEnvFile(await readFile(envPath, "utf8"));
+    resolvedPath = envPath;
+  }
+  const required: string[] = [...REQUIRED_ENV_KEYS];
+  if (target && storageFor(target) === "s3") required.push(...S3_ENV_KEYS);
+  const missing = required.filter((key) => {
+    const value = env[key];
+    if (!isPresent(value)) return true;
+    if (key === "SESSION_SECRET" && value.trim().length < 32) return true;
+    return false;
+  });
+  const recovery = [
+    ...(resolvedPath ? [] : ["Copy .env.example to .env and fill every required blank. Never commit .env."]),
+    ...recoverFromMissing(missing),
+  ];
+  return {
+    envPath: resolvedPath,
+    env,
+    missing,
+    recovery,
+    setupUrl: setupUrlFromEnv(env),
+    readyToMigrate: isPresent(env.DATABASE_URL),
+    complete: missing.length === 0,
+  };
+}
+
+function resolvePnpm(): { command: string; prefix: string[] } {
+  const execPath = process.env.npm_execpath;
+  if (execPath && /pnpm/i.test(execPath)) {
+    return { command: process.execPath, prefix: [execPath] };
+  }
+  return { command: "corepack", prefix: ["pnpm"] };
+}
+
+export async function runCommand(spec: CommandSpec): Promise<void> {
+  await new Promise<void>((resolveRun, rejectRun) => {
+    const child = spawn(spec.command, spec.args, {
+      cwd: spec.cwd,
+      env: spec.env,
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", rejectRun);
+    child.on("exit", (code, signal) => {
+      if (code === 0) {
+        resolveRun();
+        return;
+      }
+      rejectRun(
+        new Error(
+          [
+            `${spec.command} ${spec.args.join(" ")} failed${signal ? ` (${signal})` : ` with exit ${code}`}.`,
+            stdout.trim(),
+            stderr.trim(),
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        ),
+      );
+    });
+  });
+}
+
+async function defaultProbe(url: string): Promise<{ ok: boolean }> {
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      redirect: "manual",
+      signal: AbortSignal.timeout(2000),
+    });
+    return { ok: response.status > 0 };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function prepareGeneratedProject(root: string, options: PrepareOptions = {}): Promise<string[]> {
+  const destination = resolve(root);
+  const inspection = await inspectProjectEnv(destination, options.target);
+  const lines: string[] = [];
+  if (!inspection.envPath) {
+    lines.push("No .env yet. Copy .env.example to .env and fill every required blank.");
+  }
+  if (inspection.complete) {
+    lines.push("Environment looks complete.");
+  } else {
+    lines.push(`Environment is incomplete: ${inspection.missing.join(", ") || "missing .env"}.`);
+    lines.push(...inspection.recovery);
+  }
+  lines.push(`Setup URL: ${inspection.setupUrl}`);
+
+  const runner = options.runner ?? runCommand;
+  const pnpm = resolvePnpm();
+  const childEnv = { ...process.env, ...inspection.env };
+
+  if (options.install) {
+    lines.push("Installing dependencies with pnpm install --frozen-lockfile.");
+    await runner({
+      command: pnpm.command,
+      args: [...pnpm.prefix, "install", "--frozen-lockfile"],
+      cwd: destination,
+      env: childEnv,
+    });
+    lines.push("Dependencies installed.");
+  } else {
+    lines.push("Skipped dependency install. Run `pnpm install --frozen-lockfile` in the project.");
+  }
+
+  if (options.migrate) {
+    if (!inspection.readyToMigrate) {
+      throw new Error(
+        ["Cannot migrate until DATABASE_URL is set.", ...inspection.recovery].join("\n"),
+      );
+    }
+    lines.push("Running database migrations with pnpm db:migrate.");
+    await runner({
+      command: pnpm.command,
+      args: [...pnpm.prefix, "db:migrate"],
+      cwd: destination,
+      env: childEnv,
+    });
+    lines.push("Migrations applied.");
+  } else {
+    lines.push("Skipped migrations. Run `pnpm db:migrate` after DATABASE_URL is set.");
+  }
+
+  if (options.probe !== false) {
+    const probe = options.probeSetup ?? defaultProbe;
+    const result = await probe(inspection.setupUrl);
+    if (result.ok) {
+      lines.push(`Setup is reachable at ${inspection.setupUrl}. Open it to claim the owner account.`);
+    } else {
+      lines.push(
+        `Could not reach ${inspection.setupUrl} yet. Start the app with \`pnpm dev\`, then open that URL to claim the owner account.`,
+      );
+    }
+  }
+
+  return lines;
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -308,7 +546,7 @@ async function configureProject(
 
   await writeFile(
     join(root, "GETTING_STARTED.md"),
-    `# ${options.name}\n\nGenerated for **${options.target}** using the **${options.preset}** preset.\n\nCountry defaults: ${country.code}; ${country.currency}; ${country.timezone}; ${country.locales.join(", ")}. You can change every business default during setup.\n\n## Local verification\n\n1. Install the exact Node release in \`.node-version\`, then enable the pinned package manager with \`corepack enable\`.\n2. Run \`pnpm install --frozen-lockfile\`.\n3. Copy \`.env.example\` to \`.env\` and fill every required blank. Never commit \`.env\`.\n4. Run \`pnpm db:migrate\`.\n5. Run \`pnpm dev\`, open \`/setup\`, and claim the owner account.\n6. Run \`pnpm doctor -- --url <url> --email <owner> --password <password>\` before deployment.\n\n## Deploy\n\nRead \`deploy/${options.target}/README.md\` and \`deploy/${options.target}/verify.md\`. Target infrastructure, when supplied by the recipe, is also copied to \`infra/\`.\n\nPayments: ${options.payments === "stripe" ? "Stripe is selected; configure and verify both API and webhook credentials." : "manual/offline; connect a provider later in configuration."}\n`,
+    `# ${options.name}\n\nGenerated for **${options.target}** using the **${options.preset}** preset.\n\nCountry defaults: ${country.code}; ${country.currency}; ${country.timezone}; ${country.locales.join(", ")}. You can change every business default during setup.\n\n## Local verification\n\ncreate-freeholder checks \`.env\`, can run \`pnpm install --frozen-lockfile\` and \`pnpm db:migrate\`, and prints the setup URL. Re-run those steps with \`--install --migrate\` after filling \`.env\`, or do them by hand:\n\n1. Install the exact Node release in \`.node-version\`, then enable the pinned package manager with \`corepack enable\`.\n2. Run \`pnpm install --frozen-lockfile\`.\n3. Copy \`.env.example\` to \`.env\` and fill every required blank. Never commit \`.env\`.\n4. Run \`pnpm db:migrate\`.\n5. Run \`pnpm dev\`, open \`/setup\`, and claim the owner account.\n6. Run \`pnpm doctor -- --url <url> --email <owner> --password <password>\` before deployment.\n\n## Deploy\n\nRead \`deploy/${options.target}/README.md\` and \`deploy/${options.target}/verify.md\`. Target infrastructure, when supplied by the recipe, is also copied to \`infra/\`.\n\nPayments: ${options.payments === "stripe" ? "Stripe is selected; configure and verify both API and webhook credentials." : "manual/offline; connect a provider later in configuration."}\n`,
   );
 }
 
@@ -368,7 +606,7 @@ export async function createFreeholder(root: string, input: CreateOptions): Prom
     `Created ${input.name} for ${target}.`,
     `Preset: ${preset}. Country defaults: ${country.code}, ${country.currency}, ${country.timezone}.`,
     `Payments: ${payments === "stripe" ? "Stripe" : "later"}.`,
-    "Next: read GETTING_STARTED.md, configure .env, migrate, then open /setup.",
+    "Scaffold is in place. The CLI now checks the environment, can install and migrate, and prints the setup URL.",
   ];
 }
 
@@ -388,6 +626,10 @@ export function parseArguments(args: string[]): CliArguments {
     if (argument === "--help" || argument === "-h") parsed.help = true;
     else if (argument === "--demo") parsed.demo = true;
     else if (argument === "--non-interactive") parsed.nonInteractive = true;
+    else if (argument === "--install") parsed.install = true;
+    else if (argument === "--no-install") parsed.install = false;
+    else if (argument === "--migrate") parsed.migrate = true;
+    else if (argument === "--no-migrate") parsed.migrate = false;
     else if (argument.startsWith("--target")) {
       const result = optionValue(args, index, "target");
       parsed.target = result.value as CliArguments["target"];
@@ -433,8 +675,22 @@ async function choose<T extends string>(
   }
 }
 
+async function confirm(question: string, fallback: boolean): Promise<boolean> {
+  const reader = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const hint = fallback ? "Y/n" : "y/N";
+    const answer = (await reader.question(`${question} [${hint}]: `)).trim().toLowerCase();
+    if (!answer) return fallback;
+    if (answer === "y" || answer === "yes") return true;
+    if (answer === "n" || answer === "no") return false;
+    throw new Error("Answer yes or no.");
+  } finally {
+    reader.close();
+  }
+}
+
 function help(): string {
-  return `Usage: create-freeholder <directory> [options]\n\nOptions:\n  --target <target>       ${TARGETS.join(" | ")}\n  --preset <preset>       ${PRESETS.join(" | ")}\n  --country <ISO code>    ${COUNTRY_DEFAULTS.map((entry) => entry.code).join(" | ")}\n  --payments <choice>     stripe | later\n  --demo                  Seed the deterministic demo business\n  --non-interactive       Require every choice as a flag\n  --help                  Show this help\n`;
+  return `Usage: create-freeholder <directory> [options]\n\nOptions:\n  --target <target>       ${TARGETS.join(" | ")}\n  --preset <preset>       ${PRESETS.join(" | ")}\n  --country <ISO code>    ${COUNTRY_DEFAULTS.map((entry) => entry.code).join(" | ")}\n  --payments <choice>     stripe | later\n  --demo                  Seed the deterministic demo business\n  --install               Run pnpm install --frozen-lockfile after scaffolding\n  --migrate               Run pnpm db:migrate after environment checks\n  --no-install            Skip dependency install\n  --no-migrate            Skip migrations\n  --non-interactive       Require every choice as a flag; skip install/migrate unless passed\n  --help                  Show this help\n`;
 }
 
 async function main(): Promise<void> {
@@ -469,7 +725,28 @@ async function main(): Promise<void> {
     payments,
     demo: args.demo,
   });
-  for (const line of lines) console.log(line);
+  let install = args.install;
+  let migrate = args.migrate;
+  if (args.nonInteractive) {
+    install = install ?? false;
+    migrate = migrate ?? false;
+  } else {
+    if (install === undefined) {
+      install = await confirm("Install dependencies now (pnpm install --frozen-lockfile)?", true);
+    }
+    if (migrate === undefined) {
+      const inspection = await inspectProjectEnv(directory, target);
+      migrate = inspection.readyToMigrate
+        ? await confirm("Run database migrations now (pnpm db:migrate)?", true)
+        : false;
+    }
+  }
+  const prepared = await prepareGeneratedProject(directory, {
+    install,
+    migrate,
+    target,
+  });
+  for (const line of [...lines, ...prepared]) console.log(line);
 }
 
 async function isMainModule(): Promise<boolean> {
