@@ -73,6 +73,8 @@ whole story, which is the point.
   the successor.
 - [`update-checks.md`](update-checks.md) — the daily GET of that feed, jitter,
   the off path, and the guarantee that nothing identifying the instance is sent.
+- [`update-preflight.md`](update-preflight.md) — signatures, plugins, drift,
+  environment, shadow-schema migration and the downtime estimate before apply.
 - [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
   database/media restore, update and rollback acceptance for every Tier-1
   target.
