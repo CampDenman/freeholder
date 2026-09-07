@@ -29,6 +29,7 @@ const steps = [
     name: "contract suites",
     run: [
       "pnpm exec vitest run --reporter=dot",
+      "tests/core/sdk-schema.test.ts",
       "tests/core/locale-quality.test.ts",
       "tests/core/tokens.test.ts",
       "tests/core/cms-fields.test.ts",

@@ -1,13 +1,33 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Generated-from-registry client (MASTER.md §28, C3.03).
+// Typed HTTP client for a Freeholder instance (MASTER.md §28, C3.03).
 //
-// The method list is the instance's live service registry: this package
-// does not invent endpoints. `call(name, input)` POSTs `/api/v1/<name>`
-// with the same JSON the OpenAPI document describes.
+// Concrete methods and input/output types are generated from the live
+// service registry. Transport, auth and pagination wrappers live here and
+// are typed against that generated layer so a contract change breaks them.
 import { PLATFORM_VERSION } from "./version.ts";
+import type {
+  FreeholderApi,
+  PageableService,
+  ServiceCatalog,
+  ServiceInput,
+  ServiceName,
+  ServiceOutput,
+} from "./generated.ts";
 
 export { PLATFORM_VERSION };
+export {
+  PAGEABLE_SERVICES,
+  SERVICE_NAMES,
+  type FreeholderApi,
+  type PageableService,
+  type ServiceCatalog,
+  type ServiceInput,
+  type ServiceName,
+  type ServiceOutput,
+} from "./generated.ts";
+
+const SERVICE_NAME = /^[a-z][a-zA-Z0-9]*\.[a-zA-Z0-9]+$/;
 
 export class FreeholderError extends Error {
   constructor(
@@ -28,6 +48,16 @@ export interface FreeholderClientOptions {
   fetch?: typeof fetch;
 }
 
+type OptionalInputService = {
+  [K in ServiceName]: Record<string, never> extends ServiceInput<K> ? K : never;
+}[ServiceName];
+
+type PageItem<K extends PageableService> = ServiceOutput<K> extends {
+  rows: Array<infer Item>;
+}
+  ? Item
+  : never;
+
 export class FreeholderClient {
   readonly version = PLATFORM_VERSION;
   private readonly baseUrl: string;
@@ -40,8 +70,58 @@ export class FreeholderClient {
     this.fetchImpl = options.fetch ?? fetch;
   }
 
-  async call<T = unknown>(service: string, input: unknown = {}): Promise<T> {
-    if (!/^[a-z][a-zA-Z0-9]*\.[a-zA-Z0-9]+$/.test(service)) {
+  /** A client that presents a different API key on the same origin. */
+  withToken(token: string): FreeholderClient {
+    return new FreeholderClient({
+      baseUrl: this.baseUrl,
+      token,
+      fetch: this.fetchImpl,
+    });
+  }
+
+  /**
+   * Namespaced methods for every service in the published catalog.
+   * Instance-specific plugin verbs still go through `call(name, input)`.
+   */
+  get api(): FreeholderApi {
+    return createApiProxy((name, input) => this.request(name, input));
+  }
+
+  async call<K extends OptionalInputService>(
+    name: K,
+    input?: ServiceInput<K>,
+  ): Promise<ServiceOutput<K>>;
+  async call<K extends ServiceName>(
+    name: K,
+    input: ServiceInput<K>,
+  ): Promise<ServiceOutput<K>>;
+  async call(name: string, input?: unknown): Promise<unknown>;
+  async call(name: string, input: unknown = {}): Promise<unknown> {
+    return this.request(name, input);
+  }
+
+  /**
+   * Walk a `{ rows, total }` list until every row is yielded.
+   * Only services in `PAGEABLE_SERVICES` accept this wrapper.
+   */
+  async *paginate<K extends PageableService>(
+    name: K,
+    input: Omit<ServiceInput<K>, "offset">,
+  ): AsyncGenerator<PageItem<K>> {
+    let offset = 0;
+    for (;;) {
+      const page = (await this.call(
+        name,
+        { ...(input as Record<string, unknown>), offset } as ServiceInput<K>,
+      )) as { rows: PageItem<K>[]; total: number };
+      for (const row of page.rows) yield row;
+      offset += page.rows.length;
+      if (page.rows.length === 0 || offset >= page.total) break;
+    }
+  }
+
+  private async request(service: string, input: unknown = {}): Promise<unknown> {
+    if (!SERVICE_NAME.test(service)) {
       throw new FreeholderError(400, "validation", `Not a service name: ${service}`);
     }
     const headers: Record<string, string> = {
@@ -64,10 +144,35 @@ export class FreeholderClient {
         body.error?.message ?? `HTTP ${response.status}`,
       );
     }
-    return body as T;
+    return body;
   }
 }
 
 export function createClient(options: FreeholderClientOptions): FreeholderClient {
   return new FreeholderClient(options);
+}
+
+function createApiProxy(
+  request: (name: string, input?: unknown) => Promise<unknown>,
+): FreeholderApi {
+  const families = new Map<string, object>();
+  return new Proxy({} as FreeholderApi, {
+    get(_target, family: string | symbol) {
+      if (typeof family !== "string" || family === "then") return undefined;
+      let methods = families.get(family);
+      if (!methods) {
+        methods = new Proxy(
+          {},
+          {
+            get(_inner, verb: string | symbol) {
+              if (typeof verb !== "string" || verb === "then") return undefined;
+              return (input: unknown = {}) => request(`${family}.${verb}`, input);
+            },
+          },
+        );
+        families.set(family, methods);
+      }
+      return methods;
+    },
+  });
 }

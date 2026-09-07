@@ -109,22 +109,30 @@ async function main() {
     await writeFile(
       join(consumer, "smoke.mjs"),
       `import assert from "node:assert/strict";
-import { createClient, PLATFORM_VERSION } from "@freeholder/sdk";
+import { createClient, PLATFORM_VERSION, SERVICE_NAMES } from "@freeholder/sdk";
 import { definePlugin } from "@freeholder/plugin-kit";
 import { listPresets } from "@freeholder/templates";
 assert.equal(typeof createClient, "function");
 assert.equal(typeof definePlugin, "function");
 assert.match(PLATFORM_VERSION, /^\\d+\\.\\d+\\.\\d+/);
+assert.ok(SERVICE_NAMES.includes("contacts.create"));
+const client = createClient({
+  baseUrl: "https://example.invalid",
+  fetch: async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }),
+});
+assert.equal(typeof client.api.contacts.create, "function");
 assert.deepEqual(listPresets().sort(), ["creator", "service-business", "shop"].sort());
 `,
     );
     await run(process.execPath, [join(consumer, "smoke.mjs")], consumer);
     await writeFile(
       join(consumer, "consumer.mts"),
-      `import { createClient, PLATFORM_VERSION } from "@freeholder/sdk";
+      `import { createClient, PLATFORM_VERSION, SERVICE_NAMES } from "@freeholder/sdk";
 import { definePlugin } from "@freeholder/plugin-kit";
 import { preset } from "@freeholder/templates";
-void createClient;
+const client = createClient({ baseUrl: "https://example.invalid" });
+void client.api.contacts.list;
+void SERVICE_NAMES;
 void PLATFORM_VERSION;
 void definePlugin;
 void preset;
