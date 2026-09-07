@@ -7,7 +7,6 @@ import {
   parseReleaseMetadata,
   ReleaseMetadataError,
   severityForCvss,
-  type ReleaseMetadata,
 } from "@/core/update/release";
 import { describeRelease } from "@/core/update/service";
 import { THIS_RELEASE } from "@/core/update/this-release";
@@ -95,7 +94,7 @@ describe("release metadata (C10.02)", () => {
   });
 
   it("applies from minFromVersion, not from a patch looking close enough", () => {
-    const release = parseReleaseMetadata(sample({ version: "1.0.1", minFromVersion: "1.0.1" })) as ReleaseMetadata;
+    const release = parseReleaseMetadata(sample({ version: "1.0.1", minFromVersion: "1.0.1" }));
     expect(canApplyFrom("1.0.0", release).ok).toBe(false);
     expect(canApplyFrom("1.0.1", release).ok).toBe(true);
   });
