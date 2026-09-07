@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.33. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.11–C0.12 F-matrix integrity, then C9.33. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3404,9 +3404,16 @@ one with unchecked dependency items.
 - [x] **C0.08** Add a plan-consistency gate that rejects references to retired
   planning files and validates unique checklist IDs. *(`scripts/plan-gate.mjs`,
   plan-gate tests, and the `product-completion-plan.md` changeset.)*
-- [ ] **C0.09** Reconcile `README.md`, setup text, package descriptions, and
+- [x] **C0.09** Reconcile `README.md`, setup text, package descriptions, and
   deployment docs whenever a target capability becomes true; target language
   must never masquerade as current availability.
+  (`README.md` status vs product-complete target; `packages/README.md` names
+  open C3.03/C3.14/C3.15/C3.20; SDK and create-freeholder descriptions no
+  longer read as finished clients; deploy image tags distinguish `edge` from
+  unreleased SemVer. Setup copy does not promise an updater, mobile app or
+  auto-billing. Gate in `tests/core/docs-availability.test.ts`. Changeset
+  `docs-availability.md`. F08/F11 apply; F04/F05/F07/F09/F12 are N/A — this
+  item is documentation honesty, not a product surface.)
 - [x] **C0.10** License all Freeholder-authored code, documentation, deploy
   tooling, and packages under Apache-2.0 while retaining third-party notices;
   enforce the canonical license text, manifest fields, package copies, and
@@ -3439,6 +3446,8 @@ one with unchecked dependency items.
   `media.registerStoredOriginal` as an orchestrator; `plan:check` refuses
   missing C-item citations and a Current focus that names checked work
   (#280); `HANDOFF.md` / `RESTART_HANDOFF.md` declare themselves historical.
+  2026-09-07: C0.09 docs-availability gate so README, packages and deploy
+  recipes cannot present open C3/C9/C10 work as shipped.
   Still open: the F01–F12 matrix (C11.09 and remaining C0.12).)*
 - [ ] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
   carry resolvable repository evidence, the control block must be current, and
