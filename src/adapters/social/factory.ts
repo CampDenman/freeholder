@@ -5,8 +5,7 @@
 // Each network's chaos lives in its spec: URLs, scopes, how it names a person.
 // The composer and the profile table never hear about that. A plugin adds a
 // network by calling `socialAdapters.register` with another of these — no
-// core table change, which is the property C9.31 later proves with a fixture
-// plugin.
+// core table change, which C9.31 proves with `plugins/social-fixture`.
 import { unavailable, type AdapterStatus } from "../types";
 import { socialFetch, socialJson } from "./http";
 import type {

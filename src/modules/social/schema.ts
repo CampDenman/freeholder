@@ -3,7 +3,8 @@
 // Connected social profiles (MASTER.md §33, C9.24).
 //
 // Provider is plain text, not a closed enum, so a plugin can add a network
-// without a migration on this table — the property C9.31 later proves. The
+// without a migration on this table — the property C9.31 proves with
+// `plugins/social-fixture`. The
 // unique index is (provider, provider account id) because several profiles
 // per network is the normal case, not a workaround.
 //

@@ -54,6 +54,7 @@ import {
   GAP_REASONS,
   KNOWLEDGE_KINDS,
 } from "@/modules/assistant/contract";
+import { SOCIAL_EXTRAS } from "@/modules/social/capabilities";
 import {
   SOCIAL_APPROVAL_POLICIES,
   SOCIAL_ASSIGNMENTS,
@@ -272,6 +273,8 @@ describe("the families built from a template key", () => {
     ["assistant.knowledgeKind", KNOWLEDGE_KINDS],
     ["assistant.tone", ASSISTANT_TONES],
     ["assistant.gapReason", GAP_REASONS],
+    ["social.capability", ["read", "respond", "publish"]],
+    ["social.extra", SOCIAL_EXTRAS],
     ["social.status", SOCIAL_PROFILE_STATUSES],
     ["social.health", SOCIAL_HEALTH],
     ["social.assignment", SOCIAL_ASSIGNMENTS],

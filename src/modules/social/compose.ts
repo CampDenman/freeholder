@@ -23,6 +23,7 @@ import {
   SOCIAL_VARIANT_STATUSES,
 } from "./contract";
 import { outboundCampaignUrl } from "./gbp";
+import { profileMayPublish } from "./capabilities";
 import { clipCaption, parseHashtags, policyFor } from "./policy";
 import { clipVideo, cropStill, stillThumbnail } from "./render";
 import {
@@ -222,8 +223,11 @@ export const createVariantsSource = defineService({
         .from(socialProfiles)
         .where(eq(socialProfiles.id, profileId))
         .limit(1);
-      if (!profile || profile.status !== "active") {
-        throw new ServiceError("not_found", "One of those profiles is not active.");
+      if (!profile || !profileMayPublish(profile)) {
+        throw new ServiceError(
+          "not_found",
+          "One of those profiles cannot publish. Publishing is an owner switch plus what the network's API currently permits.",
+        );
       }
       profiles.push({
         id: profile.id,
@@ -484,7 +488,7 @@ export const schedulePublications = defineService({
         .from(socialProfiles)
         .where(eq(socialProfiles.id, variant.profileId))
         .limit(1);
-      if (!profile || profile.status !== "active" || !profile.allowPublish) {
+      if (!profile || !profileMayPublish(profile)) {
         throw new ServiceError(
           "permission",
           "Publishing is not switched on for that profile.",
@@ -635,7 +639,7 @@ export const publicationSource = defineService({
     if (!variant || variant.status !== "approved") {
       return unavailable("The publication variant is unavailable or no longer approved.");
     }
-    if (!profile || profile.status !== "active" || !profile.allowPublish) {
+    if (!profile || !profileMayPublish(profile)) {
       return unavailable("The publishing profile is unavailable or publishing is disabled.");
     }
     const media = [];

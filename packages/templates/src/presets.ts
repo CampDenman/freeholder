@@ -9,6 +9,13 @@ export const BENCH_TOKENS = {
   measure: "wide",
 } as const;
 
+/** Social hub in every normal preset. Connect and publish stay explicit. */
+export const SOCIAL_SURFACE = {
+  href: "/admin/social",
+  autoAuthorize: false,
+  autoPublish: false,
+} as const;
+
 export const PRESETS = {
   creator: {
     name: "Creator",
@@ -21,6 +28,7 @@ export const PRESETS = {
     entities: [{ type: "product", template: "product-page" }],
     emails: [{ key: "welcome", slots: ["name", "siteName"] }],
     seed: { pages: 3, contacts: 0 },
+    social: SOCIAL_SURFACE,
   },
   "service-business": {
     name: "Service business",
@@ -34,6 +42,7 @@ export const PRESETS = {
     entities: [{ type: "offering", template: "service-page" }],
     emails: [{ key: "booking-confirm", slots: ["name", "startsAt"] }],
     seed: { pages: 4, contacts: 0 },
+    social: SOCIAL_SURFACE,
   },
   shop: {
     name: "Shop",
@@ -47,6 +56,7 @@ export const PRESETS = {
     entities: [{ type: "product", template: "product-page" }],
     emails: [{ key: "order-receipt", slots: ["name", "total"] }],
     seed: { pages: 4, contacts: 0 },
+    social: SOCIAL_SURFACE,
   },
 } as const;
 

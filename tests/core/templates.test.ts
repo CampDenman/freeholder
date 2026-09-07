@@ -12,6 +12,9 @@ describe("@freeholder/templates starter descriptors", () => {
       expect(value.entities.length).toBeGreaterThan(0);
       expect(value.emails.length).toBeGreaterThan(0);
       expect(value.tokens.ink).toBe(BENCH_TOKENS.ink);
+      expect(value.social.href).toBe("/admin/social");
+      expect(value.social.autoAuthorize).toBe(false);
+      expect(value.social.autoPublish).toBe(false);
     }
   });
 });
