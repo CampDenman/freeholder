@@ -22,8 +22,6 @@ random scratch database, compares every table and generates the export from
 the restored copy. PostgreSQL client tools must be at least as new as the
 server. See `deploy/ownership-recovery.md`.
 
-The finished operational surface still requires setup/install (`MASTER.md`
-C3.14), the single-archive/import UX and human-readable projections (C3.18),
-cross-platform migration (C3.19), and complete recipe-level parity and update/
-rollback (C3.17 and C10.10). C1.23 supplies the guarded ownership substrate;
-those later items build on it rather than being claimed by a command name.
+`create-freeholder` now checks the generated environment, can install and
+migrate, and prints the setup URL (C3.14). Recipe update/rollback automation
+remains open under C10.10. C1.23 supplies the guarded ownership substrate.

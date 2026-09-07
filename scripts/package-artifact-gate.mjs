@@ -17,7 +17,7 @@ const packageNames = [
 ];
 
 async function run(command, args, cwd) {
-  await new Promise((resolveRun, rejectRun) => {
+  return new Promise((resolveRun, rejectRun) => {
     const child = spawn(command, args, {
       cwd,
       env: { ...process.env, NO_COLOR: "1" },
@@ -35,7 +35,7 @@ async function run(command, args, cwd) {
     child.on("error", rejectRun);
     child.on("exit", (code, signal) => {
       if (code === 0) {
-        resolveRun();
+        resolveRun(stdout);
         return;
       }
       rejectRun(
@@ -160,7 +160,7 @@ void preset;
       process.platform === "win32" ? "create-freeholder.cmd" : "create-freeholder",
     );
     await access(bin);
-    await run(
+    const created = await run(
       process.execPath,
       [
         join(consumer, "node_modules", "create-freeholder", "dist", "index.js"),
@@ -173,6 +173,11 @@ void preset;
       ],
       consumer,
     );
+    assert.match(created, /Setup URL: http:\/\/localhost:3000\/setup/);
+    assert.match(created, /No \.env yet/);
+    assert.match(created, /Skipped dependency install/);
+    assert.match(created, /Skipped migrations/);
+    assert.match(created, /Could not reach http:\/\/localhost:3000\/setup yet/);
     const generatedRoot = join(consumer, "studio");
     const generatedManifest = JSON.parse(
       await readFile(join(generatedRoot, "package.json"), "utf8"),

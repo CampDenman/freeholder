@@ -16,9 +16,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   COUNTRY_DEFAULTS as CLI_COUNTRY_DEFAULTS,
   createFreeholder,
+  inspectProjectEnv,
   missingEnv,
   parseArguments,
+  parseEnvFile,
+  prepareGeneratedProject,
   recoverFromMissing,
+  setupUrlFromEnv,
+  type CommandSpec,
 } from "../../packages/create-freeholder/src/index";
 import { COUNTRY_DEFAULTS } from "@/core/settings/defaults";
 
@@ -57,6 +62,8 @@ describe("create-freeholder (C3.14)", () => {
         "--payments",
         "stripe",
         "--demo",
+        "--install",
+        "--migrate",
       ]),
     ).toEqual({
       directory: "studio",
@@ -67,7 +74,22 @@ describe("create-freeholder (C3.14)", () => {
       preset: "shop",
       country: "GB",
       payments: "stripe",
+      install: true,
+      migrate: true,
     });
+  });
+
+  it("parses environment file values and names the setup URL", () => {
+    const env = parseEnvFile(
+      '# comment\nexport DATABASE_URL="postgres://postgres:postgres@localhost:5432/freeholder_dev"\nSESSION_SECRET=\nAPP_URL=https://studio.example/\n',
+    );
+    expect(env.DATABASE_URL).toMatch(/^postgres:/);
+    expect(env.SESSION_SECRET).toBe("");
+    expect(setupUrlFromEnv(env)).toBe("https://studio.example/setup");
+    expect(setupUrlFromEnv({ APP_URL: "https://studio.example///" })).toBe(
+      "https://studio.example/setup",
+    );
+    expect(setupUrlFromEnv({})).toBe("http://localhost:3000/setup");
   });
 
   it("writes a runnable source project, target config and walkthrough", async () => {
@@ -142,5 +164,96 @@ describe("create-freeholder (C3.14)", () => {
       }),
     ).rejects.toThrow(/cannot be inside/);
     expect(await readdir(template)).toEqual([]);
+  });
+
+  it("names missing environment, recovery, and the setup URL after scaffolding", async () => {
+    const root = await mkdtemp(join(tmpdir(), "create-fh-env-"));
+    dirs.push(root);
+    const inspection = await inspectProjectEnv(root, "local");
+    expect(inspection.envPath).toBeNull();
+    expect(inspection.complete).toBe(false);
+    expect(inspection.readyToMigrate).toBe(false);
+    expect(inspection.missing).toEqual(["DATABASE_URL", "SESSION_SECRET", "CREDENTIAL_KEY", "APP_URL"]);
+    expect(inspection.recovery[0]).toMatch(/Copy \.env\.example/);
+    expect(inspection.setupUrl).toBe("http://localhost:3000/setup");
+  });
+
+  it("treats a short session secret as missing and requires storage keys on s3 targets", async () => {
+    const root = await mkdtemp(join(tmpdir(), "create-fh-short-"));
+    dirs.push(root);
+    await writeFile(
+      join(root, ".env"),
+      [
+        "DATABASE_URL=postgres://postgres:postgres@localhost:5432/freeholder_dev",
+        "SESSION_SECRET=tooshort",
+        "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef",
+        "APP_URL=http://localhost:3000",
+      ].join("\n"),
+    );
+    const local = await inspectProjectEnv(root, "local");
+    expect(local.missing).toEqual(["SESSION_SECRET"]);
+    expect(local.readyToMigrate).toBe(true);
+    const railway = await inspectProjectEnv(root, "railway");
+    expect(railway.missing).toEqual(expect.arrayContaining(["SESSION_SECRET", "S3_BUCKET"]));
+    expect(recoverFromMissing(["S3_BUCKET"])[0]).toMatch(/object storage/);
+  });
+
+  it("installs, migrates, and reports a reachable setup URL when the environment is ready", async () => {
+    const root = await mkdtemp(join(tmpdir(), "create-fh-prepare-"));
+    dirs.push(root);
+    await writeFile(
+      join(root, ".env"),
+      [
+        "DATABASE_URL=postgres://postgres:postgres@localhost:5432/freeholder_dev",
+        "SESSION_SECRET=deterministic-session-secret-key-32+",
+        "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef",
+        "APP_URL=https://studio.example",
+      ].join("\n"),
+    );
+    const calls: CommandSpec[] = [];
+    const lines = await prepareGeneratedProject(root, {
+      install: true,
+      migrate: true,
+      target: "local",
+      runner: async (spec) => {
+        calls.push(spec);
+      },
+      probeSetup: async (url) => {
+        expect(url).toBe("https://studio.example/setup");
+        return { ok: true };
+      },
+    });
+    expect(calls[0]?.args).toEqual(expect.arrayContaining(["install", "--frozen-lockfile"]));
+    expect(calls[1]?.args).toEqual(expect.arrayContaining(["db:migrate"]));
+    expect(calls[0]?.cwd).toBe(root);
+    expect(calls[1]?.env.DATABASE_URL).toMatch(/^postgres:/);
+    expect(lines.join("\n")).toMatch(/Environment looks complete/);
+    expect(lines.join("\n")).toMatch(/Dependencies installed/);
+    expect(lines.join("\n")).toMatch(/Migrations applied/);
+    expect(lines.join("\n")).toMatch(/Setup is reachable at https:\/\/studio\.example\/setup/);
+  });
+
+  it("refuses migrate without DATABASE_URL and tells the operator how to recover", async () => {
+    const root = await mkdtemp(join(tmpdir(), "create-fh-nomigrate-"));
+    dirs.push(root);
+    await expect(
+      prepareGeneratedProject(root, {
+        migrate: true,
+        probe: false,
+        runner: async () => {
+          throw new Error("runner must not run when migrate is refused");
+        },
+      }),
+    ).rejects.toThrow(/Cannot migrate until DATABASE_URL is set/);
+    const lines = await prepareGeneratedProject(root, {
+      install: false,
+      migrate: false,
+      probeSetup: async () => ({ ok: false }),
+    });
+    expect(lines.join("\n")).toMatch(/No \.env yet/);
+    expect(lines.join("\n")).toMatch(/Skipped dependency install/);
+    expect(lines.join("\n")).toMatch(/Skipped migrations/);
+    expect(lines.join("\n")).toMatch(/Could not reach http:\/\/localhost:3000\/setup yet/);
+    expect(lines.join("\n")).toMatch(/pnpm dev/);
   });
 });
