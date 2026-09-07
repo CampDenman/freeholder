@@ -245,6 +245,14 @@ const envSchema = z.object({
     .optional(),
 
   /**
+   * Daily signed-feed check (C10.04). On unless set to `off`. Reporting does
+   * not exist; this is a GET of a static file, never an instance identifier.
+   */
+  FREEHOLDER_UPDATE_CHECK: z.enum(["on", "off"]).optional(),
+  /** Override the signed `releases.json` URL. Must be a public http(s) origin. */
+  FREEHOLDER_UPDATE_FEED_URL: z.string().url().optional(),
+
+  /**
    * Control Aurora Coast demo installation at boot.
    *
    * Unset means on in development and off everywhere else. `1` asks for it

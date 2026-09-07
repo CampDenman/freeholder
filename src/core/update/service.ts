@@ -1,13 +1,19 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Customization seams (C10.01), declared release metadata (C10.02), signed feed (C10.03).
+// Customization seams (C10.01), channels (C10.02), signed feed (C10.03), daily check (C10.04).
 import { z } from "zod";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { listed } from "@/core/contract";
 import { env } from "@/core/env";
 import { PLATFORM_VERSION } from "@/core/platform";
-import { defineService, ServiceError } from "@/core/service";
+import { defineOrchestratedService, defineService, ServiceError } from "@/core/service";
+import {
+  jitterSlot,
+  runUpdateCheck,
+  updateCheckEnabled,
+  updateFeedUrl,
+} from "./check";
 import instanceConfig from "../../../freeholder.config";
 import { CHANNELS, RELEASE_CHANNELS } from "./channels";
 import { ReleaseFeedError, verifyReleaseFeed } from "./feed";
@@ -235,4 +241,76 @@ export const verifyFeed = defineService({
   },
 });
 
-export default [inspectSeams, describeRelease, verifyFeed];
+export const updateCheckPolicy = defineService({
+  name: "platform.updateCheckPolicy",
+  summary: "Whether this instance checks the signed update feed, and that it never reports upstream.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: z.object({
+    enabled: z.boolean(),
+    feedUrl: z.string(),
+    reports: z.literal(false),
+    slot: z.number(),
+  }),
+  handler: async (_input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to read the update-check policy.");
+    }
+    const e = env();
+    return {
+      enabled: updateCheckEnabled(e.FREEHOLDER_UPDATE_CHECK),
+      feedUrl: updateFeedUrl(e.FREEHOLDER_UPDATE_FEED_URL),
+      reports: false as const,
+      slot: jitterSlot(e.APP_URL),
+    };
+  },
+});
+
+export const checkUpdates = defineOrchestratedService({
+  name: "platform.checkUpdates",
+  summary: "GET the signed update feed. Sends no instance identifier.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: z.object({
+    checked: z.boolean(),
+    reason: z.enum(["off", "slot"]).nullable(),
+    keyId: z.string().nullable(),
+    releases: listed(
+      z.object({
+        version: z.string(),
+        channel: z.enum(RELEASE_CHANNELS),
+        digest: z.string(),
+        severity: z.enum(SEVERITIES),
+      }),
+    ),
+  }),
+  handler: async (_input, actor) => {
+    if (actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to check for updates.");
+    }
+    const e = env();
+    const result = await runUpdateCheck({
+      enabled: updateCheckEnabled(e.FREEHOLDER_UPDATE_CHECK),
+      feedUrl: updateFeedUrl(e.FREEHOLDER_UPDATE_FEED_URL),
+      fetchImpl: fetch,
+    });
+    if (!result.checked) {
+      return { checked: false, reason: result.reason, keyId: null, releases: [] };
+    }
+    return {
+      checked: true,
+      reason: null,
+      keyId: result.feed.keyId,
+      releases: result.feed.releases.map((release) => ({
+        version: release.version,
+        channel: release.channel,
+        digest: release.digest,
+        severity: release.severity,
+      })),
+    };
+  },
+});
+
+export default [inspectSeams, describeRelease, verifyFeed, updateCheckPolicy, checkUpdates];

@@ -47,6 +47,11 @@ export default async function SetupDonePage() {
         </Callout>
       </div>
       <div className="mb-8">
+        <Callout tone="neutral">
+          {t("setup.done.updateCheck")}
+        </Callout>
+      </div>
+      <div className="mb-8">
         <MailReadiness
           configuration={mailConfigurationStatus()}
           appUrl={env().APP_URL}

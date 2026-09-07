@@ -3710,6 +3710,7 @@
   "setup.done.submit": "Finalizar la configuración",
   "setup.done.summary": "Publicando en {locales}, cobrando en {currency}, mostrando horarios en {timezone}.",
   "setup.done.title": "{name} está listo",
+  "setup.done.updateCheck": "Esta instancia buscará actualizaciones una vez al día. La comprobación descarga un archivo firmado: no envía identificador de instancia ni nada aguas arriba. Pon FREEHOLDER_UPDATE_CHECK=off si prefieres seguir una lista de correo.",
   "setup.location.intro": "Si los clientes van a usted, esto es lo que los buscadores comparan con los directorios: escríbalo exactamente igual que en otros sitios. Si trabaja en línea o se desplaza, omita este paso.",
   "setup.location.skip": "No tengo una dirección que mostrar",
   "setup.location.submit": "Guardar y continuar",

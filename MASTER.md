@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `703e2a1` after C10.02 release channels #305. C10.03 publishes signed `releases.json` with image digest and provenance, and the instance ships a rotatable trusted release public key. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `b2df58b` after C10.03 signed release feed #306. C10.04 is a private daily GET of that feed with jitter, no instance identifier, an explicit setup notice and an off path. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.04–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.05–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7576,8 +7576,21 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `deploy/release-feed.md`, changeset `signed-release-feed.md`. **F12** a
   retiring key still verifies; an untrusted key does not. This is not
   unattended self-update — the daily check is C10.04.)
-- [ ] **C10.04** Build private daily update checks with jitter, no instance ID
+- [x] **C10.04** Build private daily update checks with jitter, no instance ID
   or telemetry, explicit setup policy and an off path.
+  (`core.checkUpdates` GETs the signed feed in a deterministic 15-minute UTC
+  slot; `User-Agent: Freeholder-Updater` only. `FREEHOLDER_UPDATE_CHECK=off`
+  is the off path. Setup `setup.done.updateCheck` states the trade. Reporting
+  does not exist (`platform.updateCheckPolicy.reports` is false).
+  **F01–F03** N/A — tables are C10.11. **F04** setup done + Doctor, not a
+  new admin screen (C10.11). **F05** `platform.checkUpdates`,
+  `platform.updateCheckPolicy`. **F06** `setup.done.updateCheck` in en/es/fr.
+  **F07** anonymous callers refused; off skips the GET; query parameters
+  refused. **F08** `tests/core/update-check.test.ts`, doctor ids,
+  `tests/core/outbox.test.ts` job registry. **F09** SPDX. **F10** N/A.
+  **F11** `deploy/update-checks.md`, changeset `daily-update-check.md`.
+  **F12** the captured request has no instance identifier. This is not
+  unattended apply — C10.06.)
 - [ ] **C10.05** Build preflight: signatures, plugin compatibility, shadow-DB
   migration, drift, disk/Postgres/extensions/adapters and downtime estimate.
 - [ ] **C10.06** Build snapshot → verify/pull → migrate → health/smoke → cutover

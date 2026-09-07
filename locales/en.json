@@ -3710,6 +3710,7 @@
   "setup.done.submit": "Finish setup",
   "setup.done.summary": "Publishing in {locales}, charging in {currency}, showing times in {timezone}.",
   "setup.done.title": "{name} is ready",
+  "setup.done.updateCheck": "This instance will check for updates once a day. The check downloads a signed file — no instance identifier, nothing reported upstream. Set FREEHOLDER_UPDATE_CHECK=off if you would rather watch a mailing list.",
   "setup.location.intro": "If customers come to you, this is what search engines match against directory listings — so write it exactly as it appears elsewhere. If you work online or travel to customers, skip this.",
   "setup.location.skip": "I don’t have an address to show",
   "setup.location.submit": "Save and continue",

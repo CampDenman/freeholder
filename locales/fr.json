@@ -3710,6 +3710,7 @@
   "setup.done.submit": "Terminer la configuration",
   "setup.done.summary": "Publication en {locales}, facturation en {currency}, horaires affichés en {timezone}.",
   "setup.done.title": "{name} est prêt",
+  "setup.done.updateCheck": "Cette instance vérifiera les mises à jour une fois par jour. La vérification télécharge un fichier signé — aucun identifiant d’instance, rien n’est envoyé en amont. Définissez FREEHOLDER_UPDATE_CHECK=off si vous préférez suivre une liste de diffusion.",
   "setup.location.intro": "Si vos clients viennent à vous, c’est ce que les moteurs de recherche comparent aux annuaires — écrivez-le exactement comme ailleurs. Si vous travaillez en ligne ou vous déplacez, passez cette étape.",
   "setup.location.skip": "Je n’ai pas d’adresse à afficher",
   "setup.location.submit": "Enregistrer et continuer",
