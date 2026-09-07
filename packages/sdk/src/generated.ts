@@ -923,6 +923,7 @@ export const SERVICE_NAMES = [
   "paywalls.list",
   "paywalls.save",
   "platform.cancelJob",
+  "platform.checkUpdates",
   "platform.compatibility",
   "platform.cspViolations",
   "platform.describeRelease",
@@ -940,6 +941,7 @@ export const SERVICE_NAMES = [
   "platform.replayOutboxEvent",
   "platform.retryJob",
   "platform.source",
+  "platform.updateCheckPolicy",
   "platform.verifyReleaseFeed",
   "platform.version",
   "plugins.addRegistry",
@@ -4921,6 +4923,10 @@ export interface ServiceCatalog {
     input: { name: string; id: string; confirm: "CANCEL" };
     output: { cancelled: true };
   };
+  "platform.checkUpdates": {
+    input: Record<string, never>;
+    output: { checked: boolean; reason: ("off" | "slot") | null; keyId: string | null; releases: { version: string; channel: "stable" | "security" | "edge"; digest: string; severity: "none" | "low" | "medium" | "high" | "critical" }[] };
+  };
   "platform.compatibility": {
     input: Record<string, never>;
     output: { version: string; compatible: boolean; plugins: { name: string; version: string; freeholder: string; fits: boolean; [key: string]: unknown }[]; [key: string]: unknown };
@@ -4988,6 +4994,10 @@ export interface ServiceCatalog {
   "platform.source": {
     input: { includeLicenceText?: boolean; changeLimit?: number };
     output: { version: string; license: string; licenseText: string | null; notices: { name: string; license: string; note: string | null }[]; plugins: { name: string; version: string; status: string; license: string | null; permissions: string[] }[]; builderChanges: { id: string; lane: "structure" | "code"; summary: string; status: string; reference: string | null; actor: string; at: string }[] };
+  };
+  "platform.updateCheckPolicy": {
+    input: Record<string, never>;
+    output: { enabled: boolean; feedUrl: string; reports: false; slot: number };
   };
   "platform.verifyReleaseFeed": {
     input: { feed: unknown };
@@ -7220,6 +7230,7 @@ export interface FreeholderApi {
   };
   platform: {
     cancelJob: (input: ServiceCatalog["platform.cancelJob"]["input"]) => Promise<ServiceCatalog["platform.cancelJob"]["output"]>;
+    checkUpdates: (input?: ServiceCatalog["platform.checkUpdates"]["input"]) => Promise<ServiceCatalog["platform.checkUpdates"]["output"]>;
     compatibility: (input?: ServiceCatalog["platform.compatibility"]["input"]) => Promise<ServiceCatalog["platform.compatibility"]["output"]>;
     cspViolations: (input?: ServiceCatalog["platform.cspViolations"]["input"]) => Promise<ServiceCatalog["platform.cspViolations"]["output"]>;
     describeRelease: (input?: ServiceCatalog["platform.describeRelease"]["input"]) => Promise<ServiceCatalog["platform.describeRelease"]["output"]>;
@@ -7237,6 +7248,7 @@ export interface FreeholderApi {
     replayOutboxEvent: (input: ServiceCatalog["platform.replayOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.replayOutboxEvent"]["output"]>;
     retryJob: (input: ServiceCatalog["platform.retryJob"]["input"]) => Promise<ServiceCatalog["platform.retryJob"]["output"]>;
     source: (input?: ServiceCatalog["platform.source"]["input"]) => Promise<ServiceCatalog["platform.source"]["output"]>;
+    updateCheckPolicy: (input?: ServiceCatalog["platform.updateCheckPolicy"]["input"]) => Promise<ServiceCatalog["platform.updateCheckPolicy"]["output"]>;
     verifyReleaseFeed: (input: ServiceCatalog["platform.verifyReleaseFeed"]["input"]) => Promise<ServiceCatalog["platform.verifyReleaseFeed"]["output"]>;
     version: (input?: ServiceCatalog["platform.version"]["input"]) => Promise<ServiceCatalog["platform.version"]["output"]>;
   };

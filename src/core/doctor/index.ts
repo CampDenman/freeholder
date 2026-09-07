@@ -23,6 +23,7 @@ import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
 import { PLATFORM_VERSION } from "@/core/platform";
+import { updateCheckEnabled, updateFeedUrl } from "@/core/update/check";
 import { activeReleaseKeys } from "@/core/update/keys";
 import { THIS_RELEASE } from "@/core/update/this-release";
 
@@ -888,6 +889,21 @@ function checkUpdateRelease(): Check[] {
   return checks;
 }
 
+function checkUpdateCheck(): Check {
+  if (!updateCheckEnabled()) {
+    return ok(
+      "update.check",
+      "Update checks",
+      "Update checks are off. This instance will not learn about security releases unless you watch a mailing list.",
+    );
+  }
+  return ok(
+    "update.check",
+    "Update checks",
+    `Daily update checks are on. They GET ${updateFeedUrl()} and send no instance identifier.`,
+  );
+}
+
 function checkUpdateFeedKey(): Check {
   const active = activeReleaseKeys();
   if (active.length === 0) {
@@ -1010,6 +1026,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     checkPlatformVersion(),
     ...checkUpdateRelease(),
     checkUpdateFeedKey(),
+    checkUpdateCheck(),
     ...(await checkUpdateSeams()),
   ];
 

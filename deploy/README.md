@@ -71,6 +71,8 @@ whole story, which is the point.
 - [`release-feed.md`](release-feed.md) — signed `releases.json`, the embedded
   public key, and how rotation keeps the previous key until every image ships
   the successor.
+- [`update-checks.md`](update-checks.md) — the daily GET of that feed, jitter,
+  the off path, and the guarantee that nothing identifying the instance is sent.
 - [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
   database/media restore, update and rollback acceptance for every Tier-1
   target.

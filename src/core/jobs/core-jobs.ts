@@ -853,6 +853,23 @@ export const refreshCatalogue = defineJob({
   },
 });
 
+/**
+ * Private daily update check (C10.04). A GET of a static signed file.
+ * Jitter is a deterministic 15-minute UTC slot so a fleet does not stampede.
+ * Off is FREEHOLDER_UPDATE_CHECK=off. Nothing identifying this instance is sent.
+ */
+export const checkUpdates = defineJob({
+  name: "core.checkUpdates",
+  summary: "Fetch the signed update feed. No instance identifier is sent.",
+  schedule: "*/15 * * * *",
+  concurrency: 1,
+  leaseSeconds: 2 * 60,
+  handler: async () => {
+    const { runScheduledUpdateCheck } = await import("@/core/update/check");
+    return runScheduledUpdateCheck();
+  },
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
@@ -903,4 +920,5 @@ export default [
   sendSmsComplianceReply,
   sendSmsKeywordReply,
   refreshCatalogue,
+  checkUpdates,
 ];
