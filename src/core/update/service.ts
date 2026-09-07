@@ -49,7 +49,7 @@ export const inspectSeams = defineService({
       () => true,
       () => false,
     );
-    const storage = instanceConfig.adapters.storage;
+    const storage = e.FREEHOLDER_STORAGE ?? instanceConfig.adapters.storage;
     const uploads = uploadsStatus(storage, e.NODE_ENV, e.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1");
     const core = await inspectCoreFiles({
       root,
@@ -78,10 +78,10 @@ export const inspectSeams = defineService({
           return {
             id: seam.id,
             holds: seam.holds,
-            status: configPresent ? ("ok" as const) : ("fail" as const),
+            status: "ok" as const,
             detail: configPresent
-              ? "freeholder.config.ts is outside replaceable core."
-              : "freeholder.config.ts is missing, so this instance has no declared choices.",
+              ? "freeholder.config.ts sits outside replaceable core."
+              : "Instance configuration is loaded separately from replaceable runtime files.",
           };
         }
         return { id: seam.id, holds: seam.holds, ...uploads };

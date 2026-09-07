@@ -7534,14 +7534,17 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `src`/`app`/`packages`/`db`/`scripts`. `platform.inspectSeams` hashes
   replaceable core, ignores plugins/config/uploads, and lists live core edits.
   Doctor checks `update.seams.configuration`, `update.seams.uploads` and
-  `update.coreFiles`. **F01–F03** N/A — no new tables. **F04** Doctor, not a
-  new admin screen (C10.11). **F05** `platform.inspectSeams`. **F06** N/A —
-  doctor sentences are English operational copy. **F07** anonymous callers
-  refused; core edits are unsupported; production local-disk uploads fail.
-  **F08** `tests/core/update-seams.test.ts`, doctor ids in
-  `tests/core/doctor.test.ts`. **F09** doctor. **F10** N/A. **F11**
-  `deploy/customization-seams.md`, changeset `customization-seams.md`. **F12**
-  a plugin-dir edit does not change the core digest; a `src/` edit does.)
+  `update.coreFiles`. Configuration is the loaded instance config — standalone
+  images do not ship `freeholder.config.ts` on disk. Uploads honour
+  `FREEHOLDER_STORAGE` over `adapters.storage`. **F01–F03** N/A — no new
+  tables. **F04** Doctor, not a new admin screen (C10.11). **F05**
+  `platform.inspectSeams`. **F06** N/A — doctor sentences are English
+  operational copy. **F07** anonymous callers refused; core edits are
+  unsupported; production local-disk uploads fail. **F08**
+  `tests/core/update-seams.test.ts`, doctor ids in `tests/core/doctor.test.ts`.
+  **F09** doctor. **F10** N/A. **F11** `deploy/customization-seams.md`,
+  changeset `customization-seams.md`. **F12** a plugin-dir edit does not
+  change the core digest; a `src/` edit does.)
 - [ ] **C10.02** Implement semantic stable/security/edge channels and
   machine-readable compatibility, schema-risk, CVSS and manual-step metadata.
 - [ ] **C10.03** Publish signed `releases.json`, image digest/signature and

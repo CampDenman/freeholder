@@ -7,8 +7,8 @@ belong to the owner. Those seams are:
 |---|---|---|
 | Database | Pages, settings, media records, every business row | Structure is data |
 | Plugins | Owner and third-party code under `plugins/` | Installed artifacts, never merged into core |
-| Configuration | `freeholder.config.ts` and `.env` | Instance choices, never baked into the image |
-| Uploads | Object storage | The container is disposable |
+| Configuration | `freeholder.config.ts` and `.env` | Instance choices, loaded at boot — the `.ts` file is absent from standalone images |
+| Uploads | Object storage (`FREEHOLDER_STORAGE` over `adapters.storage`) | The container is disposable |
 
 Core (`src/`, `app/`, `packages/`, `db/`, `scripts/`) is replaceable. Editing
 those files on a live server is not a supported customization. Doctor reports

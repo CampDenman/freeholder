@@ -843,30 +843,16 @@ function checkPlatformVersion(): Check {
 async function checkUpdateSeams(): Promise<Check[]> {
   const e = env();
   const { inspectCoreFiles } = await import("@/core/update/integrity");
-  const { access } = await import("node:fs/promises");
-  const { join } = await import("node:path");
   const instanceConfig = (await import("../../../freeholder.config")).default;
   const checks: Check[] = [];
-  const configPath = join(/* turbopackIgnore: true */ process.cwd(), "freeholder.config.ts");
-  const configPresent = await access(/* turbopackIgnore: true */ configPath).then(
-    () => true,
-    () => false,
-  );
   checks.push(
-    configPresent
-      ? ok(
-          "update.seams.configuration",
-          "Configuration seam",
-          "freeholder.config.ts sits outside replaceable core.",
-        )
-      : fail(
-          "update.seams.configuration",
-          "Configuration seam",
-          "freeholder.config.ts is missing.",
-          "Restore freeholder.config.ts so instance choices survive an image swap.",
-        ),
+    ok(
+      "update.seams.configuration",
+      "Configuration seam",
+      "Instance configuration is loaded separately from replaceable core.",
+    ),
   );
-  const storage = instanceConfig.adapters.storage;
+  const storage = e.FREEHOLDER_STORAGE ?? instanceConfig.adapters.storage;
   if (storage === "local" && e.NODE_ENV === "production" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE !== "1") {
     checks.push(
       fail(

@@ -84,4 +84,11 @@ describe.runIf(hasDatabase)("platform.inspectSeams (C10.01)", { timeout: 60_000 
     const denied = await failure(inspectSeams.call({}, ANONYMOUS));
     expect(denied.code).toBe("permission");
   });
+
+  it("treats loaded instance configuration as the seam when the .ts file is absent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "fh-seams-noconfig-"));
+    const report = await inspectSeams.call({ root }, OWNER);
+    const configuration = report.seams.find((seam) => seam.id === "configuration");
+    expect(configuration?.status).toBe("ok");
+  });
 });
