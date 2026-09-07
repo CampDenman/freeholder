@@ -452,7 +452,10 @@ export const SERVICE_NAMES = [
   "cms.updateTemplate",
   "cms.verifyDemoFixture",
   "community.createSpace",
+  "community.getBySlug",
   "community.join",
+  "community.joinBySlug",
+  "community.listMembers",
   "community.listSpaces",
   "connections.beginCalendarOAuth",
   "connections.beginMailReadOAuth",
@@ -674,8 +677,12 @@ export const SERVICE_NAMES = [
   "galleries.viewItem",
   "galleries.viewSession",
   "giftRegistry.addItem",
+  "giftRegistry.contribute",
   "giftRegistry.create",
+  "giftRegistry.getBySlug",
+  "giftRegistry.invoiceItem",
   "giftRegistry.list",
+  "giftRegistry.listItems",
   "guidance.contexts",
   "guidance.dismiss",
   "guidance.list",
@@ -820,6 +827,7 @@ export const SERVICE_NAMES = [
   "mail.verifySender",
   "marketplace.connect",
   "marketplace.list",
+  "marketplace.sync",
   "media.abortUpload",
   "media.acceptAltTextSuggestion",
   "media.altTextSuggestionState",
@@ -958,6 +966,7 @@ export const SERVICE_NAMES = [
   "portal.updateMyProfile",
   "printOnDemand.list",
   "printOnDemand.queue",
+  "printOnDemand.submit",
   "privacy.cancelMyDataRequest",
   "privacy.createMyDataRequest",
   "privacy.downloadMyDataRequestArtifact",
@@ -3021,16 +3030,28 @@ export interface ServiceCatalog {
     output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
   };
   "community.createSpace": {
-    input: { slug: string; title: string };
-    output: { id: string; slug: string; title: string; [key: string]: unknown };
+    input: { slug: string; title: string; access?: "open" | "gated" };
+    output: { id: string; slug: string; title: string; access: string; [key: string]: unknown };
+  };
+  "community.getBySlug": {
+    input: { slug: string };
+    output: { space: { id: string; slug: string; title: string; access: string; [key: string]: unknown }; memberCount: number; [key: string]: unknown };
   };
   "community.join": {
     input: { spaceId: string; contactId: string; role?: "member" | "moderator" };
     output: { id: string; spaceId: string; contactId: string; role: string; [key: string]: unknown };
   };
+  "community.joinBySlug": {
+    input: { slug: string; email: string; name: string };
+    output: { id: string; spaceId: string; contactId: string; role: string; [key: string]: unknown };
+  };
+  "community.listMembers": {
+    input: { spaceId: string };
+    output: { id: string; spaceId: string; contactId: string; role: string; [key: string]: unknown }[];
+  };
   "community.listSpaces": {
     input: Record<string, never>;
-    output: { id: string; slug: string; title: string; [key: string]: unknown }[];
+    output: { id: string; slug: string; title: string; access: string; [key: string]: unknown }[];
   };
   "connections.beginCalendarOAuth": {
     input: { provider: "google" | "microsoft"; access?: "read" | "write"; returnTo?: string };
@@ -3910,15 +3931,31 @@ export interface ServiceCatalog {
   };
   "giftRegistry.addItem": {
     input: { registryId: string; title: string; url?: string; amountCents?: number; currency?: string };
-    output: { id: string; registryId: string; title: string; amountCents: number; currency: string; [key: string]: unknown };
+    output: { id: string; registryId: string; title: string; url: string | null; amountCents: number; currency: string; status: string; invoiceId: string | null; lastError: string | null; [key: string]: unknown };
+  };
+  "giftRegistry.contribute": {
+    input: { slug: string; itemId: string; email: string; name: string };
+    output: { id: string; registryId: string; title: string; url: string | null; amountCents: number; currency: string; status: string; invoiceId: string | null; lastError: string | null; [key: string]: unknown };
   };
   "giftRegistry.create": {
     input: { contactId: string; title: string; slug: string };
     output: { id: string; contactId: string; title: string; slug: string; [key: string]: unknown };
   };
+  "giftRegistry.getBySlug": {
+    input: { slug: string };
+    output: { registry: { id: string; contactId: string; title: string; slug: string; [key: string]: unknown }; items: { id: string; registryId: string; title: string; url: string | null; amountCents: number; currency: string; status: string; invoiceId: string | null; lastError: string | null; [key: string]: unknown }[]; [key: string]: unknown };
+  };
+  "giftRegistry.invoiceItem": {
+    input: { itemId: string };
+    output: { id: string; registryId: string; title: string; url: string | null; amountCents: number; currency: string; status: string; invoiceId: string | null; lastError: string | null; [key: string]: unknown };
+  };
   "giftRegistry.list": {
     input: Record<string, never>;
     output: { id: string; contactId: string; title: string; slug: string; [key: string]: unknown }[];
+  };
+  "giftRegistry.listItems": {
+    input: { registryId: string };
+    output: { id: string; registryId: string; title: string; url: string | null; amountCents: number; currency: string; status: string; invoiceId: string | null; lastError: string | null; [key: string]: unknown }[];
   };
   "guidance.contexts": {
     input: Record<string, never>;
@@ -4489,12 +4526,16 @@ export interface ServiceCatalog {
     output: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses"; connectedAccountId: string | null; email: string; displayName: string | null; providerIdentity: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; verificationDetail: unknown; lastVerifiedAt: string | null; lastError: string | null; createdBy: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "marketplace.connect": {
-    input: { name: string; provider: "shopify" | "etsy" | "amazon" | "ebay" };
-    output: { id: string; name: string; provider: string; status: string; [key: string]: unknown };
+    input: { name: string; provider: "shopify" | "etsy" | "amazon" | "ebay"; channelId?: string };
+    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; [key: string]: unknown };
   };
   "marketplace.list": {
     input: Record<string, never>;
-    output: { id: string; name: string; provider: string; status: string; [key: string]: unknown }[];
+    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; [key: string]: unknown }[];
+  };
+  "marketplace.sync": {
+    input: { channelId: string };
+    output: { imported: number; lastError: string | null; [key: string]: unknown };
   };
   "media.abortUpload": {
     input: { id: string };
@@ -5042,11 +5083,15 @@ export interface ServiceCatalog {
   };
   "printOnDemand.list": {
     input: Record<string, never>;
-    output: { id: string; sku: string; provider: string; status: string; [key: string]: unknown }[];
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown }[];
   };
   "printOnDemand.queue": {
     input: { sku: string; provider: string; payload?: { [key: string]: unknown } };
-    output: { id: string; sku: string; provider: string; status: string; [key: string]: unknown };
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown };
+  };
+  "printOnDemand.submit": {
+    input: { jobId: string };
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown };
   };
   "privacy.cancelMyDataRequest": {
     input: { id: string };
@@ -6046,11 +6091,11 @@ export interface ServiceCatalog {
   };
   "voiceVideo.list": {
     input: Record<string, never>;
-    output: { id: string; contactId: string; kind: string; provider: string; title: string; [key: string]: unknown }[];
+    output: { id: string; contactId: string; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; lastError: string | null; [key: string]: unknown }[];
   };
   "voiceVideo.record": {
-    input: { contactId: string; kind: "voice" | "video"; provider: string; title: string; externalRef?: string };
-    output: { id: string; contactId: string; kind: string; provider: string; title: string; [key: string]: unknown };
+    input: { contactId: string; kind: "voice" | "video"; provider: string; title: string; artifactId?: string };
+    output: { id: string; contactId: string; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; lastError: string | null; [key: string]: unknown };
   };
   "waitlist.claim": {
     input: { token: string };
@@ -6622,7 +6667,10 @@ export interface FreeholderApi {
   };
   community: {
     createSpace: (input: ServiceCatalog["community.createSpace"]["input"]) => Promise<ServiceCatalog["community.createSpace"]["output"]>;
+    getBySlug: (input: ServiceCatalog["community.getBySlug"]["input"]) => Promise<ServiceCatalog["community.getBySlug"]["output"]>;
     join: (input: ServiceCatalog["community.join"]["input"]) => Promise<ServiceCatalog["community.join"]["output"]>;
+    joinBySlug: (input: ServiceCatalog["community.joinBySlug"]["input"]) => Promise<ServiceCatalog["community.joinBySlug"]["output"]>;
+    listMembers: (input: ServiceCatalog["community.listMembers"]["input"]) => Promise<ServiceCatalog["community.listMembers"]["output"]>;
     listSpaces: (input?: ServiceCatalog["community.listSpaces"]["input"]) => Promise<ServiceCatalog["community.listSpaces"]["output"]>;
   };
   connections: {
@@ -6874,8 +6922,12 @@ export interface FreeholderApi {
   };
   giftRegistry: {
     addItem: (input: ServiceCatalog["giftRegistry.addItem"]["input"]) => Promise<ServiceCatalog["giftRegistry.addItem"]["output"]>;
+    contribute: (input: ServiceCatalog["giftRegistry.contribute"]["input"]) => Promise<ServiceCatalog["giftRegistry.contribute"]["output"]>;
     create: (input: ServiceCatalog["giftRegistry.create"]["input"]) => Promise<ServiceCatalog["giftRegistry.create"]["output"]>;
+    getBySlug: (input: ServiceCatalog["giftRegistry.getBySlug"]["input"]) => Promise<ServiceCatalog["giftRegistry.getBySlug"]["output"]>;
+    invoiceItem: (input: ServiceCatalog["giftRegistry.invoiceItem"]["input"]) => Promise<ServiceCatalog["giftRegistry.invoiceItem"]["output"]>;
     list: (input?: ServiceCatalog["giftRegistry.list"]["input"]) => Promise<ServiceCatalog["giftRegistry.list"]["output"]>;
+    listItems: (input: ServiceCatalog["giftRegistry.listItems"]["input"]) => Promise<ServiceCatalog["giftRegistry.listItems"]["output"]>;
   };
   guidance: {
     contexts: (input?: ServiceCatalog["guidance.contexts"]["input"]) => Promise<ServiceCatalog["guidance.contexts"]["output"]>;
@@ -7038,6 +7090,7 @@ export interface FreeholderApi {
   marketplace: {
     connect: (input: ServiceCatalog["marketplace.connect"]["input"]) => Promise<ServiceCatalog["marketplace.connect"]["output"]>;
     list: (input?: ServiceCatalog["marketplace.list"]["input"]) => Promise<ServiceCatalog["marketplace.list"]["output"]>;
+    sync: (input: ServiceCatalog["marketplace.sync"]["input"]) => Promise<ServiceCatalog["marketplace.sync"]["output"]>;
   };
   media: {
     abortUpload: (input: ServiceCatalog["media.abortUpload"]["input"]) => Promise<ServiceCatalog["media.abortUpload"]["output"]>;
@@ -7198,6 +7251,7 @@ export interface FreeholderApi {
   printOnDemand: {
     list: (input?: ServiceCatalog["printOnDemand.list"]["input"]) => Promise<ServiceCatalog["printOnDemand.list"]["output"]>;
     queue: (input: ServiceCatalog["printOnDemand.queue"]["input"]) => Promise<ServiceCatalog["printOnDemand.queue"]["output"]>;
+    submit: (input: ServiceCatalog["printOnDemand.submit"]["input"]) => Promise<ServiceCatalog["printOnDemand.submit"]["output"]>;
   };
   privacy: {
     cancelMyDataRequest: (input: ServiceCatalog["privacy.cancelMyDataRequest"]["input"]) => Promise<ServiceCatalog["privacy.cancelMyDataRequest"]["output"]>;

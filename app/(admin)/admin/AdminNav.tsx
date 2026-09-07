@@ -52,6 +52,10 @@ import {
   Key,
   Lock,
   Robot,
+  Gift,
+  Printer,
+  VideoCamera,
+  Storefront,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -124,6 +128,11 @@ export interface AdminNavLabels {
   plugins: string;
   imports: string;
   work: string;
+  gifts: string;
+  printOnDemand: string;
+  community: string;
+  voiceVideo: string;
+  marketplace: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -178,6 +187,11 @@ const LINKS = [
   { href: "/admin/sharing", key: "sharing", module: "share", Icon: ShareNetwork },
   { href: "/admin/popups", key: "popups", module: "popups", Icon: ChatCircleDots },
   { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
+  { href: "/admin/gifts", key: "gifts", module: "giftRegistry", Icon: Gift },
+  { href: "/admin/print-on-demand", key: "printOnDemand", module: "printOnDemand", Icon: Printer },
+  { href: "/admin/community", key: "community", module: "community", Icon: UsersThree },
+  { href: "/admin/voice-video", key: "voiceVideo", module: "voiceVideo", Icon: VideoCamera },
+  { href: "/admin/marketplace", key: "marketplace", module: "marketplace", Icon: Storefront },
   {
     href: "/admin/subscriptions",
     key: "subscriptions",

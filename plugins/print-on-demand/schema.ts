@@ -11,6 +11,8 @@ export const podJobs = pgTable(
     provider: text("provider").notNull(),
     status: text("status").notNull().default("queued"),
     payload: jsonb("payload").notNull().default({}),
+    externalRef: text("external_ref"),
+    lastError: text("last_error"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

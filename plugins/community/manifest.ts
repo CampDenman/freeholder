@@ -9,7 +9,7 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["contacts:read"],
   requires: ["core"],
-  migrations: ["0075_first_party_plugins.sql"],
+  migrations: ["0075_first_party_plugins.sql", "0163_first_party_plugin_surfaces.sql"],
   capabilities: { widgets: true },
   tables: () => import("./tables"),
   services: () => import("./service"),
