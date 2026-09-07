@@ -23,6 +23,7 @@ import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
 import { PLATFORM_VERSION } from "@/core/platform";
+import { activeReleaseKeys } from "@/core/update/keys";
 import { THIS_RELEASE } from "@/core/update/this-release";
 
 export type Verdict = "ok" | "warn" | "fail";
@@ -887,6 +888,24 @@ function checkUpdateRelease(): Check[] {
   return checks;
 }
 
+function checkUpdateFeedKey(): Check {
+  const active = activeReleaseKeys();
+  if (active.length === 0) {
+    return fail(
+      "update.feed.key",
+      "Release public key",
+      "This instance has no active release public key, so it cannot verify an update feed.",
+      "Embed a trusted Ed25519 public key in src/core/update/keys.ts.",
+    );
+  }
+  const ids = active.map((key) => key.id).join(", ");
+  return ok(
+    "update.feed.key",
+    "Release public key",
+    `This instance trusts release key ${ids}. A feed not signed by a trusted key is refused.`,
+  );
+}
+
 async function checkUpdateSeams(): Promise<Check[]> {
   const e = env();
   const { inspectCoreFiles } = await import("@/core/update/integrity");
@@ -990,6 +1009,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...(await checkManagedAgentConnections()),
     checkPlatformVersion(),
     ...checkUpdateRelease(),
+    checkUpdateFeedKey(),
     ...(await checkUpdateSeams()),
   ];
 

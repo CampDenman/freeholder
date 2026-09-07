@@ -68,6 +68,9 @@ whole story, which is the point.
   an image swap, and why editing core files on a live server is unsupported.
 - [`release-channels.md`](release-channels.md) — stable, security and edge, and
   the metadata a release must declare instead of inferring from a version.
+- [`release-feed.md`](release-feed.md) — signed `releases.json`, the embedded
+  public key, and how rotation keeps the previous key until every image ships
+  the successor.
 - [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
   database/media restore, update and rollback acceptance for every Tier-1
   target.

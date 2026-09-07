@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Customization seams (C10.01) and declared release metadata (C10.02).
+// Customization seams (C10.01), declared release metadata (C10.02), signed feed (C10.03).
 import { z } from "zod";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import { PLATFORM_VERSION } from "@/core/platform";
 import { defineService, ServiceError } from "@/core/service";
 import instanceConfig from "../../../freeholder.config";
 import { CHANNELS, RELEASE_CHANNELS } from "./channels";
+import { ReleaseFeedError, verifyReleaseFeed } from "./feed";
 import { inspectCoreFiles } from "./integrity";
 import { canApplyFrom, SCHEMA_RISKS, SEVERITIES } from "./release";
 import { CUSTOMIZATION_SEAMS, SEAM_IDS, type SeamId } from "./seams";
@@ -180,4 +181,58 @@ function uploadsStatus(
   };
 }
 
-export default [inspectSeams, describeRelease];
+export const verifyFeed = defineService({
+  name: "platform.verifyReleaseFeed",
+  summary: "Verify a signed releases.json against the keys this instance ships. A bad signature is a hard stop.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    feed: z.unknown(),
+  }),
+  output: z.object({
+    keyId: z.string(),
+    signedAt: z.string(),
+    releases: listed(
+      z.object({
+        version: z.string(),
+        channel: z.enum(RELEASE_CHANNELS),
+        digest: z.string(),
+        image: z.string(),
+        notesUrl: z.string(),
+        schemaRisk: z.enum(SCHEMA_RISKS),
+        cvss: z.number().nullable(),
+        severity: z.enum(SEVERITIES),
+      }),
+    ),
+  }),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to verify a release feed.");
+    }
+    try {
+      const verified = verifyReleaseFeed(input.feed);
+      return {
+        keyId: verified.keyId,
+        signedAt: verified.signedAt,
+        releases: verified.releases.map((release) => ({
+          version: release.version,
+          channel: release.channel,
+          digest: release.digest,
+          image: release.image,
+          notesUrl: release.notesUrl,
+          schemaRisk: release.schemaRisk,
+          cvss: release.cvss,
+          severity: release.severity,
+        })),
+      };
+    } catch (error) {
+      const message =
+        error instanceof ReleaseFeedError
+          ? error.message
+          : "This release feed is not signed by a trusted Freeholder key. Refusing to read it. This is not a warning.";
+      throw new ServiceError("validation", message);
+    }
+  },
+});
+
+export default [inspectSeams, describeRelease, verifyFeed];
