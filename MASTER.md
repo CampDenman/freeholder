@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `d035a48` after C3.15 business presets #302. C3.20 ships SemVer 0.1.0 across platform and packages, a tag-matched npm publish workflow, and the same version in health, admin, Doctor and the contract. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `cd9bc8e` after C3.20 versioned release #303. C10.01 enforces the four customization seams and detects unsupported live core-file edits. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10+C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.02–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7528,8 +7528,20 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `billing.ts`. **F09** Apache-2.0 SPDX on the new files. **F12** N/A as a
   help-centre article — the help centre is the CMS — user-facing copy is
   changeset `subscription-billing.md`. EN/FR/ES.)
-- [ ] **C10.01** Enforce customization seams—database, plugins, configuration,
+- [x] **C10.01** Enforce customization seams—database, plugins, configuration,
   uploads—and detect unsupported live core-file modifications.
+  (`src/core/update/seams.ts` names the four owner seams; core paths are
+  `src`/`app`/`packages`/`db`/`scripts`. `platform.inspectSeams` hashes
+  replaceable core, ignores plugins/config/uploads, and lists live core edits.
+  Doctor checks `update.seams.configuration`, `update.seams.uploads` and
+  `update.coreFiles`. **F01–F03** N/A — no new tables. **F04** Doctor, not a
+  new admin screen (C10.11). **F05** `platform.inspectSeams`. **F06** N/A —
+  doctor sentences are English operational copy. **F07** anonymous callers
+  refused; core edits are unsupported; production local-disk uploads fail.
+  **F08** `tests/core/update-seams.test.ts`, doctor ids in
+  `tests/core/doctor.test.ts`. **F09** doctor. **F10** N/A. **F11**
+  `deploy/customization-seams.md`, changeset `customization-seams.md`. **F12**
+  a plugin-dir edit does not change the core digest; a `src/` edit does.)
 - [ ] **C10.02** Implement semantic stable/security/edge channels and
   machine-readable compatibility, schema-risk, CVSS and manual-step metadata.
 - [ ] **C10.03** Publish signed `releases.json`, image digest/signature and

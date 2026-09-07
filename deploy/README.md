@@ -64,6 +64,8 @@ whole story, which is the point.
 
 ## Operational runbooks
 
+- [`customization-seams.md`](customization-seams.md) — which owner data survives
+  an image swap, and why editing core files on a live server is unsupported.
 - [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
   database/media restore, update and rollback acceptance for every Tier-1
   target.

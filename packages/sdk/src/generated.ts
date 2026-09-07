@@ -929,6 +929,7 @@ export const SERVICE_NAMES = [
   "platform.export",
   "platform.getJob",
   "platform.getOutboxEvent",
+  "platform.inspectSeams",
   "platform.jobSummary",
   "platform.listJobQueues",
   "platform.listJobs",
@@ -4942,6 +4943,10 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { id: string; eventName: string; status: "pending" | "dispatched" | "dead_letter"; payload: unknown; deliveries: unknown[]; [key: string]: unknown };
   };
+  "platform.inspectSeams": {
+    input: { root?: string };
+    output: { version: string; seams: { id: "database" | "plugins" | "configuration" | "uploads"; holds: string; status: "ok" | "warn" | "fail"; detail: string }[]; core: { digest: string; expected: string | null; matches: boolean | null; modified: string[]; supported: boolean } };
+  };
   "platform.jobSummary": {
     input: Record<string, never>;
     output: { queued: number; active: number; completed: number; cancelled: number; failed: number; deadLetters: number; stuck: number; total: number };
@@ -7211,6 +7216,7 @@ export interface FreeholderApi {
     export: (input?: ServiceCatalog["platform.export"]["input"]) => Promise<ServiceCatalog["platform.export"]["output"]>;
     getJob: (input: ServiceCatalog["platform.getJob"]["input"]) => Promise<ServiceCatalog["platform.getJob"]["output"]>;
     getOutboxEvent: (input: ServiceCatalog["platform.getOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.getOutboxEvent"]["output"]>;
+    inspectSeams: (input?: ServiceCatalog["platform.inspectSeams"]["input"]) => Promise<ServiceCatalog["platform.inspectSeams"]["output"]>;
     jobSummary: (input?: ServiceCatalog["platform.jobSummary"]["input"]) => Promise<ServiceCatalog["platform.jobSummary"]["output"]>;
     listJobQueues: (input?: ServiceCatalog["platform.listJobQueues"]["input"]) => Promise<ServiceCatalog["platform.listJobQueues"]["output"]>;
     listJobs: (input?: ServiceCatalog["platform.listJobs"]["input"]) => Promise<ServiceCatalog["platform.listJobs"]["output"]>;

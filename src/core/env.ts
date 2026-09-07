@@ -233,6 +233,16 @@ const envSchema = z.object({
    * with an owner's uploads on a disk that a rebuild throws away.
    */
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: z.enum(["1"]).optional(),
+  /**
+   * SHA-256 digest of replaceable core files (`sha256:…`). When set, doctor
+   * and `platform.inspectSeams` fail if the running tree does not match —
+   * live edits of core files are not a supported customization.
+   */
+  FREEHOLDER_CORE_DIGEST: z
+    .string()
+    .trim()
+    .regex(/^sha256:[a-f0-9]{64}$/)
+    .optional(),
 
   /**
    * Control Aurora Coast demo installation at boot.
