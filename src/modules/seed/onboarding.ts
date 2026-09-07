@@ -31,8 +31,8 @@ const COMPLETE_CAPABILITIES = [
 ] as const;
 
 const COMPLETE_FIXTURES = [
-  { key: "cms.current-modules", version: 1 },
-  { key: "forms.current-modules", version: 1 },
+  { key: "cms.demo-page", version: 1 },
+  { key: "forms.demo-form", version: 1 },
   { key: "core.demo-contacts", version: 1 },
   { key: "core.demo-locations", version: 1 },
   { key: "core.demo-bookings", version: 1 },
@@ -198,7 +198,7 @@ const contribution: OnboardingModuleExport = {
   scenarios: [
     {
       key: "seed.current-modules",
-      version: 2,
+      version: 1,
       titleKey: "demo.scenario.currentModules.title",
       descriptionKey: "demo.scenario.currentModules.description",
       preset: "foundation",

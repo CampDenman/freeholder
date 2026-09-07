@@ -3753,8 +3753,8 @@ reading chat logs.
   Each has en/fr/es copy, a `[Demo]` mark, a guided day-in-the-life
   (`seed.creator-day` and siblings) and the existing one-action
   load/reload/reset/purge. `seed.current-modules` stays the small CMS/Forms
-  foundation at version 2 because those fixtures now also opt into the
-  complete journeys. **F01** no new tables — provenance is still
+  foundation. Complete journeys use `cms.demo-page` and `forms.demo-form`
+  so the shipped v1 SQL seed stays byte-identical. **F01** no new tables — provenance is still
   `demo_records`. **F02** per-module load/purge/verify handlers behind
   `requireDemoHandlerRun`. **F03** contacts go through `contacts.resolve`;
   merge already covers the owned tables. **F04** `/admin/demos` lists all

@@ -139,7 +139,7 @@ suite("deterministic demo scenarios", () => {
       loadDemoForms.call(
         {
           scenarioKey: "seed.current-modules",
-          scenarioVersion: 2,
+          scenarioVersion: 1,
           runId: crypto.randomUUID(),
           generation: 1,
           locale: "en",

@@ -566,6 +566,18 @@ const DEMO_PAGE = {
   },
 } as const;
 
+function cmsDemoContribution(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? { key: "cms.current-modules", version: 1 }
+    : { key: "cms.demo-page", version: 1 };
+}
+
+function cmsDemoOutcome(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? "cms.current-modules.visible"
+    : "cms.demo-page.visible";
+}
+
 export const loadDemoCms = defineService({
   name: "cms.loadDemoFixture",
   summary: "Load the CMS contribution for a tracked demo run.",
@@ -574,12 +586,7 @@ export const loadDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoLoadResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "load",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "load");
     const copy = DEMO_PAGE[input.locale as keyof typeof DEMO_PAGE];
     if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
     const page = await ctx.callAsSystem(createPage, {
@@ -621,12 +628,7 @@ export const purgeDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoPurgeResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "purge",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "purge");
     const purged: Array<{ subjectType: string; subjectId: string }> = [];
     for (const record of input.records) {
       if (record.fixtureKey !== "project-page" || record.subjectType !== "page") {
@@ -655,12 +657,7 @@ export const verifyDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoVerifyResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "verify",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "verify");
     const ids = input.records
       .filter((record) => record.subjectType === "page")
       .map((record) => record.subjectId);
@@ -674,7 +671,7 @@ export const verifyDemoCms = defineService({
     return demoVerifyResultSchema.parse({
       outcomes: [
         {
-          key: "cms.current-modules.visible",
+          key: cmsDemoOutcome(input.scenarioKey),
           achieved:
             page?.slug === "freeholder-demo-project" &&
             page.title.startsWith("[Demo]"),

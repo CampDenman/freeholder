@@ -62,9 +62,8 @@ test.describe("deterministic demo scenario journey", () => {
     await expect(page.getByText(/tied to exact run provenance/i)).toBeVisible();
 
     await page
-      .locator("div")
-      .filter({ hasText: "Current-module foundation" })
-      .filter({ has: page.getByRole("button", { name: "Load scenario" }) })
+      .locator("form")
+      .filter({ has: page.locator('input[name="key"][value="seed.current-modules"]') })
       .getByRole("button", { name: "Load scenario" })
       .click();
     await expect(page.getByText(/scenario is loaded/i)).toBeVisible();
