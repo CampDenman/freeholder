@@ -57,7 +57,7 @@ const nextConfig: NextConfig = {
         // `DENY` blocks framing even by the site itself — so the preview group
         // is carved out here and given `SAMEORIGIN` below rather than having
         // the whole site weakened to allow one screen.
-        source: "/((?!preview).*)",
+        source: "/((?!preview|embed).*)",
         headers: [
           // Stops a browser second-guessing a declared content type, which is
           // how an uploaded file gets treated as a script (§18 media lives in
@@ -100,6 +100,21 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+        ],
+      },
+      {
+        // Copy-paste embeds (C9.36 / §34). Framed on purpose. CSP
+        // `frame-ancestors *` is the real control; omitting X-Frame-Options
+        // lets that directive stand. These URLs are widgets, not pages.
+        source: "/embed/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
           {

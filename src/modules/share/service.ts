@@ -64,6 +64,7 @@ import {
   refFromCampaign,
   shortLinkUrl,
 } from "./links";
+import { EMBED_KINDS } from "./embeds";
 
 export { SHARE_CHANNELS, channelsFor, intentUrl, shareText } from "./intents";
 export {
@@ -642,6 +643,48 @@ registerContactPrivacySource({
   },
 });
 
+export const embedSnippetFor = defineService({
+  name: "share.embedSnippet",
+  summary: "Copy-paste embed HTML for a public widget, with a backlink home.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    kind: z.enum(EMBED_KINDS),
+    id: z.string().trim().min(1).max(120).optional(),
+  }),
+  output: z.object({
+    kind: z.enum(EMBED_KINDS),
+    src: z.string(),
+    backlink: z.string(),
+    html: z.string(),
+    title: z.string(),
+  }),
+  handler: async (input, ctx) => {
+    const { embedSnippet } = await import("./embeds");
+    const [business] = await ctx.tx
+      .select({ name: businessProfile.name })
+      .from(businessProfile)
+      .limit(1);
+    const name = business?.name ?? "this business";
+    if ((input.kind === "newsletter" || input.kind === "gallery") && !input.id) {
+      throw new ServiceError("validation", "That embed needs an id.");
+    }
+    const titles = {
+      reviews: `Reviews from ${name}`,
+      booking: `Book with ${name}`,
+      newsletter: `Subscribe — ${name}`,
+      gallery: input.id ? `Gallery — ${name}` : `Gallery — ${name}`,
+    };
+    const built = embedSnippet({
+      kind: input.kind,
+      id: input.id,
+      businessName: name,
+      title: titles[input.kind],
+    });
+    return { kind: input.kind, ...built };
+  },
+});
+
 export default [
   targetFor,
   shareVia,
@@ -650,4 +693,5 @@ export default [
   saveTarget,
   forgetTarget,
   linkReport,
+  embedSnippetFor,
 ];

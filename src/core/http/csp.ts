@@ -69,6 +69,7 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     ? [...new Set(options.creativeOrigins ?? [])].sort()
     : [];
   const preview = options.path === "/preview" || options.path.startsWith("/preview/");
+  const embed = options.path === "/embed" || options.path.startsWith("/embed/");
   const development = options.production
     ? ""
     : " 'unsafe-eval'";
@@ -88,7 +89,10 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    `frame-ancestors ${preview ? "'self'" : "'none'"}`,
+    // Embeds (C9.36) are meant to be framed on other sites. Everything else
+    // stays unframeable, including admin. `*` here is the point of an embed;
+    // clickjacking a review wall is not a credential theft.
+    `frame-ancestors ${embed ? "*" : preview ? "'self'" : "'none'"}`,
     `report-uri ${CSP_REPORT_PATH}`,
     `report-to ${CSP_REPORT_GROUP}`,
     ...(options.production ? ["upgrade-insecure-requests"] : []),
