@@ -23,5 +23,7 @@ the restored copy. PostgreSQL client tools must be at least as new as the
 server. See `deploy/ownership-recovery.md`.
 
 `create-freeholder` now checks the generated environment, can install and
-migrate, and prints the setup URL (C3.14). Recipe update/rollback automation
-remains open under C10.10. C1.23 supplies the guarded ownership substrate.
+migrate, and prints the setup URL (C3.14). `pnpm packages:release` proves
+package versions match the platform and a `vX.Y.Z` tag (C3.20). Recipe
+update/rollback automation remains open under C10.10. C1.23 supplies the
+guarded ownership substrate.

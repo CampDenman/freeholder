@@ -1,6 +1,6 @@
 {
   "name": "create-freeholder",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "npx create-freeholder — scaffold a Freeholder source project, check the environment, install, migrate, and print the setup URL",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",

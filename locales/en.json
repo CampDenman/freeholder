@@ -32,6 +32,7 @@
   "admin.nav.templates": "Templates",
   "admin.nav.translations": "Translations",
   "admin.nav.work": "Work",
+  "admin.platformVersion": "Freeholder {version}",
   "admin.overview.activity": "What changed",
   "admin.overview.activityEmpty": "Nothing has changed yet. Every action anyone takes — you, your staff, or an AI agent — is recorded here.",
   "admin.overview.contacts": "Contacts",

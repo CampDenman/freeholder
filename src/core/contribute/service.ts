@@ -33,6 +33,7 @@ import {
   contributeSettings,
 } from "./schema";
 import { db } from "@/core/db";
+import { PLATFORM_VERSION } from "@/core/platform";
 import {
   DEFAULT_HUB_URL,
   deliverQueuedContribution,
@@ -469,7 +470,7 @@ export const draftContribution = defineService({
         contentHash: hash,
         includeDoctor: input.includeDoctor,
         doctorReport,
-        platformVersion: process.env.npm_package_version ?? "0.0.0",
+        platformVersion: PLATFORM_VERSION,
         dcoAttested: input.dcoAttested,
         dcoSigner: input.dcoSigner ?? null,
         actor: actorString(ctx.actor),
@@ -539,7 +540,7 @@ export const submitContribution = defineService({
       contentHash: hash,
       includeDoctor: input.includeDoctor,
       doctorReport,
-      platformVersion: process.env.npm_package_version ?? "0.0.0",
+      platformVersion: PLATFORM_VERSION,
       dcoAttested: input.dcoAttested,
       dcoSigner: input.dcoSigner ?? null,
       actor: actorString(ctx.actor),

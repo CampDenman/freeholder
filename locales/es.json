@@ -32,6 +32,7 @@
   "admin.nav.templates": "Plantillas",
   "admin.nav.translations": "Traducciones",
   "admin.nav.work": "Trabajo",
+  "admin.platformVersion": "Freeholder {version}",
   "admin.overview.activity": "Qué ha cambiado",
   "admin.overview.activityEmpty": "Todavía no ha cambiado nada. Cada acción que haga alguien — tú, tu personal o un agente de IA — queda registrada aquí.",
   "admin.overview.contacts": "Contactos",

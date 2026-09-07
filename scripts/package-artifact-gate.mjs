@@ -7,6 +7,7 @@ import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readAlignedVersion } from "./release-packages.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageNames = [
@@ -63,18 +64,7 @@ async function runPnpm(args, cwd) {
 }
 
 async function assertPackageVersions() {
-  const rootManifest = JSON.parse(await readFile(join(repositoryRoot, "package.json"), "utf8"));
-  for (const name of packageNames) {
-    const folder = name === "create-freeholder" ? name : name.split("/")[1];
-    const manifest = JSON.parse(
-      await readFile(join(repositoryRoot, "packages", folder, "package.json"), "utf8"),
-    );
-    assert.equal(
-      manifest.version,
-      rootManifest.version,
-      `${name} must have the same version as the platform`,
-    );
-  }
+  await readAlignedVersion(repositoryRoot);
 }
 
 async function main() {
