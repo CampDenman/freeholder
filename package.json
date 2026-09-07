@@ -41,6 +41,7 @@
     "packages:build": "pnpm -r --filter create-freeholder --filter @freeholder/plugin-kit --filter @freeholder/sdk --filter @freeholder/templates build",
     "packages:lint": "pnpm -r --filter create-freeholder --filter @freeholder/plugin-kit --filter @freeholder/sdk --filter @freeholder/templates lint",
     "packages:verify": "node scripts/package-artifact-gate.mjs",
+    "sdk:generate": "node scripts/generate-sdk.mjs",
     "doctor": "node scripts/doctor.mjs"
   },
   "dependencies": {

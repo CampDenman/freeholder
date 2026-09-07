@@ -1,10 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// OpenAPI, MCP and the written contract describe the same registry (C3.02, C3.06).
+// OpenAPI, MCP, SDK and the written contract describe the same registry (C3.02, C3.03, C3.06).
 import { afterAll, describe, expect, it } from "vitest";
 import { contractProjections, humanReference, llmsContractSection } from "@/core/contract/projections";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { ready } from "@/core/runtime";
+import { SERVICE_NAMES } from "../../packages/sdk/src/generated";
 import { closeDb, hasDatabase } from "../helpers/spine";
 
 describe.runIf(hasDatabase)("contract projections (C3.02, C3.06)", () => {
@@ -39,6 +40,7 @@ describe.runIf(hasDatabase)("contract projections (C3.02, C3.06)", () => {
     expect(mcpTools).not.toContain("auth_login");
     expect(names).not.toContain("briefing.assemble");
     expect(names).not.toContain("agents.startEventPlaybooks");
+    expect([...SERVICE_NAMES].sort()).toEqual([...names].sort());
     expect(humanReference()).toContain("contacts.create");
     expect(llmsContractSection()).toContain("/api/openapi.json");
   });

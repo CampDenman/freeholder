@@ -1,7 +1,7 @@
 {
   "name": "@freeholder/sdk",
   "version": "0.0.0",
-  "description": "Generic versioned HTTP client for a Freeholder instance; registry-generated methods remain C3.03",
+  "description": "Typed HTTP client for a Freeholder instance, generated from the live service registry",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
@@ -25,6 +25,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test"
+    "test": "node --test test/*.test.mjs"
   }
 }

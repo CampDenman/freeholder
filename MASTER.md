@@ -2047,7 +2047,7 @@ Inter-instance contribution uses that same RPC: a spoke POSTs `/api/v1/contribut
 **How each stays current:**
 
 1. **OpenAPI** — generated from the same Zod schemas that validate every request at runtime. It is definitionally impossible for the spec to describe a shape the API doesn't enforce.
-2. **SDK (`@freeholder/sdk`, MIT)** — generated from the OpenAPI spec; typed, tree-shakable, with hand-written ergonomic wrappers only for flows (pagination, auth) — wrappers are tested against the generated layer so they break loudly if the contract moves. Published automatically on every release by CI (changesets); SDK version === platform version, always.
+2. **SDK (`@freeholder/sdk`, Apache-2.0)** — generated from the live service registry through the same JSON Schema projection OpenAPI uses; typed, tree-shakable, with hand-written ergonomic wrappers only for flows (pagination, auth) — wrappers are tested against the generated layer so they break loudly if the contract moves. Published automatically on every release by CI (changesets); SDK version === platform version, always.
 3. **MCP** — already runtime-generated (§11): tools are derived from the enabled services of *that instance*, so an instance with the gift-registry plugin automatically exposes gift-registry tools to agents, with descriptions from the plugin's own schema annotations. New feature merged → new MCP tool exists. No release lag at all.
 4. **Per-instance introspection** — every Freeholder serves its own live contract: `/api/openapi.json` (reflecting its version + enabled modules + plugins), `/api/mcp` manifest, and `/llms.txt`. An agent or developer never reasons from generic docs about what *this* instance can do — they ask it.
 5. **Docs site** (`docs.freeholder.ai`) — reference sections are built from the generated artifacts in CI on every release; prose guides live beside code and are **executable**: doc snippets are extracted and run against the seeded demo instance in CI, so a guide with stale code fails the build. Docs ship `llms-full.txt` so AI assistants helping developers always have current ground truth.
@@ -3254,8 +3254,8 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-06 |
-| Evidence snapshot | On `main` at `8cd2d4d` after C0.12 plan-evidence gate #280 and C1.12 media transaction-boundary PRs #276–#279. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. Main CI run `33917963081` passed the isolated 20-shard matrix, CodeQL, browser, ownership, image, recipe, public and upgrade gates; publish run `33919195071` promoted and signed that candidate digest. |
+| Last reconciled | 2026-09-07 |
+| Evidence snapshot | On `main` at `993af21` after C1.27 complete demo scenarios #290. C3.03 generates `@freeholder/sdk` types and methods from `listExternalServices()`. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
@@ -4013,10 +4013,16 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   public ops `security: []`, `FreeholderEvent` webhook component,
   `info.x-freeholder` platform/webhook/MCP versions. Coverage in
   `tests/core/contract-projections.test.ts`.)
-- [ ] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
+- [x] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
   service registry; remove every package scaffold/no-op build.
-  The generic `FreeholderClient.call` and clean-install-tested ESM artifact now
-  work, but concrete types are not generated from the registry yet.
+  (`generateSdkCatalog` in `src/core/contract/sdk.ts` walks
+  `listExternalServices()` through the same JSON Schema projection as OpenAPI;
+  committed `packages/sdk/src/generated.ts` holds `ServiceCatalog`, namespaced
+  `FreeholderApi` methods, and `PAGEABLE_SERVICES`. Hand-written `call` /
+  `withToken` / `paginate` wrappers are typed against that layer. Drift gate in
+  `tests/core/sdk.test.ts`; schema conversion in
+  `tests/core/sdk-schema.test.ts`; regenerate with `pnpm sdk:generate`.
+  Changeset `typed-sdk.md`.)
 - [x] **C3.04** Make MCP discovery actor-aware—including actor kind, service
   opt-out and approval annotations—so listed tools are genuinely callable.
   (`ServiceDef.mcpExclude`; `hiddenFromMcp`; tool `annotations.actorKind` and
