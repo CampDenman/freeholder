@@ -23,6 +23,7 @@ import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
 import { PLATFORM_VERSION } from "@/core/platform";
+import { THIS_RELEASE } from "@/core/update/this-release";
 
 export type Verdict = "ok" | "warn" | "fail";
 
@@ -840,6 +841,52 @@ function checkPlatformVersion(): Check {
   );
 }
 
+function checkUpdateRelease(): Check[] {
+  const checks: Check[] = [];
+  if (THIS_RELEASE.version !== PLATFORM_VERSION) {
+    checks.push(
+      fail(
+        "update.release",
+        "Release metadata",
+        `Declared release version ${THIS_RELEASE.version} does not match this instance (${PLATFORM_VERSION}).`,
+        "Keep src/core/update/this-release.ts on the same version as package.json.",
+      ),
+    );
+  } else {
+    const schema =
+      THIS_RELEASE.schemaRisk === "compatible"
+        ? "schema compatible with the previous release"
+        : "schema-breaking, declared as such";
+    const cvss =
+      THIS_RELEASE.cvss === null
+        ? "no CVSS score"
+        : `CVSS ${THIS_RELEASE.cvss} (${THIS_RELEASE.severity})`;
+    const steps =
+      THIS_RELEASE.manualSteps.length === 0
+        ? "no manual steps"
+        : `${THIS_RELEASE.manualSteps.length} manual step${THIS_RELEASE.manualSteps.length === 1 ? "" : "s"}`;
+    checks.push(
+      ok(
+        "update.release",
+        "Release metadata",
+        `${schema}; ${cvss}; ${steps}; can apply from ${THIS_RELEASE.minFromVersion}.`,
+      ),
+    );
+  }
+  checks.push(
+    ok(
+      "update.channel",
+      "Update channel",
+      THIS_RELEASE.channel === "stable"
+        ? "This instance follows the stable channel (patch and minor releases)."
+        : THIS_RELEASE.channel === "security"
+          ? "This instance follows the security channel (security-only patches)."
+          : "This instance follows the edge channel (main).",
+    ),
+  );
+  return checks;
+}
+
 async function checkUpdateSeams(): Promise<Check[]> {
   const e = env();
   const { inspectCoreFiles } = await import("@/core/update/integrity");
@@ -942,6 +989,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...(await checkPlugins()),
     ...(await checkManagedAgentConnections()),
     checkPlatformVersion(),
+    ...checkUpdateRelease(),
     ...(await checkUpdateSeams()),
   ];
 

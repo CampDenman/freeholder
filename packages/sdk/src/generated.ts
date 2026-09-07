@@ -925,6 +925,7 @@ export const SERVICE_NAMES = [
   "platform.cancelJob",
   "platform.compatibility",
   "platform.cspViolations",
+  "platform.describeRelease",
   "platform.doctor",
   "platform.export",
   "platform.getJob",
@@ -4927,6 +4928,10 @@ export interface ServiceCatalog {
     input: { days?: number; limit?: number };
     output: { fingerprint: string; documentPath: string; effectiveDirective: string; blockedSource: string; occurrences: number; lastAt: string; [key: string]: unknown }[];
   };
+  "platform.describeRelease": {
+    input: { fromVersion?: string };
+    output: { version: string; channel: "stable" | "security" | "edge"; minFromVersion: string; schemaRisk: "compatible" | "breaking"; cvss: number | null; severity: "none" | "low" | "medium" | "high" | "critical"; manualSteps: { id: string; summary: string }[]; pluginApi: string; channels: { id: "stable" | "security" | "edge"; holds: string }[]; apply: { fromVersion: string; ok: boolean; reason: string } | null };
+  };
   "platform.doctor": {
     input: Record<string, never>;
     output: { verdict: "ok" | "warn" | "fail"; checks: { id: string; title: string; verdict: "ok" | "warn" | "fail"; detail: string; remedy?: string; [key: string]: unknown }[]; ranAt: string };
@@ -7212,6 +7217,7 @@ export interface FreeholderApi {
     cancelJob: (input: ServiceCatalog["platform.cancelJob"]["input"]) => Promise<ServiceCatalog["platform.cancelJob"]["output"]>;
     compatibility: (input?: ServiceCatalog["platform.compatibility"]["input"]) => Promise<ServiceCatalog["platform.compatibility"]["output"]>;
     cspViolations: (input?: ServiceCatalog["platform.cspViolations"]["input"]) => Promise<ServiceCatalog["platform.cspViolations"]["output"]>;
+    describeRelease: (input?: ServiceCatalog["platform.describeRelease"]["input"]) => Promise<ServiceCatalog["platform.describeRelease"]["output"]>;
     doctor: (input?: ServiceCatalog["platform.doctor"]["input"]) => Promise<ServiceCatalog["platform.doctor"]["output"]>;
     export: (input?: ServiceCatalog["platform.export"]["input"]) => Promise<ServiceCatalog["platform.export"]["output"]>;
     getJob: (input: ServiceCatalog["platform.getJob"]["input"]) => Promise<ServiceCatalog["platform.getJob"]["output"]>;

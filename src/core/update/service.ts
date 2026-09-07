@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Report whether this instance still honours the customization contract (C10.01).
+// Customization seams (C10.01) and declared release metadata (C10.02).
 import { z } from "zod";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
@@ -9,8 +9,11 @@ import { env } from "@/core/env";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { defineService, ServiceError } from "@/core/service";
 import instanceConfig from "../../../freeholder.config";
+import { CHANNELS, RELEASE_CHANNELS } from "./channels";
 import { inspectCoreFiles } from "./integrity";
+import { canApplyFrom, SCHEMA_RISKS, SEVERITIES } from "./release";
 import { CUSTOMIZATION_SEAMS, SEAM_IDS, type SeamId } from "./seams";
+import { THIS_RELEASE } from "./this-release";
 
 const seamStatus = z.object({
   id: z.enum(SEAM_IDS),
@@ -90,6 +93,64 @@ export const inspectSeams = defineService({
   },
 });
 
+const manualStep = z.object({
+  id: z.string(),
+  summary: z.string(),
+});
+
+export const describeRelease = defineService({
+  name: "platform.describeRelease",
+  summary: "Declared channel, compatibility, schema risk, CVSS and manual steps for this build.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    fromVersion: z.string().min(1).optional(),
+  }),
+  output: z.object({
+    version: z.string(),
+    channel: z.enum(RELEASE_CHANNELS),
+    minFromVersion: z.string(),
+    schemaRisk: z.enum(SCHEMA_RISKS),
+    cvss: z.number().nullable(),
+    severity: z.enum(SEVERITIES),
+    manualSteps: listed(manualStep),
+    pluginApi: z.string(),
+    channels: listed(
+      z.object({
+        id: z.enum(RELEASE_CHANNELS),
+        holds: z.string(),
+      }),
+    ),
+    apply: z
+      .object({
+        fromVersion: z.string(),
+        ok: z.boolean(),
+        reason: z.string(),
+      })
+      .nullable(),
+  }),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to read this instance's release metadata.");
+    }
+    const apply = input.fromVersion
+      ? { fromVersion: input.fromVersion, ...canApplyFrom(input.fromVersion, THIS_RELEASE) }
+      : null;
+    return {
+      version: THIS_RELEASE.version,
+      channel: THIS_RELEASE.channel,
+      minFromVersion: THIS_RELEASE.minFromVersion,
+      schemaRisk: THIS_RELEASE.schemaRisk,
+      cvss: THIS_RELEASE.cvss,
+      severity: THIS_RELEASE.severity,
+      manualSteps: THIS_RELEASE.manualSteps,
+      pluginApi: THIS_RELEASE.pluginApi,
+      channels: CHANNELS.map((channel) => ({ id: channel.id, holds: channel.holds })),
+      apply,
+    };
+  },
+});
+
 function uploadsStatus(
   storage: string,
   nodeEnv: string,
@@ -119,4 +180,4 @@ function uploadsStatus(
   };
 }
 
-export default [inspectSeams];
+export default [inspectSeams, describeRelease];
