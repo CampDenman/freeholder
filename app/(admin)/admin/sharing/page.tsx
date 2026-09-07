@@ -28,7 +28,9 @@ import {
 import { collectPublicEntities } from "@/core/seo/entities";
 import { currentBusiness } from "@/core/settings/read";
 import { SHARE_CHANNELS } from "@/modules/share/intents";
-import { linkReport, targets } from "@/modules/share/service";
+import { embedSnippetFor, linkReport, targets } from "@/modules/share/service";
+import { listPublicNewsletters } from "@/modules/newsletters/service";
+import { listGalleries } from "@/modules/galleries/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -65,11 +67,30 @@ export default async function SharingPage({
   const business = await currentBusiness();
   const locale = business?.defaultLocale ?? "en";
 
-  const [t, stored, links, entities] = await Promise.all([
+  const [t, stored, links, entities, reviewsEmbed, bookingEmbed, newsletters, galleries] =
+    await Promise.all([
     getT(),
     domainOrNull(targets.call({}, actor)),
     domainOrNull(linkReport.call({ days: 90, limit: 100 }, actor)),
     collectPublicEntities(locale).catch(() => []),
+    domainOrNull(embedSnippetFor.call({ kind: "reviews" }, actor)),
+    domainOrNull(embedSnippetFor.call({ kind: "booking" }, actor)),
+    domainOrNull(listPublicNewsletters.call({}, { kind: "anonymous" })),
+    domainOrNull(listGalleries.call({ limit: 20 }, actor)),
+  ]);
+  const extraEmbeds = await Promise.all([
+    ...(newsletters ?? []).slice(0, 5).map(async (newsletter) => ({
+      label: newsletter.name,
+      snippet: await domainOrNull(
+        embedSnippetFor.call({ kind: "newsletter", id: newsletter.id }, actor),
+      ),
+    })),
+    ...(galleries ?? []).slice(0, 5).map(async (gallery) => ({
+      label: gallery.title,
+      snippet: await domainOrNull(
+        embedSnippetFor.call({ kind: "gallery", id: gallery.slug }, actor),
+      ),
+    })),
   ]);
 
   const byPath = new Map((stored ?? []).map((each) => [each.path, each]));
@@ -128,6 +149,50 @@ export default async function SharingPage({
       {query.error ? (
         <Callout tone="danger">{query.error}</Callout>
       ) : null}
+
+      <Card>
+        <CardHeader title={t("share.embed.title")} />
+        <CardBody>
+          <p className="mb-3 max-w-prose text-sm text-ink-muted">{t("share.embed.intro")}</p>
+          <div className="grid gap-4">
+            {reviewsEmbed ? (
+              <label className="grid gap-1 text-sm">
+                <span className="text-ink-muted">{t("share.embed.reviews")}</span>
+                <textarea
+                  readOnly
+                  rows={4}
+                  value={reviewsEmbed.html}
+                  className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                />
+              </label>
+            ) : null}
+            {bookingEmbed ? (
+              <label className="grid gap-1 text-sm">
+                <span className="text-ink-muted">{t("share.embed.booking")}</span>
+                <textarea
+                  readOnly
+                  rows={4}
+                  value={bookingEmbed.html}
+                  className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                />
+              </label>
+            ) : null}
+            {extraEmbeds.map((entry) =>
+              entry.snippet ? (
+                <label key={entry.snippet.src} className="grid gap-1 text-sm">
+                  <span className="text-ink-muted">{entry.label}</span>
+                  <textarea
+                    readOnly
+                    rows={4}
+                    value={entry.snippet.html}
+                    className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                  />
+                </label>
+              ) : null,
+            )}
+          </div>
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("share.entities")} />

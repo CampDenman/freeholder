@@ -72,6 +72,21 @@ describe("the Content Security Policy contract", () => {
     expect(nested).toContain("frame-ancestors 'self'");
   });
 
+  it("lets other sites frame only the copy-paste embed widgets", () => {
+    const widget = contentSecurityPolicy({
+      nonce: "embed",
+      path: "/embed/reviews",
+      production: true,
+    });
+    const home = contentSecurityPolicy({
+      nonce: "embed",
+      path: "/",
+      production: true,
+    });
+    expect(widget).toContain("frame-ancestors *");
+    expect(home).toContain("frame-ancestors 'none'");
+  });
+
   it("opens uploads only in admin and creatives only after separate consent", () => {
     const options = {
       nonce: "bounded",

@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.36. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.31. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7235,9 +7235,17 @@ customer has one secure, comprehensible home for the relationship.
   reads it. Four tests in `tests/core/product-gift-share.test.ts`.
   Migration `0161_product_gift_share.sql`. Changeset
   `product-gift-share.md`.)
-- [ ] **C9.36** Emit copy-paste embed codes for galleries, review walls,
+- [x] **C9.36** Emit copy-paste embed codes for galleries, review walls,
   booking widgets and newsletter signup blocks, with backlinks.
-  (Split from C9.29 under §43.17.1. §34's embed half.)
+  (Split from C9.29 under §43.17.1. §34's embed half.
+  `/embed/{kind}` is the only surface other sites may frame:
+  `frame-ancestors *` there, `'none'` everywhere else, and no
+  `X-Frame-Options` on the embed routes so CSP can stand. The snippet is
+  an iframe plus an `<a>` back to this origin — the iframe is the widget,
+  the link is the SEO. Gallery embeds use the lock-screen facts, never
+  the files. `share.embedSnippet` builds the HTML with escaped names.
+  Tests in `tests/core/embeds.test.ts` and `tests/core/csp.test.ts`.
+  Changeset `embeds-with-backlinks.md`.)
 - [x] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,
   targeting, consent-aware capture and accessibility-safe dismissal.
   (New `popups` module, migration `0157_popups.sql`. §36 names the four
