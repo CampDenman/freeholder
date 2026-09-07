@@ -15,6 +15,10 @@ import {
 } from "@/ui/primitives";
 import { listLocations } from "@/core/locations/service";
 import {
+  isKnownSocialExtra,
+  profileMayPublish,
+} from "@/modules/social/capabilities";
+import {
   SOCIAL_APPROVAL_POLICIES,
   SOCIAL_ASSIGNMENTS,
 } from "@/modules/social/contract";
@@ -62,6 +66,39 @@ const STATUS_TONES = {
   needs_reconnect: "warning",
   revoked: "neutral",
 } as const;
+
+function CapabilityPills({
+  capabilities,
+  t,
+}: {
+  capabilities: {
+    read: boolean;
+    respond: boolean;
+    publish: boolean;
+    extras: readonly string[];
+  };
+  t: (key: string) => string;
+}) {
+  const verbs = [
+    ["read", capabilities.read],
+    ["respond", capabilities.respond],
+    ["publish", capabilities.publish],
+  ] as const;
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {verbs.map(([name, on]) => (
+        <Pill key={name} tone={on ? "success" : "neutral"}>
+          {t(`social.capability.${name}`)}
+        </Pill>
+      ))}
+      {capabilities.extras.map((extra) => (
+        <Pill key={extra} tone="neutral">
+          {isKnownSocialExtra(extra) ? t(`social.extra.${extra}`) : extra}
+        </Pill>
+      ))}
+    </span>
+  );
+}
 
 export default async function SocialPage({
   searchParams,
@@ -127,6 +164,7 @@ export default async function SocialPage({
                     </Pill>
                   </span>
                   <span className="text-xs text-ink-muted">{network.message}</span>
+                  <CapabilityPills capabilities={network.capabilities} t={t} />
                 </span>
                 {network.available ? (
                   <form action={beginSocialOAuthAction}>
@@ -165,6 +203,7 @@ export default async function SocialPage({
                     ) : null}
                     <span className="text-xs text-ink-muted">{profile.provider}</span>
                   </span>
+                  <CapabilityPills capabilities={profile.capabilities} t={t} />
                   {profile.lastError ? (
                     <Callout tone="warning" icon={<WarningCircle size={18} weight="duotone" />}>
                       {profile.lastError}
@@ -383,7 +422,7 @@ export default async function SocialPage({
             <fieldset className="grid gap-1">
               <legend className="text-sm font-medium">{t("social.field.profiles")}</legend>
               {(connected ?? [])
-                .filter((profile) => profile.status === "active")
+                .filter((profile) => profileMayPublish(profile))
                 .map((profile) => (
                   <label key={profile.id} className="flex items-center gap-2 text-sm">
                     <input type="checkbox" name="profileIds" value={profile.id} />

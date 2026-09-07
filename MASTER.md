@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.31. C1.27 stays dependency-blocked on remaining C9. |
+| Current focus | C0.09/C0.11–C0.12 completion integrity, then C9.33. C1.27 stays dependency-blocked on remaining C9. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7342,10 +7342,22 @@ customer has one secure, comprehensible home for the relationship.
   Thirty tests in `tests/modules/popups.test.ts` and four more in
   `tests/core/cms-a11y.test.ts`, so the popup rules run in the cheap contract
   gate beside the ones they extend. Changeset `popups.md`.)
-- [ ] **C9.31** Enable the social connection/onboarding surface in normal
+- [x] **C9.31** Enable the social connection/onboarding surface in normal
   presets while never auto-authorizing or auto-publishing; make every installed
   conforming social adapter discoverable through one capability-negotiated UI
   and prove a fixture plugin adds a network without core/composer changes.
+  (`social` onboarding target `/admin/social` and `social.connect-hub` guidance
+  complete on `social.beginOAuth`, never on setup or seed. Creator, service-
+  business, shop and everything presets ship that hub with `autoAuthorize` and
+  `autoPublish` false. The admin hub maps `social.networks` and profile
+  capabilities rather than naming networks; compose and publish require both
+  the owner publish switch and what the API currently permits.
+  `plugins/social-fixture` is a `definePlugin` with `adapters: ["social"]`
+  that registers `fixture_net` on the existing family — compose, policy and
+  the profile table do not mention it. Tests in
+  `tests/modules/social-onboarding.test.ts` and
+  `tests/adapters/social-conformance.test.ts`. Changeset
+  `social-onboarding.md`.)
 
 **C9 exit:** audience, access, attribution and recurring revenue compound on
 the spine without surveillance, shadow ledgers or channel-specific silos.

@@ -30,7 +30,8 @@ export type AdapterFamily =
   | "sms"
   | "calendar"
   | "ai"
-  | "agent";
+  | "agent"
+  | "social";
 
 export type PluginCapabilities = {
   blocks?: boolean;
