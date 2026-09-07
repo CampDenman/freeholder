@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Customization seams (C10.01), channels (C10.02), signed feed (C10.03), daily check (C10.04).
+// Customization seams (C10.01), channels (C10.02), signed feed (C10.03), daily check (C10.04), preflight (C10.05).
 import { z } from "zod";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
@@ -19,6 +19,7 @@ import { CHANNELS, RELEASE_CHANNELS } from "./channels";
 import { ReleaseFeedError, verifyReleaseFeed } from "./feed";
 import { inspectCoreFiles } from "./integrity";
 import { canApplyFrom, SCHEMA_RISKS, SEVERITIES } from "./release";
+import { runPreflight } from "./preflight";
 import { CUSTOMIZATION_SEAMS, SEAM_IDS, type SeamId } from "./seams";
 import { THIS_RELEASE } from "./this-release";
 
@@ -313,4 +314,32 @@ export const checkUpdates = defineOrchestratedService({
   },
 });
 
-export default [inspectSeams, describeRelease, verifyFeed, updateCheckPolicy, checkUpdates];
+export const preflightUpdate = defineOrchestratedService({
+  name: "platform.preflightUpdate",
+  summary: "Verify signatures, plugins, drift, environment and a shadow-schema migration before applying an update.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    feed: z.unknown().optional(),
+    targetVersion: z.string().min(1).optional(),
+  }),
+  output: z.object({
+    ok: z.boolean(),
+    estimatedDowntimeMs: z.number(),
+    steps: listed(
+      z.object({
+        id: z.string(),
+        verdict: z.enum(["ok", "warn", "fail"]),
+        detail: z.string(),
+      }),
+    ),
+  }),
+  handler: async (input, actor) => {
+    if (actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to run update preflight.");
+    }
+    return runPreflight({ feed: input.feed, targetVersion: input.targetVersion });
+  },
+});
+
+export default [inspectSeams, describeRelease, verifyFeed, updateCheckPolicy, checkUpdates, preflightUpdate];

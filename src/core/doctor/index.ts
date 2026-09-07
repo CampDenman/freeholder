@@ -889,6 +889,34 @@ function checkUpdateRelease(): Check[] {
   return checks;
 }
 
+async function checkUpdatePreflight(): Promise<Check> {
+  const { runPreflight } = await import("@/core/update/preflight");
+  try {
+    const report = await runPreflight({});
+    const failed = report.steps.filter((item) => item.verdict === "fail");
+    if (failed.length) {
+      return fail(
+        "update.preflight",
+        "Update preflight",
+        failed.map((item) => `${item.id}: ${item.detail}`).join(" "),
+        "Fix the named preflight step before applying an update.",
+      );
+    }
+    return ok(
+      "update.preflight",
+      "Update preflight",
+      `Preflight passed. Estimated downtime ${report.estimatedDowntimeMs} ms.`,
+    );
+  } catch (error) {
+    return fail(
+      "update.preflight",
+      "Update preflight",
+      `Preflight could not run: ${reason(error)}`,
+      "Check the database connection and try platform.preflightUpdate.",
+    );
+  }
+}
+
 function checkUpdateCheck(): Check {
   if (!updateCheckEnabled()) {
     return ok(
@@ -1027,6 +1055,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...checkUpdateRelease(),
     checkUpdateFeedKey(),
     checkUpdateCheck(),
+    await checkUpdatePreflight(),
     ...(await checkUpdateSeams()),
   ];
 

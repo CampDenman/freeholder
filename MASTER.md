@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `b2df58b` after C10.03 signed release feed #306. C10.04 is a private daily GET of that feed with jitter, no instance identifier, an explicit setup notice and an off path. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `e3c1c41` after C10.04 daily update checks #307. C10.05 preflights signatures, plugins, drift, environment and a shadow-schema migration, with a downtime estimate. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.05–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.06–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7591,8 +7591,19 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   **F11** `deploy/update-checks.md`, changeset `daily-update-check.md`.
   **F12** the captured request has no instance identifier. This is not
   unattended apply — C10.06.)
-- [ ] **C10.05** Build preflight: signatures, plugin compatibility, shadow-DB
+- [x] **C10.05** Build preflight: signatures, plugin compatibility, shadow-DB
   migration, drift, disk/Postgres/extensions/adapters and downtime estimate.
+  (`runPreflight` / `platform.preflightUpdate`: feed signature, plugins named
+  on a range miss, `inspectCoreFiles` drift, disk/Postgres/extensions/storage,
+  `CREATE SCHEMA` clone of `public` then drop, downtime from that timing.
+  Doctor `update.preflight`. **F01–F03** N/A — tables are C10.11. **F04**
+  Doctor, not a new admin screen (C10.11). **F05** `platform.preflightUpdate`.
+  **F06** N/A — doctor sentences are English operational copy. **F07**
+  anonymous callers refused; unsigned feed fails; incompatible plugin is
+  named. **F08** `tests/core/update-preflight.test.ts`, doctor ids. **F09**
+  SPDX. **F10** N/A. **F11** `deploy/update-preflight.md`, changeset
+  `update-preflight.md`. **F12** shadow SQL `SELECT 1/0` fails migrations
+  without touching `public`. This is not apply — C10.06.)
 - [ ] **C10.06** Build snapshot → verify/pull → migrate → health/smoke → cutover
   → release-note flow with drain, grace period and automatic rollback.
 - [ ] **C10.07** Enforce N-1 schema readability in migrations and prove update

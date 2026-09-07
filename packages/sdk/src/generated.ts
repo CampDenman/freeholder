@@ -937,6 +937,7 @@ export const SERVICE_NAMES = [
   "platform.listJobs",
   "platform.listOutboxEvents",
   "platform.outboxSummary",
+  "platform.preflightUpdate",
   "platform.redriveDeadLetters",
   "platform.replayOutboxEvent",
   "platform.retryJob",
@@ -4979,6 +4980,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { pending: number; dispatched: number; deadLetters: number };
   };
+  "platform.preflightUpdate": {
+    input: { feed?: unknown; targetVersion?: string };
+    output: { ok: boolean; estimatedDowntimeMs: number; steps: { id: string; verdict: "ok" | "warn" | "fail"; detail: string }[] };
+  };
   "platform.redriveDeadLetters": {
     input: { sourceName?: string; limit?: number; confirm: "REDRIVE" };
     output: { moved: number };
@@ -7244,6 +7249,7 @@ export interface FreeholderApi {
     listJobs: (input?: ServiceCatalog["platform.listJobs"]["input"]) => Promise<ServiceCatalog["platform.listJobs"]["output"]>;
     listOutboxEvents: (input?: ServiceCatalog["platform.listOutboxEvents"]["input"]) => Promise<ServiceCatalog["platform.listOutboxEvents"]["output"]>;
     outboxSummary: (input?: ServiceCatalog["platform.outboxSummary"]["input"]) => Promise<ServiceCatalog["platform.outboxSummary"]["output"]>;
+    preflightUpdate: (input?: ServiceCatalog["platform.preflightUpdate"]["input"]) => Promise<ServiceCatalog["platform.preflightUpdate"]["output"]>;
     redriveDeadLetters: (input: ServiceCatalog["platform.redriveDeadLetters"]["input"]) => Promise<ServiceCatalog["platform.redriveDeadLetters"]["output"]>;
     replayOutboxEvent: (input: ServiceCatalog["platform.replayOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.replayOutboxEvent"]["output"]>;
     retryJob: (input: ServiceCatalog["platform.retryJob"]["input"]) => Promise<ServiceCatalog["platform.retryJob"]["output"]>;

@@ -54,6 +54,7 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
       "update.channel",
       "update.feed.key",
       "update.check",
+      "update.preflight",
     ]) {
       expect({ id, checked: ids.includes(id) }).toEqual({ id, checked: true });
     }
