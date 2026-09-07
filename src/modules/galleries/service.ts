@@ -33,6 +33,7 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
+import demoServices from "./demo";
 import {
   GALLERY_ACCESS_ACTIONS,
   GALLERY_ACCESS_MODES,
@@ -2753,6 +2754,7 @@ registerContactPrivacySource({
 });
 
 export default [
+  ...demoServices,
   createGallery,
   updateGallery,
   listGalleries,

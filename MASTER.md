@@ -3259,7 +3259,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C1.27 is unblocked. Next product work is leftover C3, then C10+C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is leftover C3, then C10+C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3739,13 +3739,30 @@ reading chat logs.
   1,108-test suite; production build; 92-table/5,133-row ownership backup,
   restore and export drill; operator guide `deploy/demo-scenarios.md`; changeset
   `deterministic-demo-scenarios.md`.)*
-- [ ] **C1.27** After the required C5–C9 domain modules exist, ship complete
+- [x] **C1.27** After the required C5–C9 domain modules exist, ship complete
   creator, service-business, shop and everything scenarios assembled only from
   those contributions, with realistic contacts, media, content, locations,
   conversations, bookings, commerce, reports and edge states; each must have
   locale variants, an expected-outcome “day in the life,” visible demo marking
   and idempotent one-action load/reset/purge that never ambiguously mixes with
   production records.
+  (`seed.creator`, `seed.service-business`, `seed.shop` and `seed.everything`
+  pin the same C5–C9 fixture contributions: contacts (including a past-due
+  client), harbour studio, sitting, inbox thread, CMS page, enquiry form,
+  print, client gallery, quote, overdue invoice and a saved revenue view.
+  Each has en/fr/es copy, a `[Demo]` mark, a guided day-in-the-life
+  (`seed.creator-day` and siblings) and the existing one-action
+  load/reload/reset/purge. `seed.current-modules` stays the small CMS/Forms
+  foundation. Complete journeys use `cms.demo-page` and `forms.demo-form`
+  so the shipped v1 SQL seed stays byte-identical. **F01** no new tables — provenance is still
+  `demo_records`. **F02** per-module load/purge/verify handlers behind
+  `requireDemoHandlerRun`. **F03** contacts go through `contacts.resolve`;
+  merge already covers the owned tables. **F04** `/admin/demos` lists all
+  five scenarios with outcome links. **F05** `demo.load` is the same
+  service HTTP/MCP already expose. **F07**
+  `tests/core/demo-scenarios.test.ts` plus the existing Chromium lifecycle.
+  **F09** Apache-2.0 SPDX. **F12** `deploy/demo-scenarios.md` and
+  `seed/README.md`. Changeset `complete-demo-scenarios.md`.)
 - [x] **C1.28** Make screen/window/tab, camera and microphone recording a
   first-class media workflow with explicit permission, persistent live/stop
   affordances, chunked resume, preview, trim/crop/caption, confirmation,

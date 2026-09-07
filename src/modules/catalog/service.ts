@@ -25,6 +25,7 @@ import {
 } from "./contract";
 import { productLifecycleEvents, products } from "./schema";
 import { syncProductPublicPage } from "./public-pages";
+import demoServices from "./demo";
 import merchandisingServices, {
   attachProductMedia,
   compareProducts,
@@ -932,6 +933,7 @@ export const restoreProduct = defineService({
 });
 
 export default [
+  ...demoServices,
   listProducts,
   getProduct,
   listProductTaxCategories,

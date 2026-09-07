@@ -524,8 +524,10 @@ export {
   downloadExportForRecipient,
   reconcileExportRuns,
 } from "./export-service";
+import demoServices from "./demo";
 
 export default [
+  ...demoServices,
   revenueReport,
   revenueByReport,
   cohortReport,

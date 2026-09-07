@@ -44,6 +44,7 @@ import i18nServices from "@/core/i18n/service";
 import jobServices from "@/core/jobs/service";
 import guidanceServices from "@/core/guidance/service";
 import demoServices from "@/core/demo/service";
+import demoFixtureServices from "@/core/demo/fixtures";
 import invitationServices from "@/core/invitations/service";
 import locationServices from "@/core/locations/service";
 import mailServices from "@/core/mail/service";
@@ -137,6 +138,7 @@ const services: Service[] = [
   ...jobServices,
   ...guidanceServices,
   ...demoServices,
+  ...demoFixtureServices,
   ...invitationServices,
   ...locationServices,
   ...mailServices,

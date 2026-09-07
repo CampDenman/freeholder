@@ -11,10 +11,13 @@ import {
   resetDemoScenario,
 } from "@/core/demo/service";
 import { demoRecords, demoScenarioRuns } from "@/core/demo/schema";
+import { contacts } from "@/core/contacts/schema";
 import { pages } from "@/modules/cms/schema";
 import { createPage } from "@/modules/cms/service";
 import { forms } from "@/modules/forms/schema";
 import { createForm, loadDemoForms } from "@/modules/forms/service";
+import { invoices } from "@/modules/invoicing/schema";
+import { products } from "@/modules/catalog/schema";
 import {
   closeDb,
   failure,
@@ -147,5 +150,51 @@ suite("deterministic demo scenarios", () => {
     );
     expect(error.code).toBe("conflict");
     expect(await db().select().from(forms)).toHaveLength(0);
+  });
+
+  it("loads a complete creator scenario from C5–C9 contributions and purges it exactly", async () => {
+    const loaded = await loadDemoScenario.call({ key: "seed.creator", locale: "en" }, OWNER);
+    expect(loaded.action).toBe("loaded");
+    const keys = (
+      await db()
+        .select({ fixtureKey: demoRecords.fixtureKey })
+        .from(demoRecords)
+        .where(eq(demoRecords.runId, loaded.run.id))
+    )
+      .map((row) => row.fixtureKey)
+      .sort();
+    expect(keys).toEqual(
+      [
+        "customer",
+        "enquiry-form",
+        "overdue-client",
+        "overdue-invoice",
+        "package",
+        "print",
+        "project-page",
+        "proofs",
+        "revenue-view",
+        "room",
+        "sitting",
+        "studio",
+        "thread",
+      ].sort(),
+    );
+    expect(
+      (await db().select({ name: contacts.name }).from(contacts)).every((row) =>
+        row.name.startsWith("[Demo]"),
+      ),
+    ).toBe(true);
+    expect((await db().select().from(invoices))[0]?.status).toBe("overdue");
+    expect((await db().select().from(products))[0]?.slug).toBe("freeholder-demo-print");
+
+    const again = await loadDemoScenario.call({ key: "seed.creator", locale: "en" }, OWNER);
+    expect(again.action).toBe("unchanged");
+
+    await purgeDemoScenario.call({}, OWNER);
+    expect(await db().select().from(contacts)).toHaveLength(0);
+    expect(await db().select().from(invoices)).toHaveLength(0);
+    expect(await db().select().from(products).where(eq(products.slug, "freeholder-demo-print"))).toHaveLength(1);
+    expect((await db().select().from(products))[0]?.status).toBe("archived");
   });
 });

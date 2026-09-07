@@ -16,6 +16,7 @@ export default defineModule({
   requires: ["core", "invoicing"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  onboarding: () => import("./onboarding"),
   events: {
     emits: [
       "quote.sent",

@@ -341,6 +341,18 @@ const DEMO_FORM = {
   },
 } as const;
 
+function formsDemoContribution(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? { key: "forms.current-modules", version: 1 }
+    : { key: "forms.demo-form", version: 1 };
+}
+
+function formsDemoOutcome(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? "forms.current-modules.visible"
+    : "forms.demo-form.visible";
+}
+
 export const loadDemoForms = defineService({
   name: "forms.loadDemoFixture",
   summary: "Load the forms contribution for a tracked demo run.",
@@ -349,12 +361,7 @@ export const loadDemoForms = defineService({
   input: demoHandlerInputSchema,
   output: demoLoadResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "forms.current-modules", version: 1 },
-      "load",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, formsDemoContribution(input.scenarioKey), "load");
     const copy = DEMO_FORM[input.locale as keyof typeof DEMO_FORM];
     if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
     const form = await ctx.callAsSystem(createForm, {
@@ -389,12 +396,7 @@ export const purgeDemoForms = defineService({
   input: demoHandlerInputSchema,
   output: demoPurgeResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "forms.current-modules", version: 1 },
-      "purge",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, formsDemoContribution(input.scenarioKey), "purge");
     const purged: Array<{ subjectType: string; subjectId: string }> = [];
     for (const record of input.records) {
       if (record.fixtureKey !== "enquiry-form" || record.subjectType !== "form") {
@@ -420,12 +422,7 @@ export const verifyDemoForms = defineService({
   input: demoHandlerInputSchema,
   output: demoVerifyResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "forms.current-modules", version: 1 },
-      "verify",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, formsDemoContribution(input.scenarioKey), "verify");
     const ids = input.records
       .filter((record) => record.subjectType === "form")
       .map((record) => record.subjectId);
@@ -439,7 +436,7 @@ export const verifyDemoForms = defineService({
     return demoVerifyResultSchema.parse({
       outcomes: [
         {
-          key: "forms.current-modules.visible",
+          key: formsDemoOutcome(input.scenarioKey),
           achieved:
             form?.slug === "freeholder-demo-enquiry" &&
             form.name.startsWith("[Demo]"),

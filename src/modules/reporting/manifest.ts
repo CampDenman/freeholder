@@ -15,6 +15,7 @@ export default defineModule({
   requires: ["core", "invoicing", "analytics"],
   tables: () => import("./tables"),
   services: () => import("./service"),
+  onboarding: () => import("./onboarding"),
   // Scheduled accounting exports (C9.32). A report an owner opens needs no
   // job; one an accountant is waiting for does.
   jobs: () => import("./jobs"),
