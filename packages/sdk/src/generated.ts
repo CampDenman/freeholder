@@ -940,6 +940,7 @@ export const SERVICE_NAMES = [
   "platform.replayOutboxEvent",
   "platform.retryJob",
   "platform.source",
+  "platform.verifyReleaseFeed",
   "platform.version",
   "plugins.addRegistry",
   "plugins.cacheRegistry",
@@ -4988,6 +4989,10 @@ export interface ServiceCatalog {
     input: { includeLicenceText?: boolean; changeLimit?: number };
     output: { version: string; license: string; licenseText: string | null; notices: { name: string; license: string; note: string | null }[]; plugins: { name: string; version: string; status: string; license: string | null; permissions: string[] }[]; builderChanges: { id: string; lane: "structure" | "code"; summary: string; status: string; reference: string | null; actor: string; at: string }[] };
   };
+  "platform.verifyReleaseFeed": {
+    input: { feed: unknown };
+    output: { keyId: string; signedAt: string; releases: { version: string; channel: "stable" | "security" | "edge"; digest: string; image: string; notesUrl: string; schemaRisk: "compatible" | "breaking"; cvss: number | null; severity: "none" | "low" | "medium" | "high" | "critical" }[] };
+  };
   "platform.version": {
     input: Record<string, never>;
     output: { version: string; contract: { openapi: string; mcpProtocol: string; webhookSchema: number }; exportFormat: string; targets: string[]; [key: string]: unknown };
@@ -7232,6 +7237,7 @@ export interface FreeholderApi {
     replayOutboxEvent: (input: ServiceCatalog["platform.replayOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.replayOutboxEvent"]["output"]>;
     retryJob: (input: ServiceCatalog["platform.retryJob"]["input"]) => Promise<ServiceCatalog["platform.retryJob"]["output"]>;
     source: (input?: ServiceCatalog["platform.source"]["input"]) => Promise<ServiceCatalog["platform.source"]["output"]>;
+    verifyReleaseFeed: (input: ServiceCatalog["platform.verifyReleaseFeed"]["input"]) => Promise<ServiceCatalog["platform.verifyReleaseFeed"]["output"]>;
     version: (input?: ServiceCatalog["platform.version"]["input"]) => Promise<ServiceCatalog["platform.version"]["output"]>;
   };
   plugins: {

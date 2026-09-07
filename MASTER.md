@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `dfcdd3a` after C10.01 customization seams #304. C10.02 names stable/security/edge and requires machine-readable compatibility, schema-risk, CVSS and manual-step metadata — never inferred from a version number. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `703e2a1` after C10.02 release channels #305. C10.03 publishes signed `releases.json` with image digest and provenance, and the instance ships a rotatable trusted release public key. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.03–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.04–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7560,8 +7560,22 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `tests/core/doctor.test.ts`. **F09** SPDX. **F10** N/A. **F11**
   `deploy/release-channels.md`, changeset `release-channels.md`. **F12**
   `canApplyFrom` uses minFromVersion, not the size of the version bump.)
-- [ ] **C10.03** Publish signed `releases.json`, image digest/signature and
+- [x] **C10.03** Publish signed `releases.json`, image digest/signature and
   provenance; embed and rotate a trusted release public key.
+  (`src/core/update/keys.ts` ships Ed25519 public key `2026-09`; retiring
+  keys still verify. `scripts/release-feed.mjs` signs `freeholder/releases/v1`
+  with `FREEHOLDER_RELEASE_SIGNING_KEY`. Tag publishes the asset from
+  `publish-image.yml`. `platform.verifyReleaseFeed` is a hard stop on a bad
+  signature. Doctor `update.feed.key`. Image cosign/provenance remains
+  `publish-image.yml`. **F01–F03** N/A — tables are C10.11. **F04** Doctor,
+  not a new admin screen (C10.11). **F05** `platform.verifyReleaseFeed`.
+  **F06** N/A — doctor sentences are English operational copy. **F07**
+  anonymous callers refused; missing/tampered/unknown signatures refuse.
+  **F08** `tests/core/update-feed.test.ts`, doctor ids in
+  `tests/core/doctor.test.ts`. **F09** SPDX. **F10** N/A. **F11**
+  `deploy/release-feed.md`, changeset `signed-release-feed.md`. **F12** a
+  retiring key still verifies; an untrusted key does not. This is not
+  unattended self-update — the daily check is C10.04.)
 - [ ] **C10.04** Build private daily update checks with jitter, no instance ID
   or telemetry, explicit setup policy and an off path.
 - [ ] **C10.05** Build preflight: signatures, plugin compatibility, shadow-DB
