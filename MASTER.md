@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `5aa0be3` after C10.07 N-1 schema #310. C10.08 is update policy: security-auto defaults, business-timezone windows, snapshot retention and feature-update approval. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `3b8ac53` after C10.08 update policy #311. C10.09 is the fork lane: a worktree merge that reports conflicts by seam, refuses to overwrite owner code, and opens a pull request in the owner’s own fork. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.09–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.10–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7644,8 +7644,30 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `tests/core/update-policy.test.ts`. **F09** SPDX. **F10** N/A. **F11**
   `deploy/update-policy.md`, changeset `update-policy.md`. **F12** Tuesday
   03:00 America/Vancouver is in-window, Monday is not.)
-- [ ] **C10.09** Build fork-lane upstream merge/worktree/gates/PR, drift and
+- [x] **C10.09** Build fork-lane upstream merge/worktree/gates/PR, drift and
   missing-security visibility without overwriting owner code.
+  (`src/core/update/fork.ts` classifies every diverging and conflicting path
+  through §39.1's seams and states drift in security terms; `fork-merge.ts`
+  fetches upstream, merges `--no-commit --no-ff` in a `mkdtemp` worktree,
+  reports conflicts by file and always aborts and removes it; `fork-delivery.ts`
+  opens the pull request in the owner's fork through the shared
+  `src/adapters/git/github.ts` client that §37's builder lane now also uses.
+  A seam conflict refuses instead of resolving. **F01** no schema — drift is
+  computed, never stored; `AvailableRelease` caching stays with C10.11.
+  **F02** `platform.forkStatus` / `openForkUpdate` are orchestrated, so no
+  transaction is held across git or GitHub I/O. **F03** N/A — no
+  `contact_id`. **F04** Doctor `update.fork`, not a new admin screen
+  (C10.11). **F05** the two services. **F06** N/A — operational copy is
+  English. **F07** anonymous refused; refs and remotes are validated before
+  git is spawned with `shell: false`; the running tree is never written and
+  the base branch is never pushed to. **F08**
+  `tests/core/update-fork.test.ts` proves the seam refusal, the channel-
+  filtered security count, the abort-and-remove, and that no `commit` or
+  `push` is ever run. **F09** SPDX. **F10** N/A — a fork is not seeded.
+  **F11** `deploy/fork-lane.md`, changeset `fork-lane.md`. **F12** a fork
+  three commits ahead and two security releases behind reports
+  "2 security releases behind — CVSS 8.1; this fork carries 3 commits of its
+  own".)
 - [ ] **C10.10** Implement and continuously test target-specific update/
   rollback actions for every Tier-1 recipe.
 - [ ] **C10.11** Build update entities/history and matching admin, CLI, MCP and

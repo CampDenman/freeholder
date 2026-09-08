@@ -253,6 +253,26 @@ const envSchema = z.object({
   FREEHOLDER_UPDATE_FEED_URL: z.string().url().optional(),
 
   /**
+   * Upstream, for the fork lane (§39.7, C10.09).
+   *
+   * Only forks read these. An instance updating by image swap never fetches a
+   * git remote at all, which is why neither is required and neither has a
+   * credential: the fork lane clones what is already public and opens a pull
+   * request with the repository token it already has.
+   */
+  FREEHOLDER_UPSTREAM_REMOTE: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith("https://"), "must be an https URL")
+    .optional(),
+  /** The upstream branch a fork merges from. Defaults to `main`. */
+  FREEHOLDER_UPSTREAM_REF: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9._\-/]{1,200}$/)
+    .optional(),
+
+  /**
    * Control Aurora Coast demo installation at boot.
    *
    * Unset means on in development and off everywhere else. `1` asks for it
