@@ -77,6 +77,8 @@ whole story, which is the point.
   environment, shadow-schema migration and the downtime estimate before apply.
 - [`update-apply.md`](update-apply.md) — snapshot, smoke, cutover, auto-drafted
   release notes and automatic rollback. Target-specific image swap is C10.10.
+- [`n1-schema.md`](n1-schema.md) — schema-compatibility plus the upgrade gate
+  that boots the previous image, migrates, and rolls back.
 - [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
   database/media restore, update and rollback acceptance for every Tier-1
   target.

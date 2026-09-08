@@ -41,8 +41,10 @@ jobs:
       - run: pnpm build
       - run: pnpm artifact:check
       - name: Schema compatibility
-        if: github.event_name == 'pull_request'
-        run: node scripts/schema-compat-gate.mjs origin/${{ github.base_ref }}
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          SCHEMA_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'origin/main' }}
+        run: node scripts/schema-compat-gate.mjs "$SCHEMA_BASE"
       - name: Changelog coverage
         if: github.event_name == 'pull_request'
         run: node scripts/changelog-gate.mjs origin/${{ github.base_ref }}

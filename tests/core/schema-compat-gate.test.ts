@@ -11,6 +11,8 @@
 import { describe, expect, it } from "vitest";
 import {
   acknowledgement,
+  assertSchemaRisk,
+  declaredSchemaRisk,
   findBreakingStatements,
   reviewMigration,
   stripComments,
@@ -125,6 +127,24 @@ describe("the migrations already in the tree", () => {
       .filter((r: { ok: boolean }) => !r.ok)
       .map((r: { path: string }) => r.path);
     expect(offenders).toEqual([]);
+  });
+
+  it("refuses a breaking migration when this build still claims schemaRisk compatible", async () => {
+    const review = reviewMigration(
+      "0165_x.sql",
+      `-- freeholder:schema-breaking drops pages.legacy_ref, expanded in 1.4
+ALTER TABLE "pages" DROP COLUMN "legacy_ref";`,
+    );
+    expect(review.acknowledged).toBe(true);
+    const mismatch = assertSchemaRisk("compatible", [review]);
+    expect(mismatch.ok).toBe(false);
+    expect(mismatch.message).toMatch(/this-release\.ts/);
+    expect(assertSchemaRisk("breaking", [review]).ok).toBe(true);
+    expect(declaredSchemaRisk('schemaRisk: "compatible"')).toBe("compatible");
+    const { readFileSync } = await import("node:fs");
+    expect(declaredSchemaRisk(readFileSync("src/core/update/this-release.ts", "utf8"))).toBe(
+      "compatible",
+    );
   });
 
   it("would have caught the one pre-gate migration that breaks N-1", async () => {

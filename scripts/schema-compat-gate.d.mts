@@ -37,3 +37,8 @@ export function stripComments(sql: string): string;
 export function findBreakingStatements(sql: string): BreakingStatement[];
 export function acknowledgement(sql: string): { reason: string } | null;
 export function reviewMigration(path: string, sql: string): MigrationReview;
+export function declaredSchemaRisk(source: string): "compatible" | "breaking" | null;
+export function assertSchemaRisk(
+  declared: "compatible" | "breaking" | null,
+  reviews: MigrationReview[],
+): { ok: boolean; acknowledged: MigrationReview[]; message?: string };
