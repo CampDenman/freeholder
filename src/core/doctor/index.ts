@@ -917,6 +917,21 @@ async function checkUpdatePreflight(): Promise<Check> {
   }
 }
 
+function checkSchemaN1(): Check {
+  return THIS_RELEASE.schemaRisk === "compatible"
+    ? ok(
+        "update.n1",
+        "Schema N-1",
+        "This release declares schemaRisk compatible, so rollback is an image swap.",
+      )
+    : warn(
+        "update.n1",
+        "Schema N-1",
+        "This release declares schemaRisk breaking. Rollback is a restore, not an image swap.",
+        "Expand then contract, or keep schemaRisk: \"breaking\" and do not apply unattended.",
+      );
+}
+
 function checkUpdateCheck(): Check {
   if (!updateCheckEnabled()) {
     return ok(
@@ -1054,6 +1069,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     checkPlatformVersion(),
     ...checkUpdateRelease(),
     checkUpdateFeedKey(),
+    checkSchemaN1(),
     checkUpdateCheck(),
     await checkUpdatePreflight(),
     ...(await checkUpdateSeams()),

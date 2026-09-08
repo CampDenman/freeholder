@@ -17,6 +17,7 @@
 // Usage: node scripts/schema-compat-gate.mjs [<base-ref>]
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Statements that a previous release cannot survive.
@@ -98,6 +99,34 @@ export function findBreakingStatements(sql) {
     }
   }
   return [...found.values()];
+}
+
+/** The schemaRisk this build declared. Never inferred from the version number. */
+export function declaredSchemaRisk(source) {
+  const match = /schemaRisk:\s*"(compatible|breaking)"/.exec(source);
+  return match ? match[1] : null;
+}
+
+/**
+ * An acknowledged breaking migration is only honest if this build's release
+ * metadata says the same thing. Otherwise the updater will treat a contract
+ * break as an image-swap rollback.
+ */
+export function assertSchemaRisk(declared, reviews) {
+  const acknowledged = (reviews ?? []).filter((review) => review.acknowledged);
+  if (acknowledged.length === 0) return { ok: true, acknowledged };
+  if (declared !== "breaking") {
+    return {
+      ok: false,
+      acknowledged,
+      message:
+        `Schema-compatibility gate: ${acknowledged.map((review) => review.path).join(", ")} ` +
+        `is declared schema-breaking, but this build's schemaRisk is ` +
+        `${declared ?? "missing"}. Set schemaRisk: "breaking" in ` +
+        `src/core/update/this-release.ts so the updater will not treat rollback as an image swap.`,
+    };
+  }
+  return { ok: true, acknowledged };
 }
 
 /** What the author said about it, if anything. */
@@ -203,6 +232,15 @@ function main() {
         "and publish the release with schema_breaking so it is never applied " +
         "unattended.",
     );
+    process.exit(1);
+  }
+
+  const declared = declaredSchemaRisk(
+    readFileSync(join(process.cwd(), "src/core/update/this-release.ts"), "utf8"),
+  );
+  const risk = assertSchemaRisk(declared, reviews);
+  if (!risk.ok) {
+    console.error(`\n${risk.message}\n`);
     process.exit(1);
   }
 

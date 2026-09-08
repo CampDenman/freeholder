@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `ea24c21` after C10.05 update preflight #308. C10.06 applies with snapshot, smoke, cutover, a drafted release note and automatic rollback. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `c4ad39c` after C10.06 apply/rollback #309. C10.07 ties schema-breaking migrations to declared schemaRisk and proves upgrade plus N-1 rollback in CI. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.07–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.08–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7618,8 +7618,19 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   **F08** `tests/core/update-apply.test.ts`. **F09** SPDX. **F10** N/A.
   **F11** `deploy/update-apply.md`, changeset `update-apply.md`. **F12**
   `failAt: "smoke"` yields `rolled_back`.)
-- [ ] **C10.07** Enforce N-1 schema readability in migrations and prove update
+- [x] **C10.07** Enforce N-1 schema readability in migrations and prove update
   plus rollback from the previous released image in CI.
+  (`schema-compat-gate.mjs` `assertSchemaRisk` fails an acknowledged break
+  unless `this-release.ts` has `schemaRisk: "breaking"`. Upgrade gate boots
+  previous `:edge`, migrates, checks the contact and home, then boots the
+  previous image with `FREEHOLDER_SKIP_MIGRATE=1` and checks home again. Skip
+  is a warning only when that image cannot be pulled. Schema-compat also runs
+  on `merge_group`. **F01–F03** N/A. **F04** Doctor `update.n1`. **F05** N/A —
+  CI gate. **F06** N/A. **F07** compatible + acknowledged break refuses.
+  **F08** `tests/core/schema-compat-gate.test.ts`,
+  `tests/core/upgrade-gate.test.ts`. **F09** SPDX. **F10** N/A. **F11**
+  `deploy/n1-schema.md`, changeset `n1-schema.md`. **F12** live
+  `this-release.ts` reads as compatible.)
 - [ ] **C10.08** Build update policy/windows in business timezone, security-
   auto defaults, snapshot retention and feature-update approval.
 - [ ] **C10.09** Build fork-lane upstream merge/worktree/gates/PR, drift and

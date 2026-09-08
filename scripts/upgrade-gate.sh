@@ -125,5 +125,7 @@ echo "5. the previous release still runs against the new schema (rollback)"
 boot "$PREVIOUS_IMAGE" "previous release, new schema" 1
 rolled_back=$(psql_db "select count(*) from contacts where email = '${MARKER}'")
 [ "$rolled_back" = "1" ] || { echo "::error title=Upgrade gate::data unreadable after rollback"; exit 1; }
+home_rollback=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PORT}/" || true)
+[ "$home_rollback" = "200" ] || { echo "::error title=Upgrade gate::home page answered ${home_rollback} after rollback"; docker logs fh-upgrade; exit 1; }
 
-echo "Upgrade gate: upgrade and rollback both clean."
+echo "Upgrade gate: upgrade and rollback both clean. N-1 schema is readable."
