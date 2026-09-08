@@ -114,6 +114,7 @@ export default async function AdminLayout({
               paywalls: t("paywalls.title"),
               experiments: t("experiments.title"),
               health: t("doctor.title"),
+              updates: t("updates.title"),
               jobs: t("jobs.title"),
               contacts: t("admin.nav.contacts"),
               locations: t("admin.nav.locations"),
