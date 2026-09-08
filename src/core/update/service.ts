@@ -45,6 +45,8 @@ import {
   updateSettings,
   updateSnapshots,
 } from "./schema";
+import { cacheReleases, listCachedReleases, updateStatus as computeStatus } from "./catalog";
+import { db } from "@/core/db";
 import { CUSTOMIZATION_SEAMS, SEAM_IDS, type SeamId } from "./seams";
 import { THIS_RELEASE } from "./this-release";
 import { planForkMerge, summarizeDrift } from "./fork";
@@ -328,6 +330,17 @@ export const checkUpdates = defineOrchestratedService({
     if (!result.checked) {
       return { checked: false, reason: result.reason, keyId: null, releases: [] };
     }
+    // The feed is verified; the network is done. Open a fresh transaction to
+    // record what it offered (C10.11), so every surface answers "am I
+    // exposed?" from one cache rather than four independent fetches — and so
+    // there is still an answer when the feed is unreachable.
+    await db().transaction(async (tx) => {
+      await cacheReleases(tx as never, result.feed.releases);
+      await tx
+        .update(updateSettings)
+        .set({ lastCheckedAt: new Date() })
+        .where(eq(updateSettings.id, 1));
+    });
     return {
       checked: true,
       reason: null,
@@ -657,6 +670,120 @@ const missingRelease = z.object({
   publishedAt: z.string(),
 });
 
+const missingReleaseShape = z.object({
+  version: z.string(),
+  severity: z.enum(SEVERITIES),
+  cvss: z.number().nullable(),
+  notesUrl: z.string(),
+  publishedAt: z.string(),
+});
+
+export const updateStatus = defineService({
+  name: "platform.updateStatus",
+  summary:
+    "The one status line §39.10 requires: up to date, update available, or N security releases behind.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: z.object({
+    posture: z.enum(["current", "behind", "behind-security", "unknown"]),
+    sentence: z.string(),
+    urgent: z.boolean(),
+    currentVersion: z.string(),
+    channel: z.string(),
+    worstCvss: z.number().nullable(),
+    earliestReachableVersion: z.string().nullable(),
+    lastCheckedAt: z.date().nullable(),
+    missing: listed(missingReleaseShape),
+    missingSecurity: listed(missingReleaseShape),
+  }),
+  handler: async (_input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to read update status.");
+    }
+    const [settings] = await ctx.tx
+      .select()
+      .from(updateSettings)
+      .where(eq(updateSettings.id, 1))
+      .limit(1);
+    const cached = await listCachedReleases(ctx.tx as never);
+    // An instance on the `off` policy channel still has a subscription for
+    // the purpose of "which releases would you have been offered": the
+    // question an owner asks when deciding whether to turn it back on.
+    const channel = settings?.channel === "off" ? "security" : (settings?.channel ?? "security");
+    const status = computeStatus({
+      currentVersion: PLATFORM_VERSION,
+      channel,
+      cached,
+      lastCheckedAt: settings?.lastCheckedAt ?? null,
+      checksEnabled: updateCheckEnabled(env().FREEHOLDER_UPDATE_CHECK),
+    });
+    return {
+      posture: status.posture,
+      sentence: status.sentence,
+      urgent: status.urgent,
+      currentVersion: status.currentVersion,
+      channel: status.channel,
+      worstCvss: status.worstCvss,
+      earliestReachableVersion: status.earliestReachableVersion,
+      lastCheckedAt: status.lastCheckedAt,
+      missing: status.missing,
+      missingSecurity: status.missingSecurity,
+    };
+  },
+});
+
+export const listAvailableReleases = defineService({
+  name: "platform.listAvailableReleases",
+  summary: "What the signed feed offered, as this instance last cached it.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: z.object({
+    releases: listed(
+      z.object({
+        version: z.string(),
+        channel: z.string(),
+        digest: z.string(),
+        severity: z.enum(SEVERITIES),
+        cvss: z.number().nullable(),
+        schemaBreaking: z.boolean(),
+        minFromVersion: z.string(),
+        pluginApi: z.string(),
+        notesUrl: z.string(),
+        publishedAt: z.date(),
+        verified: z.boolean(),
+        applicable: z.boolean(),
+        reason: z.string(),
+      }),
+    ),
+  }),
+  handler: async (_input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to read available releases.");
+    }
+    const cached = await listCachedReleases(ctx.tx as never);
+    return {
+      releases: cached.map((release) => {
+        // Whether this instance can actually get there, stated per row: a list
+        // of releases an owner cannot apply from their version is a list that
+        // teaches them to ignore it.
+        const verdict = canApplyFrom(PLATFORM_VERSION, {
+          version: release.version,
+          channel: release.channel,
+          minFromVersion: release.minFromVersion,
+          schemaRisk: release.schemaBreaking ? "breaking" : "compatible",
+          cvss: release.cvss,
+          severity: release.severity,
+          manualSteps: [],
+          pluginApi: release.pluginApi,
+        });
+        return { ...release, applicable: verdict.ok, reason: verdict.reason };
+      }),
+    };
+  },
+});
+
 export const describeUpdateTargets = defineService({
   name: "platform.describeUpdateTargets",
   summary:
@@ -851,6 +978,8 @@ export default [
   getUpdatePolicy,
   saveUpdatePolicy,
   evaluateUpdatePolicy,
+  updateStatus,
+  listAvailableReleases,
   describeUpdateTargets,
   forkStatus,
   openForkUpdate,
