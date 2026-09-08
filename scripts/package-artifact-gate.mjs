@@ -15,6 +15,7 @@ const packageNames = [
   "@freeholder/plugin-kit",
   "@freeholder/sdk",
   "@freeholder/cli",
+  "@freeholder/mobile-app",
   "@freeholder/templates",
 ];
 

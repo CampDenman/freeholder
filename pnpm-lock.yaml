@@ -147,6 +147,8 @@ importers:
 
   packages/create-freeholder: {}
 
+  packages/mobile-app: {}
+
   packages/plugin-kit: {}
 
   packages/sdk: {}
