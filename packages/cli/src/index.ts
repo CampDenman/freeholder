@@ -51,6 +51,19 @@ interface Options {
   quiet: boolean;
 }
 
+/**
+ * Drop trailing slashes so `${url}/api/v1/...` never doubles up.
+ *
+ * A loop rather than `/\/+$/`: that pattern backtracks polynomially on a
+ * string of many slashes followed by anything else, which CodeQL flags and
+ * which is a silly thing to inherit from a one-character convenience.
+ */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end -= 1;
+  return value.slice(0, end);
+}
+
 export function parseArgs(argv: readonly string[]): {
   command: string;
   action: string;
@@ -69,9 +82,8 @@ export function parseArgs(argv: readonly string[]): {
     command: argv.find((entry) => !entry.startsWith("--")) ?? "",
     action: action ?? "status",
     options: {
-      url: (value("url", process.env.FREEHOLDER_URL ?? "http://localhost:3000") ?? "").replace(
-        /\/+$/,
-        "",
+      url: stripTrailingSlashes(
+        value("url", process.env.FREEHOLDER_URL ?? "http://localhost:3000") ?? "",
       ),
       apiKey: value("api-key", process.env.FREEHOLDER_API_KEY),
       email: value("email", process.env.FREEHOLDER_EMAIL),

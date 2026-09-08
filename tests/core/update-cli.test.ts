@@ -56,6 +56,11 @@ describe("the update CLI (C10.21)", () => {
       ]);
       // Trailing slashes stripped, so `${url}/api/v1/...` never doubles up.
       expect(parsed.options.url).toBe("https://example.test");
+      // Stripped by a loop, not `/\/+$/`, which backtracks polynomially on a
+      // long run of slashes. Many slashes must be cheap, not quadratic.
+      expect(parseArgs(["update", "--url", `https://x.test${"/".repeat(5000)}`]).options.url).toBe(
+        "https://x.test",
+      );
       expect(parsed.options.apiKey).toBe("fh_test");
       expect(parsed.options.json).toBe(true);
     });
