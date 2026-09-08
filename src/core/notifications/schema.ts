@@ -346,3 +346,44 @@ export const notificationDeliveries = pgTable(
     ),
   ],
 );
+
+export const DEVICE_PLATFORMS = ["ios", "android"] as const;
+
+/**
+ * One app install that may be pushed to (MASTER.md §35.1, C10.14).
+ *
+ * §35.1: "The device token is a `NotificationDelivery` channel like email and
+ * SMS (§30), registered against the contact, subject to the same per-topic
+ * preferences, and revoked when the session ends. A push that says something
+ * the platform would not have emailed is a bug."
+ *
+ * Unique on the token rather than on (contact, token): a device token is
+ * globally unique and belongs to an install, not to a person. When a phone is
+ * handed on, or a second customer signs in on the same device, re-registration
+ * moves the row rather than creating a second one that would push somebody
+ * else's bookings to the new owner.
+ */
+export const deviceTokens = pgTable(
+  "device_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    platform: text("platform", { enum: DEVICE_PLATFORMS }).notNull(),
+    token: text("token").notNull(),
+    appVersion: text("app_version").notNull(),
+    /** So a push is never sent to a binary too old to open its own link. */
+    contractVersion: integer("contract_version").notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the session ends or the provider says the token is dead. */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("device_tokens_token_key").on(t.token),
+    index("device_tokens_contact_idx").on(t.contactId),
+    check("device_tokens_token_not_blank", sql`length(trim(${t.token})) > 0`),
+    check("device_tokens_contract_version", sql`${t.contractVersion} >= 1`),
+  ],
+);

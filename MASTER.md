@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C10 update work is complete. Next is C10.23–C10.24 (the Expo application), then C10.14–C10.18, C10.19 and C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C10 update work is complete. Next is C10.23–C10.24 (the Expo application) and C10.15–C10.18, then C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7871,7 +7871,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 - [ ] **C10.24** Build the remaining customer screens against the same
   contracts: booking, invoice pay, galleries and proofing, portal messages and
   newsletters.
-- [ ] **C10.14** Build push registration/preferences and booking, gallery,
+- [x] **C10.14** Build push registration/preferences and booking, gallery,
   invoice and back-in-stock notifications through core notification services.
   §35.1's `DeviceToken` carries a `contact_id`, so this item **must repoint it
   in `contacts.merge`** in the same change (CLAUDE.md's spine rule; the list in
@@ -7879,6 +7879,31 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   it orphans every push token the first time an owner merges two duplicates).
   A device token is a `NotificationDelivery` channel like email and SMS, not a
   second notification system.
+  *(`device_tokens` (migration `0167_device_tokens.sql`) plus
+  `src/core/notifications/devices.ts`. Unique on the token alone, not on
+  (contact, token): a token identifies an install, so a phone handed on moves
+  rather than leaving the previous owner registered. **F01**
+  `device_tokens`, with `contract_version` so a push is never sent to a binary
+  too old to open its own C10.13 deep link. **F02** repointed in
+  `contacts.merge`; the plain repoint is safe *because* the unique index is on
+  the token alone, so the survivor cannot already hold the moved row.
+  **F03** registered for merge, export and erasure — export includes the token
+  because it is the customer's, and erasure deletes rather than revokes
+  because a revoked row still holds a way to reach their phone.
+  `tests/core/merge-completeness.test.ts` failed on all three the moment the
+  table appeared, which is what it is for. **F04**
+  `notifications.myDevices` lists which phones can reach a customer and never
+  returns the token itself. **F05** three services. **F06** the message is
+  whatever the notification already localized. **F07** revoke is scoped to the
+  caller's own tokens, because a token is a bearer value and guessing one must
+  not silence somebody else. **F08** `tests/core/push-devices.test.ts`.
+  **F09** delivery skips are recorded, never faked. **F10** N/A. **F11**
+  `deploy/push-notifications.md`, changeset `push-notifications.md`. **F12**
+  the four topics join `NOTIFICATION_TOPICS` rather than forming a
+  mobile-only list, so they reach email and in-app under the same per-topic
+  preferences — "a push that says something the platform would not have
+  emailed is a bug". Honest limit: no production push carrier is configured
+  yet; the adapter seam reports itself unavailable.)*
 - [ ] **C10.15** Implement `freeholder-app init`: pull branding, generate
   icons/splash/store metadata/screenshots and emit an auditable config diff.
 - [ ] **C10.16** Continuously build iOS/Android against the demo contract and

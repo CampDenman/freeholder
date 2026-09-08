@@ -914,7 +914,10 @@ export const SERVICE_NAMES = [
   "notifications.list",
   "notifications.markAllRead",
   "notifications.markRead",
+  "notifications.myDevices",
   "notifications.preferences",
+  "notifications.registerDevice",
+  "notifications.revokeDevice",
   "notifications.unreadCount",
   "notifications.updatePreference",
   "notifications.updatePreferences",
@@ -4899,9 +4902,21 @@ export interface ServiceCatalog {
     input: { id: string; read?: boolean };
     output: { id: string; readAt: string | null };
   };
+  "notifications.myDevices": {
+    input: Record<string, never>;
+    output: { devices: { id: string; platform: "ios" | "android"; appVersion: string; lastSeenAt: string }[] };
+  };
   "notifications.preferences": {
     input: Record<string, never>;
     output: { topics: string[]; preferences: { topic: string; channel: "in_app" | "email" | "sms" | "push"; mode: "immediate" | "digest" | "off"; [key: string]: unknown }[]; settings: { digestCadence: "daily" | "weekly"; digestMinute: number; digestWeekday: number; timezone: string | null; escalationMinutes: number; [key: string]: unknown }; email: { provider: "smtp" | "console" | "gmail" | "outlook"; ready: boolean }; adapters: { channel: "sms" | "push"; provider: string; available: boolean; message: string }[] };
+  };
+  "notifications.registerDevice": {
+    input: { token: string; platform: "ios" | "android"; appVersion: string; contractVersion: number };
+    output: { id: string; moved: boolean };
+  };
+  "notifications.revokeDevice": {
+    input: { token: string };
+    output: { revoked: boolean };
   };
   "notifications.unreadCount": {
     input: Record<string, never>;
@@ -7277,7 +7292,10 @@ export interface FreeholderApi {
     list: (input?: ServiceCatalog["notifications.list"]["input"]) => Promise<ServiceCatalog["notifications.list"]["output"]>;
     markAllRead: (input?: ServiceCatalog["notifications.markAllRead"]["input"]) => Promise<ServiceCatalog["notifications.markAllRead"]["output"]>;
     markRead: (input: ServiceCatalog["notifications.markRead"]["input"]) => Promise<ServiceCatalog["notifications.markRead"]["output"]>;
+    myDevices: (input?: ServiceCatalog["notifications.myDevices"]["input"]) => Promise<ServiceCatalog["notifications.myDevices"]["output"]>;
     preferences: (input?: ServiceCatalog["notifications.preferences"]["input"]) => Promise<ServiceCatalog["notifications.preferences"]["output"]>;
+    registerDevice: (input: ServiceCatalog["notifications.registerDevice"]["input"]) => Promise<ServiceCatalog["notifications.registerDevice"]["output"]>;
+    revokeDevice: (input: ServiceCatalog["notifications.revokeDevice"]["input"]) => Promise<ServiceCatalog["notifications.revokeDevice"]["output"]>;
     unreadCount: (input?: ServiceCatalog["notifications.unreadCount"]["input"]) => Promise<ServiceCatalog["notifications.unreadCount"]["output"]>;
     updatePreference: (input: ServiceCatalog["notifications.updatePreference"]["input"]) => Promise<ServiceCatalog["notifications.updatePreference"]["output"]>;
     updatePreferences: (input: ServiceCatalog["notifications.updatePreferences"]["input"]) => Promise<ServiceCatalog["notifications.updatePreferences"]["output"]>;

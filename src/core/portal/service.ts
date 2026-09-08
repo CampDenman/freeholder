@@ -36,7 +36,14 @@ const profile = row({
  * portal screen needs the join, and doing it in one place keeps a surface from
  * inventing its own idea of who is looking.
  */
-async function contactForActor(ctx: ServiceContext) {
+/**
+ * The contact row behind a signed-in customer.
+ *
+ * Exported because push registration (C10.14) needs exactly this question
+ * answered exactly this way — a second copy would be a second place for
+ * "which customer is this?" to drift.
+ */
+export async function contactForActor(ctx: ServiceContext) {
   if (ctx.actor.kind !== "user") {
     throw new ServiceError("permission", "Sign in to see your details.");
   }

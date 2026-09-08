@@ -22,6 +22,8 @@ import { notificationAdapterStatus, pushNotifications, smsNotifications } from "
 import { users, roleGrants } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
+import { contactForActor } from "@/core/portal/service";
+import { devicesForContact } from "./devices";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { enqueueJob } from "@/core/jobs";
@@ -33,6 +35,7 @@ import {
   notificationReceipts,
   notificationSettings,
   notifications,
+  deviceTokens,
 } from "@/core/notifications/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -67,6 +70,15 @@ export const NOTIFICATION_TOPICS = [
   // the question for three months, so silence must not be indistinguishable
   // from safety.
   "platform.securityUpdate",
+  // The four moments §35 says are worth a customer's attention on their phone.
+  // They are ordinary topics, not a mobile-only system: each is subject to the
+  // same per-topic preferences and reaches email and in-app too, because
+  // "a push that says something the platform would not have emailed is a bug"
+  // (§35.1).
+  "booking.confirmed",
+  "gallery.ready",
+  "invoice.due",
+  "catalog.backInStock",
 ] as const;
 
 const notificationCreateResult = z.object({
@@ -206,6 +218,35 @@ registerContactReference({
 });
 
 registerContactReference({
+  // §35.1's DeviceToken. A plain repoint is safe precisely because the unique
+  // index is on the token alone: the survivor cannot already hold the row
+  // being moved, so there is no conflict to decide. Had it been unique on
+  // (contact, token), this would have needed a decision, not an update.
+  table: "device_tokens",
+  repoint: (tx, duplicateId, survivingId) =>
+    tx.update(deviceTokens).set({ contactId: survivingId })
+      .where(eq(deviceTokens.contactId, duplicateId)),
+  captureForUndo: async (tx, duplicateId, survivingId) => ({
+    state: await tx.select({ id: deviceTokens.id, contactId: deviceTokens.contactId })
+      .from(deviceTokens)
+      .where(inArray(deviceTokens.contactId, [duplicateId, survivingId])),
+    undoable: true,
+  }),
+  restoreAfterUndo: (tx, before, after, duplicateId) =>
+    restoreContactPointers(
+      tx,
+      "Device tokens",
+      before,
+      after,
+      duplicateId,
+      (ids) => tx.select({ id: deviceTokens.id, contactId: deviceTokens.contactId })
+        .from(deviceTokens).where(inArray(deviceTokens.id, ids)),
+      (ids, id) => tx.update(deviceTokens).set({ contactId: id })
+        .where(inArray(deviceTokens.id, ids)),
+    ),
+});
+
+registerContactReference({
   table: "notification_digests",
   repoint: (tx, duplicateId, survivingId) =>
     tx.update(notificationDigests).set({ recipientContactId: survivingId })
@@ -336,6 +377,7 @@ registerContactPrivacySource({
     "notification_preferences",
     "notification_settings",
     "notification_digests",
+    "device_tokens",
   ],
   exportData: async (tx, contactId) => {
     const noticeRows = await tx.select().from(notifications)
@@ -357,6 +399,11 @@ registerContactPrivacySource({
         .where(eq(notificationSettings.contactId, contactId)),
       digests: await tx.select().from(notificationDigests)
         .where(eq(notificationDigests.recipientContactId, contactId)),
+      // Which devices this person is reachable on is data about them, so an
+      // export that omitted it would be an incomplete answer to "what do you
+      // hold". The token itself is included: it is theirs, not ours.
+      devices: await tx.select().from(deviceTokens)
+        .where(eq(deviceTokens.contactId, contactId)),
     };
   },
   erase: async (tx, contactId) => {
@@ -372,7 +419,19 @@ registerContactPrivacySource({
     const noticeRows = await tx.delete(notifications)
       .where(eq(notifications.recipientContactId, contactId))
       .returning({ id: notifications.id });
-    return { affected: digests.length + preferences.length + settings.length + noticeRows.length };
+    // Deleted rather than revoked: erasure means the platform stops holding a
+    // way to reach this person's phone, and a revoked row still holds one.
+    const devices = await tx.delete(deviceTokens)
+      .where(eq(deviceTokens.contactId, contactId))
+      .returning({ id: deviceTokens.id });
+    return {
+      affected:
+        digests.length +
+        preferences.length +
+        settings.length +
+        noticeRows.length +
+        devices.length,
+    };
   },
 });
 
@@ -1016,6 +1075,79 @@ export const notificationPreferenceStatus = defineService({
   },
 });
 
+const registeredDevice = z.object({
+  id: uuid,
+  platform: z.enum(["ios", "android"]),
+  appVersion: z.string(),
+  lastSeenAt: timestamp,
+});
+
+export const registerDeviceToken = defineService({
+  name: "notifications.registerDevice",
+  summary: "Register this app install so it can receive push notifications.",
+  kind: "mutation",
+  permission: "authenticated",
+  input: z.object({
+    token: z.string().trim().min(8).max(512),
+    platform: z.enum(["ios", "android"]),
+    appVersion: z.string().trim().min(1).max(32),
+    contractVersion: z.number().int().min(1).max(1000),
+  }),
+  output: z.object({ id: uuid, moved: z.boolean() }),
+  handler: async (input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const { registerDevice } = await import("./devices");
+    return registerDevice(ctx.tx, { contactId: contact.id, ...input });
+  },
+});
+
+export const revokeDeviceToken = defineService({
+  name: "notifications.revokeDevice",
+  summary: "Stop pushing to one app install. Called when a session ends.",
+  kind: "mutation",
+  permission: "authenticated",
+  input: z.object({ token: z.string().trim().min(8).max(512) }),
+  output: z.object({ revoked: z.boolean() }),
+  handler: async (input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const { revokeDevice } = await import("./devices");
+    // Scoped to the caller's own devices: a token is a bearer value, and
+    // letting any signed-in person revoke any token by guessing one would be
+    // a denial-of-service on somebody else's notifications.
+    const [owned] = await ctx.tx
+      .select({ id: deviceTokens.id })
+      .from(deviceTokens)
+      .where(and(eq(deviceTokens.token, input.token), eq(deviceTokens.contactId, contact.id)))
+      .limit(1);
+    if (!owned) return { revoked: false };
+    return { revoked: await revokeDevice(ctx.tx, input.token) };
+  },
+});
+
+export const listMyDevices = defineService({
+  name: "notifications.myDevices",
+  summary: "The app installs currently able to notify this customer.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({}),
+  output: z.object({ devices: listed(registeredDevice) }),
+  handler: async (_input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const rows = await ctx.tx
+      .select({
+        id: deviceTokens.id,
+        platform: deviceTokens.platform,
+        appVersion: deviceTokens.appVersion,
+        lastSeenAt: deviceTokens.lastSeenAt,
+      })
+      .from(deviceTokens)
+      .where(and(eq(deviceTokens.contactId, contact.id), isNull(deviceTokens.revokedAt)));
+    // The token itself is never returned. A customer needs to know *which
+    // phones* can reach them, not the bearer value that reaches them.
+    return { devices: rows };
+  },
+});
+
 export const updateNotificationPreference = defineService({
   name: "notifications.updatePreference",
   summary: "Set one personal topic and channel preference.",
@@ -1263,18 +1395,48 @@ export async function deliverDueNotifications(limit = 50) {
         }
       } else {
         const adapter = delivery.channel === "sms" ? smsNotifications : pushNotifications;
-        const to = delivery.channel === "sms" ? address.phone : address.key;
-        if (!to) {
-          outcome = { provider: adapter.id, providerRef: null, delivers: false, reason: "This recipient has no phone number." };
+        // One delivery row, but a person may carry several phones. SMS has a
+        // single address; push fans out across every install the contact has
+        // registered (§35.1) and is delivered if any of them took it — one
+        // dead handset must not mark the whole notification undelivered.
+        const targets =
+          delivery.channel === "sms"
+            ? (address.phone ? [address.phone] : [])
+            : notification.recipientContactId
+              ? (await db().transaction((tx) =>
+                  devicesForContact(tx, notification.recipientContactId!),
+                )).map((device) => device.token)
+              : [];
+        if (targets.length === 0) {
+          outcome = {
+            provider: adapter.id,
+            providerRef: null,
+            delivers: false,
+            reason:
+              delivery.channel === "sms"
+                ? "This recipient has no phone number."
+                : "This recipient has no app install registered for push.",
+          };
         } else {
-          const result = await adapter.send({
-            to,
-            title: notification.title,
-            body: notification.body,
-            href: absoluteHref(notification.href),
-            deliveryId: delivery.id,
-          });
-          outcome = { provider: adapter.id, ...result };
+          const results = [];
+          for (const to of targets) {
+            results.push(
+              await adapter.send({
+                to,
+                title: notification.title,
+                body: notification.body,
+                href: absoluteHref(notification.href),
+                deliveryId: delivery.id,
+              }),
+            );
+          }
+          const delivered = results.filter((result) => result.delivers);
+          outcome = {
+            provider: adapter.id,
+            providerRef: delivered[0]?.providerRef ?? null,
+            delivers: delivered.length > 0,
+            reason: delivered.length > 0 ? undefined : results[0]?.reason,
+          };
         }
       }
       await db().update(notificationDeliveries).set({
@@ -1692,6 +1854,9 @@ export default [
   archiveNotification,
   markAllNotificationsRead,
   notificationPreferenceStatus,
+  registerDeviceToken,
+  revokeDeviceToken,
+  listMyDevices,
   updateNotificationPreference,
   updateNotificationPreferences,
   updateNotificationSettings,
