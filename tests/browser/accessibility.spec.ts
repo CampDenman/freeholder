@@ -21,7 +21,7 @@ import {
 } from "../helpers/spine";
 import { resetBrowserDatabase } from "./database";
 
-type Surface = "setup" | "admin" | "editor" | "storefront" | "portal";
+type Surface = "setup" | "admin" | "updates" | "editor" | "storefront" | "portal";
 
 const BASE_URL = process.env.APP_URL ?? "http://localhost:3100";
 const WCAG_TAGS = [
@@ -217,6 +217,18 @@ async function assertScreenReaderTree(page: Page, surface: Surface) {
     await expect(page.getByRole("progressbar", { name: /tasks complete/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "Guided help" })).toBeVisible();
     expect(tree).toContain("Admin sections");
+  } else if (surface === "updates") {
+    // The update surface (C10.20). Asserted on its own terms rather than the
+    // overview's: it is a different page, and reusing the overview's checks
+    // here would have tested that Updates looks like the dashboard.
+    await expect(page.getByRole("heading", { level: 1, name: "Updates" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Admin sections" })).toBeVisible();
+    // The policy form is the part a keyboard user has to operate, so its
+    // grouping and labelling are what matter most on this screen.
+    await expect(page.getByRole("group", { name: "Nights an update may land" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Release channel" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check for updates now" })).toBeVisible();
+    expect(tree).toContain("Updates");
   } else if (surface === "editor") {
     await expect(page.getByRole("heading", { level: 1, name: "Aurora Coast Photography" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Add a block" }).first()).toBeVisible();
@@ -414,7 +426,7 @@ test.describe("real-browser accessibility", () => {
     // that quietly stops being the way updates get applied.
     await test.step("admin updates", async () => {
       await page.goto("/admin/updates");
-      await assertSurface(page, "admin");
+      await assertSurface(page, "updates");
     });
 
     await test.step("editor", async () => {

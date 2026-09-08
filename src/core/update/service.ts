@@ -644,6 +644,20 @@ function upstream(): { remote: string; ref: string } {
   };
 }
 
+/**
+ * Whether this instance has opted into the fork lane at all.
+ *
+ * The lane is opt-in because entering it costs a `git fetch` over the network,
+ * and the admin screen (C10.20) reads fork status on every render. A plain
+ * source checkout — every development machine, and the CI container that
+ * builds the accessibility suite — would otherwise reach out to GitHub to
+ * render a page. An owner who has actually forked sets one of these.
+ */
+function forkLaneConfigured(): boolean {
+  const e = env();
+  return Boolean(e.FREEHOLDER_UPSTREAM_REMOTE || e.BUILDER_CODE_REPOSITORY);
+}
+
 async function readFeedReleases(): Promise<VerifiedRelease[]> {
   const e = env();
   if (!updateCheckEnabled(e.FREEHOLDER_UPDATE_CHECK)) return [];
@@ -846,6 +860,22 @@ export const forkStatus = defineOrchestratedService({
     if (actor.kind === "anonymous") {
       throw new ServiceError("permission", "Sign in to read fork status.");
     }
+    if (!forkLaneConfigured()) {
+      return {
+        fork: false,
+        reason:
+          "This instance updates by image swap. The fork lane is for owners who have modified core; set FREEHOLDER_UPSTREAM_REMOTE to enter it.",
+        ahead: 0,
+        behind: 0,
+        status: "current" as const,
+        sentence: "This instance updates by image swap.",
+        worstCvss: null,
+        ownedByYou: [],
+        replaceableCore: [],
+        missing: [],
+        missingSecurity: [],
+      };
+    }
     const { remote, ref } = upstream();
     const attempt = await attemptUpstreamMerge({
       root: input.root ?? process.cwd(),
@@ -901,6 +931,12 @@ export const openForkUpdate = defineOrchestratedService({
   handler: async (input, actor) => {
     if (actor.kind === "anonymous") {
       throw new ServiceError("permission", "Sign in to open a fork update.");
+    }
+    if (!forkLaneConfigured()) {
+      throw new ServiceError(
+        "conflict",
+        "The fork lane is not configured. Set FREEHOLDER_UPSTREAM_REMOTE and connect a repository first.",
+      );
     }
     const { remote, ref } = upstream();
     const attempt = await attemptUpstreamMerge({

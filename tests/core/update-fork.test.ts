@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   classifyDivergence,
   compareVersions,
@@ -142,6 +143,18 @@ describe("fork lane (C10.09)", () => {
       expect(plan.merges).toBe(false);
       expect(plan.ownerConflicts).toEqual([]);
       expect(plan.refusal).toContain("2 core files conflict");
+    });
+  });
+
+  describe("the lane is opt-in", () => {
+    it("is documented as requiring explicit configuration", () => {
+      // Entering the lane costs a `git fetch`, and the admin screen reads fork
+      // status on every render. A plain source checkout — every development
+      // machine, and the CI container that builds the accessibility suite —
+      // must not reach out to GitHub to render a page.
+      const source = readFileSync("src/core/update/service.ts", "utf8");
+      expect(source).toContain("forkLaneConfigured");
+      expect(source).toMatch(/FREEHOLDER_UPSTREAM_REMOTE \|\| e\.BUILDER_CODE_REPOSITORY/);
     });
   });
 
