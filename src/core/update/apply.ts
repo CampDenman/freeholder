@@ -165,3 +165,95 @@ export async function applyUpdate(input: {
     return { id: runId, status: "rolled_back", snapshotId, noteId, preflight };
   }
 }
+
+export class RollbackRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RollbackRefused";
+  }
+}
+
+/**
+ * Go back to the release the last completed update came from (§39.10, C10.21).
+ *
+ * Deliberate rollback, as distinct from the automatic one inside `applyUpdate`.
+ * Two things it refuses rather than attempts:
+ *
+ *   - **Rolling back past a schema contraction.** §39.11's horizon is not
+ *     advice: once a release has contracted the schema, the build before it
+ *     cannot read the database, and swapping the image back produces an
+ *     instance that boots and then fails on the first query. That is worse
+ *     than staying, so it is refused with the version to restore from instead.
+ *   - **Rolling back a run that already rolled back.** There is nothing to
+ *     undo, and recording a second reversal would make the history lie.
+ */
+export async function rollbackUpdate(input: {
+  target?: UpdateTarget;
+  actor: Actor;
+  /** Versions known to contract the schema, newest-first from C10.11's cache. */
+  breakingSince?: readonly string[];
+}): Promise<{ id: string; status: string; fromVersion: string; toVersion: string }> {
+  const [last] = await db()
+    .select()
+    .from(updateRuns)
+    .where(sql`${updateRuns.status} = 'completed'`)
+    .orderBy(sql`${updateRuns.startedAt} desc`)
+    .limit(1);
+  if (!last) {
+    throw new RollbackRefused(
+      "This instance has no completed update to roll back. Restore from a backup instead.",
+    );
+  }
+  if ((input.breakingSince ?? []).length > 0) {
+    throw new RollbackRefused(
+      `Rolling back to ${last.fromVersion} would cross a schema contraction (${[...(input.breakingSince ?? [])].join(", ")}). The previous build cannot read this database. Restore from a snapshot instead.`,
+    );
+  }
+
+  const target = input.target ?? localUpdateTarget;
+  const [run] = await db()
+    .insert(updateRuns)
+    .values({
+      fromVersion: last.toVersion,
+      toVersion: last.fromVersion,
+      trigger: "cli",
+      status: "started",
+      preflight: {},
+      rolledBackFromRunId: last.id,
+      log: "",
+    })
+    .returning();
+  const runId = run!.id;
+  try {
+    await target.rollbackCutover();
+    await smokeUpdate();
+    await db()
+      .update(updateRuns)
+      .set({ status: "completed", log: "rollback,smoke", finishedAt: new Date() })
+      .where(sql`${updateRuns.id} = ${runId}`);
+    await db().insert(releaseNotes).values({
+      kind: "platform_upgrade",
+      title: `Rolled back to ${last.fromVersion}`,
+      body: `This site moved back from ${last.toVersion} to ${last.fromVersion}.`,
+      actor: actorString(input.actor),
+      sourceRef: last.fromVersion,
+      visibility: "internal",
+    });
+    return {
+      id: runId,
+      status: "completed",
+      fromVersion: last.toVersion,
+      toVersion: last.fromVersion,
+    };
+  } catch (error) {
+    await db()
+      .update(updateRuns)
+      .set({
+        status: "failed",
+        log: `rollback-failed:${error instanceof Error ? error.message : String(error)}`,
+        finishedAt: new Date(),
+      })
+      .where(sql`${updateRuns.id} = ${runId}`);
+    throw error;
+  }
+}

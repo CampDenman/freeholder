@@ -14,10 +14,19 @@ const packageNames = [
   "create-freeholder",
   "@freeholder/plugin-kit",
   "@freeholder/sdk",
+  "@freeholder/cli",
   "@freeholder/templates",
 ];
 
-async function run(command, args, cwd) {
+/**
+ * Run a command in the consumer project.
+ *
+ * `allowFailure` exists for one case: a CLI whose *exit code* is the thing
+ * being tested. Rejecting on non-zero would make it impossible to assert that
+ * `freeholder update` exits 3 when it cannot reach an instance, which is the
+ * contract a crontab depends on.
+ */
+async function run(command, args, cwd, { allowFailure = false } = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(command, args, {
       cwd,
@@ -35,6 +44,10 @@ async function run(command, args, cwd) {
     });
     child.on("error", rejectRun);
     child.on("exit", (code, signal) => {
+      if (allowFailure) {
+        resolveRun({ code: code ?? 0, output: `${stdout}${stderr}` });
+        return;
+      }
       if (code === 0) {
         resolveRun(stdout);
         return;
@@ -172,6 +185,33 @@ void preset;
     assert.match(created, /Skipped dependency install/);
     assert.match(created, /Skipped migrations/);
     assert.match(created, /Could not reach http:\/\/localhost:3000\/setup yet/);
+    // The update CLI (C10.21) is exercised through its packed artifact too:
+    // its exit codes are what a crontab reads, and an exit code that only
+    // works from source is an exit code that stops working on install.
+    const updateBin = join(
+      consumer,
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "freeholder.cmd" : "freeholder",
+    );
+    await access(updateBin);
+    const unreachable = await run(
+      process.execPath,
+      [
+        join(consumer, "node_modules", "@freeholder", "cli", "dist", "index.js"),
+        "update",
+        "--check",
+        "--url",
+        "http://127.0.0.1:59599",
+        "--api-key",
+        "fh_artifact_gate",
+      ],
+      consumer,
+      { allowFailure: true },
+    );
+    assert.match(unreachable.output, /Could not reach/);
+    assert.equal(unreachable.code, 3);
+
     const generatedRoot = join(consumer, "studio");
     const generatedManifest = JSON.parse(
       await readFile(join(generatedRoot, "package.json"), "utf8"),
