@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.22 (update MCP tools and the security escalation), then C10.12–C10.18, C10.19 and C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C10 update work is complete. Next is C10.12–C10.18 (the mobile package), then C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7776,10 +7776,31 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   the other published packages. **F10** `packages/cli/README.md`. **F11**
   changeset `update-cli.md`. **F12** a rolled-back apply exits non-zero, so
   cron cannot mistake a reversal for a success.)*
-- [ ] **C10.22** Expose the same services as MCP tools and add the §39.10
+- [x] **C10.22** Expose the same services as MCP tools and add the §39.10
   email/SMS escalation, so a security release outstanding beyond a set period
   becomes a notification rather than silence. Reading update status and
   applying an update are separate scopes.
+  *(`escalation.ts` decides, `escalate-job.ts` delivers, and
+  `core.escalateSecurityUpdates` runs hourly. Severity sets the clock —
+  24h critical, 48h high, 96h medium, 168h low — because treating a 2.1 like
+  a 9.8 is how an owner learns to archive these unread, at which point the
+  escalation is worse than silence rather than better. MCP needed no new
+  code: tools are generated from the registry, and `platform` is not an
+  excluded family. **F01** no new table; the topic
+  `platform.securityUpdate` joins `NOTIFICATION_TOPICS`. **F02** the decision
+  is pure and separately tested; delivery is one transaction. **F03**
+  notifications resolve their recipient through the existing spine helper.
+  **F04** the notification links to `/admin/updates` (C10.20). **F05** MCP
+  tools plus the notification itself — the fourth §39.10 surface. **F06**
+  N/A — operational copy. **F07** a key scoped `platform.updateStatus` is
+  refused `platform.applyUpdate`, so a monitoring key cannot cut a site over;
+  escalation continues while updates are paused, because §39.6's pause was
+  only safe on the condition the platform still says you are exposed.
+  **F08** `tests/core/update-escalation.test.ts`. **F09** SPDX; the job is
+  observable and retryable like every other. **F10** N/A. **F11**
+  `deploy/update-escalation.md`, changeset `update-escalation.md`. **F12**
+  the key is bucketed by version and day, so an hourly job escalates once
+  daily and a newer release still gets its own alarm.)*
 
 #### Customer and owner mobile apps
 

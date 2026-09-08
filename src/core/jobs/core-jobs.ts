@@ -870,6 +870,28 @@ export const checkUpdates = defineJob({
   },
 });
 
+/**
+ * Escalate a security release this instance has been running without for
+ * longer than its severity allows (§39.10, C10.22).
+ *
+ * Every other update surface waits to be looked at. This one goes and finds
+ * the owner, because the failure mode of an updater is not a wrong answer —
+ * it is nobody asking the question for three months.
+ */
+export const escalateSecurityUpdates = defineJob({
+  name: "core.escalateSecurityUpdates",
+  summary: "Notify owners about a security release that has been outstanding too long.",
+  schedule: "41 * * * *",
+  concurrency: 1,
+  leaseSeconds: 2 * 60,
+  handler: async () => {
+    const { escalateOutstandingSecurityUpdates } = await import(
+      "@/core/update/escalate-job"
+    );
+    return escalateOutstandingSecurityUpdates();
+  },
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
@@ -921,4 +943,5 @@ export default [
   sendSmsKeywordReply,
   refreshCatalogue,
   checkUpdates,
+  escalateSecurityUpdates,
 ];

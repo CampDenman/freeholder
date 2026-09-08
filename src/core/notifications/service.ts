@@ -61,6 +61,12 @@ export const NOTIFICATION_TOPICS = [
   // topic of its own because its failure is *silence*: unlike a wrong figure
   // on a screen, nobody is looking at the thing that stopped.
   "reports.exportFailed",
+  // A security release this instance has been running without for longer than
+  // its severity allows (§39.10, C10.22). Its own topic for the same reason:
+  // the failure mode of an updater is not a wrong answer, it is nobody asking
+  // the question for three months, so silence must not be indistinguishable
+  // from safety.
+  "platform.securityUpdate",
 ] as const;
 
 const notificationCreateResult = z.object({
