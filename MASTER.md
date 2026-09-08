@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.11 and C10.20–C10.22 (the update read model and its four surfaces), then C10.12–C10.18, C10.19 and C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.20–C10.22 (the update admin, CLI and MCP surfaces), then C10.12–C10.18, C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7691,7 +7691,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   changeset `update-targets.md`. **F12** `scripts/recipe-update-actions.mjs`
   runs once per target inside the recipe matrix, so §39.8's "a recipe without
   a tested update path is not Tier 1" is enforced on every PR.)
-- [ ] **C10.11** Build the update read model §39.10 specifies: cache the
+- [x] **C10.11** Build the update read model §39.10 specifies: cache the
   verified feed as `AvailableRelease` (version, channel, digest, severity,
   cvss, schema_breaking, min_from_version, plugin_api, notes_url,
   published_at, verified), and expose update history — runs, snapshots and
@@ -7706,6 +7706,23 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   live IDs to make a document read in order trades a real breakage for a
   cosmetic one. They are printed here, in dependency order, rather than at
   the end of C10.)*
+  *(`available_releases` (migration `0166_available_releases.sql`) caches the
+  verified feed; `catalog.ts` computes one status line for all four surfaces.
+  **F01** `available_releases`, unique on version, with database checks
+  repeating the feed parser's rule that a scored release names a band and an
+  unscored one does not. **F02** no `contact_id`; the cache is written in a
+  fresh transaction after `checkUpdates` finishes its network call, never one
+  held across it. **F03** N/A. **F04** the screens are C10.20 — this item is
+  deliberately the model those screens read, which is what the split above
+  exists to make honest. **F05** `platform.updateStatus`,
+  `platform.listAvailableReleases`. **F06** N/A — operational copy.
+  **F07** anonymous refused; `unknown` is a distinct posture so an unchecked
+  instance is never told it is up to date; a withdrawn CVSS is corrected by
+  upsert rather than retained. **F08** `tests/core/update-catalog.test.ts`.
+  **F09** SPDX. **F10** N/A. **F11** `deploy/update-status.md`, changeset
+  `update-status.md`. **F12** §39.11's rollback horizon is computed from the
+  newest breaking release the instance has passed, and per-row applicability
+  reuses C10.02's `canApplyFrom`.)*
 - [ ] **C10.20** Build the admin update surface §39.10 requires: a status line
   that is never ambiguous — *"Up to date"*, *"Update available"*, or *"2
   security releases behind — CVSS 8.1"* in the danger colour — with the notes,

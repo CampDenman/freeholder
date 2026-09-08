@@ -17,7 +17,13 @@ export {
   webauthnCredentials,
 } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
-export { updateSettings, updateSnapshots, updateRuns, releaseNotes } from "@/core/update/schema";
+export {
+  updateSettings,
+  updateSnapshots,
+  updateRuns,
+  releaseNotes,
+  availableReleases,
+} from "@/core/update/schema";
 export {
   agentConnections,
   agents,

@@ -938,6 +938,7 @@ export const SERVICE_NAMES = [
   "platform.getUpdatePolicy",
   "platform.inspectSeams",
   "platform.jobSummary",
+  "platform.listAvailableReleases",
   "platform.listJobQueues",
   "platform.listJobs",
   "platform.listOutboxEvents",
@@ -951,6 +952,7 @@ export const SERVICE_NAMES = [
   "platform.saveUpdatePolicy",
   "platform.source",
   "platform.updateCheckPolicy",
+  "platform.updateStatus",
   "platform.verifyReleaseFeed",
   "platform.version",
   "plugins.addRegistry",
@@ -4992,6 +4994,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { queued: number; active: number; completed: number; cancelled: number; failed: number; deadLetters: number; stuck: number; total: number };
   };
+  "platform.listAvailableReleases": {
+    input: Record<string, never>;
+    output: { releases: { version: string; channel: string; digest: string; severity: "none" | "low" | "medium" | "high" | "critical"; cvss: number | null; schemaBreaking: boolean; minFromVersion: string; pluginApi: string; notesUrl: string; publishedAt: string; verified: boolean; applicable: boolean; reason: string }[] };
+  };
   "platform.listJobQueues": {
     input: Record<string, never>;
     output: string[];
@@ -5043,6 +5049,10 @@ export interface ServiceCatalog {
   "platform.updateCheckPolicy": {
     input: Record<string, never>;
     output: { enabled: boolean; feedUrl: string; reports: false; slot: number };
+  };
+  "platform.updateStatus": {
+    input: Record<string, never>;
+    output: { posture: "current" | "behind" | "behind-security" | "unknown"; sentence: string; urgent: boolean; currentVersion: string; channel: string; worstCvss: number | null; earliestReachableVersion: string | null; lastCheckedAt: string | null; missing: { version: string; severity: "none" | "low" | "medium" | "high" | "critical"; cvss: number | null; notesUrl: string; publishedAt: string }[]; missingSecurity: { version: string; severity: "none" | "low" | "medium" | "high" | "critical"; cvss: number | null; notesUrl: string; publishedAt: string }[] };
   };
   "platform.verifyReleaseFeed": {
     input: { feed: unknown };
@@ -7290,6 +7300,7 @@ export interface FreeholderApi {
     getUpdatePolicy: (input?: ServiceCatalog["platform.getUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.getUpdatePolicy"]["output"]>;
     inspectSeams: (input?: ServiceCatalog["platform.inspectSeams"]["input"]) => Promise<ServiceCatalog["platform.inspectSeams"]["output"]>;
     jobSummary: (input?: ServiceCatalog["platform.jobSummary"]["input"]) => Promise<ServiceCatalog["platform.jobSummary"]["output"]>;
+    listAvailableReleases: (input?: ServiceCatalog["platform.listAvailableReleases"]["input"]) => Promise<ServiceCatalog["platform.listAvailableReleases"]["output"]>;
     listJobQueues: (input?: ServiceCatalog["platform.listJobQueues"]["input"]) => Promise<ServiceCatalog["platform.listJobQueues"]["output"]>;
     listJobs: (input?: ServiceCatalog["platform.listJobs"]["input"]) => Promise<ServiceCatalog["platform.listJobs"]["output"]>;
     listOutboxEvents: (input?: ServiceCatalog["platform.listOutboxEvents"]["input"]) => Promise<ServiceCatalog["platform.listOutboxEvents"]["output"]>;
@@ -7303,6 +7314,7 @@ export interface FreeholderApi {
     saveUpdatePolicy: (input: ServiceCatalog["platform.saveUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.saveUpdatePolicy"]["output"]>;
     source: (input?: ServiceCatalog["platform.source"]["input"]) => Promise<ServiceCatalog["platform.source"]["output"]>;
     updateCheckPolicy: (input?: ServiceCatalog["platform.updateCheckPolicy"]["input"]) => Promise<ServiceCatalog["platform.updateCheckPolicy"]["output"]>;
+    updateStatus: (input?: ServiceCatalog["platform.updateStatus"]["input"]) => Promise<ServiceCatalog["platform.updateStatus"]["output"]>;
     verifyReleaseFeed: (input: ServiceCatalog["platform.verifyReleaseFeed"]["input"]) => Promise<ServiceCatalog["platform.verifyReleaseFeed"]["output"]>;
     version: (input?: ServiceCatalog["platform.version"]["input"]) => Promise<ServiceCatalog["platform.version"]["output"]>;
   };

@@ -1,15 +1,19 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Update runs, snapshots and instance release notes (MASTER.md §39.5, §39.10, C10.06).
+// Update runs, snapshots and instance release notes (MASTER.md §39.5, §39.10,
+// C10.06), and the cached signed feed (C10.11).
 import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAtColumn } from "@/core/db/columns";
@@ -57,6 +61,57 @@ export const updateSettings = pgTable(
   (t) => [
     check("update_settings_singleton", sql`${t.id} = 1`),
     check("update_settings_keep_snapshots", sql`${t.keepSnapshots} between 1 and 50`),
+  ],
+);
+
+/**
+ * What the signed feed offered, cached (§39.10, C10.11).
+ *
+ * Cached rather than fetched per read for one reason: an owner asking "am I
+ * exposed?" must get an answer when the feed is unreachable, and "I could not
+ * reach the feed" is a different sentence from "you are up to date". The
+ * `verified` column records whether the signature checked out at the moment
+ * the row was written, so a row can never be mistaken for a trusted one later.
+ */
+export const availableReleases = pgTable(
+  "available_releases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    version: text("version").notNull(),
+    channel: text("channel", { enum: ["stable", "security", "edge"] }).notNull(),
+    digest: text("digest").notNull(),
+    severity: text("severity", {
+      enum: ["none", "low", "medium", "high", "critical"],
+    })
+      .notNull()
+      .default("none"),
+    // numeric, not real: a CVSS score is compared and displayed, never summed,
+    // and 8.1 must read back as 8.1 rather than 8.100000381469727.
+    cvss: numeric("cvss", { precision: 3, scale: 1 }),
+    schemaBreaking: boolean("schema_breaking").notNull().default(false),
+    minFromVersion: text("min_from_version").notNull(),
+    pluginApi: text("plugin_api").notNull(),
+    notesUrl: text("notes_url").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+    verified: boolean("verified").notNull().default(false),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("available_releases_version_key").on(t.version),
+    index("available_releases_published_idx").on(t.publishedAt),
+    check("available_releases_version_not_blank", sql`length(trim(${t.version})) > 0`),
+    check(
+      "available_releases_digest_shape",
+      sql`${t.digest} ~ '^sha256:[a-f0-9]{64}$'`,
+    ),
+    check("available_releases_cvss_range", sql`${t.cvss} is null or (${t.cvss} >= 0 and ${t.cvss} <= 10)`),
+    // A scored release must say how bad, and an unscored one must not claim a
+    // band. C10.02 refuses this at the feed; the database refuses it too,
+    // because a cache that can hold what the parser rejects is not a cache.
+    check(
+      "available_releases_severity_matches_score",
+      sql`(${t.cvss} is null and ${t.severity} = 'none') or (${t.cvss} is not null and ${t.severity} <> 'none')`,
+    ),
   ],
 );
 
