@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C10 update work is complete. Next is C10.13–C10.18 (mobile screens, push, init, store builds, companion mode and capture), then C10.19 and C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C10 update work is complete. Next is C10.23–C10.24 (the Expo application), then C10.14–C10.18, C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7833,8 +7833,44 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   which is what C0.10, `LICENSING.md` and the licence gate all require.
   **F12** the app's compatibility check and the server's `checkCompatibility`
   are asserted to agree.)*
-- [ ] **C10.13** Build customer home, catalog/services, booking, invoice pay,
-  galleries/proofing, portal messages, newsletters and deep links.
+- [x] **C10.13** Build the app's screen contracts, navigation and deep links:
+  every screen a customer can reach, which services it calls, what it shows
+  while empty/loading/offline/failed, and the URL→screen resolution that lets
+  a push notification, a universal link or a pasted address land on the right
+  place with the right argument.
+  *(Split on 2026-09-08. The original line asked for eight surfaces in one
+  reviewable change. It splits by layer rather than by surface because §35.1's
+  rule — "the app is a client, never a second implementation" — makes the
+  contract the load-bearing part: once each screen's services and states are
+  declared and tested, the views render a contract instead of inventing one.
+  The Expo application that renders them is C10.23 and C10.24.)*
+  *(`packages/mobile-app/src/screens.ts` declares thirteen screens with the
+  services each may read and write, its audience, its empty state and whether
+  it is worth caching; `deep-links.ts` resolves both website paths and
+  `freeholder://` push links. **F01** no schema. **F02** no service changes —
+  the contract names existing ones. **F03** N/A. **F04** every screen carries
+  a title and an empty-state key, so no screen can render blank; the views are
+  C10.23/C10.24. **F05** the contract *is* the agent-visible surface:
+  `servicesUsed()` is exactly the scope an app's API key needs. **F06** locale
+  prefixes are stripped, so `/fr/portal/...` and `/portal/...` are one
+  destination. **F07** a link resolves to a screen and one opaque parameter
+  and nothing else — query strings are dropped, a link for another instance is
+  refused rather than silently switching business, and non-http schemes are
+  rejected. **F08** `tests/core/mobile-screens.test.ts`, 26 tests, including
+  one that checks every declared service against the generated SDK — it caught
+  fourteen invented names in the first draft. **F09** SPDX. **F10** N/A.
+  **F11** changeset `mobile-screens.md`. **F12** every push link round-trips
+  through the resolver back to the screen that minted it.)*
+- [ ] **C10.23** Stand up the runnable Expo application against the screen
+  contracts, with the customer home and the catalog/services screens.
+  *(The Expo runtime lives outside the root pnpm workspace so that
+  `pnpm install --frozen-lockfile` — which runs in every one of the repository's
+  CI jobs — does not pay for a React Native dependency graph that only one
+  package needs. `packages/mobile-app` stays the dependency-free client layer
+  those screens consume.)*
+- [ ] **C10.24** Build the remaining customer screens against the same
+  contracts: booking, invoice pay, galleries and proofing, portal messages and
+  newsletters.
 - [ ] **C10.14** Build push registration/preferences and booking, gallery,
   invoice and back-in-stock notifications through core notification services.
   §35.1's `DeviceToken` carries a `contact_id`, so this item **must repoint it
