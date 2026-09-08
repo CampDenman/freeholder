@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `e3c1c41` after C10.04 daily update checks #307. C10.05 preflights signatures, plugins, drift, environment and a shadow-schema migration, with a downtime estimate. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `ea24c21` after C10.05 update preflight #308. C10.06 applies with snapshot, smoke, cutover, a drafted release note and automatic rollback. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.06–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.07–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7604,8 +7604,20 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   SPDX. **F10** N/A. **F11** `deploy/update-preflight.md`, changeset
   `update-preflight.md`. **F12** shadow SQL `SELECT 1/0` fails migrations
   without touching `public`. This is not apply — C10.06.)
-- [ ] **C10.06** Build snapshot → verify/pull → migrate → health/smoke → cutover
+- [x] **C10.06** Build snapshot → verify/pull → migrate → health/smoke → cutover
   → release-note flow with drain, grace period and automatic rollback.
+  (`update_snapshots`, `update_runs`, `release_notes`. `platform.applyUpdate`
+  snapshots a schema fingerprint, runs preflight, pulls/cutover via a target
+  adapter, smokes `ready()` plus a contact read, drafts a `ReleaseNote`, and
+  rolls back on migrate/smoke/cutover failure. Local adapter is in-process;
+  Tier-1 image swap is C10.10. **F01** `update_snapshots`, `update_runs`,
+  `release_notes`. **F02** no `contact_id`. **F03** N/A. **F04** list service,
+  not a new admin screen (C10.11). **F05** `platform.applyUpdate`,
+  `platform.listUpdateRuns`. **F06** N/A — note title is English operational
+  copy. **F07** anonymous refused; failed smoke rolls back and writes no note.
+  **F08** `tests/core/update-apply.test.ts`. **F09** SPDX. **F10** N/A.
+  **F11** `deploy/update-apply.md`, changeset `update-apply.md`. **F12**
+  `failAt: "smoke"` yields `rolled_back`.)
 - [ ] **C10.07** Enforce N-1 schema readability in migrations and prove update
   plus rollback from the previous released image in CI.
 - [ ] **C10.08** Build update policy/windows in business timezone, security-

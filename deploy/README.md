@@ -75,6 +75,8 @@ whole story, which is the point.
   the off path, and the guarantee that nothing identifying the instance is sent.
 - [`update-preflight.md`](update-preflight.md) — signatures, plugins, drift,
   environment, shadow-schema migration and the downtime estimate before apply.
+- [`update-apply.md`](update-apply.md) — snapshot, smoke, cutover, auto-drafted
+  release notes and automatic rollback. Target-specific image swap is C10.10.
 - [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
   database/media restore, update and rollback acceptance for every Tier-1
   target.
