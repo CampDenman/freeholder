@@ -266,6 +266,16 @@ const envSchema = z.object({
     .refine((value) => value.startsWith("https://"), "must be an https URL")
     .optional(),
   /**
+   * Where to send a customer whose app binary is too old (§35.1, C10.12).
+   *
+   * Absent is the normal state: most owners never publish an app, and a
+   * discovery document that invents a store link would send someone to a
+   * listing that does not exist.
+   */
+  MOBILE_APP_STORE_URL: z.string().url().optional(),
+  MOBILE_PLAY_STORE_URL: z.string().url().optional(),
+
+  /**
    * Which Tier-1 recipe this instance is deployed with (§39.8, C10.10).
    *
    * Absent means the updater migrates and smokes but swaps nothing: guessing a

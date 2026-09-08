@@ -2232,7 +2232,7 @@ Sharing isn't a buttons plugin; it's a property of every entity with a public fa
 
 ## 35. React Native App: Always Ready for the Stores
 
-`packages/mobile-app` (MIT): a **white-label Expo/React Native app** for the business's *customers*, driven entirely by the instance's generated SDK and live contract (§28) — permanently in sync with the platform by construction.
+`packages/mobile-app` (Apache-2.0, like the rest of the project — an earlier draft of this line said MIT, which contradicted C0.10, `LICENSING.md` and the licence gate that requires one identifier across every package): a **white-label Expo/React Native app** for the business's *customers*, driven entirely by the instance's generated SDK and live contract (§28) — permanently in sync with the platform by construction.
 
 - **In the box v1:** branded home (colors/logo/fonts pulled from instance settings), browse services & products, book with push-notification reminders, view/pay invoices, client galleries (the killer feature — proofing and favoriting from a phone is where clients actually live), portal messages, newsletter content, push notifications for the moments that matter (booking confirmed, gallery ready, invoice due, back-in-stock).
 - **Always submission-ready:** `npx freeholder-app init` reads the instance URL → pulls branding, generates icons/splash from the logo, writes store metadata (descriptions from the business profile, screenshots auto-captured from seeded content) → `eas build` produces store-submittable binaries. The CI matrix builds the app against the demo instance on every release, so "ready for submission" is a tested property, not a promise. Store-listing checklists (Apple review quirks, Play data-safety forms) ship as docs with the honest caveat that review outcomes are the stores' call.
@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C10 update work is complete. Next is C10.12–C10.18 (the mobile package), then C10.19 and C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C10 update work is complete. Next is C10.13–C10.18 (mobile screens, push, init, store builds, companion mode and capture), then C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7804,8 +7804,35 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 
 #### Customer and owner mobile apps
 
-- [ ] **C10.12** Create the MIT Expo/React Native package entirely against the
+- [x] **C10.12** Create the Expo/React Native package entirely against the
   generated SDK with instance discovery, auth, branding and offline-safe state.
+  *(`packages/mobile-app` plus `app/.well-known/freeholder`, the discovery
+  document §35.1 requires. Four modules and no more: `discovery` normalizes
+  what people actually type then insists on https, and gives four distinct
+  refusals — typo, setup unfinished, unreachable, and app-too-old with the
+  store link rather than a broken screen; `session` keeps the token in an
+  injected keychain store, never `AsyncStorage`, and treats biometrics as a
+  screen lock over a session the server already granted rather than a factor;
+  `offline` is read-through/write-never, refusing a queued mutation outright
+  and always rendering *when* content was fetched; `branding` resolves the
+  instance's semantic tokens with a neutral fallback rather than a guessed
+  brand colour. **F01** no schema. **F02** discovery is a public route that
+  says nothing a signed-out visitor could not read. **F03** N/A — the app
+  holds no contact of its own; `DeviceToken` arrives with C10.14. **F04** the
+  screens are C10.13. **F05** the package is a client of the generated SDK
+  and the existing HTTP API; no mobile-only endpoint was added beyond
+  discovery itself. **F06** locale, currency and timezone come from the
+  instance rather than the device. **F07** https enforced; a failed biometric
+  locks the screen without signing out; an app newer than its instance is not
+  locked out. **F08** `tests/core/mobile-app.test.ts`, which also asserts
+  structurally that the package imports nothing but its own files and node
+  builtins, so it cannot grow a rule that goes stale during store review.
+  **F09** SPDX; built, linted and artifact-gated with the other packages.
+  **F10** `packages/mobile-app/README.md`. **F11** changeset
+  `mobile-app-package.md`; §35's MIT parenthetical corrected to Apache-2.0,
+  which is what C0.10, `LICENSING.md` and the licence gate all require.
+  **F12** the app's compatibility check and the server's `checkCompatibility`
+  are asserted to agree.)*
 - [ ] **C10.13** Build customer home, catalog/services, booking, invoice pay,
   galleries/proofing, portal messages, newsletters and deep links.
 - [ ] **C10.14** Build push registration/preferences and booking, gallery,

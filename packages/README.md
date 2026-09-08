@@ -15,3 +15,11 @@ URL with reachable-or-recovery guidance.
 Bench tokens and full page, entity and email trees; `seed.installPreset`
 installs them through CMS, catalog and design services.
 `@freeholder/plugin-kit` is the plugin authoring contract (C3.08–C3.12).
+`@freeholder/cli` installs the `freeholder` binary: `freeholder update
+--check | --preflight | --apply | --rollback`, with exit codes fit for cron
+and monitoring (C10.21). It is a client of an instance's own API, not a second
+implementation of the updater.
+`@freeholder/mobile-app` is the white-label customer app's client layer —
+instance discovery, keychain sessions, read-through-write-never offline state
+and runtime branding (C10.12). The screens themselves are C10.13, so this is
+not yet an app you can submit to a store.
