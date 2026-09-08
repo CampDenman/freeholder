@@ -34,6 +34,6 @@ operations:
   update: "render deploys create $RENDER_SERVICE_ID --image ghcr.io/campdenman/freeholder:$FREEHOLDER_IMAGE_TAG --wait"
   rollback: "render deploys create $RENDER_SERVICE_ID --image ghcr.io/campdenman/freeholder:$PREVIOUS_FREEHOLDER_IMAGE_TAG --wait"
 update:
-  strategy: image-swap
-  rollback: redeploy the previous image
+  strategy: deploy-hook
+  rollback: redeploy the previous image through render deploys create
 tested_on: "2026-08-25"

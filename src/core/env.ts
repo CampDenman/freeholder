@@ -265,6 +265,23 @@ const envSchema = z.object({
     .url()
     .refine((value) => value.startsWith("https://"), "must be an https URL")
     .optional(),
+  /**
+   * Which Tier-1 recipe this instance is deployed with (§39.8, C10.10).
+   *
+   * Absent means the updater migrates and smokes but swaps nothing: guessing a
+   * deploy strategy from the environment and then running a container command
+   * against it is how an update takes down a host nobody meant to touch.
+   */
+  FREEHOLDER_RECIPE_TARGET: z
+    .enum([
+      "replit",
+      "digitalocean-app",
+      "digitalocean-droplet",
+      "railway",
+      "render",
+      "docker-selfhost",
+    ])
+    .optional(),
   /** The upstream branch a fork merges from. Defaults to `main`. */
   FREEHOLDER_UPSTREAM_REF: z
     .string()

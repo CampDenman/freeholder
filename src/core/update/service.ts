@@ -21,7 +21,13 @@ import { CHANNELS, RELEASE_CHANNELS } from "./channels";
 import { ReleaseFeedError, verifyReleaseFeed, type VerifiedRelease } from "./feed";
 import { inspectCoreFiles } from "./integrity";
 import { canApplyFrom, SCHEMA_RISKS, SEVERITIES } from "./release";
-import { applyUpdate as runApply, localUpdateTarget } from "./apply";
+import { applyUpdate as runApply } from "./apply";
+import {
+  configuredTarget,
+  describeTargets,
+  resolveUpdateTarget,
+  UPDATE_STRATEGIES,
+} from "./targets";
 import { runPreflight } from "./preflight";
 import {
   inUpdateWindow,
@@ -389,7 +395,7 @@ export const applyUpdate = defineOrchestratedService({
       digest: input.digest,
       drainMs: input.drainMs,
       trigger: "admin",
-      target: localUpdateTarget,
+      target: resolveUpdateTarget({ imageTag: input.toVersion }),
       actor,
     });
     return { id: result.id, status: result.status, snapshotId: result.snapshotId, noteId: result.noteId };
@@ -651,6 +657,42 @@ const missingRelease = z.object({
   publishedAt: z.string(),
 });
 
+export const describeUpdateTargets = defineService({
+  name: "platform.describeUpdateTargets",
+  summary:
+    "What updating and rolling back mean on each Tier-1 target, and which one this instance is.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({}),
+  output: z.object({
+    thisTarget: z.string().nullable(),
+    swaps: z.boolean(),
+    targets: listed(
+      z.object({
+        target: z.string(),
+        strategy: z.enum(UPDATE_STRATEGIES),
+        means: z.string(),
+        rollbackArtifact: z.string(),
+        cutoverCost: z.string(),
+      }),
+    ),
+  }),
+  handler: async (_input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to read update targets.");
+    }
+    const current = configuredTarget();
+    return {
+      thisTarget: current,
+      // Stated rather than implied: an instance with no declared recipe
+      // migrates and smokes but swaps nothing, and an owner who thinks
+      // otherwise will believe an update landed when it did not.
+      swaps: current !== null,
+      targets: describeTargets(),
+    };
+  },
+});
+
 export const forkStatus = defineOrchestratedService({
   name: "platform.forkStatus",
   summary:
@@ -809,6 +851,7 @@ export default [
   getUpdatePolicy,
   saveUpdatePolicy,
   evaluateUpdatePolicy,
+  describeUpdateTargets,
   forkStatus,
   openForkUpdate,
 ];

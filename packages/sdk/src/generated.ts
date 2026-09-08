@@ -928,6 +928,7 @@ export const SERVICE_NAMES = [
   "platform.compatibility",
   "platform.cspViolations",
   "platform.describeRelease",
+  "platform.describeUpdateTargets",
   "platform.doctor",
   "platform.evaluateUpdatePolicy",
   "platform.export",
@@ -4951,6 +4952,10 @@ export interface ServiceCatalog {
     input: { fromVersion?: string };
     output: { version: string; channel: "stable" | "security" | "edge"; minFromVersion: string; schemaRisk: "compatible" | "breaking"; cvss: number | null; severity: "none" | "low" | "medium" | "high" | "critical"; manualSteps: { id: string; summary: string }[]; pluginApi: string; channels: { id: "stable" | "security" | "edge"; holds: string }[]; apply: { fromVersion: string; ok: boolean; reason: string } | null };
   };
+  "platform.describeUpdateTargets": {
+    input: Record<string, never>;
+    output: { thisTarget: string | null; swaps: boolean; targets: { target: string; strategy: "image-swap" | "deploy-hook" | "source-pull"; means: string; rollbackArtifact: string; cutoverCost: string }[] };
+  };
   "platform.doctor": {
     input: Record<string, never>;
     output: { verdict: "ok" | "warn" | "fail"; checks: { id: string; title: string; verdict: "ok" | "warn" | "fail"; detail: string; remedy?: string; [key: string]: unknown }[]; ranAt: string };
@@ -7275,6 +7280,7 @@ export interface FreeholderApi {
     compatibility: (input?: ServiceCatalog["platform.compatibility"]["input"]) => Promise<ServiceCatalog["platform.compatibility"]["output"]>;
     cspViolations: (input?: ServiceCatalog["platform.cspViolations"]["input"]) => Promise<ServiceCatalog["platform.cspViolations"]["output"]>;
     describeRelease: (input?: ServiceCatalog["platform.describeRelease"]["input"]) => Promise<ServiceCatalog["platform.describeRelease"]["output"]>;
+    describeUpdateTargets: (input?: ServiceCatalog["platform.describeUpdateTargets"]["input"]) => Promise<ServiceCatalog["platform.describeUpdateTargets"]["output"]>;
     doctor: (input?: ServiceCatalog["platform.doctor"]["input"]) => Promise<ServiceCatalog["platform.doctor"]["output"]>;
     evaluateUpdatePolicy: (input: ServiceCatalog["platform.evaluateUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.evaluateUpdatePolicy"]["output"]>;
     export: (input?: ServiceCatalog["platform.export"]["input"]) => Promise<ServiceCatalog["platform.export"]["output"]>;
