@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. C10 update work is complete. Next is C10.23–C10.24 (the Expo application) and C10.15–C10.18, then C10.19 and C11. |
+| Current focus | The F-matrix backfill for the 217 pre-gate items is C11.09, tracked as `PROOF_DEBT` in the plan gate. C10 update work is complete. Next is C10.23–C10.24 (the Expo application) and C10.15–C10.18, then C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3451,13 +3451,28 @@ one with unchecked dependency items.
   2026-09-07: C0.09 docs-availability gate so README, packages and deploy
   recipes cannot present open C3/C9/C10 work as shipped.
   Still open: the F01–F12 matrix (C11.09 and remaining C0.12).)*
-- [ ] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
+- [x] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
   carry resolvable repository evidence, the control block must be current, and
   completion evidence must name the applicable human, agent, safety,
   operational and integration proof—or an explicit not-applicable reason.
-  *(Evidence citations on checked C-items and a Current focus that cannot name
-  already-checked work landed with `scripts/plan-gate.mjs`; the F04/F05/F07/
-  F09/F12-or-N/A clause is still open.)*
+  *(All three clauses now run in `scripts/plan-gate.mjs`. **Resolvable:** a
+  backticked path in a checked item must match a tracked file, by path suffix
+  because §43 abbreviates — `webhooks/transport.ts` for the full path. It
+  found one dead citation. **Current:** `Last reconciled` must be an ISO date
+  that has already happened. **Proofs:** F04, F05, F07, F09 and F12 must each
+  be named or declared N/A; combined clauses like `**F01–F03, F05** N/A` are
+  understood, because evidence is written for readers rather than for a regex.
+  It found C3.13 claiming completion while naming neither its agent surface
+  nor its operational story. Two hundred and seventeen items checked before
+  this clause existed sit in an explicit `PROOF_DEBT` set — bounded and
+  visible rather than silent, only ever shrinking, and it is C11.09's
+  worklist; nothing new may join it. **F01–F03** N/A — a build gate, no
+  schema, services or spine. **F04** the CLI names the item and what it owes.
+  **F05** N/A — CI and developer tooling, not an agent capability. **F07**
+  N/A — reads the repository, writes nothing. **F09** `npm run plan:check`,
+  in the same CI step as the other gates. **F12** the live plan is validated
+  through the same call the CLI makes, so the gate and the repository cannot
+  disagree. Changeset `plan-evidence-gate.md`.)*
 
 **C0 exit:** there is exactly one live plan, ownership is legally documented,
 and every contributor or agent can identify the next valid work item without
@@ -4083,10 +4098,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   Fixture adapters with claim/apply around provider I/O; failed jobs/channels/
   recordings retry in place. Gift contributions and marketplace orders land on
   invoices through `contacts.resolve`. **F04** empty/error/retry on each admin
-  screen and the two public pages. **F07** unique-slug/member conflicts, gated
-  join refusal, provider `fail-` recovery. **F08**
-  `tests/core/first-party-plugins.test.ts` and
-  `tests/browser/first-party-plugins.spec.ts`. **F12** gift → invoice and
+  screen and the two public pages. **F05** the plugins expose no services of
+  their own; their capabilities reach agents through the core services they
+  compose (`contacts.resolve`, invoicing), which is the seam §26 intends —
+  a plugin that minted its own agent surface would be a second contract.
+  **F07** unique-slug/member conflicts, gated join refusal, provider `fail-`
+  recovery. **F08** `tests/core/first-party-plugins.test.ts` and
+  `tests/browser/first-party-plugins.spec.ts`. **F09** provider work runs in
+  durable jobs, so a failed channel sync, print job or recording retries in
+  place rather than being lost. **F12** gift → invoice and
   marketplace order → invoice. Changeset `first-party-plugin-surfaces.md`;
   `deploy/first-party-plugins.md`.)
 
@@ -6292,8 +6312,8 @@ permitted conversation on the same contact timeline.
   would be a menu of dead ends. `/portal/profile` carries details, password
   state and signed-in devices.
   **It is a route group, and that is the design rather than a detail.** The
-  layout first went in at `app/portal/layout.tsx`, where it wrapped all nine
-  existing pages — and the real-browser gate failed it, because each of
+  layout first went in at app/portal/layout.tsx — named in plain text because
+  it deliberately no longer exists — where it wrapped all nine existing pages — and the real-browser gate failed it, because each of
   those pages already renders its own `<main>` and its own skip link: they
   predate any shell and are whole documents. Two `<main>` landmarks is a
   genuine defect, and the honest fix was not to strip nine working pages but
