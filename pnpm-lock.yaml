@@ -70,8 +70,8 @@ importers:
         specifier: ^3.4.9
         version: 3.4.9
       qr:
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.7.0
+        version: 0.7.0
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -2486,8 +2486,8 @@ packages:
     resolution: {integrity: sha512-+Owyggi9IxT1ePKGafcI87ubSmxol6smwJ+RAHDQlx9+9cPwFWDiKFFCPuWhr9ignlGpZ9vDQLw67N4dcTVFEA==}
     engines: {node: '>=20'}
 
-  qr@0.6.0:
-    resolution: {integrity: sha512-P23VoX7SipHALdiIYG+D+LT/6n22dNKwV92FAb3d+Nlki/5WisSsfLt0UDFz2XEBtuwrECTznvu+chKKFCSYhA==}
+  qr@0.7.0:
+    resolution: {integrity: sha512-/VrrACmOAwZVipuRITwfEwOL5oAMEHH5PTmBWaGtlTom2Thxaa+rhmna4zU9PRN2uLw2wdccbkHOLGZb1Q9SdA==}
     engines: {node: '>= 20.19.0'}
 
   quansync@0.2.11:
@@ -5082,7 +5082,7 @@ snapshots:
     dependencies:
       hookified: 2.2.0
 
-  qr@0.6.0: {}
+  qr@0.7.0: {}
 
   quansync@0.2.11: {}
 
