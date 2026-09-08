@@ -26,6 +26,7 @@ import { PLATFORM_VERSION } from "@/core/platform";
 import { updateCheckEnabled, updateFeedUrl } from "@/core/update/check";
 import { activeReleaseKeys } from "@/core/update/keys";
 import { THIS_RELEASE } from "@/core/update/this-release";
+import { STRATEGIES, TARGET_STRATEGY, configuredTarget } from "@/core/update/targets";
 
 export type Verdict = "ok" | "warn" | "fail";
 
@@ -925,6 +926,25 @@ function checkUpdatePolicy(): Check {
   );
 }
 
+function checkUpdateTarget(): Check {
+  const target = configuredTarget();
+  if (!target) {
+    return warn(
+      "update.target",
+      "Update target",
+      "No deploy recipe is declared, so an update will migrate and smoke but swap nothing. It will look like it worked.",
+      "Set FREEHOLDER_RECIPE_TARGET to the Tier-1 recipe this instance runs on.",
+    );
+  }
+  const strategy = TARGET_STRATEGY[target];
+  const definition = STRATEGIES[strategy];
+  return ok(
+    "update.target",
+    "Update target",
+    `${target}: ${definition.means} Rollback needs ${definition.rollbackArtifact}, and cutover takes ${definition.cutoverCost}.`,
+  );
+}
+
 function checkForkLane(): Check {
   const e = env();
   const configured = Boolean(e.FREEHOLDER_UPSTREAM_REMOTE || e.BUILDER_CODE_REPOSITORY);
@@ -1103,6 +1123,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...checkUpdateRelease(),
     checkUpdateFeedKey(),
     checkUpdatePolicy(),
+    checkUpdateTarget(),
     checkForkLane(),
     checkSchemaN1(),
     checkUpdateCheck(),

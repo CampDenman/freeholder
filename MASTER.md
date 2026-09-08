@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `3b8ac53` after C10.08 update policy #311. C10.09 is the fork lane: a worktree merge that reports conflicts by seam, refuses to overwrite owner code, and opens a pull request in the owner’s own fork. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `3b8ac53` after C10.08 update policy #311. C10.09 is the fork lane: a worktree merge that reports conflicts by seam, refuses to overwrite owner code, and opens a pull request in the owner’s own fork. C10.10 gives each Tier-1 recipe its own update and rollback actions and gates them in the recipe matrix. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.10–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.11–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7668,8 +7668,29 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   three commits ahead and two security releases behind reports
   "2 security releases behind — CVSS 8.1; this fork carries 3 commits of its
   own".)
-- [ ] **C10.10** Implement and continuously test target-specific update/
+- [x] **C10.10** Implement and continuously test target-specific update/
   rollback actions for every Tier-1 recipe.
+  (`src/core/update/targets.ts` names §39.8's three strategies — `image-swap`
+  for the droplet and self-host recipes, `deploy-hook` for App Platform,
+  Render and Railway, `source-pull` for Replit — with what each rollback needs
+  and what cutover costs. `recipeUpdateTarget` runs the recipe's own declared
+  commands and pins `PREVIOUS_FREEHOLDER_IMAGE` / `_APP_SPEC` / `_IMAGE_TAG` /
+  `_TAG`; `resolveUpdateTarget` picks it from `FREEHOLDER_RECIPE_TARGET` and
+  `platform.applyUpdate` now uses it instead of the in-process stub. All six
+  recipes previously declared `image-swap`, including Replit, which has no
+  image; three are corrected. **F01** no schema. **F02** no `contact_id`;
+  `applyUpdate` was already orchestrated. **F03** N/A. **F04** Doctor
+  `update.target`, which warns when no recipe is declared because an update
+  that swaps nothing still looks like it worked; the admin screen is C10.11.
+  **F05** `platform.describeUpdateTargets`. **F06** N/A. **F07** anonymous
+  refused; an unknown recipe name resolves to the stub rather than a guessed
+  strategy; a target with no rollback command refuses instead of pretending.
+  **F08** `tests/core/update-targets.test.ts` proves each recipe implements
+  what it declares and that the embedded copy cannot drift from
+  `recipe.yaml`. **F09** SPDX. **F10** N/A. **F11** `deploy/update-targets.md`,
+  changeset `update-targets.md`. **F12** `scripts/recipe-update-actions.mjs`
+  runs once per target inside the recipe matrix, so §39.8's "a recipe without
+  a tested update path is not Tier 1" is enforced on every PR.)
 - [ ] **C10.11** Build update entities/history and matching admin, CLI, MCP and
   email/SMS notification surfaces with separate read/apply scopes.
 
