@@ -75,6 +75,7 @@ export interface AdminNavLabels {
   traffic: string;
   experiments: string;
   health: string;
+  updates: string;
   jobs: string;
   settings: string;
   roles: string;
@@ -214,6 +215,7 @@ const LINKS = [
   { href: "/admin/plugins", key: "plugins", module: "platform", Icon: PuzzlePiece },
   { href: "/admin/imports", key: "imports", module: "platform", Icon: DownloadSimple },
   { href: "/admin/health", key: "health", module: "platform", Icon: Stethoscope },
+  { href: "/admin/updates", key: "updates", module: "platform", Icon: ArrowsClockwise },
   { href: "/admin/jobs", key: "jobs", module: "platform", Icon: ListChecks },
 ] as const;
 

@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.20–C10.22 (the update admin, CLI and MCP surfaces), then C10.12–C10.18, C10.19 and C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.21 and C10.22 (the update CLI and MCP surfaces), then C10.12–C10.18, C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7723,7 +7723,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `update-status.md`. **F12** §39.11's rollback horizon is computed from the
   newest breaking release the instance has passed, and per-row applicability
   reuses C10.02's `canApplyFrom`.)*
-- [ ] **C10.20** Build the admin update surface §39.10 requires: a status line
+- [x] **C10.20** Build the admin update surface §39.10 requires: a status line
   that is never ambiguous — *"Up to date"*, *"Update available"*, or *"2
   security releases behind — CVSS 8.1"* in the danger colour — with the notes,
   one button, run history, snapshot list and the earliest version still
@@ -7731,6 +7731,27 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   C10.01–C10.10 is discharged, including the policy editor for C10.08's
   window, channel, pause and retention, and the fork lane's drift and
   missing-security view from C10.09.
+  *(`app/(admin)/admin/updates/page.tsx` and `updateControlAction`. Status
+  line tone follows posture, with `behind-security` in the danger colour and
+  `unknown` shown rather than hidden. **F01** no schema — reads C10.11's.
+  **F02** every action calls the existing services; the admin is a caller,
+  never a shortcut. **F03** N/A — no `contact_id`. **F04** this item *is*
+  F04, for itself and for C10.01–C10.11: seams, channel, signed feed, check,
+  preflight, run history, snapshots, notes, schema-breaking, policy, pause,
+  per-target strategy and the fork lane are all on the screen, and
+  `deploy/update-admin.md` maps each item to what it put there. Empty,
+  pending and error states are covered; applying carries a typed
+  confirmation. **F05** unchanged — the same services the CLI (C10.21) and
+  MCP (C10.22) will call. **F06** all strings in `en`/`es`/`fr`; colours are
+  semantic tokens only, so it ships in light and dark; `/admin/updates` is in
+  the real-browser accessibility sweep. **F07**
+  `requireStaffActor("platform")`; apply confirms before cutting over; pause
+  and resume are the policy save with one field changed rather than a second
+  write path. **F08** `tests/core/update-admin.test.ts` and the a11y step.
+  **F09** SPDX. **F10** the no-deploy-target warning says plainly that an
+  update would swap nothing. **F11** `deploy/update-admin.md`, changeset
+  `update-admin.md`. **F12** the fork panel appears only on a git checkout,
+  and the target panel marks which of the six recipes this instance is.)*
 - [ ] **C10.21** Ship the `freeholder update` CLI: `--check`, `--preflight`,
   `--apply`, `--rollback`, with exit codes fit for cron and for monitoring,
   as a workspace `bin` alongside `create-freeholder`.

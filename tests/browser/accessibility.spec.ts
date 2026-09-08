@@ -408,6 +408,15 @@ test.describe("real-browser accessibility", () => {
       await assertSurface(page, "admin");
     });
 
+    // The update surface (C10.20) carries the one status line an owner acts
+    // on, plus the policy form. It is checked in a real browser rather than
+    // assumed, because a screen nobody can operate by keyboard is a screen
+    // that quietly stops being the way updates get applied.
+    await test.step("admin updates", async () => {
+      await page.goto("/admin/updates");
+      await assertSurface(page, "admin");
+    });
+
     await test.step("editor", async () => {
       await page.goto(`/admin/pages/${fixture.homePageId}`);
       await assertSurface(page, "editor");

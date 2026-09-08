@@ -21,6 +21,14 @@ import { actorFromToken } from "@/core/http/actor";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import {
+  applyUpdate,
+  checkUpdates,
+  getUpdatePolicy,
+  openForkUpdate,
+  preflightUpdate,
+  saveUpdatePolicy,
+} from "@/core/update/service";
+import {
   createContact,
   mergeContacts,
   undoContactMerge,
@@ -665,6 +673,120 @@ export async function jobControlAction(
   revalidatePath("/admin/jobs/outbox");
   if (name && id) revalidatePath(`/admin/jobs/${name}/${id}`);
   if (intent === "replay" && id) revalidatePath(`/admin/jobs/outbox/${id}`);
+  const t = await getT();
+  return { saved: true, message: t(messageKey) };
+}
+
+/* ------------------------------------------------- platform updates (C10.20) */
+
+/**
+ * Every §39.10 update action the admin offers, through the same services the
+ * CLI and MCP will call. The admin is a caller, never a shortcut.
+ *
+ * Applying an update is the only one that carries a typed confirmation: it
+ * cuts a live site over to a new build, and §39's whole argument is that this
+ * is safe *because* it is deliberate, snapshotted and reversible — not because
+ * it is easy to trigger by accident.
+ */
+export async function updateControlAction(
+  previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const intent = field(form, "intent");
+  let messageKey = "updates.message.saved";
+  try {
+    const actor = await currentActor();
+    switch (intent) {
+      case "check": {
+        const result = await checkUpdates.call({}, actor);
+        messageKey = result.checked
+          ? "updates.message.checked"
+          : result.reason === "off"
+            ? "updates.message.checksOff"
+            : "updates.message.notMySlot";
+        break;
+      }
+      case "preflight":
+        await preflightUpdate.call(
+          { targetVersion: field(form, "version") || undefined },
+          actor,
+        );
+        messageKey = "updates.message.preflighted";
+        break;
+      case "apply":
+        await applyUpdate.call(
+          { toVersion: field(form, "version") || undefined },
+          actor,
+        );
+        messageKey = "updates.message.applied";
+        break;
+      case "pause":
+      case "resume":
+      case "savePolicy": {
+        const current = await getUpdatePolicy.call({}, actor);
+        // Pause and resume are the policy save with one field changed, rather
+        // than a second write path: two ways to change `pausedUntil` is two
+        // places for the snapshot pruning and validation to diverge.
+        const pausedUntil =
+          intent === "pause"
+            ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+            : intent === "resume"
+              ? null
+              : field(form, "pausedUntil")
+                ? new Date(field(form, "pausedUntil"))
+                : null;
+        const days = form.getAll("windowDays").filter((day): day is string => typeof day === "string");
+        await saveUpdatePolicy.call(
+          {
+            channel: (intent === "savePolicy"
+              ? field(form, "channel")
+              : current.channel) as "security" | "stable" | "edge" | "off",
+            applyLevel: (intent === "savePolicy"
+              ? field(form, "applyLevel")
+              : current.applyLevel) as "security" | "patch" | "minor" | "none",
+            window:
+              intent === "savePolicy" && days.length > 0
+                ? { days: days as never, start: field(form, "windowStart", "03:00") }
+                : (current.window as never),
+            drain: intent === "savePolicy" ? field(form, "drain") === "on" : current.drain,
+            notifyChannels: (intent === "savePolicy"
+              ? form.getAll("notifyChannels").filter((c): c is string => typeof c === "string")
+              : current.notifyChannels) as ("email" | "sms")[],
+            keepSnapshots:
+              intent === "savePolicy"
+                ? Number(field(form, "keepSnapshots", "5"))
+                : current.keepSnapshots,
+            pausedUntil,
+          },
+          actor,
+        );
+        messageKey =
+          intent === "pause"
+            ? "updates.message.paused"
+            : intent === "resume"
+              ? "updates.message.resumed"
+              : "updates.message.saved";
+        break;
+      }
+      case "forkUpdate": {
+        const result = await openForkUpdate.call({}, actor);
+        if (!result.opened) {
+          return {
+            error: result.refusal ?? "The fork lane could not open a pull request.",
+            ...echo(previous, form),
+          };
+        }
+        messageKey = "updates.message.forkOpened";
+        break;
+      }
+      default:
+        throw new ServiceError("validation", "Choose an update action.");
+    }
+  } catch (error) {
+    return { ...present(error), ...echo(previous, form) };
+  }
+  revalidatePath("/admin/updates");
+  revalidatePath("/admin/health");
   const t = await getT();
   return { saved: true, message: t(messageKey) };
 }
