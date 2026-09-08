@@ -34,6 +34,6 @@ operations:
   update: "node scripts/prepare-do-app-spec.mjs --output .freeholder-do-app-update.yaml && doctl apps update $DIGITALOCEAN_APP_ID --spec .freeholder-do-app-update.yaml"
   rollback: "doctl apps update $DIGITALOCEAN_APP_ID --spec $PREVIOUS_FREEHOLDER_APP_SPEC"
 update:
-  strategy: image-swap
-  rollback: redeploy the previous spec image tag
+  strategy: deploy-hook
+  rollback: redeploy the previous app spec
 tested_on: "2026-08-25"

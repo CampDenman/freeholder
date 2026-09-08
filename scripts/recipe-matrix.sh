@@ -120,5 +120,13 @@ for target in "${TARGETS[@]}"; do
       process.exit(1);
     }
   ' "$doctor_status"
-  echo "${target}: image healthy; seeded setup claim and Doctor passed with no failures"
+  # §39.8, C10.10: "A recipe without a tested update path is not Tier 1."
+  # Run this target's own declared update and rollback commands with a
+  # recorded shell instead of the real one, so the matrix proves the commands
+  # are the ones the recipe declares, are reachable, and pin the artifact that
+  # strategy actually needs. The real doctl/render/railway calls are not made
+  # here — this gate owns the wiring, not somebody else's control plane.
+  node scripts/recipe-update-actions.mjs "$target"
+
+  echo "${target}: image healthy; seeded setup claim, Doctor and update/rollback actions passed"
 done

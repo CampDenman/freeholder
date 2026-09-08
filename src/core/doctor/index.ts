@@ -26,6 +26,7 @@ import { PLATFORM_VERSION } from "@/core/platform";
 import { updateCheckEnabled, updateFeedUrl } from "@/core/update/check";
 import { activeReleaseKeys } from "@/core/update/keys";
 import { THIS_RELEASE } from "@/core/update/this-release";
+import { STRATEGIES, TARGET_STRATEGY, configuredTarget } from "@/core/update/targets";
 
 export type Verdict = "ok" | "warn" | "fail";
 
@@ -925,6 +926,50 @@ function checkUpdatePolicy(): Check {
   );
 }
 
+function checkUpdateTarget(): Check {
+  const target = configuredTarget();
+  if (!target) {
+    return warn(
+      "update.target",
+      "Update target",
+      "No deploy recipe is declared, so an update will migrate and smoke but swap nothing. It will look like it worked.",
+      "Set FREEHOLDER_RECIPE_TARGET to the Tier-1 recipe this instance runs on.",
+    );
+  }
+  const strategy = TARGET_STRATEGY[target];
+  const definition = STRATEGIES[strategy];
+  return ok(
+    "update.target",
+    "Update target",
+    `${target}: ${definition.means} Rollback needs ${definition.rollbackArtifact}, and cutover takes ${definition.cutoverCost}.`,
+  );
+}
+
+function checkForkLane(): Check {
+  const e = env();
+  const configured = Boolean(e.FREEHOLDER_UPSTREAM_REMOTE || e.BUILDER_CODE_REPOSITORY);
+  if (!configured) {
+    return ok(
+      "update.fork",
+      "Fork lane",
+      "This instance updates by image swap. The fork lane is for owners who have modified core and merge upstream instead.",
+    );
+  }
+  if (!e.BUILDER_CODE_REPOSITORY || !e.BUILDER_CODE_TOKEN) {
+    return warn(
+      "update.fork",
+      "Fork lane",
+      "An upstream remote is configured but no repository is connected, so a fork update has nowhere to open a pull request.",
+      "Set BUILDER_CODE_REPOSITORY and BUILDER_CODE_TOKEN, or unset FREEHOLDER_UPSTREAM_REMOTE and update by image.",
+    );
+  }
+  return ok(
+    "update.fork",
+    "Fork lane",
+    `Upstream merges open a pull request in ${e.BUILDER_CODE_REPOSITORY}. The merge is proved in a throwaway worktree and never touches the running tree.`,
+  );
+}
+
 function checkSchemaN1(): Check {
   return THIS_RELEASE.schemaRisk === "compatible"
     ? ok(
@@ -1078,6 +1123,8 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...checkUpdateRelease(),
     checkUpdateFeedKey(),
     checkUpdatePolicy(),
+    checkUpdateTarget(),
+    checkForkLane(),
     checkSchemaN1(),
     checkUpdateCheck(),
     await checkUpdatePreflight(),

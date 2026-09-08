@@ -928,9 +928,11 @@ export const SERVICE_NAMES = [
   "platform.compatibility",
   "platform.cspViolations",
   "platform.describeRelease",
+  "platform.describeUpdateTargets",
   "platform.doctor",
   "platform.evaluateUpdatePolicy",
   "platform.export",
+  "platform.forkStatus",
   "platform.getJob",
   "platform.getOutboxEvent",
   "platform.getUpdatePolicy",
@@ -940,6 +942,7 @@ export const SERVICE_NAMES = [
   "platform.listJobs",
   "platform.listOutboxEvents",
   "platform.listUpdateRuns",
+  "platform.openForkUpdate",
   "platform.outboxSummary",
   "platform.preflightUpdate",
   "platform.redriveDeadLetters",
@@ -4949,6 +4952,10 @@ export interface ServiceCatalog {
     input: { fromVersion?: string };
     output: { version: string; channel: "stable" | "security" | "edge"; minFromVersion: string; schemaRisk: "compatible" | "breaking"; cvss: number | null; severity: "none" | "low" | "medium" | "high" | "critical"; manualSteps: { id: string; summary: string }[]; pluginApi: string; channels: { id: "stable" | "security" | "edge"; holds: string }[]; apply: { fromVersion: string; ok: boolean; reason: string } | null };
   };
+  "platform.describeUpdateTargets": {
+    input: Record<string, never>;
+    output: { thisTarget: string | null; swaps: boolean; targets: { target: string; strategy: "image-swap" | "deploy-hook" | "source-pull"; means: string; rollbackArtifact: string; cutoverCost: string }[] };
+  };
   "platform.doctor": {
     input: Record<string, never>;
     output: { verdict: "ok" | "warn" | "fail"; checks: { id: string; title: string; verdict: "ok" | "warn" | "fail"; detail: string; remedy?: string; [key: string]: unknown }[]; ranAt: string };
@@ -4960,6 +4967,10 @@ export interface ServiceCatalog {
   "platform.export": {
     input: { outputDirectory?: string };
     output: { ok: true; format: string; directory: string; files: number; checksum?: string };
+  };
+  "platform.forkStatus": {
+    input: { root?: string };
+    output: { fork: boolean; reason: string | null; ahead: number; behind: number; status: "current" | "behind" | "behind-security"; sentence: string; worstCvss: number | null; ownedByYou: string[]; replaceableCore: string[]; missing: { version: string; severity: "none" | "low" | "medium" | "high" | "critical"; cvss: number | null; notesUrl: string; publishedAt: string }[]; missingSecurity: { version: string; severity: "none" | "low" | "medium" | "high" | "critical"; cvss: number | null; notesUrl: string; publishedAt: string }[] };
   };
   "platform.getJob": {
     input: { name: string; id: string };
@@ -4996,6 +5007,10 @@ export interface ServiceCatalog {
   "platform.listUpdateRuns": {
     input: { limit?: number };
     output: { runs: { id: string; fromVersion: string; toVersion: string; status: string; trigger: string; startedAt: string }[]; notes: { id: string; title: string; kind: string; occurredAt: string }[] };
+  };
+  "platform.openForkUpdate": {
+    input: { root?: string; toVersion?: string };
+    output: { opened: boolean; url: string | null; branch: string | null; number: number | null; refusal: string | null; conflicts: { path: string; owner: "core" | "seam" | "ignored" }[]; ownerConflicts: string[] };
   };
   "platform.outboxSummary": {
     input: Record<string, never>;
@@ -7265,9 +7280,11 @@ export interface FreeholderApi {
     compatibility: (input?: ServiceCatalog["platform.compatibility"]["input"]) => Promise<ServiceCatalog["platform.compatibility"]["output"]>;
     cspViolations: (input?: ServiceCatalog["platform.cspViolations"]["input"]) => Promise<ServiceCatalog["platform.cspViolations"]["output"]>;
     describeRelease: (input?: ServiceCatalog["platform.describeRelease"]["input"]) => Promise<ServiceCatalog["platform.describeRelease"]["output"]>;
+    describeUpdateTargets: (input?: ServiceCatalog["platform.describeUpdateTargets"]["input"]) => Promise<ServiceCatalog["platform.describeUpdateTargets"]["output"]>;
     doctor: (input?: ServiceCatalog["platform.doctor"]["input"]) => Promise<ServiceCatalog["platform.doctor"]["output"]>;
     evaluateUpdatePolicy: (input: ServiceCatalog["platform.evaluateUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.evaluateUpdatePolicy"]["output"]>;
     export: (input?: ServiceCatalog["platform.export"]["input"]) => Promise<ServiceCatalog["platform.export"]["output"]>;
+    forkStatus: (input?: ServiceCatalog["platform.forkStatus"]["input"]) => Promise<ServiceCatalog["platform.forkStatus"]["output"]>;
     getJob: (input: ServiceCatalog["platform.getJob"]["input"]) => Promise<ServiceCatalog["platform.getJob"]["output"]>;
     getOutboxEvent: (input: ServiceCatalog["platform.getOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.getOutboxEvent"]["output"]>;
     getUpdatePolicy: (input?: ServiceCatalog["platform.getUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.getUpdatePolicy"]["output"]>;
@@ -7277,6 +7294,7 @@ export interface FreeholderApi {
     listJobs: (input?: ServiceCatalog["platform.listJobs"]["input"]) => Promise<ServiceCatalog["platform.listJobs"]["output"]>;
     listOutboxEvents: (input?: ServiceCatalog["platform.listOutboxEvents"]["input"]) => Promise<ServiceCatalog["platform.listOutboxEvents"]["output"]>;
     listUpdateRuns: (input?: ServiceCatalog["platform.listUpdateRuns"]["input"]) => Promise<ServiceCatalog["platform.listUpdateRuns"]["output"]>;
+    openForkUpdate: (input?: ServiceCatalog["platform.openForkUpdate"]["input"]) => Promise<ServiceCatalog["platform.openForkUpdate"]["output"]>;
     outboxSummary: (input?: ServiceCatalog["platform.outboxSummary"]["input"]) => Promise<ServiceCatalog["platform.outboxSummary"]["output"]>;
     preflightUpdate: (input?: ServiceCatalog["platform.preflightUpdate"]["input"]) => Promise<ServiceCatalog["platform.preflightUpdate"]["output"]>;
     redriveDeadLetters: (input: ServiceCatalog["platform.redriveDeadLetters"]["input"]) => Promise<ServiceCatalog["platform.redriveDeadLetters"]["output"]>;

@@ -253,6 +253,43 @@ const envSchema = z.object({
   FREEHOLDER_UPDATE_FEED_URL: z.string().url().optional(),
 
   /**
+   * Upstream, for the fork lane (§39.7, C10.09).
+   *
+   * Only forks read these. An instance updating by image swap never fetches a
+   * git remote at all, which is why neither is required and neither has a
+   * credential: the fork lane clones what is already public and opens a pull
+   * request with the repository token it already has.
+   */
+  FREEHOLDER_UPSTREAM_REMOTE: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith("https://"), "must be an https URL")
+    .optional(),
+  /**
+   * Which Tier-1 recipe this instance is deployed with (§39.8, C10.10).
+   *
+   * Absent means the updater migrates and smokes but swaps nothing: guessing a
+   * deploy strategy from the environment and then running a container command
+   * against it is how an update takes down a host nobody meant to touch.
+   */
+  FREEHOLDER_RECIPE_TARGET: z
+    .enum([
+      "replit",
+      "digitalocean-app",
+      "digitalocean-droplet",
+      "railway",
+      "render",
+      "docker-selfhost",
+    ])
+    .optional(),
+  /** The upstream branch a fork merges from. Defaults to `main`. */
+  FREEHOLDER_UPSTREAM_REF: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9._\-/]{1,200}$/)
+    .optional(),
+
+  /**
    * Control Aurora Coast demo installation at boot.
    *
    * Unset means on in development and off everywhere else. `1` asks for it

@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `5aa0be3` after C10.07 N-1 schema #310. C10.08 is update policy: security-auto defaults, business-timezone windows, snapshot retention and feature-update approval. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `3b8ac53` after C10.08 update policy #311. C10.09 is the fork lane: a worktree merge that reports conflicts by seam, refuses to overwrite owner code, and opens a pull request in the owner’s own fork. C10.10 gives each Tier-1 recipe its own update and rollback actions and gates them in the recipe matrix. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.09–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.11 and C10.20–C10.22 (the update read model and its four surfaces), then C10.12–C10.18, C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7644,12 +7644,83 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `tests/core/update-policy.test.ts`. **F09** SPDX. **F10** N/A. **F11**
   `deploy/update-policy.md`, changeset `update-policy.md`. **F12** Tuesday
   03:00 America/Vancouver is in-window, Monday is not.)
-- [ ] **C10.09** Build fork-lane upstream merge/worktree/gates/PR, drift and
+- [x] **C10.09** Build fork-lane upstream merge/worktree/gates/PR, drift and
   missing-security visibility without overwriting owner code.
-- [ ] **C10.10** Implement and continuously test target-specific update/
+  (`src/core/update/fork.ts` classifies every diverging and conflicting path
+  through §39.1's seams and states drift in security terms; `fork-merge.ts`
+  fetches upstream, merges `--no-commit --no-ff` in a `mkdtemp` worktree,
+  reports conflicts by file and always aborts and removes it; `fork-delivery.ts`
+  opens the pull request in the owner's fork through the shared
+  `src/adapters/git/github.ts` client that §37's builder lane now also uses.
+  A seam conflict refuses instead of resolving. **F01** no schema — drift is
+  computed, never stored; `AvailableRelease` caching stays with C10.11.
+  **F02** `platform.forkStatus` / `openForkUpdate` are orchestrated, so no
+  transaction is held across git or GitHub I/O. **F03** N/A — no
+  `contact_id`. **F04** Doctor `update.fork`, not a new admin screen
+  (C10.11). **F05** the two services. **F06** N/A — operational copy is
+  English. **F07** anonymous refused; refs and remotes are validated before
+  git is spawned with `shell: false`; the running tree is never written and
+  the base branch is never pushed to. **F08**
+  `tests/core/update-fork.test.ts` proves the seam refusal, the channel-
+  filtered security count, the abort-and-remove, and that no `commit` or
+  `push` is ever run. **F09** SPDX. **F10** N/A — a fork is not seeded.
+  **F11** `deploy/fork-lane.md`, changeset `fork-lane.md`. **F12** a fork
+  three commits ahead and two security releases behind reports
+  "2 security releases behind — CVSS 8.1; this fork carries 3 commits of its
+  own".)
+- [x] **C10.10** Implement and continuously test target-specific update/
   rollback actions for every Tier-1 recipe.
-- [ ] **C10.11** Build update entities/history and matching admin, CLI, MCP and
-  email/SMS notification surfaces with separate read/apply scopes.
+  (`src/core/update/targets.ts` names §39.8's three strategies — `image-swap`
+  for the droplet and self-host recipes, `deploy-hook` for App Platform,
+  Render and Railway, `source-pull` for Replit — with what each rollback needs
+  and what cutover costs. `recipeUpdateTarget` runs the recipe's own declared
+  commands and pins `PREVIOUS_FREEHOLDER_IMAGE` / `_APP_SPEC` / `_IMAGE_TAG` /
+  `_TAG`; `resolveUpdateTarget` picks it from `FREEHOLDER_RECIPE_TARGET` and
+  `platform.applyUpdate` now uses it instead of the in-process stub. All six
+  recipes previously declared `image-swap`, including Replit, which has no
+  image; three are corrected. **F01** no schema. **F02** no `contact_id`;
+  `applyUpdate` was already orchestrated. **F03** N/A. **F04** Doctor
+  `update.target`, which warns when no recipe is declared because an update
+  that swaps nothing still looks like it worked; the admin screen is C10.11.
+  **F05** `platform.describeUpdateTargets`. **F06** N/A. **F07** anonymous
+  refused; an unknown recipe name resolves to the stub rather than a guessed
+  strategy; a target with no rollback command refuses instead of pretending.
+  **F08** `tests/core/update-targets.test.ts` proves each recipe implements
+  what it declares and that the embedded copy cannot drift from
+  `recipe.yaml`. **F09** SPDX. **F10** N/A. **F11** `deploy/update-targets.md`,
+  changeset `update-targets.md`. **F12** `scripts/recipe-update-actions.mjs`
+  runs once per target inside the recipe matrix, so §39.8's "a recipe without
+  a tested update path is not Tier 1" is enforced on every PR.)
+- [ ] **C10.11** Build the update read model §39.10 specifies: cache the
+  verified feed as `AvailableRelease` (version, channel, digest, severity,
+  cvss, schema_breaking, min_from_version, plugin_api, notes_url,
+  published_at, verified), and expose update history — runs, snapshots and
+  release notes — as one queryable model the four surfaces below all read.
+  *(Split from the original single-line C10.11 on 2026-09-07. That line asked
+  for an entity model plus four surfaces in one reviewable change, and was
+  silently carrying the human surface of eight shipped items: C10.01–C10.10
+  each recorded **F04** as a Doctor check "not a new admin screen (C10.11)".
+  One item cannot be the deferred F04 of ten. The four parts are C10.11 and
+  C10.20–C10.22; they keep those numbers because §43 identifiers are
+  referenced from source, tests and the packaged template, and renumbering
+  live IDs to make a document read in order trades a real breakage for a
+  cosmetic one. They are printed here, in dependency order, rather than at
+  the end of C10.)*
+- [ ] **C10.20** Build the admin update surface §39.10 requires: a status line
+  that is never ambiguous — *"Up to date"*, *"Update available"*, or *"2
+  security releases behind — CVSS 8.1"* in the danger colour — with the notes,
+  one button, run history, snapshot list and the earliest version still
+  reachable by rollback (§39.11). This is where the deferred **F04** of
+  C10.01–C10.10 is discharged, including the policy editor for C10.08's
+  window, channel, pause and retention, and the fork lane's drift and
+  missing-security view from C10.09.
+- [ ] **C10.21** Ship the `freeholder update` CLI: `--check`, `--preflight`,
+  `--apply`, `--rollback`, with exit codes fit for cron and for monitoring,
+  as a workspace `bin` alongside `create-freeholder`.
+- [ ] **C10.22** Expose the same services as MCP tools and add the §39.10
+  email/SMS escalation, so a security release outstanding beyond a set period
+  becomes a notification rather than silence. Reading update status and
+  applying an update are separate scopes.
 
 #### Customer and owner mobile apps
 
@@ -7659,6 +7730,12 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   galleries/proofing, portal messages, newsletters and deep links.
 - [ ] **C10.14** Build push registration/preferences and booking, gallery,
   invoice and back-in-stock notifications through core notification services.
+  §35.1's `DeviceToken` carries a `contact_id`, so this item **must repoint it
+  in `contacts.merge`** in the same change (CLAUDE.md's spine rule; the list in
+  `src/core/contacts/service.ts` is hand-maintained, and a table missing from
+  it orphans every push token the first time an owner merges two duplicates).
+  A device token is a `NotificationDelivery` channel like email and SMS, not a
+  second notification system.
 - [ ] **C10.15** Implement `freeholder-app init`: pull branding, generate
   icons/splash/store metadata/screenshots and emit an auditable config diff.
 - [ ] **C10.16** Continuously build iOS/Android against the demo contract and
@@ -7673,10 +7750,14 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 - [ ] **C10.19** Collapse the migration chain into one reviewed baseline once
   the schema is complete, keeping seed, demo and restore working, and
   re-baseline the reference instance deliberately rather than by surprise.
-  (Scheduled here on purpose: it must land **after** C10's own tables —
-  §39.10's `UpdateSetting`, `AvailableRelease`, `UpdateRun` and `Snapshot`
-  are the last schema this plan adds — and **before** C11, so C11's
-  journeys run against the collapsed schema and are what proves it. Doing
+  (Scheduled here on purpose: it must land **after every table C10 adds** and
+  **before** C11, so C11's journeys run against the collapsed schema and are
+  what proves it. That is §39.10's `UpdateSetting`, `AvailableRelease`,
+  `UpdateRun` and `Snapshot` — and also §35.1's `DeviceToken` from C10.14,
+  which is why this item cannot start until the mobile push work has landed.
+  Corrected 2026-09-07: this parenthesis previously named only the four
+  §39.10 tables as "the last schema this plan adds", which would have put a
+  whole-schema rewrite in front of a migration it had not accounted for. Doing
   it just before the C11.17 gate would put a whole-schema rewrite at the
   moment the product is meant to be stabilising.
   Pre-1.0 is the only window: after 1.0 the chain is somebody else's
