@@ -922,6 +922,7 @@ export const SERVICE_NAMES = [
   "paywalls.evaluate",
   "paywalls.list",
   "paywalls.save",
+  "platform.applyUpdate",
   "platform.cancelJob",
   "platform.checkUpdates",
   "platform.compatibility",
@@ -936,6 +937,7 @@ export const SERVICE_NAMES = [
   "platform.listJobQueues",
   "platform.listJobs",
   "platform.listOutboxEvents",
+  "platform.listUpdateRuns",
   "platform.outboxSummary",
   "platform.preflightUpdate",
   "platform.redriveDeadLetters",
@@ -4920,6 +4922,10 @@ export interface ServiceCatalog {
     input: { id?: string; name: string; appliesTo: { kind: "page" | "post" | "gallery" | "collection" | "tag" | "product"; selector: string }; mode?: "hard" | "soft" | "metered" | "registration"; meterCount?: number; meterWindowDays?: number; previewStrategy?: "blocks" | "paragraphs" | "percent"; previewValue?: number; requiredEntitlementIds?: string[]; upsellPageId?: string | null; seoPolicy?: "flexible_sampling" | "fully_gated"; status?: "active" | "archived" };
     output: { id: string; name: string; appliesTo: { kind: "page" | "post" | "gallery" | "collection" | "tag" | "product"; selector: string }; mode: "hard" | "soft" | "metered" | "registration"; meterCount: number; meterWindowDays: number; previewStrategy: "blocks" | "paragraphs" | "percent"; previewValue: number; requiredEntitlementIds: string[]; upsellPageId: string | null; seoPolicy: "flexible_sampling" | "fully_gated"; status: "active" | "archived"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "platform.applyUpdate": {
+    input: { toVersion?: string; digest?: string; drainMs?: number };
+    output: { id: string; status: string; snapshotId: string | null; noteId: string | null };
+  };
   "platform.cancelJob": {
     input: { name: string; id: string; confirm: "CANCEL" };
     output: { cancelled: true };
@@ -4975,6 +4981,10 @@ export interface ServiceCatalog {
   "platform.listOutboxEvents": {
     input: { status?: "pending" | "dispatched" | "dead_letter"; eventName?: string; limit?: number; offset?: number };
     output: { items: { id: string; eventName: string; status: "pending" | "dispatched" | "dead_letter"; attempts: number; replayCount: number; nextAttemptAt: string | null; deadLetteredAt: string | null; lastError: string | null; createdAt: string; [key: string]: unknown }[]; total: number };
+  };
+  "platform.listUpdateRuns": {
+    input: { limit?: number };
+    output: { runs: { id: string; fromVersion: string; toVersion: string; status: string; trigger: string; startedAt: string }[]; notes: { id: string; title: string; kind: string; occurredAt: string }[] };
   };
   "platform.outboxSummary": {
     input: Record<string, never>;
@@ -7234,6 +7244,7 @@ export interface FreeholderApi {
     save: (input: ServiceCatalog["paywalls.save"]["input"]) => Promise<ServiceCatalog["paywalls.save"]["output"]>;
   };
   platform: {
+    applyUpdate: (input?: ServiceCatalog["platform.applyUpdate"]["input"]) => Promise<ServiceCatalog["platform.applyUpdate"]["output"]>;
     cancelJob: (input: ServiceCatalog["platform.cancelJob"]["input"]) => Promise<ServiceCatalog["platform.cancelJob"]["output"]>;
     checkUpdates: (input?: ServiceCatalog["platform.checkUpdates"]["input"]) => Promise<ServiceCatalog["platform.checkUpdates"]["output"]>;
     compatibility: (input?: ServiceCatalog["platform.compatibility"]["input"]) => Promise<ServiceCatalog["platform.compatibility"]["output"]>;
@@ -7248,6 +7259,7 @@ export interface FreeholderApi {
     listJobQueues: (input?: ServiceCatalog["platform.listJobQueues"]["input"]) => Promise<ServiceCatalog["platform.listJobQueues"]["output"]>;
     listJobs: (input?: ServiceCatalog["platform.listJobs"]["input"]) => Promise<ServiceCatalog["platform.listJobs"]["output"]>;
     listOutboxEvents: (input?: ServiceCatalog["platform.listOutboxEvents"]["input"]) => Promise<ServiceCatalog["platform.listOutboxEvents"]["output"]>;
+    listUpdateRuns: (input?: ServiceCatalog["platform.listUpdateRuns"]["input"]) => Promise<ServiceCatalog["platform.listUpdateRuns"]["output"]>;
     outboxSummary: (input?: ServiceCatalog["platform.outboxSummary"]["input"]) => Promise<ServiceCatalog["platform.outboxSummary"]["output"]>;
     preflightUpdate: (input?: ServiceCatalog["platform.preflightUpdate"]["input"]) => Promise<ServiceCatalog["platform.preflightUpdate"]["output"]>;
     redriveDeadLetters: (input: ServiceCatalog["platform.redriveDeadLetters"]["input"]) => Promise<ServiceCatalog["platform.redriveDeadLetters"]["output"]>;

@@ -1,7 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Customization seams (C10.01), channels (C10.02), signed feed (C10.03), daily check (C10.04), preflight (C10.05).
+// Customization seams (C10.01), channels (C10.02), signed feed (C10.03), daily check (C10.04), preflight (C10.05), apply (C10.06).
 import { z } from "zod";
+import { desc } from "drizzle-orm";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { listed } from "@/core/contract";
@@ -19,7 +20,9 @@ import { CHANNELS, RELEASE_CHANNELS } from "./channels";
 import { ReleaseFeedError, verifyReleaseFeed } from "./feed";
 import { inspectCoreFiles } from "./integrity";
 import { canApplyFrom, SCHEMA_RISKS, SEVERITIES } from "./release";
+import { applyUpdate as runApply, localUpdateTarget } from "./apply";
 import { runPreflight } from "./preflight";
+import { releaseNotes, updateRuns } from "./schema";
 import { CUSTOMIZATION_SEAMS, SEAM_IDS, type SeamId } from "./seams";
 import { THIS_RELEASE } from "./this-release";
 
@@ -342,4 +345,106 @@ export const preflightUpdate = defineOrchestratedService({
   },
 });
 
-export default [inspectSeams, describeRelease, verifyFeed, updateCheckPolicy, checkUpdates, preflightUpdate];
+export const applyUpdate = defineOrchestratedService({
+  name: "platform.applyUpdate",
+  summary: "Snapshot, verify, migrate, smoke, cut over and draft a release note. Failures roll back.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    toVersion: z.string().min(1).optional(),
+    digest: z.string().optional(),
+    drainMs: z.number().int().min(0).max(60_000).optional(),
+  }),
+  output: z.object({
+    id: z.string().uuid(),
+    status: z.string(),
+    snapshotId: z.string().uuid().nullable(),
+    noteId: z.string().uuid().nullable(),
+  }),
+  handler: async (input, actor) => {
+    if (actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to apply an update.");
+    }
+    const result = await runApply({
+      toVersion: input.toVersion,
+      digest: input.digest,
+      drainMs: input.drainMs,
+      trigger: "admin",
+      target: localUpdateTarget,
+      actor,
+    });
+    return { id: result.id, status: result.status, snapshotId: result.snapshotId, noteId: result.noteId };
+  },
+});
+
+export const listUpdateRuns = defineService({
+  name: "platform.listUpdateRuns",
+  summary: "Update attempts, kept forever.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    limit: z.number().int().min(1).max(100).default(20),
+  }),
+  output: z.object({
+    runs: listed(
+      z.object({
+        id: z.string().uuid(),
+        fromVersion: z.string(),
+        toVersion: z.string(),
+        status: z.string(),
+        trigger: z.string(),
+        startedAt: z.date(),
+      }),
+    ),
+    notes: listed(
+      z.object({
+        id: z.string().uuid(),
+        title: z.string(),
+        kind: z.string(),
+        occurredAt: z.date(),
+      }),
+    ),
+  }),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to read update history.");
+    }
+    const runs = await ctx.tx
+      .select()
+      .from(updateRuns)
+      .orderBy(desc(updateRuns.startedAt))
+      .limit(input.limit);
+    const notes = await ctx.tx
+      .select()
+      .from(releaseNotes)
+      .orderBy(desc(releaseNotes.occurredAt))
+      .limit(input.limit);
+    return {
+      runs: runs.map((run) => ({
+        id: run.id,
+        fromVersion: run.fromVersion,
+        toVersion: run.toVersion,
+        status: run.status,
+        trigger: run.trigger,
+        startedAt: run.startedAt,
+      })),
+      notes: notes.map((note) => ({
+        id: note.id,
+        title: note.title,
+        kind: note.kind,
+        occurredAt: note.occurredAt,
+      })),
+    };
+  },
+});
+
+export default [
+  inspectSeams,
+  describeRelease,
+  verifyFeed,
+  updateCheckPolicy,
+  checkUpdates,
+  preflightUpdate,
+  applyUpdate,
+  listUpdateRuns,
+];
