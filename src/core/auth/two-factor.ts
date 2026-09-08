@@ -10,7 +10,7 @@ import {
 } from "@simplewebauthn/server";
 import type {
   AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
+  AuthenticatorTransport,
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { and, count, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
@@ -246,7 +246,7 @@ async function verifyWebAuthn(
         id: credential.credentialId,
         publicKey: Buffer.from(credential.publicKey, "base64url"),
         counter: credential.counter,
-        transports: credential.transports as AuthenticatorTransportFuture[],
+        transports: credential.transports,
       },
     });
   } catch {
@@ -285,7 +285,7 @@ export async function createLoginChallenge(
       userVerification: "required",
       allowCredentials: credentials.map((credential) => ({
         id: credential.credentialId,
-        transports: credential.transports as AuthenticatorTransportFuture[],
+        transports: credential.transports as AuthenticatorTransport[],
       })),
     });
     webauthnChallenge = webauthnOptions.challenge;
@@ -327,7 +327,7 @@ export const loginChallengeDetails = defineService({
         userVerification: "required",
         allowCredentials: credentials.map((credential) => ({
           id: credential.credentialId,
-          transports: credential.transports as AuthenticatorTransportFuture[],
+          transports: credential.transports as AuthenticatorTransport[],
         })),
       });
     }
@@ -561,7 +561,7 @@ export const beginWebAuthnRegistration = defineService({
       authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
       excludeCredentials: existing.map((credential) => ({
         id: credential.credentialId,
-        transports: credential.transports as AuthenticatorTransportFuture[],
+        transports: credential.transports as AuthenticatorTransport[],
       })),
     });
     const registrationToken = await challenge(ctx.tx, actor.userId, "webauthn-registration", {
@@ -659,7 +659,7 @@ export const beginWebAuthnStepUp = defineService({
       userVerification: "required",
       allowCredentials: credentials.map((credential) => ({
         id: credential.credentialId,
-        transports: credential.transports as AuthenticatorTransportFuture[],
+        transports: credential.transports as AuthenticatorTransport[],
       })),
     });
     const verificationToken = await challenge(ctx.tx, actor.userId, "webauthn-step-up", {
