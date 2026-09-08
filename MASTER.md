@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | The F-matrix backfill for the 217 pre-gate items is C11.09, tracked as `PROOF_DEBT` in the plan gate. C10 update work is complete. Next is C10.23–C10.24 (the Expo application) and C10.15–C10.18, then C10.19 and C11. |
+| Current focus | The F-matrix backfill for the 217 pre-gate items is C11.09, tracked as `PROOF_DEBT` in the plan gate. C10 update work is complete. Next is C10.24 (the remaining customer screens) and C10.15–C10.18, then C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7881,13 +7881,31 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   fourteen invented names in the first draft. **F09** SPDX. **F10** N/A.
   **F11** changeset `mobile-screens.md`. **F12** every push link round-trips
   through the resolver back to the screen that minted it.)*
-- [ ] **C10.23** Stand up the runnable Expo application against the screen
+- [x] **C10.23** Stand up the runnable Expo application against the screen
   contracts, with the customer home and the catalog/services screens.
   *(The Expo runtime lives outside the root pnpm workspace so that
   `pnpm install --frozen-lockfile` — which runs in every one of the repository's
   CI jobs — does not pay for a React Native dependency graph that only one
   package needs. `packages/mobile-app` stays the dependency-free client layer
   those screens consume.)*
+  *(`apps/mobile`: Expo SDK 57 with expo-router, outside the workspace with its
+  own lockfile and its own required CI job. `src/lib/screen-data.ts` is what
+  makes C10.13 load-bearing — a screen names a service and one its contract
+  does not list throws before a request is made. **F01** no schema. **F02** no
+  services; the app calls `/api/v1/<service>`, the same surface the website,
+  CLI and MCP use. **F03** N/A — the app holds no contact of its own.
+  **F04** connect, home and catalog, each with loading, empty and error
+  states, and cached content that says when it was fetched. **F05** N/A —
+  this is a human client of the existing agent surface. **F06** locale,
+  currency and timezone come from the instance; colours come from its semantic
+  tokens, so a rebrand needs no store review. **F07** the session is in the
+  platform keychain via `expo-secure-store`, never JS-reachable storage.
+  **F08** `tests/core/mobile-app-shell.test.ts`, plus the app's own typecheck
+  in CI. **F09** one dedicated CI job, so the React Native graph is not billed
+  to the other twenty. **F10** `apps/mobile/README.md`. **F11** changeset
+  `expo-customer-app.md`. **F12** the tab bar renders `TAB_ORDER` filtered to
+  screens that exist, so a tab never leads to a dead end. Store binaries are
+  C10.16.)*
 - [ ] **C10.24** Build the remaining customer screens against the same
   contracts: booking, invoice pay, galleries and proofing, portal messages and
   newsletters.

@@ -1,0 +1,33 @@
+{
+  "name": "freeholder-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The white-label Freeholder customer app (Expo). Outside the root pnpm workspace on purpose — see README.",
+  "license": "Apache-2.0",
+  "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "expo": "~57.0.21",
+    "expo-constants": "~57.0.17",
+    "expo-linking": "~57.0.9",
+    "expo-router": "~57.0.20",
+    "expo-secure-store": "~57.0.3",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-native": "0.87.1",
+    "react-native-safe-area-context": "~5.9.1",
+    "react-native-screens": "~4.27.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.0",
+    "typescript": "~5.9.3"
+  }
+}
