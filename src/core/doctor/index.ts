@@ -917,6 +917,14 @@ async function checkUpdatePreflight(): Promise<Check> {
   }
 }
 
+function checkUpdatePolicy(): Check {
+  return ok(
+    "update.policy",
+    "Update policy",
+    "Security updates apply automatically in a night window in the business timezone. Feature updates wait for approval.",
+  );
+}
+
 function checkSchemaN1(): Check {
   return THIS_RELEASE.schemaRisk === "compatible"
     ? ok(
@@ -1069,6 +1077,7 @@ export async function runDoctor(): Promise<DoctorReport> {
     checkPlatformVersion(),
     ...checkUpdateRelease(),
     checkUpdateFeedKey(),
+    checkUpdatePolicy(),
     checkSchemaN1(),
     checkUpdateCheck(),
     await checkUpdatePreflight(),
