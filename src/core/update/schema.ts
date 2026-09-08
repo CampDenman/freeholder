@@ -3,6 +3,7 @@
 // Update runs, snapshots and instance release notes (MASTER.md §39.5, §39.10, C10.06).
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   integer,
   jsonb,
@@ -21,6 +22,11 @@ export const UPDATE_RUN_STATUSES = [
   "failed",
 ] as const;
 export const SNAPSHOT_KINDS = ["db", "config"] as const;
+export const POLICY_CHANNELS = ["security", "stable", "edge", "off"] as const;
+export const APPLY_LEVELS = ["security", "patch", "minor", "none"] as const;
+export const WINDOW_DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+export const NOTIFY_CHANNELS = ["email", "sms"] as const;
+
 export const RELEASE_NOTE_KINDS = [
   "platform_upgrade",
   "module_toggled",
@@ -30,6 +36,29 @@ export const RELEASE_NOTE_KINDS = [
   "setting_changed",
   "custom",
 ] as const;
+
+export const updateSettings = pgTable(
+  "update_settings",
+  {
+    id: integer("id").primaryKey().default(1),
+    channel: text("channel", { enum: POLICY_CHANNELS }).notNull().default("security"),
+    applyLevel: text("apply_level", { enum: APPLY_LEVELS }).notNull().default("security"),
+    window: jsonb("window")
+      .$type<{ days: string[]; start: string }>()
+      .notNull()
+      .default({ days: ["tue", "wed", "thu"], start: "03:00" }),
+    drain: boolean("drain").notNull().default(true),
+    notifyChannels: text("notify_channels").array().notNull().default(sql`'{"email","sms"}'`),
+    keepSnapshots: integer("keep_snapshots").notNull().default(5),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    pausedUntil: timestamp("paused_until", { withTimezone: true }),
+    createdAt: createdAtColumn(),
+  },
+  (t) => [
+    check("update_settings_singleton", sql`${t.id} = 1`),
+    check("update_settings_keep_snapshots", sql`${t.keepSnapshots} between 1 and 50`),
+  ],
+);
 
 export const updateSnapshots = pgTable(
   "update_snapshots",

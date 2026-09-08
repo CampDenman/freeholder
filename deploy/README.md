@@ -79,6 +79,8 @@ whole story, which is the point.
   release notes and automatic rollback. Target-specific image swap is C10.10.
 - [`n1-schema.md`](n1-schema.md) — schema-compatibility plus the upgrade gate
   that boots the previous image, migrates, and rolls back.
+- [`update-policy.md`](update-policy.md) — security-auto defaults, business-
+  timezone windows, snapshot retention and feature-update approval.
 - [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
   database/media restore, update and rollback acceptance for every Tier-1
   target.

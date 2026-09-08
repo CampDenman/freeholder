@@ -929,9 +929,11 @@ export const SERVICE_NAMES = [
   "platform.cspViolations",
   "platform.describeRelease",
   "platform.doctor",
+  "platform.evaluateUpdatePolicy",
   "platform.export",
   "platform.getJob",
   "platform.getOutboxEvent",
+  "platform.getUpdatePolicy",
   "platform.inspectSeams",
   "platform.jobSummary",
   "platform.listJobQueues",
@@ -943,6 +945,7 @@ export const SERVICE_NAMES = [
   "platform.redriveDeadLetters",
   "platform.replayOutboxEvent",
   "platform.retryJob",
+  "platform.saveUpdatePolicy",
   "platform.source",
   "platform.updateCheckPolicy",
   "platform.verifyReleaseFeed",
@@ -4950,6 +4953,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { verdict: "ok" | "warn" | "fail"; checks: { id: string; title: string; verdict: "ok" | "warn" | "fail"; detail: string; remedy?: string; [key: string]: unknown }[]; ranAt: string };
   };
+  "platform.evaluateUpdatePolicy": {
+    input: { channel: "stable" | "security" | "edge"; now?: string; timezone?: string };
+    output: { offered: boolean; autoApply: boolean; requiresApproval: boolean };
+  };
   "platform.export": {
     input: { outputDirectory?: string };
     output: { ok: true; format: string; directory: string; files: number; checksum?: string };
@@ -4961,6 +4968,10 @@ export interface ServiceCatalog {
   "platform.getOutboxEvent": {
     input: { id: string };
     output: { id: string; eventName: string; status: "pending" | "dispatched" | "dead_letter"; payload: unknown; deliveries: unknown[]; [key: string]: unknown };
+  };
+  "platform.getUpdatePolicy": {
+    input: { now?: string };
+    output: { channel: "security" | "stable" | "edge" | "off"; applyLevel: "security" | "patch" | "minor" | "none"; window: { days: ("sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat")[]; start: string }; drain: boolean; notifyChannels: string[]; keepSnapshots: number; lastCheckedAt: string | null; pausedUntil: string | null; timezone: string; inWindow: boolean; paused: boolean };
   };
   "platform.inspectSeams": {
     input: { root?: string };
@@ -5005,6 +5016,10 @@ export interface ServiceCatalog {
   "platform.retryJob": {
     input: { name: string; id: string; confirm: "RETRY" };
     output: { retried: true };
+  };
+  "platform.saveUpdatePolicy": {
+    input: { channel: "security" | "stable" | "edge" | "off"; applyLevel: "security" | "patch" | "minor" | "none"; window: { days: ("sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat")[]; start: string }; drain: boolean; notifyChannels: ("email" | "sms")[]; keepSnapshots: number; pausedUntil?: string | null };
+    output: { channel: "security" | "stable" | "edge" | "off"; applyLevel: "security" | "patch" | "minor" | "none"; keepSnapshots: number; pruned: number };
   };
   "platform.source": {
     input: { includeLicenceText?: boolean; changeLimit?: number };
@@ -7251,9 +7266,11 @@ export interface FreeholderApi {
     cspViolations: (input?: ServiceCatalog["platform.cspViolations"]["input"]) => Promise<ServiceCatalog["platform.cspViolations"]["output"]>;
     describeRelease: (input?: ServiceCatalog["platform.describeRelease"]["input"]) => Promise<ServiceCatalog["platform.describeRelease"]["output"]>;
     doctor: (input?: ServiceCatalog["platform.doctor"]["input"]) => Promise<ServiceCatalog["platform.doctor"]["output"]>;
+    evaluateUpdatePolicy: (input: ServiceCatalog["platform.evaluateUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.evaluateUpdatePolicy"]["output"]>;
     export: (input?: ServiceCatalog["platform.export"]["input"]) => Promise<ServiceCatalog["platform.export"]["output"]>;
     getJob: (input: ServiceCatalog["platform.getJob"]["input"]) => Promise<ServiceCatalog["platform.getJob"]["output"]>;
     getOutboxEvent: (input: ServiceCatalog["platform.getOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.getOutboxEvent"]["output"]>;
+    getUpdatePolicy: (input?: ServiceCatalog["platform.getUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.getUpdatePolicy"]["output"]>;
     inspectSeams: (input?: ServiceCatalog["platform.inspectSeams"]["input"]) => Promise<ServiceCatalog["platform.inspectSeams"]["output"]>;
     jobSummary: (input?: ServiceCatalog["platform.jobSummary"]["input"]) => Promise<ServiceCatalog["platform.jobSummary"]["output"]>;
     listJobQueues: (input?: ServiceCatalog["platform.listJobQueues"]["input"]) => Promise<ServiceCatalog["platform.listJobQueues"]["output"]>;
@@ -7265,6 +7282,7 @@ export interface FreeholderApi {
     redriveDeadLetters: (input: ServiceCatalog["platform.redriveDeadLetters"]["input"]) => Promise<ServiceCatalog["platform.redriveDeadLetters"]["output"]>;
     replayOutboxEvent: (input: ServiceCatalog["platform.replayOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.replayOutboxEvent"]["output"]>;
     retryJob: (input: ServiceCatalog["platform.retryJob"]["input"]) => Promise<ServiceCatalog["platform.retryJob"]["output"]>;
+    saveUpdatePolicy: (input: ServiceCatalog["platform.saveUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.saveUpdatePolicy"]["output"]>;
     source: (input?: ServiceCatalog["platform.source"]["input"]) => Promise<ServiceCatalog["platform.source"]["output"]>;
     updateCheckPolicy: (input?: ServiceCatalog["platform.updateCheckPolicy"]["input"]) => Promise<ServiceCatalog["platform.updateCheckPolicy"]["output"]>;
     verifyReleaseFeed: (input: ServiceCatalog["platform.verifyReleaseFeed"]["input"]) => Promise<ServiceCatalog["platform.verifyReleaseFeed"]["output"]>;

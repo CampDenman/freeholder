@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Customization seams (C10.01), channels (C10.02), signed feed (C10.03), daily check (C10.04), preflight (C10.05), apply (C10.06).
 import { z } from "zod";
-import { desc } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { listed } from "@/core/contract";
 import { env } from "@/core/env";
+import { businessProfile } from "@/core/settings/schema";
 import { PLATFORM_VERSION } from "@/core/platform";
-import { defineOrchestratedService, defineService, ServiceError } from "@/core/service";
+import { defineOrchestratedService, defineService, ServiceError, type Tx } from "@/core/service";
 import {
   jitterSlot,
   runUpdateCheck,
@@ -22,7 +23,22 @@ import { inspectCoreFiles } from "./integrity";
 import { canApplyFrom, SCHEMA_RISKS, SEVERITIES } from "./release";
 import { applyUpdate as runApply, localUpdateTarget } from "./apply";
 import { runPreflight } from "./preflight";
-import { releaseNotes, updateRuns } from "./schema";
+import {
+  inUpdateWindow,
+  isPaused,
+  policyReceives,
+  requiresApproval,
+  shouldAutoApply,
+} from "./policy";
+import {
+  APPLY_LEVELS,
+  POLICY_CHANNELS,
+  WINDOW_DAYS,
+  releaseNotes,
+  updateRuns,
+  updateSettings,
+  updateSnapshots,
+} from "./schema";
 import { CUSTOMIZATION_SEAMS, SEAM_IDS, type SeamId } from "./seams";
 import { THIS_RELEASE } from "./this-release";
 
@@ -438,6 +454,164 @@ export const listUpdateRuns = defineService({
   },
 });
 
+const policyWindow = z.object({
+  days: z.array(z.enum(WINDOW_DAYS)).min(1).max(7),
+  start: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/),
+});
+
+async function loadPolicy(tx: Tx) {
+  const [row] = await tx.select().from(updateSettings).where(eq(updateSettings.id, 1)).limit(1);
+  if (row) return row;
+  const [created] = await tx.insert(updateSettings).values({ id: 1 }).returning();
+  return created!;
+}
+
+export const getUpdatePolicy = defineService({
+  name: "platform.getUpdatePolicy",
+  summary: "The update channel, auto-apply level, business-timezone window and snapshot retention.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    now: z.coerce.date().optional(),
+  }),
+  output: z.object({
+    channel: z.enum(POLICY_CHANNELS),
+    applyLevel: z.enum(APPLY_LEVELS),
+    window: policyWindow,
+    drain: z.boolean(),
+    notifyChannels: listed(z.string()),
+    keepSnapshots: z.number(),
+    lastCheckedAt: z.date().nullable(),
+    pausedUntil: z.date().nullable(),
+    timezone: z.string(),
+    inWindow: z.boolean(),
+    paused: z.boolean(),
+  }),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to read the update policy.");
+    }
+    const row = await loadPolicy(ctx.tx);
+    const [business] = await ctx.tx.select({ timezone: businessProfile.timezone }).from(businessProfile).limit(1);
+    const timezone = business?.timezone || "UTC";
+    const now = input.now ?? new Date();
+    const policy = {
+      channel: row.channel,
+      applyLevel: row.applyLevel,
+      window: row.window,
+      drain: row.drain,
+      notifyChannels: row.notifyChannels,
+      keepSnapshots: row.keepSnapshots,
+      lastCheckedAt: row.lastCheckedAt,
+      pausedUntil: row.pausedUntil,
+    };
+    return {
+      ...policy,
+      timezone,
+      inWindow: inUpdateWindow(now, timezone, row.window),
+      paused: isPaused(policy, now),
+    };
+  },
+});
+
+export const saveUpdatePolicy = defineService({
+  name: "platform.saveUpdatePolicy",
+  summary: "Change the update channel, auto-apply level, window, drain and snapshot retention.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({
+    channel: z.enum(POLICY_CHANNELS),
+    applyLevel: z.enum(APPLY_LEVELS),
+    window: policyWindow,
+    drain: z.boolean(),
+    notifyChannels: z.array(z.enum(["email", "sms"])).max(2),
+    keepSnapshots: z.number().int().min(1).max(50),
+    pausedUntil: z.coerce.date().nullable().optional(),
+  }),
+  output: z.object({
+    channel: z.enum(POLICY_CHANNELS),
+    applyLevel: z.enum(APPLY_LEVELS),
+    keepSnapshots: z.number(),
+    pruned: z.number(),
+  }),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind !== "user") {
+      throw new ServiceError("permission", "Only a signed-in owner can change the update policy.");
+    }
+    await loadPolicy(ctx.tx);
+    const [row] = await ctx.tx
+      .update(updateSettings)
+      .set({
+        channel: input.channel,
+        applyLevel: input.applyLevel,
+        window: input.window,
+        drain: input.drain,
+        notifyChannels: input.notifyChannels,
+        keepSnapshots: input.keepSnapshots,
+        ...(input.pausedUntil !== undefined ? { pausedUntil: input.pausedUntil } : {}),
+      })
+      .where(eq(updateSettings.id, 1))
+      .returning();
+    const kept = row!.keepSnapshots;
+    const snapshots = await ctx.tx
+      .select({ id: updateSnapshots.id })
+      .from(updateSnapshots)
+      .orderBy(desc(updateSnapshots.createdAt));
+    const extra = snapshots.slice(kept).map((snapshot) => snapshot.id);
+    if (extra.length) {
+      await ctx.tx.delete(updateSnapshots).where(inArray(updateSnapshots.id, extra));
+    }
+    return {
+      channel: row!.channel,
+      applyLevel: row!.applyLevel,
+      keepSnapshots: kept,
+      pruned: extra.length,
+    };
+  },
+});
+
+export const evaluateUpdatePolicy = defineService({
+  name: "platform.evaluateUpdatePolicy",
+  summary: "Whether a release would auto-apply or needs feature-update approval.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({
+    channel: z.enum(RELEASE_CHANNELS),
+    now: z.coerce.date().optional(),
+    timezone: z.string().min(1).optional(),
+  }),
+  output: z.object({
+    offered: z.boolean(),
+    autoApply: z.boolean(),
+    requiresApproval: z.boolean(),
+  }),
+  handler: async (input, ctx) => {
+    if (ctx.actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to evaluate the update policy.");
+    }
+    const row = await loadPolicy(ctx.tx);
+    const [business] = await ctx.tx.select({ timezone: businessProfile.timezone }).from(businessProfile).limit(1);
+    const timezone = input.timezone || business?.timezone || "UTC";
+    const now = input.now ?? new Date();
+    const policy = {
+      channel: row.channel,
+      applyLevel: row.applyLevel,
+      window: row.window,
+      drain: row.drain,
+      notifyChannels: row.notifyChannels,
+      keepSnapshots: row.keepSnapshots,
+      lastCheckedAt: row.lastCheckedAt,
+      pausedUntil: row.pausedUntil,
+    };
+    const release = { channel: input.channel };
+    return {
+      offered: policyReceives(policy.channel, input.channel),
+      autoApply: shouldAutoApply(policy, release, now, timezone),
+      requiresApproval: requiresApproval(policy, release),
+    };
+  },
+});
+
 export default [
   inspectSeams,
   describeRelease,
@@ -447,4 +621,7 @@ export default [
   preflightUpdate,
   applyUpdate,
   listUpdateRuns,
+  getUpdatePolicy,
+  saveUpdatePolicy,
+  evaluateUpdatePolicy,
 ];

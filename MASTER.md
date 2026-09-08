@@ -3256,11 +3256,11 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-07 |
-| Evidence snapshot | On `main` at `c4ad39c` after C10.06 apply/rollback #309. C10.07 ties schema-breaking migrations to declared schemaRisk and proves upgrade plus N-1 rollback in CI. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `5aa0be3` after C10.07 N-1 schema #310. C10.08 is update policy: security-auto defaults, business-timezone windows, snapshot retention and feature-update approval. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.08–C10.19, then C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.09–C10.19, then C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7631,8 +7631,19 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `tests/core/upgrade-gate.test.ts`. **F09** SPDX. **F10** N/A. **F11**
   `deploy/n1-schema.md`, changeset `n1-schema.md`. **F12** live
   `this-release.ts` reads as compatible.)
-- [ ] **C10.08** Build update policy/windows in business timezone, security-
+- [x] **C10.08** Build update policy/windows in business timezone, security-
   auto defaults, snapshot retention and feature-update approval.
+  (`update_settings` singleton; defaults channel/apply `security`, Tue–Thu
+  03:00 in the business timezone, drain, keep 5 snapshots. Feature updates
+  `requiresApproval`. `platform.getUpdatePolicy` /
+  `saveUpdatePolicy` / `evaluateUpdatePolicy`. Saving prunes extra snapshots.
+  **F01** `update_settings`. **F02** no `contact_id`. **F03** N/A. **F04**
+  Doctor `update.policy`, not a new admin screen (C10.11). **F05** the three
+  services. **F06** N/A. **F07** anonymous refused; paused/off/outside window
+  do not auto-apply; stable needs approval under security-auto. **F08**
+  `tests/core/update-policy.test.ts`. **F09** SPDX. **F10** N/A. **F11**
+  `deploy/update-policy.md`, changeset `update-policy.md`. **F12** Tuesday
+  03:00 America/Vancouver is in-window, Monday is not.)
 - [ ] **C10.09** Build fork-lane upstream merge/worktree/gates/PR, drift and
   missing-security visibility without overwriting owner code.
 - [ ] **C10.10** Implement and continuously test target-specific update/
