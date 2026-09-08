@@ -3260,7 +3260,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.21 and C10.22 (the update CLI and MCP surfaces), then C10.12–C10.18, C10.19 and C11. |
+| Current focus | Leftover C0.11–C0.12 F-matrix stays with C11.09. Next product work is C10.22 (update MCP tools and the security escalation), then C10.12–C10.18, C10.19 and C11. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7752,9 +7752,30 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   update would swap nothing. **F11** `deploy/update-admin.md`, changeset
   `update-admin.md`. **F12** the fork panel appears only on a git checkout,
   and the target panel marks which of the six recipes this instance is.)*
-- [ ] **C10.21** Ship the `freeholder update` CLI: `--check`, `--preflight`,
+- [x] **C10.21** Ship the `freeholder update` CLI: `--check`, `--preflight`,
   `--apply`, `--rollback`, with exit codes fit for cron and for monitoring,
   as a workspace `bin` alongside `create-freeholder`.
+  *(`packages/cli`, published as `@freeholder/cli` with the `freeholder`
+  binary. A thin client over `/api/v1`, like `scripts/doctor.mjs`: the update
+  logic stays in the instance because only the instance knows its own
+  adapters and deploy target. Exit codes 0 clean / 1 behind / 2 security
+  outstanding or action failed / 3 unreachable — 1 and 2 are separate so a
+  monitor can page on exposure without paging on every feature release, and
+  an instance that has merely never checked exits 0 rather than making every
+  fresh install look broken. `--rollback` needed a deliberate rollback
+  distinct from C10.06's automatic one, so `platform.rollbackUpdate` lands
+  here; it refuses to cross a schema contraction (§39.11) rather than swap in
+  a build that cannot read the database. **F01** no schema. **F02**
+  orchestrated; the refusal is a `conflict` error, not a silent no-op.
+  **F03** N/A. **F04** the admin equivalent is C10.20. **F05** this is the
+  CLI surface; MCP is C10.22. **F06** N/A — operational copy in English.
+  **F07** scoped API key is the documented cron credential, so a monitoring
+  key need not be able to cut a site over; TOTP supported for owner sessions.
+  **F08** `tests/core/update-cli.test.ts` pins every exit code and proves the
+  CLI holds no database or deploy logic. **F09** SPDX; built and linted with
+  the other published packages. **F10** `packages/cli/README.md`. **F11**
+  changeset `update-cli.md`. **F12** a rolled-back apply exits non-zero, so
+  cron cannot mistake a reversal for a success.)*
 - [ ] **C10.22** Expose the same services as MCP tools and add the §39.10
   email/SMS escalation, so a security release outstanding beyond a set period
   becomes a notification rather than silence. Reading update status and

@@ -143,6 +143,8 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
+  packages/cli: {}
+
   packages/create-freeholder: {}
 
   packages/plugin-kit: {}

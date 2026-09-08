@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Customization seams (C10.01), channels (C10.02), signed feed (C10.03), daily check (C10.04), preflight (C10.05), apply (C10.06).
 import { z } from "zod";
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { listed } from "@/core/contract";
@@ -21,7 +21,7 @@ import { CHANNELS, RELEASE_CHANNELS } from "./channels";
 import { ReleaseFeedError, verifyReleaseFeed, type VerifiedRelease } from "./feed";
 import { inspectCoreFiles } from "./integrity";
 import { canApplyFrom, SCHEMA_RISKS, SEVERITIES } from "./release";
-import { applyUpdate as runApply } from "./apply";
+import { applyUpdate as runApply, rollbackUpdate as runRollback, RollbackRefused } from "./apply";
 import {
   configuredTarget,
   describeTargets,
@@ -49,7 +49,7 @@ import { cacheReleases, listCachedReleases, updateStatus as computeStatus } from
 import { db } from "@/core/db";
 import { CUSTOMIZATION_SEAMS, SEAM_IDS, type SeamId } from "./seams";
 import { THIS_RELEASE } from "./this-release";
-import { planForkMerge, summarizeDrift } from "./fork";
+import { compareVersions, planForkMerge, summarizeDrift } from "./fork";
 import { attemptUpstreamMerge } from "./fork-merge";
 import { openForkUpdatePullRequest } from "./fork-delivery";
 
@@ -412,6 +412,58 @@ export const applyUpdate = defineOrchestratedService({
       actor,
     });
     return { id: result.id, status: result.status, snapshotId: result.snapshotId, noteId: result.noteId };
+  },
+});
+
+export const rollbackUpdate = defineOrchestratedService({
+  name: "platform.rollbackUpdate",
+  summary:
+    "Go back to the release the last completed update came from. Refuses to cross a schema contraction.",
+  kind: "mutation",
+  permission: "scoped",
+  input: z.object({}),
+  output: z.object({
+    id: z.string().uuid(),
+    status: z.string(),
+    fromVersion: z.string(),
+    toVersion: z.string(),
+  }),
+  handler: async (_input, actor) => {
+    if (actor.kind === "anonymous") {
+      throw new ServiceError("permission", "Sign in to roll back an update.");
+    }
+    // §39.11's horizon, read from C10.11's cache: any breaking release between
+    // where the last update came from and where it went makes the previous
+    // build unable to read this database.
+    const cached = await db().transaction(async (tx) => listCachedReleases(tx as never));
+    const [last] = await db()
+      .select({ from: updateRuns.fromVersion, to: updateRuns.toVersion })
+      .from(updateRuns)
+      .where(sql`${updateRuns.status} = 'completed'`)
+      .orderBy(desc(updateRuns.startedAt))
+      .limit(1);
+    const breakingSince = last
+      ? cached
+          .filter(
+            (release) =>
+              release.schemaBreaking &&
+              (compareVersions(release.version, last.from) ?? 0) > 0 &&
+              (compareVersions(release.version, last.to) ?? 1) <= 0,
+          )
+          .map((release) => release.version)
+      : [];
+    try {
+      return await runRollback({
+        actor,
+        breakingSince,
+        target: resolveUpdateTarget({ previousTag: last?.from, imageTag: last?.from }),
+      });
+    } catch (error) {
+      if (error instanceof RollbackRefused) {
+        throw new ServiceError("conflict", error.message);
+      }
+      throw error;
+    }
   },
 });
 
@@ -1011,6 +1063,7 @@ export default [
   preflightUpdate,
   applyUpdate,
   listUpdateRuns,
+  rollbackUpdate,
   getUpdatePolicy,
   saveUpdatePolicy,
   evaluateUpdatePolicy,

@@ -949,6 +949,7 @@ export const SERVICE_NAMES = [
   "platform.redriveDeadLetters",
   "platform.replayOutboxEvent",
   "platform.retryJob",
+  "platform.rollbackUpdate",
   "platform.saveUpdatePolicy",
   "platform.source",
   "platform.updateCheckPolicy",
@@ -5038,6 +5039,10 @@ export interface ServiceCatalog {
     input: { name: string; id: string; confirm: "RETRY" };
     output: { retried: true };
   };
+  "platform.rollbackUpdate": {
+    input: Record<string, never>;
+    output: { id: string; status: string; fromVersion: string; toVersion: string };
+  };
   "platform.saveUpdatePolicy": {
     input: { channel: "security" | "stable" | "edge" | "off"; applyLevel: "security" | "patch" | "minor" | "none"; window: { days: ("sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat")[]; start: string }; drain: boolean; notifyChannels: ("email" | "sms")[]; keepSnapshots: number; pausedUntil?: string | null };
     output: { channel: "security" | "stable" | "edge" | "off"; applyLevel: "security" | "patch" | "minor" | "none"; keepSnapshots: number; pruned: number };
@@ -7311,6 +7316,7 @@ export interface FreeholderApi {
     redriveDeadLetters: (input: ServiceCatalog["platform.redriveDeadLetters"]["input"]) => Promise<ServiceCatalog["platform.redriveDeadLetters"]["output"]>;
     replayOutboxEvent: (input: ServiceCatalog["platform.replayOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.replayOutboxEvent"]["output"]>;
     retryJob: (input: ServiceCatalog["platform.retryJob"]["input"]) => Promise<ServiceCatalog["platform.retryJob"]["output"]>;
+    rollbackUpdate: (input?: ServiceCatalog["platform.rollbackUpdate"]["input"]) => Promise<ServiceCatalog["platform.rollbackUpdate"]["output"]>;
     saveUpdatePolicy: (input: ServiceCatalog["platform.saveUpdatePolicy"]["input"]) => Promise<ServiceCatalog["platform.saveUpdatePolicy"]["output"]>;
     source: (input?: ServiceCatalog["platform.source"]["input"]) => Promise<ServiceCatalog["platform.source"]["output"]>;
     updateCheckPolicy: (input?: ServiceCatalog["platform.updateCheckPolicy"]["input"]) => Promise<ServiceCatalog["platform.updateCheckPolicy"]["output"]>;
