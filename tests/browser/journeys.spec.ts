@@ -198,7 +198,12 @@ test.describe("real-browser product journeys", () => {
       await page.getByRole("button", { name: "Issue invoice" }).click();
       await expect(page).toHaveURL(/\?saved=issue$/);
       await expect(page.getByText("The invoice was issued.")).toBeVisible();
-      await expect(page.getByText(/^INV-/)).toBeVisible();
+      // By role, not by text: Next's route announcer (`__next-route-announcer__`)
+      // is an aria-live region that echoes the new page's heading after a
+      // client-side navigation, so a bare text match finds the heading *and*
+      // the announcement of it. The announcer is correct accessibility
+      // behaviour; the assertion was simply looser than what it meant.
+      await expect(page.getByRole("heading", { name: /^INV-/ })).toBeVisible();
 
       await page.goto("/admin/invoices/tax");
       await expect(page.getByRole("heading", { name: "Tax setup" })).toBeVisible();
