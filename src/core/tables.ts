@@ -77,6 +77,7 @@ export {
   mailSuppressions,
 } from "@/core/mail/schema";
 export {
+  deviceTokens,
   notificationDeliveries,
   notificationDigests,
   notificationPreferences,
