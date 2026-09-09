@@ -23,6 +23,7 @@ const colorTokens = z.object({
   warningSoft: z.string(),
   danger: z.string(),
   dangerSoft: z.string(),
+  onDanger: z.string(),
   focus: z.string(),
 });
 
