@@ -13,6 +13,17 @@ const nextConfig: NextConfig = {
   // (§14: one-command deploy, and a droplet with 4GB has better uses for it).
   output: "standalone",
 
+  // sharp is a native module and must not be bundled. Declaring it external is
+  // the supported way to say so, and it is what lets tracing treat the package
+  // as a package rather than as a pile of files to enumerate.
+  //
+  // Added when Next 16.3 was taken for two critical advisories: 16.3's
+  // Turbopack follows every glob match and reads it, and pnpm's layout puts a
+  // *symlinked directory* — `@img/sharp-libvips-linux-x64` — inside the tree
+  // the include below matches. 16.2 tolerated that; 16.3 fails the build with
+  // "Is a directory (os error 21)".
+  serverExternalPackages: ["sharp"],
+
   // sharp loads its native library by resolving a path at runtime, which
   // dependency tracing cannot see — so the standalone output shipped the
   // JavaScript and left `libvips-cpp.so` behind, and the image died on boot
@@ -22,8 +33,22 @@ const nextConfig: NextConfig = {
   // Found by CI booting the image rather than by anything at build time: the
   // build succeeds either way, which is exactly why §18's recipe check runs
   // the container instead of trusting that it compiled.
+  // Every pattern ends in something file-shaped, and that is the point rather
+  // than tidiness. pnpm's virtual store puts *symlinked directories* under
+  // `node_modules/.pnpm/node_modules/@img/` — `colour`, and the platform
+  // package. A bare `@img/**/*` matches those symlinks, and Turbopack 16.3
+  // reads every match: "Is a directory (os error 21)" on Linux, "Access is
+  // denied" on Windows. 16.2 tolerated it. Requiring an extension or a `lib/`
+  // segment means a directory can never be a match in the first place.
+  //
+  // `lib/*` rather than `lib/*.so`: the Linux artifact is `libvips-cpp.so.42`,
+  // whose extension is `.42`.
   outputFileTracingIncludes: {
-    "/*": ["./node_modules/sharp/**/*", "./node_modules/@img/**/*"],
+    "/*": [
+      "./node_modules/sharp/**/*.{js,cjs,mjs,json,node}",
+      "./node_modules/@img/**/*.{js,cjs,mjs,json,node}",
+      "./node_modules/@img/*/lib/*",
+    ],
   },
 
   // Runtime filesystem adapters accept paths that do not exist until an
