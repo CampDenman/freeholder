@@ -20,6 +20,7 @@ import { decryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { closeDb, db } from "@/core/db";
 import { invoices, payments, refunds, taxCategories } from "@/modules/invoicing/schema";
 import { paymentReturnToken } from "@/modules/invoicing/customer-tokens";
+import { galleries } from "@/modules/galleries/schema";
 import { resetBrowserDatabase } from "./database";
 
 const OWNER_EMAIL = "owner-journey@example.test";
@@ -288,6 +289,29 @@ test.describe("real-browser product journeys", () => {
           await expect(customerPage.getByText(translator("en")("customerInvoice.succeeded"), { exact: true })).toBeVisible();
           await expect(customerPage.getByRole("link", { name: translator("en")("app.invoice.return") })).toHaveAttribute("href", `freeholder://invoices?instance=${encodeURIComponent(new URL(customerPage.url()).origin)}`);
           expect((await new AxeBuilder({ page: customerPage }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+          // C10.29: the same contact reaches their gallery through the portal.
+          const [ownGallery] = await db().insert(galleries).values({ contactId: invoice!.contactId,
+            title: "Customer coastal proofs", slug: "customer-coastal-proofs", access: "login" }).returning();
+          await db().insert(galleries).values({ title: "Another customer's private proofs",
+            slug: "other-private-proofs", access: "login" });
+          for (const locale of ["en", "es", "fr"]) {
+            for (const theme of ["light", "dark"] as const) {
+              const prefix = locale === "en" ? "" : `/${locale}`;
+              await visitor.addCookies([{ name: THEME_COOKIE, value: theme, url: new URL(page.url()).origin }]);
+              await customerPage.goto(`${prefix}/portal/galleries`);
+              await expect(customerPage.getByRole("heading", { name: translator(locale)("portal.room.galleries"), exact: true })).toBeVisible();
+              await expect(customerPage.locator("html")).toHaveAttribute("lang", locale);
+              await expect(customerPage.locator("html")).toHaveAttribute("data-theme", theme);
+              await expect(customerPage.getByRole("link", { name: ownGallery!.title, exact: true })).toHaveAttribute("href", `${prefix}/g/${ownGallery!.slug}`);
+              await expect(customerPage.getByText("Another customer's private proofs", { exact: true })).toHaveCount(0);
+              expect((await new AxeBuilder({ page: customerPage }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+              await customerPage.screenshot({ path: test.info().outputPath(`customer-galleries-${locale}-${theme}.png`), fullPage: true });
+            }
+          }
+          await customerPage.goto("/portal/galleries");
+          await customerPage.getByRole("link", { name: ownGallery!.title, exact: true }).click();
+          await customerPage.getByRole("button", { name: translator("en")("galleries.lock.login"), exact: true }).click();
+          await expect(customerPage.getByRole("heading", { name: ownGallery!.title, exact: true })).toBeVisible();
         } finally {
           await visitor.close();
           await db().update(businessProfile).set({ enabledLocales: languagePolicy!.enabledLocales });

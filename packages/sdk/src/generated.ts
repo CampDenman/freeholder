@@ -659,6 +659,7 @@ export const SERVICE_NAMES = [
   "galleries.listRounds",
   "galleries.listSelections",
   "galleries.loadDemoFixture",
+  "galleries.myGalleries",
   "galleries.openWithLogin",
   "galleries.publicBySlug",
   "galleries.purgeDemoFixture",
@@ -3890,6 +3891,10 @@ export interface ServiceCatalog {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
   };
+  "galleries.myGalleries": {
+    input: { limit?: number };
+    output: { id: string; title: string; slug: string; expiresAt: string | null; updatedAt: string; [key: string]: unknown }[];
+  };
   "galleries.openWithLogin": {
     input: { slug: string };
     output: { ok: true; sessionToken: string; gallery: { id: string; title: string; slug: string; access: "password" | "pin" | "login"; downloadPolicy: "none" | "web_res" | "full_res" | "limit_n"; watermark: boolean; expiresAt: string | null; [key: string]: unknown }; items: { id: string; galleryId: string; assetId: string; position: number; canView: boolean; canDownload: boolean; filename?: string; altText?: string | null; mime?: string; status?: string; [key: string]: unknown }[]; selections: { id: string; galleryId: string; contactId: string | null; assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; round: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; lastDecided: { id: string; galleryId: string; sequence: number; state: "open" | "submitted" | "approved" | "reopened"; submittedByContactId: string | null; note: string | null; snapshot: { assetId: string; kind: "favorite" | "select" | "reject"; comment: string | null }[]; submittedAt: string | null; decidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; canInvitePartner: boolean; invitedPartners: { id: string; galleryId: string; contactId: string; contactName?: string; contactEmail?: string | null; role: "client" | "partner"; canView: boolean; canDownload: boolean; expiresAt: string | null; revokedAt: string | null; invitedByContactId?: string | null; [key: string]: unknown }[] } | { ok: false };
@@ -3955,7 +3960,7 @@ export interface ServiceCatalog {
     output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
   };
   "galleries.viewItem": {
-    input: { sessionToken: string; itemId: string };
+    input: { sessionToken: string; itemId: string; slug?: string };
     output: { assetId: string; storageKey: string; filename: string; mime: string; bytes: number; [key: string]: unknown } | null;
   };
   "galleries.viewSession": {
@@ -7047,6 +7052,7 @@ export interface FreeholderApi {
     listRounds: (input: ServiceCatalog["galleries.listRounds"]["input"]) => Promise<ServiceCatalog["galleries.listRounds"]["output"]>;
     listSelections: (input: ServiceCatalog["galleries.listSelections"]["input"]) => Promise<ServiceCatalog["galleries.listSelections"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["galleries.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["galleries.loadDemoFixture"]["output"]>;
+    myGalleries: (input?: ServiceCatalog["galleries.myGalleries"]["input"]) => Promise<ServiceCatalog["galleries.myGalleries"]["output"]>;
     openWithLogin: (input: ServiceCatalog["galleries.openWithLogin"]["input"]) => Promise<ServiceCatalog["galleries.openWithLogin"]["output"]>;
     publicBySlug: (input: ServiceCatalog["galleries.publicBySlug"]["input"]) => Promise<ServiceCatalog["galleries.publicBySlug"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["galleries.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["galleries.purgeDemoFixture"]["output"]>;

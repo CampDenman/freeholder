@@ -7,7 +7,9 @@
 // through the spine. Per-asset flags are a ceiling: a guest overlay cannot
 // grant more than the item allows.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { contactForActor } from "@/core/portal/service";
+import { registerPortalSection } from "@/core/portal/sections";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { hashPassword, verifyPassword } from "@/core/auth/passwords";
 import { users } from "@/core/auth/schema";
@@ -857,6 +859,42 @@ export const listGalleries = defineService({
   },
 });
 
+/** C10.29: a customer sees only galleries their own login can open. */
+export const myGalleries = defineService({
+  name: "galleries.myGalleries",
+  summary: "Your own unexpired client galleries and active guest invitations.",
+  kind: "query",
+  permission: "authenticated",
+  input: z.object({ limit: z.number().int().min(1).max(200).default(100) }).strict(),
+  output: listed(row({ id: uuid, title: z.string(), slug: z.string(), expiresAt: timestamp.nullable(), updatedAt: timestamp })),
+  handler: async (input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const now = new Date();
+    const invited = ctx.tx.select({ id: galleryGuests.id }).from(galleryGuests).where(and(
+      eq(galleryGuests.galleryId, galleries.id),
+      eq(galleryGuests.contactId, contact.id),
+      isNull(galleryGuests.revokedAt),
+      or(isNull(galleryGuests.expiresAt), gt(galleryGuests.expiresAt, now)),
+    ));
+    return ctx.tx.select({ id: galleries.id, title: galleries.title, slug: galleries.slug,
+      expiresAt: galleries.expiresAt, updatedAt: galleries.updatedAt }).from(galleries).where(and(
+      eq(galleries.kind, "client_delivery"),
+      or(isNull(galleries.expiresAt), gt(galleries.expiresAt, now)),
+      or(eq(galleries.contactId, contact.id), exists(invited)),
+    )).orderBy(desc(galleries.updatedAt), desc(galleries.id)).limit(input.limit);
+  },
+});
+
+registerPortalSection({
+  key: "galleries",
+  order: 65,
+  load: async (ctx, _contactId, limit) => {
+    const rows = await ctx.call(myGalleries, { limit });
+    return rows.map((gallery) => ({ id: gallery.id, title: gallery.title, status: null,
+      at: gallery.updatedAt, href: `/g/${encodeURIComponent(gallery.slug)}` }));
+  },
+});
+
 export const getGallery = defineService({
   name: "galleries.get",
   summary: "One gallery, with its items, for the owner.",
@@ -1489,6 +1527,7 @@ export const openGalleryWithLogin = defineService({
               eq(galleryGuests.galleryId, gallery.id),
               eq(galleryGuests.contactId, contactId),
               isNull(galleryGuests.revokedAt),
+              or(isNull(galleryGuests.expiresAt), gt(galleryGuests.expiresAt, new Date())),
             ),
           )
           .limit(1);
@@ -1609,6 +1648,7 @@ export const viewGalleryItem = defineService({
   input: z.object({
     sessionToken: z.string().min(20).max(200),
     itemId: id,
+    slug: slug.optional(),
   }),
   output: row({
     assetId: uuid,
@@ -1619,6 +1659,7 @@ export const viewGalleryItem = defineService({
   }).nullable(),
   handler: async (input, ctx) => {
     const { gallery, guest } = await loadSession(ctx, input.sessionToken);
+    if (input.slug !== undefined && gallery.slug !== input.slug) return null;
     const [found] = await ctx.tx
       .select({ item: galleryItems, asset: assets })
       .from(galleryItems)
@@ -2771,6 +2812,7 @@ export default [
   unlockGallery,
   redeemGalleryGuest,
   openGalleryWithLogin,
+  myGalleries,
   viewGallerySession,
   viewGalleryItem,
   setGallerySelection,
