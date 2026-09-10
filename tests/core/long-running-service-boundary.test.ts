@@ -13,6 +13,8 @@ type FunctionNode =
   | ts.MethodDeclaration;
 
 const PROVIDER_METHODS = new Set([
+  "createCheckout",
+  "captureCheckout",
   "health",
   "identity",
   "listInteractions",
@@ -139,6 +141,7 @@ describe("long-running service transaction boundary", () => {
   it("keeps catalogue, social, mail and OAuth provider I/O outside service transactions", () => {
     const files = [
       "src/core/catalogue/service.ts",
+      "src/modules/invoicing/customer-service.ts",
       "src/core/connections/calendar-oauth.ts",
       "src/core/connections/mail-read-oauth.ts",
       "src/core/import/signup-contact-service.ts",

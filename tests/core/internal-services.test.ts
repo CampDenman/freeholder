@@ -99,6 +99,10 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.claimCustomerCheckout",
+  "invoicing.applyCustomerCheckout",
+  "invoicing.customerPaymentSource",
+  "invoicing.applyCustomerPayment",
   "demo.installApply",
   "demo.installGuard",
   "connections.applyCalendarOAuthCompletion",

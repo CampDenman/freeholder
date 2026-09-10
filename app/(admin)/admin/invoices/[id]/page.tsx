@@ -88,6 +88,14 @@ export default async function InvoiceDetailPage({
         </Callout>
       ) : null}
       {query.saved ? <Callout tone="success">{t(`invoices.saved.${query.saved}`)}</Callout> : null}
+      {canManage && ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) ? (
+        <form action={invoiceAction}>
+          <input type="hidden" name="intent" value="send" />
+          <input type="hidden" name="id" value={invoice.id} />
+          <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+          <Button type="submit">{t("customerInvoice.send")}</Button>
+        </form>
+      ) : null}
       {canManage && !stepUpValid ? (
         <Callout tone="warning">
           {t("invoices.stepUp")}{" "}

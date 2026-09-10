@@ -10,8 +10,16 @@ import { desc, eq } from "drizzle-orm";
 import { passwordResets } from "@/core/auth/schema";
 import { totpCode } from "@/core/auth/two-factor-crypto";
 import { contacts } from "@/core/contacts/schema";
+import { users } from "@/core/auth/schema";
+import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
+import { businessProfile } from "@/core/settings/schema";
+import { THEME_COOKIE } from "@/core/design/theme";
+import { translator } from "@/core/i18n";
+import { mailOutbox } from "@/core/mail/schema";
+import { decryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { closeDb, db } from "@/core/db";
 import { invoices, payments, refunds, taxCategories } from "@/modules/invoicing/schema";
+import { paymentReturnToken } from "@/modules/invoicing/customer-tokens";
 import { resetBrowserDatabase } from "./database";
 
 const OWNER_EMAIL = "owner-journey@example.test";
@@ -34,7 +42,7 @@ test.describe("real-browser product journeys", () => {
     await closeDb();
   });
 
-  test("covers setup, auth, editing, publishing, forms, contacts, translations, API keys, MCP and recovery", async ({ page }) => {
+  test("covers setup, auth, editing, publishing, forms, contacts, translations, API keys, MCP and recovery", async ({ page, browser }) => {
     test.setTimeout(300_000);
     let totpSecret = "";
     let recoveryCode = "";
@@ -204,6 +212,85 @@ test.describe("real-browser product journeys", () => {
       // the announcement of it. The announcer is correct accessibility
       // behaviour; the assertion was simply looser than what it meant.
       await expect(page.getByRole("heading", { name: /^INV-/ })).toBeVisible();
+
+      await test.step("C5.25 customer invoice email, portal, offline payment and localized accessibility", async () => {
+        const id = new URL(page.url()).pathname.split("/").at(-1)!;
+        const [invoice] = await db().select().from(invoices).where(eq(invoices.id, id));
+        await page.getByRole("button", { name: "Email payment link", exact: true }).click();
+        await expect(page).toHaveURL(/\?saved=send(?:Preview)?$/);
+        const outbox = await db().select().from(mailOutbox).orderBy(desc(mailOutbox.createdAt));
+        const mail = outbox.map((row) => decryptMailOutbox(row.encryptedMessage, row.deliveryId)).find((body) => body.includes(`/portal/invoices/${id}?token=`));
+        expect(mail).toBeDefined();
+        const message = JSON.parse(mail!) as { text: string };
+        const link = message.text.split("\n").find((line) => line.includes(`/portal/invoices/${id}?token=`))!;
+        const path = new URL(link).pathname + new URL(link).search;
+        const [languagePolicy] = await db().select({ enabledLocales: businessProfile.enabledLocales }).from(businessProfile);
+        await db().update(businessProfile).set({ enabledLocales: ["en", "es", "fr"] });
+        for (const locale of ["en", "es", "fr"]) {
+          const t = translator(locale);
+          for (const theme of ["light", "dark"] as const) {
+            const visitor = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width: 390, height: 844 } });
+            try {
+              await visitor.addCookies([{ name: THEME_COOKIE, value: theme, url: new URL(page.url()).origin }]);
+              const customerPage = await visitor.newPage();
+              await customerPage.goto(`${locale === "en" ? "" : `/${locale}`}${path}`);
+              await expect(customerPage.getByRole("heading", { name: t("customerInvoice.title", { number: invoice!.number! }) })).toBeVisible();
+              await expect(customerPage.locator("html")).toHaveAttribute("lang", locale);
+              await expect(customerPage.locator("html")).toHaveAttribute("data-theme", theme);
+              await expect(customerPage).toHaveTitle(t("invoices.title"));
+              await customerPage.keyboard.press("Tab");
+              await expect(customerPage.getByRole("link", { name: t("a11y.skipToContent") })).toBeFocused();
+              await customerPage.screenshot({ path: test.info().outputPath(`customer-invoice-${locale}-${theme}.png`), fullPage: true });
+              const audit = await new AxeBuilder({ page: customerPage }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+              expect(audit.violations, `${locale}/${theme}`).toEqual([]);
+              await customerPage.getByRole("button", { name: t("customerInvoice.offline"), exact: true }).click();
+              await expect(customerPage.getByText(t("customerInvoice.offlineInstructions"), { exact: true })).toBeVisible();
+              expect((await db().select().from(invoices).where(eq(invoices.id, id)))[0]?.paidMinor).toBe(0);
+            } finally { await visitor.close(); }
+          }
+        }
+        // A session reaches the same page without exposing an email token in
+        // the portal list. The customer's own contact stays the identity.
+        const customerId = randomUUID();
+        await db().insert(users).values({ id: customerId, email: "invoice-customer@example.test", role: "customer" });
+        await db().update(contacts).set({ userId: customerId }).where(eq(contacts.id, invoice!.contactId));
+        const session = await db().transaction((tx) => createSession(tx, customerId));
+        const visitor = await browser.newContext({ baseURL: new URL(page.url()).origin });
+        try {
+          await visitor.addCookies([{ name: SESSION_COOKIE, value: session.token, url: new URL(page.url()).origin }]);
+          const customerPage = await visitor.newPage();
+          await customerPage.goto("/portal/invoices");
+          const entry = customerPage.getByRole("link", { name: invoice!.number!, exact: true });
+          await expect(entry).toHaveAttribute("href", `/portal/invoices/${id}`);
+          await entry.click();
+          await expect(customerPage.getByRole("button", { name: "Arrange offline payment" })).toBeVisible();
+          // Only the owner's verified offline receipt settles the amount.
+          await page.goto("/admin/payments");
+          await page.getByLabel(translator("en")("payments.invoice"), { exact: true }).first().selectOption(id);
+          await page.getByLabel("Amount", { exact: true }).first().fill("50.00");
+          await page.getByLabel("How this payment was verified").fill("Cash received and counted for the customer invoice journey.");
+          await page.getByLabel("I confirm this money was received and the evidence is accurate.").check();
+          await page.getByRole("button", { name: "Record payment", exact: true }).click();
+          await expect(page).toHaveURL(/\/admin\/payments\?status=record/);
+          await customerPage.reload();
+          await expect(customerPage.getByText("This invoice is no longer open for payment.", { exact: true })).toBeVisible();
+          expect((await db().select().from(invoices).where(eq(invoices.id, id)))[0]?.paidMinor).toBe(5_000);
+          // The loading boundary can start a 200 stream before notFound().
+          // Assert the rendered denial and absence of private invoice content.
+          await customerPage.goto(path);
+          await expect(customerPage.getByRole("heading", { name: "404", exact: true })).toBeVisible();
+          await expect(customerPage.getByRole("heading", { name: translator("en")("customerInvoice.title", { number: invoice!.number! }), exact: true })).toHaveCount(0);
+          await expect(customerPage.getByRole("button", { name: "Arrange offline payment" })).toHaveCount(0);
+          const [receipt] = await db().select().from(payments).where(eq(payments.invoiceId, id));
+          await customerPage.goto(`/portal/invoices/confirmation/${paymentReturnToken(receipt!)}`);
+          await expect(customerPage).toHaveTitle("Payment confirmation");
+          await expect(customerPage.getByText(translator("en")("customerInvoice.succeeded"), { exact: true })).toBeVisible();
+          expect((await new AxeBuilder({ page: customerPage }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+        } finally {
+          await visitor.close();
+          await db().update(businessProfile).set({ enabledLocales: languagePolicy!.enabledLocales });
+        }
+      });
 
       await page.goto("/admin/invoices/tax");
       await expect(page.getByRole("heading", { name: "Tax setup" })).toBeVisible();

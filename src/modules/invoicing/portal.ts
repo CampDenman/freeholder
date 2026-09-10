@@ -21,7 +21,7 @@ registerPortalSection({
       title: invoice.number ?? invoice.id.slice(0, 8),
       status: invoice.status,
       at: invoice.issuedAt ?? invoice.createdAt ?? null,
-      href: null,
+      href: invoice.number ? `/portal/invoices/${invoice.id}` : null,
       amountMinor: invoice.totalMinor,
       currency: invoice.currency,
     }));
