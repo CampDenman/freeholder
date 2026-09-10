@@ -160,12 +160,24 @@ export function resolveDeepLink(
     return { ok: false, reason: "not-a-link", message: "That is not a link this app can open." };
   }
 
-  // A `freeholder://` link has no authority to check — it can only have come
-  // from this app's own notification. An https link names a business, and that
-  // business has to be the one the customer is signed in to.
+  // Browser returns name their issuing instance without carrying credentials.
+  // A custom scheme is not proof that the link came from a trusted sender.
+  const issuingInstance = isAppScheme ? url.searchParams.get("instance") : null;
+  if (issuingInstance) {
+    let issuer: URL;
+    try { issuer = new URL(issuingInstance); } catch {
+      return { ok: false, reason: "not-a-link", message: "That return link has no valid business address." };
+    }
+    if (!["https:", "http:"].includes(issuer.protocol) || issuer.username || issuer.password) {
+      return { ok: false, reason: "not-a-link", message: "That return link has no valid business address." };
+    }
+    if (options.instanceUrl && issuer.origin !== new URL(options.instanceUrl).origin) {
+      return { ok: false, reason: "wrong-instance", message: `That link is for ${issuer.host}, not the connected business.` };
+    }
+  }
   if (!isAppScheme && options.instanceUrl) {
     const expected = new URL(options.instanceUrl).host;
-    if (url.host !== expected) {
+    if (url.origin !== new URL(options.instanceUrl).origin) {
       return {
         ok: false,
         reason: "wrong-instance",
@@ -194,7 +206,7 @@ export function resolveDeepLink(
     ok: true,
     destination: options.instanceUrl
       ? { ...destination, instanceUrl: options.instanceUrl }
-      : destination,
+      : issuingInstance ? { ...destination, instanceUrl: new URL(issuingInstance).origin } : destination,
   };
 }
 

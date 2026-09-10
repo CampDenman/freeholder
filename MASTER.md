@@ -8106,6 +8106,35 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   Pay button that opens the C5.25 page in the system browser and returns by
   deep link. Depends on C5.25. The contract test's ban on any `pay|checkout|
   charge` service name stays; the handoff is a URL.
+  *(Implementation 2026-09-10: invoice list and detail render the customer
+  projection, line totals, tax/discount/shipping, paid amount and balance.
+  **F01** no schema changes. **F02** authenticated `invoicing.customerInvoiceLink`
+  reuses C5.25 ownership checks and returns only a payable invoice's browser
+  capability; another contact, anonymous caller or unlinked owner is refused.
+  **F03** existing invoice, contact, payment and provider flow remain the source
+  of truth. **F04** list/detail loading, empty, failed room, stale read,
+  unavailable payment, offline and browser-open failure states are implemented;
+  physical-device interaction/accessibility proof remains, so this checkbox
+  stays open. **F05** HTTP/OpenAPI/SDK expose the query; capability retrieval is
+  excluded from agent/MCP discovery. **F06** en/es/fr labels, currency exponents,
+  business timezone, semantic colours and web return links; native screen-reader
+  and light/dark inspection remain pending. **F07** no app payment mutation,
+  no session token in a URL, uncached invoice capabilities, same-origin browser
+  handoff, and instance-bound app return links. Paid invoices produce no link.
+  **F08** customer invoice authorization/retirement tests, mobile contract/shell
+  checks, currency rendering and browser return-link assertions. **F09** no new
+  jobs or storage; existing invoice privacy/backup/retention apply. **F10** manual
+  providers show instructions rather than claiming payment; browser return and
+  app foreground refresh always reread the ledger. **F11** SDK, READMEs and
+  changeset updated. **F12** own session → invoice capability → anonymous browser
+  invoice is service-tested; C5.25's browser journey checks return links in all
+  three locales/both themes and on the receipt. Physical browser-to-app return
+  still needs an installed native build.)*
+  **Build audit:** the local standalone trace included `.git`, a mobile README
+  and test-output files. C10.26 excludes repository/workspace roots from tracing
+  and makes the artifact gate reject/scrub them, with a regression proving the
+  real workspace's Git metadata survives. Scrubbing reduced the observed
+  artifact from 18,154 to 15,468 files without raising its 18,000-file limit.
 - [ ] **C10.27** Build the galleries tab and the proofing screen on the real
   session flow: a `galleries` portal room (module registers
   `registerPortalSection`, loads by contact) so `portal.myRecords` lists the

@@ -46,6 +46,7 @@ export {
 } from "./offline.js";
 export { brandFrom, type Brand } from "./branding.js";
 export { appText } from "./strings.js";
+export { formatMoney } from "./format.js";
 export {
   SCREENS,
   SCREEN_IDS,

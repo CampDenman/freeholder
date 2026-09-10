@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { CONTRACT_VERSION, checkCompatibility } from "@/core/discovery";
 import {
   APP_CONTRACT_VERSION,
+  formatMoney,
   brandFrom,
   discover,
   freshnessLabel,
@@ -185,6 +186,13 @@ describe("the customer app (C10.12)", () => {
         checkCompatibility(document({ contractVersion: 99 }), APP_CONTRACT_VERSION).ok,
       ).toBe(false);
     });
+  });
+
+  it("renders native invoice money in zero, two and three-decimal currencies without losing minor units", () => {
+    expect(formatMoney(1000, "JPY", "en")).toBe("¥1,000");
+    expect(formatMoney(12345, "USD", "en")).toBe("$123.45");
+    expect(formatMoney(1001, "KWD", "en")).toContain("1.001");
+    expect(formatMoney(-1, "USD", "en")).toBe("-$0.01");
   });
 
   describe("holding a session on a device", () => {

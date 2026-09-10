@@ -73,8 +73,14 @@ Bookings (C10.25) use the customer's profile and own list, then uncached
 management links. The detail reads live, applies the server's rescheduling
 policy, confirms cancellation, and opens existing intake/waiver web forms.
 The native picker uses the appointment's timezone; the preview also shows the
-business timezone. Invoice pay, galleries/proofing, messages and newsletters
-remain C10.26–C10.28.
+business timezone. Galleries/proofing, messages and newsletters
+remain C10.27–C10.28. Invoices (C10.26) read the existing customer portal room
+and customer invoice projection. A separate, uncached own-invoice link opens
+payment in the system browser without exposing the user's session. Invoice
+and receipt pages return to the app's invoice list; a return naming another
+business is refused. The app refreshes on return and never assumes a browser
+redirect means the invoice was paid. Both C10.25 and C10.26 still need physical
+device interaction and accessibility checks before their checkboxes close.
 
 Home and bookings offer password sign-in or an email link. Copy the original
 email link into the app: it is checked against the connected business and

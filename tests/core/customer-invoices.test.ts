@@ -13,7 +13,7 @@ import { mailOutbox } from "@/core/mail/schema";
 import { decryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { myRecords } from "@/core/portal/service";
 import { getExternalService } from "@/core/service";
-import { beginCustomerCheckout, confirmCustomerPayment, customerPaymentReceipt, getCustomerInvoice, sendInvoice, viewCustomerInvoice } from "@/modules/invoicing/customer-service";
+import { beginCustomerCheckout, confirmCustomerPayment, customerInvoiceLink, customerPaymentReceipt, getCustomerInvoice, sendInvoice, viewCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { invoiceAccessToken, paymentReturnToken, validInvoiceToken, validPaymentReturnToken } from "@/modules/invoicing/customer-tokens";
 import { createDraftInvoice, getInvoice, issueInvoice, markInvoiceOverdue, voidInvoice } from "@/modules/invoicing/invoice-service";
 import { recordOfflinePayment } from "@/modules/invoicing/payment-provider-service";
@@ -74,6 +74,13 @@ describe.runIf(hasDatabase)("customer invoices", () => {
     const other = await createContact.call({ name: "Another buyer", email: "other-invoice@example.test" }, OWNER);
     await db().update(contacts).set({ userId: otherId }).where(eq(contacts.id, other.id));
     expect(await failure(getCustomerInvoice.call({ id: invoice.id }, { ...CUSTOMER, userId: otherId }))).toMatchObject({ code: "not_found" });
+    const link = await customerInvoiceLink.call({ id: invoice.id }, CUSTOMER);
+    expect(link.href).toBe(`/portal/invoices/${invoice.id}?token=${token}`);
+    const browserUrl = new URL(link.href!, "https://example.test");
+    expect(await getCustomerInvoice.call({ id: invoice.id, token: browserUrl.searchParams.get("token")! }, ANON)).toMatchObject({ id: invoice.id });
+    expect(await failure(customerInvoiceLink.call({ id: invoice.id }, { ...CUSTOMER, userId: otherId }))).toMatchObject({ code: "not_found" });
+    expect(await failure(customerInvoiceLink.call({ id: invoice.id }, ANON))).toMatchObject({ code: "permission" });
+    expect(await failure(customerInvoiceLink.call({ id: invoice.id }, OWNER))).toMatchObject({ code: "not_found" });
     expect(await failure(getCustomerInvoice.call({ id: invoice.id, token: "0".repeat(64) }, ANON))).toMatchObject({ code: "not_found" });
     const rooms = await myRecords.call({ section: "invoices" }, CUSTOMER);
     expect(rooms[0]?.records[0]?.href).toBe(`/portal/invoices/${invoice.id}`);
@@ -102,6 +109,7 @@ describe.runIf(hasDatabase)("customer invoices", () => {
     await recordOfflinePayment.call({ invoiceId: invoice.id, method: "cash", amountMinor: 10_000, evidence: "Cash received and counted.", idempotencyKey: "paid" }, OWNER);
     expect(await failure(getCustomerInvoice.call({ id: invoice.id, token }, ANON))).toMatchObject({ code: "not_found" });
     expect(await getCustomerInvoice.call({ id: invoice.id }, CUSTOMER)).toMatchObject({ status: "paid", canPay: false });
+    expect(await customerInvoiceLink.call({ id: invoice.id }, CUSTOMER)).toEqual({ href: null });
     expect(await failure(beginCustomerCheckout.call({ id: invoice.id, token }, ANON))).toMatchObject({ code: "not_found" });
   });
 

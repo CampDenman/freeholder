@@ -36,7 +36,14 @@ const MAX_FILES = 18_000;
 const MAX_BYTES = 512 * 1024 * 1024;
 const STANDALONE = path.resolve(".next", "standalone");
 const FORBIDDEN_ROOTS = new Set([
+  ".git",
+  ".github",
+  ".agents",
+  ".codex",
+  ".claude",
+  ".work",
   "app",
+  "apps",
   "db",
   "deploy",
   "locales",
@@ -46,6 +53,7 @@ const FORBIDDEN_ROOTS = new Set([
   "seed",
   "src",
   "tests",
+  "test-results",
 ]);
 const FORBIDDEN_ROOT_FILES = new Set([
   "CLAUDE.md",
@@ -64,11 +72,13 @@ async function scrubBuildOnlyFiles() {
   const removed = [];
   for (const entry of entries) {
     const removeDirectory = entry.isDirectory() && FORBIDDEN_ROOTS.has(entry.name);
+    const removeLink = entry.isSymbolicLink() && FORBIDDEN_ROOTS.has(entry.name);
     const removeFile = entry.isFile() && (
       isEnvironmentFile(entry.name) || FORBIDDEN_ROOT_FILES.has(entry.name)
     );
-    if (!removeDirectory && !removeFile) continue;
+    if (!removeDirectory && !removeFile && !removeLink) continue;
     const target = path.join(STANDALONE, entry.name);
+    if (!path.resolve(target).startsWith(STANDALONE + path.sep)) throw new Error("Refusing to scrub outside the standalone artifact.");
     await rm(target, { recursive: removeDirectory, force: true });
     removed.push(removeDirectory ? `${entry.name}/` : entry.name);
   }

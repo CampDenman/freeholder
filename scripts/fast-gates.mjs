@@ -40,6 +40,7 @@ const steps = [
       "tests/core/contract-evidence.test.ts",
       "tests/core/mobile-screens.test.ts",
       "tests/core/mobile-app-shell.test.ts",
+      "tests/core/standalone-artifact.test.ts",
       "tests/core/locale-quality.test.ts",
       "tests/core/tokens.test.ts",
       "tests/core/cms-fields.test.ts",

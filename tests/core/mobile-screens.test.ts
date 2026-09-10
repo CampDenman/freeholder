@@ -204,6 +204,9 @@ describe("deep links (C10.13)", () => {
       if (result.ok) return;
       expect(result.reason).toBe("wrong-instance");
       expect(result.message).toContain("someone-else.test");
+      expect(resolveDeepLink("freeholder://invoices?instance=https%3A%2F%2Fsomeone-else.test", { instanceUrl })).toMatchObject({ ok: false, reason: "wrong-instance" });
+      expect(resolveDeepLink(`freeholder://invoices?instance=${encodeURIComponent(instanceUrl)}`, { instanceUrl })).toMatchObject({ ok: true, destination: { screen: "invoices" } });
+      expect(resolveDeepLink("freeholder://invoices?instance=not-a-url", { instanceUrl })).toMatchObject({ ok: false, reason: "not-a-link" });
     });
 
     it("refuses anything that is not an http(s) or app link", () => {
@@ -230,7 +233,7 @@ describe("deep links (C10.13)", () => {
 
     it("refuses to mint a link that would open a screen with no argument", () => {
       expect(() => pushLink("gallery")).toThrow(/needs a slug/);
-      expect(() => pushLink("invoice")).toThrow(/needs a token/);
+      expect(() => pushLink("invoice")).toThrow(/needs a id/);
     });
 
     it("does not open an app link naming a screen that does not exist", () => {

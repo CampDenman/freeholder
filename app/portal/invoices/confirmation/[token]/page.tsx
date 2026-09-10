@@ -7,6 +7,7 @@ import { formatMoney } from "@/core/i18n";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
 import { customerPaymentReceipt } from "@/modules/invoicing/customer-service";
+import { invoiceAppReturnHref } from "@/modules/invoicing/customer-tokens";
 import { Callout } from "@/ui/primitives";
 import { getLocale, getT } from "../../../../i18n";
 import { confirmInvoicePaymentAction } from "../../actions";
@@ -35,5 +36,6 @@ export default async function InvoiceConfirmation({ params, searchParams }: {
     {query.error ? <div role="alert"><Callout tone="danger">{t("customerInvoice.failed")}</Callout></div> : null}
     {pending ? <form action={confirmInvoicePaymentAction}><input type="hidden" name="token" value={token} /><PaymentButton label={t("customerInvoice.confirm")} pendingLabel={t("common.working")} /></form> : null}
     <a href={business ? localizeCustomerHref("/portal/invoices", locale, business) : "/portal/invoices"} className="text-accent underline">{t("customerInvoice.back")}</a>
+    <a href={invoiceAppReturnHref()} className="text-accent underline">{t("app.invoice.return")}</a>
   </main>;
 }

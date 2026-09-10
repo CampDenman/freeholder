@@ -737,6 +737,7 @@ export const SERVICE_NAMES = [
   "invoicing.createTaxCategory",
   "invoicing.createTaxZone",
   "invoicing.customerInvoice",
+  "invoicing.customerInvoiceLink",
   "invoicing.customerPaymentReceipt",
   "invoicing.failPayment",
   "invoicing.failRefund",
@@ -4201,6 +4202,10 @@ export interface ServiceCatalog {
     input: { id: string; token?: string };
     output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; totalMinor: number }[]; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable" };
   };
+  "invoicing.customerInvoiceLink": {
+    input: { id: string };
+    output: { href: string | null };
+  };
   "invoicing.customerPaymentReceipt": {
     input: { token: string };
     output: { status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number };
@@ -7132,6 +7137,7 @@ export interface FreeholderApi {
     createTaxCategory: (input: ServiceCatalog["invoicing.createTaxCategory"]["input"]) => Promise<ServiceCatalog["invoicing.createTaxCategory"]["output"]>;
     createTaxZone: (input: ServiceCatalog["invoicing.createTaxZone"]["input"]) => Promise<ServiceCatalog["invoicing.createTaxZone"]["output"]>;
     customerInvoice: (input: ServiceCatalog["invoicing.customerInvoice"]["input"]) => Promise<ServiceCatalog["invoicing.customerInvoice"]["output"]>;
+    customerInvoiceLink: (input: ServiceCatalog["invoicing.customerInvoiceLink"]["input"]) => Promise<ServiceCatalog["invoicing.customerInvoiceLink"]["output"]>;
     customerPaymentReceipt: (input: ServiceCatalog["invoicing.customerPaymentReceipt"]["input"]) => Promise<ServiceCatalog["invoicing.customerPaymentReceipt"]["output"]>;
     failPayment: (input: ServiceCatalog["invoicing.failPayment"]["input"]) => Promise<ServiceCatalog["invoicing.failPayment"]["output"]>;
     failRefund: (input: ServiceCatalog["invoicing.failRefund"]["input"]) => Promise<ServiceCatalog["invoicing.failRefund"]["output"]>;

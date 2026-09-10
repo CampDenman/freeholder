@@ -238,6 +238,7 @@ test.describe("real-browser product journeys", () => {
               await expect(customerPage.locator("html")).toHaveAttribute("lang", locale);
               await expect(customerPage.locator("html")).toHaveAttribute("data-theme", theme);
               await expect(customerPage).toHaveTitle(t("invoices.title"));
+              await expect(customerPage.getByRole("link", { name: t("app.invoice.return") })).toHaveAttribute("href", `freeholder://invoices?instance=${encodeURIComponent(new URL(customerPage.url()).origin)}`);
               await customerPage.keyboard.press("Tab");
               await expect(customerPage.getByRole("link", { name: t("a11y.skipToContent") })).toBeFocused();
               await customerPage.screenshot({ path: test.info().outputPath(`customer-invoice-${locale}-${theme}.png`), fullPage: true });
@@ -285,6 +286,7 @@ test.describe("real-browser product journeys", () => {
           await customerPage.goto(`/portal/invoices/confirmation/${paymentReturnToken(receipt!)}`);
           await expect(customerPage).toHaveTitle("Payment confirmation");
           await expect(customerPage.getByText(translator("en")("customerInvoice.succeeded"), { exact: true })).toBeVisible();
+          await expect(customerPage.getByRole("link", { name: translator("en")("app.invoice.return") })).toHaveAttribute("href", `freeholder://invoices?instance=${encodeURIComponent(new URL(customerPage.url()).origin)}`);
           expect((await new AxeBuilder({ page: customerPage }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
         } finally {
           await visitor.close();

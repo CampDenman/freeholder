@@ -36,3 +36,8 @@ export function validPaymentReturnToken(payment: PaymentIdentity, token: string)
 export function customerInvoicePath(id: string, token?: string): string {
   return `/portal/invoices/${encodeURIComponent(id)}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
 }
+
+/** C10.26: no credential or payment assertion crosses the app return link. */
+export function invoiceAppReturnHref(): string {
+  return `freeholder://invoices?instance=${encodeURIComponent(new URL(env().APP_URL).origin)}`;
+}
