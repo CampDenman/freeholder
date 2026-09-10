@@ -8066,6 +8066,41 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   refuses a `contactId` other than the caller's and never appears in an
   owner list. Booking *creation* stays on the web until a customer-callable
   request path exists — `bookings.create` is an owner mutation.
+  **Integration audit 2026-09-10:** this item also repairs the native session
+  entry needed to exercise those screens: password sign-in calls the actual
+  `auth.login` API projection (the browser login route strips its token),
+  email-link request/consumption use the existing customer auth services,
+  and HTTP accepts a validated user session bearer without falling back to
+  cookies on invalid credentials. Cookie-bearing writes still require CSRF.
+  The app stores sessions only for their issuing instance. Native bundle
+  validation covers Metro's shared-package resolution and Expo's supported
+  React Native version, which typechecking alone did not prove. Intake and
+  waiver actions open their existing token-authorized web forms, then refresh
+  on returning to the app. An enrolled two-factor account uses the web sign-in
+  until a native challenge UI is delivered with the account/release work.
+  *(Implementation 2026-09-10: own list/link/detail screens, native date/time
+  picker, two clocks, policy refusal, cancellation confirmation and outcome,
+  live-only writes, intake/waiver web handoffs with resume refresh, and real
+  password/email-link entry. **F01** no schema change. **F02** `bookings.myLinks`
+  has typed input/output, self-service scoping and an explicit ownership check
+  even for privileged callers. **F03** existing contact/user linkage, booking
+  lifecycle events and policy/money services are reused. **F04** loading,
+  empty, failure, confirmation, pending and moved-link recovery paths are
+  implemented; on-device interaction/accessibility proof remains outstanding,
+  so this checkbox stays open. **F05** HTTP/OpenAPI/SDK expose the same query;
+  capability links remain excluded from agent/MCP discovery. **F06** en/es/fr
+  labels, native timezone-aware picking, locale/currency formatting and semantic
+  colours; device screen-reader and light/dark inspection still required.
+  **F07** own-link denial, uncached capabilities, session-isolated read caches,
+  issuing-instance binding, offline refusal, cookie omission, explicit-credential
+  precedence and cookie CSRF protection. **F08** service/HTTP/client/shell tests
+  and native bundle checks. **F09** no new storage/jobs; existing booking privacy,
+  backup and retention paths apply; CI now bundles both native platforms.
+  **F10** existing booking records and policy drive the screens; two-factor
+  accounts have an explicit web fallback. **F11** mobile READMEs, SDK, API auth
+  description and changeset updated. **F12** real HTTP password sign-in → own
+  profile/link → reschedule → new link → cancellation → revoked-session refusal
+  is covered by `tests/core/bookings.test.ts`; device journey still pending.)*
 - [ ] **C10.26** Build the invoices tab and the invoice screen against C5.25:
   list from `portal.myRecords`, detail from a customer-authorized read, and a
   Pay button that opens the C5.25 page in the system browser and returns by
@@ -8094,6 +8129,8 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   signed-in preference — never the email-footer `unsubscribe` token. Account:
   `portal.myProfile`, `portal.myRecords`, sign out with device-token revoke
   (C10.14). Grow `BUILT` in `app/(tabs)/_layout.tsx` to the full `TAB_ORDER`
+  and complete the native two-factor challenge path for enrolled accounts
+  (C10.25 safely directs those accounts to the website in the interim),
   and add every new file to the shell test's colour and state lists.
 - [x] **C10.14** Build push registration/preferences and booking, gallery,
   invoice and back-in-stock notifications through core notification services.

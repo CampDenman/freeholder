@@ -26,6 +26,7 @@ export {
   loadSession,
   saveSession,
   signIn,
+  redeemSignInLink,
   signOut,
   unlockOnResume,
   type BiometricGate,

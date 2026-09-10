@@ -19,6 +19,8 @@ import {
   writeThrough,
   saveSession,
   signOut,
+  signIn,
+  redeemSignInLink,
   unlockOnResume,
   type Cache,
   type Instance,
@@ -186,6 +188,25 @@ describe("the customer app (C10.12)", () => {
   });
 
   describe("holding a session on a device", () => {
+    it("rejects another business's email link before sending anything and preserves one-time failures", async () => {
+      const transport = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ token: "session-token" }) }));
+      const input = { instanceUrl: "https://example.test", email: "rae@example.test", link: "https://other.test/portal/magic?token=abcdefghijklmnopqrstuv" };
+      expect((await redeemSignInLink(input, transport)).ok).toBe(false);
+      expect(transport).not.toHaveBeenCalled();
+      expect((await redeemSignInLink({ ...input, link: "https://example.test/fr/portal/magic?token=abcdefghijklmnopqrstuv" }, transport)).ok).toBe(true);
+      expect(transport).toHaveBeenCalledWith("https://example.test/api/v1/auth.consumeCustomerMagicLink", expect.objectContaining({ credentials: "omit", body: JSON.stringify({ token: "abcdefghijklmnopqrstuv" }) }));
+      const denied = vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) }));
+      expect((await redeemSignInLink({ ...input, link: "https://example.test/portal/magic?token=abcdefghijklmnopqrstuv" }, denied)).ok).toBe(false);
+      expect(denied).toHaveBeenCalledTimes(1);
+    });
+    it("uses real auth services and never treats an OTP challenge or failed email request as a session", async () => {
+      const transport = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ token: "", twoFactorRequired: true }) }));
+      const result = await signIn({ instanceUrl: "https://example.test", email: "rae@example.test", password: "password" }, transport);
+      expect(result).toMatchObject({ ok: false, reason: "two-factor" });
+      expect(transport).toHaveBeenCalledWith("https://example.test/api/v1/auth.login", expect.objectContaining({ credentials: "omit" }));
+      const failed = await signIn({ instanceUrl: "https://example.test", email: "rae@example.test" }, async () => ({ ok: false, status: 429, json: async () => ({}) }));
+      expect(failed).toMatchObject({ ok: false, reason: "invalid" });
+    });
     it("keeps the token where only the keychain writes", async () => {
       const store = memoryStore();
       await saveSession(store, {

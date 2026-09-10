@@ -41,6 +41,9 @@ jobs:
       - name: Typecheck the customer app
         working-directory: apps/mobile
         run: npx tsc -p tsconfig.json --noEmit
+      - name: Bundle both native platforms
+        working-directory: apps/mobile
+        run: npx expo export --platform android --platform ios
 
   application:
     name: Application gates

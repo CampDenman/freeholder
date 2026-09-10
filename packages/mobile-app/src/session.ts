@@ -38,11 +38,11 @@ export interface Session {
 
 export type SignInResult =
   | { ok: true; session: Session }
-  | { ok: false; reason: "invalid" | "unreachable" | "magic-link-sent"; message: string };
+  | { ok: false; reason: "invalid" | "unreachable" | "magic-link-sent" | "two-factor"; message: string };
 
 type FetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
+  init: { method: string; headers: Record<string, string>; body: string; credentials?: "omit" },
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
 /**
@@ -58,12 +58,13 @@ export async function signIn(
   fetchImpl: FetchLike,
 ): Promise<SignInResult> {
   const endpoint = input.password
-    ? `${input.instanceUrl}/api/auth/login`
-    : `${input.instanceUrl}/api/auth/magic-link`;
+    ? `${input.instanceUrl}/api/v1/auth.login`
+    : `${input.instanceUrl}/api/v1/auth.requestCustomerMagicLink`;
   let response;
   try {
     response = await fetchImpl(endpoint, {
       method: "POST",
+      credentials: "omit",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(
         input.password
@@ -74,6 +75,7 @@ export async function signIn(
   } catch {
     return { ok: false, reason: "unreachable", message: "Could not reach the site." };
   }
+  if (!response.ok) return { ok: false, reason: "invalid", message: "Sign-in could not be completed. Check your details or try again later." };
   if (!input.password) {
     // Always the same answer, sent or not: whether an address has an account
     // is not something an unauthenticated caller gets to learn.
@@ -83,10 +85,8 @@ export async function signIn(
       message: "If that address has an account, a sign-in link is on its way.",
     };
   }
-  if (!response.ok) {
-    return { ok: false, reason: "invalid", message: "That email and password did not match." };
-  }
-  const body = (await response.json()) as { token?: string };
+  const body = (await response.json()) as { token?: string; twoFactorRequired?: boolean };
+  if (body.twoFactorRequired) return { ok: false, reason: "two-factor", message: "This account requires two-factor sign-in on the website." };
   if (!body.token) {
     return { ok: false, reason: "invalid", message: "That email and password did not match." };
   }
@@ -99,6 +99,23 @@ export async function signIn(
       issuedAt: new Date().toISOString(),
     },
   };
+}
+
+/** The original email link is consumed only against its issuing business. */
+export async function redeemSignInLink(input: { instanceUrl: string; link: string; email: string }, fetchImpl: FetchLike): Promise<SignInResult> {
+  let token: string;
+  try {
+    const url = new URL(input.link.trim());
+    if (url.origin !== new URL(input.instanceUrl).origin || !/^\/(?:[a-z]{2}(?:-[A-Za-z]{2,4})?\/)?portal\/magic\/?$/.test(url.pathname)) throw new Error("wrong site");
+    token = url.searchParams.get("token") ?? "";
+    if (token.length < 20 || token.length > 200) throw new Error("invalid token");
+  } catch { return { ok: false, reason: "invalid", message: "Use the original sign-in link from this business's email." }; }
+  try {
+    const response = await fetchImpl(`${input.instanceUrl}/api/v1/auth.consumeCustomerMagicLink`, { method: "POST", credentials: "omit", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) });
+    const body = await response.json() as { token?: string };
+    if (!response.ok || !body.token) return { ok: false, reason: "invalid", message: "That sign-in link is no longer valid." };
+    return { ok: true, session: { instanceUrl: input.instanceUrl, token: body.token, email: input.email, issuedAt: new Date().toISOString() } };
+  } catch { return { ok: false, reason: "unreachable", message: "Could not reach the site." }; }
 }
 
 export async function saveSession(store: SecretStore, session: Session): Promise<void> {

@@ -870,6 +870,31 @@ export const cancelByToken = defineService({
   },
 });
 
+/** Capability links belong only to the linked customer, including for owners. */
+export const myBookingLinks = defineService({
+  name: "bookings.myLinks",
+  summary: "Management links for the signed-in customer's own appointments.",
+  kind: "query",
+  permission: "scoped",
+  selfService: { contactField: "contactId" },
+  mcpExclude: true,
+  agentCallable: false,
+  input: z.object({ contactId: uuid, bookingIds: z.array(uuid).min(1).max(500) }),
+  output: z.array(z.object({ id: uuid, token: z.string() })),
+  handler: async (input, ctx) => {
+    // Scoped owner grants bypass the generic selfService guard. They must not
+    // bypass this one: these links authorize acting as the customer.
+    if (ctx.actor.kind !== "user") throw new ServiceError("permission", "You can only see your own records.");
+    const [own] = await ctx.tx.select({ id: contacts.id }).from(contacts)
+      .where(eq(contacts.userId, ctx.actor.userId)).limit(1);
+    if (!own || own.id !== input.contactId) throw new ServiceError("permission", "You can only see your own records.");
+    const rows = await ctx.tx.select({ id: bookings.id, token: bookings.rescheduleToken })
+      .from(bookings).where(and(eq(bookings.contactId, own.id),
+        sql`${bookings.id} = any(${sql.param(input.bookingIds)}::uuid[])`));
+    return rows.flatMap((booking) => booking.token ? [{ id: booking.id, token: booking.token }] : []);
+  },
+});
+
 export const listBookings = defineService({
   name: "bookings.list",
   summary: "Appointments in a window, by calendar or by customer.",
@@ -1218,6 +1243,7 @@ export default [
   rescheduleByToken,
   cancelByToken,
   listBookings,
+  myBookingLinks,
   getBooking,
   addBookingParticipant,
   removeBookingParticipant,

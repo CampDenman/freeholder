@@ -41,7 +41,8 @@ describe("the Expo application (C10.23)", () => {
       expect(code(file), file).not.toMatch(/message=\{SCREENS\./);
     }
     const data = code("src/lib/screen-data.ts");
-    expect(data).toContain("[screen, service, instanceUrl, token, cache, serialized, enabled, attempt]");
+    expect(data).toContain("[screen, service, instanceUrl, token, scopedCache, serialized, enabled, attempt]");
+    expect(data).toContain("[token, cache]");
   });
   it("stays outside the root pnpm workspace", () => {
     // Every CI job runs `pnpm install --frozen-lockfile` at the root. A React
@@ -95,7 +96,7 @@ describe("the Expo application (C10.23)", () => {
   it("renders no colour of its own", () => {
     // Colours come from the instance's semantic tokens. A literal here is a
     // colour that cannot be rebranded without a store review.
-    for (const file of ["src/lib/ui.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx"]) {
+    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx"]) {
       const source = read(file).replace(/^\s*\/\/.*$/gm, "");
       expect(source, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     }
@@ -103,7 +104,7 @@ describe("the Expo application (C10.23)", () => {
 
   it("gives every built screen a loading, empty and error state", () => {
     // F04: a screen that renders nothing while it waits looks broken.
-    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx"]) {
+    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx"]) {
       const source = read(file);
       expect(source, file).toContain("Loading");
       expect(source, file).toMatch(/Empty|emptyKey/);
