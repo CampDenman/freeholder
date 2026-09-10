@@ -28,4 +28,16 @@ describe("fast gate execution evidence (C11.15)", () => {
   it("does not count failed tests as passing evidence", () => {
     expect(missingContractEvidence([file], report(["failed"]))).toEqual([file]);
   });
+
+  it("uses the platform's path casing when the runner canonicalizes the workspace", () => {
+    const result = report(["passed"]);
+    result.testResults[0]!.name = resolve(file).toUpperCase();
+    expect(missingContractEvidence([file], result)).toEqual(process.platform === "win32" ? [] : [file]);
+  });
+
+  it("never substitutes a different directory's test with the same basename", () => {
+    const result = report(["passed"]);
+    result.testResults[0]!.name = resolve("tests/other/example.test.ts");
+    expect(missingContractEvidence([file], result)).toEqual([file]);
+  });
 });

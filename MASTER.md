@@ -8151,6 +8151,8 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   list, empty and failed-room states. **F05** HTTP/OpenAPI/SDK and normal agent
   discovery expose the contact-bound query. **F06** en/es/fr room labels reuse
   the portal's semantic light/dark UI; browser assertions cover all six views.
+  That browser audit found missing document titles on generic portal rooms;
+  the shared page now generates its translated room title.
   **F07** expired/revoked invitations disappear; explicit image bearer failure
   never falls back to cookies, and the slug is checked inside `viewItem`.
   Header-authenticated images are no-store; browser cookies retain the existing
@@ -8159,8 +8161,10 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   watermarks and expiry have integration tests; the browser journey follows
   portal → gallery → login. **F09** no jobs or storage changes; existing gallery
   privacy, merge and retention apply. **F10** the website gets the same room
-  before the native tab. **F11** generated SDK and changeset updated. Validation
-  is in progress; this checkbox remains open until the new checks pass.)*
+  before the native tab. **F11** generated SDK, app README and changeset updated.
+  The 17 focused tests in `tests/core/customer-galleries.test.ts` and
+  `tests/core/portal-rooms.test.ts` passed, as did 190 required contract tests.
+  Browser validation is in progress; this checkbox remains open until it passes.)*
 - [ ] **C10.27** Build the galleries tab and the proofing screen on C10.29's
   customer portal room and private image transport; then
   `galleries.openWithLogin` → `galleries.viewSession`
@@ -8356,6 +8360,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   `0.0.0` because the droplet was never redeployed after C3.20 — a gate that
   `CHANGELOG.md`'s top version equals `package.json` closes the first; the
   §18 recipe should make the second visible.)
+  *(2026-09-10 validation follow-up: `scripts/contract-evidence.mjs` now
+  normalizes Windows path casing before comparing required files with Vitest
+  results. A run with 188 passing tests had been rejected because `C:\Users`
+  and `C:\users` differed. `tests/core/contract-evidence.test.ts` covers the
+  platform-specific comparison and rejects a different directory with the same
+  filename. Missing, empty, skipped and failed-only files still fail closed.)*
 - [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
   prove there is no affirmative feature without a completed checklist item.
 - [ ] **C11.17 — DONE** Run the full clean-room install, migration, test,

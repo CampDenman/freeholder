@@ -302,6 +302,7 @@ test.describe("real-browser product journeys", () => {
               const prefix = locale === "en" ? "" : `/${locale}`;
               await visitor.addCookies([{ name: THEME_COOKIE, value: theme, url: new URL(page.url()).origin }]);
               await customerPage.goto(`${prefix}/portal/galleries`);
+              await expect(customerPage).toHaveTitle(translator(locale)("portal.room.galleries"));
               await expect(customerPage.getByRole("heading", { name: translator(locale)("portal.room.galleries"), exact: true })).toBeVisible();
               await expect(customerPage.locator("html")).toHaveAttribute("lang", locale);
               await expect(customerPage.locator("html")).toHaveAttribute("data-theme", theme);
