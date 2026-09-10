@@ -8164,11 +8164,15 @@ schema they inherit reads as a designed thing rather than an excavation.
   passing acceptance test.
   (**Worklist, 2026-09-09.** The tree has zero TODO/FIXME markers and no
   dead admin actions; the false positives are in the gates themselves.
-  `pnpm gates` omits `merge-completeness`, `registry-completeness`,
-  `docs-availability` and `plan-gate`, all DB-free and together under a
-  minute, and lists `cms-a11y`, which skips silently without a database, so
-  the fast run reports green having run nothing for it — make a listed file
-  that runs zero tests a failure. The colour rule is enforced only for
+  **Gate follow-up, 2026-09-10:** `pnpm gates` now includes
+  `merge-completeness`, `registry-completeness`, `docs-availability` and
+  `plan-gate`, and checks the runner's JSON report for at least one passing
+  test in every listed file. Missing, empty and entirely skipped files fail
+  (`tests/core/contract-evidence.test.ts`). Correction to the earlier audit:
+  `cms-a11y` has static tests that run without a database; only its database
+  group skips. The popup browser journey now waits for the committed Live
+  status instead of the Saved message left over from creation. These bounded
+  gate repairs do not complete C11.15. The colour rule is enforced only for
   Tailwind palette and arbitrary-value utilities: `.css` is not linted at all
   (`app/globals.css` shadow fallbacks are `rgb()` literals), bare hex in
   `style={{}}` or attributes passes, and `packages/**` is outside ESLint
