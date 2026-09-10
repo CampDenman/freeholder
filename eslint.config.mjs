@@ -94,7 +94,11 @@ const I18N_GATE = [
 
 export default tseslint.config(
   {
-    ignores: [".next/**", "node_modules/**", "packages/**", "db/**"],
+    // `apps/**` is the Expo customer app (C10.23). It sits outside the root
+    // pnpm workspace with its own tsconfig, dependencies and CI job, so
+    // type-aware linting here would resolve its imports against the wrong
+    // project and report every one of them as missing.
+    ignores: [".next/**", "node_modules/**", "packages/**", "db/**", "apps/**"],
   },
   // Type-aware from here down. Several gates in §15 are statements about
   // values, not syntax, and cannot be written without the type checker.

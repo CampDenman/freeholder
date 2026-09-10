@@ -21,6 +21,27 @@ env:
   SESSION_SECRET: ci-build-only-not-a-real-secret-0000000000
 
 jobs:
+  mobile:
+    name: Customer app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      # `npm ci` inside apps/mobile, not the workspace install. The app sits
+      # outside the root pnpm workspace on purpose: a React Native dependency
+      # graph that only this app needs must not be billed to every other job.
+      - name: Install the customer app
+        working-directory: apps/mobile
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck the customer app
+        working-directory: apps/mobile
+        run: npx tsc -p tsconfig.json --noEmit
+
   application:
     name: Application gates
     runs-on: ubuntu-latest
@@ -63,6 +84,19 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: low
+          # `image-size` reaches the tree only through Metro — React Native's
+          # bundler — via @react-native/community-cli-plugin and metro-config.
+          # It reads image dimensions while bundling on a developer machine or
+          # in CI; it is never on a customer's phone, so the denial of service
+          # needs somebody to bundle a malicious JXL/HEIF/ICNS image of their
+          # own. Every published version is affected, so unlike the pnpm
+          # overrides above there is no patch to take.
+          #
+          # Two named advisories, not a path exemption: every other advisory in
+          # the mobile app's ~600 packages still fails this build at severity
+          # low, including any that would reach a device. Delete these the day
+          # upstream publishes a fix.
+          allow-ghsas: GHSA-w3rx-r6r6-pgpr, GHSA-5p2g-fcmc-qvqq
       - name: Secret scan
         uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c # v3.97.4
         with:
@@ -326,7 +360,7 @@ jobs:
     # `checks` and the merge queue lands the candidate (merge-group 33993046449).
     name: checks
     if: ${{ always() }}
-    needs: [application, security, codeql, tests, ownership, browser, deployment]
+    needs: [mobile, application, security, codeql, tests, ownership, browser, deployment]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

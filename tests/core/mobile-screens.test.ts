@@ -16,6 +16,8 @@ import {
   pushLink,
   resolveDeepLink,
 } from "../../packages/mobile-app/src/deep-links";
+import { ready } from "@/core/runtime";
+import { getService } from "@/core/service";
 
 function sdkServiceNames(): Set<string> {
   const source = readFileSync("packages/sdk/src/generated.ts", "utf8");
@@ -55,6 +57,24 @@ describe("screen contracts (C10.13)", () => {
       expect(SCREENS[id].audience, id).toBe("signed-in");
     }
     expect(screensNeedingSignIn()).toContain("bookings");
+  });
+
+  it("lets a public screen name only services a stranger may call", async () => {
+    // Registered is not the same as callable. C10.23's catalog first read
+    // `catalog.listProducts` — a real name, so the check above passed — and an
+    // owner-only service, so every customer saw the error state. A screen the
+    // app shows before sign-in may read only what an anonymous visitor may
+    // call, plus the `authenticated` reads it adds once a session exists; it
+    // never reads a scoped or system service, and it never writes.
+    await ready();
+    const publicScreens = SCREEN_IDS.filter((id) => SCREENS[id].audience === "public");
+    const offending = publicScreens.flatMap((id) =>
+      SCREENS[id].reads
+        .map((name) => ({ screen: id, service: name, permission: getService(name).def.permission }))
+        .filter((entry) => entry.permission !== "public" && entry.permission !== "authenticated"),
+    );
+    expect(offending).toEqual([]);
+    for (const id of publicScreens) expect(SCREENS[id].writes, id).toEqual([]);
   });
 
   it("does not let the app take payment in-app", () => {

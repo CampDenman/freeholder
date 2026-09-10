@@ -92,7 +92,7 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     // Services are products with a `service_offerings` row attached, so one
     // listing covers both. There is no separate "list services" call, and
     // inventing one in the app would be the second implementation §35.1 bans.
-    reads: ["catalog.listProducts"],
+    reads: ["catalog.listVisibleProducts"],
     writes: [],
     emptyKey: "app.catalog.empty",
     cacheable: true,
@@ -111,7 +111,7 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "product",
     audience: "public",
     titleKey: "app.product.title",
-    reads: ["catalog.getProduct"],
+    reads: ["catalog.resolveVisibleProduct"],
     writes: [],
     param: "slug",
     emptyKey: "app.product.empty",
