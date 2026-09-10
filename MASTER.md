@@ -7895,7 +7895,16 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   services; the app calls `/api/v1/<service>`, the same surface the website,
   CLI and MCP use. **F03** N/A — the app holds no contact of its own.
   **F04** connect, home and catalog, each with loading, empty and error
-  states, and cached content that says when it was fetched. **F05** N/A —
+  states, and cached content that says when it was fetched. The catalog and
+  product contracts read `catalog.listVisibleProducts` and
+  `catalog.resolveVisibleProduct`, the public projections: the first draft
+  named `catalog.listProducts`, a registered name — so the C10.13 SDK check
+  passed — and an owner-only service, so every customer would have seen the
+  error state. `tests/core/mobile-screens.test.ts` now boots the registry and
+  refuses a public screen that reads anything but a public or authenticated
+  service; the same assertion must extend to the signed-in screens as C10.24
+  builds them, because four of their contracts have the same defect.
+  **F05** N/A —
   this is a human client of the existing agent surface. **F06** locale,
   currency and timezone come from the instance; colours come from its semantic
   tokens, so a rebrand needs no store review. **F07** the session is in the

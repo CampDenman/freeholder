@@ -3,7 +3,10 @@
 // What the business sells (C10.23). Contract: SCREENS.catalog.
 //
 // Public, because a customer who has just installed the app should see what is
-// on offer before being asked who they are (§35.1).
+// on offer before being asked who they are (§35.1). That is also why it reads
+// `catalog.listVisibleProducts` and not `catalog.listProducts`: the latter is
+// the owner's list, permission "scoped", and a customer calling it gets a
+// refusal — a screen whose every visitor sees the error state is not a screen.
 import { FlatList } from "react-native";
 import { SCREENS } from "@freeholder/mobile-app";
 import { useInstance } from "@/lib/instance";
@@ -11,9 +14,9 @@ import { memoryCache } from "@/lib/cache";
 import { useScreenData } from "@/lib/screen-data";
 import { Empty, Loading, Problem, Row, Screen, StalenessNotice, Title } from "@/lib/ui";
 
-interface Products {
-  products?: { id: string; name: string; slug?: string; summary?: string }[];
-}
+// `catalog.listVisibleProducts` answers with the public projection of each
+// active, public product — a plain array, not an envelope.
+type Products = { id: string; name: string; slug: string; subtitle: string | null }[];
 
 export default function Catalog() {
   const { instance, brand, session } = useInstance();
@@ -24,7 +27,7 @@ export default function Catalog() {
   // inventing one in the app would be the second implementation §35.1 bans.
   const data = useScreenData<Products>({
     screen: "catalog",
-    service: "catalog.listProducts",
+    service: "catalog.listVisibleProducts",
     caller,
     cache: memoryCache,
     params: { limit: 50 },
@@ -43,11 +46,11 @@ export default function Catalog() {
         <Problem brand={brand} message={data.error} onRetry={data.reload} />
       ) : (
         <FlatList
-          data={data.value?.products ?? []}
+          data={data.value ?? []}
           keyExtractor={(item) => item.id}
           ListEmptyComponent={<Empty brand={brand} message={SCREENS.catalog.emptyKey} />}
           renderItem={({ item }) => (
-            <Row brand={brand} title={item.name} detail={item.summary} />
+            <Row brand={brand} title={item.name} detail={item.subtitle ?? undefined} />
           )}
         />
       )}

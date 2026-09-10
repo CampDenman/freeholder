@@ -55,13 +55,13 @@ describe("the Expo application (C10.23)", () => {
   });
 
   it("asks only for services its screen contract allows", () => {
-    // Home reads portal.myRecords; catalog reads catalog.listProducts. If a
+    // Home reads portal.myRecords; catalog reads catalog.listVisibleProducts. If a
     // screen ever asks for something else, `assertOnContract` throws before a
     // request is made.
     expect(read("app/(tabs)/index.tsx")).toContain('service: "portal.myRecords"');
     expect(SCREENS.home.reads).toContain("portal.myRecords");
-    expect(read("app/(tabs)/catalog.tsx")).toContain('service: "catalog.listProducts"');
-    expect(SCREENS.catalog.reads).toContain("catalog.listProducts");
+    expect(read("app/(tabs)/catalog.tsx")).toContain('service: "catalog.listVisibleProducts"');
+    expect(SCREENS.catalog.reads).toContain("catalog.listVisibleProducts");
   });
 
   it("speaks the platform's own HTTP API, not a mobile endpoint", () => {
