@@ -99,20 +99,20 @@ describe.runIf(hasDatabase)("bookings", { timeout: 60_000 }, () => {
     const result = await signIn({ instanceUrl: "https://example.test", email: "rae@example.test", password }, async (url, init) => dispatch(new Request(url, init), new URL(url).pathname.split("/").at(-1)!));
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected a customer session");
-    const call = async (name: string, input: unknown, bearer = result.session.token) => {
+    const call = async <T>(name: string, input: unknown, bearer = result.session.token): Promise<T> => {
       const response = await dispatch(new Request(`https://example.test/api/v1/${name}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${bearer}` }, body: JSON.stringify(input) }), name);
       expect(response.status, name).toBe(200);
-      return response.json();
+      return await response.json() as T;
     };
-    const profile = await call("portal.myProfile", {});
+    const profile = await call<{ contactId: string }>("portal.myProfile", {});
     expect(profile.contactId).toBe(own.contactId);
-    const links = await call("bookings.myLinks", { contactId: profile.contactId, bookingIds: [own.id] });
-    const moved = await call("bookings.rescheduleByToken", { token: links[0].token, startsAt: TEN, endsAt: ELEVEN });
+    const links = await call<{ token: string }[]>("bookings.myLinks", { contactId: profile.contactId, bookingIds: [own.id] });
+    const moved = await call<{ id: string }>("bookings.rescheduleByToken", { token: links[0]!.token, startsAt: TEN, endsAt: ELEVEN });
     expect(moved.id).not.toBe(own.id);
-    const newLinks = await call("bookings.myLinks", { contactId: own.contactId, bookingIds: [moved.id] });
-    expect(newLinks[0].token).not.toBe(links[0].token);
-    await call("bookings.cancelByToken", { token: newLinks[0].token });
-    expect((await call("bookings.byToken", { token: newLinks[0].token })).status).toBe("cancelled");
+    const newLinks = await call<{ token: string }[]>("bookings.myLinks", { contactId: own.contactId, bookingIds: [moved.id] });
+    expect(newLinks[0]!.token).not.toBe(links[0]!.token);
+    await call("bookings.cancelByToken", { token: newLinks[0]!.token });
+    expect((await call<{ status: string }>("bookings.byToken", { token: newLinks[0]!.token })).status).toBe("cancelled");
     await call("auth.logout", { token: result.session.token });
     const denied = await dispatch(new Request("https://example.test/api/v1/portal.myProfile", { headers: { authorization: `Bearer ${result.session.token}` } }), "portal.myProfile");
     expect(denied.status).toBe(401);

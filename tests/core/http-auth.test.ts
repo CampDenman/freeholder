@@ -80,7 +80,7 @@ describe.runIf(hasDatabase)("the auth routes", () => {
       expect(response.status).toBe(401);
     }
     const session = await sessionRoute(get("https://example.test/api/auth/session", cookie));
-    expect((await session.json()).user).not.toBeNull();
+    expect((await session.json() as { user: unknown }).user).not.toBeNull();
     const bearerActor = await actorFromRequest(new Request("https://example.test", { headers: { authorization: `Bearer ${sessionTokenFrom(created)}` } }));
     expect(bearerActor.kind).toBe("user");
   });
