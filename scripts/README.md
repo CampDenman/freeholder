@@ -5,6 +5,13 @@ export and restore rehearsal, the SEO and accessibility public gates, schema
 compatibility, changelog enforcement and the upgrade gate. Package scripts in
 the root `package.json` are the supported commands.
 
+`pnpm gates` runs the inexpensive pre-push checks. Its contract suite includes
+contact merge coverage, registry completeness, documentation availability and
+plan integrity. Every listed test file must report at least one passing test;
+a missing, empty or entirely skipped file fails the gate. Database cases in
+mixed suites still require a disposable `TEST_DATABASE_URL`. Browser checks
+run separately against a built app; recipe, SEO and upgrade checks need Docker.
+
 `doctor.mjs` accepts an owner password plus `--totp-secret` (or the equivalent
 `FREEHOLDER_*` variables) for an interactive owner check. Automation should use
 a bearer key scoped to `platform.doctor` through `--api-key` /

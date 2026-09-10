@@ -517,7 +517,13 @@ Series:   active → paused → completed | cancelled   (per-occurrence override
   consultation produces no invoice at all.
 - **Rescheduling creates a new row** linked to the prior one, so the history of
   a moved appointment survives. Customers reschedule through a signed
-  `reschedule_token` link, with no login and no support email.
+  `reschedule_token` link, with no login and no support email. *(Decided
+  2026-09-10.)* A signed-in customer may also ask for **their own** booking
+  links: a `selfService` query returns the link for each booking whose
+  `contact_id` is the caller's, because a session that already proves who
+  they are is at least as strong as the emailed link. Lists a business or
+  staff member reads still never carry a bearer value (`PortalRecord.href`
+  stays `null`), so the token reaches exactly one person either way.
 - **Cancellation is policy-driven, not ad hoc.** The policy attached to the
   service decides whether a refund, a credit, or a fee applies, and the
   customer saw the terms before booking.
@@ -950,6 +956,13 @@ are strict enough to belong in the spine instead of a plugin.
   route. So the channel a message arrived on is a fact about that message and
   never changes, while the channel a reply would use is a fact about the thread
   and follows the last thing that happened. (Settled 2026-08-23, C7.08.)
+- **A signed-in customer can reply in their own thread.** *(Decided
+  2026-09-10.)* `conversations.replyAsContact` writes an `inbound` message
+  from the session's own contact into the session's own conversation — the
+  portal and the app are simply one more channel a customer can arrive by.
+  It never sends on the thread's `reply_channel` (that is the business
+  speaking, `conversations.reply`), it is untrusted input like every other
+  inbound message, and it is rate-limited per contact like a form.
 - **An inbound message resolves to a Contact, always.** The phone number is
   normalised to E.164 and passed to `contacts.resolve` (never `create`) through
   `ctx.callAsSystem`, so a text from an unknown number produces a real contact
@@ -7971,14 +7984,13 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   own list through `bookings.list` (`selfService`, so the screen first learns
   its `contactId` from `portal.myProfile`), and reschedule, cancel and intake
   through the existing token services, mirroring
-  `app/portal/appointments/[token]`. **Decision needed first:** the list
-  deliberately omits the reschedule token (`PortalRecord.href` is `null` so a
-  list never carries a bearer value), so a signed-in customer cannot open a
-  booking from the list on any surface. Either a self-service query mints the
-  customer's own booking link for a session that already proves identity, or
-  the app reaches bookings only from push and email links; record the choice in
-  §4.4. Booking *creation* stays on the web until a customer-callable request
-  path exists — `bookings.create` is an owner mutation.
+  `app/portal/appointments/[token]`. **Decided 2026-09-10 (§4.4):** a
+  `selfService` query (`bookings.myLinks` or equivalent) returns the caller's
+  own booking links, so the list opens a booking; owner-facing lists keep
+  `PortalRecord.href` as `null`. Evidence includes a test that the query
+  refuses a `contactId` other than the caller's and never appears in an
+  owner list. Booking *creation* stays on the web until a customer-callable
+  request path exists — `bookings.create` is an owner mutation.
 - [ ] **C10.26** Build the invoices tab and the invoice screen against C5.25:
   list from `portal.myRecords`, detail from a customer-authorized read, and a
   Pay button that opens the C5.25 page in the system browser and returns by
@@ -7996,11 +8008,13 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   that limit.
 - [ ] **C10.28** Build messages, newsletters and the account tab. Messages:
   the customer's threads through `conversations.list` (`selfService`), a thread
-  view, and a reply that is a *customer* message — today no such service
-  exists (`conversations.reply` is the business speaking; the customer-origin
-  paths are the public `cms.submit*` services), so add one under §4.14's
-  inbound rules or ship the screen read-only and drop it from the pinned
-  writes list. Newsletters: `newsletters.listPublic` to learn what may be
+  view, and a reply that is a *customer* message. **Decided 2026-09-10
+  (§4.14):** add `conversations.replyAsContact`, an `authenticated` mutation
+  that writes an `inbound` message from the caller's own contact into the
+  caller's own thread, never sends on `reply_channel`, is treated as untrusted
+  input and is rate-limited per contact; the web portal's messages room gains
+  the same thread view and reply so the app is not the only place it exists.
+  Newsletters: `newsletters.listPublic` to learn what may be
   subscribed to, `subscribe`, and `privacy.setMyMarketingPreference` for the
   signed-in preference — never the email-footer `unsubscribe` token. Account:
   `portal.myProfile`, `portal.myRecords`, sign out with device-token revoke
@@ -8150,11 +8164,15 @@ schema they inherit reads as a designed thing rather than an excavation.
   passing acceptance test.
   (**Worklist, 2026-09-09.** The tree has zero TODO/FIXME markers and no
   dead admin actions; the false positives are in the gates themselves.
-  `pnpm gates` omits `merge-completeness`, `registry-completeness`,
-  `docs-availability` and `plan-gate`, all DB-free and together under a
-  minute, and lists `cms-a11y`, which skips silently without a database, so
-  the fast run reports green having run nothing for it — make a listed file
-  that runs zero tests a failure. The colour rule is enforced only for
+  **Gate follow-up, 2026-09-10:** `pnpm gates` now includes
+  `merge-completeness`, `registry-completeness`, `docs-availability` and
+  `plan-gate`, and checks the runner's JSON report for at least one passing
+  test in every listed file. Missing, empty and entirely skipped files fail
+  (`tests/core/contract-evidence.test.ts`). Correction to the earlier audit:
+  `cms-a11y` has static tests that run without a database; only its database
+  group skips. The popup browser journey now waits for the committed Live
+  status instead of the Saved message left over from creation. These bounded
+  gate repairs do not complete C11.15. The colour rule is enforced only for
   Tailwind palette and arbitrary-value utilities: `.css` is not linted at all
   (`app/globals.css` shadow fallbacks are `rgb()` literals), bare hex in
   `style={{}}` or attributes passes, and `packages/**` is outside ESLint

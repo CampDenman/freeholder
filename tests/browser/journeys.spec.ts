@@ -355,7 +355,10 @@ test.describe("real-browser product journeys", () => {
       await page.getByLabel("Text").fill("Only once after you close it");
       await expect(page.getByRole("status")).toHaveText("Saved", { timeout: 15_000 });
       await page.getByRole("button", { name: "Make it live" }).click();
-      await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
+      // C11.15: creation already left ?saved=1 and its Saved message on this
+      // page. Wait for the committed status before navigation can interrupt
+      // the publish action; the old message proves only creation succeeded.
+      await expect(page.getByText("Live", { exact: true })).toBeVisible();
 
       await page.goto("/journey");
       await expect(page.getByRole("heading", { name: "A small announcement" })).toBeVisible();

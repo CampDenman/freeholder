@@ -8,11 +8,14 @@
 // and every one of them was reported locally in seconds by a gate that was
 // already in the repository. The gates were not missing. Running them was.
 //
-// What this is NOT: the browser, recipe, SEO and upgrade gates need Docker or
-// a built app and cannot run on the development machine at all (see
-// HANDOFF.md). A green run here means "nothing cheap is broken", never "CI
-// will pass". It is the first filter, not the last word.
+// Browser gates need a built app and a disposable database; recipe, SEO and
+// upgrade gates need Docker. They run separately from this inexpensive pass.
+// A green run here means "nothing cheap is broken", never "CI will pass".
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { missingContractEvidence } from "./contract-evidence.mjs";
 
 const steps = [
   { name: "typecheck", run: "pnpm exec tsc --noEmit" },
@@ -30,6 +33,11 @@ const steps = [
     run: [
       "pnpm exec vitest run --reporter=dot",
       "tests/core/sdk-schema.test.ts",
+      "tests/core/merge-completeness.test.ts",
+      "tests/core/registry-completeness.test.ts",
+      "tests/core/docs-availability.test.ts",
+      "tests/core/plan-gate.test.ts",
+      "tests/core/contract-evidence.test.ts",
       "tests/core/locale-quality.test.ts",
       "tests/core/tokens.test.ts",
       "tests/core/cms-fields.test.ts",
@@ -64,9 +72,34 @@ for (const step of selected) {
   const started = Date.now();
   // One command string rather than argv + shell:true, which Node deprecates
   // (the args are concatenated unescaped). Nothing here takes user input.
-  const result = spawnSync(step.run, { stdio: "inherit", shell: true });
+  const reportDirectory = step.name === "contract suites"
+    ? mkdtempSync(join(tmpdir(), "freeholder-contracts-"))
+    : null;
+  let ok;
+  try {
+    const reportPath = reportDirectory && join(reportDirectory, "results.json");
+    const command = reportPath
+      ? `${step.run} --reporter=json --outputFile.json="${reportPath}"`
+      : step.run;
+    const result = spawnSync(command, { stdio: "inherit", shell: true });
+    ok = result.status === 0;
+    if (reportPath) {
+      try {
+        const files = step.run.split(" ").filter((arg) => arg.endsWith(".test.ts"));
+        const missing = missingContractEvidence(files, JSON.parse(readFileSync(reportPath, "utf8")));
+        if (missing.length) {
+          console.error(`No passing tests in required contract files: ${missing.join(", ")}`);
+          ok = false;
+        }
+      } catch (error) {
+        console.error(`Cannot verify contract test evidence: ${error.message}`);
+        ok = false;
+      }
+    }
+  } finally {
+    if (reportDirectory) rmSync(reportDirectory, { recursive: true, force: true });
+  }
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
-  const ok = result.status === 0;
   if (!ok) failed.push(step.name);
   console.log(`${ok ? "ok  " : "FAIL"}  ${step.name} (${seconds}s)`);
 }
@@ -76,4 +109,4 @@ if (failed.length) {
   console.error("Fix these before pushing; each one is a red pipeline otherwise.");
   process.exit(1);
 }
-console.log("\nAll fast gates pass. The browser, recipe, SEO and upgrade gates still only run in CI.");
+console.log("\nSelected fast gates pass. Browser, recipe, SEO and upgrade gates require separate runs.");
