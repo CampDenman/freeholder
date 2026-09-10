@@ -82,6 +82,15 @@ business is refused. The app refreshes on return and never assumes a browser
 redirect means the invoice was paid. Both C10.25 and C10.26 still need physical
 device interaction and accessibility checks before their checkboxes close.
 
+C10.29 supplies the gallery foundation: `portal.myRecords` now has a
+`galleries` room backed by the caller's own contact and active invitations.
+After `galleries.openWithLogin`, the existing `/g/{slug}/view/{itemId}` image
+route accepts `Authorization: Bearer {gallerySessionToken}`. This is the
+gallery capability, not the user's login token; never put it in the URL.
+The route rechecks gallery/item access and returns header-authenticated images
+with `Cache-Control: private, no-store`. C10.27 still owns the native proofing
+screen and the explicit lifetime and revocation rules for persistent caching.
+
 Home and bookings offer password sign-in or an email link. Copy the original
 email link into the app: it is checked against the connected business and
 consumed once by the existing customer auth service. A two-factor challenge

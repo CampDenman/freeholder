@@ -21,10 +21,15 @@ import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale, getT } from "../../../i18n";
 
-export const metadata: Metadata = {
-  // A portal is a person's own records and never a search result.
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata({ params }: { params: Promise<{ section: string }> }): Promise<Metadata> {
+  const { section } = await params;
+  const t = await getT();
+  return {
+    title: t(`portal.room.${section}`),
+    // A portal is a person's own records and never a search result.
+    robots: { index: false, follow: false },
+  };
+}
 
 export default async function PortalRoom({
   params,

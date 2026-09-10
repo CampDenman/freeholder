@@ -8135,10 +8135,39 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   and makes the artifact gate reject/scrub them, with a regression proving the
   real workspace's Git metadata survives. Scrubbing reduced the observed
   artifact from 18,154 to 15,468 files without raising its 18,000-file limit.
-- [ ] **C10.27** Build the galleries tab and the proofing screen on the real
-  session flow: a `galleries` portal room (module registers
-  `registerPortalSection`, loads by contact) so `portal.myRecords` lists the
-  customer's galleries; then `galleries.openWithLogin` → `galleries.viewSession`
+- [ ] **C10.29** Supply C10.27's customer gallery foundation: a contact-bound
+  gallery query and module-registered portal room, including active guest
+  invitations and excluding expired/revoked access. Reuse the existing private
+  image route for gallery-session bearer headers, with explicit credentials
+  taking precedence over cookies and the URL slug bound to the session.
+  Verify ownership, guest expiry/revocation, private image authorization and
+  translated portal navigation before building the native proofing screen.
+  *(Implementation 2026-09-10: `galleries.myGalleries` resolves the contact
+  from the actor even with owner grants, selects a minimal credential-free
+  projection, and registers the galleries room. **F01** no schema changes;
+  existing gallery/contact and guest/gallery/contact indexes support the query.
+  **F02/F03** portal and API share that query; gallery login and image access
+  keep the existing service authorization. **F04** the generic portal supplies
+  list, empty and failed-room states. **F05** HTTP/OpenAPI/SDK and normal agent
+  discovery expose the contact-bound query. **F06** en/es/fr room labels reuse
+  the portal's semantic light/dark UI; browser assertions cover all six views.
+  That browser audit found missing document titles on generic portal rooms;
+  the shared page now generates its translated room title.
+  **F07** expired/revoked invitations disappear; explicit image bearer failure
+  never falls back to cookies, and the slug is checked inside `viewItem`.
+  Header-authenticated images are no-store; browser cookies retain the existing
+  60-second cache limit. **F08/F12** customer/owner-grant isolation, guest expiry,
+  private image bytes, cookie precedence, wrong slug, hidden items, missing
+  watermarks and expiry have integration tests; the browser journey follows
+  portal → gallery → login. **F09** no jobs or storage changes; existing gallery
+  privacy, merge and retention apply. **F10** the website gets the same room
+  before the native tab. **F11** generated SDK, app README and changeset updated.
+  The 17 focused tests in `tests/core/customer-galleries.test.ts` and
+  `tests/core/portal-rooms.test.ts` passed, as did 190 required contract tests.
+  Browser validation is in progress; this checkbox remains open until it passes.)*
+- [ ] **C10.27** Build the galleries tab and the proofing screen on C10.29's
+  customer portal room and private image transport; then
+  `galleries.openWithLogin` → `galleries.viewSession`
   → `viewItem`, `setSelection`, `clearSelection`, `submitRound`, mirroring
   `app/g/[slug]` and `app/g/actions.ts`; remove `galleries.list` and
   `galleries.listSelections` from the contract. Persist the read-through cache
@@ -8331,6 +8360,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   `0.0.0` because the droplet was never redeployed after C3.20 — a gate that
   `CHANGELOG.md`'s top version equals `package.json` closes the first; the
   §18 recipe should make the second visible.)
+  *(2026-09-10 validation follow-up: `scripts/contract-evidence.mjs` now
+  normalizes Windows path casing before comparing required files with Vitest
+  results. A run with 188 passing tests had been rejected because `C:\Users`
+  and `C:\users` differed. `tests/core/contract-evidence.test.ts` covers the
+  platform-specific comparison and rejects a different directory with the same
+  filename. Missing, empty, skipped and failed-only files still fail closed.)*
 - [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
   prove there is no affirmative feature without a completed checklist item.
 - [ ] **C11.17 — DONE** Run the full clean-room install, migration, test,
