@@ -132,7 +132,7 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "bookings",
     audience: "signed-in",
     titleKey: "app.bookings.title",
-    reads: ["portal.myProfile", "bookings.list"],
+    reads: ["portal.myProfile", "bookings.list", "bookings.myLinks"],
     writes: [],
     emptyKey: "app.bookings.empty",
     cacheable: true,

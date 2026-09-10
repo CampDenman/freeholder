@@ -175,6 +175,7 @@ export const SERVICE_NAMES = [
   "bookings.ics",
   "bookings.issueWaiver",
   "bookings.list",
+  "bookings.myLinks",
   "bookings.reminders",
   "bookings.removeParticipant",
   "bookings.requirements",
@@ -1951,6 +1952,10 @@ export interface ServiceCatalog {
   "bookings.list": {
     input: { calendarId?: string; contactId?: string; from?: string; to?: string; statuses?: ("requested" | "confirmed" | "in_progress" | "completed" | "no_show" | "cancelled")[]; limit?: number };
     output: { id: string; contactId: string; serviceOfferingId: string | null; calendarId: string; secondaryCalendarIds: string[]; startsAt: string; endsAt: string; timezoneAtBooking: string; status: "requested" | "confirmed" | "in_progress" | "completed" | "no_show" | "cancelled"; locationId: string | null; locationDetail: string | null; capacityUsed: number; exclusive: boolean; invoiceId: string | null; rescheduledFromId: string | null; rescheduleCount: number; intakeSubmissionId: string | null; waiverId: string | null; source: "site" | "admin" | "agent" | "import"; notes: string | null; cancellationReason: string | null; contactName: string | null; contactEmail: string | null; calendarName: string; [key: string]: unknown }[];
+  };
+  "bookings.myLinks": {
+    input: { contactId: string; bookingIds: string[] };
+    output: { id: string; token: string }[];
   };
   "bookings.reminders": {
     input: { bookingId: string };
@@ -6509,6 +6514,7 @@ export interface FreeholderApi {
     ics: (input: ServiceCatalog["bookings.ics"]["input"]) => Promise<ServiceCatalog["bookings.ics"]["output"]>;
     issueWaiver: (input: ServiceCatalog["bookings.issueWaiver"]["input"]) => Promise<ServiceCatalog["bookings.issueWaiver"]["output"]>;
     list: (input?: ServiceCatalog["bookings.list"]["input"]) => Promise<ServiceCatalog["bookings.list"]["output"]>;
+    myLinks: (input: ServiceCatalog["bookings.myLinks"]["input"]) => Promise<ServiceCatalog["bookings.myLinks"]["output"]>;
     reminders: (input: ServiceCatalog["bookings.reminders"]["input"]) => Promise<ServiceCatalog["bookings.reminders"]["output"]>;
     removeParticipant: (input: ServiceCatalog["bookings.removeParticipant"]["input"]) => Promise<ServiceCatalog["bookings.removeParticipant"]["output"]>;
     requirements: (input: ServiceCatalog["bookings.requirements"]["input"]) => Promise<ServiceCatalog["bookings.requirements"]["output"]>;

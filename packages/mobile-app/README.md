@@ -58,6 +58,12 @@ Magic link and password, the portal's own. The token goes in the platform
 keychain via the injected `SecretStore` — never `AsyncStorage`, which is a JSON
 file in the app sandbox that lands in unencrypted device backups.
 
+`signIn` calls the token-returning `auth.login` API projection for passwords
+and `auth.requestCustomerMagicLink` for email links. `redeemSignInLink` accepts
+the original email URL only from the connected instance and passes its token
+to `auth.consumeCustomerMagicLink`. A failed request, used link, or two-factor
+challenge never becomes a stored session. These calls omit ambient cookies.
+
 **Biometric unlock guards re-opening the app, never the login.** A fingerprint
 is a convenience over a session the server already granted, not a factor the
 server knows about. A broken sensor shows the app rather than locking a

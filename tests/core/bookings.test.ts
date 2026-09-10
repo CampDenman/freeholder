@@ -14,15 +14,20 @@ import { bookings } from "@/core/scheduling/schema";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { createCalendar } from "@/core/scheduling/service";
+import { dispatch } from "@/core/api/dispatch";
+import { hashPassword } from "@/core/auth/passwords";
+import { signIn } from "../../packages/mobile-app/src/session";
 import {
   addBookingParticipant,
   createBooking,
   getBooking,
   listBookings,
+  myBookingLinks,
+  bookingByToken,
   rescheduleBooking,
   setBookingStatus,
 } from "@/core/scheduling/bookings";
-import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { closeDb, failure, hasDatabase, OWNER, CUSTOMER, truncateSpine } from "../helpers/spine";
 
 const NINE = "2026-09-14T09:00:00.000Z";
 const TEN = "2026-09-14T10:00:00.000Z";
@@ -65,6 +70,53 @@ describe.runIf(hasDatabase)("bookings", { timeout: 60_000 }, () => {
       OWNER,
     );
   }
+
+  it("returns capability links only to their linked customer, never through owner lists (C10.25)", async () => {
+    const studio = await calendar();
+    const own = await book(studio.id);
+    const other = await book(studio.id, { startsAt: TEN, endsAt: ELEVEN, contact: { email: "other@example.test" } });
+    await db().insert(users).values({ id: CUSTOMER.userId, email: "rae@example.test", role: "customer" });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, own.contactId));
+    const input = { contactId: own.contactId, bookingIds: [own.id, other.id] };
+    const links = await myBookingLinks.call(input, CUSTOMER);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.id).toBe(own.id);
+    expect((await bookingByToken.call({ token: links[0]!.token }, { kind: "anonymous" }))?.id).toBe(own.id);
+    expect((await failure(myBookingLinks.call({ ...input, contactId: other.contactId }, CUSTOMER))).code).toBe("permission");
+    expect((await failure(myBookingLinks.call(input, OWNER))).code).toBe("permission");
+    expect((await failure(myBookingLinks.call(input, { kind: "anonymous" }))).code).toBe("permission");
+    const ownerRows = await listBookings.call({ contactId: own.contactId }, OWNER);
+    expect(JSON.stringify(ownerRows)).not.toContain(links[0]!.token);
+    expect(ownerRows[0]).not.toHaveProperty("rescheduleToken");
+  });
+
+  it("signs in through the mobile transport, opens an own link, moves and cancels (C10.25)", async () => {
+    const studio = await calendar();
+    const own = await book(studio.id);
+    const password = "customer-booking-test-password";
+    await db().insert(users).values({ id: CUSTOMER.userId, email: "rae@example.test", role: "customer", passwordHash: await hashPassword(password) });
+    await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, own.contactId));
+    const result = await signIn({ instanceUrl: "https://example.test", email: "rae@example.test", password }, async (url, init) => dispatch(new Request(url, init), new URL(url).pathname.split("/").at(-1)!));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected a customer session");
+    const call = async <T>(name: string, input: unknown, bearer = result.session.token): Promise<T> => {
+      const response = await dispatch(new Request(`https://example.test/api/v1/${name}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${bearer}` }, body: JSON.stringify(input) }), name);
+      expect(response.status, name).toBe(200);
+      return await response.json() as T;
+    };
+    const profile = await call<{ contactId: string }>("portal.myProfile", {});
+    expect(profile.contactId).toBe(own.contactId);
+    const links = await call<{ token: string }[]>("bookings.myLinks", { contactId: profile.contactId, bookingIds: [own.id] });
+    const moved = await call<{ id: string }>("bookings.rescheduleByToken", { token: links[0]!.token, startsAt: TEN, endsAt: ELEVEN });
+    expect(moved.id).not.toBe(own.id);
+    const newLinks = await call<{ token: string }[]>("bookings.myLinks", { contactId: own.contactId, bookingIds: [moved.id] });
+    expect(newLinks[0]!.token).not.toBe(links[0]!.token);
+    await call("bookings.cancelByToken", { token: newLinks[0]!.token });
+    expect((await call<{ status: string }>("bookings.byToken", { token: newLinks[0]!.token })).status).toBe("cancelled");
+    await call("auth.logout", { token: result.session.token });
+    const denied = await dispatch(new Request("https://example.test/api/v1/portal.myProfile", { headers: { authorization: `Bearer ${result.session.token}` } }), "portal.myProfile");
+    expect(denied.status).toBe(401);
+  });
 
   it("resolves the customer into the spine rather than creating a second one", async () => {
     const studio = await calendar();

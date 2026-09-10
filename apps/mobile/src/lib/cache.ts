@@ -10,9 +10,9 @@
 // accident here.
 import type { Cache } from "@freeholder/mobile-app";
 
-const store = new Map<string, string>();
-
-export const memoryCache: Cache = {
+export function createMemoryCache(): Cache {
+  const store = new Map<string, string>();
+  return {
   async get(key) {
     return store.get(key) ?? null;
   },
@@ -22,4 +22,7 @@ export const memoryCache: Cache = {
   async delete(key) {
     store.delete(key);
   },
-};
+  };
+}
+
+export const memoryCache = createMemoryCache();

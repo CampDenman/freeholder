@@ -2,17 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // The customer's home (C10.23). Contract: SCREENS.home.
 import { View } from "react-native";
+import { useState } from "react";
 import { SCREENS } from "@freeholder/mobile-app";
 import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
+import { SignIn } from "@/screens/sign-in";
 import { memoryCache } from "@/lib/cache";
 import { useScreenData } from "@/lib/screen-data";
-import { Body, Empty, Loading, Muted, Problem, Screen, StalenessNotice, Title } from "@/lib/ui";
+import { Body, Button, Empty, Loading, Muted, Problem, Screen, StalenessNotice, Title } from "@/lib/ui";
 
 type Records = { records: { id: string; title: string; detail?: string }[] }[];
 
 export default function Home() {
-  const { instance, brand, session } = useInstance();
+  const { instance, brand, session, signOut } = useInstance();
+  const [signOutError, setSignOutError] = useState(false);
   const t = useAppText();
   const caller = instance ? { instanceUrl: instance.url, token: session?.token ?? null } : null;
 
@@ -34,6 +37,8 @@ export default function Home() {
     <Screen brand={brand}>
       <Title brand={brand}>{brand.name}</Title>
       {brand.tagline ? <Muted brand={brand}>{brand.tagline}</Muted> : null}
+      {session ? <Button brand={brand} label={t("app.auth.localSignOut")} variant="quiet" onPress={() => { setSignOutError(false); void signOut().catch(() => setSignOutError(true)); }} /> : null}
+      {signOutError ? <Problem brand={brand} message={t("app.auth.signOutFailed")} /> : null}
 
       <View style={{ height: 16 }} />
       <StalenessNotice brand={brand} label={data.staleness} />
@@ -41,7 +46,7 @@ export default function Home() {
       {!session ? (
         // Browsing is public; anything about *this* customer is not. Saying so
         // beats an empty list that looks broken.
-        <Body brand={brand}>{t("app.signInHint")}</Body>
+        <SignIn />
       ) : data.loading ? (
         <Loading brand={brand} />
       ) : data.error ? (

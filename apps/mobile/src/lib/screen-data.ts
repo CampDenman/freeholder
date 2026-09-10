@@ -11,7 +11,8 @@
 // Offline behaviour is `@freeholder/mobile-app`'s `readThrough` (C10.12), so
 // the write-never rule and the "say when it was fetched" rule are enforced in
 // one place for every screen rather than remembered in each.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createMemoryCache, memoryCache } from "./cache";
 import {
   cacheKey,
   freshnessLabel,
@@ -56,6 +57,7 @@ export async function callService<T>(
 ): Promise<T> {
   const response = await fetch(`${caller.instanceUrl}/api/v1/${service}`, {
     method: "POST",
+    credentials: "omit",
     headers: {
       "content-type": "application/json",
       ...(caller.token ? { authorization: `Bearer ${caller.token}` } : {}),
@@ -148,6 +150,9 @@ export function useScreenData<T>(input: {
   // so updating request state does not trigger an endless refetch loop.
   const instanceUrl = caller?.instanceUrl;
   const token = caller?.token;
+  // Private reads use an isolated process-memory cache for this session.
+  // A late response from a former account can only write into its old cache.
+  const scopedCache = useMemo(() => token && cache === memoryCache ? createMemoryCache() : cache, [token, cache]);
 
   const reload = useCallback(() => setAttempt((count) => count + 1), []);
 
@@ -168,7 +173,7 @@ export function useScreenData<T>(input: {
             service,
           },
           () => callService<T>({ instanceUrl, token: token ?? null }, service, JSON.parse(serialized)),
-          SCREENS[screen].cacheable ? cache : passthrough,
+          SCREENS[screen].cacheable ? scopedCache : passthrough,
         );
         if (cancelled) return;
         setState({
@@ -195,7 +200,7 @@ export function useScreenData<T>(input: {
     return () => {
       cancelled = true;
     };
-  }, [screen, service, instanceUrl, token, cache, serialized, enabled, attempt]);
+  }, [screen, service, instanceUrl, token, scopedCache, serialized, enabled, attempt]);
 
   return { ...state, reload };
 }

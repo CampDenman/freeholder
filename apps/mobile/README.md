@@ -14,6 +14,10 @@ npm install
 npm start
 ```
 
+Metro and TypeScript both consume `packages/mobile-app/src`. To check both native
+bundles without a simulator, run `npx expo export --platform android --platform
+ios` from this directory.
+
 ## Why this is not in the pnpm workspace
 
 Every CI job in this repository runs `pnpm install --frozen-lockfile` at the
@@ -65,9 +69,19 @@ the contract test rejects a stale subset or a missing screen label.
   installed the app should see what is on offer before being asked who they
   are.
 
-Booking, invoice pay, galleries and proofing, portal messages and newsletters
-are C10.25–C10.28. The tab bar renders only the screens that exist; a tab leading
-nowhere is a dead end.
+Bookings (C10.25) use the customer's profile and own list, then uncached
+management links. The detail reads live, applies the server's rescheduling
+policy, confirms cancellation, and opens existing intake/waiver web forms.
+The native picker uses the appointment's timezone; the preview also shows the
+business timezone. Invoice pay, galleries/proofing, messages and newsletters
+remain C10.26–C10.28.
+
+Home and bookings offer password sign-in or an email link. Copy the original
+email link into the app: it is checked against the connected business and
+consumed once by the existing customer auth service. A two-factor challenge
+never becomes a session; those accounts currently use the website. User
+sessions travel as bearer credentials with cookies omitted, and are stored
+only for their issuing instance. Browser cookie requests retain CSRF checks.
 
 ## Rules the code keeps
 
@@ -83,6 +97,6 @@ nowhere is a dead end.
 
 ## Limits
 
-`npm start` needs a simulator or Expo Go. CI typechecks the app on every
-change; building actual store binaries is C10.16, which is where EAS and the
+`npm start` needs a simulator or Expo Go. CI typechecks and bundles Android
+and iOS on every change; building actual store binaries is C10.16, where EAS and the
 submission checklists belong.

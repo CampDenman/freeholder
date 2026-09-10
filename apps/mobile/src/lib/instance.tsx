@@ -16,11 +16,14 @@ import {
   discover,
   loadSession,
   saveSession,
+  signIn as requestSignIn,
+  redeemSignInLink,
   signOut as clearSession,
   type Brand,
   type Instance,
   type SecretStore,
   type Session,
+  type SignInResult,
 } from "@freeholder/mobile-app";
 
 /**
@@ -49,6 +52,7 @@ export interface InstanceState {
   connect(address: string): Promise<void>;
   forget(): Promise<void>;
   signOut(): Promise<void>;
+  signIn(input: { email: string; password?: string; link?: string }): Promise<SignInResult>;
 }
 
 const InstanceContext = createContext<InstanceState | null>(null);
@@ -75,6 +79,10 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     await SecureStore.setItemAsync(INSTANCE_KEY, result.instance.url);
+    const stored = await loadSession(keychain);
+    // Never send a session from the previously connected business to a new one.
+    if (stored && stored.instanceUrl !== result.instance.url) await clearSession(keychain);
+    setSession(stored?.instanceUrl === result.instance.url ? stored : null);
     setInstance(result.instance);
     setProblem(null);
     setStatus("ready");
@@ -96,6 +104,19 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   }, []);
 
+  const signIn = useCallback(async (input: { email: string; password?: string; link?: string }): Promise<SignInResult> => {
+    if (!instance) return { ok: false, reason: "unreachable", message: "Connect first." };
+    const request = { ...input, instanceUrl: instance.url };
+    const result = input.link
+      ? await redeemSignInLink({ ...request, link: input.link }, (url, init) => fetch(url, init))
+      : await requestSignIn(request, (url, init) => fetch(url, init));
+    if (result.ok) {
+      await saveSession(keychain, result.session);
+      setSession(result.session);
+    }
+    return result;
+  }, [instance]);
+
   useEffect(() => {
     void (async () => {
       const remembered = await SecureStore.getItemAsync(INSTANCE_KEY);
@@ -103,7 +124,6 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
         setStatus("needs-instance");
         return;
       }
-      setSession(await loadSession(keychain));
       await connect(remembered);
     })();
   }, [connect]);
@@ -118,8 +138,9 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       connect,
       forget,
       signOut,
+      signIn,
     }),
-    [status, instance, session, problem, connect, forget, signOut],
+    [status, instance, session, problem, connect, forget, signOut, signIn],
   );
 
   return <InstanceContext.Provider value={value}>{children}</InstanceContext.Provider>;

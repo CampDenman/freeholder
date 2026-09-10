@@ -230,7 +230,7 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
         bearerAuth: {
           type: "http",
           scheme: "bearer",
-          description: "An API key from Settings → API keys.",
+          description: "An API key from Settings → API keys, or a user session token from the auth services. Bearer clients omit cookies; requests carrying a session cookie also require CSRF.",
         },
       },
       schemas: {

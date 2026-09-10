@@ -89,11 +89,19 @@ export async function resolveApiKey(request: Request): Promise<Actor | undefined
  * — which is the opposite of what scoping a key is for.
  */
 export async function actorFromRequest(request: Request): Promise<Actor> {
-  const key = await resolveApiKey(request);
-  if (key) return key;
-
-  const session = await resolveSession(request);
+  const authorization = request.headers.get("authorization");
   const metadata = requestMetadata(request);
+  // An explicit credential is authoritative even when invalid. Falling back
+  // to ambient cookies would bypass CSRF's bearer exemption (C10.25).
+  if (authorization !== null) {
+    if (!authorization.toLowerCase().startsWith("bearer ")) return { ...ANONYMOUS, request: metadata };
+    const token = authorization.slice(7).trim();
+    const key = await resolveApiKey(request);
+    if (key) return key;
+    if (token.startsWith("fh_")) return { ...ANONYMOUS, request: metadata };
+    return { ...await actorFromToken(token), request: metadata };
+  }
+  const session = await resolveSession(request);
   if (!session) return { ...ANONYMOUS, request: metadata };
   return {
     kind: "user",
