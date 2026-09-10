@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # The Freeholder customer app
 
 White-label Expo application. *MASTER.md §35, §35.1 — checklist item C10.23;
-the remaining screens are C10.24.*
+customer contracts and writes are C10.24; remaining screens are C10.25–C10.28.*
 
 ```sh
 cd apps/mobile
@@ -42,6 +42,19 @@ documentation: a screen asks for a service **by name**, and a name its contract
 does not list throws before any request is made. A view cannot quietly grow a
 dependency — it has to change the contract, in a diff somebody reviews.
 
+`useScreenWrite` is the shared mutation path (C10.24). Pass the current caller
+and network `online` state, then call `execute(params)` only from a deliberate
+tap. It checks the write contract, requires a customer session on signed-in
+screens, refuses offline through `OfflineWriteRefused`, and exposes pending
+and error state. It neither caches nor retries a mutation, including ambiguous
+network failures. The instance still enforces authorization and idempotency.
+
+Contract labels use `useAppText()` with the instance's default locale. Edit
+the `app.*` strings in `locales/en.json`, `es.json`, and `fr.json`, then run
+`node scripts/generate-mobile-messages.mjs` from the repository root. The
+generated subset keeps the full web/admin catalogs out of the phone bundle;
+the contract test rejects a stale subset or a missing screen label.
+
 ## Built so far
 
 - **Connect** — the first screen. Asks for the business's address and shows
@@ -53,7 +66,7 @@ dependency — it has to change the contract, in a diff somebody reviews.
   are.
 
 Booking, invoice pay, galleries and proofing, portal messages and newsletters
-are C10.24. The tab bar renders only the screens that exist; a tab leading
+are C10.25–C10.28. The tab bar renders only the screens that exist; a tab leading
 nowhere is a dead end.
 
 ## Rules the code keeps

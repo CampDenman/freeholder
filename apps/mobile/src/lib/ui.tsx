@@ -9,6 +9,7 @@
 // store review.
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Brand } from "@freeholder/mobile-app";
+import { useAppText } from "./strings";
 
 export function Screen({
   brand,
@@ -58,9 +59,10 @@ export function StalenessNotice({ brand, label }: { brand: Brand; label: string 
 
 /** Loading, empty and error are states a screen has, not accidents. */
 export function Loading({ brand }: { brand: Brand }) {
+  const t = useAppText();
   return (
     <View style={styles.centred}>
-      <ActivityIndicator accessibilityLabel="Loading" color={brand.colors.accent} />
+      <ActivityIndicator accessibilityLabel={t("app.loading")} color={brand.colors.accent} />
     </View>
   );
 }
@@ -82,11 +84,12 @@ export function Problem({
   message: string;
   onRetry?: () => void;
 }) {
+  const t = useAppText();
   return (
     <View style={styles.centred}>
       <Text style={[styles.body, { color: brand.colors.danger }]}>{message}</Text>
       {onRetry ? (
-        <Button brand={brand} label="Try again" onPress={onRetry} />
+        <Button brand={brand} label={t("app.retry")} onPress={onRetry} />
       ) : null}
     </View>
   );

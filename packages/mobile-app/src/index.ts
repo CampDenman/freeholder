@@ -38,11 +38,13 @@ export {
   cacheKey,
   freshnessLabel,
   readThrough,
+  writeThrough,
   type Cache,
   type Freshness,
   type ReadResult,
 } from "./offline.js";
 export { brandFrom, type Brand } from "./branding.js";
+export { appText } from "./strings.js";
 export {
   SCREENS,
   SCREEN_IDS,

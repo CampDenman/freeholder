@@ -11,11 +11,12 @@
 // Offline behaviour is `@freeholder/mobile-app`'s `readThrough` (C10.12), so
 // the write-never rule and the "say when it was fetched" rule are enforced in
 // one place for every screen rather than remembered in each.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   cacheKey,
   freshnessLabel,
   readThrough,
+  writeThrough,
   SCREENS,
   type Cache,
   type Freshness,
@@ -85,6 +86,40 @@ export interface ScreenData<T> {
   reload(): void;
 }
 
+/** A tap-driven mutation. Connectivity is supplied by the screen's network state. */
+export function useScreenWrite<T>(input: {
+  screen: ScreenId;
+  service: string;
+  caller: Caller | null;
+  online: boolean;
+}): { pending: boolean; error: string | null; execute(params?: unknown): Promise<T> } {
+  const { screen, service, caller, online } = input;
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(false);
+  const instanceUrl = caller?.instanceUrl;
+  const token = caller?.token;
+  const execute = useCallback(async (params?: unknown): Promise<T> => {
+    assertOnContract(screen, service, true);
+    if (!instanceUrl) throw new Error("Connect to a business before making changes.");
+    if (SCREENS[screen].audience === "signed-in" && !token) throw new Error("Sign in before making changes.");
+    if (inFlight.current) throw new Error("A request is already in progress.");
+    inFlight.current = true;
+    setPending(true);
+    setError(null);
+    try {
+      return await writeThrough({ service, online }, () => callService<T>({ instanceUrl, token: token ?? null }, service, params));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+      throw failure;
+    } finally {
+      inFlight.current = false;
+      setPending(false);
+    }
+  }, [screen, service, instanceUrl, token, online]);
+  return { pending, error, execute };
+}
+
 /**
  * Read one service for a screen, with the offline and staleness rules applied.
  *
@@ -109,22 +144,30 @@ export function useScreenData<T>(input: {
   });
   const [attempt, setAttempt] = useState(0);
   const serialized = JSON.stringify(params ?? {});
+  // Screens construct caller objects while rendering. Depend on their values
+  // so updating request state does not trigger an endless refetch loop.
+  const instanceUrl = caller?.instanceUrl;
+  const token = caller?.token;
 
   const reload = useCallback(() => setAttempt((count) => count + 1), []);
 
   useEffect(() => {
-    if (!enabled || !caller) return;
+    if (!enabled || !instanceUrl) {
+      setState({ value: null, loading: false, staleness: null, freshness: null, error: null });
+      return;
+    }
     let cancelled = false;
+    setState({ value: null, loading: true, staleness: null, freshness: null, error: null });
     void (async () => {
       try {
         assertOnContract(screen, service);
         const result = await readThrough<T>(
           {
-            key: cacheKey(caller.instanceUrl, service, JSON.parse(serialized)),
+            key: cacheKey(instanceUrl, service, JSON.parse(serialized)),
             kind: "query",
             service,
           },
-          () => callService<T>(caller, service, JSON.parse(serialized)),
+          () => callService<T>({ instanceUrl, token: token ?? null }, service, JSON.parse(serialized)),
           SCREENS[screen].cacheable ? cache : passthrough,
         );
         if (cancelled) return;
@@ -152,7 +195,7 @@ export function useScreenData<T>(input: {
     return () => {
       cancelled = true;
     };
-  }, [screen, service, caller, cache, serialized, enabled, attempt]);
+  }, [screen, service, instanceUrl, token, cache, serialized, enabled, attempt]);
 
   return { ...state, reload };
 }

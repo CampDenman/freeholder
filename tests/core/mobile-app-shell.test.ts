@@ -4,7 +4,7 @@
 // the claims that hold without one — and the contract enforcement, which is
 // the whole reason C10.13 was written down.
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { SCREENS, TAB_ORDER } from "../../packages/mobile-app/src/screens";
 
 const read = (path: string) => readFileSync(`apps/mobile/${path}`, "utf8");
@@ -22,6 +22,27 @@ const code = (path: string) =>
     .replace(/^\s*\/\/.*$/gm, "");
 
 describe("the Expo application (C10.23)", () => {
+  it("keeps the write-contract assertion in the shared write helper (C10.24)", () => {
+    const paths = ["app", "src"].flatMap((directory) => readdirSync(`apps/mobile/${directory}`, { recursive: true })
+      .map((entry) => `${directory}/${String(entry).replace(/\\/g, "/")}`).filter((path) => /\.tsx?$/.test(path)));
+    const callers = paths.filter((path) => /assertOnContract\([^)]*,\s*true\)/.test(code(path)));
+    expect(callers).toEqual(["src/lib/screen-data.ts"]);
+    const helper = code("src/lib/screen-data.ts");
+    expect(helper).toContain("export function useScreenWrite");
+    expect(helper).toContain("await writeThrough({ service, online }");
+    for (const path of paths.filter((path) => path.startsWith("app/") || path.startsWith("src/screens/"))) {
+      expect(code(path), path).not.toMatch(/\bcallService\b|\bfetch\s*\(|assertOnContract\s*\(/);
+    }
+  });
+
+  it("resolves contract copy and keeps read dependencies stable (C10.24)", () => {
+    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/_layout.tsx"]) {
+      expect(code(file), file).toContain("useAppText");
+      expect(code(file), file).not.toMatch(/message=\{SCREENS\./);
+    }
+    const data = code("src/lib/screen-data.ts");
+    expect(data).toContain("[screen, service, instanceUrl, token, cache, serialized, enabled, attempt]");
+  });
   it("stays outside the root pnpm workspace", () => {
     // Every CI job runs `pnpm install --frozen-lockfile` at the root. A React
     // Native dependency graph that only one app needs must not be billed to

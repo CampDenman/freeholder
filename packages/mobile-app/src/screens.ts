@@ -122,9 +122,8 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     audience: "signed-in",
     titleKey: "app.booking.title",
     reads: ["bookings.byToken"],
-    // The only screen that books. Availability is checked by the platform at
-    // the moment of the call, never by the app against a cached slot list.
-    writes: ["bookings.create", "bookings.rescheduleByToken", "bookings.cancelByToken"],
+    // Creation remains on the web; these capabilities manage an own booking.
+    writes: ["bookings.rescheduleByToken", "bookings.cancelByToken"],
     param: "token",
     emptyKey: "app.booking.empty",
     cacheable: false,
@@ -133,7 +132,7 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "bookings",
     audience: "signed-in",
     titleKey: "app.bookings.title",
-    reads: ["bookings.list"],
+    reads: ["portal.myProfile", "bookings.list"],
     writes: [],
     emptyKey: "app.bookings.empty",
     cacheable: true,
@@ -151,7 +150,7 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "invoice",
     audience: "signed-in",
     titleKey: "app.invoice.title",
-    reads: ["invoicing.get"],
+    reads: ["invoicing.customerInvoice"],
     // Paying is a web handoff, not an in-app purchase: §35.1 keeps the
     // business's money out of a 15–30% store cut, and the store rules permit
     // web checkout for goods consumed outside the app.
@@ -164,7 +163,7 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "galleries",
     audience: "signed-in",
     titleKey: "app.galleries.title",
-    reads: ["galleries.list"],
+    reads: ["portal.myRecords"],
     writes: [],
     emptyKey: "app.galleries.empty",
     cacheable: true,
@@ -173,11 +172,11 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "gallery",
     audience: "signed-in",
     titleKey: "app.gallery.title",
-    reads: ["galleries.publicBySlug", "galleries.listSelections"],
+    reads: ["galleries.viewSession", "galleries.viewItem"],
     // Proofing is the one thing §35 calls the killer feature, and a favourite
     // is a decision about the customer's own selection rather than about
     // availability — so it is a write the platform can accept at any time.
-    writes: ["galleries.setSelection", "galleries.submitRound"],
+    writes: ["galleries.openWithLogin", "galleries.setSelection", "galleries.clearSelection", "galleries.submitRound"],
     param: "slug",
     emptyKey: "app.gallery.empty",
     cacheable: true,
@@ -186,8 +185,10 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "messages",
     audience: "signed-in",
     titleKey: "app.messages.title",
-    reads: ["conversations.get"],
-    writes: ["conversations.reply"],
+    reads: ["portal.myProfile", "conversations.list"],
+    // C10.28 adds the customer's own reply service and thread view. Never
+    // substitute conversations.reply, which sends as the business.
+    writes: [],
     emptyKey: "app.messages.empty",
     cacheable: true,
   },
@@ -195,8 +196,8 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "newsletters",
     audience: "signed-in",
     titleKey: "app.newsletters.title",
-    reads: ["newsletters.listPublicIssues"],
-    writes: ["newsletters.subscribe", "newsletters.unsubscribe"],
+    reads: ["portal.myProfile", "newsletters.listPublic", "newsletters.listPublicIssues"],
+    writes: ["newsletters.subscribe", "privacy.setMyMarketingPreference"],
     emptyKey: "app.newsletters.empty",
     cacheable: true,
   },

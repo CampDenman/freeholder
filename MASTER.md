@@ -2291,6 +2291,16 @@ This is not tidiness: a rule that exists only in the app is a rule that stops
 being true the moment somebody uses the website instead, and the store review
 cycle means the app is always the copy that is weeks out of date.
 
+Screen contracts name customer-callable queries (public, authenticated or
+contact-bound `selfService`) and customer-authorized mutations, never an owner
+operation merely because its name exists in the SDK. `useScreenWrite` is the
+shared tap-driven write path: it checks the declared contract, requires the
+screen's customer session, and calls once only while online. It does not cache,
+queue or retry an ambiguous network failure. Literal `app.*` labels come from
+the root en/es/fr catalogs through a generated app-only subset and locale
+resolver; the phone does not bundle the full admin catalogs. Native booking,
+invoice, gallery and message screens remain the separate delivery items below.
+
 **Instance discovery is the first screen and it is honest.** The app is
 white-label but not single-tenant-compiled: it asks for the business's address,
 fetches `/.well-known/freeholder` for the name, branding and contract version,
@@ -3298,7 +3308,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C10.24–C10.28 (mobile contracts first, then the screens; the shared customer invoice payment page is available), then C10.15–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
+| Current focus | C10.25–C10.28 (mobile screens on the corrected customer contracts and shared invoice payment page), then C10.15–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -7999,7 +8009,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `expo-customer-app.md`. **F12** the tab bar renders `TAB_ORDER` filtered to
   screens that exist, so a tab never leads to a dead end. Store binaries are
   C10.16.)*
-- [ ] **C10.24** Make the signed-in screen contracts true before building on
+- [x] **C10.24** Make the signed-in screen contracts true before building on
   them, and give the app a write path. Split 2026-09-09 from "build the
   remaining customer screens": the audit found four of the five contracts name
   services a customer cannot call — `invoicing.get`, `galleries.list` and
@@ -8019,7 +8029,32 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   **Evidence:** the audience test fails on today's contracts and passes on the
   corrected ones; F04 N/A (no new screen); F05 N/A; F07 the write helper is
   the only way a screen mutates; F09 N/A; F12 the app's shell test lists the
-  helper as the sole caller of `assertOnContract(..., true)`.
+  helper as the sole caller of `assertOnContract(..., true)`. *(Implemented
+  2026-09-10. The new audience/kind assertion first failed on six owner-only
+  references, then passed with customer invoice reads, contact-bound booking/
+  thread lists, gallery session services and signed-in marketing preferences.
+  No business-side reply is substituted for the future C10.28 customer reply.
+  **F01** N/A — no schema. **F02** existing platform permissions remain intact;
+  contracts require customer-callable queries/mutations of the declared kind.
+  **F03** existing portal/contact services supply identity and records; no new
+  customer model. **F04** N/A — no new screen; existing home/catalog/tab copy
+  resolves labels, and home reads the actual portal-room array.
+  **F05** N/A — no new platform API. **F06** all contract title/empty keys plus
+  shared loading/retry labels resolve in en/es/fr; generated app-only catalogs
+  are checked against their source, with regional/default/unknown-key tests.
+  No colors or accessibility roles change. **F07** `useScreenWrite` checks the
+  declared write and signed-in caller, refuses known-offline submissions before
+  transport, and neither caches nor retries writes; duplicate taps are guarded.
+  Read dependencies use stable caller values to avoid render/refetch loops.
+  **F08** 78 focused mobile/locale tests, Expo typecheck, package build and
+  full fast gates; mobile audience and shell checks now run in the fast gates.
+  **F09** N/A — no jobs or persistent storage; gallery cache persistence and
+  revocation remain C10.27. **F10** existing tabs display translated labels
+  rather than keys; no new setup is required. **F11** §35.1, both app READMEs,
+  generator and `customer-mobile-contracts.md` changeset.
+  **F12** shell test restricts the write assertion to the shared helper and
+  refuses direct transport from screens. Native screen/device journeys remain
+  C10.25–C10.28; this item delivers their contract and write foundation.)*
 - [ ] **C10.25** Build the bookings tab and the booking screen: the customer's
   own list through `bookings.list` (`selfService`, so the screen first learns
   its `contactId` from `portal.myProfile`), and reschedule, cancel and intake
