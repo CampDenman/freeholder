@@ -7,9 +7,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { CONTRACT_VERSION, checkCompatibility } from "@/core/discovery";
-import { formatMoney } from "../../apps/mobile/src/lib/format";
 import {
   APP_CONTRACT_VERSION,
+  formatMoney,
   brandFrom,
   discover,
   freshnessLabel,

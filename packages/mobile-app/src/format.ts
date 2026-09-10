@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// C10.26: render integer minor units without assuming two currency decimals.
+// C10.26: platform-independent formatting of integer currency minor units.
 export function formatMoney(minor: number, currency: string, locale: string): string {
   const formatter = new Intl.NumberFormat(locale, { style: "currency", currency });
   const exponent = formatter.resolvedOptions().maximumFractionDigits ?? 2;

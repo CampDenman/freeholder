@@ -4,11 +4,10 @@
 import { useCallback } from "react";
 import { ScrollView } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { SCREENS, resolveDeepLink } from "@freeholder/mobile-app";
+import { SCREENS, resolveDeepLink, formatMoney } from "@freeholder/mobile-app";
 import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 import { memoryCache } from "@/lib/cache";
-import { formatMoney } from "@/lib/format";
 import { useScreenData } from "@/lib/screen-data";
 import { SignIn } from "@/screens/sign-in";
 import { Button, Empty, Loading, Problem, Row, Screen, StalenessNotice, Title } from "@/lib/ui";
