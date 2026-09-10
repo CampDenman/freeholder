@@ -150,12 +150,12 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "invoice",
     audience: "signed-in",
     titleKey: "app.invoice.title",
-    reads: ["invoicing.customerInvoice"],
+    reads: ["invoicing.customerInvoice", "invoicing.customerInvoiceLink"],
     // Paying is a web handoff, not an in-app purchase: §35.1 keeps the
     // business's money out of a 15–30% store cut, and the store rules permit
     // web checkout for goods consumed outside the app.
     writes: [],
-    param: "token",
+    param: "id",
     emptyKey: "app.invoice.empty",
     cacheable: true,
   },

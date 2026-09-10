@@ -58,6 +58,14 @@ const nextConfig: NextConfig = {
   // by the runtime image (public/ and db/); none is executed from source.
   outputFileTracingExcludes: {
     "/*": [
+      "./.git/**",
+      "./.github/**",
+      "./.agents/**",
+      "./.codex/**",
+      "./.claude/**",
+      "./.work/**",
+      "./apps/**",
+      "./test-results/**",
       "./app/**/*.{ts,tsx,md}",
       "./db/**/*.md",
       "./deploy/**",

@@ -11,7 +11,7 @@ import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 
 /** Only the tabs this release actually renders. C10.25–C10.28 fill the rest. */
-const BUILT = new Set(["home", "catalog", "bookings"]);
+const BUILT = new Set(["home", "catalog", "bookings", "invoices"]);
 
 export default function TabsLayout() {
   const { brand } = useInstance();

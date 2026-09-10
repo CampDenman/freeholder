@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import type { getCustomerInvoice } from "@/modules/invoicing/customer-service";
+import { invoiceAppReturnHref } from "@/modules/invoicing/customer-tokens";
 import { formatMoney, type Translate } from "@/core/i18n";
 import { Callout, Card, CardBody, Pill } from "@/ui/primitives";
 import { SkipLink } from "@/ui/SkipLink";
@@ -54,6 +55,7 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
           </form>
         ) : <Callout tone="neutral">{t("customerInvoice.closed")}</Callout>}
         <a href={backHref} className="text-sm text-accent underline">{t("customerInvoice.back")}</a>
+        <a href={invoiceAppReturnHref()} className="text-sm text-accent underline">{t("app.invoice.return")}</a>
       </main>
     </div>
   );

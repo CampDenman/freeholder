@@ -66,6 +66,19 @@ export const getCustomerInvoice = defineService({
   },
 });
 
+/** C10.26: the system browser has no app session; give it only this invoice. */
+export const customerInvoiceLink = defineService({
+  name: "invoicing.customerInvoiceLink",
+  summary: "Open your own payable invoice in a browser without sharing your session.",
+  kind: "query", permission: "authenticated", mcpExclude: true, agentCallable: false,
+  input: z.object({ id: z.string().uuid() }).strict(),
+  output: z.object({ href: z.string().nullable() }),
+  handler: async (input, ctx) => {
+    const invoice = await authorizedInvoice(input, ctx);
+    return { href: payable(invoice) ? customerInvoicePath(invoice.id, invoiceAccessToken(invoice)) : null };
+  },
+});
+
 export const viewCustomerInvoice = defineService({
   name: "invoicing.viewCustomerInvoice", summary: "Record the first authorized customer view without changing the amount owed.",
   kind: "mutation", permission: "public", input: access, output: z.object({ viewed: z.boolean() }),
@@ -260,5 +273,5 @@ export const confirmCustomerPayment = defineOrchestratedService({
   },
 });
 
-export default [getCustomerInvoice, viewCustomerInvoice, sendInvoice, claimCustomerCheckout, applyCustomerCheckout,
+export default [getCustomerInvoice, customerInvoiceLink, viewCustomerInvoice, sendInvoice, claimCustomerCheckout, applyCustomerCheckout,
   beginCustomerCheckout, customerPaymentReceipt, customerPaymentSource, applyCustomerPayment, confirmCustomerPayment];
