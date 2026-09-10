@@ -292,9 +292,12 @@ test.describe("real-browser product journeys", () => {
           // C10.29: the same contact reaches their gallery through the portal.
           const [ownGallery] = await db().insert(galleries).values({ contactId: invoice!.contactId,
             title: "Customer coastal proofs", slug: "customer-coastal-proofs", access: "login" }).returning();
-          await db().insert(galleries).values({ title: "Another customer's private proofs",
+          const [otherGalleryContact] = await db().insert(contacts).values({ name: "Another customer", email: "other-gallery@example.test" }).returning();
+          await db().insert(galleries).values({ contactId: otherGalleryContact!.id, title: "Another customer's private proofs",
             slug: "other-private-proofs", access: "login" });
           for (const locale of ["en", "es", "fr"]) {
+            // Signed-in portal language follows the contact, above URL prefixes.
+            await db().update(contacts).set({ preferredLocale: locale }).where(eq(contacts.id, invoice!.contactId));
             for (const theme of ["light", "dark"] as const) {
               const prefix = locale === "en" ? "" : `/${locale}`;
               await visitor.addCookies([{ name: THEME_COOKIE, value: theme, url: new URL(page.url()).origin }]);
@@ -308,6 +311,7 @@ test.describe("real-browser product journeys", () => {
               await customerPage.screenshot({ path: test.info().outputPath(`customer-galleries-${locale}-${theme}.png`), fullPage: true });
             }
           }
+          await db().update(contacts).set({ preferredLocale: "en" }).where(eq(contacts.id, invoice!.contactId));
           await customerPage.goto("/portal/galleries");
           await customerPage.getByRole("link", { name: ownGallery!.title, exact: true }).click();
           await customerPage.getByRole("button", { name: translator("en")("galleries.lock.login"), exact: true }).click();
