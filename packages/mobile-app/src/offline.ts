@@ -34,6 +34,15 @@ export class OfflineWriteRefused extends Error {
   }
 }
 
+/** One deliberate write, only while online; never cached, queued or retried. */
+export async function writeThrough<T>(
+  input: { service: string; online: boolean },
+  call: () => Promise<T>,
+): Promise<T> {
+  if (!input.online) throw new OfflineWriteRefused(input.service);
+  return call();
+}
+
 export type Freshness =
   | { state: "live" }
   | { state: "cached"; fetchedAt: string; reason: "offline" | "failed" }

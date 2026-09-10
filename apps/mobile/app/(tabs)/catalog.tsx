@@ -10,6 +10,7 @@
 import { FlatList } from "react-native";
 import { SCREENS } from "@freeholder/mobile-app";
 import { useInstance } from "@/lib/instance";
+import { useAppText } from "@/lib/strings";
 import { memoryCache } from "@/lib/cache";
 import { useScreenData } from "@/lib/screen-data";
 import { Empty, Loading, Problem, Row, Screen, StalenessNotice, Title } from "@/lib/ui";
@@ -20,6 +21,7 @@ type Products = { id: string; name: string; slug: string; subtitle: string | nul
 
 export default function Catalog() {
   const { instance, brand, session } = useInstance();
+  const t = useAppText();
   const caller = instance ? { instanceUrl: instance.url, token: session?.token ?? null } : null;
 
   // Services are products with a service_offerings row attached, so one
@@ -37,7 +39,7 @@ export default function Catalog() {
 
   return (
     <Screen brand={brand}>
-      <Title brand={brand}>Shop</Title>
+      <Title brand={brand}>{t(SCREENS.catalog.titleKey)}</Title>
       <StalenessNotice brand={brand} label={data.staleness} />
 
       {data.loading ? (
@@ -48,7 +50,7 @@ export default function Catalog() {
         <FlatList
           data={data.value ?? []}
           keyExtractor={(item) => item.id}
-          ListEmptyComponent={<Empty brand={brand} message={SCREENS.catalog.emptyKey} />}
+          ListEmptyComponent={<Empty brand={brand} message={t(SCREENS.catalog.emptyKey)} />}
           renderItem={({ item }) => (
             <Row brand={brand} title={item.name} detail={item.subtitle ?? undefined} />
           )}

@@ -17,8 +17,7 @@ instance. *MASTER.md §35, §35.1 — checklist item C10.12.*
 > endpoint, no mobile-only business rule, and no mobile-only notion of a
 > customer.
 
-So this package contains exactly the four things a client needs that the
-platform cannot supply:
+This package contains the shared client behavior:
 
 | Module | Answers |
 |---|---|
@@ -26,6 +25,8 @@ platform cannot supply:
 | `session` | how is a session held on a device? |
 | `offline` | what do I show with no signal? |
 | `branding` | what does this business look like? |
+| `screens` | which services may each customer screen call? |
+| `strings` | how do the screen's catalog keys read in this locale? |
 
 Everything else — prices, availability, entitlements — comes from the instance
 over HTTP. A test asserts this package imports nothing but its own files and
@@ -77,6 +78,19 @@ showing an empty gallery.
 
 The one sanctioned write queue is media capture (C10.18), which is a queue of
 files rather than a queue of decisions.
+
+`writeThrough({ service, online }, call)` is the live-only counterpart:
+offline calls throw `OfflineWriteRefused` before transport is invoked. Online
+calls run once and propagate failures, with no cache, retry or queue. The Expo
+`useScreenWrite` binding checks the screen's write contract before using it.
+
+## Screen copy (C10.24)
+
+`appText(locale, key)` resolves the literal `app.*` screen labels from the
+shared catalogs, including regional locales such as `fr-CA`. Unsupported
+locales fall back to English; unknown keys show a localized unavailable
+message. Regenerate the bundled subset with
+`node scripts/generate-mobile-messages.mjs` after editing root catalogs.
 
 ## Licence
 

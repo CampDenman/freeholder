@@ -18,6 +18,8 @@ import {
 } from "../../packages/mobile-app/src/deep-links";
 import { ready } from "@/core/runtime";
 import { getService } from "@/core/service";
+import { appText } from "../../packages/mobile-app/src/strings";
+import { appMessages } from "../../packages/mobile-app/src/messages.generated";
 
 function sdkServiceNames(): Set<string> {
   const source = readFileSync("packages/sdk/src/generated.ts", "utf8");
@@ -25,6 +27,33 @@ function sdkServiceNames(): Set<string> {
 }
 
 describe("screen contracts (C10.13)", () => {
+  it("resolves every contract label from the shared catalogs in en/es/fr (C10.24)", () => {
+    for (const locale of ["en", "es", "fr"] as const) {
+      const catalog = JSON.parse(readFileSync(`locales/${locale}.json`, "utf8")) as Record<string, string>;
+      expect(appMessages[locale]).toEqual(Object.fromEntries(Object.entries(catalog).filter(([key]) => key.startsWith("app."))));
+      for (const screen of Object.values(SCREENS)) {
+        for (const key of [screen.titleKey, screen.emptyKey]) {
+          expect(catalog[key], `${locale}:${key}`).toBeTruthy();
+          expect(appText(locale, key)).toBe(catalog[key]);
+          // This lightweight resolver deliberately handles literal labels.
+          expect(catalog[key]).not.toMatch(/[{}]/);
+        }
+      }
+    }
+    expect(appText("fr-CA", "app.catalog.title")).toBe("Boutique");
+    expect(appText("unknown", "app.catalog.title")).toBe("Shop");
+    expect(appText("es", "app.missing")).toBe(appMessages.es["app.unavailable"]);
+  });
+
+  it("uses session/contact equivalents instead of business replies and email-footer tokens (C10.24)", () => {
+    expect(SCREENS.newsletters.writes).toContain("privacy.setMyMarketingPreference");
+    expect(servicesUsed()).not.toContain("newsletters.unsubscribe");
+    expect(servicesUsed()).not.toContain("conversations.reply");
+    expect(SCREENS.bookings.reads).toContain("portal.myProfile");
+    expect(SCREENS.messages.reads).toContain("portal.myProfile");
+    expect(SCREENS.gallery.reads).toContain("galleries.viewSession");
+    expect(SCREENS.gallery.writes).toContain("galleries.openWithLogin");
+  });
   it("names only services the platform actually exposes", () => {
     // The whole point of declaring the contract: a screen that asks for a
     // service nobody wrote is a failing test here rather than an error on a
@@ -85,11 +114,26 @@ describe("screen contracts (C10.13)", () => {
     expect(paying).toEqual([]);
   });
 
+  it("lets signed-in screens call only customer-authorized services of the declared kind (C10.24)", async () => {
+    await ready();
+    const offending = screensNeedingSignIn().flatMap((id) =>
+      (["reads", "writes"] as const).flatMap((operation) => SCREENS[id][operation].flatMap((name) => {
+        const definition = getService(name).def;
+        const expected = operation === "reads" ? "query" : "mutation";
+        const customer = definition.permission === "public" || definition.permission === "authenticated" ||
+          (expected === "query" && definition.permission === "scoped" && Boolean(definition.selfService));
+        return customer && definition.kind === expected && definition.external !== false ? [] :
+          [{ screen: id, service: name, permission: definition.permission, kind: definition.kind }];
+      })),
+    );
+    expect(offending).toEqual([]);
+  });
+
   it("only writes from screens where a write is a decision, not a queue", () => {
     // §35.1's offline rule: writes are never queued. A screen with no writes
     // behaves identically with and without signal.
     const writing = SCREEN_IDS.filter((id) => SCREENS[id].writes.length > 0);
-    expect(writing.sort()).toEqual(["booking", "gallery", "messages", "newsletters"]);
+    expect(writing.sort()).toEqual(["booking", "gallery", "newsletters"]);
   });
 
   it("does not cache the one screen whose data expires", () => {

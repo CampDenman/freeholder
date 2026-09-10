@@ -8,12 +8,14 @@
 import { Tabs } from "expo-router";
 import { TAB_ORDER, SCREENS } from "@freeholder/mobile-app";
 import { useInstance } from "@/lib/instance";
+import { useAppText } from "@/lib/strings";
 
-/** Only the tabs this release actually renders. C10.24 fills the rest. */
+/** Only the tabs this release actually renders. C10.25–C10.28 fill the rest. */
 const BUILT = new Set(["home", "catalog"]);
 
 export default function TabsLayout() {
   const { brand } = useInstance();
+  const t = useAppText();
   return (
     <Tabs
       screenOptions={{
@@ -26,7 +28,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           key={id}
           name={id === "home" ? "index" : id}
-          options={{ title: SCREENS[id].titleKey.split(".")[1] ?? id }}
+          options={{ title: t(SCREENS[id].titleKey) }}
         />
       ))}
     </Tabs>

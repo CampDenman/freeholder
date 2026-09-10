@@ -4,7 +4,7 @@
 // app does when something is *wrong* — a mistyped address, a contract it does
 // not understand, no signal, a broken fingerprint sensor — because those are
 // the paths a simulator screenshot never covers.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { CONTRACT_VERSION, checkCompatibility } from "@/core/discovery";
 import {
@@ -16,6 +16,7 @@ import {
   normalizeAddress,
   OfflineWriteRefused,
   readThrough,
+  writeThrough,
   saveSession,
   signOut,
   unlockOnResume,
@@ -219,6 +220,17 @@ describe("the customer app (C10.12)", () => {
   });
 
   describe("offline is read-through, write-never", () => {
+    it("refuses offline writes before calling the provider and never retries a failed write", async () => {
+      const call = vi.fn(async () => "saved");
+      await expect(writeThrough({ service: "galleries.setSelection", online: false }, call)).rejects.toBeInstanceOf(OfflineWriteRefused);
+      expect(call).not.toHaveBeenCalled();
+      expect(await writeThrough({ service: "galleries.setSelection", online: true }, call)).toBe("saved");
+      expect(call).toHaveBeenCalledTimes(1);
+      const failure = new Error("network disconnected after sending");
+      call.mockRejectedValue(failure);
+      await expect(writeThrough({ service: "galleries.setSelection", online: true }, call)).rejects.toBe(failure);
+      expect(call).toHaveBeenCalledTimes(2);
+    });
     it("refuses to queue a mutation, loudly", async () => {
       await expect(
         readThrough(
