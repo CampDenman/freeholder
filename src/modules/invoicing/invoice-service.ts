@@ -772,9 +772,11 @@ export const markInvoiceViewed = defineService({
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That invoice is not here.");
     if (invoice.status === "viewed" || invoice.viewedAt) return invoice;
-    if (invoice.status !== "sent") throw new ServiceError("conflict", "Only a sent invoice can be marked viewed.");
-    const [updated] = await ctx.tx.update(invoices).set({ status: "viewed", viewedAt: new Date() }).where(eq(invoices.id, invoice.id)).returning();
-    await stateEvent(ctx, "invoice", invoice.id, "sent", "viewed");
+    if (!["sent", "overdue", "partially_paid"].includes(invoice.status)) throw new ServiceError("conflict", "Only an open invoice can be marked viewed.");
+    const status = invoice.status === "sent" ? "viewed" : invoice.status;
+    const [updated] = await ctx.tx.update(invoices).set({ status, viewedAt: new Date() }).where(eq(invoices.id, invoice.id)).returning();
+    if (status !== invoice.status) await stateEvent(ctx, "invoice", invoice.id, invoice.status, status);
+    await ctx.emitTimeline({ contactId: invoice.contactId, eventType: "invoice.viewed", subjectType: "invoice", subjectId: invoice.id, payload: { number: invoice.number } });
     ctx.queueEvent("invoice.viewed", { invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("invoice", invoice.id);
     return updated!;

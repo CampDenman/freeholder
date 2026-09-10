@@ -429,6 +429,18 @@ by staff and no customer invoice page existed on any surface, so the state
 machine above promised a `paid` step that nothing let a customer take. That is
 C5.25.)*
 
+Customer access is a session tied to the invoice contact or an invoice-specific
+HMAC link (`SESSION_SECRET`, bound to the contact and issue date). Paid, void
+and refunded invoices retire the email link; the customer's session retains
+read-only history. `invoicing.send` queues that link in the encrypted mail
+outbox. Hosted checkout commits its payment attempt before provider I/O and
+attaches the provider response in a fresh authorized transaction. Repeated
+requests reuse the outstanding attempt; a timeout cannot create a new charge.
+The provider return has a separate seven-day capability exposing only payment
+status, currency and amount. A redirect never settles money: provider checks
+and webhooks converge through the shared ledger. With the manual adapter the
+page shows instructions; only an owner-attested receipt records payment.
+
 ### 4.4 Time (the scheduling engine)
 
 Scheduling is the half of this platform that a spreadsheet cannot fake, and the
@@ -3286,7 +3298,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C5.25 (no customer can pay an invoice today) and C10.24–C10.28 (mobile contracts first, then the screens), then C10.15–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
+| Current focus | C10.24–C10.28 (mobile contracts first, then the screens; the shared customer invoice payment page is available), then C10.15–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4997,7 +5009,7 @@ owner operations, never substitute for them.
   takes; translated `/admin/pos`; `tests/core/pos-adapters.test.ts` and
   `tests/core/invoicing-pos.test.ts`; changeset `commerce-pos.md`.)*
 
-- [ ] **C5.25** Let a customer pay an issued invoice: a `/portal/invoices/[id]`
+- [x] **C5.25** Let a customer pay an issued invoice: a `/portal/invoices/[id]`
   page for the signed-in customer and a token link for the invoice email, both
   rendering one component that shows the invoice, starts the configured
   provider's hosted checkout and lands on a same-instance confirmation;
@@ -5013,7 +5025,35 @@ owner operations, never substitute for them.
   cancel URLs stay same-instance; a focused service suite plus a real-browser
   journey through the manual/offline provider; F04 light/dark, en/es/fr; F07
   tokens are unguessable, single-purpose and dead once the invoice is void or
-  paid; F12 the room entry, the email and the app all reach the same page.)
+  paid; F12 the room entry and email reach the same page, and the mobile link
+  contract resolves that path; the native invoices screen and Pay button are
+  delivered separately by dependent item C10.26.) *(Implemented 2026-09-10:
+  **F01** existing invoice, payment and encrypted mail-outbox tables; no schema
+  migration. **F02** `customer-service.ts` provides typed customer-authorized
+  reads and claim/provider/apply orchestration with short transactions.
+  **F03** the linked contact, shared payment ledger, invoice view/email
+  timeline, audit and mail outbox remain the single business record.
+  **F04** owner email action, common customer invoice view, loading/error/
+  cancelled/closed states, offline instructions and explicit confirmation.
+  **F05** six registered public/scoped services appear in HTTP, OpenAPI, MCP
+  and the regenerated SDK; four internal phases remain inaccessible externally.
+  **F06** en/es/fr, localized titles/returns/currency, keyboard skip links and
+  WCAG AA checks at 390px in actual light/dark themes in
+  `tests/browser/journeys.spec.ts`. **F07** purpose-separated HMAC capabilities,
+  retired paid/void links, seven-day minimal receipts, rate limits, stable
+  checkout identities/URLs, and reconciliation before retrying old or
+  changed-balance/provider attempts. **F08** 65 passing invoice/customer/
+  portal/mobile-link regressions plus 147 contract tests; browser evidence
+  exercises issued email, session entry, offline receipt and token retirement.
+  **F09** existing mail retry/observability and shared-table backup/export/
+  retention paths; no separate jobs or storage. **F10** existing adapter setup
+  and manual default; unavailable-provider and unverified-money guidance.
+  **F11** §4.3, generated SDK and `customer-invoice-payments.md` changeset.
+  **F12** owner issue → encrypted invoice email → customer page → verified
+  offline payment → paid history/confirmation; `mobile-screens.test.ts`
+  covers the same localized invoice URL contract. Hosted-provider timeout,
+  replay and settlement tests use adapter doubles; this evidence does not
+  claim a live provider charge or completion of C10.26.)*
 
 **C5 exit:** every form of value converges through one explainable invoice,
 payment, tax, inventory and reporting path, with no floating-point money.

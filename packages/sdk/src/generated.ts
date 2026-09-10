@@ -717,12 +717,14 @@ export const SERVICE_NAMES = [
   "invoicing.adjustCustomerBalance",
   "invoicing.applyCustomerBalance",
   "invoicing.assessLateFee",
+  "invoicing.beginCustomerCheckout",
   "invoicing.beginInPersonPayment",
   "invoicing.beginPaymentCheckout",
   "invoicing.cancelPayment",
   "invoicing.cancelPaymentPlan",
   "invoicing.cancelRefund",
   "invoicing.completePaymentCheckout",
+  "invoicing.confirmCustomerPayment",
   "invoicing.createCreditNote",
   "invoicing.createDepositAndBalance",
   "invoicing.createDraft",
@@ -733,6 +735,8 @@ export const SERVICE_NAMES = [
   "invoicing.createSchedule",
   "invoicing.createTaxCategory",
   "invoicing.createTaxZone",
+  "invoicing.customerInvoice",
+  "invoicing.customerPaymentReceipt",
   "invoicing.failPayment",
   "invoicing.failRefund",
   "invoicing.get",
@@ -776,6 +780,7 @@ export const SERVICE_NAMES = [
   "invoicing.revokeSavedPaymentMethod",
   "invoicing.runSchedules",
   "invoicing.scheduleReminders",
+  "invoicing.send",
   "invoicing.setTaxExemption",
   "invoicing.setTaxRegistration",
   "invoicing.settlePayment",
@@ -787,6 +792,7 @@ export const SERVICE_NAMES = [
   "invoicing.taxThresholds",
   "invoicing.updateSchedule",
   "invoicing.verifyDemoFixture",
+  "invoicing.viewCustomerInvoice",
   "invoicing.void",
   "invoicing.voidCreditNote",
   "locations.create",
@@ -4114,6 +4120,10 @@ export interface ServiceCatalog {
     input: { invoiceId: string; terms: { basis: "fixed"; fixedMinor: number; capMinor?: number } | { basis: "percentage"; ratePpm: number; capMinor?: number }; graceDays?: number; asOf?: string; reason: string; taxCategoryCode?: string; tax: { mode: "calculate"; origin: { city?: string; region?: string; postalCode?: string; country: string }; destination: { city?: string; region?: string; postalCode?: string; country: string } } | { mode: "not_applicable"; reason: string }; dueAt?: string; issueNow?: boolean; idempotencyKey: string };
     output: { assessment: { id: string; sourceInvoiceId: string; feeInvoiceId: string; basis: "fixed" | "percentage"; outstandingMinor: number; fixedMinor: number | null; ratePpm: number | null; capMinor: number | null; graceDays: number; assessedMinor: number; assessedAt: string; reason: string; idempotencyKey: string; requestHash: string; createdAt: string; [key: string]: unknown }; invoice: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
   };
+  "invoicing.beginCustomerCheckout": {
+    input: { id: string; token?: string };
+    output: { url: string };
+  };
   "invoicing.beginInPersonPayment": {
     input: { invoiceId: string; locationId: string; method: "cash" | "card_present" | "tap_to_pay"; amountMinor?: number; readerRef?: string; idempotencyKey: string };
     output: { payment: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; collection: { providerRef: string; status: "requires_reader" | "processing" | "succeeded" | "failed"; readerActionToken?: string }; receipt: { receiptNumber: string; issuedAt: string; invoice: { id: string; number: string; issuedAt: string; currency: string; totalMinor: number }; customer: { id: string; name: string | null; email: string | null }; payment: { id: string; provider: string; providerRef: string; method: string; amountMinor: number; refundedMinor: number; netMinor: number }; lines: { id: string; invoiceId: string; position: number; sourceType: string | null; sourceId: string | null; description: string; quantityMicros: number; unitAmountMinor: number; subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number; taxCategoryCode: string; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; taxLines: { id: string; invoiceId: string; invoiceLineId: string | null; kind: "item" | "shipping" | "exemption"; rateName: string; ratePpm: number; taxableMinor: number; amountMinor: number; jurisdiction: string; registrationNumber: string | null; inclusive: boolean; compound: boolean; priority: number; exemptionKind: string | null; explanation: string; createdAt: string; [key: string]: unknown }[]; refunds: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; requiredTaxLegend: string | null } | null };
@@ -4137,6 +4147,10 @@ export interface ServiceCatalog {
   "invoicing.completePaymentCheckout": {
     input: { paymentId: string; idempotencyKey: string };
     output: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "invoicing.confirmCustomerPayment": {
+    input: { token: string };
+    output: { status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number };
   };
   "invoicing.createCreditNote": {
     input: { invoiceId: string; idempotencyKey: string; reason: string; lines: { invoiceLineId?: string; description: string; quantityMicros: number; subtotalMinor: number; taxMinor?: number }[] };
@@ -4177,6 +4191,14 @@ export interface ServiceCatalog {
   "invoicing.createTaxZone": {
     input: { name: string; country: string; regions?: string[]; postalPatterns?: string[]; priority?: number; basis?: "origin" | "destination"; pricesIncludeTax?: boolean; roundingScope?: "line" | "invoice"; roundingMode?: "half_up" | "bankers" };
     output: { id: string; name: string; templateKey: string | null; templateVersion: number | null; country: string; regions: string[]; postalPatterns: string[]; priority: number; basis: "origin" | "destination"; pricesIncludeTax: boolean; roundingScope: "line" | "invoice"; roundingMode: "half_up" | "bankers"; active: boolean; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "invoicing.customerInvoice": {
+    input: { id: string; token?: string };
+    output: { id: string; number: string; status: string; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; totalMinor: number }[]; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable" };
+  };
+  "invoicing.customerPaymentReceipt": {
+    input: { token: string };
+    output: { status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number };
   };
   "invoicing.failPayment": {
     input: { id: string; code?: string; message: string };
@@ -4350,6 +4372,10 @@ export interface ServiceCatalog {
     input: { invoiceId: string; offsetDays: number[] };
     output: { id: string; offsetDays: number; sendAt: string; status: "scheduled" | "sent" | "skipped" | "failed"; [key: string]: unknown }[];
   };
+  "invoicing.send": {
+    input: { id: string; idempotencyKey: string };
+    output: { deliveryId: string; delivers: boolean };
+  };
   "invoicing.setTaxExemption": {
     input: { id?: string; contactId: string; zoneId: string; kind: "reseller" | "nonprofit" | "reverse_charge" | "diplomatic"; certificateRef?: string; validatedAt?: string; expiresAt?: string; status: "pending" | "valid" | "expired" | "revoked" };
     output: { id: string; contactId: string; zoneId: string; kind: "reseller" | "nonprofit" | "reverse_charge" | "diplomatic"; certificateRef: string | null; validatedAt: string | null; expiresAt: string | null; status: "pending" | "valid" | "expired" | "revoked"; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -4393,6 +4419,10 @@ export interface ServiceCatalog {
   "invoicing.verifyDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
+  };
+  "invoicing.viewCustomerInvoice": {
+    input: { id: string; token?: string };
+    output: { viewed: boolean };
   };
   "invoicing.void": {
     input: { id: string; reason: string };
@@ -7077,12 +7107,14 @@ export interface FreeholderApi {
     adjustCustomerBalance: (input: ServiceCatalog["invoicing.adjustCustomerBalance"]["input"]) => Promise<ServiceCatalog["invoicing.adjustCustomerBalance"]["output"]>;
     applyCustomerBalance: (input: ServiceCatalog["invoicing.applyCustomerBalance"]["input"]) => Promise<ServiceCatalog["invoicing.applyCustomerBalance"]["output"]>;
     assessLateFee: (input: ServiceCatalog["invoicing.assessLateFee"]["input"]) => Promise<ServiceCatalog["invoicing.assessLateFee"]["output"]>;
+    beginCustomerCheckout: (input: ServiceCatalog["invoicing.beginCustomerCheckout"]["input"]) => Promise<ServiceCatalog["invoicing.beginCustomerCheckout"]["output"]>;
     beginInPersonPayment: (input: ServiceCatalog["invoicing.beginInPersonPayment"]["input"]) => Promise<ServiceCatalog["invoicing.beginInPersonPayment"]["output"]>;
     beginPaymentCheckout: (input: ServiceCatalog["invoicing.beginPaymentCheckout"]["input"]) => Promise<ServiceCatalog["invoicing.beginPaymentCheckout"]["output"]>;
     cancelPayment: (input: ServiceCatalog["invoicing.cancelPayment"]["input"]) => Promise<ServiceCatalog["invoicing.cancelPayment"]["output"]>;
     cancelPaymentPlan: (input: ServiceCatalog["invoicing.cancelPaymentPlan"]["input"]) => Promise<ServiceCatalog["invoicing.cancelPaymentPlan"]["output"]>;
     cancelRefund: (input: ServiceCatalog["invoicing.cancelRefund"]["input"]) => Promise<ServiceCatalog["invoicing.cancelRefund"]["output"]>;
     completePaymentCheckout: (input: ServiceCatalog["invoicing.completePaymentCheckout"]["input"]) => Promise<ServiceCatalog["invoicing.completePaymentCheckout"]["output"]>;
+    confirmCustomerPayment: (input: ServiceCatalog["invoicing.confirmCustomerPayment"]["input"]) => Promise<ServiceCatalog["invoicing.confirmCustomerPayment"]["output"]>;
     createCreditNote: (input: ServiceCatalog["invoicing.createCreditNote"]["input"]) => Promise<ServiceCatalog["invoicing.createCreditNote"]["output"]>;
     createDepositAndBalance: (input: ServiceCatalog["invoicing.createDepositAndBalance"]["input"]) => Promise<ServiceCatalog["invoicing.createDepositAndBalance"]["output"]>;
     createDraft: (input: ServiceCatalog["invoicing.createDraft"]["input"]) => Promise<ServiceCatalog["invoicing.createDraft"]["output"]>;
@@ -7093,6 +7125,8 @@ export interface FreeholderApi {
     createSchedule: (input: ServiceCatalog["invoicing.createSchedule"]["input"]) => Promise<ServiceCatalog["invoicing.createSchedule"]["output"]>;
     createTaxCategory: (input: ServiceCatalog["invoicing.createTaxCategory"]["input"]) => Promise<ServiceCatalog["invoicing.createTaxCategory"]["output"]>;
     createTaxZone: (input: ServiceCatalog["invoicing.createTaxZone"]["input"]) => Promise<ServiceCatalog["invoicing.createTaxZone"]["output"]>;
+    customerInvoice: (input: ServiceCatalog["invoicing.customerInvoice"]["input"]) => Promise<ServiceCatalog["invoicing.customerInvoice"]["output"]>;
+    customerPaymentReceipt: (input: ServiceCatalog["invoicing.customerPaymentReceipt"]["input"]) => Promise<ServiceCatalog["invoicing.customerPaymentReceipt"]["output"]>;
     failPayment: (input: ServiceCatalog["invoicing.failPayment"]["input"]) => Promise<ServiceCatalog["invoicing.failPayment"]["output"]>;
     failRefund: (input: ServiceCatalog["invoicing.failRefund"]["input"]) => Promise<ServiceCatalog["invoicing.failRefund"]["output"]>;
     get: (input: ServiceCatalog["invoicing.get"]["input"]) => Promise<ServiceCatalog["invoicing.get"]["output"]>;
@@ -7136,6 +7170,7 @@ export interface FreeholderApi {
     revokeSavedPaymentMethod: (input: ServiceCatalog["invoicing.revokeSavedPaymentMethod"]["input"]) => Promise<ServiceCatalog["invoicing.revokeSavedPaymentMethod"]["output"]>;
     runSchedules: (input?: ServiceCatalog["invoicing.runSchedules"]["input"]) => Promise<ServiceCatalog["invoicing.runSchedules"]["output"]>;
     scheduleReminders: (input: ServiceCatalog["invoicing.scheduleReminders"]["input"]) => Promise<ServiceCatalog["invoicing.scheduleReminders"]["output"]>;
+    send: (input: ServiceCatalog["invoicing.send"]["input"]) => Promise<ServiceCatalog["invoicing.send"]["output"]>;
     setTaxExemption: (input: ServiceCatalog["invoicing.setTaxExemption"]["input"]) => Promise<ServiceCatalog["invoicing.setTaxExemption"]["output"]>;
     setTaxRegistration: (input: ServiceCatalog["invoicing.setTaxRegistration"]["input"]) => Promise<ServiceCatalog["invoicing.setTaxRegistration"]["output"]>;
     settlePayment: (input: ServiceCatalog["invoicing.settlePayment"]["input"]) => Promise<ServiceCatalog["invoicing.settlePayment"]["output"]>;
@@ -7147,6 +7182,7 @@ export interface FreeholderApi {
     taxThresholds: (input?: ServiceCatalog["invoicing.taxThresholds"]["input"]) => Promise<ServiceCatalog["invoicing.taxThresholds"]["output"]>;
     updateSchedule: (input: ServiceCatalog["invoicing.updateSchedule"]["input"]) => Promise<ServiceCatalog["invoicing.updateSchedule"]["output"]>;
     verifyDemoFixture: (input: ServiceCatalog["invoicing.verifyDemoFixture"]["input"]) => Promise<ServiceCatalog["invoicing.verifyDemoFixture"]["output"]>;
+    viewCustomerInvoice: (input: ServiceCatalog["invoicing.viewCustomerInvoice"]["input"]) => Promise<ServiceCatalog["invoicing.viewCustomerInvoice"]["output"]>;
     void: (input: ServiceCatalog["invoicing.void"]["input"]) => Promise<ServiceCatalog["invoicing.void"]["output"]>;
     voidCreditNote: (input: ServiceCatalog["invoicing.voidCreditNote"]["input"]) => Promise<ServiceCatalog["invoicing.voidCreditNote"]["output"]>;
   };

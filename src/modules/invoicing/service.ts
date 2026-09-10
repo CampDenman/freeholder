@@ -7,6 +7,7 @@ import advancedMoneyServices from "./advanced-money-service";
 import paymentProviderServices from "./payment-provider-service";
 import posServices from "./pos-service";
 import taxServices from "./tax-service";
+import customerServices from "./customer-service";
 
 export { quoteTax } from "./tax-service";
 
@@ -32,4 +33,5 @@ export default [
   ...advancedMoneyServices,
   ...paymentProviderServices,
   ...posServices,
+  ...customerServices,
 ];
