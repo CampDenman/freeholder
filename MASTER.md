@@ -416,6 +416,19 @@ Invoice:  draft → sent → viewed → partially_paid → paid | overdue | void
 Payment:  created → processing → succeeded | failed → (refund: partial | full)
 ```
 
+**Customers pay where they read.** Every issued invoice has one customer page:
+`/portal/invoices/[id]` for a signed-in customer arriving from the portal
+invoices room, and a token-addressed link of the same shape as quotes,
+agreements and appointments for the invoice email — both render one component.
+The page shows the invoice, starts the configured provider's hosted checkout
+and returns to a same-instance confirmation; first opening it is what moves
+`sent → viewed`. The mobile app opens that page in the system browser (§35.1
+forbids in-app purchase) and never grows a payment path of its own. *(Added
+2026-09-09: an audit found `invoicing.beginPaymentCheckout` was callable only
+by staff and no customer invoice page existed on any surface, so the state
+machine above promised a `paid` step that nothing let a customer take. That is
+C5.25.)*
+
 ### 4.4 Time (the scheduling engine)
 
 Scheduling is the half of this platform that a spreadsheet cannot fake, and the
@@ -3255,12 +3268,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-07 |
+| Last reconciled | 2026-09-10 |
 | Evidence snapshot | On `main` at `3b8ac53` after C10.08 update policy #311. C10.09 is the fork lane: a worktree merge that reports conflicts by seam, refuses to overwrite owner code, and opens a pull request in the owner’s own fork. C10.10 gives each Tier-1 recipe its own update and rollback actions and gates them in the recipe matrix. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | The F-matrix backfill for the 217 pre-gate items is C11.09, tracked as `PROOF_DEBT` in the plan gate. C10 update work is complete. Next is C10.24 (the remaining customer screens) and C10.15–C10.18, then C10.19 and C11. |
+| Current focus | C5.25 (no customer can pay an invoice today) and C10.24–C10.28 (mobile contracts first, then the screens), then C10.15–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4970,6 +4983,24 @@ owner operations, never substitute for them.
   `invoicing.receipt`; `reconcileInPersonPayments` lists unsettled Terminal
   takes; translated `/admin/pos`; `tests/core/pos-adapters.test.ts` and
   `tests/core/invoicing-pos.test.ts`; changeset `commerce-pos.md`.)*
+
+- [ ] **C5.25** Let a customer pay an issued invoice: a `/portal/invoices/[id]`
+  page for the signed-in customer and a token link for the invoice email, both
+  rendering one component that shows the invoice, starts the configured
+  provider's hosted checkout and lands on a same-instance confirmation;
+  `invoicing.send` puts the link in the email and the portal invoices room's
+  entry links to the page. (**Why this exists:** the 2026-09-09 audit found
+  `invoicing.beginPaymentCheckout` is `scoped` and called only from
+  `app/(admin)/payment-actions.ts`, portal "payments" is a list, and no
+  customer invoice page exists — C8.11 shipped the *lists*. Nothing let a
+  customer pay on web or mobile. C11.01's "invoice → payment" and C10.26 both
+  depend on this. **Evidence:** the customer path is a token- or
+  session-authorized read plus a checkout start bound to that invoice, never a
+  widened `scoped` permission; `viewed` is written on first open; success and
+  cancel URLs stay same-instance; a focused service suite plus a real-browser
+  journey through the manual/offline provider; F04 light/dark, en/es/fr; F07
+  tokens are unguessable, single-purpose and dead once the invoice is void or
+  paid; F12 the room entry, the email and the app all reach the same page.)
 
 **C5 exit:** every form of value converges through one explainable invoice,
 payment, tax, inventory and reporting path, with no floating-point money.
@@ -7915,9 +7946,66 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `expo-customer-app.md`. **F12** the tab bar renders `TAB_ORDER` filtered to
   screens that exist, so a tab never leads to a dead end. Store binaries are
   C10.16.)*
-- [ ] **C10.24** Build the remaining customer screens against the same
-  contracts: booking, invoice pay, galleries and proofing, portal messages and
-  newsletters.
+- [ ] **C10.24** Make the signed-in screen contracts true before building on
+  them, and give the app a write path. Split 2026-09-09 from "build the
+  remaining customer screens": the audit found four of the five contracts name
+  services a customer cannot call — `invoicing.get`, `galleries.list` and
+  `galleries.listSelections` are owner-only; `conversations.get` is owner-only
+  and `conversations.reply` replies *as the business*; `bookings.create` is an
+  owner mutation; `newsletters.unsubscribe` needs an email-footer token the app
+  never holds. C10.13 checked that every name exists in the SDK; it did not
+  check who may call it, which is how C10.23's catalog first shipped reading
+  the owner's list (corrected in the same PR). **Scope:** extend the
+  `tests/core/mobile-screens.test.ts` audience assertion to signed-in screens
+  (public, authenticated, or `selfService` queries only; no `scoped` write
+  without a customer-authorized equivalent) and correct every contract until it
+  passes; add `useScreenWrite` to `apps/mobile/src/lib/screen-data.ts` that
+  asserts the write is on the contract and refuses offline through
+  `OfflineWriteRefused`; add the `app.*` strings the contracts already name to
+  `locales/{en,es,fr}.json` with a resolver, so no screen renders a key.
+  **Evidence:** the audience test fails on today's contracts and passes on the
+  corrected ones; F04 N/A (no new screen); F05 N/A; F07 the write helper is
+  the only way a screen mutates; F09 N/A; F12 the app's shell test lists the
+  helper as the sole caller of `assertOnContract(..., true)`.
+- [ ] **C10.25** Build the bookings tab and the booking screen: the customer's
+  own list through `bookings.list` (`selfService`, so the screen first learns
+  its `contactId` from `portal.myProfile`), and reschedule, cancel and intake
+  through the existing token services, mirroring
+  `app/portal/appointments/[token]`. **Decision needed first:** the list
+  deliberately omits the reschedule token (`PortalRecord.href` is `null` so a
+  list never carries a bearer value), so a signed-in customer cannot open a
+  booking from the list on any surface. Either a self-service query mints the
+  customer's own booking link for a session that already proves identity, or
+  the app reaches bookings only from push and email links; record the choice in
+  §4.4. Booking *creation* stays on the web until a customer-callable request
+  path exists — `bookings.create` is an owner mutation.
+- [ ] **C10.26** Build the invoices tab and the invoice screen against C5.25:
+  list from `portal.myRecords`, detail from a customer-authorized read, and a
+  Pay button that opens the C5.25 page in the system browser and returns by
+  deep link. Depends on C5.25. The contract test's ban on any `pay|checkout|
+  charge` service name stays; the handoff is a URL.
+- [ ] **C10.27** Build the galleries tab and the proofing screen on the real
+  session flow: a `galleries` portal room (module registers
+  `registerPortalSection`, loads by contact) so `portal.myRecords` lists the
+  customer's galleries; then `galleries.openWithLogin` → `galleries.viewSession`
+  → `viewItem`, `setSelection`, `clearSelection`, `submitRound`, mirroring
+  `app/g/[slug]` and `app/g/actions.ts`; remove `galleries.list` and
+  `galleries.listSelections` from the contract. Persist the read-through cache
+  with the revocation limit `apps/mobile/src/lib/cache.ts` defers here — a
+  gallery whose access was revoked must not remain readable on the phone past
+  that limit.
+- [ ] **C10.28** Build messages, newsletters and the account tab. Messages:
+  the customer's threads through `conversations.list` (`selfService`), a thread
+  view, and a reply that is a *customer* message — today no such service
+  exists (`conversations.reply` is the business speaking; the customer-origin
+  paths are the public `cms.submit*` services), so add one under §4.14's
+  inbound rules or ship the screen read-only and drop it from the pinned
+  writes list. Newsletters: `newsletters.listPublic` to learn what may be
+  subscribed to, `subscribe`, and `privacy.setMyMarketingPreference` for the
+  signed-in preference — never the email-footer `unsubscribe` token. Account:
+  `portal.myProfile`, `portal.myRecords`, sign out with device-token revoke
+  (C10.14). Grow `BUILT` in `app/(tabs)/_layout.tsx` to the full `TAB_ORDER`
+  and add every new file to the shell test's colour and state lists.
 - [x] **C10.14** Build push registration/preferences and booking, gallery,
   invoice and back-in-stock notifications through core notification services.
   §35.1's `DeviceToken` carries a `contact_id`, so this item **must repoint it
@@ -7995,7 +8083,8 @@ schema they inherit reads as a designed thing rather than an excavation.
 
 - [ ] **C11.01** Prove site visitor → localized signup/page → optional consent-
   safe contact import → form/chat → one resolved contact → inbox/task → quote
-  → contract → invoice → payment → timeline/report.
+  → contract → invoice → payment → timeline/report. (Depends on C5.25: until
+  it lands there is no step a customer can take between `sent` and `paid`.)
 - [ ] **C11.02** Prove product browse → variant/price/tax/stock → cart → mixed
   checkout → payment → split/digital fulfillment → return/refund/reconciliation.
 - [ ] **C11.03** Prove service/event/rental discovery → real availability →
@@ -8018,6 +8107,30 @@ schema they inherit reads as a designed thing rather than an excavation.
 
 - [ ] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
   package row and record evidence beside each remaining checkbox.
+  (**Worklist, 2026-09-09.** The `PROOF_DEBT` set in `scripts/plan-gate.mjs`
+  is the list of items checked before C0.12's proof clause; deleting an entry
+  is how this item records that its evidence was written. The audit also
+  found F04 owed on shipped services, verified by caller search with no
+  string-dispatch escape hatch: **reviews** has no admin screen at all
+  (`moderate`, `reply`, `list`, `request`, `ingestExternal` have no caller);
+  **connections** has OAuth *callbacks* but no begin route or button, so the
+  calendar screen's `needs_reconnect` pill has no action, and no screen
+  inspects, re-scopes, rotates or removes a connection; **settings** module
+  on/off (`setModuleEnabled`, `listModules`); **invoicing** payment plans,
+  deposit/balance splits, late fees and provider payouts
+  (`advanced-money-service.ts`, no caller); **plugins** update, rollback,
+  registry and catalogue browse; **webhooks** inspect and replay; **messaging**
+  keyword rules, quiet-hours windows and SMS compliance events; **scheduling**
+  ICS feeds, per-service calendars, audience links; **crm** stage and deal
+  edit; **quotes** convert-to-invoice; **galleries** price sheet;
+  **help-centre** authoring; **seo** redirect list/delete; **agents** hire,
+  edit, runtime connect, playbook export; **automations** run list/kill;
+  **events** and **newsletters** update; **catalog** publish, shipping zones,
+  reservations, saved carts, digital grants; **update** rollback and policy;
+  **import** map/review-conflicts; **segments** preview. Each is either a
+  screen in the same change as its evidence block or an explicit §36 refusal.
+  Two admin pages exist but are absent from `AdminNav.tsx`: guidance and
+  notifications.)
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.
@@ -8035,6 +8148,30 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
   passing acceptance test.
+  (**Worklist, 2026-09-09.** The tree has zero TODO/FIXME markers and no
+  dead admin actions; the false positives are in the gates themselves.
+  `pnpm gates` omits `merge-completeness`, `registry-completeness`,
+  `docs-availability` and `plan-gate`, all DB-free and together under a
+  minute, and lists `cms-a11y`, which skips silently without a database, so
+  the fast run reports green having run nothing for it — make a listed file
+  that runs zero tests a failure. The colour rule is enforced only for
+  Tailwind palette and arbitrary-value utilities: `.css` is not linted at all
+  (`app/globals.css` shadow fallbacks are `rgb()` literals), bare hex in
+  `style={{}}` or attributes passes, and `packages/**` is outside ESLint
+  (`packages/mobile-app/src/branding.ts` and `packages/templates/src/presets.ts`
+  carry a light-only palette with no contrast test). Nothing statically stops
+  `ctx.callAsSystem(createContact, …)` from a module — a `no-restricted-imports`
+  rule outside `app/(admin)/**` closes it. The provider-boundary gate's
+  `PROVIDER_METHODS` list has no self-check, unlike merge-completeness, which
+  asserts its own reflection still finds known columns. Two demo paths
+  coexist: `core/demo` powers `/admin/demos`, while `modules/seed`'s
+  `demo.install`/`seed.installPreset` and every module's `loadDemo*`/
+  `verifyDemo*`/`purgeDemo*` fixture service have no caller — confirm and
+  remove one. Release notes have an input gate (`changelog-gate.mjs`) and no
+  output: 301 changesets, no `CHANGELOG.md`, and production health reports
+  `0.0.0` because the droplet was never redeployed after C3.20 — a gate that
+  `CHANGELOG.md`'s top version equals `package.json` closes the first; the
+  §18 recipe should make the second visible.)
 - [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
   prove there is no affirmative feature without a completed checklist item.
 - [ ] **C11.17 — DONE** Run the full clean-room install, migration, test,
