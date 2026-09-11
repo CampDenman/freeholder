@@ -8182,8 +8182,10 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   remain authoritative across web, HTTP and agent clients. **F04/F06/F10** the
   existing native loading/stale/error states remain; private data is hidden
   while backgrounded and before an account/route transition can render an old
-  result. Expiry clears it and triggers a fresh query. Physical light/dark,
-  screen-reader and foreground/cold-start checks are still pending.
+  result. Expiry clears it and triggers a fresh query.
+  Uncached management links also follow session invalidation; the bookings
+  profile uses the private lease so it does not block an offline cached list.
+  Physical light/dark, screen-reader and foreground/cold-start checks remain pending.
   **F07** 401 invalidates the active session's entire cache; 403/404 evict the
   denied read. A late 401 from an old account cannot clear the new account.
   Failed requests never renew the private lease; cache failures never switch

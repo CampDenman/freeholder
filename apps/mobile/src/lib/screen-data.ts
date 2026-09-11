@@ -132,7 +132,7 @@ export function useScreenData<T>(input: {
   enabled?: boolean;
 }): ScreenData<T> {
   const { screen, service, caller, cache, params, enabled = true } = input;
-  const [state, setState] = useState<Omit<ScreenData<T>, "reload"> & { identity?: string; cache?: Cache }>({
+  const [state, setState] = useState<Omit<ScreenData<T>, "reload"> & { identity?: string; cache?: Cache; scope?: Cache }>({
     value: null,
     loading: true,
     staleness: null,
@@ -155,7 +155,7 @@ export function useScreenData<T>(input: {
   const reload = useCallback(() => setAttempt((count) => count + 1), []);
 
   useEffect(() => {
-    const publish = (next: Omit<ScreenData<T>, "reload">) => setState({ ...next, identity, cache: scopedCache });
+    const publish = (next: Omit<ScreenData<T>, "reload">) => setState({ ...next, identity, cache: scopedCache, scope: privateCache });
     if (!enabled || !instanceUrl || !visible) {
       publish({ value: null, loading: false, staleness: null, freshness: null, error: null });
       return;
@@ -209,11 +209,11 @@ export function useScreenData<T>(input: {
       cancelled = true;
       if (expiry !== undefined) clearTimeout(expiry);
     };
-  }, [screen, service, instanceUrl, token, scopedCache, serialized, enabled, visible, identity, reload]);
+  }, [screen, service, instanceUrl, token, scopedCache, privateCache, serialized, enabled, visible, identity, reload]);
 
   // Hide the previous account/route/background result during render, before
   // effects run. Scope invalidation also hides every mounted private screen.
-  if (state.identity !== identity || state.cache !== scopedCache || !visible) {
+  if (state.identity !== identity || state.cache !== scopedCache || state.scope !== privateCache || !visible) {
     return { value: null, loading: enabled && visible, staleness: null, freshness: null, error: null, reload };
   }
   return { value: state.value, loading: state.loading, staleness: state.staleness, freshness: state.freshness, error: state.error, reload };

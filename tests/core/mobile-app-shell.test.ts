@@ -41,9 +41,9 @@ describe("the Expo application (C10.23)", () => {
       expect(code(file), file).not.toMatch(/message=\{SCREENS\./);
     }
     const data = code("src/lib/screen-data.ts");
-    expect(data).toContain("[screen, service, instanceUrl, token, scopedCache, serialized, enabled, visible, identity, reload]");
+    expect(data).toContain("[screen, service, instanceUrl, token, scopedCache, privateCache, serialized, enabled, visible, identity, reload]");
     expect(data).toContain("useSyncExternalStore(privateCaches.subscribe");
-    expect(data).toContain("state.identity !== identity || state.cache !== scopedCache || !visible");
+    expect(data).toContain("state.identity !== identity || state.cache !== scopedCache || state.scope !== privateCache || !visible");
     expect(data).toContain("maxAgeMs: PRIVATE_CACHE_LEASE_MS");
     expect(data).toContain("result.expiresAt - Date.now()");
   });
