@@ -89,6 +89,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
     await change(async () => {
       if (request !== revision.current) return;
       const stored = await loadSession(keychain);
+      if (request !== revision.current) return;
       const normalized = normalizeAddress(address);
       const matching = stored && "url" in normalized && stored.instanceUrl === normalized.url ? stored : null;
       if (matching) {
