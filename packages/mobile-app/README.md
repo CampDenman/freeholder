@@ -24,6 +24,8 @@ This package contains the shared client behavior:
 | `discovery` | which instance am I talking to, and can this binary talk to it? |
 | `session` | how is a session held on a device? |
 | `offline` | what do I show with no signal? |
+| `private-cache` | how does encrypted persistence remain bound to a live session? |
+| `cached-discovery` | can a remembered instance reopen offline without bypassing compatibility? |
 | `branding` | what does this business look like? |
 | `screens` | which services may each customer screen call? |
 | `strings` | how do the screen's catalog keys read in this locale? |
@@ -78,9 +80,20 @@ longer exist, and a payment queued offline is a payment somebody believes they
 made.
 
 Cached content always renders with **when** it was fetched, not just *that* it
-is stale: a gallery from four minutes ago is worth proofing and one from last
-Tuesday is not. When nothing has been cached, the app says so rather than
-showing an empty gallery.
+is stale. When nothing usable is cached, the app says so rather than showing
+an empty gallery. Private native snapshots use `PRIVATE_CACHE_LEASE_MS` (60
+seconds) through `readThrough({ maxAgeMs, ... }, call, cache)`. Network and
+persistence latency count against the lease; failed reads never renew it.
+HTTP 401/403/404 evict instead of falling back. The returned `expiresAt` lets
+the native binding clear displayed data and revalidate on expiry/foreground.
+
+`encryptedCache` wraps platform storage with authenticated encryption and binds
+each payload to its requested cache key. `revocableCache` serializes operations
+and invalidates old callers synchronously; `privateCacheScope` orders account
+changes, including an asynchronous keychain open finishing after sign-out.
+The Expo adapter supplies AES-GCM and a key held in SecureStore; this package
+adds no crypto or native dependency. Public cached discovery restores branding
+only for the remembered instance and cannot extend any private read lease.
 
 The one sanctioned write queue is media capture (C10.18), which is a queue of
 files rather than a queue of decisions.

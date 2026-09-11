@@ -11,12 +11,17 @@
 // Offline behaviour is `@freeholder/mobile-app`'s `readThrough` (C10.12), so
 // the write-never rule and the "say when it was fetched" rule are enforced in
 // one place for every screen rather than remembered in each.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createMemoryCache, memoryCache } from "./cache";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { AppState } from "react-native";
+import { memoryCache, privateCaches, privateCacheOwner } from "./cache";
+import { fetchWithTimeout } from "./transport";
 import {
   cacheKey,
   freshnessLabel,
   readThrough,
+  noCache,
+  PRIVATE_CACHE_LEASE_MS,
+  serviceResponse,
   writeThrough,
   SCREENS,
   type Cache,
@@ -55,7 +60,7 @@ export async function callService<T>(
   service: string,
   input: unknown,
 ): Promise<T> {
-  const response = await fetch(`${caller.instanceUrl}/api/v1/${service}`, {
+  const response = await fetchWithTimeout(`${caller.instanceUrl}/api/v1/${service}`, {
     method: "POST",
     credentials: "omit",
     headers: {
@@ -64,18 +69,8 @@ export async function callService<T>(
     },
     body: JSON.stringify(input ?? {}),
   });
-  const text = await response.text();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error(`${service} did not answer JSON (${response.status}).`);
-  }
-  if (!response.ok) {
-    const message = (parsed as { error?: { message?: string } }).error?.message;
-    throw new Error(message ?? `${service} failed (${response.status}).`);
-  }
-  return parsed as T;
+  if (response.status === 401 && caller.token) void privateCaches.clear(privateCacheOwner({ ...caller, token: caller.token })).catch(() => {});
+  return serviceResponse<T>(service, response);
 }
 
 export interface ScreenData<T> {
@@ -137,7 +132,7 @@ export function useScreenData<T>(input: {
   enabled?: boolean;
 }): ScreenData<T> {
   const { screen, service, caller, cache, params, enabled = true } = input;
-  const [state, setState] = useState<Omit<ScreenData<T>, "reload">>({
+  const [state, setState] = useState<Omit<ScreenData<T>, "reload"> & { identity?: string; cache?: Cache }>({
     value: null,
     loading: true,
     staleness: null,
@@ -150,19 +145,24 @@ export function useScreenData<T>(input: {
   // so updating request state does not trigger an endless refetch loop.
   const instanceUrl = caller?.instanceUrl;
   const token = caller?.token;
-  // Private reads use an isolated process-memory cache for this session.
-  // A late response from a former account can only write into its old cache.
-  const scopedCache = useMemo(() => token && cache === memoryCache ? createMemoryCache() : cache, [token, cache]);
+  const owner = privateCacheOwner({ instanceUrl: instanceUrl ?? "", token: token ?? "" });
+  const privateCache = useSyncExternalStore(privateCaches.subscribe, () => privateCaches.get(owner), () => noCache);
+  const scopedCache = token && cache === memoryCache ? privateCache : cache;
+  const appState = useSyncExternalStore(subscribeAppState, () => AppState.currentState, () => "active");
+  const visible = !token || (appState !== "background" && appState !== "inactive");
+  const identity = JSON.stringify([screen, service, instanceUrl, token, serialized, enabled, attempt, appState]);
 
   const reload = useCallback(() => setAttempt((count) => count + 1), []);
 
   useEffect(() => {
-    if (!enabled || !instanceUrl) {
-      setState({ value: null, loading: false, staleness: null, freshness: null, error: null });
+    const publish = (next: Omit<ScreenData<T>, "reload">) => setState({ ...next, identity, cache: scopedCache });
+    if (!enabled || !instanceUrl || !visible) {
+      publish({ value: null, loading: false, staleness: null, freshness: null, error: null });
       return;
     }
     let cancelled = false;
-    setState({ value: null, loading: true, staleness: null, freshness: null, error: null });
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    publish({ value: null, loading: true, staleness: null, freshness: null, error: null });
     void (async () => {
       try {
         assertOnContract(screen, service);
@@ -171,12 +171,13 @@ export function useScreenData<T>(input: {
             key: cacheKey(instanceUrl, service, JSON.parse(serialized)),
             kind: "query",
             service,
+            ...(token ? { maxAgeMs: PRIVATE_CACHE_LEASE_MS } : {}),
           },
           () => callService<T>({ instanceUrl, token: token ?? null }, service, JSON.parse(serialized)),
           SCREENS[screen].cacheable ? scopedCache : passthrough,
         );
         if (cancelled) return;
-        setState({
+        publish({
           value: result.value,
           loading: false,
           staleness: freshnessLabel(result.freshness),
@@ -186,9 +187,16 @@ export function useScreenData<T>(input: {
               ? freshnessLabel(result.freshness)
               : null,
         });
+        if (result.expiresAt !== undefined) {
+          expiry = setTimeout(() => {
+            if (cancelled) return;
+            publish({ value: null, loading: true, staleness: null, freshness: null, error: null });
+            reload();
+          }, Math.max(0, result.expiresAt - Date.now()));
+        }
       } catch (error) {
         if (cancelled) return;
-        setState({
+        publish({
           value: null,
           loading: false,
           staleness: null,
@@ -199,10 +207,21 @@ export function useScreenData<T>(input: {
     })();
     return () => {
       cancelled = true;
+      if (expiry !== undefined) clearTimeout(expiry);
     };
-  }, [screen, service, instanceUrl, token, scopedCache, serialized, enabled, attempt]);
+  }, [screen, service, instanceUrl, token, scopedCache, serialized, enabled, visible, identity, reload]);
 
-  return { ...state, reload };
+  // Hide the previous account/route/background result during render, before
+  // effects run. Scope invalidation also hides every mounted private screen.
+  if (state.identity !== identity || state.cache !== scopedCache || !visible) {
+    return { value: null, loading: enabled && visible, staleness: null, freshness: null, error: null, reload };
+  }
+  return { value: state.value, loading: state.loading, staleness: state.staleness, freshness: state.freshness, error: state.error, reload };
+}
+
+function subscribeAppState(listener: () => void) {
+  const subscription = AppState.addEventListener("change", listener);
+  return () => subscription.remove();
 }
 
 /**

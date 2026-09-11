@@ -89,7 +89,25 @@ route accepts `Authorization: Bearer {gallerySessionToken}`. This is the
 gallery capability, not the user's login token; never put it in the URL.
 The route rechecks gallery/item access and returns header-authenticated images
 with `Cache-Control: private, no-store`. C10.27 still owns the native proofing
-screen and the explicit lifetime and revocation rules for persistent caching.
+screen and caching private image bytes; C10.30 supplies the snapshot cache below.
+
+Private read snapshots persist as AES-GCM ciphertext in the app cache directory,
+with a session-specific key in SecureStore (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`).
+The vault allows at most 64 files/20 MiB, with an 8 MiB per-entry ceiling.
+Private content expires 60 seconds after the request began, including time spent
+receiving and persisting it. A failed/offline read never renews that lease.
+HTTP 401 invalidates the active session's vault; 403/404 remove the denied read.
+Sign-out and account/instance changes invalidate old callers immediately, then
+remove their ciphertext. Late responses cannot refill the old vault or erase
+the next account's cache. Storage failures disable persistence without losing
+successful live reads or falling back to plaintext.
+
+Private screens hide while backgrounded, revalidate on foreground, and clear
+expired content even when left open. Offline restart can restore remembered
+public branding for the same instance/session; every private read still needs
+an unexpired snapshot. An authoritative compatibility/setup refusal cannot be
+hidden by the discovery cache. Physical device cold-start, keychain, lifecycle
+and accessibility verification remains open under C10.30.
 
 Home and bookings offer password sign-in or an email link. Copy the original
 email link into the app: it is checked against the connected business and
@@ -107,8 +125,8 @@ only for their issuing instance. Browser cookie requests retain CSRF checks.
   tokens, so a rebrand reaches every phone without a store review.
 - **Every screen has a loading, empty and error state.** A screen that renders
   nothing while it waits looks broken.
-- **Cached content says when it was fetched.** A gallery from four minutes ago
-  is worth proofing; one from last Tuesday is not.
+- **Cached content says when it was fetched.** Private snapshots have a
+  60-second lease and disappear when it expires.
 
 ## Limits
 

@@ -9,11 +9,16 @@
 //
 // §35.1: "The app is a client, never a second implementation." So there is no
 // business rule below — only storage, context and fetch.
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
+import { privateCaches, privateCacheOwner } from "./cache";
+import { fetchWithTimeout } from "./transport";
 import {
   brandFrom,
-  discover,
+  discoverWithCache,
+  rememberInstance,
+  normalizeAddress,
+  noCache,
   loadSession,
   saveSession,
   signIn as requestSignIn,
@@ -68,54 +73,96 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [status, setStatus] = useState<InstanceState["status"]>("loading");
-
-  const connect = useCallback(async (address: string) => {
-    const result = await discover(address, (url) => fetch(url));
-    if (!result.ok) {
-      // Every refusal already carries a sentence written for the customer, so
-      // the app shows what the resolver said rather than inventing its own.
-      setProblem(result.message);
-      setStatus("needs-instance");
-      return;
-    }
-    await SecureStore.setItemAsync(INSTANCE_KEY, result.instance.url);
-    const stored = await loadSession(keychain);
-    // Never send a session from the previously connected business to a new one.
-    if (stored && stored.instanceUrl !== result.instance.url) await clearSession(keychain);
-    setSession(stored?.instanceUrl === result.instance.url ? stored : null);
-    setInstance(result.instance);
-    setProblem(null);
-    setStatus("ready");
+  const revision = useRef(0);
+  const pending = useRef<Promise<unknown>>(Promise.resolve());
+  // Keychain mutations are ordered even when a login returns during sign-out.
+  const change = useCallback((work: () => Promise<void>) => {
+    const task = pending.current.then(work, work);
+    pending.current = task.catch(() => {});
+    return task;
   }, []);
 
+  const connect = useCallback(async (address: string) => {
+    const request = ++revision.current;
+    setSession(null);
+    setStatus("loading");
+    await change(async () => {
+      if (request !== revision.current) return;
+      const stored = await loadSession(keychain);
+      const normalized = normalizeAddress(address);
+      const matching = stored && "url" in normalized && stored.instanceUrl === normalized.url ? stored : null;
+      if (matching) {
+        // Cache/keychain failure may disable offline reads, never force plaintext.
+        await privateCaches.activate(privateCacheOwner(matching)).catch(() => {});
+      } else {
+        await privateCaches.clear();
+      }
+      if (request !== revision.current) return;
+      const cache = matching ? privateCaches.get(privateCacheOwner(matching)) : noCache;
+      const result = await discoverWithCache(address, (url) => fetchWithTimeout(url), cache);
+      if (request !== revision.current) return;
+      if (!result.ok) {
+        setProblem(result.message);
+        setStatus("needs-instance");
+        return;
+      }
+      await SecureStore.setItemAsync(INSTANCE_KEY, result.instance.url);
+      if (stored && !matching) await clearSession(keychain);
+      if (request !== revision.current) return;
+      setSession(matching);
+      setInstance(result.instance);
+      setProblem(null);
+      setStatus("ready");
+    });
+  }, [change]);
+
   const forget = useCallback(async () => {
-    await SecureStore.deleteItemAsync(INSTANCE_KEY);
-    await clearSession(keychain);
+    ++revision.current;
+    const cleanup = privateCaches.clear();
+    void cleanup.catch(() => {});
     setInstance(null);
     setSession(null);
     setStatus("needs-instance");
-  }, []);
+    await change(async () => {
+      try {
+        await clearSession(keychain);
+        await SecureStore.deleteItemAsync(INSTANCE_KEY);
+      } finally { await cleanup; }
+    });
+  }, [change]);
 
   const signOut = useCallback(async () => {
-    // Token first: an app that clears its in-memory state and is then killed
-    // by the OS before the keychain write lands has "signed out" into a state
-    // that signs itself back in on next launch.
-    await clearSession(keychain);
+    ++revision.current;
+    const cleanup = privateCaches.clear();
+    void cleanup.catch(() => {});
     setSession(null);
-  }, []);
+    await change(async () => {
+      try { await clearSession(keychain); } finally { await cleanup; }
+    });
+  }, [change]);
 
   const signIn = useCallback(async (input: { email: string; password?: string; link?: string }): Promise<SignInResult> => {
     if (!instance) return { ok: false, reason: "unreachable", message: "Connect first." };
+    const generation = ++revision.current;
     const request = { ...input, instanceUrl: instance.url };
     const result = input.link
       ? await redeemSignInLink({ ...request, link: input.link }, (url, init) => fetch(url, init))
       : await requestSignIn(request, (url, init) => fetch(url, init));
     if (result.ok) {
-      await saveSession(keychain, result.session);
-      setSession(result.session);
+      await change(async () => {
+        if (generation !== revision.current) return;
+        await saveSession(keychain, result.session);
+        if (generation !== revision.current) return;
+        await privateCaches.activate(privateCacheOwner(result.session)).catch(() => {});
+        if (generation !== revision.current) return;
+        await rememberInstance(instance, privateCaches.get(privateCacheOwner(result.session)));
+        if (generation !== revision.current) return;
+        setSession(result.session);
+      });
     }
+    if (generation !== revision.current) return { ok: false, reason: "unreachable", message: "The sign-in was cancelled. Try again." };
     return result;
-  }, [instance]);
+  }, [instance, change]);
 
   useEffect(() => {
     void (async () => {
@@ -125,7 +172,10 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       await connect(remembered);
-    })();
+    })().catch((error: unknown) => {
+      setProblem(error instanceof Error ? error.message : String(error));
+      setStatus("needs-instance");
+    });
   }, [connect]);
 
   const value = useMemo<InstanceState>(
