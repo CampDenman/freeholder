@@ -20,7 +20,7 @@ export default function Bookings() {
   const t = useAppText();
   const router = useRouter();
   const caller = instance ? { instanceUrl: instance.url, token: session?.token ?? null } : null;
-  const profile = useScreenData<{ contactId: string }>({ screen: "bookings", service: "portal.myProfile", caller, cache: noCache, enabled: Boolean(session) });
+  const profile = useScreenData<{ contactId: string }>({ screen: "bookings", service: "portal.myProfile", caller, cache: memoryCache, enabled: Boolean(session) });
   const contactId = profile.value?.contactId;
   const data = useScreenData<Appointment[]>({ screen: "bookings", service: "bookings.list", caller, cache: memoryCache, params: { contactId, limit: 200 }, enabled: Boolean(session && contactId) });
   const ids = data.value?.map((booking) => booking.id) ?? [];

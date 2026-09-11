@@ -8135,7 +8135,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   and makes the artifact gate reject/scrub them, with a regression proving the
   real workspace's Git metadata survives. Scrubbing reduced the observed
   artifact from 18,154 to 15,468 files without raising its 18,000-file limit.
-- [ ] **C10.29** Supply C10.27's customer gallery foundation: a contact-bound
+- [x] **C10.29** Supply C10.27's customer gallery foundation: a contact-bound
   gallery query and module-registered portal room, including active guest
   invitations and excluding expired/revoked access. Reuse the existing private
   image route for gallery-session bearer headers, with explicit credentials
@@ -8164,16 +8164,60 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   before the native tab. **F11** generated SDK, app README and changeset updated.
   The 17 focused tests in `tests/core/customer-galleries.test.ts` and
   `tests/core/portal-rooms.test.ts` passed, as did 190 required contract tests.
-  Browser validation is in progress; this checkbox remains open until it passes.)*
+  Browser validation and the merge queue passed in PR #332, merged as
+  `c786e7680acb4eb87a79109a661731f20e8bceee`.)*
+- [ ] **C10.30** Supply C10.27's private cache foundation: encrypted, bounded
+  read snapshots bound to the active instance/session, a 60-second read lease,
+  immediate denial eviction, and synchronous invalidation of old callers at
+  sign-out or account/instance changes. Clear displayed private content on
+  expiry and revalidate on foreground. Support offline restart only for the
+  same remembered instance and still-valid snapshots. Verify denial, expiry,
+  persistence failure and delayed-request races with executable tests; native
+  cold-start/keychain/device interaction evidence remains required.
+  *(Implemented 2026-09-10: `packages/mobile-app/src/private-cache.ts` serializes
+  cache operations and account transitions; `apps/mobile/src/lib/cache.ts`
+  binds AES-GCM ciphertext to the session and cache key, stores its encryption
+  key in SecureStore, and limits storage to 64 files/20 MiB, 8 MiB per entry.
+  **F01/F02/F03/F05** no schema, service or permission changes; existing reads
+  remain authoritative across web, HTTP and agent clients. **F04/F06/F10** the
+  existing native loading/stale/error states remain; private data is hidden
+  while backgrounded and before an account/route transition can render an old
+  result. Expiry clears it and triggers a fresh query.
+  Uncached management links also follow session invalidation; the bookings
+  profile uses the private lease so it does not block an offline cached list.
+  Physical light/dark, screen-reader and foreground/cold-start checks remain pending.
+  **F07** 401 invalidates the active session's entire cache; 403/404 evict the
+  denied read. A late 401 from an old account cannot clear the new account.
+  Failed requests never renew the private lease; cache failures never switch
+  to plaintext. **F08/F12** `tests/core/mobile-private-cache.test.ts` covers
+  exact expiry, encryption/tampering, denial bodies, delayed reads/writes,
+  superseded keychain opens, cleanup failure and offline restart. **F09** cache
+  files are disposable, with no jobs or queued writes; public discovery may
+  restore branding offline, but grants no extension to private read leases.
+  **F11** app/package READMEs and the changeset describe the policy. Local
+  validation passed 219 required contract tests (25 files), 67 focused app/cache
+  tests, native/root typechecks, the shared package build, lint after correcting
+  a test-helper binding, and Android/iOS Hermes exports. PR #333 carries the
+  implementation; the item remains open for the native-device evidence above.)*
 - [ ] **C10.27** Build the galleries tab and the proofing screen on C10.29's
   customer portal room and private image transport; then
   `galleries.openWithLogin` → `galleries.viewSession`
   → `viewItem`, `setSelection`, `clearSelection`, `submitRound`, mirroring
   `app/g/[slug]` and `app/g/actions.ts`; remove `galleries.list` and
-  `galleries.listSelections` from the contract. Persist the read-through cache
-  with the revocation limit `apps/mobile/src/lib/cache.ts` defers here — a
+  `galleries.listSelections` from the contract. Extend C10.30's read-through cache
+  to private gallery image bytes with the same revocation limit — a
   gallery whose access was revoked must not remain readable on the phone past
   that limit.
+  **Cache policy, decided 2026-09-10:** private read snapshots and image bytes
+  have a 60-second lease from successful server authorization, matching the
+  existing web image cache ceiling. Permission/not-found responses evict
+  immediately; offline/network failures never renew the lease. Expiry clears
+  displayed content even while the screen remains open, and foregrounding
+  rechecks time and access. Persist ciphertext in the app cache directory with
+  a session-specific encryption key in the platform keychain. Sign-out,
+  account/instance changes and failed authorization invalidate the cache;
+  late requests from the old session may not repopulate it. No proofing writes
+  are queued or retried automatically.
 - [ ] **C10.28** Build messages, newsletters and the account tab. Messages:
   the customer's threads through `conversations.list` (`selfService`), a thread
   view, and a reply that is a *customer* message. **Decided 2026-09-10

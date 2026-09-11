@@ -51,6 +51,15 @@ export type Freshness =
 export interface ReadResult<T> {
   value: T | null;
   freshness: Freshness;
+  expiresAt?: number;
+}
+
+export const PRIVATE_CACHE_LEASE_MS = 60_000;
+
+/** An authoritative denial is never an excuse to show a cached private read. */
+export function isAccessDenied(error: unknown): boolean {
+  const status = (error as { status?: number } | null)?.status;
+  return status === 401 || status === 403 || status === 404;
 }
 
 /**
@@ -67,26 +76,51 @@ export async function readThrough<T>(
     /** Must be a query. A mutation here is a programming error, not a retry. */
     kind: "query" | "mutation";
     service: string;
+    maxAgeMs?: number;
+    now?: () => number;
   },
   call: () => Promise<T>,
   cache: Cache,
 ): Promise<ReadResult<T>> {
   if (input.kind === "mutation") throw new OfflineWriteRefused(input.service);
-
+  const now = input.now ?? Date.now;
+  const startedAt = now();
+  if (input.maxAgeMs !== undefined && (!Number.isFinite(input.maxAgeMs) || input.maxAgeMs <= 0)) {
+    throw new Error("A private cache lease must be finite and positive.");
+  }
   try {
     const value = await call();
+    const expiresAt = input.maxAgeMs === undefined ? undefined : startedAt + input.maxAgeMs;
+    if (expiresAt !== undefined && now() >= expiresAt) {
+      await cache.delete(input.key).catch(() => {});
+      return { value: null, freshness: { state: "empty", reason: "failed" } };
+    }
     await cache.set(
       input.key,
-      JSON.stringify({ value, fetchedAt: new Date().toISOString() } satisfies CacheEntry<T>),
-    );
-    return { value, freshness: { state: "live" } };
+      JSON.stringify({ value, fetchedAt: new Date(startedAt).toISOString() } satisfies CacheEntry<T>),
+    ).catch(() => {}); // Persistence failure must not discard a successful live read.
+    if (expiresAt !== undefined && now() >= expiresAt) {
+      await cache.delete(input.key).catch(() => {});
+      return { value: null, freshness: { state: "empty", reason: "failed" } };
+    }
+    return { value, freshness: { state: "live" }, ...(expiresAt === undefined ? {} : { expiresAt }) };
   } catch (error) {
+    if (isAccessDenied(error)) {
+      await cache.delete(input.key).catch(() => {});
+      throw error;
+    }
     const reason = isOffline(error) ? "offline" : "failed";
-    const raw = await cache.get(input.key);
+    const raw = await cache.get(input.key).catch(() => null);
     if (!raw) return { value: null, freshness: { state: "empty", reason } };
     try {
       const entry = JSON.parse(raw) as CacheEntry<T>;
-      return { value: entry.value, freshness: { state: "cached", fetchedAt: entry.fetchedAt, reason } };
+      const fetchedAt = Date.parse(entry.fetchedAt);
+      const expiresAt = input.maxAgeMs === undefined ? undefined : fetchedAt + input.maxAgeMs;
+      if (!Number.isFinite(fetchedAt) || fetchedAt > now() || (expiresAt !== undefined && now() >= expiresAt)) {
+        await cache.delete(input.key).catch(() => {});
+        return { value: null, freshness: { state: "empty", reason } };
+      }
+      return { value: entry.value, freshness: { state: "cached", fetchedAt: entry.fetchedAt, reason }, ...(expiresAt === undefined ? {} : { expiresAt }) };
     } catch {
       return { value: null, freshness: { state: "empty", reason } };
     }
