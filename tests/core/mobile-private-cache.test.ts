@@ -102,7 +102,7 @@ describe("revocation and account transitions (C10.30)", () => {
     const disk = storage();
     const started = deferred<void>();
     const finish = deferred<void>();
-    const originalSet = disk.set;
+    const originalSet = disk.set.bind(disk);
     disk.set = async (key, value) => { started.resolve(); await finish.promise; await originalSet(key, value); };
     const cache = revocableCache(disk);
     const writing = cache.set("a", "private");

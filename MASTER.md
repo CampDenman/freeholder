@@ -8192,8 +8192,11 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   superseded keychain opens, cleanup failure and offline restart. **F09** cache
   files are disposable, with no jobs or queued writes; public discovery may
   restore branding offline, but grants no extension to private read leases.
-  **F11** app/package READMEs and the changeset describe the policy. The item
-  remains open for the native-device evidence above.)*
+  **F11** app/package READMEs and the changeset describe the policy. Local
+  validation passed 219 required contract tests (25 files), 67 focused app/cache
+  tests, native/root typechecks, the shared package build, lint after correcting
+  a test-helper binding, and Android/iOS Hermes exports. PR #333 carries the
+  implementation; the item remains open for the native-device evidence above.)*
 - [ ] **C10.27** Build the galleries tab and the proofing screen on C10.29's
   customer portal room and private image transport; then
   `galleries.openWithLogin` → `galleries.viewSession`
