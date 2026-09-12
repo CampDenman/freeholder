@@ -19,7 +19,9 @@ import { formatDateTime } from "@/core/i18n";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
+import { hasModuleAccess } from "@/core/service";
 import { bulkConversationsAction } from "../../inbox-actions";
+import { beginMailReadOAuthAction } from "../../connection-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -40,6 +42,7 @@ export default async function InboxPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const actor = await requireStaffActor("crm");
+  const canConnectMail = hasModuleAccess(actor, "connections", "manage");
   const params = await searchParams;
   const one = (key: string): string => {
     const value = params[key];
@@ -97,6 +100,25 @@ export default async function InboxPage({
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
           {one("error").includes(" ") ? one("error") : t("inbox.failed")}
         </p>
+      ) : null}
+
+      {canConnectMail ? (
+        <Card>
+          <CardHeader title={t("inbox.connectMail.title")} />
+          <CardBody>
+            <p className="max-w-prose text-sm text-ink-muted">{t("inbox.connectMail.intro")}</p>
+            <div className="flex flex-wrap gap-2">
+              <form action={beginMailReadOAuthAction}>
+                <input type="hidden" name="provider" value="google" />
+                <Button type="submit">{t("inbox.connectMail.google")}</Button>
+              </form>
+              <form action={beginMailReadOAuthAction}>
+                <input type="hidden" name="provider" value="microsoft" />
+                <Button type="submit">{t("inbox.connectMail.microsoft")}</Button>
+              </form>
+            </div>
+          </CardBody>
+        </Card>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-4 text-sm">

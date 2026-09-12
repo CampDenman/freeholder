@@ -56,6 +56,9 @@ import {
   Printer,
   VideoCamera,
   Storefront,
+  Star,
+  Bell,
+  BookOpen,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -134,6 +137,9 @@ export interface AdminNavLabels {
   community: string;
   voiceVideo: string;
   marketplace: string;
+  reviews: string;
+  guidance: string;
+  notifications: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
@@ -141,6 +147,8 @@ export interface AdminNavLabels {
 const LINKS = [
   { href: "/admin", key: "overview", module: "admin", Icon: Gauge },
   { href: "/admin/briefing", key: "briefing", module: "admin", Icon: Sun },
+  { href: "/admin/guidance", key: "guidance", module: "admin", Icon: BookOpen },
+  { href: "/admin/notifications", key: "notifications", module: "admin", Icon: Bell },
   { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
   { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },
   { href: "/admin/templates", key: "templates", module: "cms", Icon: Copy },
@@ -174,6 +182,7 @@ const LINKS = [
   { href: "/admin/automations", key: "automations", module: "automations", Icon: Shuffle },
   { href: "/admin/projects", key: "projects", module: "projects", Icon: Kanban },
   { href: "/admin/galleries", key: "galleries", module: "galleries", Icon: ImageIcon },
+  { href: "/admin/reviews", key: "reviews", module: "reviews", Icon: Star },
   { href: "/admin/documents", key: "documents", module: "documents", Icon: FileText },
   { href: "/admin/time", key: "time", module: "time", Icon: Clock },
   { href: "/admin/quotes", key: "quotes", module: "quotes", Icon: Receipt },
