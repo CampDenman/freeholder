@@ -3303,12 +3303,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-10 |
-| Evidence snapshot | On `main` at `3b8ac53` after C10.08 update policy #311. C10.09 is the fork lane: a worktree merge that reports conflicts by seam, refuses to overwrite owner code, and opens a pull request in the owner’s own fork. C10.10 gives each Tier-1 recipe its own update and rollback actions and gates them in the recipe matrix. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Last reconciled | 2026-09-12 |
+| Evidence snapshot | On `main` at `09679d8` after C10.30 private cache #333. C10.30 remains open for native-device evidence. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C10.25–C10.28 (mobile screens on the corrected customer contracts and shared invoice payment page), then C10.15–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
+| Current focus | C3.13 (rebuild to §36), then C10.27–C10.28, then C10.15–C10.18, then C10.19, then C11 |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -4138,7 +4138,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   tests and examples for a block, service, adapter, automation verb and route.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
   Coverage in `tests/core/plugin-scaffold.test.ts`.)
-- [x] **C3.13** Ship first-party plugins for gift options/registries, print-on-
+- [ ] **C3.13** Ship first-party plugins for gift options/registries, print-on-
   demand, advanced communities, voice and video artifacts, and marketplace
   channel sync seams, as assigned by §§4.14 and 36.
   (`plugins/gift-registry`, `print-on-demand`, `community`, `voice-video`,
@@ -4156,7 +4156,12 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   durable jobs, so a failed channel sync, print job or recording retries in
   place rather than being lost. **F12** gift → invoice and
   marketplace order → invoice. Changeset `first-party-plugin-surfaces.md`;
-  `deploy/first-party-plugins.md`.)
+  `deploy/first-party-plugins.md`.
+  **Reopened 2026-09-12:** those seams exist; §36 product depth is now in
+  flight — community rooms/posts/moderation, voice/video rooms and
+  transcripts on the conversation spine, Printify-style POD fulfillment,
+  and marketplace channel sync that is not a hardcoded order. Do not treat
+  the fixture plugins as complete products.)
 
 #### Packages, installation, export, and target parity
 
@@ -7639,9 +7644,9 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   cancel. **F05** The same services are the HTTP/MCP surface. **F07**
   `tests/modules/subscription-billing.test.ts`, Stripe adapter coverage in
   `tests/core/payment-adapters.test.ts`, transaction-boundary scan includes
-  `billing.ts`. **F09** Apache-2.0 SPDX on the new files. **F12** N/A as a
-  help-centre article — the help centre is the CMS — user-facing copy is
-  changeset `subscription-billing.md`. EN/FR/ES.)
+  `billing.ts`. **F09** Apache-2.0 SPDX on the new files. **F12** live
+  provider settlement is C11.05, same honesty as C5.25 — user-facing copy
+  is changeset `subscription-billing.md`. EN/FR/ES.)
 - [x] **C10.01** Enforce customization seams—database, plugins, configuration,
   uploads—and detect unsupported live core-file modifications.
   (`src/core/update/seams.ts` names the four owner seams; core paths are
