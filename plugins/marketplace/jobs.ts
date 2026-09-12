@@ -26,7 +26,7 @@ export const retryFailedMarketplace = defineJob({
         );
         continue;
       }
-      if (channel.status === "connected" && channel.lastError) {
+      if (channel.status === "syncing" || (channel.status === "connected" && channel.lastError)) {
         await syncMarketplaceChannel.call({ channelId: channel.id }, actor);
       }
     }

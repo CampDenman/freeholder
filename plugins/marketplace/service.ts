@@ -23,6 +23,11 @@ attachPluginContactColumn({
 
 const PROVIDERS = ["shopify", "etsy", "amazon", "ebay"] as const;
 const SYNC_PAGE_SIZE = 50;
+const MAX_SYNC_PAGES = 500;
+
+function invoiceIdentity(channelId: string, externalRef: string): string {
+  return `marketplace:${channelId}:${externalRef}`;
+}
 
 const channelRow = row({
   id: uuid,
@@ -165,10 +170,11 @@ export const connectMarketplaceChannel = defineOrchestratedService({
 
 const claimSync = defineService({
   name: "marketplace.claimSync",
-  summary: "Read a connected channel before pulling orders.",
-  kind: "query",
+  summary: "Lock a connected channel before pulling orders.",
+  kind: "mutation",
   permission: "scoped",
   external: false,
+  writeClass: "write",
   input: z.object({ channelId: z.string().uuid() }),
   output: row({
     channelId: uuid,
@@ -177,21 +183,38 @@ const claimSync = defineService({
     cursor: z.string().nullable(),
   }),
   handler: async (input, ctx) => {
-    const [channel] = await ctx.tx
+    const [locked] = await ctx.tx
+      .update(marketplaceChannels)
+      .set({ status: "syncing", lastError: null })
+      .where(and(eq(marketplaceChannels.id, input.channelId), eq(marketplaceChannels.status, "connected")))
+      .returning();
+    if (locked?.externalRef) {
+      return {
+        channelId: locked.id,
+        provider: locked.provider,
+        externalRef: locked.externalRef,
+        cursor: locked.syncCursor,
+      };
+    }
+    const [existing] = await ctx.tx
       .select()
       .from(marketplaceChannels)
       .where(eq(marketplaceChannels.id, input.channelId))
       .limit(1);
-    if (!channel) throw new ServiceError("not_found", "No such marketplace channel.");
-    if (channel.status !== "connected" || !channel.externalRef) {
-      throw new ServiceError("conflict", "Connect that channel before syncing orders.");
+    if (!existing) throw new ServiceError("not_found", "No such marketplace channel.");
+    // A crashed sync leaves `syncing`; reclaim so Retry/the job can finish.
+    if (existing.status === "syncing" && existing.externalRef) {
+      return {
+        channelId: existing.id,
+        provider: existing.provider,
+        externalRef: existing.externalRef,
+        cursor: existing.syncCursor,
+      };
     }
-    return {
-      channelId: channel.id,
-      provider: channel.provider,
-      externalRef: channel.externalRef,
-      cursor: channel.syncCursor,
-    };
+    if (existing.status === "syncing") {
+      throw new ServiceError("conflict", "That channel is already syncing.");
+    }
+    throw new ServiceError("conflict", "Connect that channel before syncing orders.");
   },
 });
 
@@ -213,7 +236,7 @@ const applySync = defineService({
     if (input.lastError) {
       await ctx.tx
         .update(marketplaceChannels)
-        .set({ lastError: input.lastError })
+        .set({ status: "connected", lastError: input.lastError })
         .where(eq(marketplaceChannels.id, input.channelId));
     } else {
       await ctx.tx
@@ -221,6 +244,7 @@ const applySync = defineService({
         .set({
           lastError: null,
           syncCursor: input.cursor ?? null,
+          status: input.completed ? "connected" : "syncing",
           ...(input.completed ? { lastSyncedAt: new Date() } : {}),
         })
         .where(eq(marketplaceChannels.id, input.channelId));
@@ -332,13 +356,14 @@ async function importProviderOrder(
     { email: order.buyerEmail, name: order.buyerName, source: "marketplace" },
     { kind: "system" },
   )) as { contact: { id: string } };
+  const identity = invoiceIdentity(channelId, order.externalRef);
   const draft = (await getService("invoicing.createDraft").call(
     {
       contactId: resolved.contact.id,
       currency: order.currency,
       sourceType: "order",
-      sourceId: order.externalRef,
-      idempotencyKey: `marketplace:${order.externalRef}`,
+      sourceId: identity,
+      idempotencyKey: identity,
       lines: [
         {
           description: order.description,
@@ -380,8 +405,13 @@ export const syncMarketplaceChannel = defineOrchestratedService({
     const claimed = await claimSync.call(input, { kind: "system" });
     let cursor = claimed.cursor;
     let imported = 0;
+    let pages = 0;
     try {
       for (;;) {
+        pages += 1;
+        if (pages > MAX_SYNC_PAGES) {
+          throw new Error("The marketplace returned too many order pages.");
+        }
         const page = await marketplaceProvider().listOrders({
           provider: claimed.provider,
           externalRef: claimed.externalRef,
