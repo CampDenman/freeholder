@@ -3,7 +3,7 @@
 // Marketplace channel sync (MASTER.md §36, C3.13).
 import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
-import { listMarketplaceChannels } from "../../../../plugins/marketplace/service";
+import { listMarketplaceChannels, listMarketplaceOrders } from "../../../../plugins/marketplace/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -19,9 +19,10 @@ export default async function MarketplacePage({
 }) {
   const actor = await requireStaffActor("marketplace", "manage");
   const query = await searchParams;
-  const [t, channels] = await Promise.all([
+  const [t, channels, orders] = await Promise.all([
     getT(),
     domainOrNull(listMarketplaceChannels.call({}, actor)),
+    domainOrNull(listMarketplaceOrders.call({}, actor)),
   ]);
 
   return (
@@ -89,10 +90,26 @@ export default async function MarketplacePage({
                     <form action={syncMarketplaceAction}>
                       <input type="hidden" name="channelId" value={channel.id} />
                       <Button type="submit" variant="quiet">
-                        {t("marketplace.sync")}
+                        {channel.lastError ? t("marketplace.retry") : t("marketplace.sync")}
                       </Button>
                     </form>
                   ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader title={t("marketplace.orders")} />
+        <CardBody>
+          {(orders ?? []).length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("marketplace.orders.empty")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {(orders ?? []).map((order) => (
+                <li key={order.id} className="rounded-md border border-rule p-3 text-sm">
+                  {order.externalRef} — {order.description}
                 </li>
               ))}
             </ul>

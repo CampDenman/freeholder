@@ -5,7 +5,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import manifests from "@/modules";
 import { isPluginManifest } from "@/core/plugin";
 import { ready } from "@/core/runtime";
-import { createContact } from "@/core/contacts/service";
+import { createContact, mergeContacts } from "@/core/contacts/service";
+import { listInvoices } from "@/modules/invoicing/invoice-service";
 import {
   addGiftRegistryItem,
   contributeToGiftRegistry,
@@ -14,9 +15,11 @@ import {
   invoiceGiftRegistryItem,
 } from "../../plugins/gift-registry/service";
 import { listPodJobs, queuePodJob, submitPodJob } from "../../plugins/print-on-demand/service";
+import { resetStagedMarketplaceOrders, stageMarketplaceOrders } from "../../plugins/marketplace/adapter";
 import {
   connectMarketplaceChannel,
   listMarketplaceChannels,
+  listMarketplaceOrders,
   syncMarketplaceChannel,
 } from "../../plugins/marketplace/service";
 import { listVoiceVideoArtifacts, recordVoiceVideoArtifact } from "../../plugins/voice-video/service";
@@ -46,6 +49,9 @@ describe("first-party plugins (C3.13)", () => {
       }
       expect(manifest.requires).toContain("core");
       expect(manifest.migrations).toContain("0163_first_party_plugin_surfaces.sql");
+      if (name === "marketplace") {
+        expect(manifest.migrations).toContain("0168_marketplace_channel_sync.sql");
+      }
     }
   });
 });
@@ -54,6 +60,7 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
   beforeEach(async () => {
     await ready();
     await truncateSpine();
+    resetStagedMarketplaceOrders();
   });
   afterAll(closeDb);
 
@@ -100,21 +107,75 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
     expect((await listPodJobs.call({}, OWNER)).length).toBe(2);
   });
 
-  it("connects a marketplace, recovers a refused handshake, and imports an order", async () => {
+  it("refuses a marketplace handshake and retries the same channel", async () => {
     const failed = await connectMarketplaceChannel.call(
       { name: "fail-shop", provider: "shopify" },
       OWNER,
     );
     expect(failed.status).toBe("failed");
+    expect(failed.lastError).toMatch(/refused/i);
+    expect(await listMarketplaceChannels.call({}, OWNER)).toHaveLength(1);
     const recovered = await connectMarketplaceChannel.call(
       { name: "Harbour shop", provider: "shopify", channelId: failed.id },
       OWNER,
     );
+    expect(recovered.id).toBe(failed.id);
     expect(recovered.status).toBe("connected");
-    const synced = await syncMarketplaceChannel.call({ channelId: recovered.id }, OWNER);
-    expect(synced.imported).toBe(1);
+    expect(recovered.lastError).toBeNull();
+    expect(await listMarketplaceChannels.call({}, OWNER)).toHaveLength(1);
+  });
+
+  it("pages two staged orders onto invoices and repoints them on merge", async () => {
+    stageMarketplaceOrders("shopify", [
+      {
+        externalRef: "shopify-1001",
+        description: "Harbour print",
+        amountMinor: 2_500,
+        currency: "USD",
+        buyerEmail: "ada.market@demo.freeholder.test",
+        buyerName: "Ada Market",
+      },
+      {
+        externalRef: "shopify-1002",
+        description: "Sitting frame",
+        amountMinor: 4_000,
+        currency: "USD",
+        buyerEmail: "ada.dup@demo.freeholder.test",
+        buyerName: "Ada Duplicate",
+      },
+    ]);
+    const connected = await connectMarketplaceChannel.call(
+      { name: "Harbour shop", provider: "shopify" },
+      OWNER,
+    );
+    expect(connected.status).toBe("connected");
+    const synced = await syncMarketplaceChannel.call({ channelId: connected.id }, OWNER);
+    expect(synced.imported).toBe(2);
     expect(synced.lastError).toBeNull();
     expect((await listMarketplaceChannels.call({}, OWNER))[0]?.lastSyncedAt).toBeTruthy();
+
+    const imported = await listMarketplaceOrders.call({ channelId: connected.id }, OWNER);
+    expect(imported).toHaveLength(2);
+    const contactIds = [...new Set(imported.map((row) => row.contactId))];
+    expect(contactIds).toHaveLength(2);
+    const invoices = (await listInvoices.call({}, OWNER)).filter((row) =>
+      row.idempotencyKey.startsWith("marketplace:"),
+    );
+    expect(invoices).toHaveLength(2);
+    expect(invoices.map((row) => row.contactId).sort()).toEqual([...contactIds].sort());
+    expect(invoices.every((row) => row.sourceType === "order")).toBe(true);
+
+    const again = await syncMarketplaceChannel.call({ channelId: connected.id }, OWNER);
+    expect(again.imported).toBe(0);
+    expect(await listMarketplaceOrders.call({ channelId: connected.id }, OWNER)).toHaveLength(2);
+
+    const [keep, drop] = contactIds;
+    await mergeContacts.call({ survivingId: keep!, duplicateId: drop! }, OWNER);
+    const merged = await listMarketplaceOrders.call({ channelId: connected.id }, OWNER);
+    expect(merged).toHaveLength(2);
+    expect(merged.every((row) => row.contactId === keep)).toBe(true);
+    const keptInvoices = await listInvoices.call({ contactId: keep }, OWNER);
+    expect(keptInvoices.filter((row) => row.idempotencyKey.startsWith("marketplace:"))).toHaveLength(2);
   });
 
   it("attaches a voice artifact to the contact thread and retries a provider failure", async () => {

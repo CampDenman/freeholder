@@ -143,6 +143,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "marketplace.applySync",
   "marketplace.claimConnect",
   "marketplace.claimSync",
+  "marketplace.findImported",
+  "marketplace.recordImported",
   "printOnDemand.applySubmit",
   "printOnDemand.claimSubmit",
   "voiceVideo.applyCapture",

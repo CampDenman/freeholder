@@ -7,7 +7,8 @@ the instance; disable one from Admin → Plugins if the business does not use it
 **These are not complete products.** C3.13 is open: community still needs rooms,
 posts and moderation; voice/video still needs rooms and transcripts on the
 conversation spine; print-on-demand is a fixture submit, not Printify-style
-fulfillment; marketplace sync currently returns one hardcoded order. Gift
+fulfillment. Marketplace channels page provider orders onto invoices; the
+fixture returns staged orders the test inserts, not a hardcoded row. Gift
 registries already raise ordinary invoices. Rebuild the rest to §36 rather
 than treating the fixture adapters as the product.
 
@@ -49,7 +50,9 @@ spine are not this artifact row.
 
 Admin → Marketplace channels records a Shopify/Etsy/Amazon/eBay seam, then
 handshakes with the plugin adapter. A refused handshake stays `failed` so Retry
-can run without creating a second row. Sync currently invoices one hardcoded
-fixture order for the buyer contact; it is not a live channel pull.
-Credentials are not stored in this fixture adapter; a real provider adapter
-replaces it without changing the admin screen.
+can run without creating a second row. Sync pages provider orders onto
+invoices through `contacts.resolve`; the fixture adapter returns the
+in-memory list the test staged, not a hardcoded order. Credentials are not
+stored in this fixture adapter; a real provider adapter replaces it without
+changing the admin screen. `marketplace.retryFailed` retries a failed
+handshake or a failed sync in place.

@@ -9,8 +9,16 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["catalog:write", "network:external"],
   requires: ["core", "invoicing"],
-  migrations: ["0075_first_party_plugins.sql", "0163_first_party_plugin_surfaces.sql"],
+  migrations: [
+    "0075_first_party_plugins.sql",
+    "0163_first_party_plugin_surfaces.sql",
+    "0168_marketplace_channel_sync.sql",
+  ],
   capabilities: { adapters: ["payments"] },
+  events: {
+    emits: ["marketplace.channelAdded", "marketplace.orderImported"],
+  },
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
 });
