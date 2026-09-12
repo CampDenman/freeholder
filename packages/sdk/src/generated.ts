@@ -994,7 +994,10 @@ export const SERVICE_NAMES = [
   "portal.myRecords",
   "portal.updateMyProfile",
   "printOnDemand.list",
+  "printOnDemand.listMaps",
+  "printOnDemand.mapSku",
   "printOnDemand.queue",
+  "printOnDemand.queueOrder",
   "printOnDemand.submit",
   "privacy.cancelMyDataRequest",
   "privacy.createMyDataRequest",
@@ -5229,15 +5232,27 @@ export interface ServiceCatalog {
   };
   "printOnDemand.list": {
     input: Record<string, never>;
-    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown }[];
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; [key: string]: unknown }[];
+  };
+  "printOnDemand.listMaps": {
+    input: Record<string, never>;
+    output: { id: string; sku: string; provider: string; providerProductId: string; [key: string]: unknown }[];
+  };
+  "printOnDemand.mapSku": {
+    input: { sku: string; provider: string; providerProductId: string; payload?: { [key: string]: unknown } };
+    output: { id: string; sku: string; provider: string; providerProductId: string; [key: string]: unknown };
   };
   "printOnDemand.queue": {
     input: { sku: string; provider: string; payload?: { [key: string]: unknown } };
-    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown };
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; [key: string]: unknown };
+  };
+  "printOnDemand.queueOrder": {
+    input: { orderId: string };
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; [key: string]: unknown }[];
   };
   "printOnDemand.submit": {
     input: { jobId: string };
-    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown };
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; [key: string]: unknown };
   };
   "privacy.cancelMyDataRequest": {
     input: { id: string };
@@ -7429,7 +7444,10 @@ export interface FreeholderApi {
   };
   printOnDemand: {
     list: (input?: ServiceCatalog["printOnDemand.list"]["input"]) => Promise<ServiceCatalog["printOnDemand.list"]["output"]>;
+    listMaps: (input?: ServiceCatalog["printOnDemand.listMaps"]["input"]) => Promise<ServiceCatalog["printOnDemand.listMaps"]["output"]>;
+    mapSku: (input: ServiceCatalog["printOnDemand.mapSku"]["input"]) => Promise<ServiceCatalog["printOnDemand.mapSku"]["output"]>;
     queue: (input: ServiceCatalog["printOnDemand.queue"]["input"]) => Promise<ServiceCatalog["printOnDemand.queue"]["output"]>;
+    queueOrder: (input: ServiceCatalog["printOnDemand.queueOrder"]["input"]) => Promise<ServiceCatalog["printOnDemand.queueOrder"]["output"]>;
     submit: (input: ServiceCatalog["printOnDemand.submit"]["input"]) => Promise<ServiceCatalog["printOnDemand.submit"]["output"]>;
   };
   privacy: {
