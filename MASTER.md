@@ -8339,26 +8339,27 @@ schema they inherit reads as a designed thing rather than an excavation.
   is the list of items checked before C0.12's proof clause; deleting an entry
   is how this item records that its evidence was written. The audit also
   found F04 owed on shipped services, verified by caller search with no
-  string-dispatch escape hatch: **reviews** has no admin screen at all
-  (`moderate`, `reply`, `list`, `request`, `ingestExternal` have no caller);
-  **connections** has OAuth *callbacks* but no begin route or button, so the
-  calendar screen's `needs_reconnect` pill has no action, and no screen
-  inspects, re-scopes, rotates or removes a connection; **settings** module
-  on/off (`setModuleEnabled`, `listModules`); **invoicing** payment plans,
-  deposit/balance splits, late fees and provider payouts
+  string-dispatch escape hatch. **F04 follow-up, 2026-09-12.** Closed the
+  holes that blocked journeys: **reviews** admin at `/admin/reviews`
+  (`moderate`, `reply`, `list`, `request` — `ingestExternal` still has no
+  caller); **connections** begin-OAuth for calendar and mail-read (the
+  calendar `needs_reconnect` pill now starts `connections.beginCalendarOAuth`;
+  still no screen inspects, re-scopes, rotates or removes a connection);
+  **quotes** convert-to-invoice (`quotes.convert` on the quote page, with
+  confirm); guidance and notifications added to `AdminNav.tsx`. Still open:
+  **settings** module on/off (`setModuleEnabled`, `listModules`); **invoicing**
+  payment plans, deposit/balance splits, late fees and provider payouts
   (`advanced-money-service.ts`, no caller); **plugins** update, rollback,
   registry and catalogue browse; **webhooks** inspect and replay; **messaging**
   keyword rules, quiet-hours windows and SMS compliance events; **scheduling**
   ICS feeds, per-service calendars, audience links; **crm** stage and deal
-  edit; **quotes** convert-to-invoice; **galleries** price sheet;
-  **help-centre** authoring; **seo** redirect list/delete; **agents** hire,
-  edit, runtime connect, playbook export; **automations** run list/kill;
-  **events** and **newsletters** update; **catalog** publish, shipping zones,
-  reservations, saved carts, digital grants; **update** rollback and policy;
-  **import** map/review-conflicts; **segments** preview. Each is either a
-  screen in the same change as its evidence block or an explicit §36 refusal.
-  Two admin pages exist but are absent from `AdminNav.tsx`: guidance and
-  notifications.)
+  edit; **galleries** price sheet; **help-centre** authoring; **seo** redirect
+  list/delete; **agents** hire, edit, runtime connect, playbook export;
+  **automations** run list/kill; **events** and **newsletters** update;
+  **catalog** publish, shipping zones, reservations, saved carts, digital
+  grants; **update** rollback and policy; **import** map/review-conflicts;
+  **segments** preview. Each remaining hole is either a screen in the same
+  change as its evidence block or an explicit §36 refusal.)
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.

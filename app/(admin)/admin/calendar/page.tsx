@@ -13,13 +13,15 @@
 // somebody checks after a double booking, and a page that only showed the
 // blocks would send them looking in the wrong place.
 import type { Metadata } from "next";
-import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { currentBusiness } from "@/core/settings/read";
 import { addDays, zonedDate, zonedInstant } from "@/core/i18n/zoned";
 import { busyWindows, calendarSources } from "@/core/connections/busy";
+import { hasModuleAccess } from "@/core/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
+import { beginCalendarOAuthAction } from "../../connection-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -47,12 +49,20 @@ export default async function CalendarPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const actor = await requireStaffActor("connections");
+  const canConnect = hasModuleAccess(actor, "connections", "manage");
   const params = await searchParams;
   const [t, business] = await Promise.all([getT(), currentBusiness()]);
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
 
-  const weekParam = Array.isArray(params.week) ? params.week[0] : params.week;
+  const one = (key: string): string => {
+    const value = params[key];
+    return (Array.isArray(value) ? value[0] : value) ?? "";
+  };
+  const errorParam = one("error");
+  const calendarParam = one("calendar");
+  const weekParam = one("week") || undefined;
+  const oauthNotice = calendarOauthNotice(calendarParam, t);
   const today = zonedDate(new Date(), timezone);
   const anchor = parseWeek(weekParam) ?? today;
   // Monday-first, computed from the anchor's own weekday in its own zone.
@@ -122,6 +132,25 @@ export default async function CalendarPage({
         <h1 className="text-xl font-bold tracking-tight">{t("calendar.title")}</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("calendar.intro")}</p>
       </div>
+
+      {oauthNotice ? (
+        <p
+          className={
+            oauthNotice.tone === "success"
+              ? "rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success"
+              : oauthNotice.tone === "warning"
+                ? "rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning"
+                : "rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger"
+          }
+        >
+          {oauthNotice.text}
+        </p>
+      ) : null}
+      {errorParam ? (
+        <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+          {errorParam.includes(" ") ? errorParam : t("calendar.unavailable")}
+        </p>
+      ) : null}
 
       <Card>
         <CardHeader
@@ -220,7 +249,17 @@ export default async function CalendarPage({
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {source.status === "needs_reconnect" ? (
-                      <Pill tone="danger">{t("calendar.sources.needsReconnect")}</Pill>
+                      canConnect &&
+                      (source.provider === "google" || source.provider === "microsoft") ? (
+                        <form action={beginCalendarOAuthAction}>
+                          <input type="hidden" name="provider" value={source.provider} />
+                          <Button type="submit" variant="danger">
+                            {t("calendar.sources.needsReconnect")}
+                          </Button>
+                        </form>
+                      ) : (
+                        <Pill tone="danger">{t("calendar.sources.needsReconnect")}</Pill>
+                      )
                     ) : null}
                     {source.blocking ? (
                       <Pill tone="success">{t("calendar.sources.blocking")}</Pill>
@@ -239,6 +278,21 @@ export default async function CalendarPage({
               ))}
             </ul>
           )}
+          {canConnect ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <form action={beginCalendarOAuthAction}>
+                <input type="hidden" name="provider" value="google" />
+                <Button type="submit">{t("calendar.connect.google")}</Button>
+              </form>
+              <form action={beginCalendarOAuthAction}>
+                <input type="hidden" name="provider" value="microsoft" />
+                <Button type="submit">{t("calendar.connect.microsoft")}</Button>
+              </form>
+            </div>
+          ) : null}
+          <p className="mt-3 max-w-prose text-sm text-ink-muted">
+            {t("calendar.connect.hint")}
+          </p>
           <p className="mt-3 max-w-prose text-sm text-ink-muted">
             {t("calendar.sources.privacy")}
           </p>
@@ -246,4 +300,27 @@ export default async function CalendarPage({
       </Card>
     </div>
   );
+}
+
+function calendarOauthNotice(
+  value: string,
+  t: Awaited<ReturnType<typeof getT>>,
+): { tone: "success" | "warning" | "danger"; text: string } | null {
+  switch (value) {
+    case "connected":
+      return { tone: "success", text: t("calendar.oauth.connected") };
+    case "oauth_cancelled":
+      return { tone: "warning", text: t("calendar.oauth.cancelled") };
+    case "oauth_conflict":
+      return { tone: "danger", text: t("calendar.oauth.conflict") };
+    case "oauth_denied":
+      return { tone: "warning", text: t("calendar.oauth.denied") };
+    case "oauth_incomplete":
+    case "oauth_invalid_provider":
+      return { tone: "danger", text: t("calendar.oauth.incomplete") };
+    case "oauth_failed":
+      return { tone: "danger", text: t("calendar.oauth.failed") };
+    default:
+      return null;
+  }
 }
