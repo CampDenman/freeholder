@@ -133,6 +133,8 @@ describe("the Expo application (C10.23)", () => {
     expect(code("app/gallery/[slug].tsx")).toContain("held?.identity === identity");
     expect(code("app/gallery/[slug].tsx")).toContain("request !== generation.current");
     expect(code("app/gallery/[slug].tsx")).toContain("opening.current = false");
+    expect(code("app/gallery/[slug].tsx")).toContain("open.pending");
+    expect(code("app/gallery/[slug].tsx")).toContain("A request is already in progress.");
     expect(code("app/gallery/[slug].tsx")).toContain("FlatList");
     const images = code("src/lib/gallery-image.ts");
     expect(images).toContain("/g/");

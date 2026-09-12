@@ -54,7 +54,7 @@ export default function Gallery() {
   const generation = useRef(0);
 
   const unlock = useCallback(async () => {
-    if (!slug || !session || opening.current) return;
+    if (!slug || !session || opening.current || open.pending) return;
     setProblem(null);
     setDenied(false);
     if (!online) { setProblem("offline"); return; }
@@ -67,10 +67,12 @@ export default function Gallery() {
       else { setHeld(null); setDenied(true); }
     } catch (error) {
       if (request !== generation.current) return;
+      // A superseded in-flight open still occupies useScreenWrite; wait for pending to clear.
+      if (error instanceof Error && error.message === "A request is already in progress.") return;
       setHeld(null);
       setProblem(error instanceof Error ? error.message : "unavailable");
     } finally { if (request === generation.current) opening.current = false; }
-  }, [slug, session, online, executeOpen]);
+  }, [slug, session, online, executeOpen, open.pending]);
 
   useEffect(() => {
     generation.current += 1;
@@ -81,10 +83,10 @@ export default function Gallery() {
     setMessage(null);
   }, [identity]);
   useEffect(() => {
-    if (!session || !slug || galleryToken || denied || !online) return;
+    if (!session || !slug || galleryToken || denied || !online || open.pending) return;
     if (problem !== null && problem !== "offline") return;
     void unlock();
-  }, [session, slug, galleryToken, denied, problem, online, unlock]);
+  }, [session, slug, galleryToken, denied, problem, online, open.pending, unlock]);
   useFocusEffect(useCallback(() => { if (galleryToken) reload(); }, [galleryToken, reload]));
   useEffect(() => {
     const listener = AppState.addEventListener("change", (state) => { if (state === "active" && galleryToken) reload(); });
