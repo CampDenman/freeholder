@@ -76,6 +76,7 @@ export default async function InboxPage({
 
   const locale = business?.defaultLocale ?? "en";
   const timezone = business?.timezone ?? "UTC";
+  const mailboxNotice = mailboxOauthNotice(one("mailbox"), t);
   const views: Array<{ key: string; label: string; count?: number }> = [
     { key: "", label: t("inbox.view.open"), count: counts?.open },
     { key: "unread", label: t("inbox.view.unread"), count: counts?.unread },
@@ -94,6 +95,19 @@ export default async function InboxPage({
       {params.saved ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
           {t("inbox.saved")}
+        </p>
+      ) : null}
+      {mailboxNotice ? (
+        <p
+          className={
+            mailboxNotice.tone === "success"
+              ? "rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success"
+              : mailboxNotice.tone === "warning"
+                ? "rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning"
+                : "rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger"
+          }
+        >
+          {mailboxNotice.text}
         </p>
       ) : null}
       {params.error ? (
@@ -266,4 +280,27 @@ export default async function InboxPage({
       </Card>
     </div>
   );
+}
+
+function mailboxOauthNotice(
+  value: string,
+  t: Awaited<ReturnType<typeof getT>>,
+): { tone: "success" | "warning" | "danger"; text: string } | null {
+  switch (value) {
+    case "connected":
+      return { tone: "success", text: t("inbox.oauth.connected") };
+    case "oauth_cancelled":
+      return { tone: "warning", text: t("inbox.oauth.cancelled") };
+    case "oauth_conflict":
+      return { tone: "danger", text: t("inbox.oauth.conflict") };
+    case "oauth_denied":
+      return { tone: "warning", text: t("inbox.oauth.denied") };
+    case "oauth_incomplete":
+    case "oauth_invalid_provider":
+      return { tone: "danger", text: t("inbox.oauth.incomplete") };
+    case "oauth_failed":
+      return { tone: "danger", text: t("inbox.oauth.failed") };
+    default:
+      return null;
+  }
 }

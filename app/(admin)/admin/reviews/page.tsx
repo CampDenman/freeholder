@@ -41,11 +41,15 @@ const REQUEST_SOURCES = REVIEW_SOURCES.filter((source) => source !== "google_bus
 export default async function ReviewsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string; status?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const actor = await requireStaffActor("reviews");
-  const query = await searchParams;
-  const status = REVIEW_STATES.find((one) => one === query.status);
+  const params = await searchParams;
+  const one = (key: string): string => {
+    const value = params[key];
+    return (Array.isArray(value) ? value[0] : value) ?? "";
+  };
+  const status = REVIEW_STATES.find((state) => state === one("status"));
   const canManage = hasModuleAccess(actor, "reviews", "manage");
   const [t, business, reviews, rating] = await Promise.all([
     getT(),
@@ -56,12 +60,14 @@ export default async function ReviewsPage({
 
   const locale = business?.defaultLocale ?? "en";
   const timezone = business?.timezone ?? "UTC";
+  const saved = one("saved");
+  const error = one("error");
   const savedMessage =
-    query.saved === "asked"
+    saved === "asked"
       ? t("reviews.asked")
-      : query.saved === "already"
+      : saved === "already"
         ? t("reviews.alreadyAsked")
-        : query.saved
+        : saved
           ? t("reviews.saved")
           : null;
 
@@ -70,7 +76,7 @@ export default async function ReviewsPage({
       <div>
         <h1 className="text-xl font-bold tracking-tight">{t("reviews.title")}</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("reviews.intro")}</p>
-        {rating && rating.reviewCount > 0 ? (
+        {rating && rating.ratingValue !== null ? (
           <p className="mt-2 text-sm tabular-nums text-ink-muted">
             {t("reviews.rating.summary", {
               rating: rating.ratingValue,
@@ -86,9 +92,9 @@ export default async function ReviewsPage({
           {savedMessage}
         </p>
       ) : null}
-      {query.error ? (
+      {error ? (
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
-          {query.error.includes(" ") ? query.error : t("reviews.failed")}
+          {error.includes(" ") ? error : t("reviews.failed")}
         </p>
       ) : null}
       {!canManage ? (
