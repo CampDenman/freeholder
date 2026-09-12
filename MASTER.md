@@ -4177,11 +4177,10 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   transcripts on the conversation spine, Printify-style POD fulfillment,
   and marketplace channel sync that is not a hardcoded order. Do not treat
   the fixture plugins as complete products.
-  Community rooms, posts, a chronological feed, gated membership, and
-  hide/remove moderation landed in `plugins/community` (migration
-  `0001_community_rooms.sql`, `/community/<slug>` feed with empty/error/retry,
-  admin rooms and hidden/reported posts). Still [ ] until the rest of §36
-  depth ships.)
+  Community: `0001_community_rooms.sql`. Voice/video: `0002_voice_video_rooms.sql`.
+  POD: `0003_print_on_demand_fulfillment.sql`. Marketplace: `0004_marketplace_channel_sync.sql`
+  pages staged provider orders onto invoices (`contacts.resolve` + invoicing).
+  Still [ ] while POD/marketplace adapters are fixtures, not live providers.)
 
 #### Packages, installation, export, and target parity
 

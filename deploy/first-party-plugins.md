@@ -4,13 +4,11 @@ Gift registries, print-on-demand, community spaces, voice/video and marketplace
 channel sync are first-party plugins (MASTER.md §36, C3.13). They install with
 the instance; disable one from Admin → Plugins if the business does not use it.
 
-**These are not complete products.** Community rooms/posts/moderation,
-voice/video rooms/recordings/transcripts, and print-on-demand catalog
-fulfillment have landed (the POD adapter is still a fixture, not a live
-Printify connection). C3.13 is still open: marketplace sync currently returns
-one hardcoded order. Gift registries already raise ordinary invoices. Rebuild
-that remaining seam to §36 rather than treating the fixture adapter as the
-product.
+**These are not complete products.** Community, voice/video, print-on-demand
+and marketplace channel sync have landed as first-party plugins. POD and
+marketplace adapters are still fixtures (staged orders, not a live Printify
+or channel API). Gift registries already raise ordinary invoices. Live
+provider I/O is the remaining seam, not a missing plugin.
 
 ## Gift registries
 
@@ -56,7 +54,9 @@ with `fail-` makes the fixture provider refuse; the room or recording stays
 
 Admin → Marketplace channels records a Shopify/Etsy/Amazon/eBay seam, then
 handshakes with the plugin adapter. A refused handshake stays `failed` so Retry
-can run without creating a second row. Sync currently invoices one hardcoded
-fixture order for the buyer contact; it is not a live channel pull.
-Credentials are not stored in this fixture adapter; a real provider adapter
-replaces it without changing the admin screen.
+can run without creating a second row. Sync pages provider orders onto
+invoices through `contacts.resolve`; the fixture adapter returns the
+in-memory list the test staged, not a hardcoded order. Credentials are not
+stored in this fixture adapter; a real provider adapter replaces it without
+changing the admin screen. `marketplace.retryFailed` retries a failed
+handshake or a failed sync in place.
