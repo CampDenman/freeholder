@@ -52,3 +52,17 @@ export function bytesToBase64(bytes: Uint8Array): string {
   }
   return out;
 }
+
+/** Map a private image GET onto cached bytes, preserving denial status for eviction. */
+export async function decodeGalleryImageResponse(response: {
+  ok: boolean;
+  status: number;
+  mime: string | null;
+  bytes(): Promise<Uint8Array>;
+}): Promise<{ mime: string; uri: string }> {
+  if (!response.ok) {
+    throw Object.assign(new Error(`galleries.viewItem failed (${response.status}).`), { status: response.status });
+  }
+  const mime = (response.mime ?? "application/octet-stream").split(";")[0]!.trim() || "application/octet-stream";
+  return { mime, uri: `data:${mime};base64,${bytesToBase64(await response.bytes())}` };
+}

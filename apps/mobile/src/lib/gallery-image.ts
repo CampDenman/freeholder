@@ -14,7 +14,7 @@ import {
 } from "@freeholder/mobile-app";
 import { privateCaches, privateCacheOwner } from "./cache";
 import { assertOnContract, type Caller, type ScreenData } from "./screen-data";
-import { bytesToBase64, fetchBytesWithTimeout } from "./transport";
+import { decodeGalleryImageResponse, fetchBytesWithTimeout } from "./transport";
 
 export interface GalleryImage {
   mime: string;
@@ -40,21 +40,14 @@ export async function readGalleryImage(
       service: "galleries.viewItem",
       maxAgeMs: PRIVATE_CACHE_LEASE_MS,
     },
-    async () => {
-      const response = await fetchBytesWithTimeout(
-        `${caller.instanceUrl}/g/${encodeURIComponent(input.slug)}/view/${encodeURIComponent(input.itemId)}`,
-        {
-          method: "GET",
-          credentials: "omit",
-          headers: { authorization: `Bearer ${input.galleryToken}` },
-        },
-      );
-      if (!response.ok) {
-        throw Object.assign(new Error(`galleries.viewItem failed (${response.status}).`), { status: response.status });
-      }
-      const mime = (response.mime ?? "application/octet-stream").split(";")[0]!.trim() || "application/octet-stream";
-      return { mime, uri: `data:${mime};base64,${bytesToBase64(await response.bytes())}` };
-    },
+    async () => decodeGalleryImageResponse(await fetchBytesWithTimeout(
+      `${caller.instanceUrl}/g/${encodeURIComponent(input.slug)}/view/${encodeURIComponent(input.itemId)}`,
+      {
+        method: "GET",
+        credentials: "omit",
+        headers: { authorization: `Bearer ${input.galleryToken}` },
+      },
+    )),
     cache,
   );
 }

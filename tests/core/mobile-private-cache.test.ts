@@ -8,6 +8,7 @@ import {
   readThrough, rememberInstance, revocableCache, serviceResponse, PRIVATE_CACHE_LEASE_MS,
   type CacheStorage, type Instance,
 } from "../../packages/mobile-app/src/index";
+import { decodeGalleryImageResponse } from "../../apps/mobile/src/lib/transport";
 
 function storage(): CacheStorage & { data: Map<string, string> } {
   const data = new Map<string, string>();
@@ -265,6 +266,19 @@ describe("private gallery image bytes (C10.27)", () => {
     await readThrough(image, async () => bytes, cache);
     const denial = Object.assign(new Error("gallery denied"), { status });
     await expect(readThrough(image, async () => { throw denial; }, cache)).rejects.toBe(denial);
+    expect(cache.data.size).toBe(0);
+    expect((await readThrough(image, offline, cache)).value).toBeNull();
+  });
+
+  it("maps a 404 image body through the native decoder so denial still evicts", async () => {
+    const cache = storage();
+    await readThrough(image, async () => bytes, cache);
+    await expect(readThrough(image, () => decodeGalleryImageResponse({
+      ok: false,
+      status: 404,
+      mime: "image/jpeg",
+      bytes: async () => new Uint8Array([1, 2, 3]),
+    }), cache)).rejects.toMatchObject({ status: 404 });
     expect(cache.data.size).toBe(0);
     expect((await readThrough(image, offline, cache)).value).toBeNull();
   });
