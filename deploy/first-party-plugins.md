@@ -4,12 +4,13 @@ Gift registries, print-on-demand, community spaces, voice/video and marketplace
 channel sync are first-party plugins (MASTER.md §36, C3.13). They install with
 the instance; disable one from Admin → Plugins if the business does not use it.
 
-**These are not complete products.** Community rooms/posts/moderation and
-voice/video rooms/recordings/transcripts have landed. C3.13 is still open:
-print-on-demand is a fixture submit, not Printify-style fulfillment;
-marketplace sync currently returns one hardcoded order. Gift registries
-already raise ordinary invoices. Rebuild those remaining seams to §36 rather
-than treating the fixture adapters as the product.
+**These are not complete products.** Community rooms/posts/moderation,
+voice/video rooms/recordings/transcripts, and print-on-demand catalog
+fulfillment have landed (the POD adapter is still a fixture, not a live
+Printify connection). C3.13 is still open: marketplace sync currently returns
+one hardcoded order. Gift registries already raise ordinary invoices. Rebuild
+that remaining seam to §36 rather than treating the fixture adapter as the
+product.
 
 ## Gift registries
 
