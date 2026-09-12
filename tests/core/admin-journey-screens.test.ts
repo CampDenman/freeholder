@@ -13,6 +13,10 @@ const REVIEW_ACTIONS = "app/(admin)/review-actions.ts";
 const CALENDAR_PAGE = "app/(admin)/admin/calendar/page.tsx";
 const INBOX_PAGE = "app/(admin)/admin/inbox/page.tsx";
 const CONNECTION_ACTIONS = "app/(admin)/connection-actions.ts";
+const CALENDAR_CALLBACK =
+  "app/api/connections/calendar/[provider]/callback/route.ts";
+const MAIL_READ_CALLBACK =
+  "app/api/connections/mail-read/[provider]/callback/route.ts";
 const QUOTE_PAGE = "app/(admin)/admin/quotes/[id]/page.tsx";
 const QUOTE_FORM = "app/(admin)/admin/quotes/[id]/ConvertQuoteForm.tsx";
 const QUOTE_ACTIONS = "app/(admin)/quote-actions.ts";
@@ -53,6 +57,7 @@ describe("reviews admin (C11.09 F04)", () => {
     expect(page).toContain("reviews.readOnly");
     expect(page).toContain('disabled={review.status === next}');
     expect(page).toContain('hasModuleAccess(actor, "reviews", "manage")');
+    expect(page).toContain("Array.isArray(value)");
   });
 });
 
@@ -64,8 +69,11 @@ describe("calendar and mail-read begin-OAuth (C11.09 F04)", () => {
     expect(page).toContain('source.status === "needs_reconnect"');
     expect(page).toContain("calendar.connect.google");
     expect(page).toContain("calendar.connect.microsoft");
+    expect(page).toContain("calendar.oauth.connected");
     expect(actions).toContain("beginCalendarOAuth.call");
     expect(actions).toContain('returnTo: "/admin/calendar"');
+    expect(actions).toContain("step_up_required");
+    expect(actions).toContain("/security/verify?returnTo=");
   });
 
   it("starts beginMailReadOAuth from the inbox", () => {
@@ -74,15 +82,27 @@ describe("calendar and mail-read begin-OAuth (C11.09 F04)", () => {
     expect(page).toContain("beginMailReadOAuthAction");
     expect(page).toContain("inbox.connectMail.google");
     expect(page).toContain("inbox.connectMail.microsoft");
+    expect(page).toContain("inbox.oauth.connected");
     expect(actions).toContain("beginMailReadOAuth.call");
     expect(actions).toContain('returnTo: "/admin/inbox"');
+  });
+
+  it("honours stored returnTo on callback failure and flags the starting screen", () => {
+    expect(read(CALENDAR_CALLBACK)).toContain("peekCalendarOAuthReturn.call");
+    expect(read(CALENDAR_CALLBACK)).toContain('"connected"');
+    expect(read(MAIL_READ_CALLBACK)).toContain("peekMailReadOAuthReturn.call");
+    expect(read(MAIL_READ_CALLBACK)).toContain('"connected"');
   });
 });
 
 describe("quote convert-to-invoice (C11.09 F04)", () => {
   it("calls quotes.convert from the quote page after a confirm", () => {
-    expect(read(QUOTE_PAGE)).toContain("ConvertQuoteForm");
-    expect(read(QUOTE_PAGE)).toContain("quotes.convertConfirm");
+    const page = read(QUOTE_PAGE);
+    expect(page).toContain("ConvertQuoteForm");
+    expect(page).toContain("quotes.convertConfirm");
+    expect(page).toContain('quote.status === "accepted"');
+    expect(page).toContain("quote.convertedAt");
+    expect(page).toContain("quotes.alreadyConverted");
     expect(read(QUOTE_FORM)).toContain("convertQuoteAction");
     expect(read(QUOTE_FORM)).toContain("window.confirm");
     expect(read(QUOTE_ACTIONS)).toContain("convertQuote.call");
@@ -109,9 +129,12 @@ describe("journey-screen catalogs", () => {
         "reviews.readOnly",
         "reviews.action.approve",
         "calendar.connect.google",
+        "calendar.oauth.connected",
         "inbox.connectMail.title",
+        "inbox.oauth.connected",
         "quotes.action.convert",
         "quotes.convertConfirm",
+        "quotes.alreadyConverted",
       ]) {
         expect(keys, `${locale} missing ${key}`).toContain(key);
       }

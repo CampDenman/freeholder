@@ -55,8 +55,14 @@ export default async function CalendarPage({
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
 
-  const errorParam = Array.isArray(params.error) ? params.error[0] : params.error;
-  const weekParam = Array.isArray(params.week) ? params.week[0] : params.week;
+  const one = (key: string): string => {
+    const value = params[key];
+    return (Array.isArray(value) ? value[0] : value) ?? "";
+  };
+  const errorParam = one("error");
+  const calendarParam = one("calendar");
+  const weekParam = one("week") || undefined;
+  const oauthNotice = calendarOauthNotice(calendarParam, t);
   const today = zonedDate(new Date(), timezone);
   const anchor = parseWeek(weekParam) ?? today;
   // Monday-first, computed from the anchor's own weekday in its own zone.
@@ -127,6 +133,19 @@ export default async function CalendarPage({
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("calendar.intro")}</p>
       </div>
 
+      {oauthNotice ? (
+        <p
+          className={
+            oauthNotice.tone === "success"
+              ? "rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success"
+              : oauthNotice.tone === "warning"
+                ? "rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning"
+                : "rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger"
+          }
+        >
+          {oauthNotice.text}
+        </p>
+      ) : null}
       {errorParam ? (
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
           {errorParam.includes(" ") ? errorParam : t("calendar.unavailable")}
@@ -281,4 +300,27 @@ export default async function CalendarPage({
       </Card>
     </div>
   );
+}
+
+function calendarOauthNotice(
+  value: string,
+  t: Awaited<ReturnType<typeof getT>>,
+): { tone: "success" | "warning" | "danger"; text: string } | null {
+  switch (value) {
+    case "connected":
+      return { tone: "success", text: t("calendar.oauth.connected") };
+    case "oauth_cancelled":
+      return { tone: "warning", text: t("calendar.oauth.cancelled") };
+    case "oauth_conflict":
+      return { tone: "danger", text: t("calendar.oauth.conflict") };
+    case "oauth_denied":
+      return { tone: "warning", text: t("calendar.oauth.denied") };
+    case "oauth_incomplete":
+    case "oauth_invalid_provider":
+      return { tone: "danger", text: t("calendar.oauth.incomplete") };
+    case "oauth_failed":
+      return { tone: "danger", text: t("calendar.oauth.failed") };
+    default:
+      return null;
+  }
 }

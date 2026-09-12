@@ -28,6 +28,9 @@ async function actor() {
 }
 
 function refused(path: string, error: unknown, fallback: string): never {
+  if (error instanceof ServiceError && error.code === "step_up_required") {
+    redirect(`/security/verify?returnTo=${encodeURIComponent(path)}`);
+  }
   const message = error instanceof ServiceError ? ownerFacing(error.message) : fallback;
   redirect(`${path}?error=${encodeURIComponent(message)}`);
 }
