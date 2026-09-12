@@ -3097,7 +3097,7 @@ export interface ServiceCatalog {
     output: { space: { id: string; slug: string; title: string; access: string; [key: string]: unknown }; memberCount: number; [key: string]: unknown };
   };
   "community.getFeedBySlug": {
-    input: { slug: string; email?: string; roomSlug?: string };
+    input: { slug: string; email?: string; roomSlug?: string; limit?: number; before?: string };
     output: { space: { id: string; slug: string; title: string; access: string; [key: string]: unknown }; memberCount: number; canRead: boolean; rooms: { id: string; spaceId: string; slug: string; title: string; [key: string]: unknown }[]; posts: { id: string; roomId: string; roomSlug: string; roomTitle: string; authorName: string; body: string; createdAt: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "community.hidePost": {
@@ -3113,7 +3113,7 @@ export interface ServiceCatalog {
     output: { id: string; spaceId: string; contactId: string; role: string; [key: string]: unknown };
   };
   "community.listFeed": {
-    input: { spaceId: string; roomId?: string; includeHidden?: boolean };
+    input: { spaceId: string; roomId?: string; includeHidden?: boolean; limit?: number; before?: string };
     output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown }[];
   };
   "community.listJoinRequests": {
