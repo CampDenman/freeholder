@@ -65,6 +65,7 @@ const ROUTES: readonly Route[] = [
   { pattern: ["portal", "galleries"], screen: "galleries" },
   { pattern: ["g", ":param"], screen: "gallery" },
   { pattern: ["portal", "messages"], screen: "messages" },
+  { pattern: ["portal", "messages", ":param"], screen: "message" },
   { pattern: ["newsletters"], screen: "newsletters" },
   { pattern: ["portal"], screen: "account" },
 ];

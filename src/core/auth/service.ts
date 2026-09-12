@@ -31,6 +31,15 @@ const loginResult = row({
   twoFactorRequired: z.boolean(),
   token: z.string(),
   expiresAt: timestamp,
+  // Present on every login so a native client can finish an enrolled
+  // two-factor challenge without a second round-trip to learn the methods.
+  challengeToken: z.string(),
+  methods: z.object({
+    totp: z.boolean(),
+    recovery: z.boolean(),
+    webauthn: z.boolean(),
+  }),
+  webauthnOptions: z.unknown().optional(),
 });
 const sessionUser = row({
   userId: uuid,

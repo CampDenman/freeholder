@@ -22,8 +22,11 @@ import {
   loadSession,
   saveSession,
   signIn as requestSignIn,
+  completeTwoFactorSignIn,
   redeemSignInLink,
   signOut as clearSession,
+  loadDeviceToken,
+  clearDeviceToken,
   type Brand,
   type Instance,
   type SecretStore,
@@ -52,12 +55,20 @@ export interface InstanceState {
   instance: Instance | null;
   brand: Brand | null;
   session: Session | null;
+  /** Push token for this install, if one has been registered. */
+  deviceToken: string | null;
   /** Non-null when the last attempt to reach an address failed. */
   problem: string | null;
   connect(address: string): Promise<void>;
   forget(): Promise<void>;
   signOut(): Promise<void>;
-  signIn(input: { email: string; password?: string; link?: string }): Promise<SignInResult>;
+  signIn(input: {
+    email: string;
+    password?: string;
+    link?: string;
+    challengeToken?: string;
+    code?: string;
+  }): Promise<SignInResult>;
 }
 
 const InstanceContext = createContext<InstanceState | null>(null);
@@ -71,6 +82,7 @@ export function useInstance(): InstanceState {
 export function InstanceProvider({ children }: { children: React.ReactNode }) {
   const [instance, setInstance] = useState<Instance | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [deviceToken, setDeviceToken] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [status, setStatus] = useState<InstanceState["status"]>("loading");
   const revision = useRef(0);
@@ -92,6 +104,8 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       if (request !== revision.current) return;
       const normalized = normalizeAddress(address);
       const matching = stored && "url" in normalized && stored.instanceUrl === normalized.url ? stored : null;
+      const device = matching ? await loadDeviceToken(keychain) : null;
+      if (request !== revision.current) return;
       if (matching) {
         // Cache/keychain failure may disable offline reads, never force plaintext.
         await privateCaches.activate(privateCacheOwner(matching)).catch(() => {});
@@ -111,6 +125,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       if (stored && !matching) await clearSession(keychain);
       if (request !== revision.current) return;
       setSession(matching);
+      setDeviceToken(matching ? device : null);
       setInstance(result.instance);
       setProblem(null);
       setStatus("ready");
@@ -123,10 +138,12 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
     void cleanup.catch(() => {});
     setInstance(null);
     setSession(null);
+    setDeviceToken(null);
     setStatus("needs-instance");
     await change(async () => {
       try {
         await clearSession(keychain);
+        await clearDeviceToken(keychain);
         await SecureStore.deleteItemAsync(INSTANCE_KEY);
       } finally { await cleanup; }
     });
@@ -137,18 +154,33 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
     const cleanup = privateCaches.clear();
     void cleanup.catch(() => {});
     setSession(null);
+    setDeviceToken(null);
     await change(async () => {
-      try { await clearSession(keychain); } finally { await cleanup; }
+      try {
+        await clearSession(keychain);
+        await clearDeviceToken(keychain);
+      } finally { await cleanup; }
     });
   }, [change]);
 
-  const signIn = useCallback(async (input: { email: string; password?: string; link?: string }): Promise<SignInResult> => {
+  const signIn = useCallback(async (input: {
+    email: string;
+    password?: string;
+    link?: string;
+    challengeToken?: string;
+    code?: string;
+  }): Promise<SignInResult> => {
     if (!instance) return { ok: false, reason: "unreachable", message: "Connect first." };
     const generation = ++revision.current;
     const request = { ...input, instanceUrl: instance.url };
-    const result = input.link
-      ? await redeemSignInLink({ ...request, link: input.link }, (url, init) => fetch(url, init))
-      : await requestSignIn(request, (url, init) => fetch(url, init));
+    const result = input.challengeToken && input.code
+      ? await completeTwoFactorSignIn(
+          { instanceUrl: instance.url, email: input.email, challengeToken: input.challengeToken, code: input.code },
+          (url, init) => fetch(url, init),
+        )
+      : input.link
+        ? await redeemSignInLink({ ...request, link: input.link }, (url, init) => fetch(url, init))
+        : await requestSignIn(request, (url, init) => fetch(url, init));
     if (result.ok) {
       await change(async () => {
         if (generation !== revision.current) return;
@@ -185,13 +217,14 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       instance,
       brand: instance ? brandFrom(instance) : null,
       session,
+      deviceToken,
       problem,
       connect,
       forget,
       signOut,
       signIn,
     }),
-    [status, instance, session, problem, connect, forget, signOut, signIn],
+    [status, instance, session, deviceToken, problem, connect, forget, signOut, signIn],
   );
 
   return <InstanceContext.Provider value={value}>{children}</InstanceContext.Provider>;

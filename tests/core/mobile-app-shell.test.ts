@@ -99,7 +99,7 @@ describe("the Expo application (C10.23)", () => {
   it("renders no colour of its own", () => {
     // Colours come from the instance's semantic tokens. A literal here is a
     // colour that cannot be rebranded without a store review.
-    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts"]) {
+    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx"]) {
       const source = read(file).replace(/^\s*\/\/.*$/gm, "");
       expect(source, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     }
@@ -107,7 +107,7 @@ describe("the Expo application (C10.23)", () => {
 
   it("gives every built screen a loading, empty and error state", () => {
     // F04: a screen that renders nothing while it waits looks broken.
-    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx"]) {
+    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx"]) {
       const source = read(file);
       expect(source, file).toContain("Loading");
       expect(source, file).toMatch(/Empty|emptyKey/);
@@ -117,7 +117,8 @@ describe("the Expo application (C10.23)", () => {
 
   it("proofs through the declared gallery services and private image bytes (C10.27)", () => {
     expect(TAB_ORDER).toEqual(["home", "catalog", "bookings", "invoices", "galleries", "account"]);
-    expect(read("app/(tabs)/_layout.tsx")).toContain('"galleries"');
+    expect(read("app/(tabs)/_layout.tsx")).toContain("TAB_ORDER.map");
+    expect(code("app/(tabs)/_layout.tsx")).not.toContain("BUILT");
     const list = read("app/(tabs)/galleries.tsx");
     expect(list).toContain('service: "portal.myRecords"');
     expect(SCREENS.galleries.reads).toContain("portal.myRecords");
@@ -145,5 +146,22 @@ describe("the Expo application (C10.23)", () => {
     expect(images).not.toMatch(/\/api\/v1\/galleries\.viewItem/);
     expect(code("src/lib/transport.ts")).toContain("status: response.status");
     expect(code("src/lib/transport.ts")).toContain("export async function decodeGalleryImageResponse");
+  });
+
+  it("wires customer reply, newsletters and account sign-out (C10.28)", () => {
+    expect(read("app/(tabs)/account.tsx")).toContain('service: "portal.myProfile"');
+    expect(read("app/(tabs)/account.tsx")).toContain('service: "portal.myRecords"');
+    expect(read("app/(tabs)/account.tsx")).toContain('service: "notifications.revokeDevice"');
+    expect(read("app/messages.tsx")).toContain('service: "conversations.list"');
+    expect(read("app/message/[id].tsx")).toContain('service: "conversations.get"');
+    expect(read("app/message/[id].tsx")).toContain('service: "conversations.replyAsContact"');
+    expect(code("app/message/[id].tsx")).not.toMatch(/\bconversations\.reply\b/);
+    expect(read("app/newsletters.tsx")).toContain('service: "newsletters.listPublic"');
+    expect(read("app/newsletters.tsx")).toContain('service: "newsletters.listPublicIssues"');
+    expect(read("app/newsletters.tsx")).toContain('service: "newsletters.subscribe"');
+    expect(read("app/newsletters.tsx")).toContain('service: "privacy.setMyMarketingPreference"');
+    expect(code("app/newsletters.tsx")).not.toMatch(/\bnewsletters\.unsubscribe\b/);
+    expect(read("src/screens/sign-in.tsx")).toContain("challengeToken");
+    expect(read("src/screens/sign-in.tsx")).toContain("app.auth.verify");
   });
 });

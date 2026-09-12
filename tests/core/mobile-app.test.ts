@@ -21,6 +21,7 @@ import {
   saveSession,
   signOut,
   signIn,
+  completeTwoFactorSignIn,
   redeemSignInLink,
   unlockOnResume,
   type Cache,
@@ -208,10 +209,15 @@ describe("the customer app (C10.12)", () => {
       expect(denied).toHaveBeenCalledTimes(1);
     });
     it("uses real auth services and never treats an OTP challenge or failed email request as a session", async () => {
-      const transport = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ token: "", twoFactorRequired: true }) }));
+      const transport = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ token: "", twoFactorRequired: true, challengeToken: "challenge-token-value-ok", methods: { totp: true, recovery: true, webauthn: false } }) }));
       const result = await signIn({ instanceUrl: "https://example.test", email: "rae@example.test", password: "password" }, transport);
-      expect(result).toMatchObject({ ok: false, reason: "two-factor" });
+      expect(result).toMatchObject({ ok: false, reason: "two-factor", challengeToken: "challenge-token-value-ok" });
       expect(transport).toHaveBeenCalledWith("https://example.test/api/v1/auth.login", expect.objectContaining({ credentials: "omit" }));
+      const completed = await completeTwoFactorSignIn(
+        { instanceUrl: "https://example.test", email: "rae@example.test", challengeToken: "challenge-token-value-ok", code: "123456" },
+        async () => ({ ok: true, status: 200, json: async () => ({ token: "session-after-2fa" }) }),
+      );
+      expect(completed).toMatchObject({ ok: true, session: { token: "session-after-2fa", email: "rae@example.test" } });
       const failed = await signIn({ instanceUrl: "https://example.test", email: "rae@example.test" }, async () => ({ ok: false, status: 429, json: async () => ({}) }));
       expect(failed).toMatchObject({ ok: false, reason: "invalid" });
     });

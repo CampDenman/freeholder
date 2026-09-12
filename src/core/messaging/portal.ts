@@ -22,7 +22,9 @@ registerPortalSection({
       title: thread.subject ?? thread.threadKey ?? thread.id.slice(0, 8),
       status: thread.status,
       at: thread.lastInboundAt ?? thread.lastOutboundAt ?? null,
-      href: null,
+      // Session-authenticated: the id is not a capability token, so the
+      // portal (and the app deep-linking to it) can open the thread.
+      href: `/portal/messages/${thread.id}`,
     }));
   },
 });
