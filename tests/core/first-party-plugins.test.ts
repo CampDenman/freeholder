@@ -13,7 +13,29 @@ import {
   getGiftRegistryBySlug,
   invoiceGiftRegistryItem,
 } from "../../plugins/gift-registry/service";
-import { listPodJobs, queuePodJob, submitPodJob } from "../../plugins/print-on-demand/service";
+import {
+  listPodJobs,
+  mapPodSku,
+  queueOrderLines,
+  queuePodJob,
+  submitPodJob,
+} from "../../plugins/print-on-demand/service";
+import {
+  addCartItem,
+  applyVariantMatrix,
+  checkoutCart,
+  createPriceList,
+  createProduct,
+  createShippingMethod,
+  createShippingZone,
+  getFulfillment,
+  getOrCreateCart,
+  getOrder,
+  getProductVariants,
+  payOrder,
+  setPriceListEntry,
+} from "@/modules/catalog/service";
+import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import {
   connectMarketplaceChannel,
   listMarketplaceChannels,
@@ -46,11 +68,15 @@ describe("first-party plugins (C3.13)", () => {
       }
       expect(manifest.requires).toContain("core");
       expect(manifest.migrations).toContain("0163_first_party_plugin_surfaces.sql");
+      if (name === "print-on-demand") {
+        expect(manifest.migrations).toContain("0168_print_on_demand_fulfillment.sql");
+        expect(manifest.requires).toContain("catalog");
+      }
     }
   });
 });
 
-describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () => {
+describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { timeout: 60_000 }, () => {
   beforeEach(async () => {
     await ready();
     await truncateSpine();
@@ -93,11 +119,108 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
     expect(failed.status).toBe("failed");
     expect(failed.lastError).toMatch(/refused/i);
 
-    const retryQueued = await queuePodJob.call({ sku: "mug-ok", provider: "printify" }, OWNER);
-    const submitted = await submitPodJob.call({ jobId: retryQueued.id }, OWNER);
-    expect(submitted.status).toBe("submitted");
-    expect(submitted.externalRef).toMatch(/^pod:/);
-    expect((await listPodJobs.call({}, OWNER)).length).toBe(2);
+    const retried = await submitPodJob.call({ jobId: queued.id }, OWNER);
+    expect(retried.id).toBe(queued.id);
+    expect(retried.status).toBe("failed");
+    expect(retried.lastError).toMatch(/refused/i);
+    expect((await listPodJobs.call({}, OWNER)).length).toBe(1);
+  });
+
+  it("fulfills a mapped catalog order through the print plugin and retries a fail- SKU in place", async () => {
+    async function paidPrintOrder(slug: string) {
+      const product = await createProduct.call(
+        { name: slug, slug, kind: "physical" },
+        OWNER,
+      );
+      const updated = await applyVariantMatrix.call(
+        { productId: product.id, expectedVersion: product.version },
+        OWNER,
+      );
+      const variant = (await getProductVariants.call({ productId: updated.id }, OWNER)).variants[0]!;
+      const list = await createPriceList.call(
+        { name: `${slug} retail`, currency: "CAD", kind: "retail" },
+        OWNER,
+      );
+      await setPriceListEntry.call({ priceListId: list.id, variantId: variant.id, amount: "20.00" }, OWNER);
+      const zone = await createShippingZone.call(
+        { name: `${slug} world`, countries: [], regions: [], postalPatterns: [] },
+        OWNER,
+      );
+      await createShippingMethod.call(
+        { zoneId: zone.id, name: "Parcel", kind: "flat", currency: "CAD", amount: "5.00" },
+        OWNER,
+      );
+      const contact = await createContact.call(
+        { name: slug, email: `${slug}@example.test` },
+        OWNER,
+      );
+      const basket = await getOrCreateCart.call({ contactId: contact.id, currency: "CAD" }, OWNER);
+      await addCartItem.call({ cartId: basket.cart.id, variantId: variant.id, quantity: 1 }, OWNER);
+      const placed = await checkoutCart.call(
+        {
+          cartId: basket.cart.id,
+          contactId: contact.id,
+          idempotencyKey: `pod-${slug}-${crypto.randomUUID()}`,
+          acceptedTerms: true,
+          shippingAddress: { country: "CA", city: "Courtenay" },
+        },
+        OWNER,
+      );
+      const payment = await createPayment.call(
+        {
+          invoiceId: placed.order.invoiceId!,
+          provider: "manual",
+          method: "bank_transfer",
+          amountMinor: placed.order.totalMinor,
+          idempotencyKey: `pay-${placed.order.id}`,
+        },
+        OWNER,
+      );
+      await settlePayment.call({ id: payment.id, providerRef: `manual:${placed.order.id}` }, OWNER);
+      return payOrder.call({ id: placed.order.id }, OWNER);
+    }
+
+    await mapPodSku.call(
+      { sku: "mug-ok", provider: "printify", providerProductId: "printify-mug-1" },
+      OWNER,
+    );
+    await mapPodSku.call(
+      { sku: "fail-mug", provider: "printify", providerProductId: "fail-printify-mug" },
+      OWNER,
+    );
+
+    const paid = await paidPrintOrder("mug-ok");
+    const jobs = await queueOrderLines.call({ orderId: paid.order.id }, OWNER);
+    expect(jobs).toHaveLength(1);
+    const job =
+      jobs[0]!.status === "queued" || jobs[0]!.status === "failed"
+        ? await submitPodJob.call({ jobId: jobs[0]!.id }, OWNER)
+        : jobs[0]!;
+    expect(job.status).toBe("submitted");
+    expect(job.orderId).toBe(paid.order.id);
+    expect(job.fulfillmentId).toBeTruthy();
+    expect(job.externalRef).toBe("pod:printify:printify-mug-1");
+    const shipment = await getFulfillment.call({ id: job.fulfillmentId! }, OWNER);
+    expect(shipment.fulfillment.status).toBe("shipped");
+    expect(shipment.fulfillment.trackingNumber).toBe(job.externalRef);
+    expect((await getOrder.call({ id: paid.order.id }, OWNER)).order.status).toBe("fulfilled");
+
+    const refused = await paidPrintOrder("fail-mug");
+    const failedJobs = await queueOrderLines.call({ orderId: refused.order.id }, OWNER);
+    expect(failedJobs).toHaveLength(1);
+    const failed =
+      failedJobs[0]!.status === "failed"
+        ? failedJobs[0]!
+        : await submitPodJob.call({ jobId: failedJobs[0]!.id }, OWNER);
+    expect(failed.status).toBe("failed");
+    expect(failed.lastError).toMatch(/refused/i);
+    const retried = await submitPodJob.call({ jobId: failed.id }, OWNER);
+    expect(retried.id).toBe(failed.id);
+    expect(retried.status).toBe("failed");
+    expect((await listPodJobs.call({}, OWNER)).filter((row) => row.orderId === refused.order.id)).toHaveLength(1);
+    const open = await getFulfillment.call({ id: retried.fulfillmentId! }, OWNER);
+    expect(open.fulfillment.status).toBe("pending");
+    expect((await getOrder.call({ id: refused.order.id }, OWNER)).order.status).toBe("fulfilling");
   });
 
   it("connects a marketplace, recovers a refused handshake, and imports an order", async () => {

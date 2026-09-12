@@ -15,13 +15,17 @@ export interface PodProvider {
   submit(input: PodSubmitInput): Promise<PodSubmitResult>;
 }
 
-/** Fixture provider: succeeds unless the SKU asks it to fail. */
+/** Fixture provider: succeeds unless the catalog SKU asks it to fail. */
 export const fixturePodProvider: PodProvider = {
   async submit(input) {
     if (input.sku.startsWith("fail-")) {
       throw new Error("The print provider refused that SKU.");
     }
-    return { externalRef: `pod:${input.provider}:${input.sku}` };
+    const product =
+      typeof input.payload.providerProductId === "string" && input.payload.providerProductId
+        ? input.payload.providerProductId
+        : input.sku;
+    return { externalRef: `pod:${input.provider}:${product}` };
   },
 };
 
