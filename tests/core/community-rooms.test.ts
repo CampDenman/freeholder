@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Community rooms, posts, gated feed and moderation (MASTER.md §36, C3.13).
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { contactTimeline, createContact } from "@/core/contacts/service";
+import { contactTimeline, createContact, mergeContacts } from "@/core/contacts/service";
 import { ready } from "@/core/runtime";
 import {
   createCommunityPost,
@@ -15,6 +15,7 @@ import {
   joinCommunityBySlug,
   listCommunityFeed,
   listCommunityJoinRequests,
+  listCommunityMembers,
   listCommunityModeration,
   moderateCommunityPostBySlug,
   requestCommunityJoinBySlug,
@@ -97,12 +98,14 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
     );
     expect(outsider.canRead).toBe(false);
     expect(outsider.posts).toHaveLength(0);
+    expect(outsider.rooms).toHaveLength(0);
 
     const member = await getCommunityFeedBySlug.call(
       { slug: "members", email: "bea@demo.freeholder.test" },
       { kind: "anonymous" },
     );
     expect(member.canRead).toBe(true);
+    expect(member.rooms.map((item) => item.slug)).toEqual(["general"]);
     expect(member.posts.map((post) => post.body)).toEqual(["Members only."]);
   });
 
@@ -139,17 +142,34 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
       },
       { kind: "anonymous" },
     );
-    const feed = await listCommunityFeed.call({ spaceId: space.id }, OWNER);
-    expect(feed.map((post) => post.body)).toEqual(["Second.", "First."]);
-    expect(feed[0]?.id).toBe(second.id);
-    expect(feed[1]?.id).toBe(first.id);
+    const third = await createCommunityPostBySlug.call(
+      {
+        slug: "harbour",
+        roomSlug: "lounge",
+        email: "pat@demo.freeholder.test",
+        name: "Pat",
+        body: "Third.",
+      },
+      { kind: "anonymous" },
+    );
+    const feed = await listCommunityFeed.call({ spaceId: space.id, limit: 2 }, OWNER);
+    expect(feed.map((post) => post.body)).toEqual(["Third.", "Second."]);
+    expect(feed.map((post) => post.id)).toEqual([third.id, second.id]);
+    expect(feed.map((post) => post.id)).not.toContain(first.id);
+
+    const older = await listCommunityFeed.call(
+      { spaceId: space.id, limit: 2, before: second.id },
+      OWNER,
+    );
+    expect(older.map((post) => post.body)).toEqual(["First."]);
 
     const publicFeed = await getCommunityFeedBySlug.call(
-      { slug: "harbour" },
+      { slug: "harbour", limit: 2 },
       { kind: "anonymous" },
     );
     expect(publicFeed.canRead).toBe(true);
-    expect(publicFeed.posts.map((post) => post.body)).toEqual(["Second.", "First."]);
+    expect(publicFeed.posts.map((post) => post.body)).toEqual(["Third.", "Second."]);
+    expect(publicFeed.posts.map((post) => post.id)).not.toContain(first.id);
 
     const timeline = await contactTimeline.call({ contactId: joined.contactId }, OWNER);
     expect(timeline.map((event) => event.eventType)).toEqual(
@@ -215,5 +235,43 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
 
     const staffHidden = await hideCommunityPost.call({ postId: post.id }, OWNER);
     expect(staffHidden.status).toBe("hidden");
+  });
+
+  it("drops the duplicate membership and join request when both people share a space", async () => {
+    const gated = await createCommunitySpace.call(
+      { slug: "circle", title: "Circle", access: "gated" },
+      OWNER,
+    );
+    const waiting = await createCommunitySpace.call(
+      { slug: "waitlist", title: "Waitlist", access: "gated" },
+      OWNER,
+    );
+    const keep = await createContact.call(
+      { name: "Keep", email: "keep@demo.freeholder.test" },
+      OWNER,
+    );
+    const drop = await createContact.call(
+      { name: "Drop", email: "drop@demo.freeholder.test" },
+      OWNER,
+    );
+    await joinCommunity.call({ spaceId: gated.id, contactId: keep.id, role: "moderator" }, OWNER);
+    await joinCommunity.call({ spaceId: gated.id, contactId: drop.id }, OWNER);
+    await requestCommunityJoinBySlug.call(
+      { slug: "waitlist", email: "keep@demo.freeholder.test", name: "Keep" },
+      { kind: "anonymous" },
+    );
+    await requestCommunityJoinBySlug.call(
+      { slug: "waitlist", email: "drop@demo.freeholder.test", name: "Drop" },
+      { kind: "anonymous" },
+    );
+
+    await mergeContacts.call({ survivingId: keep.id, duplicateId: drop.id }, OWNER);
+
+    const members = await listCommunityMembers.call({ spaceId: gated.id }, OWNER);
+    expect(members).toHaveLength(1);
+    expect(members[0]).toMatchObject({ contactId: keep.id, role: "moderator" });
+    const requests = await listCommunityJoinRequests.call({ spaceId: waiting.id }, OWNER);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.contactId).toBe(keep.id);
   });
 });

@@ -26,6 +26,43 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
+function PostModerationButtons({
+  spaceId,
+  postId,
+  status,
+  hideLabel,
+  removeLabel,
+}: {
+  spaceId: string;
+  postId: string;
+  status: string;
+  hideLabel: string;
+  removeLabel: string;
+}) {
+  return (
+    <>
+      {status === "visible" || status === "hidden" ? (
+        <form action={hideCommunityPostAction}>
+          <input type="hidden" name="spaceId" value={spaceId} />
+          <input type="hidden" name="postId" value={postId} />
+          <Button type="submit" variant="quiet">
+            {hideLabel}
+          </Button>
+        </form>
+      ) : null}
+      {status !== "removed" ? (
+        <form action={removeCommunityPostAction}>
+          <input type="hidden" name="spaceId" value={spaceId} />
+          <input type="hidden" name="postId" value={postId} />
+          <Button type="submit" variant="danger">
+            {removeLabel}
+          </Button>
+        </form>
+      ) : null}
+    </>
+  );
+}
+
 export default async function CommunityPage({
   searchParams,
 }: {
@@ -200,10 +237,19 @@ export default async function CommunityPage({
               ) : (
                 <ul className="grid list-none gap-2 p-0">
                   {(feed ?? []).map((post) => (
-                    <li key={post.id} className="rounded-md border border-rule p-3 text-sm">
-                      <p className="font-medium">{post.authorName}</p>
-                      <p className="text-ink-muted">{post.roomTitle}</p>
-                      <p className="mt-1 whitespace-pre-wrap">{post.body}</p>
+                    <li key={post.id} className="flex flex-wrap items-start gap-3 rounded-md border border-rule p-3 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{post.authorName}</p>
+                        <p className="text-ink-muted">{post.roomTitle}</p>
+                        <p className="mt-1 whitespace-pre-wrap">{post.body}</p>
+                      </div>
+                      <PostModerationButtons
+                        spaceId={chosen.id}
+                        postId={post.id}
+                        status={post.status}
+                        hideLabel={t("community.hide")}
+                        removeLabel={t("community.remove")}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -227,24 +273,13 @@ export default async function CommunityPage({
                         {t(`community.status.${post.status}`)}
                       </Pill>
                       {post.reportedAt ? <Pill tone="warning">{t("community.reported")}</Pill> : null}
-                      {post.status === "visible" || post.status === "hidden" ? (
-                        <form action={hideCommunityPostAction}>
-                          <input type="hidden" name="spaceId" value={chosen.id} />
-                          <input type="hidden" name="postId" value={post.id} />
-                          <Button type="submit" variant="quiet">
-                            {t("community.hide")}
-                          </Button>
-                        </form>
-                      ) : null}
-                      {post.status !== "removed" ? (
-                        <form action={removeCommunityPostAction}>
-                          <input type="hidden" name="spaceId" value={chosen.id} />
-                          <input type="hidden" name="postId" value={post.id} />
-                          <Button type="submit" variant="danger">
-                            {t("community.remove")}
-                          </Button>
-                        </form>
-                      ) : null}
+                      <PostModerationButtons
+                        spaceId={chosen.id}
+                        postId={post.id}
+                        status={post.status}
+                        hideLabel={t("community.hide")}
+                        removeLabel={t("community.remove")}
+                      />
                     </li>
                   ))}
                 </ul>

@@ -1,10 +1,13 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { and, desc, eq, isNotNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, lt, or } from "drizzle-orm";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
+import { registerContactReference } from "@/core/contacts/service";
 import { isUniqueViolation } from "@/core/db";
+import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
   defineService,
   getService,
@@ -22,7 +25,125 @@ import {
   communitySpaces,
 } from "./schema";
 
-attachPluginContactColumn({
+type SpaceContactTable = PgTable & {
+  id: AnyPgColumn;
+  spaceId: AnyPgColumn;
+  contactId: AnyPgColumn;
+};
+
+/**
+ * Membership and join-request rows are unique per (space, contact). A generic
+ * UPDATE contact_id would abort the whole merge when both people already sit
+ * in the same space — keep the survivor's row and drop the duplicate's.
+ */
+function attachUniqueSpaceContactColumn(options: {
+  table: string;
+  schema: SpaceContactTable;
+  label: string;
+  scope: string;
+}): void {
+  const { schema, table, label, scope } = options;
+  registerContactReference({
+    table,
+    repoint: async (tx, duplicateId, survivingId) => {
+      const survivorRows = await tx
+        .select({ spaceId: schema.spaceId })
+        .from(schema)
+        .where(eq(schema.contactId, survivingId));
+      const taken = new Set(survivorRows.map((row) => String(row.spaceId)));
+      const duplicateRows = await tx
+        .select({ id: schema.id, spaceId: schema.spaceId })
+        .from(schema)
+        .where(eq(schema.contactId, duplicateId));
+      const drop = duplicateRows
+        .filter((row) => taken.has(String(row.spaceId)))
+        .map((row) => String(row.id));
+      const move = duplicateRows
+        .filter((row) => !taken.has(String(row.spaceId)))
+        .map((row) => String(row.id));
+      if (drop.length) {
+        await tx.delete(schema).where(inArray(schema.id, drop));
+      }
+      if (move.length) {
+        await tx
+          .update(schema)
+          .set({ contactId: survivingId })
+          .where(inArray(schema.id, move));
+      }
+    },
+    captureForUndo: async (tx, duplicateId, survivingId) => {
+      const rows = await tx
+        .select({
+          id: schema.id,
+          spaceId: schema.spaceId,
+          contactId: schema.contactId,
+        })
+        .from(schema)
+        .where(inArray(schema.contactId, [duplicateId, survivingId]));
+      const survivorSpaces = new Set(
+        rows
+          .filter((row) => row.contactId === survivingId)
+          .map((row) => String(row.spaceId)),
+      );
+      const collisions = rows.some(
+        (row) => row.contactId === duplicateId && survivorSpaces.has(String(row.spaceId)),
+      );
+      return {
+        state: rows.map((row) => ({ id: row.id, contactId: row.contactId })),
+        undoable: !collisions,
+        blocker: collisions
+          ? `${label} for the same space cannot be split back out after a merge.`
+          : undefined,
+      };
+    },
+    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId) => {
+      const pointer = z.array(
+        z.object({ id: z.string().uuid(), contactId: z.string().uuid().nullable() }),
+      );
+      const before = pointer.parse(beforeState);
+      const after = pointer.parse(afterState);
+      const current = after.length
+        ? await tx
+            .select({ id: schema.id, contactId: schema.contactId })
+            .from(schema)
+            .where(inArray(schema.id, after.map((row) => row.id)))
+        : [];
+      const byId = new Map(current.map((row) => [String(row.id), row.contactId]));
+      if (
+        current.length !== after.length ||
+        after.some((row) => byId.get(row.id) !== row.contactId)
+      ) {
+        throw new ServiceError(
+          "conflict",
+          `${label} changed after this merge. Leave the merge in place or restore that record first.`,
+        );
+      }
+      const moved = before.filter((row) => row.contactId === duplicateId);
+      if (moved.length) {
+        await tx
+          .update(schema)
+          .set({ contactId: duplicateId })
+          .where(inArray(schema.id, moved.map((row) => row.id)));
+      }
+    },
+  });
+
+  registerContactPrivacySource({
+    scope,
+    tables: [table],
+    exportData: (tx: Tx, contactId: string) =>
+      tx.select().from(schema).where(eq(schema.contactId, contactId)),
+    erase: async (tx: Tx, contactId: string) => {
+      const rows = await tx
+        .delete(schema)
+        .where(eq(schema.contactId, contactId))
+        .returning({ id: schema.id });
+      return { affected: rows.length };
+    },
+  });
+}
+
+attachUniqueSpaceContactColumn({
   table: "community_members",
   schema: communityMembers,
   label: "A community membership",
@@ -36,7 +157,7 @@ attachPluginContactColumn({
   scope: "plugins.community.posts",
 });
 
-attachPluginContactColumn({
+attachUniqueSpaceContactColumn({
   table: "community_join_requests",
   schema: communityJoinRequests,
   label: "A community join request",
@@ -208,6 +329,23 @@ function postsQuery(tx: Tx) {
     .from(communityPosts)
     .innerJoin(communityRooms, eq(communityRooms.id, communityPosts.roomId))
     .innerJoin(contacts, eq(contacts.id, communityPosts.contactId));
+}
+
+const feedLimit = z.number().int().min(1).max(100).default(50);
+const feedBefore = z.string().uuid().optional();
+
+async function olderThan(tx: Tx, before?: string) {
+  if (!before) return undefined;
+  const [anchor] = await tx
+    .select({ id: communityPosts.id, createdAt: communityPosts.createdAt })
+    .from(communityPosts)
+    .where(eq(communityPosts.id, before))
+    .limit(1);
+  if (!anchor) throw new ServiceError("not_found", "No such community post.");
+  return or(
+    lt(communityPosts.createdAt, anchor.createdAt),
+    and(eq(communityPosts.createdAt, anchor.createdAt), lt(communityPosts.id, anchor.id)),
+  );
 }
 
 async function insertPost(
@@ -387,15 +525,20 @@ export const listCommunityFeed = defineService({
     spaceId: z.string().uuid(),
     roomId: z.string().uuid().optional(),
     includeHidden: z.boolean().default(false),
+    limit: feedLimit,
+    before: feedBefore,
   }),
   output: listed(postRow),
   handler: async (input, ctx) => {
     const filters = [eq(communityRooms.spaceId, input.spaceId)];
     if (input.roomId) filters.push(eq(communityPosts.roomId, input.roomId));
     if (!input.includeHidden) filters.push(eq(communityPosts.status, "visible"));
+    const window = await olderThan(ctx.tx, input.before);
+    if (window) filters.push(window);
     return postsQuery(ctx.tx)
       .where(and(...filters))
-      .orderBy(desc(communityPosts.createdAt));
+      .orderBy(desc(communityPosts.createdAt), desc(communityPosts.id))
+      .limit(input.limit);
   },
 });
 
@@ -520,6 +663,8 @@ export const getCommunityFeedBySlug = defineService({
     slug: z.string().min(1).max(80),
     email: z.string().trim().email().toLowerCase().optional(),
     roomSlug: z.string().min(1).max(80).optional(),
+    limit: feedLimit,
+    before: feedBefore,
   }),
   output: row({
     space: spaceRow,
@@ -534,27 +679,30 @@ export const getCommunityFeedBySlug = defineService({
       .select({ id: communityMembers.id })
       .from(communityMembers)
       .where(eq(communityMembers.spaceId, space.id));
-    const rooms = await ctx.tx
-      .select()
-      .from(communityRooms)
-      .where(eq(communityRooms.spaceId, space.id))
-      .orderBy(communityRooms.createdAt);
     let canRead = space.access === "open";
     if (!canRead && input.email) {
       const person = await contactByEmail(ctx.tx, input.email);
       if (person && (await membership(ctx.tx, space.id, person.id))) canRead = true;
     }
     if (!canRead) {
-      return { space, memberCount: members.length, canRead: false, rooms, posts: [] };
+      return { space, memberCount: members.length, canRead: false, rooms: [], posts: [] };
     }
+    const rooms = await ctx.tx
+      .select()
+      .from(communityRooms)
+      .where(eq(communityRooms.spaceId, space.id))
+      .orderBy(communityRooms.createdAt);
     const filters = [
       eq(communityRooms.spaceId, space.id),
       eq(communityPosts.status, "visible"),
     ];
     if (input.roomSlug) filters.push(eq(communityRooms.slug, input.roomSlug));
+    const window = await olderThan(ctx.tx, input.before);
+    if (window) filters.push(window);
     const posts = await postsQuery(ctx.tx)
       .where(and(...filters))
-      .orderBy(desc(communityPosts.createdAt));
+      .orderBy(desc(communityPosts.createdAt), desc(communityPosts.id))
+      .limit(input.limit);
     return {
       space,
       memberCount: members.length,
