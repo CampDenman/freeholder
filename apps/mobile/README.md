@@ -73,23 +73,26 @@ Bookings (C10.25) use the customer's profile and own list, then uncached
 management links. The detail reads live, applies the server's rescheduling
 policy, confirms cancellation, and opens existing intake/waiver web forms.
 The native picker uses the appointment's timezone; the preview also shows the
-business timezone. Galleries/proofing, messages and newsletters
-remain C10.27–C10.28. Invoices (C10.26) read the existing customer portal room
-and customer invoice projection. A separate, uncached own-invoice link opens
-payment in the system browser without exposing the user's session. Invoice
-and receipt pages return to the app's invoice list; a return naming another
-business is refused. The app refreshes on return and never assumes a browser
-redirect means the invoice was paid. Both C10.25 and C10.26 still need physical
-device interaction and accessibility checks before their checkboxes close.
+business timezone. Messages and newsletters remain C10.28. Invoices (C10.26)
+read the existing customer portal room and customer invoice projection. A
+separate, uncached own-invoice link opens payment in the system browser without
+exposing the user's session. Invoice and receipt pages return to the app's
+invoice list; a return naming another business is refused. The app refreshes on
+return and never assumes a browser redirect means the invoice was paid. C10.25
+and C10.26 still need physical device interaction and accessibility checks
+before their checkboxes close.
 
-C10.29 supplies the gallery foundation: `portal.myRecords` now has a
-`galleries` room backed by the caller's own contact and active invitations.
-After `galleries.openWithLogin`, the existing `/g/{slug}/view/{itemId}` image
-route accepts `Authorization: Bearer {gallerySessionToken}`. This is the
-gallery capability, not the user's login token; never put it in the URL.
-The route rechecks gallery/item access and returns header-authenticated images
-with `Cache-Control: private, no-store`. C10.27 still owns the native proofing
-screen and caching private image bytes; C10.30 supplies the snapshot cache below.
+Galleries (C10.27) list the C10.29 portal room and open a gallery with
+`galleries.openWithLogin`, then `viewSession` / `viewItem`. Favourites, selects,
+rejects, comments and round submit use the same mutations as `app/g/[slug]`.
+Proofing writes are live-only: they are never queued or retried. Private image
+bytes come from `/g/{slug}/view/{itemId}` with `Authorization: Bearer
+{gallerySessionToken}` — the gallery capability, never the user's login token,
+and never in the URL. Those bytes share C10.30's 60-second encrypted lease;
+401/403/404 evict immediately, offline failures never renew the lease, expiry
+clears the photo while the screen stays open, and sign-out cannot let a late
+response refill the next account. Physical-device proofing and accessibility
+checks remain outstanding, so C10.27 stays open.
 
 Private read snapshots persist as AES-GCM ciphertext in the app cache directory,
 with a session-specific key in SecureStore (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`).

@@ -238,6 +238,52 @@ describe("encrypted persistence (C10.30)", () => {
   });
 });
 
+describe("private gallery image bytes (C10.27)", () => {
+  const image = {
+    key: cacheKey("https://example.test", "galleries.viewItem", { slug: "spring-shoot", itemId: "item-1" }),
+    kind: "query" as const,
+    service: "galleries.viewItem",
+    maxAgeMs: PRIVATE_CACHE_LEASE_MS,
+  };
+  const bytes = { mime: "image/jpeg", uri: "data:image/jpeg;base64,/9j/4AAQ" };
+
+  it("drops revoked image bytes at the 60-second lease and never renews them offline", async () => {
+    let now = 5_000_000;
+    const cache = storage();
+    const read = { ...image, now: () => now };
+    expect(await readThrough(read, async () => bytes, cache)).toMatchObject({ value: bytes, expiresAt: 5_060_000 });
+    now += 59_999;
+    expect((await readThrough(read, offline, cache)).value).toEqual(bytes);
+    now++;
+    expect((await readThrough(read, offline, cache)).value).toBeNull();
+    expect(cache.data.size).toBe(0);
+    expect((await readThrough(read, offline, cache)).value).toBeNull();
+  });
+
+  it.each([401, 403, 404])("evicts cached image bytes on HTTP %s instead of serving a revoked photo", async (status) => {
+    const cache = storage();
+    await readThrough(image, async () => bytes, cache);
+    const denial = Object.assign(new Error("gallery denied"), { status });
+    await expect(readThrough(image, async () => { throw denial; }, cache)).rejects.toBe(denial);
+    expect(cache.data.size).toBe(0);
+    expect((await readThrough(image, offline, cache)).value).toBeNull();
+  });
+
+  it("does not let a late image write from a signed-out session refill the next account", async () => {
+    const disk = storage();
+    const scope = privateCacheScope({ open: async () => disk, clear: () => disk.clear() });
+    await scope.activate("account-a");
+    const old = scope.get("account-a");
+    await readThrough(image, async () => bytes, old);
+    const switching = scope.activate("account-b");
+    expect(scope.get("account-a")).toBe(noCache);
+    await switching;
+    await old.set(image.key, JSON.stringify({ value: bytes, fetchedAt: new Date().toISOString() }));
+    expect(await scope.get("account-b").get(image.key)).toBeNull();
+    expect((await readThrough(image, offline, scope.get("account-b"))).value).toBeNull();
+  });
+});
+
 describe("offline instance restart (C10.30)", () => {
   const instance: Instance = {
     url: "https://example.test", contractVersion: 1, platformVersion: "0.1.0", name: "Example",
