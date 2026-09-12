@@ -86,11 +86,13 @@ export default async function MarketplacePage({
                       </Button>
                     </form>
                   ) : null}
-                  {channel.status === "connected" ? (
+                  {channel.status === "connected" || channel.status === "syncing" ? (
                     <form action={syncMarketplaceAction}>
                       <input type="hidden" name="channelId" value={channel.id} />
                       <Button type="submit" variant="quiet">
-                        {channel.lastError ? t("marketplace.retry") : t("marketplace.sync")}
+                        {channel.lastError || channel.status === "syncing"
+                          ? t("marketplace.retry")
+                          : t("marketplace.sync")}
                       </Button>
                     </form>
                   ) : null}

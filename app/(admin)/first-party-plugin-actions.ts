@@ -192,7 +192,13 @@ export async function connectMarketplaceAction(form: FormData): Promise<void> {
 export async function syncMarketplaceAction(form: FormData): Promise<void> {
   const path = "/admin/marketplace";
   try {
-    await syncMarketplaceChannel.call({ channelId: text(form, "channelId") }, await actor());
+    const result = await syncMarketplaceChannel.call(
+      { channelId: text(form, "channelId") },
+      await actor(),
+    );
+    if (result.lastError) {
+      done(path, new ServiceError("conflict", result.lastError));
+    }
   } catch (error) {
     done(path, error);
   }

@@ -36,17 +36,30 @@ export interface MarketplaceProvider {
  * Fixture pages one order at a time so a two-order sync has to walk `nextCursor`.
  * Tests insert the list; nothing is hardcoded here.
  */
-const FIXTURE_PAGE_SIZE = 1;
+export const FIXTURE_PAGE_SIZE = 1;
 
 const stagedByProvider = new Map<string, MarketplaceOrder[]>();
+let listCalls = 0;
+let failAfterPages: number | null = null;
 
 export function stageMarketplaceOrders(provider: string, orders: MarketplaceOrder[]): void {
   const current = stagedByProvider.get(provider) ?? [];
   stagedByProvider.set(provider, [...current, ...orders]);
 }
 
+export function marketplaceListOrderCalls(): number {
+  return listCalls;
+}
+
+/** Throw on the next list after this many successful pages. `null` clears it. */
+export function failMarketplaceListAfterPages(count: number | null): void {
+  failAfterPages = count;
+}
+
 export function resetStagedMarketplaceOrders(): void {
   stagedByProvider.clear();
+  listCalls = 0;
+  failAfterPages = null;
 }
 
 function pageStart(cursor: string | null | undefined): number {
@@ -64,10 +77,17 @@ export const fixtureMarketplaceProvider: MarketplaceProvider = {
     return { externalRef: `mkt:${input.provider}` };
   },
   async listOrders(input) {
-    if (input.externalRef.startsWith("fail-")) {
+    const staged = stagedByProvider.get(input.provider) ?? [];
+    if (
+      input.externalRef.startsWith("fail-") ||
+      staged.some((order) => order.externalRef.startsWith("fail-"))
+    ) {
       throw new Error("The marketplace could not list orders.");
     }
-    const staged = stagedByProvider.get(input.provider) ?? [];
+    if (failAfterPages != null && listCalls >= failAfterPages) {
+      throw new Error("The marketplace could not list orders.");
+    }
+    listCalls += 1;
     const start = pageStart(input.cursor);
     const size = Math.min(Math.max(input.limit ?? FIXTURE_PAGE_SIZE, 1), FIXTURE_PAGE_SIZE);
     const orders = staged.slice(start, start + size);

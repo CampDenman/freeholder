@@ -15,7 +15,12 @@ import {
   invoiceGiftRegistryItem,
 } from "../../plugins/gift-registry/service";
 import { listPodJobs, queuePodJob, submitPodJob } from "../../plugins/print-on-demand/service";
-import { resetStagedMarketplaceOrders, stageMarketplaceOrders } from "../../plugins/marketplace/adapter";
+import {
+  failMarketplaceListAfterPages,
+  marketplaceListOrderCalls,
+  resetStagedMarketplaceOrders,
+  stageMarketplaceOrders,
+} from "../../plugins/marketplace/adapter";
 import {
   connectMarketplaceChannel,
   listMarketplaceChannels,
@@ -152,16 +157,26 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
     const synced = await syncMarketplaceChannel.call({ channelId: connected.id }, OWNER);
     expect(synced.imported).toBe(2);
     expect(synced.lastError).toBeNull();
-    expect((await listMarketplaceChannels.call({}, OWNER))[0]?.lastSyncedAt).toBeTruthy();
+    expect(marketplaceListOrderCalls()).toBe(2);
+    const channel = (await listMarketplaceChannels.call({}, OWNER))[0];
+    expect(channel?.lastSyncedAt).toBeTruthy();
+    expect(channel?.syncCursor).toBeNull();
+    expect(channel?.status).toBe("connected");
 
     const imported = await listMarketplaceOrders.call({ channelId: connected.id }, OWNER);
     expect(imported).toHaveLength(2);
     const contactIds = [...new Set(imported.map((row) => row.contactId))];
     expect(contactIds).toHaveLength(2);
     const invoices = (await listInvoices.call({}, OWNER)).filter((row) =>
-      row.idempotencyKey.startsWith("marketplace:"),
+      row.idempotencyKey.startsWith(`marketplace:${connected.id}:`),
     );
     expect(invoices).toHaveLength(2);
+    expect(invoices.map((row) => row.idempotencyKey).sort()).toEqual(
+      [`marketplace:${connected.id}:shopify-1001`, `marketplace:${connected.id}:shopify-1002`].sort(),
+    );
+    expect(invoices.map((row) => row.sourceId).sort()).toEqual(
+      [`marketplace:${connected.id}:shopify-1001`, `marketplace:${connected.id}:shopify-1002`].sort(),
+    );
     expect(invoices.map((row) => row.contactId).sort()).toEqual([...contactIds].sort());
     expect(invoices.every((row) => row.sourceType === "order")).toBe(true);
 
@@ -175,7 +190,117 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
     expect(merged).toHaveLength(2);
     expect(merged.every((row) => row.contactId === keep)).toBe(true);
     const keptInvoices = await listInvoices.call({ contactId: keep }, OWNER);
-    expect(keptInvoices.filter((row) => row.idempotencyKey.startsWith("marketplace:"))).toHaveLength(2);
+    expect(
+      keptInvoices.filter((row) => row.idempotencyKey.startsWith(`marketplace:${connected.id}:`)),
+    ).toHaveLength(2);
+  });
+
+  it("keeps Shopify and Etsy invoices distinct when they share an order number", async () => {
+    const order = {
+      externalRef: "1001",
+      description: "Shared number",
+      amountMinor: 2_500,
+      currency: "USD",
+      buyerEmail: "shopify.buyer@demo.freeholder.test",
+      buyerName: "Shopify Buyer",
+    };
+    stageMarketplaceOrders("shopify", [order]);
+    stageMarketplaceOrders("etsy", [
+      { ...order, buyerEmail: "etsy.buyer@demo.freeholder.test", buyerName: "Etsy Buyer", amountMinor: 4_000 },
+    ]);
+    const shopify = await connectMarketplaceChannel.call(
+      { name: "Harbour shop", provider: "shopify" },
+      OWNER,
+    );
+    const etsy = await connectMarketplaceChannel.call({ name: "Harbour etsy", provider: "etsy" }, OWNER);
+    expect((await syncMarketplaceChannel.call({ channelId: shopify.id }, OWNER)).imported).toBe(1);
+    expect((await syncMarketplaceChannel.call({ channelId: etsy.id }, OWNER)).imported).toBe(1);
+    const invoices = (await listInvoices.call({}, OWNER)).filter((row) =>
+      row.idempotencyKey.startsWith("marketplace:"),
+    );
+    expect(invoices).toHaveLength(2);
+    expect(invoices.map((row) => row.idempotencyKey).sort()).toEqual(
+      [`marketplace:${etsy.id}:1001`, `marketplace:${shopify.id}:1001`].sort(),
+    );
+    expect(new Set(invoices.map((row) => row.contactId)).size).toBe(2);
+  });
+
+  it("fails a listOrders page in place and retries from the saved cursor", async () => {
+    stageMarketplaceOrders("shopify", [
+      {
+        externalRef: "page-1",
+        description: "First page",
+        amountMinor: 1_000,
+        currency: "USD",
+        buyerEmail: "page.one@demo.freeholder.test",
+        buyerName: "Page One",
+      },
+      {
+        externalRef: "page-2",
+        description: "Second page",
+        amountMinor: 2_000,
+        currency: "USD",
+        buyerEmail: "page.two@demo.freeholder.test",
+        buyerName: "Page Two",
+      },
+    ]);
+    const connected = await connectMarketplaceChannel.call(
+      { name: "Harbour shop", provider: "shopify" },
+      OWNER,
+    );
+    failMarketplaceListAfterPages(1);
+    const failed = await syncMarketplaceChannel.call({ channelId: connected.id }, OWNER);
+    expect(failed.imported).toBe(1);
+    expect(failed.lastError).toMatch(/could not list/i);
+    const paused = (await listMarketplaceChannels.call({}, OWNER))[0];
+    expect(paused?.status).toBe("connected");
+    expect(paused?.syncCursor).toBe("1");
+    expect(await listMarketplaceOrders.call({ channelId: connected.id }, OWNER)).toHaveLength(1);
+
+    failMarketplaceListAfterPages(null);
+    const retried = await syncMarketplaceChannel.call({ channelId: connected.id }, OWNER);
+    expect(retried.imported).toBe(1);
+    expect(retried.lastError).toBeNull();
+    expect(await listMarketplaceOrders.call({ channelId: connected.id }, OWNER)).toHaveLength(2);
+    expect((await listMarketplaceChannels.call({}, OWNER))[0]?.syncCursor).toBeNull();
+  });
+
+  it("refuses a fail- staged list and retries the same channel", async () => {
+    stageMarketplaceOrders("shopify", [
+      {
+        externalRef: "fail-list",
+        description: "Should not import",
+        amountMinor: 1_000,
+        currency: "USD",
+        buyerEmail: "fail.list@demo.freeholder.test",
+        buyerName: "Fail List",
+      },
+    ]);
+    const connected = await connectMarketplaceChannel.call(
+      { name: "Harbour shop", provider: "shopify" },
+      OWNER,
+    );
+    const failed = await syncMarketplaceChannel.call({ channelId: connected.id }, OWNER);
+    expect(failed.imported).toBe(0);
+    expect(failed.lastError).toMatch(/could not list/i);
+    expect((await listMarketplaceChannels.call({}, OWNER))[0]?.status).toBe("connected");
+    expect(await listMarketplaceOrders.call({ channelId: connected.id }, OWNER)).toHaveLength(0);
+
+    resetStagedMarketplaceOrders();
+    stageMarketplaceOrders("shopify", [
+      {
+        externalRef: "ok-1",
+        description: "Recovered",
+        amountMinor: 1_500,
+        currency: "USD",
+        buyerEmail: "ok.list@demo.freeholder.test",
+        buyerName: "Ok List",
+      },
+    ]);
+    const retried = await syncMarketplaceChannel.call({ channelId: connected.id }, OWNER);
+    expect(retried.imported).toBe(1);
+    expect(retried.lastError).toBeNull();
+    expect(await listMarketplaceOrders.call({ channelId: connected.id }, OWNER)).toHaveLength(1);
   });
 
   it("attaches a voice artifact to the contact thread and retries a provider failure", async () => {

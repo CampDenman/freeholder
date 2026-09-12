@@ -3435,6 +3435,7 @@
   "marketplace.status.disconnected": "Disconnected",
   "marketplace.status.failed": "Failed",
   "marketplace.status.pending": "Pending",
+  "marketplace.status.syncing": "Syncing",
   "marketplace.sync": "Sync orders",
   "marketplace.title": "Marketplace channels",
   "media.altSuggestionAccept": "Accept description",
