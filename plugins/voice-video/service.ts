@@ -11,7 +11,10 @@ import {
   ServiceError,
   type Actor,
 } from "@/core/service";
-import { attachPluginContactColumn } from "@/core/plugins/spine";
+import {
+  attachPluginContactColumn,
+  attachPluginUniqueContactColumn,
+} from "@/core/plugins/spine";
 import { voiceVideoProvider } from "./adapter";
 import { voiceVideoArtifacts, voiceVideoJoins, voiceVideoRooms } from "./schema";
 
@@ -21,9 +24,10 @@ attachPluginContactColumn({
   label: "A voice or video room",
   scope: "plugins.voice-video.rooms",
 });
-attachPluginContactColumn({
+attachPluginUniqueContactColumn({
   table: "voice_video_joins",
   schema: voiceVideoJoins,
+  parent: voiceVideoJoins.roomId,
   label: "A voice or video join",
   scope: "plugins.voice-video.joins",
 });
@@ -132,6 +136,9 @@ const claimStart = defineService({
       if (existing.status === "pending" || existing.status === "stopping") {
         throw new ServiceError("conflict", "That room is already being opened.");
       }
+      if (existing.externalRef) {
+        throw new ServiceError("conflict", "That room already has a provider session. Stop it instead.");
+      }
       await ctx.tx
         .update(voiceVideoRooms)
         .set({
@@ -186,7 +193,7 @@ const applyStart = defineService({
   }),
   output: okResult,
   handler: async (input, ctx) => {
-    if (input.externalRef) {
+    if (input.externalRef && !input.lastError) {
       await ctx.tx
         .update(voiceVideoRooms)
         .set({
@@ -203,6 +210,7 @@ const applyStart = defineService({
         .set({
           status: "failed",
           lastError: input.lastError ?? "The call provider could not open that room.",
+          ...(input.externalRef ? { externalRef: input.externalRef } : {}),
         })
         .where(eq(voiceVideoRooms.id, input.roomId));
     }
@@ -226,8 +234,9 @@ export const startVoiceVideoRoom = defineOrchestratedService({
   output: roomRow,
   handler: async (input, actor) => {
     const claimed = await claimStart.call(input, { kind: "system" });
+    let started: { externalRef: string } | undefined;
     try {
-      const started = await voiceVideoProvider().startRoom({
+      started = await voiceVideoProvider().startRoom({
         kind: claimed.kind,
         provider: claimed.provider,
         title: claimed.title,
@@ -249,7 +258,11 @@ export const startVoiceVideoRoom = defineOrchestratedService({
       const message =
         error instanceof Error ? error.message : "The call provider could not open that room.";
       await applyStart.call(
-        { roomId: claimed.roomId, lastError: message.slice(0, 500) },
+        {
+          roomId: claimed.roomId,
+          lastError: message.slice(0, 500),
+          externalRef: started?.externalRef,
+        },
         { kind: "system" },
       );
     }
@@ -288,7 +301,8 @@ export const joinVoiceVideoRoom = defineService({
       channel: "chat",
       body: `Joined call: ${room.title}`,
       sentBy: "system",
-      conversationId: room.conversationId ?? undefined,
+      conversationId:
+        input.contactId === room.contactId ? (room.conversationId ?? undefined) : undefined,
       providerRef: `vv-join:${room.id}:${input.contactId}`,
     })) as { conversation: { id: string } };
     try {
@@ -333,6 +347,7 @@ const claimStop = defineService({
     provider: z.string(),
     title: z.string(),
     externalRef: z.string().nullable(),
+    recordedArtifactId: uuid.nullable(),
     failedArtifactId: uuid.nullable(),
   }),
   handler: async (input, ctx) => {
@@ -357,9 +372,16 @@ const claimStop = defineService({
     if (room.status === "failed" && !room.externalRef) {
       throw new ServiceError("conflict", "Open that room before recording it.");
     }
-    const failedArtifact = (
-      await ctx.tx.select().from(voiceVideoArtifacts).where(eq(voiceVideoArtifacts.roomId, room.id))
-    ).find((row) => row.status === "failed" && row.kind !== "transcript");
+    const artifacts = await ctx.tx
+      .select()
+      .from(voiceVideoArtifacts)
+      .where(eq(voiceVideoArtifacts.roomId, room.id));
+    const recordedArtifact = artifacts.find(
+      (row) => row.status === "recorded" && row.kind !== "transcript",
+    );
+    const failedArtifact = artifacts.find(
+      (row) => row.status === "failed" && row.kind !== "transcript",
+    );
     await ctx.tx
       .update(voiceVideoRooms)
       .set({ status: "stopping", lastError: null })
@@ -372,6 +394,7 @@ const claimStop = defineService({
       provider: room.provider,
       title: room.title,
       externalRef: room.externalRef,
+      recordedArtifactId: recordedArtifact?.id ?? null,
       failedArtifactId: failedArtifact?.id ?? null,
     };
   },
@@ -431,6 +454,8 @@ const claimCapture = defineService({
     roomId: uuid.nullable(),
     conversationId: uuid.nullable(),
     externalRef: z.string().nullable(),
+    transcript: z.string().nullable(),
+    durationSeconds: z.number().int().nullable(),
   }),
   handler: async (input, ctx) => {
     const roomId = input.roomId;
@@ -475,6 +500,8 @@ const claimCapture = defineService({
         roomId: roomId ?? existing.roomId,
         conversationId: roomConversationId ?? existing.conversationId,
         externalRef: existing.externalRef,
+        transcript: existing.transcript,
+        durationSeconds: existing.durationSeconds,
       };
     }
     const [created] = await ctx.tx
@@ -499,6 +526,8 @@ const claimCapture = defineService({
       roomId: created!.roomId,
       conversationId: created!.conversationId,
       externalRef: created!.externalRef,
+      transcript: created!.transcript,
+      durationSeconds: created!.durationSeconds,
     };
   },
 });
@@ -526,7 +555,7 @@ const applyCapture = defineService({
       .where(eq(voiceVideoArtifacts.id, input.artifactId))
       .limit(1);
     if (!artifact) throw new ServiceError("not_found", "No such recording.");
-    if (input.externalRef) {
+    if (input.externalRef && !input.lastError) {
       await ctx.tx
         .update(voiceVideoArtifacts)
         .set({
@@ -538,20 +567,28 @@ const applyCapture = defineService({
           lastError: null,
         })
         .where(eq(voiceVideoArtifacts.id, input.artifactId));
-      const [transcript] = await ctx.tx
-        .insert(voiceVideoArtifacts)
-        .values({
-          contactId: artifact.contactId,
-          roomId: artifact.roomId,
-          kind: "transcript",
-          provider: artifact.provider,
-          title: artifact.title,
-          status: "recorded",
-          externalRef: `vv-transcript:${input.artifactId}`,
-          conversationId: input.conversationId ?? null,
-          transcript: input.transcript ?? null,
-        })
-        .returning();
+      const transcriptRef = `vv-transcript:${input.artifactId}`;
+      const [existingTranscript] = await ctx.tx
+        .select({ id: voiceVideoArtifacts.id })
+        .from(voiceVideoArtifacts)
+        .where(eq(voiceVideoArtifacts.externalRef, transcriptRef))
+        .limit(1);
+      const [transcript] = existingTranscript
+        ? [existingTranscript]
+        : await ctx.tx
+            .insert(voiceVideoArtifacts)
+            .values({
+              contactId: artifact.contactId,
+              roomId: artifact.roomId,
+              kind: "transcript",
+              provider: artifact.provider,
+              title: artifact.title,
+              status: "recorded",
+              externalRef: transcriptRef,
+              conversationId: input.conversationId ?? null,
+              transcript: input.transcript ?? null,
+            })
+            .returning({ id: voiceVideoArtifacts.id });
       await ctx.emitTimeline({
         contactId: artifact.contactId,
         eventType: "voiceVideo.recordingReady",
@@ -571,6 +608,9 @@ const applyCapture = defineService({
         .set({
           status: "failed",
           lastError: input.lastError ?? "The call provider could not store that recording.",
+          ...(input.externalRef ? { externalRef: input.externalRef } : {}),
+          ...(input.transcript !== undefined ? { transcript: input.transcript } : {}),
+          ...(input.durationSeconds !== undefined ? { durationSeconds: input.durationSeconds } : {}),
         })
         .where(eq(voiceVideoArtifacts.id, input.artifactId));
     }
@@ -595,13 +635,22 @@ export const recordVoiceVideoArtifact = defineOrchestratedService({
   output: artifactRow,
   handler: async (input, actor) => {
     const claimed = await claimCapture.call(input, { kind: "system" });
+    let captured:
+      | { externalRef: string; transcript: string; durationSeconds: number }
+      | undefined;
     try {
-      const captured = await voiceVideoProvider().capture({
-        kind: claimed.kind,
-        provider: claimed.provider,
-        title: claimed.title,
-        externalRef: claimed.externalRef ?? undefined,
-      });
+      captured = claimed.externalRef
+        ? {
+            externalRef: claimed.externalRef,
+            transcript: claimed.transcript ?? `${claimed.kind} recording: ${claimed.title}`,
+            durationSeconds: claimed.durationSeconds ?? 0,
+          }
+        : await voiceVideoProvider().capture({
+            kind: claimed.kind,
+            provider: claimed.provider,
+            title: claimed.title,
+            externalRef: claimed.externalRef ?? undefined,
+          });
       const recorded = await recordOnThread(actor, {
         contactId: claimed.contactId,
         body: captured.transcript,
@@ -622,7 +671,13 @@ export const recordVoiceVideoArtifact = defineOrchestratedService({
       const message =
         error instanceof Error ? error.message : "The call provider could not store that recording.";
       await applyCapture.call(
-        { artifactId: claimed.artifactId, lastError: message.slice(0, 500) },
+        {
+          artifactId: claimed.artifactId,
+          lastError: message.slice(0, 500),
+          externalRef: captured?.externalRef,
+          transcript: captured?.transcript,
+          durationSeconds: captured?.durationSeconds,
+        },
         { kind: "system" },
       );
     }
@@ -645,26 +700,37 @@ export const stopVoiceVideoRoom = defineOrchestratedService({
   handler: async (input, actor) => {
     const claimed = await claimStop.call(input, { kind: "system" });
     try {
-      const recorded = await recordVoiceVideoArtifact.call(
-        {
-          contactId: claimed.contactId,
-          kind: claimed.kind,
-          provider: claimed.provider,
-          title: claimed.title,
-          artifactId: claimed.failedArtifactId ?? undefined,
-          roomId: claimed.roomId,
-        },
-        actor,
-      );
-      await applyStop.call(
-        {
-          roomId: claimed.roomId,
-          status: recorded.status === "recorded" ? "ended" : "failed",
-          conversationId: recorded.conversationId ?? claimed.conversationId ?? undefined,
-          lastError: recorded.lastError ?? undefined,
-        },
-        { kind: "system" },
-      );
+      if (claimed.recordedArtifactId) {
+        await applyStop.call(
+          {
+            roomId: claimed.roomId,
+            status: "ended",
+            conversationId: claimed.conversationId ?? undefined,
+          },
+          { kind: "system" },
+        );
+      } else {
+        const recorded = await recordVoiceVideoArtifact.call(
+          {
+            contactId: claimed.contactId,
+            kind: claimed.kind,
+            provider: claimed.provider,
+            title: claimed.title,
+            artifactId: claimed.failedArtifactId ?? undefined,
+            roomId: claimed.roomId,
+          },
+          actor,
+        );
+        await applyStop.call(
+          {
+            roomId: claimed.roomId,
+            status: recorded.status === "recorded" ? "ended" : "failed",
+            conversationId: recorded.conversationId ?? claimed.conversationId ?? undefined,
+            lastError: recorded.lastError ?? undefined,
+          },
+          { kind: "system" },
+        );
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "The call provider could not store that recording.";

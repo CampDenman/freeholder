@@ -209,7 +209,7 @@ export default async function VoiceVideoPage({
                       {t(`voiceVideo.status.${artifact.status}`)}
                     </Pill>
                     {artifact.lastError ? <span className="text-danger">{artifact.lastError}</span> : null}
-                    {artifact.status === "failed" ? (
+                    {artifact.status === "failed" && !artifact.roomId ? (
                       <form action={recordVoiceVideoAction}>
                         <input type="hidden" name="artifactId" value={artifact.id} />
                         <input type="hidden" name="contactId" value={artifact.contactId} />
