@@ -1,11 +1,15 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // First-party plugins: human surfaces, provider sync, failure recovery (C3.13).
+import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import manifests from "@/modules";
 import { isPluginManifest } from "@/core/plugin";
 import { ready } from "@/core/runtime";
-import { createContact } from "@/core/contacts/service";
+import { createContact, mergeContacts } from "@/core/contacts/service";
+import { timelineEvents } from "@/core/contacts/schema";
+import { db } from "@/core/db";
+import { getConversation } from "@/core/messaging/service";
 import {
   addGiftRegistryItem,
   contributeToGiftRegistry,
@@ -19,7 +23,16 @@ import {
   listMarketplaceChannels,
   syncMarketplaceChannel,
 } from "../../plugins/marketplace/service";
-import { listVoiceVideoArtifacts, recordVoiceVideoArtifact } from "../../plugins/voice-video/service";
+import {
+  joinVoiceVideoRoom,
+  listVoiceVideoArtifacts,
+  listVoiceVideoJoins,
+  listVoiceVideoRooms,
+  missVoiceVideoRoom,
+  recordVoiceVideoArtifact,
+  startVoiceVideoRoom,
+  stopVoiceVideoRoom,
+} from "../../plugins/voice-video/service";
 import {
   createCommunitySpace,
   getCommunitySpaceBySlug,
@@ -144,7 +157,105 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
     );
     expect(recorded.status).toBe("recorded");
     expect(recorded.conversationId).toBeTruthy();
-    expect((await listVoiceVideoArtifacts.call({}, OWNER)).length).toBe(1);
+    expect(recorded.transcript).toMatch(/Sitting recap/);
+    const artifacts = await listVoiceVideoArtifacts.call({}, OWNER);
+    expect(artifacts).toHaveLength(2);
+    const transcript = artifacts.find((row) => row.kind === "transcript");
+    expect(transcript?.conversationId).toBe(recorded.conversationId);
+    expect(transcript?.transcript).toBe(recorded.transcript);
+    const thread = await getConversation.call({ id: recorded.conversationId! }, OWNER);
+    expect(thread?.messages.some((message) => message.body === recorded.transcript)).toBe(true);
+    const ready = await db()
+      .select()
+      .from(timelineEvents)
+      .where(eq(timelineEvents.eventType, "voiceVideo.recordingReady"));
+    expect(ready.some((event) => event.contactId === person.id)).toBe(true);
+  });
+
+  it("starts a room, records a join, and marks a missed call on the timeline", async () => {
+    const person = await createContact.call(
+      { name: "Rae", email: "rae@demo.freeholder.test" },
+      OWNER,
+    );
+    const failed = await startVoiceVideoRoom.call(
+      {
+        contactId: person.id,
+        kind: "voice",
+        provider: "fixture",
+        title: "fail-room",
+      },
+      OWNER,
+    );
+    expect(failed.status).toBe("failed");
+    const live = await startVoiceVideoRoom.call(
+      {
+        contactId: person.id,
+        kind: "voice",
+        provider: "fixture",
+        title: "Sitting consult",
+        roomId: failed.id,
+      },
+      OWNER,
+    );
+    expect(live.status).toBe("live");
+    expect(live.conversationId).toBeTruthy();
+    const joined = await joinVoiceVideoRoom.call(
+      { roomId: live.id, contactId: person.id },
+      OWNER,
+    );
+    expect(joined.contactId).toBe(person.id);
+    expect(joined.conversationId).toBe(live.conversationId);
+    const duplicate = await failure(
+      joinVoiceVideoRoom.call({ roomId: live.id, contactId: person.id }, OWNER),
+    );
+    expect(duplicate.code).toBe("conflict");
+    const missed = await missVoiceVideoRoom.call({ roomId: live.id }, OWNER);
+    expect(missed.status).toBe("missed");
+    const events = await db()
+      .select()
+      .from(timelineEvents)
+      .where(eq(timelineEvents.contactId, person.id));
+    expect(events.some((event) => event.eventType === "voiceVideo.missedCall")).toBe(true);
+    const thread = await getConversation.call({ id: live.conversationId! }, OWNER);
+    expect(thread?.messages.some((message) => message.body.startsWith("Missed call:"))).toBe(true);
+  });
+
+  it("stops a room onto a recording and transcript, then merges contact pointers", async () => {
+    const keep = await createContact.call(
+      { name: "Jordan Hale", email: "jordan.keep@demo.freeholder.test" },
+      OWNER,
+    );
+    const drop = await createContact.call(
+      { name: "Jordan Hale", email: "jordan.drop@demo.freeholder.test" },
+      OWNER,
+    );
+    const room = await startVoiceVideoRoom.call(
+      {
+        contactId: drop.id,
+        kind: "video",
+        provider: "fixture",
+        title: "Sitting recap",
+      },
+      OWNER,
+    );
+    await joinVoiceVideoRoom.call({ roomId: room.id, contactId: drop.id }, OWNER);
+    const ended = await stopVoiceVideoRoom.call({ roomId: room.id }, OWNER);
+    expect(ended.status).toBe("ended");
+    const artifacts = await listVoiceVideoArtifacts.call({}, OWNER);
+    const recording = artifacts.find((row) => row.kind === "video");
+    const transcript = artifacts.find((row) => row.kind === "transcript");
+    expect(recording?.conversationId).toBe(ended.conversationId);
+    expect(transcript?.conversationId).toBe(ended.conversationId);
+    expect(transcript?.contactId).toBe(drop.id);
+    const thread = await getConversation.call({ id: ended.conversationId! }, OWNER);
+    expect(thread?.messages.some((message) => message.body === recording?.transcript)).toBe(true);
+
+    await mergeContacts.call({ survivingId: keep.id, duplicateId: drop.id }, OWNER);
+    expect((await listVoiceVideoRooms.call({}, OWNER))[0]?.contactId).toBe(keep.id);
+    expect((await listVoiceVideoJoins.call({ roomId: room.id }, OWNER))[0]?.contactId).toBe(keep.id);
+    expect((await listVoiceVideoArtifacts.call({}, OWNER)).every((row) => row.contactId === keep.id)).toBe(
+      true,
+    );
   });
 
   it("lets a visitor join an open community and refuses a duplicate", async () => {
