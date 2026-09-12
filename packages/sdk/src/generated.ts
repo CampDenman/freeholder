@@ -452,12 +452,25 @@ export const SERVICE_NAMES = [
   "cms.updateSection",
   "cms.updateTemplate",
   "cms.verifyDemoFixture",
+  "community.createPost",
+  "community.createPostBySlug",
+  "community.createRoom",
   "community.createSpace",
   "community.getBySlug",
+  "community.getFeedBySlug",
+  "community.hidePost",
   "community.join",
   "community.joinBySlug",
+  "community.listFeed",
+  "community.listJoinRequests",
   "community.listMembers",
+  "community.listModeration",
+  "community.listRooms",
   "community.listSpaces",
+  "community.moderatePostBySlug",
+  "community.removePost",
+  "community.reportPostBySlug",
+  "community.requestJoinBySlug",
   "connections.beginCalendarOAuth",
   "connections.beginMailReadOAuth",
   "connections.busyWindows",
@@ -3063,6 +3076,18 @@ export interface ServiceCatalog {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
   };
+  "community.createPost": {
+    input: { roomId: string; contactId: string; body: string };
+    output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
+  "community.createPostBySlug": {
+    input: { email: string; name: string; slug: string; roomSlug: string; body: string };
+    output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
+  "community.createRoom": {
+    input: { spaceId: string; slug: string; title: string };
+    output: { id: string; spaceId: string; slug: string; title: string; [key: string]: unknown };
+  };
   "community.createSpace": {
     input: { slug: string; title: string; access?: "open" | "gated" };
     output: { id: string; slug: string; title: string; access: string; [key: string]: unknown };
@@ -3071,21 +3096,61 @@ export interface ServiceCatalog {
     input: { slug: string };
     output: { space: { id: string; slug: string; title: string; access: string; [key: string]: unknown }; memberCount: number; [key: string]: unknown };
   };
+  "community.getFeedBySlug": {
+    input: { slug: string; email?: string; roomSlug?: string };
+    output: { space: { id: string; slug: string; title: string; access: string; [key: string]: unknown }; memberCount: number; canRead: boolean; rooms: { id: string; spaceId: string; slug: string; title: string; [key: string]: unknown }[]; posts: { id: string; roomId: string; roomSlug: string; roomTitle: string; authorName: string; body: string; createdAt: string; [key: string]: unknown }[]; [key: string]: unknown };
+  };
+  "community.hidePost": {
+    input: { postId: string };
+    output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
   "community.join": {
     input: { spaceId: string; contactId: string; role?: "member" | "moderator" };
     output: { id: string; spaceId: string; contactId: string; role: string; [key: string]: unknown };
   };
   "community.joinBySlug": {
-    input: { slug: string; email: string; name: string };
+    input: { email: string; name: string; slug: string };
     output: { id: string; spaceId: string; contactId: string; role: string; [key: string]: unknown };
+  };
+  "community.listFeed": {
+    input: { spaceId: string; roomId?: string; includeHidden?: boolean };
+    output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown }[];
+  };
+  "community.listJoinRequests": {
+    input: { spaceId: string };
+    output: { id: string; spaceId: string; contactId: string; name: string; email: string | null; [key: string]: unknown }[];
   };
   "community.listMembers": {
     input: { spaceId: string };
     output: { id: string; spaceId: string; contactId: string; role: string; [key: string]: unknown }[];
   };
+  "community.listModeration": {
+    input: { spaceId: string };
+    output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown }[];
+  };
+  "community.listRooms": {
+    input: { spaceId: string };
+    output: { id: string; spaceId: string; slug: string; title: string; [key: string]: unknown }[];
+  };
   "community.listSpaces": {
     input: Record<string, never>;
     output: { id: string; slug: string; title: string; access: string; [key: string]: unknown }[];
+  };
+  "community.moderatePostBySlug": {
+    input: { email: string; name: string; slug: string; postId: string; action: "hide" | "remove" };
+    output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
+  "community.removePost": {
+    input: { postId: string };
+    output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
+  "community.reportPostBySlug": {
+    input: { email: string; name: string; slug: string; postId: string };
+    output: { id: string; roomId: string; roomSlug: string; roomTitle: string; authorName: string; body: string; createdAt: string; [key: string]: unknown };
+  };
+  "community.requestJoinBySlug": {
+    input: { email: string; name: string; slug: string };
+    output: { id: string; spaceId: string; contactId: string; name: string; email: string | null; [key: string]: unknown };
   };
   "connections.beginCalendarOAuth": {
     input: { provider: "google" | "microsoft"; access?: "read" | "write"; returnTo?: string };
@@ -6817,12 +6882,25 @@ export interface FreeholderApi {
     verifyDemoFixture: (input: ServiceCatalog["cms.verifyDemoFixture"]["input"]) => Promise<ServiceCatalog["cms.verifyDemoFixture"]["output"]>;
   };
   community: {
+    createPost: (input: ServiceCatalog["community.createPost"]["input"]) => Promise<ServiceCatalog["community.createPost"]["output"]>;
+    createPostBySlug: (input: ServiceCatalog["community.createPostBySlug"]["input"]) => Promise<ServiceCatalog["community.createPostBySlug"]["output"]>;
+    createRoom: (input: ServiceCatalog["community.createRoom"]["input"]) => Promise<ServiceCatalog["community.createRoom"]["output"]>;
     createSpace: (input: ServiceCatalog["community.createSpace"]["input"]) => Promise<ServiceCatalog["community.createSpace"]["output"]>;
     getBySlug: (input: ServiceCatalog["community.getBySlug"]["input"]) => Promise<ServiceCatalog["community.getBySlug"]["output"]>;
+    getFeedBySlug: (input: ServiceCatalog["community.getFeedBySlug"]["input"]) => Promise<ServiceCatalog["community.getFeedBySlug"]["output"]>;
+    hidePost: (input: ServiceCatalog["community.hidePost"]["input"]) => Promise<ServiceCatalog["community.hidePost"]["output"]>;
     join: (input: ServiceCatalog["community.join"]["input"]) => Promise<ServiceCatalog["community.join"]["output"]>;
     joinBySlug: (input: ServiceCatalog["community.joinBySlug"]["input"]) => Promise<ServiceCatalog["community.joinBySlug"]["output"]>;
+    listFeed: (input: ServiceCatalog["community.listFeed"]["input"]) => Promise<ServiceCatalog["community.listFeed"]["output"]>;
+    listJoinRequests: (input: ServiceCatalog["community.listJoinRequests"]["input"]) => Promise<ServiceCatalog["community.listJoinRequests"]["output"]>;
     listMembers: (input: ServiceCatalog["community.listMembers"]["input"]) => Promise<ServiceCatalog["community.listMembers"]["output"]>;
+    listModeration: (input: ServiceCatalog["community.listModeration"]["input"]) => Promise<ServiceCatalog["community.listModeration"]["output"]>;
+    listRooms: (input: ServiceCatalog["community.listRooms"]["input"]) => Promise<ServiceCatalog["community.listRooms"]["output"]>;
     listSpaces: (input?: ServiceCatalog["community.listSpaces"]["input"]) => Promise<ServiceCatalog["community.listSpaces"]["output"]>;
+    moderatePostBySlug: (input: ServiceCatalog["community.moderatePostBySlug"]["input"]) => Promise<ServiceCatalog["community.moderatePostBySlug"]["output"]>;
+    removePost: (input: ServiceCatalog["community.removePost"]["input"]) => Promise<ServiceCatalog["community.removePost"]["output"]>;
+    reportPostBySlug: (input: ServiceCatalog["community.reportPostBySlug"]["input"]) => Promise<ServiceCatalog["community.reportPostBySlug"]["output"]>;
+    requestJoinBySlug: (input: ServiceCatalog["community.requestJoinBySlug"]["input"]) => Promise<ServiceCatalog["community.requestJoinBySlug"]["output"]>;
   };
   connections: {
     beginCalendarOAuth: (input: ServiceCatalog["connections.beginCalendarOAuth"]["input"]) => Promise<ServiceCatalog["connections.beginCalendarOAuth"]["output"]>;

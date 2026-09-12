@@ -4161,7 +4161,12 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   flight — community rooms/posts/moderation, voice/video rooms and
   transcripts on the conversation spine, Printify-style POD fulfillment,
   and marketplace channel sync that is not a hardcoded order. Do not treat
-  the fixture plugins as complete products.)
+  the fixture plugins as complete products.
+  Community rooms, posts, a chronological feed, gated membership, and
+  hide/remove moderation landed in `plugins/community` (migration
+  `0168_community_rooms.sql`, `/community/<slug>` feed with empty/error/retry,
+  admin rooms and hidden/reported posts). Still [ ] until the rest of §36
+  depth ships.)
 
 #### Packages, installation, export, and target parity
 
