@@ -9,8 +9,15 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["contacts:read"],
   requires: ["core"],
-  migrations: ["0075_first_party_plugins.sql", "0163_first_party_plugin_surfaces.sql"],
+  migrations: [
+    "0075_first_party_plugins.sql",
+    "0163_first_party_plugin_surfaces.sql",
+    "0168_community_rooms.sql",
+  ],
   capabilities: { widgets: true },
+  events: {
+    emits: ["community.joined", "community.posted"],
+  },
   tables: () => import("./tables"),
   services: () => import("./service"),
 });

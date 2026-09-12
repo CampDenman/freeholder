@@ -21,7 +21,10 @@ import {
 } from "../../plugins/marketplace/service";
 import { listVoiceVideoArtifacts, recordVoiceVideoArtifact } from "../../plugins/voice-video/service";
 import {
+  createCommunityPostBySlug,
+  createCommunityRoom,
   createCommunitySpace,
+  getCommunityFeedBySlug,
   getCommunitySpaceBySlug,
   joinCommunity,
   joinCommunityBySlug,
@@ -46,6 +49,9 @@ describe("first-party plugins (C3.13)", () => {
       }
       expect(manifest.requires).toContain("core");
       expect(manifest.migrations).toContain("0163_first_party_plugin_surfaces.sql");
+      if (name === "community") {
+        expect(manifest.migrations).toContain("0168_community_rooms.sql");
+      }
     }
   });
 });
@@ -186,6 +192,35 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
       { kind: "anonymous" },
     );
     expect(publicPage.memberCount).toBe(1);
+
+    const room = await createCommunityRoom.call(
+      { spaceId: space.id, slug: "lounge", title: "Lounge" },
+      OWNER,
+    );
+    expect(room.spaceId).toBe(space.id);
+    await createCommunityPostBySlug.call(
+      {
+        slug: "harbour",
+        roomSlug: "lounge",
+        email: "member@demo.freeholder.test",
+        name: "Member",
+        body: "Hello harbour.",
+      },
+      { kind: "anonymous" },
+    );
+    const openFeed = await getCommunityFeedBySlug.call(
+      { slug: "harbour" },
+      { kind: "anonymous" },
+    );
+    expect(openFeed.canRead).toBe(true);
+    expect(openFeed.posts.map((post) => post.body)).toEqual(["Hello harbour."]);
+
+    const gatedFeed = await getCommunityFeedBySlug.call(
+      { slug: "private" },
+      { kind: "anonymous" },
+    );
+    expect(gatedFeed.canRead).toBe(false);
+    expect(gatedFeed.posts).toHaveLength(0);
   });
 
   it("raises a public gift contribution onto an invoice", async () => {

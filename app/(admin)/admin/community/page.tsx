@@ -5,16 +5,63 @@ import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { listContacts } from "@/core/contacts/service";
 import {
+  listCommunityFeed,
+  listCommunityJoinRequests,
   listCommunityMembers,
+  listCommunityModeration,
+  listCommunityRooms,
   listCommunitySpaces,
 } from "../../../../plugins/community/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
-import { createCommunitySpaceAction, joinCommunityAction } from "../../first-party-plugin-actions";
+import {
+  createCommunityRoomAction,
+  createCommunitySpaceAction,
+  hideCommunityPostAction,
+  joinCommunityAction,
+  removeCommunityPostAction,
+} from "../../first-party-plugin-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
+
+function PostModerationButtons({
+  spaceId,
+  postId,
+  status,
+  hideLabel,
+  removeLabel,
+}: {
+  spaceId: string;
+  postId: string;
+  status: string;
+  hideLabel: string;
+  removeLabel: string;
+}) {
+  return (
+    <>
+      {status === "visible" || status === "hidden" ? (
+        <form action={hideCommunityPostAction}>
+          <input type="hidden" name="spaceId" value={spaceId} />
+          <input type="hidden" name="postId" value={postId} />
+          <Button type="submit" variant="quiet">
+            {hideLabel}
+          </Button>
+        </form>
+      ) : null}
+      {status !== "removed" ? (
+        <form action={removeCommunityPostAction}>
+          <input type="hidden" name="spaceId" value={spaceId} />
+          <input type="hidden" name="postId" value={postId} />
+          <Button type="submit" variant="danger">
+            {removeLabel}
+          </Button>
+        </form>
+      ) : null}
+    </>
+  );
+}
 
 export default async function CommunityPage({
   searchParams,
@@ -30,9 +77,15 @@ export default async function CommunityPage({
   ]);
   const chosen =
     (spaces ?? []).find((row) => row.id === query.space) ?? (spaces ?? [])[0] ?? null;
-  const members = chosen
-    ? await domainOrNull(listCommunityMembers.call({ spaceId: chosen.id }, actor))
-    : [];
+  const [members, rooms, feed, moderation, requests] = chosen
+    ? await Promise.all([
+        domainOrNull(listCommunityMembers.call({ spaceId: chosen.id }, actor)),
+        domainOrNull(listCommunityRooms.call({ spaceId: chosen.id }, actor)),
+        domainOrNull(listCommunityFeed.call({ spaceId: chosen.id }, actor)),
+        domainOrNull(listCommunityModeration.call({ spaceId: chosen.id }, actor)),
+        domainOrNull(listCommunityJoinRequests.call({ spaceId: chosen.id }, actor)),
+      ])
+    : [[], [], [], [], []];
 
   return (
     <div className="grid gap-6">
@@ -92,30 +145,148 @@ export default async function CommunityPage({
         </CardBody>
       </Card>
       {chosen ? (
-        <Card>
-          <CardHeader title={chosen.title} />
-          <CardBody>
-            <p className="text-sm text-ink-muted">
-              {t("community.members", { count: (members ?? []).length })}
-            </p>
-            <form action={joinCommunityAction} className="mt-3 grid gap-3 sm:grid-cols-2">
-              <input type="hidden" name="spaceId" value={chosen.id} />
-              <Field label={t("community.field.contact")} htmlFor="community-contact">
-                <Select id="community-contact" name="contactId" required>
-                  <option value="">{t("community.field.contact")}</option>
-                  {(people?.rows ?? []).map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.name}
-                    </option>
+        <>
+          <Card>
+            <CardHeader title={chosen.title} />
+            <CardBody>
+              <p className="text-sm text-ink-muted">
+                {t("community.members", { count: (members ?? []).length })}
+              </p>
+              <form action={joinCommunityAction} className="mt-3 grid gap-3 sm:grid-cols-3">
+                <input type="hidden" name="spaceId" value={chosen.id} />
+                <Field label={t("community.field.contact")} htmlFor="community-contact">
+                  <Select id="community-contact" name="contactId" required>
+                    <option value="">{t("community.field.contact")}</option>
+                    {(people?.rows ?? []).map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label={t("community.field.role")} htmlFor="community-role">
+                  <Select id="community-role" name="role" defaultValue="member">
+                    <option value="member">{t("community.role.member")}</option>
+                    <option value="moderator">{t("community.role.moderator")}</option>
+                  </Select>
+                </Field>
+                <div className="flex items-end">
+                  <Button type="submit">{t("community.addMember")}</Button>
+                </div>
+              </form>
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader title={t("community.joinRequests")} />
+            <CardBody>
+              {(requests ?? []).length === 0 ? (
+                <p className="text-sm text-ink-muted">{t("community.joinRequestsEmpty")}</p>
+              ) : (
+                <ul className="grid list-none gap-2 p-0">
+                  {(requests ?? []).map((request) => (
+                    <li key={request.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                      <span>{request.name}</span>
+                      <span className="text-ink-muted">{request.email}</span>
+                      <form action={joinCommunityAction}>
+                        <input type="hidden" name="spaceId" value={chosen.id} />
+                        <input type="hidden" name="contactId" value={request.contactId} />
+                        <Button type="submit" variant="quiet">
+                          {t("community.addMember")}
+                        </Button>
+                      </form>
+                    </li>
                   ))}
-                </Select>
-              </Field>
-              <div className="flex items-end">
-                <Button type="submit">{t("community.addMember")}</Button>
-              </div>
-            </form>
-          </CardBody>
-        </Card>
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader title={t("community.rooms")} />
+            <CardBody>
+              <form action={createCommunityRoomAction} className="grid gap-3 sm:grid-cols-2">
+                <input type="hidden" name="spaceId" value={chosen.id} />
+                <Field label={t("community.field.title")} htmlFor="community-room-title">
+                  <Input id="community-room-title" name="title" required />
+                </Field>
+                <Field label={t("community.field.slug")} htmlFor="community-room-slug">
+                  <Input id="community-room-slug" name="slug" required />
+                </Field>
+                <div className="sm:col-span-2">
+                  <Button type="submit">{t("community.createRoom")}</Button>
+                </div>
+              </form>
+              {(rooms ?? []).length === 0 ? (
+                <p className="text-sm text-ink-muted">{t("community.roomsEmpty")}</p>
+              ) : (
+                <ul className="mt-3 grid list-none gap-2 p-0">
+                  {(rooms ?? []).map((room) => (
+                    <li key={room.id} className="text-sm">
+                      {room.title}{" "}
+                      <span className="font-mono text-xs text-ink-muted">{room.slug}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader title={t("community.posts")} />
+            <CardBody>
+              {(feed ?? []).length === 0 ? (
+                <p className="text-sm text-ink-muted">{t("community.postsEmpty")}</p>
+              ) : (
+                <ul className="grid list-none gap-2 p-0">
+                  {(feed ?? []).map((post) => (
+                    <li key={post.id} className="flex flex-wrap items-start gap-3 rounded-md border border-rule p-3 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{post.authorName}</p>
+                        <p className="text-ink-muted">{post.roomTitle}</p>
+                        <p className="mt-1 whitespace-pre-wrap">{post.body}</p>
+                      </div>
+                      <PostModerationButtons
+                        spaceId={chosen.id}
+                        postId={post.id}
+                        status={post.status}
+                        hideLabel={t("community.hide")}
+                        removeLabel={t("community.remove")}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader title={t("community.moderation")} />
+            <CardBody>
+              {(moderation ?? []).length === 0 ? (
+                <p className="text-sm text-ink-muted">{t("community.moderationEmpty")}</p>
+              ) : (
+                <ul className="grid list-none gap-2 p-0">
+                  {(moderation ?? []).map((post) => (
+                    <li key={post.id} className="flex flex-wrap items-start gap-3 rounded-md border border-rule p-3 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{post.authorName}</p>
+                        <p className="whitespace-pre-wrap">{post.body}</p>
+                      </div>
+                      <Pill tone={post.status === "removed" ? "danger" : "warning"}>
+                        {t(`community.status.${post.status}`)}
+                      </Pill>
+                      {post.reportedAt ? <Pill tone="warning">{t("community.reported")}</Pill> : null}
+                      <PostModerationButtons
+                        spaceId={chosen.id}
+                        postId={post.id}
+                        status={post.status}
+                        hideLabel={t("community.hide")}
+                        removeLabel={t("community.remove")}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+        </>
       ) : null}
     </div>
   );

@@ -4,11 +4,12 @@ Gift registries, print-on-demand, community spaces, voice/video and marketplace
 channel sync are first-party plugins (MASTER.md §36, C3.13). They install with
 the instance; disable one from Admin → Plugins if the business does not use it.
 
-**These are not complete products.** C3.13 is open: community still needs rooms,
-posts and moderation; voice/video still needs rooms and transcripts on the
-conversation spine; print-on-demand is a fixture submit, not Printify-style
-fulfillment; marketplace sync currently returns one hardcoded order. Gift
-registries already raise ordinary invoices. Rebuild the rest to §36 rather
+**These are not complete products.** Community rooms, posts, a chronological
+feed and hide/remove moderation have landed. C3.13 is still open for the rest:
+voice/video still needs rooms and transcripts on the conversation spine;
+print-on-demand is a fixture submit, not Printify-style fulfillment;
+marketplace sync currently returns one hardcoded order. Gift registries
+already raise ordinary invoices. Rebuild those remaining seams to §36 rather
 than treating the fixture adapters as the product.
 
 ## Gift registries
@@ -32,10 +33,15 @@ provider seam, not a second order table.
 
 ## Community
 
-Admin → Community creates open or gated spaces. Open spaces accept a public
-join at `/community/<slug>`. Gated spaces stay staff-only. Joining the same
-person twice is a conflict, not a second membership. There are no rooms, posts
-or moderation tools yet — that is the §36 rebuild, not this join table.
+Admin → Community creates open or gated spaces, rooms inside a space, and a
+moderation queue of hidden or reported posts. Open spaces accept a public join
+at `/community/<slug>` and show a chronological feed. Gated spaces show a join
+request instead of the feed until staff add the person; members who identify
+with the email they joined with can read and post. Joining the same person
+twice is a conflict, not a second membership. A moderator (or staff) can hide
+or remove a post; hidden posts leave the public feed and stay on the admin
+queue. Guest posts are rate-limited, stored as plain text, and land on the
+author's contact timeline.
 
 ## Voice and video
 
