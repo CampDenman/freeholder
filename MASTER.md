@@ -8218,6 +8218,29 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   account/instance changes and failed authorization invalidate the cache;
   late requests from the old session may not repopulate it. No proofing writes
   are queued or retried automatically.
+  *(Implementation 2026-09-12: galleries tab from `portal.myRecords`, proofing
+  screen via `galleries.openWithLogin` → `viewSession` / `viewItem`, then
+  `setSelection`, `clearSelection` and `submitRound`. Image bytes load from
+  `/g/{slug}/view/{itemId}` with the gallery-session bearer and share C10.30's
+  60-second encrypted lease. **F01/F02/F03/F05** no schema or new services;
+  the app is a client of the existing gallery and portal APIs. The contract
+  still excludes owner-only `galleries.list` and `galleries.listSelections`.
+  **F04** list and proofing screens have loading, empty, failed, offline and
+  stale paths; expiry clears displayed photos while the screen stays open.
+  Physical-device interaction and accessibility proof remains outstanding, so
+  this checkbox stays open. **F06** en/es/fr proofing labels and semantic
+  colours; native screen-reader and light/dark inspection still required.
+  **F07** 401/403/404 evict image bytes immediately; offline failures never
+  renew the lease; sign-out cannot let a late image write refill the next
+  account; proofing writes go through `writeThrough` and are never queued.
+  **F08** focused mobile contract/shell/cache tests, Expo and package
+  typechecks. **F09** no new jobs or storage; C10.30's vault holds the
+  ciphertext. **F10** the website already has the room and proofing page.
+  **F11** app/package READMEs and changeset `native-gallery-proofing.md`.
+  **F12** lease expiry, denial eviction and refused offline writes are
+  executable tests; a physical proofing journey still needs an installed
+  native build. `TAB_ORDER` now includes invoices so that C10.26 tab is
+  actually shown.)*
 - [ ] **C10.28** Build messages, newsletters and the account tab. Messages:
   the customer's threads through `conversations.list` (`selfService`), a thread
   view, and a reply that is a *customer* message. **Decided 2026-09-10

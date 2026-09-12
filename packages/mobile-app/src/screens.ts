@@ -217,6 +217,7 @@ export const TAB_ORDER: readonly ScreenId[] = [
   "home",
   "catalog",
   "bookings",
+  "invoices",
   "galleries",
   "account",
 ];

@@ -259,6 +259,11 @@ describe("the customer app (C10.12)", () => {
       call.mockRejectedValue(failure);
       await expect(writeThrough({ service: "galleries.setSelection", online: true }, call)).rejects.toBe(failure);
       expect(call).toHaveBeenCalledTimes(2);
+      for (const service of ["galleries.clearSelection", "galleries.submitRound"] as const) {
+        call.mockClear();
+        await expect(writeThrough({ service, online: false }, call)).rejects.toBeInstanceOf(OfflineWriteRefused);
+        expect(call).not.toHaveBeenCalled();
+      }
     });
     it("refuses to queue a mutation, loudly", async () => {
       await expect(

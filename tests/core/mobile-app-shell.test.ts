@@ -99,7 +99,7 @@ describe("the Expo application (C10.23)", () => {
   it("renders no colour of its own", () => {
     // Colours come from the instance's semantic tokens. A literal here is a
     // colour that cannot be rebranded without a store review.
-    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx"]) {
+    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts"]) {
       const source = read(file).replace(/^\s*\/\/.*$/gm, "");
       expect(source, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     }
@@ -107,11 +107,43 @@ describe("the Expo application (C10.23)", () => {
 
   it("gives every built screen a loading, empty and error state", () => {
     // F04: a screen that renders nothing while it waits looks broken.
-    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx"]) {
+    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx"]) {
       const source = read(file);
       expect(source, file).toContain("Loading");
       expect(source, file).toMatch(/Empty|emptyKey/);
       expect(source, file).toContain("Problem");
     }
+  });
+
+  it("proofs through the declared gallery services and private image bytes (C10.27)", () => {
+    expect(TAB_ORDER).toEqual(["home", "catalog", "bookings", "invoices", "galleries", "account"]);
+    expect(read("app/(tabs)/_layout.tsx")).toContain('"galleries"');
+    const list = read("app/(tabs)/galleries.tsx");
+    expect(list).toContain('service: "portal.myRecords"');
+    expect(SCREENS.galleries.reads).toContain("portal.myRecords");
+    const proof = read("app/gallery/[slug].tsx");
+    expect(proof).toContain('service: "galleries.openWithLogin"');
+    expect(proof).toContain('service: "galleries.viewSession"');
+    expect(proof).toContain('service: "galleries.setSelection"');
+    expect(proof).toContain('service: "galleries.clearSelection"');
+    expect(proof).toContain('service: "galleries.submitRound"');
+    expect(proof).toContain("usePrivateImage");
+    expect(proof).toContain("useScreenWrite");
+    expect(code("app/gallery/[slug].tsx")).not.toMatch(/\bgalleries\.list\b|\bgalleries\.listSelections\b/);
+    expect(code("app/gallery/[slug].tsx")).toContain("held?.identity === identity");
+    expect(code("app/gallery/[slug].tsx")).toContain("request !== generation.current");
+    expect(code("app/gallery/[slug].tsx")).toContain("opening.current = false");
+    expect(code("app/gallery/[slug].tsx")).toContain("open.pending");
+    expect(code("app/gallery/[slug].tsx")).toContain("A request is already in progress.");
+    expect(code("app/gallery/[slug].tsx")).toContain("FlatList");
+    const images = code("src/lib/gallery-image.ts");
+    expect(images).toContain("/g/");
+    expect(images).toContain("/view/");
+    expect(images).toContain("authorization");
+    expect(images).toContain("maxAgeMs: PRIVATE_CACHE_LEASE_MS");
+    expect(images).toContain("result.expiresAt - Date.now()");
+    expect(images).not.toMatch(/\/api\/v1\/galleries\.viewItem/);
+    expect(code("src/lib/transport.ts")).toContain("status: response.status");
+    expect(code("src/lib/transport.ts")).toContain("export async function decodeGalleryImageResponse");
   });
 });
