@@ -5713,6 +5713,8 @@
   "app.gallery.empty": "Esta galería no está disponible.",
   "app.gallery.items.empty": "Esta galería aún no tiene archivos.",
   "app.gallery.offline": "Conéctate a internet antes de cambiar esta galería.",
+  "app.gallery.photo.unavailable": "Esta fotografía no se pudo mostrar.",
+  "app.gallery.photo.untitled": "Fotografía de la galería",
   "app.gallery.proof.clear": "Deshacer",
   "app.gallery.proof.comment": "Nota para el fotógrafo",
   "app.gallery.proof.favorite": "Favorita",

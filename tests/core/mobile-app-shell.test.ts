@@ -130,11 +130,18 @@ describe("the Expo application (C10.23)", () => {
     expect(proof).toContain("usePrivateImage");
     expect(proof).toContain("useScreenWrite");
     expect(code("app/gallery/[slug].tsx")).not.toMatch(/\bgalleries\.list\b|\bgalleries\.listSelections\b/);
+    expect(code("app/gallery/[slug].tsx")).toContain("held?.identity === identity");
+    expect(code("app/gallery/[slug].tsx")).toContain("request !== generation.current");
+    expect(code("app/gallery/[slug].tsx")).toContain("opening.current = false");
+    expect(code("app/gallery/[slug].tsx")).toContain("FlatList");
     const images = code("src/lib/gallery-image.ts");
     expect(images).toContain("/g/");
     expect(images).toContain("/view/");
     expect(images).toContain("authorization");
     expect(images).toContain("maxAgeMs: PRIVATE_CACHE_LEASE_MS");
+    expect(images).toContain("result.expiresAt - Date.now()");
     expect(images).not.toMatch(/\/api\/v1\/galleries\.viewItem/);
+    expect(code("src/lib/transport.ts")).toContain("status: response.status");
+    expect(code("src/lib/transport.ts")).toContain("export async function decodeGalleryImageResponse");
   });
 });

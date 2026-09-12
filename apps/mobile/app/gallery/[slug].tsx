@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C10.27: proofing uses the same gallery services as app/g/[slug].
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Image, ScrollView, TextInput, View } from "react-native";
+import { AppState, FlatList, Image, TextInput, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useNetworkState } from "expo-network";
 import { SCREENS, type Brand } from "@freeholder/mobile-app";
@@ -33,11 +33,13 @@ export default function Gallery() {
   const { instance, brand, session } = useInstance();
   const t = useAppText();
   const network = useNetworkState();
-  const [galleryToken, setGalleryToken] = useState<string | null>(null);
+  const [held, setHeld] = useState<{ identity: string; token: string } | null>(null);
   const [denied, setDenied] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const caller = instance ? { instanceUrl: instance.url, token: session?.token ?? null } : null;
+  const identity = `${slug}|${session?.token ?? ""}`;
+  const galleryToken = held?.identity === identity ? held.token : null;
   const networkReady = network.isConnected !== null && network.isConnected !== undefined;
   const online = network.isConnected === true && network.isInternetReachable !== false;
   const open = useScreenWrite<Opened>({ screen: "gallery", service: "galleries.openWithLogin", caller, online });
@@ -49,24 +51,35 @@ export default function Gallery() {
   const reload = data.reload;
   const executeOpen = open.execute;
   const opening = useRef(false);
+  const generation = useRef(0);
 
   const unlock = useCallback(async () => {
     if (!slug || !session || opening.current) return;
     setProblem(null);
     setDenied(false);
     if (!online) { setProblem("offline"); return; }
+    const request = generation.current;
     opening.current = true;
     try {
       const result = await executeOpen({ slug });
-      if (result.ok) setGalleryToken(result.sessionToken);
-      else { setGalleryToken(null); setDenied(true); }
+      if (request !== generation.current) return;
+      if (result.ok) setHeld({ identity: `${slug}|${session.token}`, token: result.sessionToken });
+      else { setHeld(null); setDenied(true); }
     } catch (error) {
-      setGalleryToken(null);
+      if (request !== generation.current) return;
+      setHeld(null);
       setProblem(error instanceof Error ? error.message : "unavailable");
-    } finally { opening.current = false; }
+    } finally { if (request === generation.current) opening.current = false; }
   }, [slug, session, online, executeOpen]);
 
-  useEffect(() => { setGalleryToken(null); setDenied(false); setProblem(null); setMessage(null); }, [slug]);
+  useEffect(() => {
+    generation.current += 1;
+    opening.current = false;
+    setHeld(null);
+    setDenied(false);
+    setProblem(null);
+    setMessage(null);
+  }, [identity]);
   useEffect(() => {
     if (!session || !slug || galleryToken || denied || !online) return;
     if (problem !== null && problem !== "offline") return;
@@ -103,22 +116,35 @@ export default function Gallery() {
       reload();
     } catch (error) { setProblem(error instanceof Error ? error.message : "unavailable"); }
   };
-  const retry = () => { setDenied(false); setProblem(null); setGalleryToken(null); };
+  const retry = () => { setDenied(false); setProblem(null); setHeld(null); };
 
   return <Screen brand={brand}>
     <Title brand={brand}>{opened?.gallery.title ?? t(SCREENS.gallery.titleKey)}</Title>
-    {!session ? <SignIn /> : open.pending && !galleryToken ? <Loading brand={brand} /> : !galleryToken && !denied && !networkReady ? <Loading brand={brand} /> : shownProblem && !opened ? <Problem brand={brand} message={shownProblem} onRetry={retry} /> : denied ? <Empty brand={brand} message={t(SCREENS.gallery.emptyKey)} /> : !galleryToken ? <Problem brand={brand} message={shownProblem ?? t("app.gallery.offline")} onRetry={retry} /> : data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={retry} /> : !opened ? <Empty brand={brand} message={t(SCREENS.gallery.emptyKey)} /> : <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
-      <StalenessNotice brand={brand} label={data.staleness} />
-      {message ? <Body brand={brand}>{message}</Body> : null}
-      {opened.round?.state === "submitted" ? <Muted brand={brand}>{t("app.gallery.round.submitted")}</Muted> : null}
-      {opened.round?.state === "approved" ? <Body brand={brand}>{t("app.gallery.round.approved")}</Body> : null}
-      {sentBack ? <><Muted brand={brand}>{t("app.gallery.round.reopened")}</Muted>{sentBack.note ? <Body brand={brand}>{sentBack.note}</Body> : null}</> : null}
-      {shownProblem ? <Problem brand={brand} message={shownProblem} /> : null}
-      {!online ? <Muted brand={brand}>{t("app.gallery.offline")}</Muted> : null}
-      {opened.items.length === 0 ? <Empty brand={brand} message={t("app.gallery.items.empty")} /> : opened.items.map((item) => <ProofItem key={item.id} brand={brand} caller={caller} slug={slug} item={item} mark={opened.selections.find((selection) => selection.assetId === item.assetId)} galleryToken={galleryToken} pending={pending} t={t} onChange={change} />)}
-      {opened.items.length > 0 && roundOpen ? <Button brand={brand} label={t("app.gallery.round.submit")} onPress={() => void send()} /> : null}
-      <Button brand={brand} label={t("app.retry")} onPress={retry} variant="quiet" />
-    </ScrollView>}
+    {!session ? <SignIn /> : open.pending && !galleryToken ? <Loading brand={brand} /> : !galleryToken && !denied && !networkReady ? <Loading brand={brand} /> : shownProblem && !opened ? <Problem brand={brand} message={shownProblem} onRetry={retry} /> : denied ? <Empty brand={brand} message={t(SCREENS.gallery.emptyKey)} /> : !galleryToken ? <Problem brand={brand} message={shownProblem ?? t("app.gallery.offline")} onRetry={retry} /> : data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={retry} /> : !opened ? <Empty brand={brand} message={t(SCREENS.gallery.emptyKey)} /> : <FlatList
+      data={opened.items}
+      keyExtractor={(item) => item.id}
+      initialNumToRender={2}
+      maxToRenderPerBatch={2}
+      windowSize={3}
+      removeClippedSubviews
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
+      ListHeaderComponent={<>
+        <StalenessNotice brand={brand} label={data.staleness} />
+        {message ? <Body brand={brand}>{message}</Body> : null}
+        {opened.round?.state === "submitted" ? <Muted brand={brand}>{t("app.gallery.round.submitted")}</Muted> : null}
+        {opened.round?.state === "approved" ? <Body brand={brand}>{t("app.gallery.round.approved")}</Body> : null}
+        {sentBack ? <><Muted brand={brand}>{t("app.gallery.round.reopened")}</Muted>{sentBack.note ? <Body brand={brand}>{sentBack.note}</Body> : null}</> : null}
+        {shownProblem ? <Problem brand={brand} message={shownProblem} /> : null}
+        {!online ? <Muted brand={brand}>{t("app.gallery.offline")}</Muted> : null}
+        {opened.items.length === 0 ? <Empty brand={brand} message={t("app.gallery.items.empty")} /> : null}
+      </>}
+      renderItem={({ item }) => <ProofItem brand={brand} caller={caller} slug={slug} item={item} mark={opened.selections.find((selection) => selection.assetId === item.assetId)} galleryToken={galleryToken} pending={pending} t={t} onChange={change} />}
+      ListFooterComponent={<>
+        {opened.items.length > 0 && roundOpen ? <Button brand={brand} label={t("app.gallery.round.submit")} onPress={() => void send()} /> : null}
+        <Button brand={brand} label={t("app.retry")} onPress={retry} variant="quiet" />
+      </>}
+    />}
   </Screen>;
 }
 
@@ -138,10 +164,10 @@ function ProofItem({
   const image = usePrivateImage({ caller, slug, itemId: item.id, galleryToken });
   const [comment, setComment] = useState(mark?.comment ?? "");
   useEffect(() => { setComment(mark?.comment ?? ""); }, [mark?.comment]);
-  const label = item.altText || item.filename || "";
+  const label = item.altText || item.filename || t("app.gallery.photo.untitled");
   const fieldStyle = { borderWidth: 1, borderColor: brand.colors.rule, color: brand.colors.ink, backgroundColor: brand.colors.surface, padding: 12, borderRadius: 8 };
   return <View style={{ gap: 8 }}>
-    {image.loading ? <Loading brand={brand} /> : image.value ? <Image accessibilityRole="image" accessibilityLabel={label} source={{ uri: image.value.uri }} style={{ width: "100%", aspectRatio: 1, borderWidth: 1, borderColor: brand.colors.rule, borderRadius: 8, backgroundColor: brand.colors.surface }} /> : image.error ? <Muted brand={brand}>{image.error}</Muted> : <Muted brand={brand}>{t("app.gallery.items.empty")}</Muted>}
+    {image.loading ? <Loading brand={brand} /> : image.value ? <Image accessibilityRole="image" accessibilityLabel={label} source={{ uri: image.value.uri }} style={{ width: "100%", aspectRatio: 1, borderWidth: 1, borderColor: brand.colors.rule, borderRadius: 8, backgroundColor: brand.colors.surface }} /> : image.error ? <Muted brand={brand}>{image.error}</Muted> : <Muted brand={brand}>{t("app.gallery.photo.unavailable")}</Muted>}
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {PROOF_KINDS.map((kind) => <Button key={kind} brand={brand} label={t(`app.gallery.proof.${kind}`)} variant={mark?.kind === kind ? "primary" : "quiet"} onPress={() => { if (!pending) void onChange(item.id, kind, comment); }} />)}
       {mark ? <Button brand={brand} label={t("app.gallery.proof.clear")} variant="quiet" onPress={() => { if (!pending) void onChange(item.id, "clear"); }} /> : null}
