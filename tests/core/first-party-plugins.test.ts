@@ -10,6 +10,7 @@ import { createContact, mergeContacts } from "@/core/contacts/service";
 import { timelineEvents } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { getConversation } from "@/core/messaging/service";
+import { getService } from "@/core/service";
 import {
   addGiftRegistryItem,
   contributeToGiftRegistry,
@@ -205,6 +206,22 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
     );
     expect(joined.contactId).toBe(person.id);
     expect(joined.conversationId).toBe(live.conversationId);
+    const guest = await createContact.call(
+      { name: "Bea", email: "bea@demo.freeholder.test" },
+      OWNER,
+    );
+    const guestJoin = await joinVoiceVideoRoom.call(
+      { roomId: live.id, contactId: guest.id },
+      OWNER,
+    );
+    expect(guestJoin.contactId).toBe(guest.id);
+    expect(guestJoin.conversationId).toBeTruthy();
+    expect(guestJoin.conversationId).not.toBe(live.conversationId);
+    const guestThread = await getConversation.call({ id: guestJoin.conversationId! }, OWNER);
+    expect(guestThread?.contactId).toBe(guest.id);
+    expect(guestThread?.messages.some((message) => message.body.startsWith("Joined call:"))).toBe(
+      true,
+    );
     const duplicate = await failure(
       joinVoiceVideoRoom.call({ roomId: live.id, contactId: person.id }, OWNER),
     );
@@ -239,10 +256,23 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
       OWNER,
     );
     await joinVoiceVideoRoom.call({ roomId: room.id, contactId: drop.id }, OWNER);
+    const alreadyRecorded = await recordVoiceVideoArtifact.call(
+      {
+        contactId: drop.id,
+        kind: "video",
+        provider: "fixture",
+        title: "Sitting recap",
+        roomId: room.id,
+      },
+      OWNER,
+    );
+    expect(alreadyRecorded.status).toBe("recorded");
     const ended = await stopVoiceVideoRoom.call({ roomId: room.id }, OWNER);
     expect(ended.status).toBe("ended");
     const artifacts = await listVoiceVideoArtifacts.call({}, OWNER);
-    const recording = artifacts.find((row) => row.kind === "video");
+    const recordings = artifacts.filter((row) => row.kind !== "transcript" && row.roomId === room.id);
+    expect(recordings).toHaveLength(1);
+    const recording = recordings[0];
     const transcript = artifacts.find((row) => row.kind === "transcript");
     expect(recording?.conversationId).toBe(ended.conversationId);
     expect(transcript?.conversationId).toBe(ended.conversationId);
@@ -256,6 +286,77 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", () =
     expect((await listVoiceVideoArtifacts.call({}, OWNER)).every((row) => row.contactId === keep.id)).toBe(
       true,
     );
+  });
+
+  it("keeps one join when both people in a room are merged", async () => {
+    const host = await createContact.call(
+      { name: "Host", email: "host.room@demo.freeholder.test" },
+      OWNER,
+    );
+    const keep = await createContact.call(
+      { name: "Sam Keep", email: "sam.keep@demo.freeholder.test" },
+      OWNER,
+    );
+    const drop = await createContact.call(
+      { name: "Sam Drop", email: "sam.drop@demo.freeholder.test" },
+      OWNER,
+    );
+    const room = await startVoiceVideoRoom.call(
+      {
+        contactId: host.id,
+        kind: "voice",
+        provider: "fixture",
+        title: "Pair call",
+      },
+      OWNER,
+    );
+    await joinVoiceVideoRoom.call({ roomId: room.id, contactId: keep.id }, OWNER);
+    await joinVoiceVideoRoom.call({ roomId: room.id, contactId: drop.id }, OWNER);
+    expect(await listVoiceVideoJoins.call({ roomId: room.id }, OWNER)).toHaveLength(2);
+    await mergeContacts.call({ survivingId: keep.id, duplicateId: drop.id }, OWNER);
+    const joins = await listVoiceVideoJoins.call({ roomId: room.id }, OWNER);
+    expect(joins).toHaveLength(1);
+    expect(joins[0]?.contactId).toBe(keep.id);
+  });
+
+  it("keeps a vendor room ref when the contact thread cannot be written", async () => {
+    const person = await createContact.call(
+      { name: "Lea", email: "lea@demo.freeholder.test" },
+      OWNER,
+    );
+    const failed = await startVoiceVideoRoom.call(
+      {
+        contactId: person.id,
+        kind: "voice",
+        provider: "fixture",
+        title: "fail-thread",
+      },
+      OWNER,
+    );
+    await getService("voiceVideo.applyStart").call(
+      {
+        roomId: failed.id,
+        externalRef: "vv-room:leaked",
+        lastError: "The contact thread could not be written.",
+      },
+      { kind: "system" },
+    );
+    const stored = (await listVoiceVideoRooms.call({}, OWNER)).find((row) => row.id === failed.id);
+    expect(stored?.status).toBe("failed");
+    expect(stored?.externalRef).toBe("vv-room:leaked");
+    const restart = await failure(
+      startVoiceVideoRoom.call(
+        {
+          contactId: person.id,
+          kind: "voice",
+          provider: "fixture",
+          title: "Sitting consult",
+          roomId: failed.id,
+        },
+        OWNER,
+      ),
+    );
+    expect(restart.code).toBe("conflict");
   });
 
   it("lets a visitor join an open community and refuses a duplicate", async () => {
