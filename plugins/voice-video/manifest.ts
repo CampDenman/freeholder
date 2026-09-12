@@ -9,8 +9,22 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["contacts:read", "network:external"],
   requires: ["core"],
-  migrations: ["0075_first_party_plugins.sql", "0163_first_party_plugin_surfaces.sql"],
+  migrations: [
+    "0075_first_party_plugins.sql",
+    "0163_first_party_plugin_surfaces.sql",
+    "0168_voice_video_rooms.sql",
+  ],
   capabilities: { adapters: ["sms"] },
+  events: {
+    emits: [
+      "voiceVideo.roomStarted",
+      "voiceVideo.roomJoined",
+      "voiceVideo.roomEnded",
+      "voiceVideo.missedCall",
+      "voiceVideo.recorded",
+    ],
+  },
   tables: () => import("./tables"),
   services: () => import("./service"),
+  jobs: () => import("./jobs"),
 });

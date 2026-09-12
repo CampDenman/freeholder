@@ -146,7 +146,11 @@ const CALLER_AUTHORIZED_PHASES = [
   "printOnDemand.applySubmit",
   "printOnDemand.claimSubmit",
   "voiceVideo.applyCapture",
+  "voiceVideo.applyStart",
+  "voiceVideo.applyStop",
   "voiceVideo.claimCapture",
+  "voiceVideo.claimStart",
+  "voiceVideo.claimStop",
 ] as const;
 
 const PRIVATE = [...INTERNAL, ...CALLER_AUTHORIZED_PHASES] as const;

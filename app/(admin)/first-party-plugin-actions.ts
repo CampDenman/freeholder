@@ -14,7 +14,13 @@ import {
 } from "../../plugins/gift-registry/service";
 import { queuePodJob, submitPodJob } from "../../plugins/print-on-demand/service";
 import { createCommunitySpace, joinCommunity } from "../../plugins/community/service";
-import { recordVoiceVideoArtifact } from "../../plugins/voice-video/service";
+import {
+  joinVoiceVideoRoom,
+  missVoiceVideoRoom,
+  recordVoiceVideoArtifact,
+  startVoiceVideoRoom,
+  stopVoiceVideoRoom,
+} from "../../plugins/voice-video/service";
 import {
   connectMarketplaceChannel,
   syncMarketplaceChannel,
@@ -151,6 +157,65 @@ export async function joinCommunityAction(form: FormData): Promise<void> {
   done(path);
 }
 
+export async function startVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await startVoiceVideoRoom.call(
+      {
+        contactId: text(form, "contactId"),
+        kind: text(form, "kind") === "video" ? "video" : "voice",
+        provider: text(form, "provider") || "fixture",
+        title: text(form, "title"),
+        roomId: text(form, "roomId") || undefined,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function joinVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await joinVoiceVideoRoom.call(
+      {
+        roomId: text(form, "roomId"),
+        contactId: text(form, "contactId"),
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function stopVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await stopVoiceVideoRoom.call({ roomId: text(form, "roomId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function missVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await missVoiceVideoRoom.call({ roomId: text(form, "roomId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
 export async function recordVoiceVideoAction(form: FormData): Promise<void> {
   const path = "/admin/voice-video";
   try {
@@ -161,6 +226,7 @@ export async function recordVoiceVideoAction(form: FormData): Promise<void> {
         provider: text(form, "provider") || "fixture",
         title: text(form, "title"),
         artifactId: text(form, "artifactId") || undefined,
+        roomId: text(form, "roomId") || undefined,
       },
       await actor(),
     );
