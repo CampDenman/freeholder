@@ -12,7 +12,7 @@ import {
   createGiftRegistry,
   invoiceGiftRegistryItem,
 } from "../../plugins/gift-registry/service";
-import { queuePodJob, submitPodJob } from "../../plugins/print-on-demand/service";
+import { mapPodSku, queuePodJob, submitPodJob } from "../../plugins/print-on-demand/service";
 import {
   createCommunityRoom,
   createCommunitySpace,
@@ -92,6 +92,24 @@ export async function invoiceGiftRegistryItemAction(form: FormData): Promise<voi
   const path = "/admin/gifts";
   try {
     await invoiceGiftRegistryItem.call({ itemId: text(form, "itemId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function mapPodSkuAction(form: FormData): Promise<void> {
+  const path = "/admin/print-on-demand";
+  try {
+    await mapPodSku.call(
+      {
+        sku: text(form, "sku"),
+        provider: text(form, "provider") || "printify",
+        providerProductId: text(form, "providerProductId"),
+      },
+      await actor(),
+    );
   } catch (error) {
     done(path, error);
   }

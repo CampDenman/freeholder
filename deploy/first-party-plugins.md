@@ -21,14 +21,13 @@ Retry an item that failed to invoice from the same screen.
 
 ## Print on demand
 
-Admin → Print on demand queues a job then submits it to the plugin's provider
-adapter. The fixture adapter succeeds unless the SKU starts with `fail-`. A
-failed job stays failed with the provider's message; Retry sends it again.
+Admin → Print on demand maps a catalog SKU onto a provider product, then
+queues jobs. A paid order line whose SKU is mapped opens an ordinary catalog
+fulfillment and submits it to the plugin adapter. Status comes back on that
+fulfillment and the catalog order — there is no second order table. The
+fixture adapter succeeds unless the SKU starts with `fail-`. A failed job
+stays failed with the provider's message; Retry sends the same job again.
 `printOnDemand.submitQueued` retries queued and failed jobs on a schedule.
-That is a seam, not Printify-style fulfillment: there is no catalog mapping,
-print provider, or production status beyond the fixture SKU submit.
-Fulfillment status on catalog orders is unchanged: this plugin is the print
-provider seam, not a second order table.
 
 ## Community
 
