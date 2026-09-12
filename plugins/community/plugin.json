@@ -5,6 +5,6 @@
   "license": "Apache-2.0",
   "permissions": ["contacts:read"],
   "requires": ["core"],
-  "migrations": ["0000_reviewed-baseline.sql"],
+  "migrations": ["0000_reviewed-baseline.sql", "0001_community_rooms.sql"],
   "capabilities": { "widgets": true }
 }

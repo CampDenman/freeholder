@@ -32,10 +32,15 @@ provider seam, not a second order table.
 
 ## Community
 
-Admin → Community creates open or gated spaces. Open spaces accept a public
-join at `/community/<slug>`. Gated spaces stay staff-only. Joining the same
-person twice is a conflict, not a second membership. There are no rooms, posts
-or moderation tools yet — that is the §36 rebuild, not this join table.
+Admin → Community creates open or gated spaces, rooms inside a space, and a
+moderation queue of hidden or reported posts. Open spaces accept a public join
+at `/community/<slug>` and show a chronological feed. Gated spaces show a join
+request instead of the feed until staff add the person; members who identify
+with the email they joined with can read and post. Joining the same person
+twice is a conflict, not a second membership. A moderator (or staff) can hide
+or remove a post; hidden posts leave the public feed and stay on the admin
+queue. Guest posts are rate-limited, stored as plain text, and land on the
+author's contact timeline.
 
 ## Voice and video
 

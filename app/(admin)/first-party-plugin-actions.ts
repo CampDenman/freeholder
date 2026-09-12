@@ -13,7 +13,13 @@ import {
   invoiceGiftRegistryItem,
 } from "../../plugins/gift-registry/service";
 import { queuePodJob, submitPodJob } from "../../plugins/print-on-demand/service";
-import { createCommunitySpace, joinCommunity } from "../../plugins/community/service";
+import {
+  createCommunityRoom,
+  createCommunitySpace,
+  hideCommunityPost,
+  joinCommunity,
+  removeCommunityPost,
+} from "../../plugins/community/service";
 import { recordVoiceVideoArtifact } from "../../plugins/voice-video/service";
 import {
   connectMarketplaceChannel,
@@ -135,19 +141,64 @@ export async function createCommunitySpaceAction(form: FormData): Promise<void> 
 }
 
 export async function joinCommunityAction(form: FormData): Promise<void> {
-  const path = "/admin/community";
+  const spaceId = text(form, "spaceId");
+  const path = `/admin/community?space=${encodeURIComponent(spaceId)}`;
   try {
     await joinCommunity.call(
       {
-        spaceId: text(form, "spaceId"),
+        spaceId,
         contactId: text(form, "contactId"),
+        role: text(form, "role") === "moderator" ? "moderator" : "member",
       },
       await actor(),
     );
   } catch (error) {
     done(path, error);
   }
-  revalidatePath(path);
+  revalidatePath("/admin/community");
+  done(path);
+}
+
+export async function createCommunityRoomAction(form: FormData): Promise<void> {
+  const spaceId = text(form, "spaceId");
+  const path = `/admin/community?space=${encodeURIComponent(spaceId)}`;
+  try {
+    await createCommunityRoom.call(
+      {
+        spaceId,
+        slug: text(form, "slug"),
+        title: text(form, "title"),
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath("/admin/community");
+  done(path);
+}
+
+export async function hideCommunityPostAction(form: FormData): Promise<void> {
+  const spaceId = text(form, "spaceId");
+  const path = `/admin/community?space=${encodeURIComponent(spaceId)}`;
+  try {
+    await hideCommunityPost.call({ postId: text(form, "postId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath("/admin/community");
+  done(path);
+}
+
+export async function removeCommunityPostAction(form: FormData): Promise<void> {
+  const spaceId = text(form, "spaceId");
+  const path = `/admin/community?space=${encodeURIComponent(spaceId)}`;
+  try {
+    await removeCommunityPost.call({ postId: text(form, "postId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath("/admin/community");
   done(path);
 }
 
