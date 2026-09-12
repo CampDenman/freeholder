@@ -73,7 +73,13 @@ Bookings (C10.25) use the customer's profile and own list, then uncached
 management links. The detail reads live, applies the server's rescheduling
 policy, confirms cancellation, and opens existing intake/waiver web forms.
 The native picker uses the appointment's timezone; the preview also shows the
-business timezone. Messages and newsletters remain C10.28. Invoices (C10.26)
+business timezone. Messages (C10.28) list the caller's threads and open a
+thread view whose reply is `conversations.replyAsContact` — never the
+business-side `conversations.reply`. Newsletters subscribe through
+`newsletters.subscribe` and the signed-in marketing preference, never the
+email-footer unsubscribe token. The account tab reads the customer's profile
+and records and signs out with `notifications.revokeDevice` when a push token
+is held. Invoices (C10.26)
 read the existing customer portal room and customer invoice projection. A
 separate, uncached own-invoice link opens payment in the system browser without
 exposing the user's session. Invoice and receipt pages return to the app's
@@ -114,10 +120,13 @@ and accessibility verification remains open under C10.30.
 
 Home and bookings offer password sign-in or an email link. Copy the original
 email link into the app: it is checked against the connected business and
-consumed once by the existing customer auth service. A two-factor challenge
-never becomes a session; those accounts currently use the website. User
-sessions travel as bearer credentials with cookies omitted, and are stored
-only for their issuing instance. Browser cookie requests retain CSRF checks.
+consumed once by the existing customer auth service. An enrolled two-factor
+account continues in the app with a TOTP or recovery code; a security-key-only
+account still uses the website. A two-factor challenge never becomes a session
+on its own. User sessions travel as bearer credentials with cookies omitted,
+and are stored only for their issuing instance. Browser cookie requests retain
+CSRF checks. Physical-device interaction and accessibility checks remain
+outstanding, so C10.28 stays open.
 
 ## Rules the code keeps
 

@@ -39,6 +39,7 @@ import { contacts } from "@/core/contacts/schema";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
 import { sendMail } from "@/core/mail/service";
+import { contactForActor } from "@/core/portal/service";
 import {
   defineService,
   getService,
@@ -336,6 +337,62 @@ export const replyToConversation = defineService({
   },
 });
 
+/**
+ * A signed-in customer writing in their own thread (C10.28, §4.14).
+ *
+ * This is inbound, not a business reply: it never sends on `reply_channel`
+ * (that door is `conversations.reply`), it is untrusted input like every
+ * other customer message, and it is rate-limited per person the way a form
+ * is. The portal and the app are simply one more channel they can arrive by.
+ */
+export const replyAsContact = defineService({
+  name: "conversations.replyAsContact",
+  summary: "Write a customer message into the caller's own thread.",
+  kind: "mutation",
+  permission: "authenticated",
+  writeClass: "message",
+  input: z.object({
+    id,
+    body: z.string().trim().min(1).max(50_000),
+  }),
+  // Per contact, not per IP: the session is the identity, and a proxy pool
+  // would otherwise share one person's allowance. Twenty in ten minutes is
+  // past honest typing and short of a useful paste flood.
+  rateLimit: {
+    limit: 20,
+    windowSeconds: 10 * 60,
+    subject: (_input, actor) => (actor.kind === "user" ? actor.userId : undefined),
+    message: "You've sent a few messages just now. Try again shortly.",
+  },
+  output: row({ id: uuid, conversationId: uuid }),
+  handler: async (input, ctx) => {
+    const contact = await contactForActor(ctx);
+    const thread = await load(ctx.tx, input.id);
+    if (thread.contactId !== contact.id) {
+      // One sentence for "not yours" and "not here", so a guessed id does not
+      // become an existence oracle.
+      throw new ServiceError("not_found", "That conversation is not here.");
+    }
+    // Elevated: `conversations.record` is the owner's ingest door. This
+    // service already proved the thread belongs to the caller, so the write
+    // is the same inbound ingest a form or a text would take — not a second
+    // implementation, and not a widening of `record` itself.
+    const recorded = (await ctx.callAsSystem(getService("conversations.record"), {
+      conversationId: thread.id,
+      contactId: contact.id,
+      direction: "inbound",
+      // How *this* message arrived: the customer typed it in the product.
+      // Naming the existing thread keeps `reply_channel` as the business's
+      // outbound route rather than flipping it to chat.
+      channel: "chat",
+      body: input.body,
+      sentBy: "contact",
+    })) as { message: { id: string } };
+    ctx.setSubject("conversation", thread.id);
+    return { id: recorded.message.id, conversationId: thread.id };
+  },
+});
+
 const BULK_ACTIONS = ["assign", "close", "reopen", "markRead", "markUnread", "snooze"] as const;
 
 /**
@@ -538,6 +595,7 @@ export default [
   snoozeConversation,
   setConversationStatus,
   replyToConversation,
+  replyAsContact,
   bulkConversations,
   searchInbox,
   inboxCounts,

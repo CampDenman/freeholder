@@ -23,16 +23,22 @@ export {
 } from "./discovery.js";
 export {
   SESSION_KEY,
+  DEVICE_TOKEN_KEY,
   loadSession,
   saveSession,
   signIn,
+  completeTwoFactorSignIn,
   redeemSignInLink,
   signOut,
+  saveDeviceToken,
+  loadDeviceToken,
+  clearDeviceToken,
   unlockOnResume,
   type BiometricGate,
   type SecretStore,
   type Session,
   type SignInResult,
+  type TwoFactorMethods,
 } from "./session.js";
 export {
   OfflineWriteRefused,

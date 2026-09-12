@@ -27,6 +27,8 @@ export interface SecretStore {
 }
 
 export const SESSION_KEY = "freeholder.session";
+/** Push token for this install, revoked when the session ends (C10.14 / C10.28). */
+export const DEVICE_TOKEN_KEY = "freeholder.device-token";
 
 export interface Session {
   instanceUrl: string;
@@ -36,9 +38,23 @@ export interface Session {
   issuedAt: string;
 }
 
+export interface TwoFactorMethods {
+  totp: boolean;
+  recovery: boolean;
+  webauthn: boolean;
+}
+
 export type SignInResult =
   | { ok: true; session: Session }
-  | { ok: false; reason: "invalid" | "unreachable" | "magic-link-sent" | "two-factor"; message: string };
+  | { ok: false; reason: "invalid" | "unreachable" | "magic-link-sent"; message: string }
+  | {
+      ok: false;
+      reason: "two-factor";
+      message: string;
+      /** Absent when the instance did not return a completable challenge. */
+      challengeToken?: string;
+      methods?: TwoFactorMethods;
+    };
 
 type FetchLike = (
   url: string,
@@ -85,10 +101,71 @@ export async function signIn(
       message: "If that address has an account, a sign-in link is on its way.",
     };
   }
-  const body = (await response.json()) as { token?: string; twoFactorRequired?: boolean };
-  if (body.twoFactorRequired) return { ok: false, reason: "two-factor", message: "This account requires two-factor sign-in on the website." };
+  const body = (await response.json()) as {
+    token?: string;
+    twoFactorRequired?: boolean;
+    challengeToken?: string;
+    methods?: TwoFactorMethods;
+  };
+  if (body.twoFactorRequired) {
+    const challengeToken =
+      typeof body.challengeToken === "string" && body.challengeToken.length >= 20
+        ? body.challengeToken
+        : undefined;
+    return {
+      ok: false,
+      reason: "two-factor",
+      message: challengeToken
+        ? "This account requires a verification code."
+        : "This account requires two-factor sign-in on the website.",
+      challengeToken,
+      methods: body.methods,
+    };
+  }
   if (!body.token) {
     return { ok: false, reason: "invalid", message: "That email and password did not match." };
+  }
+  return {
+    ok: true,
+    session: {
+      instanceUrl: input.instanceUrl,
+      token: body.token,
+      email: input.email,
+      issuedAt: new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * Finish a password login with TOTP or a recovery code (C10.28).
+ *
+ * WebAuthn stays on the website: a passkey ceremony is a browser API this
+ * client does not wrap. A challenge that only offers a security key is
+ * refused here rather than stored as a session.
+ */
+export async function completeTwoFactorSignIn(
+  input: { instanceUrl: string; email: string; challengeToken: string; code: string },
+  fetchImpl: FetchLike,
+): Promise<SignInResult> {
+  let response;
+  try {
+    response = await fetchImpl(`${input.instanceUrl}/api/v1/auth.completeTwoFactorLogin`, {
+      method: "POST",
+      credentials: "omit",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeToken: input.challengeToken, code: input.code.trim() }),
+    });
+  } catch {
+    return { ok: false, reason: "unreachable", message: "Could not reach the site." };
+  }
+  let body: { token?: string } = {};
+  try {
+    body = (await response.json()) as { token?: string };
+  } catch {
+    body = {};
+  }
+  if (!response.ok || !body.token) {
+    return { ok: false, reason: "invalid", message: "That verification code did not work. Try again or start sign-in again." };
   }
   return {
     ok: true,
@@ -142,6 +219,19 @@ export async function loadSession(store: SecretStore): Promise<Session | null> {
  */
 export async function signOut(store: SecretStore): Promise<void> {
   await store.delete(SESSION_KEY);
+}
+
+export async function saveDeviceToken(store: SecretStore, token: string): Promise<void> {
+  await store.set(DEVICE_TOKEN_KEY, token);
+}
+
+export async function loadDeviceToken(store: SecretStore): Promise<string | null> {
+  const raw = await store.get(DEVICE_TOKEN_KEY);
+  return raw && raw.length >= 8 ? raw : null;
+}
+
+export async function clearDeviceToken(store: SecretStore): Promise<void> {
+  await store.delete(DEVICE_TOKEN_KEY);
 }
 
 export interface BiometricGate {

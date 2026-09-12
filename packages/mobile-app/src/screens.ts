@@ -29,6 +29,7 @@ export const SCREEN_IDS = [
   "galleries",
   "gallery",
   "messages",
+  "message",
   "newsletters",
   "account",
 ] as const;
@@ -186,10 +187,19 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     audience: "signed-in",
     titleKey: "app.messages.title",
     reads: ["portal.myProfile", "conversations.list"],
-    // C10.28 adds the customer's own reply service and thread view. Never
-    // substitute conversations.reply, which sends as the business.
     writes: [],
     emptyKey: "app.messages.empty",
+    cacheable: true,
+  },
+  message: {
+    id: "message",
+    audience: "signed-in",
+    titleKey: "app.message.title",
+    reads: ["portal.myProfile", "conversations.get"],
+    // Never substitute conversations.reply, which sends as the business.
+    writes: ["conversations.replyAsContact"],
+    param: "id",
+    emptyKey: "app.message.empty",
     cacheable: true,
   },
   newsletters: {
@@ -206,7 +216,7 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     audience: "signed-in",
     titleKey: "app.account.title",
     reads: ["portal.myProfile", "portal.myRecords"],
-    writes: [],
+    writes: ["notifications.revokeDevice"],
     emptyKey: "app.account.empty",
     cacheable: false,
   },
