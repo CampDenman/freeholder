@@ -4159,9 +4159,16 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `deploy/first-party-plugins.md`.
   **Reopened 2026-09-12:** those seams exist; §36 product depth is now in
   flight — community rooms/posts/moderation, voice/video rooms and
-  transcripts on the conversation spine, Printify-style POD fulfillment,
-  and marketplace channel sync that is not a hardcoded order. Do not treat
-  the fixture plugins as complete products.)
+  transcripts on the conversation spine, and Printify-style POD fulfillment.
+  Do not treat the fixture plugins as complete products.
+  Marketplace channel sync now pages staged provider orders onto invoices
+  (`0168_marketplace_channel_sync.sql`, `contacts.resolve` + invoicing). A
+  refused handshake stays `failed` on the same row; Retry reconnects it.
+  Imported order `contact_id` is on `contacts.merge`. **F05** plugins expose
+  their own services (`marketplace.connect` / `marketplace.sync` /
+  `marketplace.list` / `marketplace.listOrders`); that is the agent surface,
+  not a second contract. Still [ ] until community, voice/video, and POD
+  depth also land.)
 
 #### Packages, installation, export, and target parity
 

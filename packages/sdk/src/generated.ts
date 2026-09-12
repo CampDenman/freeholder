@@ -836,6 +836,7 @@ export const SERVICE_NAMES = [
   "mail.verifySender",
   "marketplace.connect",
   "marketplace.list",
+  "marketplace.listOrders",
   "marketplace.sync",
   "media.abortUpload",
   "media.acceptAltTextSuggestion",
@@ -4593,11 +4594,15 @@ export interface ServiceCatalog {
   };
   "marketplace.connect": {
     input: { name: string; provider: "shopify" | "etsy" | "amazon" | "ebay"; channelId?: string };
-    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; [key: string]: unknown };
+    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; syncCursor: string | null; [key: string]: unknown };
   };
   "marketplace.list": {
     input: Record<string, never>;
-    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; [key: string]: unknown }[];
+    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; syncCursor: string | null; [key: string]: unknown }[];
+  };
+  "marketplace.listOrders": {
+    input: { channelId?: string };
+    output: { id: string; channelId: string; contactId: string; invoiceId: string; externalRef: string; description: string; amountMinor: number; currency: string; [key: string]: unknown }[];
   };
   "marketplace.sync": {
     input: { channelId: string };
@@ -7249,6 +7254,7 @@ export interface FreeholderApi {
   marketplace: {
     connect: (input: ServiceCatalog["marketplace.connect"]["input"]) => Promise<ServiceCatalog["marketplace.connect"]["output"]>;
     list: (input?: ServiceCatalog["marketplace.list"]["input"]) => Promise<ServiceCatalog["marketplace.list"]["output"]>;
+    listOrders: (input?: ServiceCatalog["marketplace.listOrders"]["input"]) => Promise<ServiceCatalog["marketplace.listOrders"]["output"]>;
     sync: (input: ServiceCatalog["marketplace.sync"]["input"]) => Promise<ServiceCatalog["marketplace.sync"]["output"]>;
   };
   media: {
