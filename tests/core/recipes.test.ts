@@ -191,6 +191,6 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
     expect(matrix).toContain("node scripts/doctor.mjs");
     expect(matrix).toContain("FREEHOLDER_STORAGE=s3");
     expect(workflow).toContain("bash scripts/recipe-matrix.sh");
-    expect(workflow).toContain("minio/minio:");
+    expect(workflow).toContain("quay.io/minio/minio:");
   });
 });

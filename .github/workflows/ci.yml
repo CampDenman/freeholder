@@ -339,13 +339,13 @@ jobs:
           docker run -d --name freeholder-minio --network host \
             -e MINIO_ROOT_USER=freeholder-ci \
             -e MINIO_ROOT_PASSWORD=freeholder-ci-secret \
-            minio/minio:RELEASE.2025-07-23T15-54-02Z@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0 server /data --address :9000
+            quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0 server /data --address :9000
           for _ in $(seq 1 30); do
             curl -fsS http://127.0.0.1:9000/minio/health/live && break
             sleep 1
           done
           docker run --rm --network host --entrypoint /bin/sh \
-            minio/mc:RELEASE.2025-07-21T05-28-08Z@sha256:fb8f773eac8ef9d6da0486d5dec2f42f219358bcb8de579d1623d518c9ebd4cc -c \
+            quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z@sha256:fb8f773eac8ef9d6da0486d5dec2f42f219358bcb8de579d1623d518c9ebd4cc -c \
             'mc alias set local http://127.0.0.1:9000 freeholder-ci freeholder-ci-secret && mc mb --ignore-existing local/freeholder-recipe-gate'
       - run: bash scripts/recipe-matrix.sh
       - run: bash scripts/public-gates.sh
