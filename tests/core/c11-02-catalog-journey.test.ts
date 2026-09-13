@@ -39,7 +39,12 @@ import {
   shipFulfillment,
   activateProduct,
 } from "@/modules/catalog/service";
-import { createTaxCategory } from "@/modules/invoicing/tax-service";
+import {
+  addTaxRate,
+  createTaxCategory,
+  createTaxZone,
+  setTaxRegistration,
+} from "@/modules/invoicing/tax-service";
 import { createPayment, getInvoice, settlePayment } from "@/modules/invoicing/invoice-service";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
@@ -61,6 +66,24 @@ describe.runIf(hasDatabase)("C11.02 catalog browse to refund", { timeout: 60_000
   it("browses, checks out a mixed cart, splits fulfillment and refunds", async () => {
     const tax = await createTaxCategory.call(
       { code: "c11_standard", name: "C11 standard taxable" },
+      OWNER,
+    );
+    const zoneTax = await createTaxZone.call(
+      { name: "Canada GST", country: "CA", regions: [], postalPatterns: [] },
+      OWNER,
+    );
+    await setTaxRegistration.call(
+      { zoneId: zoneTax.id, number: "GST123", scheme: "standard", status: "active" },
+      OWNER,
+    );
+    await addTaxRate.call(
+      {
+        zoneId: zoneTax.id,
+        name: "GST",
+        jurisdiction: "Canada",
+        ratePpm: 50_000,
+        appliesToShipping: true,
+      },
       OWNER,
     );
     const studio = await createLocationService.call(
@@ -134,12 +157,13 @@ describe.runIf(hasDatabase)("C11.02 catalog browse to refund", { timeout: 60_000
         contactId: contact.id,
         idempotencyKey: `c11-02-${contact.id}`,
         acceptedTerms: true,
-        shippingAddress: { country: "CA", city: "Courtenay" },
+        shippingAddress: { country: "CA", city: "Courtenay", region: "BC" },
       },
       OWNER,
     );
     expect(placed.lines.length).toBe(2);
     expect(placed.order.invoiceId).toBeTruthy();
+    expect(placed.order.taxMinor).toBeGreaterThan(0);
     const payment = await createPayment.call(
       {
         invoiceId: placed.order.invoiceId!,
@@ -177,7 +201,16 @@ describe.runIf(hasDatabase)("C11.02 catalog browse to refund", { timeout: 60_000
       OWNER,
     );
     await decideReturn.call({ id: requested.return.id, decision: "approved" }, OWNER);
+    const beforeRestock = await availability.call(
+      { variantId: printVariant.id, locationId: studio.id, quantity: 1 },
+      OWNER,
+    );
     await receiveReturn.call({ id: requested.return.id, locationId: studio.id }, OWNER);
+    const restocked = await availability.call(
+      { variantId: printVariant.id, locationId: studio.id, quantity: 1 },
+      OWNER,
+    );
+    expect(restocked.onHand).toBeGreaterThan(beforeRestock.onHand);
     const refunded = await refundReturn.call(
       { id: requested.return.id, idempotencyKey: `rma-${requested.return.id}` },
       OWNER,

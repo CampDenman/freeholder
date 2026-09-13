@@ -1,9 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// C11.04: capture Asset → gallery proof/select → print order AND social
-// package → publish → referral conversion. Social publish uses adapter
-// doubles (mocked OAuth/network). Native capture page is the paired Playwright
-// file tests/browser/c11-04-capture.spec.ts.
+// C11.04: interrupted/resumed Asset ingest → gallery proof/select → print
+// order AND social package → publish → referral. Social publish uses adapter
+// doubles (mocked OAuth/network). The public /capture/[token] page is the
+// paired Playwright file tests/browser/c11-04-capture.spec.ts — that Asset is
+// a second ingest, not this print/publish chain. Live network publish is not
+// claimed.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
@@ -13,9 +15,11 @@ import { resetEnvForTests } from "@/core/env";
 import { ready } from "@/core/runtime";
 import { assets } from "@/core/media/schema";
 import {
-  attachCaptureUpload,
+  appendCaptureChunk,
+  assembleCapture,
   confirmCapture,
-  createUploadLink,
+  createCaptureSession,
+  grantCapturePermission,
 } from "@/core/media/capture";
 import { createContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
@@ -165,20 +169,27 @@ describe.runIf(hasDatabase)("C11.04 gallery social referral", { timeout: 90_000 
 
   afterAll(closeDb);
 
-  it("ingests an Asset, proofs it, sells a print, publishes once and attributes a referral", async () => {
-    const link = await createUploadLink.call({ source: "upload_link" }, OWNER);
-    await attachCaptureUpload.call(
-      {
-        token: link.token,
-        filename: "harbour.png",
-        contentType: "image/png",
-        bytes: png,
-      },
-      ANONYMOUS,
+  it("ingests an interrupted Asset, proofs it, sells a print, publishes once and attributes a referral", async () => {
+    const capture = await createCaptureSession.call({ source: "screen" }, OWNER);
+    await grantCapturePermission.call({ id: capture.id }, OWNER);
+    const split = Math.max(1, Math.floor(png.byteLength / 2));
+    await appendCaptureChunk.call(
+      { id: capture.id, sequence: 0, contentType: "image/png", bytes: png.subarray(0, split) },
+      OWNER,
     );
-    const confirmed = await confirmCapture.call({ token: link.token }, ANONYMOUS);
+    await appendCaptureChunk.call(
+      { id: capture.id, sequence: 1, contentType: "image/png", bytes: png.subarray(split) },
+      OWNER,
+    );
+    const assembled = await assembleCapture.call(
+      { id: capture.id, filename: "harbour.png", expectedChunks: 2 },
+      OWNER,
+    );
+    expect(assembled.session.status).toBe("preview");
+    const confirmed = await confirmCapture.call({ id: capture.id }, OWNER);
     expect(confirmed.status).toBe("confirmed");
-    const [asset] = await db().select().from(assets);
+    expect(confirmed.assetId).toBeTruthy();
+    const [asset] = await db().select().from(assets).where(eq(assets.id, confirmed.assetId!));
     expect(asset).toBeTruthy();
 
     const client = await createContact.call(

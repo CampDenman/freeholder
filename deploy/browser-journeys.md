@@ -39,18 +39,20 @@ other credential is created and consumed through the rendered product.
 
 `pnpm test:journeys` also runs `tests/browser/c11-*.spec.ts`. Those proofs
 start from a seeded owner (first-boot remains C1.22) and walk the visitor-
-facing seams C11.01 and C11.04 name: localized enquiry/chat, quote accept,
-contract sign, C5.25 customer invoice pay, and the app-free `/capture/[token]`
-ingest page.
+facing seams C11.01 and C11.04 name: a cookieless localized enquiry/chat,
+HTTP `quotes.setConversion`, quote accept, contract sign, C5.25 customer
+invoice pay with `paidMinor`, contact timeline copy, `/admin/reports` after
+pay, and the app-free `/capture/[token]` ingest page.
 
 The rest of C11.01–C11.08 is mixed vitest composition in
-`tests/core/c11-0*.test.ts`: catalog mixed checkout and refund, booking/
-waitlist/waiver/review, gallery proof and social publish, subscription
-dunning and portal cancel, agent approval plus code gates, mocked
+`tests/core/c11-0*.test.ts`: catalog tax/stock/restock checkout, availability
+query plus deposit/signed waiver/due reminder, interrupted capture then
+gallery/social, subscription change/cancel with `hasAccess` after expiry,
+agent approval plus builder prompt/apply/rollback and code gates, mocked
 mail/calendar playbooks, and demo/import-ledger/update rollback. Hosted
-Stripe/PayPal charges, live OAuth, and WordPress-to-CMS page materialization
-are not claimed — adapter doubles and the import ledger are named in
-MASTER.md §43.16.
+Stripe/PayPal charges, live OAuth, live multi-network publish, and
+WordPress-to-CMS page materialization are not claimed — adapter doubles and
+the import ledger are named in MASTER.md §43.16. C11.08 stays open.
 
 ## Run it locally
 
