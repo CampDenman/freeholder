@@ -3,6 +3,7 @@
 // One reviewed runtime identity across local setup, CI, packages and images.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { PACKAGE_FOLDERS } from "../../scripts/release-packages.mjs";
 
 function manifest(path: string): {
   engines?: { node?: string };
@@ -35,7 +36,7 @@ describe("runtime version integrity", () => {
   it("keeps every distributable package on the platform Node support floor", () => {
     const expected = manifest("package.json").engines?.node;
     expect(expected).toBeTruthy();
-    for (const name of ["create-freeholder", "plugin-kit", "sdk", "templates"]) {
+    for (const name of PACKAGE_FOLDERS) {
       expect(manifest(`packages/${name}/package.json`).engines?.node).toBe(expected);
     }
   });

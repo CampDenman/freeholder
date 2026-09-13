@@ -14,6 +14,10 @@ import type { AddressInfo } from "node:net";
 import { db } from "@/core/db";
 import { GET as serveMedia } from "../../app/media/[...key]/route";
 import { GET as downloadMedia } from "../../app/media/download/[id]/route";
+import { GET as discover } from "../../app/.well-known/freeholder/route";
+import { instanceLogoUrl } from "@/core/discovery";
+import { updateDesign } from "@/core/design/service";
+import { updateBusiness } from "@/core/settings/service";
 import {
   assets,
   mediaAltTextSuggestions,
@@ -705,6 +709,46 @@ describe.runIf(hasDatabase)("the asset library", () => {
     expect(webp!.type).toBe("image/webp");
     // A srcset the browser can choose from: "url 400w, url 800w".
     expect(webp!.srcset).toMatch(/\s\d+w(,|$)/);
+  });
+
+  it("publishes the brand logo on a fetchable image URL, not the document download path", async () => {
+    await updateBusiness.call(
+      {
+        name: "Aurora Coast Photography",
+        country: "CA",
+        baseCurrency: "CAD",
+        timezone: "America/Vancouver",
+      },
+      OWNER,
+    );
+    const asset = await uploadAsset.call(
+      {
+        filename: "logo.png",
+        contentType: "image/png",
+        bytes: await png(64, 64),
+      },
+      STAFF,
+    );
+    await updateDesign.call({ logoAssetId: asset.id }, OWNER);
+    const resolved = await resolveImage.call({ id: asset.id }, ANONYMOUS);
+    expect(resolved?.src).toMatch(/^\/media\//);
+    expect(resolved?.src).not.toContain("/media/download/");
+    const advertised = instanceLogoUrl("https://aurora.example", resolved!.src);
+    expect(advertised).toBe(`https://aurora.example${resolved!.src}`);
+
+    const discovery = await discover();
+    expect(discovery.status).toBe(200);
+    const body = (await discovery.json()) as { branding: { logoUrl: string | null } };
+    expect(body.branding.logoUrl).toMatch(/\/media\//);
+    expect(body.branding.logoUrl?.endsWith(resolved!.src)).toBe(true);
+    expect(body.branding.logoUrl).not.toContain("/media/download/");
+
+    const delivered = await serveMedia(
+      new Request(`http://localhost${resolved!.src}`),
+      { params: Promise.resolve({ key: asset.storageKey.split("/") }) },
+    );
+    expect(delivered.status).toBe(200);
+    expect(delivered.headers.get("content-type")).toMatch(/^image\//);
   });
 
   it("answers null for an asset that is gone, rather than throwing", async () => {
