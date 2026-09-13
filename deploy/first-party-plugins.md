@@ -4,9 +4,8 @@ Gift registries, print-on-demand, community spaces, voice/video and marketplace
 channel sync are first-party plugins (MASTER.md §36, C3.13). They install with
 the instance; disable one from Admin → Plugins if the business does not use it.
 
-**These are not complete products.** Community rooms, posts, a chronological
-feed and hide/remove moderation have landed. C3.13 is still open for the rest:
-voice/video still needs rooms and transcripts on the conversation spine;
+**These are not complete products.** Community rooms/posts/moderation and
+voice/video rooms/recordings/transcripts have landed. C3.13 is still open:
 print-on-demand is a fixture submit, not Printify-style fulfillment;
 marketplace sync currently returns one hardcoded order. Gift registries
 already raise ordinary invoices. Rebuild those remaining seams to §36 rather
@@ -45,11 +44,13 @@ author's contact timeline.
 
 ## Voice and video
 
-Admin → Voice and video records an artifact against a contact. The vendor SDK
-stays in the plugin. On success the recording is attached to that contact's
-conversation and timeline. A provider failure leaves `failed` plus the error;
-Retry captures again. Rooms, live calls and transcripts on the conversation
-spine are not this artifact row.
+Admin → Voice and video lists rooms. Start opens a room against a contact;
+Join records who entered; Stop captures the recording and transcript onto
+that contact's conversation and timeline; Missed call writes the missed-call
+timeline event. The vendor SDK stays in the plugin adapter. A title starting
+with `fail-` makes the fixture provider refuse; the room or recording stays
+`failed` so Retry can run in place. Merge repoints room, join and artifact
+`contact_id` columns. There is no WebRTC vendor in core.
 
 ## Marketplace channels
 
