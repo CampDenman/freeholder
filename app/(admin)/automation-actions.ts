@@ -22,6 +22,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import {
   getAutomation,
+  killRun,
   publish,
   restoreVersion,
   saveAutomation,
@@ -323,6 +324,21 @@ export async function restoreVersionAction(form: FormData): Promise<void> {
   const automationId = text(form, "automationId");
   try {
     await restoreVersion.call({ versionId: text(form, "versionId") }, caller);
+  } catch (error) {
+    back(automationId, error);
+  }
+  revalidatePath(`/admin/automations/${automationId}`);
+  back(automationId);
+}
+
+export async function killRunAction(form: FormData): Promise<void> {
+  const caller = await actor();
+  const automationId = text(form, "automationId");
+  try {
+    await killRun.call(
+      { runId: text(form, "runId"), reason: optional(form, "reason") },
+      caller,
+    );
   } catch (error) {
     back(automationId, error);
   }

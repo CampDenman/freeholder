@@ -10,6 +10,7 @@ import { listTaxConfiguration } from "@/modules/invoicing/tax-service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Select } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { invoiceAction } from "../../../invoice-actions";
+import { createDepositBalanceAction } from "../../../advanced-money-actions";
 import { requireStaffActor } from "../../guard";
 
 export const dynamic = "force-dynamic";
@@ -156,6 +157,50 @@ export default async function NewInvoicePage({
           </CardBody>
         </Card>
       )}
+
+      {contacts.rows.length > 0 ? (
+        <Card>
+          <CardHeader title={t("invoices.deposit.title")} />
+          <CardBody>
+            <p className="max-w-prose text-sm text-ink-muted">{t("invoices.deposit.intro")}</p>
+            <form action={createDepositBalanceAction} className="mt-4 grid gap-4 sm:grid-cols-2">
+              <input type="hidden" name="idempotencyKey" value={`admin-deposit-${randomUUID()}`} />
+              <input type="hidden" name="sourceId" value={randomUUID()} />
+              <Field label={t("invoices.contact")} htmlFor="deposit-contact">
+                <Select id="deposit-contact" name="contactId" required defaultValue={selected}>
+                  <option value="">{t("invoices.contactChoose")}</option>
+                  {contacts.rows.map((contact) => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.name}{contact.email ? ` · ${contact.email}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t("invoices.currency")} htmlFor="deposit-currency">
+                <Input id="deposit-currency" name="currency" required defaultValue={business?.baseCurrency ?? "USD"} maxLength={3} className="font-mono uppercase" />
+              </Field>
+              <Field label={t("invoices.deposit.description")} htmlFor="deposit-description">
+                <Input id="deposit-description" name="depositDescription" required defaultValue={t("invoices.deposit.defaultDescription")} />
+              </Field>
+              <Field label={t("invoices.deposit.amount")} htmlFor="deposit-amount">
+                <Input id="deposit-amount" name="depositAmount" inputMode="decimal" required />
+              </Field>
+              <Field label={t("invoices.deposit.balanceDescription")} htmlFor="balance-description">
+                <Input id="balance-description" name="balanceDescription" required defaultValue={t("invoices.deposit.defaultBalance")} />
+              </Field>
+              <Field label={t("invoices.deposit.balance")} htmlFor="balance-amount">
+                <Input id="balance-amount" name="balanceAmount" inputMode="decimal" required />
+              </Field>
+              <Field label={t("invoices.taxReason")} htmlFor="deposit-tax">
+                <Input id="deposit-tax" name="taxReason" defaultValue={t("invoices.taxReasonDefault")} />
+              </Field>
+              <div className="self-end">
+                <Button type="submit">{t("invoices.deposit.create")}</Button>
+              </div>
+            </form>
+          </CardBody>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -24,7 +24,7 @@ export function UpdateActionForm({
   confirm,
   children,
 }: {
-  intent: "check" | "preflight" | "apply" | "savePolicy" | "pause" | "resume" | "forkUpdate";
+  intent: "check" | "preflight" | "apply" | "savePolicy" | "pause" | "resume" | "forkUpdate" | "rollback";
   hidden?: Record<string, string>;
   submitLabel: string;
   pendingLabel: string;

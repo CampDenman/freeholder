@@ -21,6 +21,7 @@ import {
 } from "@/ui/primitives";
 import {
   createWebhookAction,
+  replayWebhookDeliveryAction,
   webhookAction,
   type ActionState,
 } from "../../actions";
@@ -71,6 +72,8 @@ export interface WebhooksLabels {
   secretHint: string;
   recent: string;
   noDeliveries: string;
+  inspect: string;
+  replay: string;
 }
 
 const FORM_ID = "new-webhook";
@@ -168,6 +171,22 @@ export function WebhooksCard({
                       </td>
                       <td className="py-1.5 pe-3 text-ink-muted">{delivery.detail}</td>
                       <td className="py-1.5 text-ink-muted">{delivery.when}</td>
+                      <td className="py-1.5">
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={`/admin/settings?delivery=${delivery.id}`}
+                            className="text-xs font-medium underline"
+                          >
+                            {labels.inspect}
+                          </a>
+                          <form action={replayWebhookDeliveryAction}>
+                            <input type="hidden" name="id" value={delivery.id} />
+                            <Button type="submit" variant="quiet">
+                              {labels.replay}
+                            </Button>
+                          </form>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

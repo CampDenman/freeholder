@@ -25,6 +25,7 @@ import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
 import {
   captureSegmentAction,
+  previewSegmentAction,
   removeSegmentAction,
   saveSegmentAction,
 } from "../../segment-actions";
@@ -35,7 +36,14 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 export default async function SegmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string; why?: string; who?: string }>;
+  searchParams: Promise<{
+    saved?: string;
+    error?: string;
+    why?: string;
+    who?: string;
+    previewCount?: string;
+    previewSample?: string;
+  }>;
 }) {
   const actor = await requireStaffActor("crm");
   const query = await searchParams;
@@ -239,8 +247,21 @@ export default async function SegmentsPage({
                 </label>
               </div>
             ))}
-            <Button type="submit">{t("segments.action.save")}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit">{t("segments.action.save")}</Button>
+              <Button type="submit" formAction={previewSegmentAction} variant="quiet">
+                {t("segments.preview")}
+              </Button>
+            </div>
           </form>
+          {query.previewCount ? (
+            <p className="mt-3 text-sm">
+              {t("segments.previewCount", { count: query.previewCount })}
+              {query.previewSample
+                ? ` · ${query.previewSample}`
+                : ` · ${t("segments.previewEmpty")}`}
+            </p>
+          ) : null}
           {/* Commas mean a list, because "one of" is the operator people reach
               for and asking them to write JSON is not an option. */}
           <p className="max-w-prose text-sm text-ink-muted">{t("segments.hint")}</p>
