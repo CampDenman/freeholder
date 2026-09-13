@@ -4,7 +4,7 @@
   "freeholder": ">=0.0.0",
   "license": "Apache-2.0",
   "permissions": ["catalog:write"],
-  "requires": ["core"],
-  "migrations": ["0000_reviewed-baseline.sql"],
+  "requires": ["core", "catalog"],
+  "migrations": ["0000_reviewed-baseline.sql", "0003_print_on_demand_fulfillment.sql"],
   "capabilities": { "adapters": ["storage"] }
 }

@@ -4,12 +4,13 @@ Gift registries, print-on-demand, community spaces, voice/video and marketplace
 channel sync are first-party plugins (MASTER.md §36, C3.13). They install with
 the instance; disable one from Admin → Plugins if the business does not use it.
 
-**These are not complete products.** Community rooms/posts/moderation and
-voice/video rooms/recordings/transcripts have landed. C3.13 is still open:
-print-on-demand is a fixture submit, not Printify-style fulfillment;
-marketplace sync currently returns one hardcoded order. Gift registries
-already raise ordinary invoices. Rebuild those remaining seams to §36 rather
-than treating the fixture adapters as the product.
+**These are not complete products.** Community rooms/posts/moderation,
+voice/video rooms/recordings/transcripts, and print-on-demand catalog
+fulfillment have landed (the POD adapter is still a fixture, not a live
+Printify connection). C3.13 is still open: marketplace sync currently returns
+one hardcoded order. Gift registries already raise ordinary invoices. Rebuild
+that remaining seam to §36 rather than treating the fixture adapter as the
+product.
 
 ## Gift registries
 
@@ -21,14 +22,13 @@ Retry an item that failed to invoice from the same screen.
 
 ## Print on demand
 
-Admin → Print on demand queues a job then submits it to the plugin's provider
-adapter. The fixture adapter succeeds unless the SKU starts with `fail-`. A
-failed job stays failed with the provider's message; Retry sends it again.
+Admin → Print on demand maps a catalog SKU onto a provider product, then
+queues jobs. A paid order line whose SKU is mapped opens an ordinary catalog
+fulfillment and submits it to the plugin adapter. Status comes back on that
+fulfillment and the catalog order — there is no second order table. The
+fixture adapter succeeds unless the SKU starts with `fail-`. A failed job
+stays failed with the provider's message; Retry sends the same job again.
 `printOnDemand.submitQueued` retries queued and failed jobs on a schedule.
-That is a seam, not Printify-style fulfillment: there is no catalog mapping,
-print provider, or production status beyond the fixture SKU submit.
-Fulfillment status on catalog orders is unchanged: this plugin is the print
-provider seam, not a second order table.
 
 ## Community
 

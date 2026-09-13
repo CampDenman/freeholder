@@ -22,6 +22,13 @@
       "when": 1792166400001,
       "tag": "0002_voice_video_rooms",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792166400006,
+      "tag": "0003_print_on_demand_fulfillment",
+      "breakpoints": true
     }
   ]
 }
