@@ -36,6 +36,26 @@ export interface Session {
   /** Whose session it is, for the "not you?" affordance on re-open. */
   email: string;
   issuedAt: string;
+  /**
+   * Named role from `auth.whoami` / `auth.login`.
+   *
+   * The customer portal is `customer`. Anything else is staff (owner,
+   * administrator, editor, a custom grant bundle) and opens companion mode
+   * rather than the customer tabs. Absent until whoami has answered.
+   */
+  role?: string;
+}
+
+/** Same codebase, two audiences: the SDK already enforces the grants. */
+export type SessionAudience = "customer" | "staff";
+
+/** The portal role. Every other stored role is staff of some kind (C10.17). */
+export function isStaffRole(role: string | undefined | null): boolean {
+  return Boolean(role && role !== "customer");
+}
+
+export function sessionAudience(session: Pick<Session, "role"> | null | undefined): SessionAudience {
+  return isStaffRole(session?.role) ? "staff" : "customer";
 }
 
 export interface TwoFactorMethods {
@@ -103,6 +123,7 @@ export async function signIn(
   }
   const body = (await response.json()) as {
     token?: string;
+    role?: string;
     twoFactorRequired?: boolean;
     challengeToken?: string;
     methods?: TwoFactorMethods;
@@ -132,6 +153,7 @@ export async function signIn(
       token: body.token,
       email: input.email,
       issuedAt: new Date().toISOString(),
+      role: typeof body.role === "string" && body.role ? body.role : undefined,
     },
   };
 }
@@ -158,9 +180,9 @@ export async function completeTwoFactorSignIn(
   } catch {
     return { ok: false, reason: "unreachable", message: "Could not reach the site." };
   }
-  let body: { token?: string } = {};
+  let body: { token?: string; role?: string } = {};
   try {
-    body = (await response.json()) as { token?: string };
+    body = (await response.json()) as { token?: string; role?: string };
   } catch {
     body = {};
   }
@@ -174,6 +196,7 @@ export async function completeTwoFactorSignIn(
       token: body.token,
       email: input.email,
       issuedAt: new Date().toISOString(),
+      role: typeof body.role === "string" && body.role ? body.role : undefined,
     },
   };
 }
@@ -191,7 +214,7 @@ export async function redeemSignInLink(input: { instanceUrl: string; link: strin
     const response = await fetchImpl(`${input.instanceUrl}/api/v1/auth.consumeCustomerMagicLink`, { method: "POST", credentials: "omit", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) });
     const body = await response.json() as { token?: string };
     if (!response.ok || !body.token) return { ok: false, reason: "invalid", message: "That sign-in link is no longer valid." };
-    return { ok: true, session: { instanceUrl: input.instanceUrl, token: body.token, email: input.email, issuedAt: new Date().toISOString() } };
+    return { ok: true, session: { instanceUrl: input.instanceUrl, token: body.token, email: input.email, issuedAt: new Date().toISOString(), role: "customer" } };
   } catch { return { ok: false, reason: "unreachable", message: "Could not reach the site." }; }
 }
 
@@ -207,6 +230,36 @@ export async function loadSession(store: SecretStore): Promise<Session | null> {
     return parsed.token && parsed.instanceUrl ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Fill in the named role from the live session, not from a guess.
+ *
+ * Password login may already have it. Magic-link and TOTP do not. Companion
+ * mode is gated on this answer, so a stale local role must not outrank whoami.
+ */
+export async function resolveSessionRole(
+  session: Session,
+  fetchImpl: FetchLike,
+): Promise<Session> {
+  try {
+    const response = await fetchImpl(`${session.instanceUrl}/api/v1/auth.whoami`, {
+      method: "POST",
+      credentials: "omit",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: session.token }),
+    });
+    if (!response.ok) return session;
+    const body = (await response.json()) as { role?: string; email?: string };
+    if (typeof body.role !== "string" || !body.role) return session;
+    return {
+      ...session,
+      role: body.role,
+      email: typeof body.email === "string" && body.email ? body.email : session.email,
+    };
+  } catch {
+    return session;
   }
 }
 
