@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 import {
   cacheKey,
+  decodeGalleryImageResponse,
   freshnessLabel,
   noCache,
   PRIVATE_CACHE_LEASE_MS,
@@ -14,7 +15,7 @@ import {
 } from "@freeholder/mobile-app";
 import { privateCaches, privateCacheOwner } from "./cache";
 import { assertOnContract, type Caller, type ScreenData } from "./screen-data";
-import { decodeGalleryImageResponse, fetchBytesWithTimeout } from "./transport";
+import { fetchBytesWithTimeout } from "./transport";
 
 export interface GalleryImage {
   mime: string;

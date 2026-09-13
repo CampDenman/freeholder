@@ -4,11 +4,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
-  cacheKey, discoverWithCache, encryptedCache, noCache, privateCacheScope,
+  cacheKey, decodeGalleryImageResponse, discoverWithCache, encryptedCache, noCache, privateCacheScope,
   readThrough, rememberInstance, revocableCache, serviceResponse, PRIVATE_CACHE_LEASE_MS,
   type CacheStorage, type Instance,
 } from "../../packages/mobile-app/src/index";
-import { decodeGalleryImageResponse } from "../../apps/mobile/src/lib/transport";
 
 function storage(): CacheStorage & { data: Map<string, string> } {
   const data = new Map<string, string>();
