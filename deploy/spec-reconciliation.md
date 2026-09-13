@@ -39,9 +39,9 @@ Anti-roadmap rows are refusals, not leftovers.
 |---|---|---|---|---|
 | 1 | Why Freeholder | Pitch, Apache-2.0, contribute channel, demo fixture. Recipes in `deploy/`. | Built | Struck: `/docs/deploy` path (actual `deploy/`). |
 | 2 | Architectural principles | Single-tenant, monolith, contact spine, invoice convergence, adapters, first-party analytics, service layer, SSR SEO, i18n, one database. | Doctrine + built | None as leftover features. |
-| 3 | Module map | Core + commerce + services + content + growth + platform folders exist as `src/core`, `src/modules/*`, `plugins/*`. Admin shell, CRM, inbox, automations, portal, reporting, API, MCP all present. | Built | Struck: `[v2: auto-clip]` on social. Folder names in the tree are conceptual (catalog owns orders; scheduling owns booking; newsletters owns email-marketing). |
+| 3 | Module map | Core + commerce + services + content + growth + platform folders exist as `src/core`, `src/modules/*`, `plugins/*`. Admin shell, CRM, inbox, automations, portal, reporting, API, MCP all present. | Built | Struck: `[v2: auto-clip]` on social; tax line is the `none` seam, not named vendors. Folder names in the tree are conceptual (catalog owns orders; scheduling owns booking; newsletters owns email-marketing). |
 | 4.1 | Identity & access | `roles`, `role_grants`, `users`, `sessions`, `login_security_events`, `staff_invitations`, `customer_magic_links`, `contacts`, `organizations`, `timeline_events`. `/admin/roles`, `/admin/invitations`, `/security`, `/admin/contacts`. | Built | C1.01–C1.08. |
-| 4.2 | Catalog | Products, variants, options, attributes, media (incl. GLB/glTF/USDZ), relations, bundles, service offerings, price lists/breaks, customer groups, inventory ledger, back-in-stock, suppliers/POs, digital deliveries, rental terms, passes. `/admin/products`, inventory, procurement, price-lists. | Built | **Struck `LicenseKey`:** digital grants are `digital_deliveries` tokens (C5.19), not a license-key table. |
+| 4.2 | Catalog | Products, variants, options, attributes, media (incl. GLB/glTF/USDZ), relations, bundles, service offerings, price lists/breaks, customer groups, inventory ledger, back-in-stock, suppliers/POs, digital deliveries, rental terms, passes. `/admin/products`, inventory, procurement, price-lists. | Built | **Struck `LicenseKey` and `DigitalFulfillment` sibling fields** (`license_template_id`, `watermark_policy`). Grants are `digital_deliveries` tokens (C5.19). |
 | 4.3 | Money | Orders, quotes, contracts, invoices, payments, subscriptions, content unlocks, tips, coupons, gift cards, affiliate program/code/commission. `/admin/orders`, quotes, agreements, invoices, payments, promotions, referrals. | Built | **Struck Stripe Connect as a DONE payout adapter.** C9.10 ships manual/CSV batches. Live hosted settlement remains honesty on C11.05, not a claimed hop. |
 | 4.4 | Time | Calendars, memberships, rules/exceptions, busy blocks, bookings, participants, waitlist, reminders, cancellation policies, audiences. `/admin/calendar(s)`, appointments, waitlist. ICS + Google/Microsoft writeback. | Built | **Struck `BookingSeries`.** Recurring is not a first-class RRULE entity; each occurrence is a `Booking`. ICS import does not expand `RRULE` (`src/core/ics.ts`). |
 | 4.5 | Media & galleries | Assets, capture sessions, galleries, selections, access logs, documents/versions/shares, projects/outcomes/media/collections/testimonials. `/admin/media`, galleries, documents, projects. | Built | C1.12–C1.29, C8.01–C8.08, C8.13. |
@@ -51,8 +51,8 @@ Anti-roadmap rows are refusals, not leftovers.
 | 4.9 | Internationalization | `business_profile` locales/currency/timezone/units; `entity_translations`; en/fr/es catalogs; locale-prefixed public URLs; hreflang/sitemaps. `/admin/translations`. | Built | **Struck `LocaleSetting` / `CurrencySetting` / `FxRate` tables and `adapters/fx`.** Those fields live on `business_profile`. Auto-FX display stays off (§8). Charges never auto-convert. |
 | 4.10 | Locations & NAP | `business_locations`, `opening_hours`, `service_areas`; location pages via CMS. `/admin/locations`. | Built | C2.21 feeds, C9.27 GBP hours. |
 | 4.11 | Shipping | Zones, methods, rate bands, boxes, fulfillments, delivery windows, RMAs. `/admin/shipping`, fulfillment, returns. Carrier family is `adapters/carrier/none`. | Built | Live carrier labels/rates are the seam, not a shipped UPS/ShipStation adapter (C5.18 honesty). |
-| 4.12 | Tax | Categories, zones, rates, registrations, exemptions, tax lines. `/admin/invoices/tax`. `adapters/tax/none` plus built-in templates (CA/EU/UK/US/AU/NZ). | Built | **Struck named Stripe Tax / Avalara / TaxJar implementations as DONE.** The contract is C5.01; the arithmetic is the templates (C5.02–C5.04). |
-| 4.13 | Loyalty & referrals | Programs, accounts, points ledger, tiers, rewards, attribution, invitations, payout batches/lines. `/admin/loyalty`, referrals. | Built | C9.09–C9.12. Provider payout adapter not DONE (see 4.3). |
+| 4.12 | Tax | Categories, zones, rates, registrations, exemptions, tax lines. `/admin/invoices/tax`. `adapters/tax/none` plus built-in templates (CA/EU/UK/US/AU/NZ). | Built | **Struck named Stripe Tax / Avalara / TaxJar implementations as DONE**, including the leftover “replacement family” sentence. The contract is C5.01; the arithmetic is the templates (C5.02–C5.04). |
+| 4.13 | Loyalty & referrals | Programs, accounts, points ledger, tiers, rewards, attribution, invitations, payout batches/lines. `/admin/loyalty`, referrals. | Built | C9.09–C9.12. Payout `method` is manual; `provider` is not a shipped adapter (see 4.3). |
 | 4.14 | Messaging | Conversations, messages, deliveries, numbers, windows, keywords, SMS Twilio, site chat. `/admin/inbox`, messaging. Voice/video is the plugin. | Built | C7.08–C7.15, C3.13 plugin. |
 | 4.15 | Subscriptions & paywalls | Plans, subscriptions, entitlements, grants, pass balances, paywalls, meters, dunning. `/admin/subscriptions`, paywalls. Portal self-service. | Built | **Live Stripe/PayPal settlement remaining honesty (C11.05), not a claimed hop.** |
 | 4.16 | Ads | Sizes, slots, advertisers, campaigns, creatives, stats, ads.txt. `/admin/ads`. | Built | C9.17–C9.20. |
@@ -101,8 +101,8 @@ Anti-roadmap rows are refusals, not leftovers.
 These are removed from §§1–42 so C11.16 is not papering over them:
 
 1. **`BookingSeries`** as a required entity — occurrences are `Booking` rows.
-2. **`LicenseKey`** — digital access is `digital_deliveries`.
-3. **Stripe Connect / payout-provider adapter as DONE** — C9.10 CSV/manual is the shipped path.
+2. **`LicenseKey`** and `DigitalFulfillment` sibling fields (`license_template_id`, `watermark_policy`) — digital access is `digital_deliveries`.
+3. **Stripe Connect / payout-provider adapter as DONE** — C9.10 CSV/manual is the shipped path. `PayoutBatch.method` is `manual`.
 4. **Social auto-clip as a v2 DONE feature** — C9.26 ships reviewed variants; auto-clip is not in the plan.
 5. **Dedicated public `/changelog` route** — `/admin/updates` is the instance log.
 6. **`LocaleSetting` / `CurrencySetting` / `FxRate` tables and `adapters/fx`** — profile columns; no auto-FX.
@@ -110,7 +110,7 @@ These are removed from §§1–42 so C11.16 is not papering over them:
 8. **`/docs/deploy`** — `deploy/`.
 9. **MIT on `create-freeholder`** — Apache-2.0.
 10. **Mercado Pago as in-plan** — not a C-item; C5.07's four adapters shipped.
-11. **Named Stripe Tax / Avalara / TaxJar implementations** — tax `none` + templates.
+11. **Named Stripe Tax / Avalara / TaxJar implementations** — tax `none` + templates. §4.12's leftover “replacement family” sentence, and §3's “Stripe Tax et al” seam label, now match.
 
 ## Remaining affirmative work (open checklist items)
 

@@ -140,7 +140,7 @@ freeholder/
 │   ├── i18n                 # Locales, translations, currency, formats — used by every module
 │   ├── locations            # Business locations, NAP, hours, service areas → LocalBusiness schema
 │   ├── scheduling           # Calendars (person / business / resource), availability engine, ICS, external sync
-│   ├── tax                  # Zones, categories, rates, registrations, exemptions; adapter seam for Stripe Tax et al
+│   ├── tax                  # Zones, categories, rates, registrations, exemptions; adapter seam (`none` + built-in engine)
 │   ├── messaging            # Numbers, two-way SMS/MMS, consent & keywords, quiet hours, delivery receipts
 │   ├── notifications        # In-app + email notification fanout
 │   ├── agents               # Agent connections, workers, tasks, runs, approvals, spend (§40)
@@ -355,7 +355,7 @@ out to mean "in six weeks" is the fastest way to earn a chargeback.
 
 | Entity | Purpose | Key fields |
 |---|---|---|
-| `DigitalFulfillment` | What a digital purchase grants. | variant_id, asset_ids[], download_limit, expires_after_days, license_template_id, watermark_policy |
+| `DigitalDelivery` | What a digital purchase grants. | order_id, order_item_id, token, asset_id, granted_at, downloaded_at |
 | `RentalTerms` | For `rental` products — equipment, venues, gear. | variant_id, unit (hour/day/week), min_units, max_units, buffer_before/after_hours, deposit_cents, damage_policy, replacement_value_cents |
 | `Pass` | Prepaid entitlement: ten classes, five sessions, an annual membership. | product_id, kind (count/period/unlimited), credits, valid_days, applies_to (jsonb: services, categories), transferable |
 | `PassBalance` | What a contact has left. | contact_id, pass_id, invoice_id, credits_remaining, starts_at, expires_at |
@@ -845,10 +845,10 @@ that outgrow it.
   EU (VAT with OSS and reverse charge), the UK, the US (state + local, with
   taxability by category), Australia and New Zealand (GST). Every other country
   is a `TaxZone` an owner can define by hand in five minutes.
-- **The tax adapter family** (Stripe Tax, Avalara, TaxJar) replaces the
-  calculation when a business needs 12,000 US jurisdictions rather than the
-  handful they sell into. The interface is `quote(order) → TaxLine[]`, and the
-  built-in engine is simply the default implementation of it.
+- **The tax adapter family** is the `none` seam plus the built-in engine
+  (`quote(order) → TaxLine[]`). Named vendor calculators are not in this plan;
+  a business that outgrows the templates defines more zones by hand, or a
+  plugin implements the same interface.
 - **Invoices carry what the jurisdiction requires**: sequential numbering that
   cannot gap, the business's registration numbers, the customer's VAT number
   where applicable, the legally required wording per regime, and a stable PDF
@@ -913,7 +913,7 @@ What follows is the machinery that makes attribution defensible.
 |---|---|---|
 | `AttributionTouch` | Every recorded contact with a referral code, first-party. | anon_id, contact_id (once identified), code_id, kind (click/scan/manual), landing_path, referrer_url, utm (jsonb), device_hash, at |
 | `ReferralInvitation` | A named invite, so "invite a friend" is trackable rather than a hope. | referrer_contact_id, program_id, channel (email/sms/link/qr), invitee_email, invitee_phone, sent_at, accepted_at, converted_at, reward_state |
-| `PayoutBatch` / `PayoutLine` | Settling commissions. | batch: period, currency, method (manual/transfer/provider), status (draft/approved/paid), total_cents, paid_at · line: batch_id, affiliate_contact_id, commission_event_ids[], amount_cents, tax_form_state |
+| `PayoutBatch` / `PayoutLine` | Settling commissions. | batch: period, currency, method (manual), status (draft/approved/paid), total_cents, paid_at · line: batch_id, affiliate_contact_id, commission_event_ids[], amount_cents, tax_form_state |
 
 **Rules:**
 
