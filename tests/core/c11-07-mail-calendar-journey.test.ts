@@ -142,6 +142,9 @@ describe.runIf(hasDatabase)("C11.07 mail calendar playbook briefing", { timeout:
       OWNER,
     );
     expect(busy).toHaveLength(1);
+    expect(Object.keys(busy[0]!).sort()).toEqual(["endsAt", "startsAt"]);
+    expect(busy[0]).not.toHaveProperty("title");
+    expect(busy[0]).not.toHaveProperty("name");
 
     await createPlaybook.call(
       {
@@ -167,11 +170,10 @@ describe.runIf(hasDatabase)("C11.07 mail calendar playbook briefing", { timeout:
     expect(tasks[0]?.brief).not.toContain("delete everything");
 
     const assembled = await assembleBriefing.call({ userId: OWNER.userId }, { kind: "system" });
-    expect(["ready", "assembling", "failed"]).toContain(assembled.status);
+    expect(assembled.status).toBe("ready");
     const briefing = await readBriefing.call({}, OWNER);
-    expect(briefing).toBeTruthy();
-    if (briefing?.id) {
-      await markBriefingRead.call({ id: briefing.id }, OWNER);
-    }
+    expect(briefing?.id).toBeTruthy();
+    const marked = await markBriefingRead.call({ id: briefing!.id }, OWNER);
+    expect(marked.readAt).toBeTruthy();
   });
 });

@@ -1,8 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C11.05: subscription → entitlement → server-side access → dunning/renewal →
-// portal cancel → grant expiry. Settlement uses the manual adapter and the
-// dunning sweep — LIVE Stripe/PayPal charges are not claimed here.
+// portal change/cancel → grant expiry. Settlement uses the manual adapter and
+// the dunning sweep — LIVE Stripe/PayPal charges are remaining honesty, not a
+// claimed hop.
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
@@ -23,6 +24,7 @@ import { subscriptions } from "@/modules/subscriptions/schema";
 import {
   advanceDunning,
   cancelMySubscription,
+  changeMyPlan,
   getSubscription,
   renewDue,
   savePlan,
@@ -129,6 +131,8 @@ describe.runIf(hasDatabase)("C11.05 subscription entitlement dunning cancel", { 
     const member = await person("member");
     await db().update(contacts).set({ userId: CUSTOMER.userId }).where(eq(contacts.id, member.id));
     const monthly = await plan({
+      cancelBehaviour: "immediate",
+      proration: "none",
       dunning: {
         retries: [0],
         graceDays: 7,
@@ -136,10 +140,16 @@ describe.runIf(hasDatabase)("C11.05 subscription entitlement dunning cancel", { 
         finalAction: "pause",
       },
     });
+    const yearly = await plan(
+      { name: "Annual membership", interval: "year", proration: "none", cancelBehaviour: "immediate" },
+      20_000,
+    );
     const started = await subscribe.call({ contactId: member.id, planId: monthly.id }, OWNER);
     expect(
       (await hasAccess.call({ resource: { kind: "site" }, contactId: member.id }, OWNER)).allowed,
     ).toBe(true);
+    const changed = await changeMyPlan.call({ id: started.subscription.id, planId: yearly.id }, CUSTOMER);
+    expect(changed.subscriptionId).toBe(started.subscription.id);
 
     await due(started.subscription.id);
     const swept = await renewDue.call({}, { kind: "system" });
@@ -175,6 +185,9 @@ describe.runIf(hasDatabase)("C11.05 subscription entitlement dunning cancel", { 
     expect(cancelled.cancelled).toBe(true);
     expect(cancelled.endsAt).toBeTruthy();
     const after = await getSubscription.call({ id: started.subscription.id }, OWNER);
-    expect(["cancelled", "active", "paused"]).toContain(after.subscription.status);
+    expect(after.subscription.status).toBe("cancelled");
+    expect(
+      (await hasAccess.call({ resource: { kind: "site" }, contactId: member.id }, OWNER)).allowed,
+    ).toBe(false);
   });
 });
