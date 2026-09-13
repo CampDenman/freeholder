@@ -135,9 +135,10 @@ staff account. Approvals, agent status and camera/roll/screen/share ingest are
 stack screens from Today. Ingest uses `media.createCaptureSession` /
 `createUploadLink`, `media.beginUpload`, `POST /api/media` and
 `media.confirmCapture` — the website's capture pipeline, not a mobile upload
-API. Uploads require a live connection; offline batches are C10.18. Physical
-camera, share-target and accessibility checks remain outstanding, so C10.17
-stays open.
+API. Offline batches (C10.18) stay on the phone with recorded consent, destination,
+progress, pause/resume/cancel and retry, then flush through that same pipeline
+once online. Physical camera, share-target, background-upload and accessibility
+checks remain outstanding, so C10.17 and C10.18 stay open.
 
 ## Rules the code keeps
 
