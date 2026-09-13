@@ -33,10 +33,14 @@ export class InitError extends Error {
 export type FetchLike = (url: string) => Promise<{
   ok: boolean;
   status: number;
+  url?: string;
   headers: { get(name: string): string | null };
   json: () => Promise<unknown>;
   arrayBuffer: () => Promise<ArrayBufferLike>;
 }>;
+
+/** Logos are marks, not galleries. A 1 MiB cap is well above any PNG icon. */
+export const MAX_LOGO_BYTES = 1_048_576;
 
 export interface InitOptions {
   url: string;
@@ -82,46 +86,96 @@ async function readJson(path: string): Promise<Json | null> {
   }
 }
 
-export async function pullBranding(url: string, fetchImpl: FetchLike): Promise<{ brand: Branding; logo: Uint8Array | null }> {
-  const origin = normalizeUrl(url);
-  let payload: unknown;
-  let status: number;
+export function logoFetchUrl(raw: string, instanceOrigin: string): URL | null {
+  let parsed: URL;
   try {
-    const response = await fetchImpl(`${origin}/.well-known/freeholder`);
-    status = response.status;
-    payload = await response.json();
+    parsed = new URL(raw, `${instanceOrigin}/`);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol === "http:" && !isLoopback(parsed.hostname)) return null;
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  if (parsed.origin !== instanceOrigin) return null;
+  return parsed;
+}
+
+async function readLogo(
+  raw: string,
+  instanceOrigin: string,
+  fetchImpl: FetchLike,
+): Promise<{ bytes: Uint8Array | null; note: string | null }> {
+  const allowed = logoFetchUrl(raw, instanceOrigin);
+  if (!allowed) {
+    return { bytes: null, note: "Logo URL is not on the instance origin; icons use the brand colours." };
+  }
+  let response: Awaited<ReturnType<FetchLike>>;
+  try {
+    response = await fetchImpl(allowed.toString());
+  } catch {
+    return { bytes: null, note: "The logo URL in discovery could not be fetched; icons use the brand colours." };
+  }
+  if (response.url) {
+    const landed = logoFetchUrl(response.url, instanceOrigin);
+    if (!landed) {
+      return { bytes: null, note: "Logo URL redirected off the instance origin; icons use the brand colours." };
+    }
+  }
+  if (!response.ok) {
+    return { bytes: null, note: "The logo URL in discovery could not be fetched; icons use the brand colours." };
+  }
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_LOGO_BYTES) {
+    return { bytes: null, note: "Logo is larger than 1 MiB; icons use the brand colours." };
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > MAX_LOGO_BYTES) {
+    return { bytes: null, note: "Logo is larger than 1 MiB; icons use the brand colours." };
+  }
+  return { bytes, note: null };
+}
+
+export async function pullBranding(
+  url: string,
+  fetchImpl: FetchLike,
+): Promise<{ brand: Branding; logo: Uint8Array | null; notes: string[] }> {
+  const origin = normalizeUrl(url);
+  let response: Awaited<ReturnType<FetchLike>>;
+  try {
+    response = await fetchImpl(`${origin}/.well-known/freeholder`);
   } catch {
     throw new InitError(`Could not reach ${origin}.`, EXIT.unreachable);
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new InitError("That address does not look like a Freeholder site.", EXIT.refused);
   }
   const document = payload as Record<string, unknown>;
   if (document?.freeholder !== true) {
     throw new InitError("That address does not look like a Freeholder site.", EXIT.refused);
   }
-  if (status === 503 || document.setupComplete === false) {
+  if (response.status === 503 || document.setupComplete === false) {
     throw new InitError("This site is not finished being set up yet. Finish setup, then re-run init.", EXIT.refused);
   }
   if (typeof document.contractVersion !== "number") {
     throw new InitError("That address does not look like a Freeholder site.", EXIT.refused);
   }
   const brand = brandingFrom(origin, document);
+  const notes: string[] = [];
   let logo: Uint8Array | null = null;
   if (brand.logoUrl) {
-    try {
-      const response = await fetchImpl(brand.logoUrl);
-      if (response.ok) logo = new Uint8Array(await response.arrayBuffer());
-    } catch {
-      logo = null;
-    }
+    const fetched = await readLogo(brand.logoUrl, origin, fetchImpl);
+    logo = fetched.bytes;
+    if (fetched.note) notes.push(fetched.note);
   }
-  return { brand, logo };
+  return { brand, logo, notes };
 }
 
 export async function initApp(options: InitOptions, fetchImpl: FetchLike): Promise<InitResult> {
-  const { brand, logo } = await pullBranding(options.url, fetchImpl);
+  const { brand, logo, notes } = await pullBranding(options.url, fetchImpl);
   const generated = generateAssets(brand, logo);
-  if (brand.logoUrl && !logo) {
-    generated.notes.push("The logo URL in discovery could not be fetched; icons use the brand colours.");
-  }
+  generated.notes.push(...notes);
 
   const appPath = join(options.dir, "app.json");
   const easPath = join(options.dir, "eas.json");

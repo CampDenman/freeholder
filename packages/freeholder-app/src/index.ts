@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXIT, InitError, initApp, printResult, type FetchLike } from "./init.js";
 
-export { EXIT, InitError, initApp, pullBranding } from "./init.js";
+export { EXIT, InitError, initApp, logoFetchUrl, MAX_LOGO_BYTES, pullBranding } from "./init.js";
 export { parseHex, brandingFrom, storeCopy } from "./branding.js";
 export { brandedExpoConfig, bundleId, diffJson, expoSlug, formatDiff, mergeEasConfig } from "./config.js";
 export { ICON_SIZE, SCREENSHOT, SPLASH, generateAssets } from "./assets.js";
@@ -60,12 +60,14 @@ export function parseArgs(argv: readonly string[], cwd = process.cwd()): {
   const looksLikeUrl = Boolean(first && (first.includes(".") || first.includes("://") || first === "localhost"));
   const command = first === "help" ? "help" : first && first !== "init" && !looksLikeUrl ? first : "init";
   const positionalUrl = first === "init" ? walked[1] : looksLikeUrl ? first : undefined;
+  // An explicit `--url` with no value is empty, not a fall-through to env —
+  // otherwise CI with FREEHOLDER_URL set would make `--url --json` look like
+  // a parsed address.
+  const urlFlag = argv.includes("--url") ? (flagValue(argv, "url") ?? "") : undefined;
   return {
     command,
     options: {
-      url: stripTrailingSlashes(
-        flagValue(argv, "url", positionalUrl ?? process.env.FREEHOLDER_URL) ?? "",
-      ),
+      url: stripTrailingSlashes(urlFlag ?? positionalUrl ?? process.env.FREEHOLDER_URL ?? ""),
       dir: flagValue(argv, "dir", defaultAppDir(cwd)) ?? defaultAppDir(cwd),
       json: argv.includes("--json"),
       help: argv.includes("--help") || argv.includes("-h"),
@@ -97,6 +99,7 @@ const defaultFetch: FetchLike = async (url) => {
   return {
     ok: response.ok,
     status: response.status,
+    url: response.url,
     headers: response.headers,
     json: () => response.json(),
     arrayBuffer: () => response.arrayBuffer(),

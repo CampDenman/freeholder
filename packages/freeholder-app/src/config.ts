@@ -53,7 +53,10 @@ export function brandedExpoConfig(existing: Json, brand: Branding): Json {
   const adaptive = isObject(android.adaptiveIcon) ? { ...android.adaptiveIcon } : {};
 
   expo.name = brand.name;
-  expo.slug = expoSlug(brand.name);
+  // Slug and store ids identify a listing. Filling them in on first run is
+  // the point; overwriting them on a re-run is how an already-submitted app
+  // desyncs from the store.
+  if (typeof expo.slug !== "string" || !expo.slug) expo.slug = expoSlug(brand.name);
   expo.icon = "./assets/icon.png";
   expo.userInterfaceStyle = expo.userInterfaceStyle ?? "automatic";
   expo.orientation = expo.orientation ?? "portrait";
@@ -63,9 +66,13 @@ export function brandedExpoConfig(existing: Json, brand: Branding): Json {
   splash.backgroundColor = brand.colors.surface;
   expo.splash = splash;
   ios.supportsTablet = ios.supportsTablet ?? true;
-  ios.bundleIdentifier = bundleId(brand.name);
+  if (typeof ios.bundleIdentifier !== "string" || !ios.bundleIdentifier) {
+    ios.bundleIdentifier = bundleId(brand.name);
+  }
   expo.ios = ios;
-  android.package = bundleId(brand.name);
+  if (typeof android.package !== "string" || !android.package) {
+    android.package = bundleId(brand.name);
+  }
   adaptive.foregroundImage = "./assets/adaptive-icon.png";
   adaptive.backgroundColor = brand.colors.surface;
   android.adaptiveIcon = adaptive;

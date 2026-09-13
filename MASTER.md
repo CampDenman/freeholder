@@ -2273,7 +2273,7 @@ Sharing isn't a buttons plugin; it's a property of every entity with a public fa
 `packages/mobile-app` (Apache-2.0, like the rest of the project — an earlier draft of this line said MIT, which contradicted C0.10, `LICENSING.md` and the licence gate that requires one identifier across every package): a **white-label Expo/React Native app** for the business's *customers*, driven entirely by the instance's generated SDK and live contract (§28) — permanently in sync with the platform by construction.
 
 - **In the box v1:** branded home (colors/logo/fonts pulled from instance settings), browse services & products, book with push-notification reminders, view/pay invoices, client galleries (the killer feature — proofing and favoriting from a phone is where clients actually live), portal messages, newsletter content, push notifications for the moments that matter (booking confirmed, gallery ready, invoice due, back-in-stock).
-- **Always submission-ready:** `npx freeholder-app init` reads the instance URL → pulls branding, generates icons/splash from the logo, writes store metadata (descriptions from the business profile, screenshots auto-captured from seeded content) → `eas build` produces store-submittable binaries. The CI matrix builds the app against the demo instance on every release, so "ready for submission" is a tested property, not a promise. Store-listing checklists (Apple review quirks, Play data-safety forms) ship as docs with the honest caveat that review outcomes are the stores' call.
+- **Always submission-ready:** `npx freeholder-app init` (C10.15) reads the instance URL, pulls branding, generates icons and splash from the logo, and writes store metadata from the business profile. Screenshots are branded placeholders when a running demo is not there to capture; capturing from seeded content is better, not required for the command to exist. `eas build` (C10.16) produces store-submittable binaries and owns the Apple/Google checklists. The CI matrix builds the app against the demo instance on every release, so "ready for submission" is a tested property, not a promise. Store-listing checklists (Apple review quirks, Play data-safety forms) ship as docs with the honest caveat that review outcomes are the stores' call.
 - **Owner companion (v2):** same codebase, admin mode — today's-bookings glance, tap-to-invoice, respond to messages, approve reviews. One app, role-gated, since the SDK already enforces permissions.
 
 ### 35.1 What the app is allowed to be
@@ -8314,20 +8314,25 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   icons/splash/store metadata/screenshots and emit an auditable config diff.
   *(`packages/freeholder-app`, published as `freeholder-app` so
   `npx freeholder-app init <url>` works. Public client of
-  `/.well-known/freeholder` — no API key, no EAS login. Icons and splash
-  composite a PNG logo onto the brand surface, or a mark in the accent when
-  the logo is missing or not rasterisable; store copy is the business name and
-  tagline within Apple/Google field limits; screenshots are branded
-  placeholders so the command does not depend on a running demo. The printed
-  diff is field-level on `app.json` and `eas.json`; existing EAS credentials
-  are filled around, never overwritten. **F01** no schema. **F02** N/A — reads
-  the public discovery document. **F03** N/A. **F04** the command itself plus
-  `packages/freeholder-app/README.md`. **F05** N/A — operational CLI, not an
-  agent tool; discovery is already public. **F06** N/A — operational copy in
-  English, like `freeholder update`. **F07** https except loopback;
-  discovery only; no store secrets required or written. **F08**
-  `tests/core/freeholder-app-init.test.ts` with injected fetch. **F09** SPDX;
-  built, linted and artifact-gated with the other packages. **F10**
+  `/.well-known/freeholder` — no API key, no EAS login. Discovery publishes
+  `media.resolveImage`'s src rewritten onto the instance `/media/{key}`
+  route (`src/core/discovery.ts` `instanceLogoUrl`), never the document-only
+  `/media/download/{id}` path. Icons and splash composite that PNG onto the
+  brand surface, or a mark in the accent when the logo is missing or not
+  rasterisable; store copy is the business name and tagline within
+  Apple/Google field limits; screenshots are branded placeholders so the
+  command does not depend on a running demo. The printed diff is field-level
+  on `app.json` and `eas.json`; existing EAS credentials, Expo slug and
+  iOS/Android package ids are filled around, never overwritten. **F01** no
+  schema. **F02** N/A — reads the public discovery document. **F03** N/A.
+  **F04** the command itself plus `packages/freeholder-app/README.md`.
+  **F05** N/A — operational CLI, not an agent tool; discovery is already
+  public. **F06** N/A — operational copy in English, like `freeholder
+  update`. **F07** https except loopback; logo GET is same-origin and
+  1 MiB-capped; no store secrets required or written. **F08**
+  `tests/core/freeholder-app-init.test.ts` with injected fetch (logo pixels,
+  Bench tokens, env, non-JSON exit 2). **F09** SPDX; built, linted and
+  artifact-gated with the other packages. **F10**
   `packages/freeholder-app/README.md`, `apps/mobile/README.md`. **F11**
   changeset `freeholder-app-init.md`. **F12** packed `freeholder-app init`
   against an unreachable URL exits 3. Store binaries and review checklists

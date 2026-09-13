@@ -9,12 +9,16 @@ import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import {
   EXIT,
+  InitError,
+  MAX_LOGO_BYTES,
   brandedExpoConfig,
+  brandingFrom,
   bundleId,
   decodePng,
   encodePng,
   expoSlug,
   initApp,
+  logoFetchUrl,
   parseArgs,
   pngSize,
   run,
@@ -23,6 +27,8 @@ import {
   SCREENSHOT,
   SPLASH,
 } from "../../packages/freeholder-app/src/index";
+import { instanceLogoUrl } from "@/core/discovery";
+import { colors as bench } from "@/core/design/tokens";
 
 const dirs: string[] = [];
 
@@ -48,7 +54,7 @@ function document(overrides: Record<string, unknown> = {}) {
     timezone: "America/Vancouver",
     country: "CA",
     branding: {
-      logoUrl: "https://aurora.example/media/download/logo",
+      logoUrl: "https://aurora.example/media/2026/09/logo.png",
       colors: {
         light: {
           surface: "#fafaf8",
@@ -64,7 +70,19 @@ function document(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function fetching(map: Record<string, { status?: number; json?: unknown; body?: Uint8Array }>) {
+function fetching(
+  map: Record<
+    string,
+    {
+      status?: number;
+      json?: unknown;
+      body?: Uint8Array;
+      headers?: Record<string, string>;
+      jsonError?: boolean;
+      onArrayBuffer?: () => void;
+    }
+  >,
+) {
   return async (url: string) => {
     const hit = map[url];
     if (!hit) throw new Error(`unexpected fetch ${url}`);
@@ -72,9 +90,18 @@ function fetching(map: Record<string, { status?: number; json?: unknown; body?: 
     return {
       ok: (hit.status ?? 200) < 400,
       status: hit.status ?? 200,
-      headers: { get: () => null },
-      json: async () => hit.json,
-      arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+      url,
+      headers: {
+        get: (name: string) => hit.headers?.[name.toLowerCase()] ?? null,
+      },
+      json: async () => {
+        if (hit.jsonError) throw new SyntaxError("not json");
+        return hit.json;
+      },
+      arrayBuffer: async () => {
+        hit.onArrayBuffer?.();
+        return body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength);
+      },
     };
   };
 }
@@ -92,6 +119,15 @@ describe("freeholder-app init (C10.15)", () => {
       );
       expect(parseArgs(["https://aurora.example"]).command).toBe("init");
       expect(parseArgs(["https://aurora.example"]).options.url).toBe("https://aurora.example");
+      const previous = process.env.FREEHOLDER_URL;
+      process.env.FREEHOLDER_URL = "https://from-env.example";
+      try {
+        expect(parseArgs(["init"]).options.url).toBe("https://from-env.example");
+        expect(parseArgs(["init", "--url", "--json"]).options.url).toBe("");
+      } finally {
+        if (previous === undefined) delete process.env.FREEHOLDER_URL;
+        else process.env.FREEHOLDER_URL = previous;
+      }
     });
 
     it("does not swallow the next flag as a missing value", () => {
@@ -112,7 +148,7 @@ describe("freeholder-app init (C10.15)", () => {
       { url: "https://aurora.example", dir, json: false },
       fetching({
         "https://aurora.example/.well-known/freeholder": { json: document() },
-        "https://aurora.example/media/download/logo": { body: logo },
+        "https://aurora.example/media/2026/09/logo.png": { body: logo },
       }),
     );
 
@@ -138,10 +174,14 @@ describe("freeholder-app init (C10.15)", () => {
       ]),
     );
     expect(result.diff.find((file) => file.file === "eas.json")?.created).toBe(true);
-    expect(result.notes.join(" ")).toMatch(/logo/i);
+    expect(result.notes.join(" ")).toMatch(/composite the instance logo/i);
 
-    const icon = pngSize(await readFile(join(dir, "assets/icon.png")));
+    const iconBytes = await readFile(join(dir, "assets/icon.png"));
+    const icon = pngSize(iconBytes);
     expect(icon).toEqual({ width: ICON_SIZE, height: ICON_SIZE });
+    const pixels = decodePng(iconBytes);
+    const center = ((ICON_SIZE / 2) * ICON_SIZE + ICON_SIZE / 2) * 4;
+    expect([...pixels!.rgba.slice(center, center + 3)]).toEqual([0, 128, 64]);
     const splash = pngSize(await readFile(join(dir, "assets/splash.png")));
     expect(splash).toEqual({ width: SPLASH.width, height: SPLASH.height });
     const shot = pngSize(await readFile(join(dir, "store/screenshots/01-home.png")));
@@ -172,11 +212,11 @@ describe("freeholder-app init (C10.15)", () => {
       { url: "https://aurora.example", dir, json: false },
       fetching({
         "https://aurora.example/.well-known/freeholder": { json: document() },
-        "https://aurora.example/media/download/logo": { body: new Uint8Array([0xff, 0xd8, 0xff]) },
+        "https://aurora.example/media/2026/09/logo.png": { body: new Uint8Array([0xff, 0xd8, 0xff]) },
       }),
     );
     expect(result.notes.join(" ")).toMatch(/not a PNG/i);
-    expect(result.filesWritten).toContain("assets/logo-source.bin");
+    expect(result.filesWritten).not.toContain("assets/logo-source.bin");
     expect(pngSize(await readFile(join(dir, "assets/icon.png")))).toEqual({
       width: ICON_SIZE,
       height: ICON_SIZE,
@@ -225,17 +265,21 @@ describe("freeholder-app init (C10.15)", () => {
 
   it("refuses an unfinished or non-Freeholder address without writing", async () => {
     const dir = await scratch();
-    await expect(
-      initApp(
-        { url: "https://aurora.example", dir, json: false },
-        fetching({
-          "https://aurora.example/.well-known/freeholder": {
-            status: 503,
-            json: { freeholder: true, setupComplete: false },
-          },
-        }),
-      ),
-    ).rejects.toMatchObject({ code: EXIT.refused, message: expect.stringMatching(/not finished/i) });
+    const unfinished = await initApp(
+      { url: "https://aurora.example", dir, json: false },
+      fetching({
+        "https://aurora.example/.well-known/freeholder": {
+          status: 503,
+          json: { freeholder: true, setupComplete: false },
+        },
+      }),
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(unfinished).toBeInstanceOf(InitError);
+    expect((unfinished as InitError).code).toBe(EXIT.refused);
+    expect((unfinished as InitError).message).toMatch(/not finished/i);
 
     const logs: string[] = [];
     const code = await run(
@@ -315,6 +359,97 @@ describe("freeholder-app init (C10.15)", () => {
     expect(decoded?.width).toBe(4);
     expect(decoded?.height).toBe(2);
     expect([...decoded!.rgba.slice(0, 4)]).toEqual([0, 0, 30, 255]);
+  });
+
+  it("preserves existing store identity on a re-run", () => {
+    const next = brandedExpoConfig(
+      {
+        expo: {
+          slug: "already-listed",
+          ios: { bundleIdentifier: "com.studio.listed" },
+          android: { package: "com.studio.listed" },
+          scheme: "freeholder",
+        },
+      },
+      {
+        url: "https://aurora.example",
+        name: "Aurora Coast Photography",
+        tagline: null,
+        colors: { surface: "#ffffff", ink: "#000000", accent: "#2551e0", onAccent: "#ffffff" },
+        rgb: { surface: [255, 255, 255], ink: [0, 0, 0], accent: [37, 81, 224], onAccent: [255, 255, 255] },
+        logoUrl: null,
+        locales: { default: "en", enabled: ["en"] },
+        country: "CA",
+      },
+    ) as {
+      expo: { slug: string; ios: { bundleIdentifier: string }; android: { package: string }; name: string };
+    };
+    expect(next.expo.name).toBe("Aurora Coast Photography");
+    expect(next.expo.slug).toBe("already-listed");
+    expect(next.expo.ios.bundleIdentifier).toBe("com.studio.listed");
+    expect(next.expo.android.package).toBe("com.studio.listed");
+  });
+
+  it("reads Bench's nested light/dark theme the way discovery actually ships it", () => {
+    const brand = brandingFrom("https://aurora.example", {
+      name: "Aurora Coast",
+      branding: { colors: bench, logoUrl: null },
+    });
+    expect(brand.colors.accent).toBe(bench.light.accent);
+    expect(brand.colors.surface).toBe(bench.light.surface);
+    expect(brand.colors.ink).toBe(bench.light.ink);
+  });
+
+  it("treats reachable non-JSON as not a Freeholder site, not unreachable", async () => {
+    const dir = await scratch();
+    const code = await run(
+      ["init", "--url", "https://html.example", "--dir", dir],
+      { log: () => undefined, error: () => undefined },
+      fetching({
+        "https://html.example/.well-known/freeholder": { status: 200, jsonError: true },
+      }),
+    );
+    expect(code).toBe(EXIT.refused);
+  });
+
+  it("does not fetch a logo off the instance origin or past the size cap", async () => {
+    expect(logoFetchUrl("https://evil.example/logo.png", "https://aurora.example")).toBeNull();
+    expect(logoFetchUrl("https://aurora.example/media/2026/09/logo.png", "https://aurora.example")?.toString()).toBe(
+      "https://aurora.example/media/2026/09/logo.png",
+    );
+
+    const dir = await scratch();
+    let buffered = false;
+    const result = await initApp(
+      { url: "https://aurora.example", dir, json: false },
+      fetching({
+        "https://aurora.example/.well-known/freeholder": {
+          json: document({
+            branding: { logoUrl: "https://aurora.example/media/huge.png", colors: { accent: "#2551e0" } },
+          }),
+        },
+        "https://aurora.example/media/huge.png": {
+          headers: { "content-length": String(MAX_LOGO_BYTES + 1) },
+          body: new Uint8Array([1, 2, 3]),
+          onArrayBuffer: () => {
+            buffered = true;
+          },
+        },
+      }),
+    );
+    expect(buffered).toBe(false);
+    expect(result.notes.join(" ")).toMatch(/1 MiB/i);
+  });
+
+  it("rewrites adapter image URLs onto the instance media route", () => {
+    expect(instanceLogoUrl("https://aurora.example", "/media/2026/09/logo.png")).toBe(
+      "https://aurora.example/media/2026/09/logo.png",
+    );
+    expect(instanceLogoUrl("https://aurora.example", "https://cdn.example/2026/09/logo.png")).toBe(
+      "https://aurora.example/media/2026/09/logo.png",
+    );
+    expect(instanceLogoUrl("https://aurora.example", "/media/download/not-an-image")).toBeNull();
+    expect(instanceLogoUrl("https://aurora.example", "/elsewhere/logo.png")).toBeNull();
   });
 
   it("preserves the existing Expo scheme so deep links keep working", () => {

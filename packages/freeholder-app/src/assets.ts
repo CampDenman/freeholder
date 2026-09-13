@@ -24,7 +24,7 @@ export function generateAssets(brand: Branding, logoBytes: Uint8Array | null): G
   const notes: string[] = [];
   const logo = logoBytes ? decodePng(logoBytes) : null;
   if (logoBytes && !logo) {
-    notes.push("Logo was not a PNG this command can rasterise; icons use the brand colours instead. The original bytes are saved as assets/logo-source.bin.");
+    notes.push("Logo was not a PNG this command can rasterise; icons use the brand colours instead.");
   } else if (logo) {
     notes.push("Icons and splash composite the instance logo onto the brand surface.");
   } else {
@@ -43,7 +43,6 @@ export function generateAssets(brand: Branding, logoBytes: Uint8Array | null): G
     "assets/adaptive-icon.png": encodeRgba(ICON_SIZE, ICON_SIZE, adaptive),
     "assets/splash.png": encodeRgba(SPLASH.width, SPLASH.height, splash),
   };
-  if (logoBytes && !logo) files["assets/logo-source.bin"] = Buffer.from(logoBytes);
 
   const copy = storeCopy(brand);
   SCREEN_LABELS.forEach((label, index) => {
