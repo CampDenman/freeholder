@@ -17,11 +17,16 @@
 // `contact_id`, resolved through the spine like everything else, and
 // `clientDisplayName` is what to *call* them publicly rather than who they are.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { pages } from "@/modules/cms/schema";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { isUniqueViolation } from "@/core/db";
@@ -947,6 +952,41 @@ registerContactPrivacySource({
       .delete(projectTestimonials)
       .where(eq(projectTestimonials.contactId, contactId));
     return { affected: rows.length };
+  },
+});
+
+registerSearchSource({
+  kind: "project",
+  module: "projects",
+  tables: ["projects"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: projects.id,
+        title: projects.title,
+        slug: projects.slug,
+        summary: projects.summary,
+        contactId: projects.contactId,
+      })
+      .from(projects)
+      .where(
+        or(
+          matchesIlike(projects.title, pattern),
+          matchesIlike(projects.slug, pattern),
+          matchesIlike(projects.summary, pattern),
+        ),
+      )
+      .orderBy(desc(projects.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "project",
+      id: row.id,
+      title: row.title,
+      href: `/admin/projects/${row.id}`,
+      snippet: clipSnippet(row.summary ?? row.slug),
+      contactId: row.contactId,
+      module: "projects",
+    }));
   },
 });
 

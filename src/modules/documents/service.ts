@@ -18,11 +18,16 @@
 //   download limit or the password stopped somebody; the visitor learns only
 //   that it did not open.
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { hashPassword, verifyPassword } from "@/core/auth/passwords";
 import { assets } from "@/core/media/schema";
 import { users } from "@/core/auth/schema";
@@ -809,6 +814,36 @@ registerContactPrivacySource({
       .where(eq(documents.contactId, contactId))
       .returning({ id: documents.id });
     return { affected: unshared.length + seen.length + owned.length };
+  },
+});
+
+registerSearchSource({
+  kind: "document",
+  module: "documents",
+  tables: ["documents"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: documents.id,
+        title: documents.title,
+        description: documents.description,
+        contactId: documents.contactId,
+      })
+      .from(documents)
+      .where(
+        or(matchesIlike(documents.title, pattern), matchesIlike(documents.description, pattern)),
+      )
+      .orderBy(desc(documents.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "document",
+      id: row.id,
+      title: row.title,
+      href: `/admin/documents/${row.id}`,
+      snippet: clipSnippet(row.description),
+      contactId: row.contactId,
+      module: "documents",
+    }));
   },
 });
 

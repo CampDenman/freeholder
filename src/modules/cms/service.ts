@@ -7,9 +7,14 @@
 // safe: an agent rearranging a page goes through the same validation,
 // permission check, audit row and revision history a human does.
 import { z } from "zod";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { isUniqueViolation } from "@/core/db";
 import { businessProfile } from "@/core/settings/schema";
 import { getTranslation, translatedIds } from "@/core/i18n/service";
@@ -1460,6 +1465,40 @@ export {
 export async function onSetupCompleted(): Promise<void> {
   await ensureDefaults.call({}, { kind: "system" });
 }
+
+registerSearchSource({
+  kind: "page",
+  module: "cms",
+  tables: ["pages"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: pages.id,
+        title: pages.title,
+        slug: pages.slug,
+        workingTitle: pages.workingTitle,
+      })
+      .from(pages)
+      .where(
+        or(
+          matchesIlike(pages.title, pattern),
+          matchesIlike(pages.slug, pattern),
+          matchesIlike(pages.workingTitle, pattern),
+        ),
+      )
+      .orderBy(desc(pages.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "page",
+      id: row.id,
+      title: row.workingTitle?.trim() || row.title,
+      href: `/admin/pages/${row.id}`,
+      snippet: clipSnippet(row.slug || row.title),
+      contactId: null,
+      module: "cms",
+    }));
+  },
+});
 
 export default [
   resolvePage,

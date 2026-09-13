@@ -16,6 +16,11 @@ import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { sendMail } from "@/core/mail/service";
 import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
@@ -2791,6 +2796,34 @@ registerContactPrivacySource({
       .set({ submittedByContactId: null })
       .where(eq(galleryRounds.submittedByContactId, contactId));
     return { affected: owned.length };
+  },
+});
+
+registerSearchSource({
+  kind: "gallery",
+  module: "galleries",
+  tables: ["galleries"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: galleries.id,
+        title: galleries.title,
+        slug: galleries.slug,
+        contactId: galleries.contactId,
+      })
+      .from(galleries)
+      .where(or(matchesIlike(galleries.title, pattern), matchesIlike(galleries.slug, pattern)))
+      .orderBy(desc(galleries.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "gallery",
+      id: row.id,
+      title: row.title,
+      href: `/admin/galleries/${row.id}`,
+      snippet: clipSnippet(row.slug),
+      contactId: row.contactId,
+      module: "galleries",
+    }));
   },
 });
 

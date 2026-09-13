@@ -1129,6 +1129,7 @@ export const SERVICE_NAMES = [
   "scoring.rules",
   "scoring.saveRule",
   "scoring.why",
+  "search.query",
   "seed.installPreset",
   "segments.capture",
   "segments.contains",
@@ -5772,6 +5773,10 @@ export interface ServiceCatalog {
     input: { contactId: string; limit?: number };
     output: { score: number; awards: { id: string; ruleName: string; eventName: string; points: number; remaining: number; decayDays: number; daysLeft: number | null; occurredAt: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
+  "search.query": {
+    input: { q: string; kinds?: string[]; limit?: number };
+    output: { kind: string; id: string; title: string; href: string; snippet: string | null; contactId: string | null; module: string; [key: string]: unknown }[];
+  };
   "seed.installPreset": {
     input: { preset: "creator" | "service-business" | "shop"; locale?: string };
     output: { preset: "creator" | "service-business" | "shop"; pages: string[]; entities: string[]; emails: string[]; tokensApplied: boolean };
@@ -7593,6 +7598,9 @@ export interface FreeholderApi {
     rules: (input?: ServiceCatalog["scoring.rules"]["input"]) => Promise<ServiceCatalog["scoring.rules"]["output"]>;
     saveRule: (input: ServiceCatalog["scoring.saveRule"]["input"]) => Promise<ServiceCatalog["scoring.saveRule"]["output"]>;
     why: (input: ServiceCatalog["scoring.why"]["input"]) => Promise<ServiceCatalog["scoring.why"]["output"]>;
+  };
+  search: {
+    query: (input: ServiceCatalog["search.query"]["input"]) => Promise<ServiceCatalog["search.query"]["output"]>;
   };
   seed: {
     installPreset: (input: ServiceCatalog["seed.installPreset"]["input"]) => Promise<ServiceCatalog["seed.installPreset"]["output"]>;
