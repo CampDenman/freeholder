@@ -37,7 +37,7 @@ describe("the C1.14 migration artifact", () => {
     expect(migration).toContain('CREATE UNIQUE INDEX "mail_provider_events_external_idx"');
   });
 
-  it("is additive and readable by the previous release", () => {
+  it("lives in the reviewed baseline", () => {
     expect(reviewMigration(MIGRATION, migration)).toMatchObject({
       ok: true,
       acknowledged: true,

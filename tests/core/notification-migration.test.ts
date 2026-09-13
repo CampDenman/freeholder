@@ -36,7 +36,7 @@ describe("the C1.15 migration artifacts", () => {
     expect(all).toContain('CREATE INDEX "notifications_escalation_idx"');
   });
 
-  it("is additive and readable by the previous release", () => {
+  it("lives in the reviewed baseline", () => {
     for (const [path, migration] of migrations) {
       expect(reviewMigration(path, migration)).toMatchObject({
         ok: true,

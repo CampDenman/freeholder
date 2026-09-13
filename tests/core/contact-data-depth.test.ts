@@ -413,7 +413,7 @@ describe.runIf(hasDatabase)("contact relationships", () => {
 });
 
 describe("the contact-data-depth migration", () => {
-  it("is additive and indexes every new query path", () => {
+  it("indexes every query path in the reviewed baseline", () => {
     const migration = readFileSync("db/migrations/0000_reviewed-baseline.sql", "utf8");
     expect(migration).toContain('CREATE TABLE "contact_relationships"');
     expect(migration).toContain('CREATE TABLE "custom_field_definitions"');

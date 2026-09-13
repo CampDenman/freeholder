@@ -340,7 +340,7 @@ describe.runIf(hasDatabase)("contact duplicate review", () => {
 });
 
 describe("the duplicate-review migration", () => {
-  it("is additive and indexes queue, foreign-key, and blocking paths", () => {
+  it("indexes queue, foreign-key, and blocking paths in the reviewed baseline", () => {
     const migration = readFileSync(
       "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
