@@ -48,7 +48,6 @@ import {
 } from "@/modules/invoicing/invoice-service";
 import { processPaymentProviderEvents } from "@/modules/invoicing/payment-provider-service";
 import { GET as liveHealth } from "../../app/api/health/live/route";
-import { GET as readyHealth } from "../../app/api/health/route";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const invoice = {
@@ -200,10 +199,11 @@ describe("C11.13 adapter, clock, disk and process drills", () => {
   });
 
   it("keeps liveness green without touching the database", async () => {
+    // Readiness turning 503 while Postgres is down is the image-gate contract,
+    // not this string inspection. Liveness must stay process-only.
     const live = liveHealth();
     expect(live.status).toBe(200);
     expect(await live.json()).toMatchObject({ ok: true });
-    expect(readyHealth.toString()).toContain("503");
   });
 
   it("drains once on process death and does not restart the drain", async () => {
