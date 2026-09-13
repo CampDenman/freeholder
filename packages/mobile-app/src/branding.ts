@@ -32,16 +32,32 @@ export interface Brand {
   branded: boolean;
 }
 
-/** Neutral, legible on both grounds, and obviously not anybody's brand. */
-const NEUTRAL: Brand["colors"] = {
+/**
+ * Unbranded fallback, copied from the platform light tokens so the package
+ * never invents a palette. Contrast is proven in tests/core/colour-literals.test.ts.
+ */
+export const FALLBACK_COLORS: Brand["colors"] = {
   surface: "#ffffff",
   ink: "#23262a",
   inkMuted: "#5a5f66",
   accent: "#2551e0",
   onAccent: "#ffffff",
-  danger: "#a4232b",
-  rule: "#dfe2e8",
+  danger: "#b3261e",
+  rule: "#e3e3de",
 };
+
+/** Dark counterpart of FALLBACK_COLORS, for a scheme the instance did not brand. */
+export const FALLBACK_COLORS_DARK: Brand["colors"] = {
+  surface: "#191b1f",
+  ink: "#eceef0",
+  inkMuted: "#9aa0a8",
+  accent: "#5c86ff",
+  onAccent: "#0d1016",
+  danger: "#f08d85",
+  rule: "#2b2e34",
+};
+
+const NEUTRAL = FALLBACK_COLORS;
 
 function pick(colors: Record<string, string>, ...names: string[]): string | null {
   for (const name of names) {

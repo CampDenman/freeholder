@@ -837,6 +837,14 @@ async function checkPlugins(): Promise<Check[]> {
 }
 
 function checkPlatformVersion(): Check {
+  if (!PLATFORM_VERSION || PLATFORM_VERSION === "0.0.0") {
+    return fail(
+      "platform.version",
+      "Freeholder version",
+      `This instance reports ${PLATFORM_VERSION || "no version"}, the unset placeholder from before C3.20.`,
+      "Redeploy from a build whose package.json version is the real semver, then confirm GET /api/health returns that version.",
+    );
+  }
   return ok(
     "platform.version",
     "Freeholder version",

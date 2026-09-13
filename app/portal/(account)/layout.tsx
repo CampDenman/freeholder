@@ -20,11 +20,15 @@ import { currentBusiness } from "@/core/settings/read";
 import { SkipLink } from "@/ui/SkipLink";
 import { portalSignOutAction } from "../actions";
 
-export const metadata: Metadata = {
-  // A portal is a person's own records. It is never a search result.
-  robots: { index: false, follow: false },
-  referrer: "no-referrer",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const [business, t] = await Promise.all([currentBusiness(), getT()]);
+  return {
+    title: `${t("portal.title")} — ${business?.name ?? t("common.appName")}`,
+    // A portal is a person's own records. It is never a search result.
+    robots: { index: false, follow: false },
+    referrer: "no-referrer",
+  };
+}
 
 export default async function PortalLayout({
   children,
@@ -64,7 +68,7 @@ export default async function PortalLayout({
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
-      <SkipLink target="main">{t("a11y.skipToContent")}</SkipLink>
+      <SkipLink>{t("a11y.skipToContent")}</SkipLink>
       <header className="border-b border-rule">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 p-4">
           <p className="font-semibold">{business?.name ?? t("portal.title")}</p>
