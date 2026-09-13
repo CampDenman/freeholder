@@ -41,6 +41,7 @@ const steps = [
       "tests/core/mobile-screens.test.ts",
       "tests/core/mobile-app-shell.test.ts",
       "tests/core/freeholder-app-init.test.ts",
+      "tests/core/mobile-store-gate.test.ts",
       "tests/core/mobile-private-cache.test.ts",
       "tests/core/standalone-artifact.test.ts",
       "tests/core/locale-quality.test.ts",

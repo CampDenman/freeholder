@@ -1,0 +1,1 @@
+booking,gallery,invoice,client

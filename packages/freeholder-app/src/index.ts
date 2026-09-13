@@ -14,7 +14,7 @@ import { EXIT, InitError, initApp, printResult, type FetchLike } from "./init.js
 export { EXIT, InitError, initApp, logoFetchUrl, MAX_LOGO_BYTES, pullBranding } from "./init.js";
 export { parseHex, brandingFrom, storeCopy } from "./branding.js";
 export { brandedExpoConfig, bundleId, diffJson, expoSlug, formatDiff, mergeEasConfig } from "./config.js";
-export { ICON_SIZE, SCREENSHOT, SPLASH, generateAssets } from "./assets.js";
+export { ICON_SIZE, SCREENSHOT, SPLASH, STORE_ASSET_PATHS, generateAssets } from "./assets.js";
 export { decodePng, encodePng, encodeRgba, pngSize } from "./png.js";
 
 export interface Options {

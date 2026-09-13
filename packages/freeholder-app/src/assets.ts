@@ -13,6 +13,24 @@ export const ICON_SIZE = 1024;
 export const SPLASH = { width: 1284, height: 2778 } as const;
 export const SCREENSHOT = { width: 1290, height: 2796 } as const;
 
+/** Every path `generateAssets` must write. The store gate fails if any is missing. */
+export const STORE_ASSET_PATHS = [
+  "assets/icon.png",
+  "assets/adaptive-icon.png",
+  "assets/splash.png",
+  "store/screenshots/01-home.png",
+  "store/screenshots/02-catalog.png",
+  "store/screenshots/03-bookings.png",
+  "store/metadata.json",
+  "store/ios/name.txt",
+  "store/ios/subtitle.txt",
+  "store/ios/description.txt",
+  "store/ios/keywords.txt",
+  "store/android/title.txt",
+  "store/android/short-description.txt",
+  "store/android/full-description.txt",
+] as const;
+
 export interface GeneratedAssets {
   files: Record<string, Buffer | string>;
   notes: string[];

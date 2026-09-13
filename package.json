@@ -30,6 +30,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:baseline-identity": "node scripts/schema-baseline-identity.mjs",
     "plan:check": "node scripts/plan-gate.mjs",
+    "mobile:store-check": "node scripts/mobile-store-gate.mjs",
     "workflow:check": "node scripts/workflow-integrity-gate.mjs",
     "dependency:audit": "node scripts/dependency-audit.mjs",
     "artifact:check": "node scripts/standalone-artifact-gate.mjs",
