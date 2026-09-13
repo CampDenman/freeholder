@@ -15,8 +15,9 @@ const FILE_STARTUP_MS = 1_500;
 // a severely contended hosted runner. Consecutive runs of the exact same shard
 // at 0c7df0f showed a worst per-file slowdown of 6.7x (settings: 30.8s to
 // 206.3s), so seven times estimated work is the explicit resilience budget.
-// The integrity test binds these values to the workflow topology.
-export const CI_TEST_SHARD_COUNT = 20;
+// The integrity test binds these values to the workflow topology. Twenty-three
+// shards keep C11 journeys inside the 25-minute timeout.
+export const CI_TEST_SHARD_COUNT = 23;
 export const CI_TEST_JOB_TIMEOUT_MS = 25 * 60 * 1_000;
 export const CI_DEGRADED_RUNNER_MULTIPLIER = 7;
 export const CI_FIXED_JOB_OVERHEAD_MS = 2 * 60 * 1_000;
@@ -39,6 +40,13 @@ const MEASURED_DURATION_MS: Readonly<Record<string, number>> = Object.freeze({
   "tests/core/recurring-invoices.test.ts": 71_000,
   "tests/core/seed-demo.test.ts": 52_000,
   "tests/core/signup-contact-import.test.ts": 80_000,
+  "tests/core/c11-02-catalog-journey.test.ts": 60_000,
+  "tests/core/c11-03-booking-journey.test.ts": 90_000,
+  "tests/core/c11-04-gallery-social-journey.test.ts": 90_000,
+  "tests/core/c11-05-subscription-journey.test.ts": 60_000,
+  "tests/core/c11-06-agent-journey.test.ts": 40_000,
+  "tests/core/c11-07-mail-calendar-journey.test.ts": 90_000,
+  "tests/core/c11-08-install-update-journey.test.ts": 90_000,
   "tests/core/spine.test.ts": 167_000,
   "tests/core/agents-budgets.test.ts": 66_000,
   "tests/core/agents-inbound.test.ts": 33_000,
