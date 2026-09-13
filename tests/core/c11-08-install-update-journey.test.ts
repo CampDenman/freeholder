@@ -1,10 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C11.08 pieces that exist: role-guided demo load, WordPress parse/preview/
-// commit ledger, ownership-export contract, signed local update and failed-
-// update rollback. Import commit does not materialize CMS pages, and restore
-// on another Tier-1 target remains the ownership-drill pair matrix — this
-// file does not fake either.
+// commit that writes CMS pages, ownership-export contract, signed local
+// update and failed-update rollback. Restore on another Tier-1 target
+// remains the ownership-drill pair matrix — this file does not fake it.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { applyUpdate as runApply } from "@/core/update/apply";
 import { listUpdateRuns } from "@/core/update/service";
@@ -59,11 +58,13 @@ describe.runIf(hasDatabase)("C11.08 demo import update rollback", { timeout: 90_
     );
     expect(previewed.status).toBe("previewed");
     await commitImport.call({ id: run.id }, OWNER);
+    const [draft] = await db().select().from(pages).where(eq(pages.slug, "about"));
+    expect(draft).toMatchObject({ slug: "about", title: "About", status: "draft" });
     await reconcileImport.call({ id: run.id, counts: { pages: 1, media: 0, redirects: 0 } }, OWNER);
     const published = await publishImport.call({ id: run.id }, OWNER);
     expect(published.status).toBe("published");
-    // Honest gap: the ledger is published; CMS pages are not written from it.
-    expect(await db().select().from(pages).where(eq(pages.slug, "about"))).toHaveLength(0);
+    const [live] = await db().select().from(pages).where(eq(pages.slug, "about"));
+    expect(live?.status).toBe("published");
 
     expect(MIGRATION_ARTIFACTS.logical).toBe(EXPORT_FORMAT);
     const contract = migrationContract("replit", "railway");
@@ -76,5 +77,24 @@ describe.runIf(hasDatabase)("C11.08 demo import update rollback", { timeout: 90_
     const history = await listUpdateRuns.call({ limit: 5 }, OWNER);
     expect(history.runs.some((row) => row.status === "completed")).toBe(true);
     expect(history.runs.some((row) => row.status === "rolled_back")).toBe(true);
+  });
+
+  it("commits a generic HTML import as a CMS draft", async () => {
+    const run = await startImport.call(
+      { origin: "https://example.com", kind: "html" },
+      OWNER,
+    );
+    const previewed = await previewFromSource.call(
+      {
+        id: run.id,
+        payload:
+          "<html lang='en'><head><link rel='canonical' href='https://example.com/team'><title>Team</title></head><article><p>We work here.</p></article></html>",
+      },
+      OWNER,
+    );
+    expect(previewed.status).toBe("previewed");
+    await commitImport.call({ id: run.id }, OWNER);
+    const [page] = await db().select().from(pages).where(eq(pages.slug, "team"));
+    expect(page).toMatchObject({ slug: "team", title: "Team", status: "draft" });
   });
 });

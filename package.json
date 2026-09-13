@@ -44,7 +44,8 @@
     "packages:verify": "node scripts/package-artifact-gate.mjs",
     "packages:release": "node scripts/release-packages.mjs",
     "sdk:generate": "node scripts/generate-sdk.mjs",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "perf:budgets": "node scripts/performance-budgets.mjs"
   },
   "dependencies": {
     "@formatjs/icu-messageformat-parser": "^3.5.15",
