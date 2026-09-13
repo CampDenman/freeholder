@@ -15,6 +15,11 @@ import {
   attachPluginContactColumn,
   attachPluginUniqueContactColumn,
 } from "@/core/plugins/spine";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { voiceVideoProvider } from "./adapter";
 import { voiceVideoArtifacts, voiceVideoJoins, voiceVideoRooms } from "./schema";
 
@@ -831,6 +836,33 @@ export const listVoiceVideoArtifacts = defineService({
   output: listed(artifactRow),
   handler: (_input, ctx) =>
     ctx.tx.select().from(voiceVideoArtifacts).orderBy(desc(voiceVideoArtifacts.createdAt)),
+});
+
+registerSearchSource({
+  kind: "voice_video_room",
+  module: "voiceVideo",
+  tables: ["voice_video_rooms"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: voiceVideoRooms.id,
+        title: voiceVideoRooms.title,
+        contactId: voiceVideoRooms.contactId,
+      })
+      .from(voiceVideoRooms)
+      .where(matchesIlike(voiceVideoRooms.title, pattern))
+      .orderBy(desc(voiceVideoRooms.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "voice_video_room",
+      id: row.id,
+      title: row.title,
+      href: "/admin/voice-video",
+      snippet: clipSnippet(row.title),
+      contactId: row.contactId,
+      module: "voiceVideo",
+    }));
+  },
 });
 
 export default [
