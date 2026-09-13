@@ -3308,7 +3308,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C10.25–C10.28 (mobile screens on the corrected customer contracts and shared invoice payment page), then C10.15–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
+| Current focus | C10.25–C10.28 (mobile screens on the corrected customer contracts and shared invoice payment page), then C10.16–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -8310,8 +8310,28 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   preferences — "a push that says something the platform would not have
   emailed is a bug". Honest limit: no production push carrier is configured
   yet; the adapter seam reports itself unavailable.)*
-- [ ] **C10.15** Implement `freeholder-app init`: pull branding, generate
+- [x] **C10.15** Implement `freeholder-app init`: pull branding, generate
   icons/splash/store metadata/screenshots and emit an auditable config diff.
+  *(`packages/freeholder-app`, published as `freeholder-app` so
+  `npx freeholder-app init <url>` works. Public client of
+  `/.well-known/freeholder` — no API key, no EAS login. Icons and splash
+  composite a PNG logo onto the brand surface, or a mark in the accent when
+  the logo is missing or not rasterisable; store copy is the business name and
+  tagline within Apple/Google field limits; screenshots are branded
+  placeholders so the command does not depend on a running demo. The printed
+  diff is field-level on `app.json` and `eas.json`; existing EAS credentials
+  are filled around, never overwritten. **F01** no schema. **F02** N/A — reads
+  the public discovery document. **F03** N/A. **F04** the command itself plus
+  `packages/freeholder-app/README.md`. **F05** N/A — operational CLI, not an
+  agent tool; discovery is already public. **F06** N/A — operational copy in
+  English, like `freeholder update`. **F07** https except loopback;
+  discovery only; no store secrets required or written. **F08**
+  `tests/core/freeholder-app-init.test.ts` with injected fetch. **F09** SPDX;
+  built, linted and artifact-gated with the other packages. **F10**
+  `packages/freeholder-app/README.md`, `apps/mobile/README.md`. **F11**
+  changeset `freeholder-app-init.md`. **F12** packed `freeholder-app init`
+  against an unreachable URL exits 3. Store binaries and review checklists
+  remain C10.16.)*
 - [ ] **C10.16** Continuously build iOS/Android against the demo contract and
   maintain Apple/Google submission, privacy and data-safety checklists.
 - [ ] **C10.17** Build role-gated owner companion mode for today, invoice,
