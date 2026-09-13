@@ -15,6 +15,7 @@ const packageNames = [
   "@freeholder/plugin-kit",
   "@freeholder/sdk",
   "@freeholder/cli",
+  "freeholder-app",
   "@freeholder/mobile-app",
   "@freeholder/templates",
 ];
@@ -212,6 +213,29 @@ void preset;
     );
     assert.match(unreachable.output, /Could not reach/);
     assert.equal(unreachable.code, 3);
+
+    const appBin = join(
+      consumer,
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "freeholder-app.cmd" : "freeholder-app",
+    );
+    await access(appBin);
+    const appUnreachable = await run(
+      process.execPath,
+      [
+        join(consumer, "node_modules", "freeholder-app", "dist", "index.js"),
+        "init",
+        "--url",
+        "http://127.0.0.1:59599",
+        "--dir",
+        join(consumer, "mobile-init"),
+      ],
+      consumer,
+      { allowFailure: true },
+    );
+    assert.match(appUnreachable.output, /Could not reach/);
+    assert.equal(appUnreachable.code, 3);
 
     const generatedRoot = join(consumer, "studio");
     const generatedManifest = JSON.parse(

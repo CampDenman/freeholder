@@ -157,5 +157,8 @@ C10.17 and C10.18 stay open.
 ## Limits
 
 `npm start` needs a simulator or Expo Go. CI typechecks and bundles Android
-and iOS on every change; building actual store binaries is C10.16, where EAS and the
-submission checklists belong.
+and iOS on every change. Brand the stub for a real instance with
+`npx freeholder-app init <url>` from the repository root (C10.15) — that
+writes icons, splash, store metadata and a config diff without EAS login.
+Building actual store binaries is C10.16, where EAS and the submission
+checklists belong.
