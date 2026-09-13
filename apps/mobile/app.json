@@ -9,16 +9,37 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.freeholder.customer"
+      "bundleIdentifier": "ai.freeholder.customer",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Take a photo or video to add to this business’s library.",
+        "NSPhotoLibraryUsageDescription": "Choose photos or videos to add to this business’s library.",
+        "NSMicrophoneUsageDescription": "Record video with sound to add to this business’s library."
+      }
     },
     "android": {
       "package": "ai.freeholder.customer",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": ["CAMERA", "READ_MEDIA_IMAGES", "READ_MEDIA_VIDEO"],
+      "intentFilters": [
+        {
+          "action": "SEND",
+          "category": ["DEFAULT"],
+          "data": [{ "mimeType": "image/*" }, { "mimeType": "video/*" }]
+        }
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose photos or videos to add to this business’s library.",
+          "cameraPermission": "Take a photo or video to add to this business’s library.",
+          "microphonePermission": "Record video with sound to add to this business’s library."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

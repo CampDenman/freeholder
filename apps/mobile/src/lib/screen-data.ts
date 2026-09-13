@@ -99,7 +99,7 @@ export function useScreenWrite<T>(input: {
   const execute = useCallback(async (params?: unknown): Promise<T> => {
     assertOnContract(screen, service, true);
     if (!instanceUrl) throw new Error("Connect to a business before making changes.");
-    if (SCREENS[screen].audience === "signed-in" && !token) throw new Error("Sign in before making changes.");
+    if (SCREENS[screen].audience !== "public" && !token) throw new Error("Sign in before making changes.");
     if (inFlight.current) throw new Error("A request is already in progress.");
     inFlight.current = true;
     setPending(true);

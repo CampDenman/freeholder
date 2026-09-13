@@ -24,6 +24,8 @@ import {
   signIn as requestSignIn,
   completeTwoFactorSignIn,
   redeemSignInLink,
+  resolveSessionRole,
+  sessionAudience,
   signOut as clearSession,
   loadDeviceToken,
   clearDeviceToken,
@@ -31,6 +33,7 @@ import {
   type Instance,
   type SecretStore,
   type Session,
+  type SessionAudience,
   type SignInResult,
 } from "@freeholder/mobile-app";
 
@@ -55,6 +58,8 @@ export interface InstanceState {
   instance: Instance | null;
   brand: Brand | null;
   session: Session | null;
+  /** Customer tabs vs owner companion, from the session's named role. */
+  audience: SessionAudience;
   /** Push token for this install, if one has been registered. */
   deviceToken: string | null;
   /** Non-null when the last attempt to reach an address failed. */
@@ -124,7 +129,17 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       await SecureStore.setItemAsync(INSTANCE_KEY, result.instance.url);
       if (stored && !matching) await clearSession(keychain);
       if (request !== revision.current) return;
-      setSession(matching);
+      const resolved = matching
+        ? await resolveSessionRole(matching, (url, init) => fetchWithTimeout(url, init).then((response) => ({
+            ok: response.ok,
+            status: response.status,
+            json: () => response.json(),
+          })))
+        : null;
+      if (request !== revision.current) return;
+      if (resolved && resolved.role !== matching?.role) await saveSession(keychain, resolved);
+      if (request !== revision.current) return;
+      setSession(resolved);
       setDeviceToken(matching ? device : null);
       setInstance(result.instance);
       setProblem(null);
@@ -190,7 +205,11 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
         if (generation !== revision.current) return;
         await rememberInstance(instance, privateCaches.get(privateCacheOwner(result.session)));
         if (generation !== revision.current) return;
-        setSession(result.session);
+        const resolved = await resolveSessionRole(result.session, (url, init) => fetch(url, init));
+        if (generation !== revision.current) return;
+        if (resolved.role !== result.session.role) await saveSession(keychain, resolved);
+        if (generation !== revision.current) return;
+        setSession(resolved);
       });
     }
     if (generation !== revision.current) return { ok: false, reason: "unreachable", message: "The sign-in was cancelled. Try again." };
@@ -217,6 +236,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       instance,
       brand: instance ? brandFrom(instance) : null,
       session,
+      audience: sessionAudience(session),
       deviceToken,
       problem,
       connect,

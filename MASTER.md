@@ -8317,6 +8317,28 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 - [ ] **C10.17** Build role-gated owner companion mode for today, invoice,
   inbox, reviews, approvals, agent status, critical notifications and direct
   camera-roll/camera/screen/share-target ingest through the core media contract.
+  *(Implementation 2026-09-12: same app, staff session. `auth.whoami` /
+  `auth.login` name the role; `customer` keeps the portal tabs and every other
+  stored role opens `OWNER_TAB_ORDER`. Screens call existing owner services —
+  `briefing.today`, `invoicing.list` / `createDraft` / `issue`, `conversations.list`
+  / `reply`, `reviews.list` / `moderate`, `agents.listApprovals` / `approveWrite`
+  / `rejectWrite`, `agents.list` / `board`, `notifications.list` with
+  `state: "critical"`. Capture ingest is `media.createCaptureSession` or
+  `createUploadLink`, then `media.beginUpload`, `POST /api/media`,
+  `media.bindCaptureAsset` and `media.confirmCapture`. Writes are live-only;
+  offline batches remain C10.18. **F01** no schema. **F02/F03/F05** no new
+  services or customer model; the SDK already enforces grants.
+  **F04** loading/empty/error/offline on every companion screen; physical
+  camera, share-target and accessibility proof remain outstanding, so this
+  checkbox stays open. **F06** en/es/fr labels and semantic colours; native
+  screen-reader and light/dark inspection still required. **F07** staff
+  screens are audience-gated; customer tabs hide; ingest uses the website
+  media pipeline; no mobile-only upload API. **F08** contract, audience,
+  ingest and shell tests. **F09** no new jobs or storage. **F10** the website
+  already has these owner surfaces. **F11** app/package READMEs and changeset
+  `owner-companion.md`. **F12** role detection, staff-only contracts and
+  refused offline ingest are executable tests; a physical companion journey
+  still needs an installed native build.)*
 - [ ] **C10.18** Add offline/background-safe mobile capture batches with clear
   consent, progress, pause/resume/cancel, retry and destination selection, and
   prove the native app and app-free phone path create equivalent Assets.

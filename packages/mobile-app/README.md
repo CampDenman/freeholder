@@ -27,7 +27,8 @@ This package contains the shared client behavior:
 | `private-cache` | how does encrypted persistence remain bound to a live session? |
 | `cached-discovery` | can a remembered instance reopen offline without bypassing compatibility? |
 | `branding` | what does this business look like? |
-| `screens` | which services may each customer screen call? |
+| `screens` | which services may each customer or staff screen call? |
+| `capture` | how does owner ingest reach the core media contract? |
 | `strings` | how do the screen's catalog keys read in this locale? |
 
 Everything else — prices, availability, entitlements — comes from the instance
@@ -102,8 +103,12 @@ The Expo adapter supplies AES-GCM and a key held in SecureStore; this package
 adds no crypto or native dependency. Public cached discovery restores branding
 only for the remembered instance and cannot extend any private read lease.
 
-The one sanctioned write queue is media capture (C10.18), which is a queue of
-files rather than a queue of decisions.
+Companion mode (C10.17) is the same client with a staff session. `sessionAudience`
+reads the named role from `auth.whoami` / `auth.login`; `customer` keeps the
+portal tabs and every other role opens `OWNER_TAB_ORDER`. Capture ingest talks
+to the existing media services and `/api/media` while online. The one sanctioned
+write queue is media capture (C10.18), which is a queue of files rather than a
+queue of decisions.
 
 `writeThrough({ service, online }, call)` is the live-only counterpart:
 offline calls throw `OfflineWriteRefused` before transport is invoked. Online

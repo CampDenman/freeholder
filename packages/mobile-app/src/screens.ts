@@ -32,18 +32,30 @@ export const SCREEN_IDS = [
   "message",
   "newsletters",
   "account",
+  "today",
+  "ownerInvoices",
+  "ownerInvoice",
+  "inbox",
+  "inboxThread",
+  "reviews",
+  "approvals",
+  "agents",
+  "alerts",
+  "capture",
+  "staffAccount",
 ] as const;
 
 export type ScreenId = (typeof SCREEN_IDS)[number];
 
 /**
- * Whether a screen may be opened by somebody who has not signed in.
+ * Who a screen is for.
  *
  * Browsing is public because a customer who has just installed the app should
  * be able to see what the business offers before being asked who they are.
- * Everything about *them* is not.
+ * Everything about *them* is signed-in. Companion screens are staff: the same
+ * app, gated on the session's named role, never a second customer model.
  */
-export type ScreenAudience = "public" | "signed-in";
+export type ScreenAudience = "public" | "signed-in" | "staff";
 
 export interface ScreenContract {
   id: ScreenId;
@@ -220,6 +232,115 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     emptyKey: "app.account.empty",
     cacheable: false,
   },
+  today: {
+    id: "today",
+    audience: "staff",
+    titleKey: "app.today.title",
+    reads: ["briefing.today", "bookings.list"],
+    writes: ["briefing.markRead"],
+    emptyKey: "app.today.empty",
+    cacheable: true,
+  },
+  ownerInvoices: {
+    id: "ownerInvoices",
+    audience: "staff",
+    titleKey: "app.ownerInvoices.title",
+    reads: ["invoicing.list", "contacts.list"],
+    writes: ["invoicing.createDraft", "invoicing.issue"],
+    emptyKey: "app.ownerInvoices.empty",
+    cacheable: true,
+  },
+  ownerInvoice: {
+    id: "ownerInvoice",
+    audience: "staff",
+    titleKey: "app.ownerInvoice.title",
+    reads: ["invoicing.get"],
+    writes: ["invoicing.issue"],
+    param: "id",
+    emptyKey: "app.ownerInvoice.empty",
+    cacheable: true,
+  },
+  inbox: {
+    id: "inbox",
+    audience: "staff",
+    titleKey: "app.inbox.title",
+    reads: ["conversations.list"],
+    writes: [],
+    emptyKey: "app.inbox.empty",
+    cacheable: true,
+  },
+  inboxThread: {
+    id: "inboxThread",
+    audience: "staff",
+    titleKey: "app.inboxThread.title",
+    reads: ["conversations.get"],
+    writes: ["conversations.reply", "conversations.markRead"],
+    param: "id",
+    emptyKey: "app.inboxThread.empty",
+    cacheable: true,
+  },
+  reviews: {
+    id: "reviews",
+    audience: "staff",
+    titleKey: "app.reviews.title",
+    reads: ["reviews.list"],
+    writes: ["reviews.moderate"],
+    emptyKey: "app.reviews.empty",
+    cacheable: true,
+  },
+  approvals: {
+    id: "approvals",
+    audience: "staff",
+    titleKey: "app.approvals.title",
+    reads: ["agents.listApprovals"],
+    writes: ["agents.approveWrite", "agents.rejectWrite"],
+    emptyKey: "app.approvals.empty",
+    cacheable: false,
+  },
+  agents: {
+    id: "agents",
+    audience: "staff",
+    titleKey: "app.agents.title",
+    reads: ["agents.list", "agents.board"],
+    writes: [],
+    emptyKey: "app.agents.empty",
+    cacheable: true,
+  },
+  alerts: {
+    id: "alerts",
+    audience: "staff",
+    titleKey: "app.alerts.title",
+    reads: ["notifications.list"],
+    writes: ["notifications.markRead"],
+    emptyKey: "app.alerts.empty",
+    cacheable: true,
+  },
+  capture: {
+    id: "capture",
+    audience: "staff",
+    titleKey: "app.capture.title",
+    reads: ["media.getCaptureSession", "media.listCaptureSessions"],
+    writes: [
+      "media.createCaptureSession",
+      "media.createUploadLink",
+      "media.grantCapturePermission",
+      "media.beginUpload",
+      "media.bindCaptureAsset",
+      "media.confirmCapture",
+      "media.discardCapture",
+    ],
+    emptyKey: "app.capture.empty",
+    cacheable: false,
+  },
+  staffAccount: {
+    id: "staffAccount",
+    audience: "staff",
+    titleKey: "app.staffAccount.title",
+    reads: ["auth.whoami"],
+    writes: ["notifications.revokeDevice"],
+    emptyKey: "app.staffAccount.empty",
+    cacheable: false,
+  },
 };
 
 /** The tabs a customer sees, in the order they look for them. */
@@ -232,7 +353,35 @@ export const TAB_ORDER: readonly ScreenId[] = [
   "account",
 ];
 
+/** Companion tabs. Same app, staff session, existing owner services (C10.17). */
+export const OWNER_TAB_ORDER: readonly ScreenId[] = [
+  "today",
+  "ownerInvoices",
+  "inbox",
+  "reviews",
+  "alerts",
+  "staffAccount",
+];
+
+export function tabOrderFor(audience: "customer" | "staff"): readonly ScreenId[] {
+  return audience === "staff" ? OWNER_TAB_ORDER : TAB_ORDER;
+}
+
+/** Expo Router file names: home is `index`, camelCase ids become kebab-case. */
+export function tabFileName(id: ScreenId): string {
+  if (id === "home") return "index";
+  return id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
 export function screensNeedingSignIn(): ScreenId[] {
+  return SCREEN_IDS.filter((id) => SCREENS[id].audience !== "public");
+}
+
+export function staffScreens(): ScreenId[] {
+  return SCREEN_IDS.filter((id) => SCREENS[id].audience === "staff");
+}
+
+export function customerSignedInScreens(): ScreenId[] {
   return SCREEN_IDS.filter((id) => SCREENS[id].audience === "signed-in");
 }
 

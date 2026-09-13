@@ -5,7 +5,7 @@
 // the whole reason C10.13 was written down.
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
-import { SCREENS, TAB_ORDER } from "../../packages/mobile-app/src/screens";
+import { SCREENS, TAB_ORDER, OWNER_TAB_ORDER, tabFileName } from "../../packages/mobile-app/src/screens";
 
 const read = (path: string) => readFileSync(`apps/mobile/${path}`, "utf8");
 
@@ -26,7 +26,7 @@ describe("the Expo application (C10.23)", () => {
     const paths = ["app", "src"].flatMap((directory) => readdirSync(`apps/mobile/${directory}`, { recursive: true })
       .map((entry) => `${directory}/${String(entry).replace(/\\/g, "/")}`).filter((path) => /\.tsx?$/.test(path)));
     const callers = paths.filter((path) => /assertOnContract\([^)]*,\s*true\)/.test(code(path)));
-    expect(callers).toEqual(["src/lib/screen-data.ts"]);
+    expect(callers.sort()).toEqual(["src/lib/capture.ts", "src/lib/screen-data.ts"]);
     const helper = code("src/lib/screen-data.ts");
     expect(helper).toContain("export function useScreenWrite");
     expect(helper).toContain("await writeThrough({ service, online }");
@@ -72,11 +72,11 @@ describe("the Expo application (C10.23)", () => {
   });
 
   it("takes its tab order from the contract rather than retyping it", () => {
-    expect(read("app/(tabs)/_layout.tsx")).toContain("TAB_ORDER");
-    // The tabs this release actually renders are a subset, and the rest are
-    // C10.24 — a tab leading to a screen that does not exist is a dead end.
+    expect(read("app/(tabs)/_layout.tsx")).toContain("tabOrderFor");
+    expect(read("app/(tabs)/_layout.tsx")).toContain("OWNER_TAB_ORDER");
     expect(TAB_ORDER).toContain("home");
     expect(TAB_ORDER).toContain("catalog");
+    expect(OWNER_TAB_ORDER).toContain("today");
   });
 
   it("asks only for services its screen contract allows", () => {
@@ -99,7 +99,7 @@ describe("the Expo application (C10.23)", () => {
   it("renders no colour of its own", () => {
     // Colours come from the instance's semantic tokens. A literal here is a
     // colour that cannot be rebranded without a store review.
-    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx"]) {
+    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx", "app/(tabs)/today.tsx", "app/(tabs)/owner-invoices.tsx", "app/owner-invoice/[id].tsx", "app/(tabs)/inbox.tsx", "app/inbox-thread/[id].tsx", "app/(tabs)/reviews.tsx", "app/approvals.tsx", "app/agents.tsx", "app/(tabs)/alerts.tsx", "app/capture.tsx", "app/(tabs)/staff-account.tsx", "src/lib/capture.ts"]) {
       const source = read(file).replace(/^\s*\/\/.*$/gm, "");
       expect(source, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     }
@@ -107,7 +107,7 @@ describe("the Expo application (C10.23)", () => {
 
   it("gives every built screen a loading, empty and error state", () => {
     // F04: a screen that renders nothing while it waits looks broken.
-    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx"]) {
+    for (const file of ["app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx", "app/(tabs)/today.tsx", "app/(tabs)/owner-invoices.tsx", "app/owner-invoice/[id].tsx", "app/(tabs)/inbox.tsx", "app/inbox-thread/[id].tsx", "app/(tabs)/reviews.tsx", "app/approvals.tsx", "app/agents.tsx", "app/(tabs)/alerts.tsx", "app/capture.tsx", "app/(tabs)/staff-account.tsx"]) {
       const source = read(file);
       expect(source, file).toContain("Loading");
       expect(source, file).toMatch(/Empty|emptyKey/);
@@ -117,7 +117,7 @@ describe("the Expo application (C10.23)", () => {
 
   it("proofs through the declared gallery services and private image bytes (C10.27)", () => {
     expect(TAB_ORDER).toEqual(["home", "catalog", "bookings", "invoices", "galleries", "account"]);
-    expect(read("app/(tabs)/_layout.tsx")).toContain("TAB_ORDER.map");
+    expect(read("app/(tabs)/_layout.tsx")).toContain("ALL_TABS.map");
     expect(code("app/(tabs)/_layout.tsx")).not.toContain("BUILT");
     const list = read("app/(tabs)/galleries.tsx");
     expect(list).toContain('service: "portal.myRecords"');
@@ -168,5 +168,33 @@ describe("the Expo application (C10.23)", () => {
     expect(code("src/screens/sign-in.tsx")).toContain('keyboardType="default"');
     expect(code("src/screens/sign-in.tsx")).toContain("methods.recovery");
     expect(code("src/screens/sign-in.tsx")).toContain("methods.totp");
+  });
+
+  it("wires owner companion screens through existing services (C10.17)", () => {
+    expect(read("src/lib/instance.tsx")).toContain("resolveSessionRole");
+    expect(read("src/lib/instance.tsx")).toContain("sessionAudience");
+    expect(read("app/(tabs)/_layout.tsx")).toContain("tabOrderFor");
+    expect(read("app/(tabs)/_layout.tsx")).toContain("href: visible.has(name) ? undefined : null");
+    expect(read("app/(tabs)/today.tsx")).toContain('service: "briefing.today"');
+    expect(read("app/(tabs)/today.tsx")).toContain('service: "bookings.list"');
+    expect(read("app/(tabs)/owner-invoices.tsx")).toContain('service: "invoicing.list"');
+    expect(read("app/(tabs)/owner-invoices.tsx")).toContain('service: "invoicing.createDraft"');
+    expect(read("app/owner-invoice/[id].tsx")).toContain('service: "invoicing.get"');
+    expect(read("app/(tabs)/inbox.tsx")).toContain('service: "conversations.list"');
+    expect(read("app/inbox-thread/[id].tsx")).toContain('service: "conversations.reply"');
+    expect(code("app/inbox-thread/[id].tsx")).not.toMatch(/\breplyAsContact\b/);
+    expect(read("app/(tabs)/reviews.tsx")).toContain('service: "reviews.moderate"');
+    expect(read("app/approvals.tsx")).toContain('service: "agents.listApprovals"');
+    expect(read("app/agents.tsx")).toContain('service: "agents.list"');
+    expect(read("app/(tabs)/alerts.tsx")).toContain('service: "notifications.list"');
+    expect(read("app/capture.tsx")).toContain("uploadPickedCapture");
+    expect(code("src/lib/capture.ts")).toContain("/api/media");
+    expect(code("src/lib/capture.ts")).not.toMatch(/\/api\/mobile/);
+    expect(read("app/(tabs)/staff-account.tsx")).toContain('service: "auth.whoami"');
+    for (const id of OWNER_TAB_ORDER) {
+      expect(read("app/(tabs)/_layout.tsx")).toContain("tabFileName");
+      expect(tabFileName(id)).toBeTruthy();
+    }
+    expect(SCREENS.capture.writes).toContain("media.beginUpload");
   });
 });
