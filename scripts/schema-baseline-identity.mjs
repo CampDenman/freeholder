@@ -13,7 +13,14 @@
 //
 // Usage: node scripts/schema-baseline-identity.mjs [--write-fixture]
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -206,7 +213,33 @@ export async function proveBaselineIdentity(options = {}) {
   try {
     await recreateDatabase(admin, baselineName);
     created.push(baselineName);
-    await applyMigrations(databaseUrl(url, baselineName), join(repoRoot, BASELINE_FOLDER));
+    const baselineOnly = mkdtempSync(join(tmpdir(), "fh-c1019-baseline-"));
+    mkdirSync(join(baselineOnly, "meta"));
+    copyFileSync(
+      join(repoRoot, BASELINE_FOLDER, "0000_reviewed-baseline.sql"),
+      join(baselineOnly, "0000_reviewed-baseline.sql"),
+    );
+    writeFileSync(
+      join(baselineOnly, "meta/_journal.json"),
+      JSON.stringify({
+        version: "7",
+        dialect: "postgresql",
+        entries: [
+          {
+            idx: 0,
+            version: "7",
+            when: 0,
+            tag: "0000_reviewed-baseline",
+            breakpoints: true,
+          },
+        ],
+      }),
+    );
+    try {
+      await applyMigrations(databaseUrl(url, baselineName), baselineOnly);
+    } finally {
+      rmSync(baselineOnly, { recursive: true, force: true });
+    }
     const baselineCatalog = await dumpCatalog(databaseUrl(url, baselineName));
 
     const fixturePath = join(repoRoot, FIXTURE);

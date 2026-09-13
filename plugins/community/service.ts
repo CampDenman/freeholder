@@ -17,6 +17,11 @@ import {
 } from "@/core/service";
 import { attachPluginContactColumn } from "@/core/plugins/spine";
 import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
+import {
   COMMUNITY_ROLES,
   communityJoinRequests,
   communityMembers,
@@ -913,6 +918,35 @@ export const moderateCommunityPostBySlug = defineService({
     ctx.setSubject("community_post", post.id);
     const [updated] = await postsQuery(ctx.tx).where(eq(communityPosts.id, post.id)).limit(1);
     return updated!;
+  },
+});
+
+registerSearchSource({
+  kind: "community_post",
+  module: "community",
+  tables: ["community_posts"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: communityPosts.id,
+        body: communityPosts.body,
+        contactId: communityPosts.contactId,
+      })
+      .from(communityPosts)
+      .where(
+        and(eq(communityPosts.status, "visible"), matchesIlike(communityPosts.body, pattern)),
+      )
+      .orderBy(desc(communityPosts.createdAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "community_post",
+      id: row.id,
+      title: clipSnippet(row.body) ?? "Post",
+      href: "/admin/community",
+      snippet: clipSnippet(row.body),
+      contactId: row.contactId,
+      module: "community",
+    }));
   },
 });
 
