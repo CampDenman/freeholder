@@ -3,13 +3,18 @@
 // Transaction-safe invoice, payment, refund, and credit-note state machines.
 
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   registerContactReference,
 } from "@/core/contacts/service";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import {
   actorString,
   defineService,
@@ -240,6 +245,34 @@ registerPointer(
   (tx, ids) => tx.select({ id: paymentMethods.id, contactId: paymentMethods.contactId }).from(paymentMethods).where(inArray(paymentMethods.contactId, ids)),
   (tx, from, to) => tx.update(paymentMethods).set({ contactId: to }).where(eq(paymentMethods.contactId, from)),
 );
+
+registerSearchSource({
+  kind: "invoice",
+  module: "invoicing",
+  tables: ["invoices"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        memo: invoices.memo,
+        contactId: invoices.contactId,
+      })
+      .from(invoices)
+      .where(or(matchesIlike(invoices.number, pattern), matchesIlike(invoices.memo, pattern)))
+      .orderBy(desc(invoices.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "invoice",
+      id: row.id,
+      title: row.number ?? clipSnippet(row.memo) ?? "Invoice",
+      href: `/admin/invoices/${row.id}`,
+      snippet: clipSnippet(row.memo),
+      contactId: row.contactId,
+      module: "invoicing",
+    }));
+  },
+});
 
 registerContactPrivacySource({
   scope: "commerce.money",

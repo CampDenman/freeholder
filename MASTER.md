@@ -8605,13 +8605,19 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
-  *(Partial 2026-09-12: `tests/core/record-participation.test.ts` plus
-  `merge-completeness`, `ownership-export`, `ownership-drill` and
-  `contact-privacy-rights`. Contact foreign keys are merge-repointed, privacy
-  export/erasure registered, ownership export is information_schema-complete,
-  restore is the drill pair matrix, `contacts.list` searches the spine, and
-  mutations audit through `defineService`. **Remaining named worklist:**
-  No product-wide search index: findability is per-list (contacts.list.search, conversations.search, cms.searchHelp), not one query over every user-owned table.
+  *(Partial 2026-09-13: `tests/core/record-participation.test.ts` plus
+  `tests/core/c11-14-search.test.ts`, `merge-completeness`, `ownership-export`,
+  `ownership-drill` and `contact-privacy-rights`. Contact foreign keys are
+  merge-repointed, privacy export/erasure registered, ownership export is
+  information_schema-complete, restore is the drill pair matrix, `search.query`
+  is one grant-filtered ILIKE over a registry of live contact-attached and
+  first-class owner records (not Elasticsearch, not a second customer store),
+  `contacts.list` still searches the spine, and mutations audit through
+  `defineService`. **F04** `/admin/search`. **F05** `search.query` at
+  `/api/v1/search.query`, OpenAPI/SDK, MCP `search_query`. **F07** grant
+  filtering plus escaped ILIKE. **F09** still open because undelete/retention
+  leftovers remain. **F12** `tests/core/c11-14-search.test.ts` mixed-kind
+  query. **Remaining named worklist:**
   Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
   Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,

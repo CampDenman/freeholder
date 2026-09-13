@@ -30,6 +30,11 @@ import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { sendMail } from "@/core/mail/service";
 import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
@@ -1488,6 +1493,34 @@ registerContactPrivacySource({
         ),
       );
     return { affected: offers.length };
+  },
+});
+
+registerSearchSource({
+  kind: "quote",
+  module: "quotes",
+  tables: ["quotes"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: quotes.id,
+        title: quotes.title,
+        reference: quotes.reference,
+        contactId: quotes.contactId,
+      })
+      .from(quotes)
+      .where(or(matchesIlike(quotes.title, pattern), matchesIlike(quotes.reference, pattern)))
+      .orderBy(desc(quotes.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "quote",
+      id: row.id,
+      title: row.title,
+      href: `/admin/quotes/${row.id}`,
+      snippet: clipSnippet(row.reference),
+      contactId: row.contactId,
+      module: "quotes",
+    }));
   },
 });
 
