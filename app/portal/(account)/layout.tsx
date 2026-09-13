@@ -64,7 +64,7 @@ export default async function PortalLayout({
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
-      <SkipLink target="main">{t("a11y.skipToContent")}</SkipLink>
+      <SkipLink>{t("a11y.skipToContent")}</SkipLink>
       <header className="border-b border-rule">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 p-4">
           <p className="font-semibold">{business?.name ?? t("portal.title")}</p>

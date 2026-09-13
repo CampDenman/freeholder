@@ -14,6 +14,8 @@ import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
 import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { pages } from "@/modules/cms/schema";
+import { t } from "@/core/i18n";
+import { businessProfile } from "@/core/settings/schema";
 import {
   closeDb,
   CUSTOMER,
@@ -45,7 +47,7 @@ function axeSummary(
     .join("\n");
 }
 
-async function assertAxe(page: Page, surface: Surface, theme: "light" | "dark") {
+async function assertAxe(page: Page, surface: string, theme: "light" | "dark") {
   const builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
   // Chromium/axe on Linux can report content inside a positioned iframe as
   // overlapped by the iframe itself, which turns a real colour pair into an
@@ -94,12 +96,12 @@ async function assertAxe(page: Page, surface: Surface, theme: "light" | "dark") 
   }
 }
 
-async function assertKeyboardAndFocus(page: Page, surface: Surface) {
+async function assertKeyboardAndFocus(page: Page, surface: string, locale = "en") {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(page.url().split("#", 1)[0]!, { waitUntil: "domcontentloaded" });
 
   await page.keyboard.press("Tab");
-  const skip = page.getByRole("link", { name: "Skip to content" });
+  const skip = page.getByRole("link", { name: t(locale, "a11y.skipToContent") });
   await expect(skip, `${surface} must make its bypass link the first keyboard stop`).toBeFocused();
   await expect(skip).toBeVisible();
   await page.keyboard.press("Enter");
@@ -185,7 +187,7 @@ async function reflowProblems(frame: Frame) {
   });
 }
 
-async function assertReflow(page: Page, surface: Surface) {
+async function assertReflow(page: Page, surface: string) {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.reload({ waitUntil: "domcontentloaded" });
   for (const frame of page.frames()) {
@@ -392,6 +394,28 @@ async function installFixtures() {
   };
 }
 
+async function publishLocales(defaultLocale: string, enabled: string[]) {
+  await db()
+    .update(businessProfile)
+    .set({ defaultLocale, enabledLocales: enabled })
+    .where(eq(businessProfile.id, 1));
+}
+
+async function assertHeadingAxeAndSkip(
+  page: Page,
+  path: string,
+  heading: string,
+  locale = "en",
+) {
+  await page.goto(path, { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+  await assertAxe(page, path, "light");
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("link", { name: t(locale, "a11y.skipToContent") }),
+  ).toBeFocused();
+}
+
 test.describe("real-browser accessibility", () => {
   test.beforeAll(resetBrowserDatabase);
   test.afterAll(async () => {
@@ -403,7 +427,7 @@ test.describe("real-browser accessibility", () => {
   });
 
   test("covers setup, admin, editor, storefront and portal", async ({ page, context }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(420_000);
 
     await test.step("setup", async () => {
       await page.goto("/setup");
@@ -429,6 +453,20 @@ test.describe("real-browser accessibility", () => {
       await assertSurface(page, "updates");
     });
 
+    await test.step("admin F04 screens", async () => {
+      for (const [path, heading] of [
+        ["/admin/roles", t("en", "roles.title")],
+        ["/admin/invitations", t("en", "invitations.title")],
+        ["/admin/contacts", t("en", "contacts.title")],
+        ["/admin/health", t("en", "doctor.title")],
+        ["/admin/settings", t("en", "admin.settings.title")],
+        ["/admin/plugins", t("en", "plugins.title")],
+        ["/admin/work", t("en", "work.title")],
+      ] as const) {
+        await assertHeadingAxeAndSkip(page, path, heading);
+      }
+    });
+
     await test.step("editor", async () => {
       await page.goto(`/admin/pages/${fixture.homePageId}`);
       await assertSurface(page, "editor");
@@ -438,6 +476,39 @@ test.describe("real-browser accessibility", () => {
     await test.step("storefront", async () => {
       await page.goto("/");
       await assertSurface(page, "storefront");
+    });
+
+    await test.step("French, Spanish and RTL", async () => {
+      await publishLocales("fr", ["en", "fr", "es"]);
+      await page.goto("/admin");
+      await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+      await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+      await expect(
+        page.getByRole("heading", { level: 1, name: t("fr", "admin.overview.title") }),
+      ).toBeVisible();
+      await assertAxe(page, "admin-fr", "light");
+      await assertKeyboardAndFocus(page, "admin-fr", "fr");
+
+      await page.goto("/fr");
+      await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+      await assertAxe(page, "storefront-fr", "light");
+
+      await publishLocales("es", ["en", "fr", "es"]);
+      await page.goto("/es");
+      await expect(page.locator("html")).toHaveAttribute("lang", "es");
+      await assertAxe(page, "storefront-es", "light");
+
+      await publishLocales("en", ["en", "fr", "es"]);
+      await page.goto("/admin");
+      await page.evaluate(() => document.documentElement.setAttribute("dir", "rtl"));
+      await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+      await page.setViewportSize({ width: 320, height: 800 });
+      const rtlProblems = await reflowProblems(page.mainFrame());
+      expect(rtlProblems.documentOverflow, "admin RTL does not reflow at 320 CSS px").toBeUndefined();
+      expect(rtlProblems.nested, "admin RTL creates nested horizontal scrolling").toEqual([]);
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("link", { name: t("en", "a11y.skipToContent") })).toBeFocused();
     });
 
     await context.addCookies([
@@ -458,6 +529,15 @@ test.describe("real-browser accessibility", () => {
         "2 of 2 tasks complete",
       );
       await expect(guide.locator("header").getByText("Completed")).toBeVisible();
+    });
+
+    await test.step("portal rooms", async () => {
+      await assertHeadingAxeAndSkip(
+        page,
+        "/portal",
+        t("en", "portal.greeting", { name: "Morgan Accessibility" }),
+      );
+      await assertHeadingAxeAndSkip(page, "/portal/profile", t("en", "portal.nav.profile"));
     });
   });
 });

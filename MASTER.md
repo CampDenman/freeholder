@@ -8551,12 +8551,29 @@ schema they inherit reads as a designed thing rather than an excavation.
   queues, search and migrations.
 - [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.
+  *(Partial 2026-09-12: `tests/browser/accessibility.spec.ts` now also walks
+  admin F04 screens — roles, invitations, contacts, health, settings, plugins,
+  work — plus portal home/profile, French/Spanish `lang`, and a representative
+  RTL reflow/keyboard pass on admin. Setup/admin/editor/storefront/portal still
+  run axe in light and dark with keyboard and 320px reflow. **Left open:** the
+  browser suite is the evidence, not a local run here; not every F04 screen is
+  in the axe loop, and RTL is injected `dir` rather than a shipped Arabic
+  catalog.)*
 - [ ] **C11.13** Complete failure drills for database/storage/mail/payment/SMS/
   OAuth/AI/provider outages, process death, duplicate webhook/job, clock skew,
   low disk, lost credential key and interrupted update.
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  *(Partial 2026-09-12: `tests/core/record-participation.test.ts` plus
+  `merge-completeness`, `ownership-export`, `ownership-drill` and
+  `contact-privacy-rights`. Contact foreign keys are merge-repointed, privacy
+  export/erasure registered, ownership export is information_schema-complete,
+  restore is the drill pair matrix, `contacts.list` searches the spine, and
+  mutations audit through `defineService`. **Remaining named worklist:**
+  No product-wide search index: findability is per-list (contacts.list.search, conversations.search, cms.searchHelp), not one query over every user-owned table.
+  Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
+  Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
   passing acceptance test.
@@ -8594,6 +8611,15 @@ schema they inherit reads as a designed thing rather than an excavation.
   and `C:\users` differed. `tests/core/contract-evidence.test.ts` covers the
   platform-specific comparison and rejects a different directory with the same
   filename. Missing, empty, skipped and failed-only files still fail closed.)*
+  *(2026-09-12 remainder: colour holes closed — `app/globals.css` has no rgb()
+  fallbacks, ESLint bans `style={{}}` colour literals, package palettes are
+  contrast-tested in `tests/core/colour-literals.test.ts`.
+  `no-restricted-imports` blocks `createContact` from modules; the provider
+  gate self-checks adapter method names. Both demo paths have callers
+  (`tests/core/demo-paths.test.ts`). `CHANGELOG.md` is generated from
+  changesets and gated to `package.json`. Doctor and the §18 recipe/public/
+  upgrade gates refuse health `0.0.0`. **Left open:** not every documentation
+  claim in §§1–42 has a passing acceptance test, so this item is not checked.)*
 - [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
   prove there is no affirmative feature without a completed checklist item.
 - [ ] **C11.17 — DONE** Run the full clean-room install, migration, test,

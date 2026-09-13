@@ -90,6 +90,11 @@ boot() {
     docker logs fh-upgrade
     exit 1
   }
+  if [[ "$health" != *'"version"'* ]] || [[ "$health" == *'"version":"0.0.0"'* ]]; then
+    echo "::error title=Upgrade gate::${name} health version is missing or 0.0.0: ${health}"
+    docker logs fh-upgrade
+    exit 1
+  fi
 }
 
 echo "1. the previous release boots and migrates an empty database"
