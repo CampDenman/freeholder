@@ -93,6 +93,11 @@ whole story, which is the point.
 - [`privacy-rights.md`](privacy-rights.md) — consent evidence, access/export,
   correction, erasure, legal-retention exceptions, artifact retention, backup
   guidance, module registration, and the threat model.
+- [`app-store-privacy.md`](app-store-privacy.md) — Apple privacy nutrition
+  label, required-reason APIs and review notes for the customer app. Review
+  outcomes remain Apple's.
+- [`play-data-safety.md`](play-data-safety.md) — Play Data safety answers for
+  the same binary. Review outcomes remain Google's.
 - [`background-jobs.md`](background-jobs.md) — transactional enqueue,
   idempotency, retry/backoff, global concurrency, leases, cancellation,
   owner history, retained dead letters, redrive controls, process layouts,

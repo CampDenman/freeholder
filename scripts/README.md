@@ -2,12 +2,13 @@
 
 Current entry points include `doctor`, owner-password recovery, ownership
 export and restore rehearsal, the SEO and accessibility public gates, schema
-compatibility, changelog enforcement and the upgrade gate. Package scripts in
-the root `package.json` are the supported commands.
+compatibility, changelog enforcement, the mobile store-readiness gate and the
+upgrade gate. Package scripts in the root `package.json` are the supported
+commands.
 
 `pnpm gates` runs the inexpensive pre-push checks. Its contract suite includes
-contact merge coverage, registry completeness, documentation availability and
-plan integrity. Every listed test file must report at least one passing test;
+contact merge coverage, registry completeness, documentation availability,
+plan integrity and the mobile store-readiness gate. Every listed test file must report at least one passing test;
 a missing, empty or entirely skipped file fails the gate. Database cases in
 mixed suites still require a disposable `TEST_DATABASE_URL`. Browser checks
 run separately against a built app; recipe, SEO and upgrade checks need Docker.

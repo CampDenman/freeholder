@@ -3308,7 +3308,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C10.25–C10.28 (mobile screens on the corrected customer contracts and shared invoice payment page), then C10.16–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
+| Current focus | C10.25–C10.28 (mobile screens on the corrected customer contracts and shared invoice payment page), then C10.17–C10.18, then C10.19 alone on main with the first `changeset version`, then C11. C0.11's leftover F-matrix stays with C11.09; its worklist is written there. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -8337,8 +8337,29 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   changeset `freeholder-app-init.md`. **F12** packed `freeholder-app init`
   against an unreachable URL exits 3. Store binaries and review checklists
   remain C10.16.)*
-- [ ] **C10.16** Continuously build iOS/Android against the demo contract and
+- [x] **C10.16** Continuously build iOS/Android against the demo contract and
   maintain Apple/Google submission, privacy and data-safety checklists.
+  *(`scripts/mobile-store-gate.mjs` plus the existing `expo export` of both
+  native platforms in `.github/workflows/ci.yml`. The gate builds the demo
+  discovery document from `seed/demo/content.ts` and the contract majors,
+  then fails an unparsable contract, a missing store asset from init, or a
+  privacy manifest that does not match the permissions the binary actually
+  requests. Apple and Play checklists ship as
+  `deploy/app-store-privacy.md` and `deploy/play-data-safety.md` with the
+  honest caveat that review outcomes are the stores' call. Signed
+  store-submittable binaries still need Expo, Apple and Google credentials;
+  `.github/workflows/eas.yml` is `workflow_dispatch` and fails closed
+  without `EXPO_TOKEN` — a pull request must not spend EAS quota. **F01** no
+  schema. **F02** N/A — reads the public discovery document the app already
+  parses. **F03** N/A. **F04** the two store checklists. **F05** N/A —
+  operational CI, not an agent tool. **F06** N/A — operational copy in
+  English, like `freeholder update`. **F07** the privacy manifest must match
+  requested permissions; no tracking, no background location, no
+  third-party analytics SDK. **F08** `tests/core/mobile-store-gate.test.ts`.
+  **F09** the customer-app job, plus skippable `eas.yml`. **F10**
+  `deploy/app-store-privacy.md`, `deploy/play-data-safety.md`,
+  `apps/mobile/README.md`. **F11** changeset `mobile-store-ci.md`. **F12**
+  every CI run exports iOS and Android against the demo contract.)*
 - [ ] **C10.17** Build role-gated owner companion mode for today, invoice,
   inbox, reviews, approvals, agent status, critical notifications and direct
   camera-roll/camera/screen/share-target ingest through the core media contract.
