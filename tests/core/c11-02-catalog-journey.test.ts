@@ -210,6 +210,11 @@ describe.runIf(hasDatabase)("C11.02 catalog browse to refund", { timeout: 60_000
       { variantId: printVariant.id, locationId: studio.id, quantity: 1 },
       OWNER,
     );
+    expect(beforeRestock).toMatchObject({ tracked: true });
+    expect(restocked).toMatchObject({ tracked: true });
+    if (!beforeRestock.tracked || !restocked.tracked) {
+      throw new Error("expected tracked inventory");
+    }
     expect(restocked.onHand).toBeGreaterThan(beforeRestock.onHand);
     const refunded = await refundReturn.call(
       { id: requested.return.id, idempotencyKey: `rma-${requested.return.id}` },

@@ -155,26 +155,29 @@ jobs:
         # executes DB-backed files at the measured 6.7x degraded rate. The
         # sequencer integrity test binds this topology to that resilience budget.
         shard:
-          - 1/20
-          - 2/20
-          - 3/20
-          - 4/20
-          - 5/20
-          - 6/20
-          - 7/20
-          - 8/20
-          - 9/20
-          - 10/20
-          - 11/20
-          - 12/20
-          - 13/20
-          - 14/20
-          - 15/20
-          - 16/20
-          - 17/20
-          - 18/20
-          - 19/20
-          - 20/20
+          - 1/23
+          - 2/23
+          - 3/23
+          - 4/23
+          - 5/23
+          - 6/23
+          - 7/23
+          - 8/23
+          - 9/23
+          - 10/23
+          - 11/23
+          - 12/23
+          - 13/23
+          - 14/23
+          - 15/23
+          - 16/23
+          - 17/23
+          - 18/23
+          - 19/23
+          - 20/23
+          - 21/23
+          - 22/23
+          - 23/23
     services:
       postgres:
         image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94
