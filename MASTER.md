@@ -3308,7 +3308,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.09 leftover F04 callers, C10.15, C10.16, C3.13 first-party plugins, then remaining C11 |
+| Current focus | C11.08 remaining hops, C10.15, C10.16, C3.13 first-party plugins, then remaining C11 |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -3471,7 +3471,7 @@ one with unchecked dependency items.
   enforce the canonical license text, manifest fields, package copies, and
   source SPDX headers. *(`LICENSE`, `LICENSING.md`,
   `scripts/license-headers.mjs`, and changeset `apache-license.md`. **F04** N/A — license text and SPDX headers, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** changeset `apache-license.md` landed with the rest of the spine.)*
-- [ ] **C0.11** Audit every checked C-item against F01–F12, reopen or narrow
+- [x] **C0.11** Audit every checked C-item against the twelve F-criteria, reopen or narrow
   every claim that its executable evidence does not prove, retire stale
   handoffs as planning authorities, and record the audit date and evidence.
   *(2026-09-04 pass: the service call graph exposed nine nested-transaction
@@ -3501,10 +3501,13 @@ one with unchecked dependency items.
   2026-09-07: C0.09 docs-availability gate so README, packages and deploy
   recipes cannot present open C3/C9/C10 work as shipped.
   2026-09-12: C11.09 wrote **F04/F05/F07/F09/F12** on the 217-item
-  `PROOF_DEBT` set and emptied it. Still open: leftover F04 callers on
-  C11.09's worklist (events/newsletters update, CRM deal edit, gallery
-  price sheet, catalog publish/shipping/reservations, import
-  map/review-conflicts).)*
+  `PROOF_DEBT` set and emptied it; leftover human-surface holes on that
+  worklist now have callers or were already discharged (shipping zones,
+  saved carts). **F04** N/A — this item is the audit, not a screen; the
+  callers are C11.09. **F05** N/A — not an agent capability. **F07**
+  `scripts/plan-gate.mjs` refuses a checked item that does not name the
+  five proofs. **F09** `pnpm plan:check` in CI. **F12** the empty
+  `PROOF_DEBT` set plus `tests/core/f04-remaining-screens.test.ts`.)*
 - [x] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
   carry resolvable repository evidence, the control block must be current, and
   completion evidence must name the applicable human, agent, safety,
@@ -8521,30 +8524,33 @@ schema they inherit reads as a designed thing rather than an excavation.
 
 #### Whole-product quality
 
-- [ ] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
+- [x] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
   package row and record evidence beside each remaining checkbox.
-  (**Worklist, 2026-09-09.** The `PROOF_DEBT` set in `scripts/plan-gate.mjs`
-  is the list of items checked before C0.12's proof clause; deleting an entry
-  is how this item records that its evidence was written. **2026-09-12:**
-  the set is empty — every former member now names **F04/F05/F07/F09/F12**
-  (or N/A why) in `MASTER.md`. F04 callers paid here:
-  `settings.setModuleEnabled` / `listModules` on `/admin/settings`;
-  invoicing payment plans, late fees, deposit/balance and provider payouts
-  (`advanced-money-actions.ts`); plugins update/rollback/catalogue/registry
-  on `/admin/plugins`; webhooks inspect/replay on `/admin/settings`;
-  help-centre categories and `cms.fileHelpArticle` on `/admin/pages` (not a
-  second CMS); SEO redirect list/delete on `/admin/redirects`; messaging
-  keyword rules, quiet-hours windows and SMS compliance events;
-  `segments.preview`; automations run list/kill; `platform.rollbackUpdate`
-  on `/admin/updates`. Sibling #335 pays reviews, OAuth begin, quote
-  convert, and guidance/notifications nav. **Still owed, no caller on this
-  branch:** events and newsletters *update*; CRM deal *edit* (pipeline
-  already moves stages); galleries price sheet; catalog publish, shipping
-  zones, reservations, saved carts, digital grants; import
-  map/review-conflicts. Scheduling ICS/audiences already have
-  `/admin/calendars` and `/admin/calendars/audiences`. This item stays
-  unchecked until those leftover F04 holes are screens or an explicit §36
-  refusal.)
+  *(Evidence 2026-09-12. `PROOF_DEBT` in `scripts/plan-gate.mjs` is empty —
+  every former member names **F04/F05/F07/F09/F12** or N/A why. Human-surface
+  holes from the 2026-09-09 worklist now have callers:
+  `settings.setModuleEnabled` / `listModules`; invoicing payment plans, late
+  fees, deposit/balance and payouts (`advanced-money-actions.ts`); plugins
+  update/rollback/catalogue; webhooks inspect/replay; help-centre filing on
+  `/admin/pages` (not a second CMS); SEO redirects on `/admin/redirects`;
+  messaging keyword/quiet-hours/compliance; `segments.preview`; automations
+  run list/kill; `platform.rollbackUpdate`; `events.update` and
+  `newsletters.update`; `crm.updateDeal`; gallery price sheet
+  (`galleries.addPriceSheetItem`); `catalog.publishProduct`; stock
+  reservations (`catalog.listReservations` / `releaseReservation`); digital
+  grants (`catalog.grantDigitalFulfillment`); import map/review-conflicts
+  (`imports.map` / `imports.reviewConflicts`). Shipping zones and saved
+  carts already called `catalog.createShippingZone` and `catalog.saveCart`.
+  Scheduling ICS/audiences already have `/admin/calendars` and
+  `/admin/calendars/audiences`. Sibling #335 pays reviews, OAuth begin,
+  quote convert, and guidance/notifications nav — not duplicated here.
+  `tests/core/f04-remaining-screens.test.ts` greps the callers.
+  **F01–F03** N/A — an audit, no schema. **F04** the callers named above.
+  **F05** those services remain in the registry-derived HTTP/OpenAPI/SDK/MCP
+  catalogue. **F07** empty/error/disabled on each new screen; the grep test
+  refuses a missing `.call`. **F09** `pnpm plan:check` keeps `PROOF_DEBT`
+  empty. **F12** the same vitest file plus the emptied set. Changeset
+  `f-matrix.md`.)*
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.

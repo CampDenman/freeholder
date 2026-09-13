@@ -11,9 +11,16 @@ import { requireStaffActor } from "../../guard";
 
 export const dynamic = "force-dynamic";
 
-export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EventDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const actor = await requireStaffActor("events");
   const { id } = await params;
+  const query = await searchParams;
   const [bundle, t] = await Promise.all([
     getEvent.call({ id }, actor).catch((error: unknown) => {
       if (error instanceof ServiceError) notFound();
@@ -21,19 +28,56 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     }),
     getT(),
   ]);
+  const event = bundle.event;
 
   return (
     <div className="grid gap-6">
       <div>
         <a href="/admin/events" className="text-sm text-ink-muted">{t("events.back")}</a>
-        <h1 className="mt-2 text-xl font-bold tracking-tight">{bundle.event.name}</h1>
+        <h1 className="mt-2 text-xl font-bold tracking-tight">{event.workingName ?? event.name}</h1>
         <p className="mt-1 text-sm text-ink-muted">
           {t("events.listMeta", {
-            status: t(`events.status.${bundle.event.status}`),
-            path: t("events.publicPath", { slug: bundle.event.slug }),
+            status: t(`events.status.${event.status}`),
+            path: t("events.publicPath", { slug: event.slug }),
           })}
         </p>
       </div>
+      {query.error ? (
+        <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+          {query.error.includes(" ") ? query.error : t("events.failed")}
+        </p>
+      ) : null}
+
+      {event.status !== "cancelled" ? (
+        <Card>
+          <CardHeader title={t("events.update")} />
+          <CardBody>
+            <form action={eventAction} className="grid gap-4 sm:grid-cols-2">
+              <input type="hidden" name="intent" value="update" />
+              <input type="hidden" name="id" value={event.id} />
+              <input type="hidden" name="expectedVersion" value={event.version} />
+              <Field label={t("events.name")} htmlFor="event-name">
+                <Input id="event-name" name="name" required defaultValue={event.workingName ?? event.name} />
+              </Field>
+              <Field label={t("events.slug")} htmlFor="event-slug">
+                <Input id="event-slug" name="slug" required defaultValue={event.slug} className="font-mono" />
+              </Field>
+              <Field label={t("events.summary")} htmlFor="event-summary">
+                <Input id="event-summary" name="summary" defaultValue={event.workingSummary ?? event.summary ?? ""} />
+              </Field>
+              <Field label={t("events.venueName")} htmlFor="event-venue">
+                <Input id="event-venue" name="venueName" defaultValue={event.workingVenueName ?? event.venueName ?? ""} />
+              </Field>
+              <Field label={t("events.venueAddress")} htmlFor="event-address">
+                <Input id="event-address" name="venueAddress" defaultValue={event.workingVenueAddress ?? event.venueAddress ?? ""} />
+              </Field>
+              <div className="self-end">
+                <Button type="submit">{t("events.update")}</Button>
+              </div>
+            </form>
+          </CardBody>
+        </Card>
+      ) : null}
 
       {bundle.event.status === "draft" ? (
         <form action={eventAction}>

@@ -31,6 +31,20 @@ const AUTOMATION_ACTIONS = "app/(admin)/automation-actions.ts";
 const UPDATES = "app/(admin)/admin/updates/page.tsx";
 const MESSAGING = "app/(admin)/admin/messaging/page.tsx";
 const MESSAGING_ACTIONS = "app/(admin)/messaging-actions.ts";
+const EVENTS = "app/(admin)/admin/events/[id]/page.tsx";
+const EVENT_ACTIONS = "app/(admin)/event-actions.ts";
+const NEWSLETTERS = "app/(admin)/admin/newsletters/[id]/page.tsx";
+const NEWSLETTER_ACTIONS = "app/(admin)/newsletter-actions.ts";
+const PIPELINE = "app/(admin)/admin/pipeline/page.tsx";
+const PIPELINE_ACTIONS = "app/(admin)/pipeline-actions.ts";
+const GALLERY = "app/(admin)/admin/galleries/[id]/page.tsx";
+const GALLERY_ACTIONS = "app/(admin)/gallery-actions.ts";
+const PRODUCT = "app/(admin)/admin/products/[id]/page.tsx";
+const CATALOG_ACTIONS = "app/(admin)/catalog-actions.ts";
+const ORDERS = "app/(admin)/admin/orders/[id]/page.tsx";
+const INVENTORY = "app/(admin)/admin/inventory/page.tsx";
+const IMPORT_FORMS = "app/(admin)/admin/imports/ImportForms.tsx";
+const IMPORT_ACTIONS = "app/(admin)/import-actions.ts";
 const LOCALES = ["en", "es", "fr"] as const;
 
 function read(path: string): string {
@@ -131,6 +145,44 @@ describe("segments preview, automation runs, update rollback, messaging (C11.09 
   });
 });
 
+describe("leftover F04 holes (C11.09)", () => {
+  it("updates events and newsletters through the real services", () => {
+    expect(read(EVENTS)).toContain('name="intent" value="update"');
+    expect(read(EVENTS)).toContain("events.update");
+    expect(read(EVENT_ACTIONS)).toContain("updateEvent.call");
+    expect(read(NEWSLETTERS)).toContain('name="intent" value="update"');
+    expect(read(NEWSLETTER_ACTIONS)).toContain("updateNewsletter.call");
+  });
+
+  it("edits a deal on the pipeline board", () => {
+    expect(read(PIPELINE)).toContain("updateDealAction");
+    expect(read(PIPELINE_ACTIONS)).toContain("updateDeal.call");
+  });
+
+  it("offers gallery prints through the catalog variant list", () => {
+    expect(read(GALLERY)).toContain("listGalleryPriceSheet.call");
+    expect(read(GALLERY)).toContain("addGalleryPriceSheetItemAction");
+    expect(read(GALLERY_ACTIONS)).toContain("addGalleryPriceSheetItem.call");
+    expect(read(GALLERY_ACTIONS)).toContain("removeGalleryPriceSheetItem.call");
+  });
+
+  it("publishes a product, grants digital downloads, and releases stock holds", () => {
+    expect(read(PRODUCT)).toContain('name="intent" value="publish"');
+    expect(read(CATALOG_ACTIONS)).toContain("publishProduct.call");
+    expect(read(ORDERS)).toContain('name="intent" value="grantDigital"');
+    expect(read(CATALOG_ACTIONS)).toContain("grantDigitalFulfillment.call");
+    expect(read(INVENTORY)).toContain("listReservations.call");
+    expect(read(CATALOG_ACTIONS)).toContain("releaseReservation.call");
+  });
+
+  it("maps an import and records conflict decisions before commit", () => {
+    expect(read(IMPORT_FORMS)).toContain("mapImportAction");
+    expect(read(IMPORT_FORMS)).toContain("reviewImportConflictsAction");
+    expect(read(IMPORT_ACTIONS)).toContain("mapImport.call");
+    expect(read(IMPORT_ACTIONS)).toContain("reviewImportConflicts.call");
+  });
+});
+
 describe("remaining-screen catalogs", () => {
   it("covers the new copy in every locale", () => {
     for (const locale of LOCALES) {
@@ -158,6 +210,15 @@ describe("remaining-screen catalogs", () => {
         "messaging.keywords.title",
         "messaging.windows.title",
         "messaging.compliance.title",
+        "events.update",
+        "newsletters.update",
+        "pipeline.action.edit",
+        "galleries.priceSheet",
+        "catalog.publish",
+        "catalog.fulfill.grantDigital",
+        "catalog.inventory.releaseHold",
+        "imports.map",
+        "imports.review",
       ]) {
         expect(keys, `${locale} missing ${key}`).toContain(key);
       }

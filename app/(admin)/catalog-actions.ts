@@ -44,6 +44,9 @@ import {
   addPurchaseOrderLine,
   adjustStock,
   activateProduct,
+  grantDigitalFulfillment,
+  publishProduct,
+  releaseReservation,
   addOptionValue,
   applyVariantMatrix,
   archiveProduct,
@@ -151,6 +154,14 @@ export async function productAction(form: FormData): Promise<void> {
         );
       } else if (intent === "activate") {
         await activateProduct.call({ id, expectedVersion }, actor);
+      } else if (intent === "publish") {
+        await publishProduct.call({ id, expectedVersion }, actor);
+      } else if (intent === "grantDigital") {
+        await grantDigitalFulfillment.call({ orderId: field(form, "orderId") }, actor);
+        destination = `/admin/orders/${field(form, "orderId")}?saved=grantDigital`;
+      } else if (intent === "releaseReservation") {
+        await releaseReservation.call({ id: field(form, "reservationId") }, actor);
+        destination = `/admin/inventory?item=${field(form, "itemId")}&saved=releaseReservation`;
       } else if (intent === "archive") {
         await archiveProduct.call(
           { id, expectedVersion, reason: field(form, "reason") },

@@ -11,10 +11,12 @@ import { ServiceError } from "@/core/service";
 import { GALLERY_INVITE_COOKIE } from "@/modules/galleries/cookies";
 import {
   addGalleryItem,
+  addGalleryPriceSheetItem,
   approveGalleryRound,
   createGallery,
   inviteGalleryGuest,
   removeGalleryItem,
+  removeGalleryPriceSheetItem,
   reopenGalleryRound,
   revokeGalleryGuest,
   updateGallery,
@@ -188,6 +190,37 @@ export async function reopenGalleryRoundAction(form: FormData): Promise<void> {
     );
   } catch (error) {
     refused(error, path, "That round could not be sent back.");
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
+}
+
+export async function addGalleryPriceSheetItemAction(form: FormData): Promise<void> {
+  const galleryId = text(form, "galleryId");
+  const path = `${GALLERIES}/${galleryId}`;
+  try {
+    await addGalleryPriceSheetItem.call(
+      {
+        galleryId,
+        variantId: text(form, "variantId"),
+        position: Number(text(form, "position") || "0"),
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, path, "That print could not be offered.");
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
+}
+
+export async function removeGalleryPriceSheetItemAction(form: FormData): Promise<void> {
+  const galleryId = text(form, "galleryId");
+  const path = `${GALLERIES}/${galleryId}`;
+  try {
+    await removeGalleryPriceSheetItem.call({ id: text(form, "id") }, await actor());
+  } catch (error) {
+    refused(error, path, "That print could not be removed.");
   }
   revalidatePath(path);
   redirect(`${path}?saved=1`);

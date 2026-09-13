@@ -10,17 +10,21 @@ import {
   getGallery,
   listGalleryAccess,
   listGalleryGuests,
+  listGalleryPriceSheet,
   listGalleryRounds,
   listGallerySelections,
 } from "@/modules/galleries/service";
+import { listSellableVariants } from "@/modules/catalog/service";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
 import { GALLERY_INVITE_COOKIE } from "@/modules/galleries/cookies";
 import {
   addGalleryItemAction,
+  addGalleryPriceSheetItemAction,
   approveGalleryRoundAction,
   inviteGalleryGuestAction,
+  removeGalleryPriceSheetItemAction,
   reopenGalleryRoundAction,
   removeGalleryItemAction,
   revokeGalleryGuestAction,
@@ -50,7 +54,7 @@ export default async function GalleryEditorPage({
 }) {
   const { id } = await params;
   const actor = await requireStaffActor("galleries");
-  const [t, gallery, guests, log, selections, rounds, library, query, jar] = await Promise.all([
+  const [t, gallery, guests, log, selections, rounds, library, sheet, variants, query, jar] = await Promise.all([
     getT(),
     domainOrNull(getGallery.call({ id }, actor)),
     domainOrNull(listGalleryGuests.call({ galleryId: id }, actor)),
@@ -58,6 +62,8 @@ export default async function GalleryEditorPage({
     domainOrNull(listGallerySelections.call({ galleryId: id }, actor)),
     domainOrNull(listGalleryRounds.call({ galleryId: id }, actor)),
     domainOrNull(listAssets.call({ limit: 100 }, actor)),
+    domainOrNull(listGalleryPriceSheet.call({ galleryId: id }, actor)),
+    domainOrNull(listSellableVariants.call({}, actor)),
     searchParams,
     cookies(),
   ]);
@@ -379,6 +385,54 @@ export default async function GalleryEditorPage({
               ))}
             </ul>
           )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("galleries.priceSheet")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("galleries.priceSheetIntro")}</p>
+          {sheet === null ? (
+            <p className="text-sm text-danger">{t("galleries.failed")}</p>
+          ) : sheet.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("galleries.priceSheetEmpty")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-2 p-0">
+              {sheet.map((row) => {
+                const variant = (variants ?? []).find((item) => item.id === row.variantId);
+                return (
+                  <li key={row.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                    <span className="font-medium">
+                      {variant ? `${variant.productName} · ${variant.sku}` : row.variantId}
+                    </span>
+                    <form action={removeGalleryPriceSheetItemAction} className="ms-auto">
+                      <input type="hidden" name="galleryId" value={gallery.id} />
+                      <input type="hidden" name="id" value={row.id} />
+                      <Button type="submit" variant="danger">{t("galleries.priceSheetRemove")}</Button>
+                    </form>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <form action={addGalleryPriceSheetItemAction} className="mt-4 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="galleryId" value={gallery.id} />
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("galleries.priceSheetVariant")}</span>
+              <select
+                name="variantId"
+                required
+                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+              >
+                {(variants ?? []).map((variant) => (
+                  <option key={variant.id} value={variant.id}>
+                    {variant.productName} · {variant.sku}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button type="submit">{t("galleries.priceSheetAdd")}</Button>
+          </form>
         </CardBody>
       </Card>
 
