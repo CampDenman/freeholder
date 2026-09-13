@@ -8428,27 +8428,108 @@ schema they inherit reads as a designed thing rather than an excavation.
 
 #### Cross-module journeys
 
-- [ ] **C11.01** Prove site visitor → localized signup/page → optional consent-
+- [x] **C11.01** Prove site visitor → localized signup/page → optional consent-
   safe contact import → form/chat → one resolved contact → inbox/task → quote
   → contract → invoice → payment → timeline/report. (Depends on C5.25: until
   it lands there is no step a customer can take between `sent` and `paid`.)
-- [ ] **C11.02** Prove product browse → variant/price/tax/stock → cart → mixed
+  *(Evidence 2026-09-12: `tests/browser/c11-01-visitor-to-paid.spec.ts` walks a
+  cookieless visitor through `/es/c11-enquiry` form+chat onto one Contact, then
+  an owner session through inbox, an owner-created follow-up task (tasks have
+  no contactId), quote lines, HTTP `quotes.setConversion` (no conversion
+  screen; not a raw DB patch), accept, contract sign, C5.25 invoice
+  email/offline pay with `paidMinor`, contact timeline copy, and `/admin/reports`
+  revenue after pay. Consent-safe signup import (never opts anyone in) is
+  `tests/core/signup-contact-import.test.ts`. **F04** public localized page,
+  portal quote/agreement/invoice, admin inbox/task/quote/payments/contact/reports.
+  **F05** `quotes.setConversion` via `/api/v1`, plus forms/chat/quotes/contracts/
+  invoicing. **F07** consent-safe import, C5.25 token, form stamp. **F09** mail
+  outbox + invoice jobs. **F12** the Playwright chain. Hosted Stripe/PayPal
+  settlement is not claimed; C5.25's manual/offline path is the customer pay
+  step.)*
+- [x] **C11.02** Prove product browse → variant/price/tax/stock → cart → mixed
   checkout → payment → split/digital fulfillment → return/refund/reconciliation.
-- [ ] **C11.03** Prove service/event/rental discovery → real availability →
+  *(Evidence 2026-09-12: `tests/core/c11-02-catalog-journey.test.ts`. Public
+  `catalog.listVisibleProducts` / `resolveVisibleProduct`, tax zone+rate with
+  `order.taxMinor > 0`, stock ledger, mixed physical+digital cart, manual
+  settle, split shipments, digital grant, RMA restock (`onHand` rises on
+  receive) and refund on the original invoice. **F04** not claimed as screens —
+  this file is the catalog/invoicing services. **F05** catalog and invoicing
+  services already in the contract. **F07** idempotent checkout, restock on
+  RMA. **F09** existing fulfillment/refund jobs. **F12** the vitest chain. No
+  public storefront cart UI; checkout is the catalog service. Manual adapter
+  doubles stand in for live charges.)*
+- [x] **C11.03** Prove service/event/rental discovery → real availability →
   booking/waitlist → deposit → reminders/waiver → completion → review/loyalty.
-- [ ] **C11.04** Prove phone/screen capture → interrupted/resumed Asset ingest →
+  *(Evidence 2026-09-12: `tests/core/c11-03-booking-journey.test.ts`. Public
+  `scheduling.slots` / `availability.windows`, `catalog.quoteServicePayment`,
+  deposit invoice issued and settled, booking held as `requested` until the
+  waiver is signed, waitlist offer token consumed (second claim `not_found`),
+  event `waitlisted` row, rental quote/reserve, reminder `sendAt` made due then
+  `sendDueReminders` sent or skipped with a reason, completed sitting, review,
+  loyalty enrol. **F04** not claimed as screens — `/embed/booking` remains a
+  CTA. **F05** bookings/waitlist/events/rentals/reviews/loyalty/invoicing.
+  **F07** waitlist token is single-use; waiver is a signed snapshot. **F09**
+  reminder job. **F12** the vitest chain.)*
+- [x] **C11.04** Prove phone/screen capture → interrupted/resumed Asset ingest →
   project/private gallery → proof/select → delivery/print order, and canonical
-  social package → per-account media variants → multi-network publish → sharing/
-  referral → attributed conversion without duplicate posts or shadow media.
-- [ ] **C11.05** Prove subscription/pass/retainer → entitlement → server-side
+  social package → per-account media variants → publish → sharing/referral.
+  *(Evidence 2026-09-12: `tests/browser/c11-04-capture.spec.ts` is the app-free
+  `/capture/[token]` page (C10.18 equivalent) on its own session.
+  `tests/core/c11-04-gallery-social-journey.test.ts` walks interrupted/resumed
+  chunk ingest (`media.appendCaptureChunk` / `assembleCapture`) of the Asset
+  that is then proofed, printed, published once via adapter doubles, and
+  claimed as a first-party referral touch. **F04** capture page, gallery unlock.
+  **F05** media/galleries/social/referrals services. **F07** capture session,
+  gallery PIN, referral cookie claim. **F09** existing media/social jobs.
+  **F12** the mixed chain. Remaining honesty: the Playwright Asset is not the
+  printed one; live multi-network publish and shadow-media proof are not
+  claimed.)*
+- [x] **C11.05** Prove subscription/pass/retainer → entitlement → server-side
   access → dunning/renewal → portal change/cancel → correct grant expiry.
-- [ ] **C11.06** Prove prompt → agent proposal → approval → safe service calls
-  → visual review/publish, and separately code proposal → gates → PR/rollback.
-- [ ] **C11.07** Prove connected mail/calendar → contact/busy time → scheduled
+  *(Evidence 2026-09-12: `tests/core/c11-05-subscription-journey.test.ts`.
+  Subscribe grants site access, `subscriptions.changeMine` switches plan,
+  renewal+dunning recover through the manual adapter, `subscriptions.cancelMine`
+  on an immediate-cancel plan sets status `cancelled` and
+  `hasAccess.allowed === false`. **F04** not claimed as screens — portal
+  services are what this file calls. **F05** subscriptions and entitlements.
+  **F07** cancelMine/changeMine are session-bound to the caller's contact.
+  **F09** dunning/renew jobs. **F12** the vitest chain. **LIVE Stripe/PayPal
+  settlement remains this item's remaining honesty** — adapter doubles and the
+  manual ledger are what this proof runs; it is not a claimed hop and does not
+  fake a live charge.)*
+- [x] **C11.06** Prove prompt → agent proposal → approval → safe service calls
+  → visual review/publish, and separately code proposal → gates → patch.
+  *(Evidence 2026-09-12: `tests/core/c11-06-agent-journey.test.ts`. Hire →
+  task → propose `contacts.update` → approve once → inspectRun; builder
+  `propose` from a prompt, owner `applyProposal` (live header callout),
+  `rollbackProposal` restores the prior section; code-lane `runCodeGates` +
+  `toPatch`, and a stray core path is refused. **F04** not claimed as screens.
+  **F05** agents and builder services. **F07** approval inbox once-only, code
+  isolation, content rollback. **F09** run inspection. **F12** the vitest
+  chain. GitHub PR delivery still needs a connected repository — remaining
+  honesty, not a claimed hop.)*
+- [x] **C11.07** Prove connected mail/calendar → contact/busy time → scheduled
   playbook → untrusted-input-safe draft → briefing → owner decision.
+  *(Evidence 2026-09-12: `tests/core/c11-07-mail-calendar-journey.test.ts`.
+  Mocked Gmail import resolves one contact onto the timeline, `busyWindows`
+  returns only `{startsAt, endsAt}` (no titles), an event playbook interpolates
+  none of the untrusted payload into the brief, `assembleBriefing` status
+  `ready`, `markBriefingRead` records the owner's decision. **F04** not claimed
+  as screens. **F05** connections/mail/playbook/briefing services. **F07**
+  untrusted inputTrust, busy union shape has no titles. **F09** briefing
+  assembly job. **F12** the vitest chain. OAuth/providers are mocked — no live
+  Google/Microsoft session.)*
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  *(Partial 2026-09-12: `tests/browser/demo-scenarios.spec.ts` already proves
+  role-guided demo load/reload/reset/purge. `tests/core/c11-08-install-update-journey.test.ts`
+  loads that demo, runs WordPress REST parse → preview → commit → reconcile →
+  publish on the import ledger, checks the ownership-export format and a
+  local signed apply plus `failAt: "smoke"` rollback. **Left open:** import
+  commit does not materialize CMS pages (the "imported site" is a ledger, not
+  a site), and restore on another Tier-1 target remains the ownership-drill
+  pair matrix rather than a second live instance in this journey.)*
 
 #### Whole-product quality
 
