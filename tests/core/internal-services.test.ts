@@ -109,6 +109,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "connections.applyMailReadOAuthCompletion",
   "connections.claimCalendarOAuthCompletion",
   "connections.claimMailReadOAuthCompletion",
+  "connections.peekCalendarOAuthReturn",
+  "connections.peekMailReadOAuthReturn",
   "mail.applyOAuthCompletion",
   "mail.claimOAuthCompletion",
   "media.abortUploadApply",

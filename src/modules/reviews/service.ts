@@ -29,6 +29,10 @@ import {
 } from "./schema";
 import { hashReviewToken, newReviewToken } from "./tokens";
 
+// Re-exported so a screen can name the filter choices without importing a
+// schema file: outside core, the service layer is the only door (§15.5).
+export { REVIEW_SOURCES, REVIEW_STATES, REVIEW_SUBJECTS } from "./schema";
+
 const id = z.string().uuid();
 
 function requirePerson(actor: Actor): void {

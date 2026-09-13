@@ -74,6 +74,11 @@ import {
   POPUP_TRIGGERS,
 } from "@/modules/popups/schema";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
+import {
+  REVIEW_SOURCES,
+  REVIEW_STATES,
+  REVIEW_SUBJECTS,
+} from "@/modules/reviews/schema";
 import { WRITE_KINDS } from "@/core/agents/previews";
 import en from "../../locales/en.json";
 import es from "../../locales/es.json";
@@ -309,6 +314,9 @@ describe("the families built from a template key", () => {
         "archive",
       ],
     ],
+    ["reviews.status", REVIEW_STATES],
+    ["reviews.source", REVIEW_SOURCES],
+    ["reviews.subject", REVIEW_SUBJECTS],
   ])("names every member of %s", (prefix, values) => {
     const missing = values
       .map((value) => `${prefix}.${value}`)

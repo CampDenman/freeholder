@@ -1226,6 +1226,7 @@ export const getQuote = defineService({
   input: z.object({ id }),
   output: quoteRow
     .extend({
+      convertedAt: timestamp.nullable(),
       items: listed(itemRow),
       totals: totalsShape,
       /** Every version's lines, so an earlier offer is still readable. */

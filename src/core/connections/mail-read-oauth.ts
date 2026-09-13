@@ -251,9 +251,46 @@ export const completeMailReadOAuth = defineOrchestratedService({
   },
 });
 
+/**
+ * The stored admin return path for a mail-read OAuth attempt that did not
+ * finish. Cancel and fail must land in the inbox, not on Settings.
+ */
+export const peekMailReadOAuthReturn = defineService({
+  name: "connections.peekMailReadOAuthReturn",
+  summary: "The admin path a mail-read OAuth attempt should return to.",
+  kind: "query",
+  permission: "scoped",
+  agentCallable: false,
+  external: false,
+  input: z.object({
+    provider: z.enum(["google", "microsoft"]),
+    state: z.string().min(30).max(200),
+  }),
+  output: z.object({ returnTo: z.string().nullable() }),
+  handler: async (input, ctx) => {
+    const actor = requirePerson(ctx.actor);
+    const [state] = await ctx.tx
+      .select({ returnTo: mailOauthStates.returnTo })
+      .from(mailOauthStates)
+      .where(
+        and(
+          eq(mailOauthStates.tokenHash, hashState(input.state)),
+          eq(mailOauthStates.userId, actor.userId),
+          eq(mailOauthStates.provider, input.provider),
+          eq(mailOauthStates.purpose, "mail_read"),
+          isNull(mailOauthStates.consumedAt),
+          gt(mailOauthStates.expiresAt, sql`now()`),
+        ),
+      )
+      .limit(1);
+    return { returnTo: state?.returnTo ?? null };
+  },
+});
+
 export default [
   beginMailReadOAuth,
   completeMailReadOAuth,
   claimMailReadOAuthCompletion,
   applyMailReadOAuthCompletion,
+  peekMailReadOAuthReturn,
 ];
