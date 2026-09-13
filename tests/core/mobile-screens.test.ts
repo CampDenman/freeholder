@@ -51,6 +51,8 @@ describe("screen contracts (C10.13)", () => {
     expect(servicesUsed()).not.toContain("conversations.reply");
     expect(SCREENS.bookings.reads).toContain("portal.myProfile");
     expect(SCREENS.messages.reads).toContain("portal.myProfile");
+    expect(SCREENS.message.writes).toContain("conversations.replyAsContact");
+    expect(SCREENS.account.writes).toContain("notifications.revokeDevice");
     expect(SCREENS.gallery.reads).toContain("galleries.viewSession");
     expect(SCREENS.gallery.writes).toContain("galleries.openWithLogin");
     expect(servicesUsed()).not.toContain("galleries.list");
@@ -84,7 +86,7 @@ describe("screen contracts (C10.13)", () => {
     expect(SCREENS.catalog.audience).toBe("public");
     expect(SCREENS.service.audience).toBe("public");
     expect(SCREENS.product.audience).toBe("public");
-    for (const id of ["invoice", "invoices", "gallery", "galleries", "messages", "account"] as const) {
+    for (const id of ["invoice", "invoices", "gallery", "galleries", "messages", "message", "account"] as const) {
       expect(SCREENS[id].audience, id).toBe("signed-in");
     }
     expect(screensNeedingSignIn()).toContain("bookings");
@@ -135,7 +137,7 @@ describe("screen contracts (C10.13)", () => {
     // §35.1's offline rule: writes are never queued. A screen with no writes
     // behaves identically with and without signal.
     const writing = SCREEN_IDS.filter((id) => SCREENS[id].writes.length > 0);
-    expect(writing.sort()).toEqual(["booking", "gallery", "newsletters"]);
+    expect(writing.sort()).toEqual(["account", "booking", "gallery", "message", "newsletters"]);
   });
 
   it("does not cache the one screen whose data expires", () => {
@@ -164,6 +166,8 @@ describe("deep links (C10.13)", () => {
       ["https://aurora.test/portal/appointments/tok123", "booking", "tok123"],
       ["https://aurora.test/portal/invoices/inv-9", "invoice", "inv-9"],
       ["https://aurora.test/g/spring-shoot", "gallery", "spring-shoot"],
+      ["https://aurora.test/portal/messages", "messages", undefined],
+      ["https://aurora.test/portal/messages/thread-9", "message", "thread-9"],
       ["https://aurora.test/portal", "account", undefined],
     ];
     for (const [url, screen, param] of cases) {

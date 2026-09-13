@@ -8257,6 +8257,26 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   and complete the native two-factor challenge path for enrolled accounts
   (C10.25 safely directs those accounts to the website in the interim),
   and add every new file to the shell test's colour and state lists.
+  *(Implementation 2026-09-12: `conversations.replyAsContact` writes an inbound
+  `chat` message from the session's own contact into the session's own thread,
+  never sends on `reply_channel`, and is rate-limited per contact. `conversations.get`
+  is self-service with an explicit contact filter. The portal messages room
+  links to a thread page with the same reply. Native messages/newsletters/account
+  screens and TOTP/recovery sign-in use those services; WebAuthn-only accounts
+  still use the website. **F01** no schema. **F02** customer reply is
+  `authenticated` and ownership-checked; get is the existing query with a second
+  audience. **F03** contact/user linkage and `conversations.record` are reused.
+  **F04** loading/empty/failed/offline paths on the new screens; device
+  interaction and accessibility proof remain outstanding, so this checkbox
+  stays open. **F05** HTTP/OpenAPI/SDK expose the mutation. **F06** en/es/fr
+  labels and semantic colours; native screen-reader and light/dark inspection
+  still required. **F07** own-thread-only reply, no business `conversations.reply`,
+  no email-footer unsubscribe, sign-out revokes a held device token, writes
+  are live-only. **F08** service/HTTP/client/shell tests. **F09** no new storage
+  or jobs. **F10** the website now has the same thread view. **F11** app/package
+  READMEs and changeset `customer-reply-and-account.md`. **F12** HTTP customer
+  reply and native 2FA client path are executable tests; a physical journey
+  still needs an installed native build.)*
 - [x] **C10.14** Build push registration/preferences and booking, gallery,
   invoice and back-in-stock notifications through core notification services.
   §35.1's `DeviceToken` carries a `contact_id`, so this item **must repoint it
