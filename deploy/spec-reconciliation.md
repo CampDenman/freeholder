@@ -122,12 +122,10 @@ These stay in the spec. They are why C11.17 cannot be checked.
 | Independent security review | C11.10 — packet at `security/independent-review-packet.md` is not a signed review. |
 | Live settlement | C11.05 remaining honesty. Manual/offline and adapter doubles are what journeys run. Hosted Stripe/PayPal charges are not claimed. |
 | C11.08 Tier-1 restore | Fresh demo + WordPress/generic import + local signed apply/rollback exist. Restore onto another live Tier-1 target remains the ownership-drill pair matrix, not a second instance in the journey. |
-| C11.09 F05 stamps | `PROOF_DEBT` is empty and F04/F07/F09/F12 are named, but ~194 F05 catalogue lines are still template paste. C0.11 stays open for the same reason. |
 | C11.11 large seed | Small-seed server clocks in CI. Medium/large §15.1 seed, Core Web Vitals, editor, job-queue, migration and cold-boot are opt-in and fail closed here. |
 | C11.12 leftovers | Axe on setup/admin/editor/storefront/portal plus more admin F04 screens and injected RTL. Not every F04 screen is in the loop; no shipped Arabic catalog. |
 | C11.14 leftovers | No product-wide search index (per-list search only). Per-record restore is merge-undo + instance drill, not undelete-every-row. Retention is privacy-rights + artifact TTL, not per-table TTL. |
 | C11.15 leftovers | Scaffold/TODO/false-positive gates closed in earlier passes. Not every sentence in §§1–42 has its own acceptance test; this recon is the map, not a substitute for those tests. |
-| C0.11 | Same F05-stamp audit as C11.09. |
 | C11.17 | Unsigned. Owner must sign the §43.1 record after the clean-room suite. |
 
 ## Anti-roadmap (correctly not built)
@@ -144,7 +142,7 @@ no physical device).
 
 | Command | What it proves | This worktree 2026-09-13 |
 |---|---|---|
-| `pnpm plan:check` | §43 ids, evidence, proofs, current focus | ran: 297 IDs, 267 checked, 30 open |
+| `pnpm plan:check` | §43 ids, evidence, proofs, current focus | ran: 297 IDs, 269 checked, 28 open |
 | `pnpm exec tsc --noEmit` | types, including C11.02 `onHand` narrowing | ran: clean |
 | `node scripts/license-headers.mjs` | SPDX | ran: clean |
 | `node scripts/changelog-gate.mjs` | changeset + CHANGELOG version | ran: clean |
@@ -167,5 +165,4 @@ DONE.
 - Independent security review.
 - Live payment-provider settlement.
 - Native store submission or a physical-device walkthrough.
-- That every F05 evidence sentence is more than catalogue paste.
 - That every F04 screen has been axe-walked in this worktree.
