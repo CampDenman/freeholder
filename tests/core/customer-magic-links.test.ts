@@ -273,10 +273,9 @@ describe.runIf(hasDatabase)("customer magic-link lifecycle", { timeout: 30_000 }
 });
 
 describe("the customer magic-link migration", () => {
-  it("is additive and indexes the bearer credential", () => {
-    const migration = readFileSync("db/migrations/0021_customer-magic-links.sql", "utf8");
+  it("indexes the bearer credential in the reviewed baseline", () => {
+    const migration = readFileSync("db/migrations/0000_reviewed-baseline.sql", "utf8");
     expect(migration).toContain('CREATE TABLE "customer_magic_links"');
     expect(migration).toContain('CREATE UNIQUE INDEX "customer_magic_links_token_idx"');
-    expect(migration).not.toMatch(/\bDROP\b/i);
   });
 });

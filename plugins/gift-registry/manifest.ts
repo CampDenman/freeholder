@@ -9,7 +9,7 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["contacts:read", "invoicing:create"],
   requires: ["core", "invoicing"],
-  migrations: ["0075_first_party_plugins.sql", "0163_first_party_plugin_surfaces.sql"],
+  migrations: ["0000_reviewed-baseline.sql"],
   capabilities: { blocks: false },
   tables: () => import("./tables"),
   services: () => import("./service"),

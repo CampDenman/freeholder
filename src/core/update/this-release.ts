@@ -9,7 +9,7 @@ export const THIS_RELEASE: ReleaseMetadata = parseReleaseMetadata({
   version: PLATFORM_VERSION,
   channel: "edge",
   minFromVersion: "0.1.0",
-  schemaRisk: "compatible",
+  schemaRisk: "breaking",
   cvss: null,
   severity: "none",
   manualSteps: [],

@@ -114,7 +114,7 @@ describe("instance fit", () => {
       installed: manifests.map((row) => row.name),
       migrationsDir: "db/migrations",
     });
-    expect(existsSync("db/migrations/0073_plain_lilandra.sql")).toBe(true);
+    expect(existsSync("db/migrations/0000_reviewed-baseline.sql")).toBe(true);
   });
 
   it("names the plugin when the platform is outside its range", () => {

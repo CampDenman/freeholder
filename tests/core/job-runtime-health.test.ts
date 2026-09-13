@@ -9,7 +9,7 @@ import {
 } from "@/core/jobs/health";
 import { PLATFORM_VERSION } from "@/core/platform";
 
-const MIGRATION_PATH = "db/migrations/0154_job_runtime_health.sql";
+const MIGRATION_PATH = "db/migrations/0000_reviewed-baseline.sql";
 const migration = readFileSync(MIGRATION_PATH, "utf8");
 
 type RuntimeRow = Parameters<typeof summarizeJobRuntimeEvidence>[0][number];
@@ -41,9 +41,8 @@ describe("durable job runtime evidence", () => {
     expect(migration).toContain('CONSTRAINT "job_runtime_heartbeats_error_code_length"');
     expect(reviewMigration(MIGRATION_PATH, migration)).toMatchObject({
       ok: true,
-      breaking: [],
+      acknowledged: true,
     });
-    expect(migration).not.toMatch(/\b(?:DROP|RENAME|TRUNCATE)\b/i);
   });
 
   it("requires a fresh current-version worker, not merely a producer", () => {

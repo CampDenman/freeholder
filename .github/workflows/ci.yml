@@ -191,6 +191,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # C10.19 identity applies the pre-collapse chain from the parent of
+          # the commit that deleted 0000_core-spine.sql. Depth 1 cannot see it.
+          fetch-depth: 0
       - uses: ./.github/actions/setup-project
       - run: pnpm exec vitest run --shard=${{ matrix.shard }}
 

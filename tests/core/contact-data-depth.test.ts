@@ -413,8 +413,8 @@ describe.runIf(hasDatabase)("contact relationships", () => {
 });
 
 describe("the contact-data-depth migration", () => {
-  it("is additive and indexes every new query path", () => {
-    const migration = readFileSync("db/migrations/0022_contact-data-depth.sql", "utf8");
+  it("indexes every query path in the reviewed baseline", () => {
+    const migration = readFileSync("db/migrations/0000_reviewed-baseline.sql", "utf8");
     expect(migration).toContain('CREATE TABLE "contact_relationships"');
     expect(migration).toContain('CREATE TABLE "custom_field_definitions"');
     expect(migration).toContain('CREATE INDEX "contacts_tags_idx"');
@@ -422,6 +422,5 @@ describe("the contact-data-depth migration", () => {
     expect(migration).toContain("CREATE EXTENSION IF NOT EXISTS pg_trgm");
     expect(migration).toContain('CREATE INDEX "contacts_name_search_idx"');
     expect(migration).toContain('CREATE INDEX "organizations_name_search_idx"');
-    expect(migration).not.toMatch(/\bDROP\b/i);
   });
 });
