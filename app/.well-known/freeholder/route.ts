@@ -13,11 +13,12 @@
 // module list, no version of anything that would help someone decide which
 // exploit to try — the platform version is here because an app has to know
 // what it is talking to, and it is already in `/api/health`.
-import { CONTRACT_VERSION, type DiscoveryDocument } from "@/core/discovery";
+import { CONTRACT_VERSION, instanceLogoUrl, type DiscoveryDocument } from "@/core/discovery";
 import { env } from "@/core/env";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { currentBusiness } from "@/core/settings/read";
 import { currentDesign } from "@/core/design/read";
+import { resolveImage } from "@/core/media/service";
 
 function stripTrailingSlashes(value: string): string {
   let end = value.length;
@@ -48,6 +49,10 @@ export async function GET(): Promise<Response> {
     );
   }
 
+  const logo = design.logoAssetId
+    ? await resolveImage.call({ id: design.logoAssetId }, { kind: "anonymous" })
+    : null;
+
   const document: DiscoveryDocument = {
     freeholder: true,
     contractVersion: CONTRACT_VERSION,
@@ -62,7 +67,7 @@ export async function GET(): Promise<Response> {
     timezone: business.timezone,
     country: business.country,
     branding: {
-      logoUrl: design.logoAssetId ? `${base}/media/download/${design.logoAssetId}` : null,
+      logoUrl: instanceLogoUrl(base, logo?.src),
       // The resolved semantic tokens, so the app never invents a colour and
       // never has to know which of them the owner overrode.
       colors: design.theme as unknown as Record<string, string>,

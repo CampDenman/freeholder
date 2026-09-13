@@ -19,6 +19,10 @@ installs them through CMS, catalog and design services.
 --check | --preflight | --apply | --rollback`, with exit codes fit for cron
 and monitoring (C10.21). It is a client of an instance's own API, not a second
 implementation of the updater.
+`freeholder-app` installs `npx freeholder-app init`: point it at an instance
+URL and it pulls branding, writes icons/splash/store metadata/screenshots and
+prints an auditable `app.json` / `eas.json` diff (C10.15). It does not need
+EAS credentials; store binaries are C10.16.
 `@freeholder/mobile-app` is the white-label customer app's client layer —
 instance discovery, keychain sessions, read-through-write-never offline state
 and runtime branding (C10.12). The screens themselves are C10.13, so this is

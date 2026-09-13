@@ -12,6 +12,7 @@ export const PACKAGE_FOLDERS = [
   "plugin-kit",
   "sdk",
   "templates",
+  "freeholder-app",
 ];
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
