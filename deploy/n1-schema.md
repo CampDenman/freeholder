@@ -18,3 +18,16 @@ Two gates keep that true:
 
 This is not unattended apply (C10.06) and not target-specific image swap
 (C10.10).
+
+## C10.19 — one-time pre-1.0 baseline
+
+Collapsing `0000`–`0167` into `0000_reviewed-baseline.sql` is an acknowledged
+schema break (`schemaRisk: "breaking"`). A database whose journal still names
+the old chain cannot apply the baseline, and rolling back to a pre-collapse
+image is not an image swap: the previous migrator does not recognise the new
+journal. Fresh installs apply the baseline from empty. This is the only window
+the chain is still ours to collapse; after 1.0 it is somebody else's installed
+history.
+
+Sibling `0168_*` first-party plugin migrations (C3.13) are not in this
+baseline. Fold them in when those PRs land, or rebase this collapse after them.

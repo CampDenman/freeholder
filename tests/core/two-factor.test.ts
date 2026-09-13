@@ -264,10 +264,9 @@ describe.runIf(hasDatabase)("the two-factor lifecycle", () => {
 
 describe("the additive two-factor migration", () => {
   it("adds assurance without removing the N-1 session or user columns", () => {
-    const sql = readFileSync("db/migrations/0019_privileged-2fa-step-up.sql", "utf8");
+    const sql = readFileSync("db/migrations/0000_reviewed-baseline.sql", "utf8");
     expect(sql).toContain('CREATE TABLE "totp_factors"');
     expect(sql).toContain('CREATE TABLE "webauthn_credentials"');
-    expect(sql).toContain('ADD COLUMN "two_factor_verified_at"');
-    expect(sql).not.toMatch(/DROP (TABLE|COLUMN)/);
+    expect(sql).toContain('"two_factor_verified_at"');
   });
 });

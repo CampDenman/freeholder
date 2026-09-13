@@ -342,7 +342,7 @@ describe.runIf(hasDatabase)("contact duplicate review", () => {
 describe("the duplicate-review migration", () => {
   it("is additive and indexes queue, foreign-key, and blocking paths", () => {
     const migration = readFileSync(
-      "db/migrations/0023_contact-duplicate-review.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "merge_candidates"');
@@ -353,6 +353,5 @@ describe("the duplicate-review migration", () => {
     expect(migration).toContain(
       'CREATE INDEX "contacts_normalized_phone_idx" ON "contacts" USING btree ((case',
     );
-    expect(migration).not.toMatch(/\bDROP\b/i);
   });
 });

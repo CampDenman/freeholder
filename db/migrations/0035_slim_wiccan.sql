@@ -1,1 +1,0 @@
-ALTER TABLE "customer_magic_links" ADD COLUMN "locale" text;

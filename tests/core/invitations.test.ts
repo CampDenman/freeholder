@@ -331,7 +331,7 @@ describe.runIf(hasDatabase)("staff invitations", () => {
 describe("the invitation migration", () => {
   it("creates the lifecycle indexes and grants existing administrators access", () => {
     const migration = readFileSync(
-      "db/migrations/0018_staff-invitations.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     expect(migration).toContain("staff_invitations_pending_email_idx");

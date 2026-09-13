@@ -116,7 +116,7 @@ describe.runIf(hasDatabase)("platform.describeRelease (C10.02)", { timeout: 60_0
     const report = await describeRelease.call({}, OWNER);
     expect(report.version).toBe(THIS_RELEASE.version);
     expect(report.channel).toBe("edge");
-    expect(report.schemaRisk).toBe("compatible");
+    expect(report.schemaRisk).toBe("breaking");
     expect(report.cvss).toBeNull();
     expect(report.channels.map((channel) => channel.id)).toEqual(["stable", "security", "edge"]);
     const fromHere = await describeRelease.call({ fromVersion: THIS_RELEASE.minFromVersion }, OWNER);
