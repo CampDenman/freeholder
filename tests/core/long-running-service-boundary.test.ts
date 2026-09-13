@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Provider I/O must not run while defineService owns a database transaction.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -121,6 +121,44 @@ function findings(file: string, text: string): string[] {
   return result;
 }
 
+function adapterInterfaceMethods(): Set<string> {
+  const names = new Set<string>();
+  function walk(dir: string): string[] {
+    const found: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const child = join(dir, entry.name);
+      if (entry.isDirectory()) found.push(...walk(child));
+      else if (entry.name === "types.ts") found.push(child);
+    }
+    return found;
+  }
+  for (const file of walk(resolve(process.cwd(), "src/adapters"))) {
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    function visit(node: ts.Node): void {
+      if (ts.isInterfaceDeclaration(node)) {
+        for (const member of node.members) {
+          if (
+            (ts.isMethodSignature(member) || ts.isPropertySignature(member)) &&
+            member.name &&
+            (ts.isIdentifier(member.name) || ts.isStringLiteral(member.name))
+          ) {
+            names.add(member.name.text);
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+  }
+  return names;
+}
+
 describe("long-running service transaction boundary", () => {
   it("detects direct and helper-hidden provider work", () => {
     expect(
@@ -136,6 +174,19 @@ describe("long-running service transaction boundary", () => {
         `,
       ),
     ).toHaveLength(3);
+  });
+
+  it("still finds known provider methods on adapter contracts", () => {
+    // Guards the gate itself: a hand list that stops matching real adapter
+    // methods would pass the scan below while checking nothing at all.
+    const declared = adapterInterfaceMethods();
+    expect(declared.has("send")).toBe(true);
+    expect(declared.has("createCheckout")).toBe(true);
+    expect(declared.has("exchangeCode")).toBe(true);
+    expect(declared.has("listReviews")).toBe(true);
+    expect(declared.has("suggest")).toBe(true);
+    const missing = [...PROVIDER_METHODS].filter((name) => !declared.has(name));
+    expect(missing, missing.join(", ")).toEqual([]);
   });
 
   it("keeps catalogue, social, mail and OAuth provider I/O outside service transactions", () => {

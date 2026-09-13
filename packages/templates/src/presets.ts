@@ -4,7 +4,10 @@
 // application imports. The app installs these trees through CMS, catalog,
 // forms and design services.
 
-/** Platform Bench, the working surface packages/templates overrides. */
+/**
+ * Platform Bench, the working surface packages/templates overrides.
+ * Hex values must stay the platform light tokens (tests/core/colour-literals.test.ts).
+ */
 export const BENCH_TOKENS = {
   paper: "#fafaf8",
   ink: "#23262a",

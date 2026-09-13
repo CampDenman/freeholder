@@ -63,6 +63,15 @@ if [ "$code" != "200" ]; then
   exit 1
 fi
 
+# C11.15: a 200 that still reports 0.0.0 is the droplet that was never
+# redeployed after C3.20. Capture without a pipe; see the SIGPIPE note below.
+health_json=$(curl -s "${BASE}/api/health")
+if [[ "$health_json" != *'"version"'* ]] || [[ "$health_json" == *'"version":"0.0.0"'* ]]; then
+  echo "::error title=Public gates::health version is missing or 0.0.0: ${health_json}"
+  docker logs fh-demo
+  exit 1
+fi
+
 # The demo has to have actually installed. Without this the gates would run
 # against a bare instance and pass by having nothing to look at — the exact
 # failure mode a crawl gate is prone to.

@@ -33,6 +33,19 @@ function recipe(target: string): Recipe {
   return yaml(join(DEPLOY, target, "recipe.yaml")) as Recipe;
 }
 
+describe("health version in executable recipes (C11.15)", () => {
+  it("refuses a 0.0.0 health payload on every gate that waits for /api/health", () => {
+    for (const file of [
+      "scripts/public-gates.sh",
+      "scripts/recipe-matrix.sh",
+      "scripts/upgrade-gate.sh",
+    ]) {
+      const source = readFileSync(join(ROOT, file), "utf8");
+      expect(source, file).toContain('version":"0.0.0"');
+    }
+  });
+});
+
 describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
   it.each(TIER1_RECIPES)("%s has parsed metadata, artifacts and executable operations", (target) => {
     for (const file of REQUIRED_RECIPE_FILES) {

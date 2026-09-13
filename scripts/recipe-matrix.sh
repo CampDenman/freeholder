@@ -56,6 +56,14 @@ for target in "${TARGETS[@]}"; do
     exit 1
   fi
 
+  # C11.15: refuse the 0.0.0 placeholder a stale droplet used to publish.
+  health_json=$(curl -s "$BASE/api/health")
+  if [[ "$health_json" != *'"version"'* ]] || [[ "$health_json" == *'"version":"0.0.0"'* ]]; then
+    echo "${target}: health version is missing or 0.0.0: ${health_json}"
+    docker logs freeholder-recipe-gate
+    exit 1
+  fi
+
   # Capture and match without a pipe: see the note in public-gates.sh.
   # `docker logs … | grep -q` takes SIGPIPE when grep exits on the first
   # match while docker is still writing, which `set -o pipefail` turns into
