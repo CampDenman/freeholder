@@ -197,13 +197,14 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
     const hits = await querySearch.call({ q: TOKEN, limit: 20 }, crmStaff);
     expect(hits.some((hit) => hit.kind === "conversation")).toBe(true);
     expect(hits.some((hit) => hit.kind === "contact")).toBe(false);
+    expect(hits.some((hit) => hit.kind === "note")).toBe(false);
   });
 
   it("hides private notes from agents", async () => {
     const agent: Actor = {
       kind: "agent",
       keyName: "search-key",
-      scopes: ["search.query", "crm.*"],
+      scopes: ["search.query", "contacts.*"],
     };
     const id = await person("priv@example.test", "Priv Lane");
     await writeNote.call(
@@ -247,6 +248,23 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
       OWNER,
     );
     expect(hits).toHaveLength(2);
+  });
+
+  it("still returns a later kind when contacts would fill the limit", async () => {
+    const id = await person("round@example.test", "zxqvround contact a");
+    await person("round-b@example.test", "zxqvround contact b");
+    await person("round-c@example.test", "zxqvround contact c");
+    await writeNote.call(
+      { subjectType: "contact", subjectId: id, body: "zxqvround note body" },
+      OWNER,
+    );
+    const hits = await querySearch.call(
+      { q: "zxqvround", kinds: ["contact", "note"], limit: 2 },
+      OWNER,
+    );
+    expect(hits).toHaveLength(2);
+    expect(hits.some((hit) => hit.kind === "contact")).toBe(true);
+    expect(hits.some((hit) => hit.kind === "note")).toBe(true);
   });
 
   it("treats % and _ in the query as literals", async () => {
