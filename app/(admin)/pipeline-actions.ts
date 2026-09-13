@@ -16,6 +16,7 @@ import {
   installPipelineDefaults,
   moveContactStage,
   moveDeal,
+  updateDeal,
 } from "@/modules/crm/service";
 import { ownerFacing } from "./action-helpers";
 
@@ -64,6 +65,29 @@ export async function createDealAction(form: FormData): Promise<void> {
   }
   revalidatePath(PIPELINE);
   redirect(`${PIPELINE}?saved=opened`);
+}
+
+export async function updateDealAction(form: FormData): Promise<void> {
+  try {
+    const currency = text(form, "currency") || "GBP";
+    const probability = text(form, "probability");
+    await updateDeal.call(
+      {
+        id: text(form, "id"),
+        title: text(form, "title") || undefined,
+        valueMinor: text(form, "value")
+          ? decimalToMinor(text(form, "value"), currency)
+          : undefined,
+        probability: probability === "" ? null : probability ? Number(probability) : undefined,
+        expectedCloseOn: text(form, "expectedCloseOn") || null,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, "That deal could not be changed.");
+  }
+  revalidatePath(PIPELINE);
+  redirect(`${PIPELINE}?saved=edited`);
 }
 
 export async function moveDealAction(form: FormData): Promise<void> {

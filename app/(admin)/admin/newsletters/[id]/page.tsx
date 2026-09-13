@@ -13,11 +13,14 @@ export const dynamic = "force-dynamic";
 
 export default async function NewsletterDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("newsletters");
   const { id } = await params;
+  const query = await searchParams;
   const [bundle, t] = await Promise.all([
     getNewsletter.call({ id }, actor).catch((error: unknown) => {
       if (error instanceof ServiceError) notFound();
@@ -25,14 +28,55 @@ export default async function NewsletterDetailPage({
     }),
     getT(),
   ]);
+  const newsletter = bundle.newsletter;
 
   return (
     <div className="grid gap-6">
       <div>
         <a href="/admin/newsletters" className="text-sm text-ink-muted">{t("newsletters.back")}</a>
-        <h1 className="mt-2 text-xl font-bold tracking-tight">{bundle.newsletter.name}</h1>
-        <p className="mt-1 text-sm text-ink-muted">{t(`newsletters.status.${bundle.newsletter.status}`)}</p>
+        <h1 className="mt-2 text-xl font-bold tracking-tight">{newsletter.name}</h1>
+        <p className="mt-1 text-sm text-ink-muted">{t(`newsletters.status.${newsletter.status}`)}</p>
       </div>
+      {query.saved ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("newsletters.saved")}
+        </p>
+      ) : null}
+      {query.error ? (
+        <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+          {query.error.includes(" ") ? query.error : t("newsletters.failed")}
+        </p>
+      ) : null}
+
+      <Card>
+        <CardHeader title={t("newsletters.update")} />
+        <CardBody>
+          <form action={newsletterAction} className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="intent" value="update" />
+            <input type="hidden" name="newsletterId" value={newsletter.id} />
+            <Field label={t("newsletters.name")} htmlFor="nl-name">
+              <Input id="nl-name" name="name" required defaultValue={newsletter.name} />
+            </Field>
+            <Field label={t("newsletters.statusLabel")} htmlFor="nl-status">
+              <select
+                id="nl-status"
+                name="status"
+                defaultValue={newsletter.status === "paused" ? "paused" : "active"}
+                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+              >
+                <option value="active">{t("newsletters.status.active")}</option>
+                <option value="paused">{t("newsletters.status.paused")}</option>
+              </select>
+            </Field>
+            <Field label={t("newsletters.description")} htmlFor="nl-description">
+              <Input id="nl-description" name="description" defaultValue={newsletter.description ?? ""} />
+            </Field>
+            <div className="self-end">
+              <Button type="submit">{t("newsletters.update")}</Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("newsletters.issueAdd")} />
