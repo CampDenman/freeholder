@@ -99,7 +99,7 @@ registerSearchSource({
 
 registerSearchSource({
   kind: "note",
-  module: "crm",
+  module: "contacts",
   tables: ["notes"],
   search: async ({ tx, actor, pattern, limit }) => {
     const visibility = noteVisible(actor);
@@ -124,7 +124,7 @@ registerSearchSource({
         : subjectHref(row.subjectType, row.subjectId),
       snippet: clipSnippet(row.body),
       contactId: row.contactId,
-      module: "crm",
+      module: "contacts",
     }));
   },
 });

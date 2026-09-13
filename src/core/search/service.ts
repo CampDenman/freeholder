@@ -47,18 +47,29 @@ export const querySearch = defineService({
       if (wanted && !wanted.has(source.kind)) return false;
       return canSeeSource(ctx.actor, source.module);
     });
-    const hits = [];
-    for (const source of selected) {
-      hits.push(
-        ...(await source.search({
+    const buckets = await Promise.all(
+      selected.map((source) =>
+        source.search({
           tx: ctx.tx,
           actor: ctx.actor,
           pattern,
           limit: input.limit,
-        })),
-      );
+        }),
+      ),
+    );
+    const hits = [];
+    for (let offset = 0; hits.length < input.limit; offset += 1) {
+      let added = false;
+      for (const bucket of buckets) {
+        const hit = bucket[offset];
+        if (!hit) continue;
+        hits.push(hit);
+        added = true;
+        if (hits.length >= input.limit) break;
+      }
+      if (!added) break;
     }
-    return hits.slice(0, input.limit);
+    return hits;
   },
 });
 
