@@ -45,6 +45,10 @@ const ORDERS = "app/(admin)/admin/orders/[id]/page.tsx";
 const INVENTORY = "app/(admin)/admin/inventory/page.tsx";
 const IMPORT_FORMS = "app/(admin)/admin/imports/ImportForms.tsx";
 const IMPORT_ACTIONS = "app/(admin)/import-actions.ts";
+const WORK = "app/(admin)/admin/work/page.tsx";
+const WORK_FORMS = "app/(admin)/admin/work/WorkForms.tsx";
+const WORK_ACTIONS = "app/(admin)/work-actions.ts";
+const PLAYBOOKS = "app/(admin)/admin/work/playbooks/page.tsx";
 const LOCALES = ["en", "es", "fr"] as const;
 
 function read(path: string): string {
@@ -183,6 +187,28 @@ describe("leftover F04 holes (C11.09)", () => {
   });
 });
 
+describe("agents hire, edit, runtime connect, playbook export (C11.09 F04)", () => {
+  it("connects a runtime and hires a worker through the real services", () => {
+    expect(read(WORK)).toContain("listConnections.call");
+    expect(read(WORK)).toContain("ConnectRuntimeForm");
+    expect(read(WORK)).toContain("HireAgentForm");
+    expect(read(WORK)).toContain("work.runtime.empty");
+    expect(read(WORK)).toContain("work.hire.noConnection");
+    expect(read(WORK_FORMS)).toContain("connectRuntimeAction");
+    expect(read(WORK_FORMS)).toContain("hireAgentAction");
+    expect(read(WORK_ACTIONS)).toContain("connectAgentRuntime.call");
+    expect(read(WORK_ACTIONS)).toContain("hireAgent.call");
+    expect(read(WORK_ACTIONS)).toContain("step_up_required");
+  });
+
+  it("edits a worker and exports a playbook without a second path", () => {
+    expect(read(WORK)).toContain("updateAgentAction");
+    expect(read(WORK_ACTIONS)).toContain("updateAgent.call");
+    expect(read(PLAYBOOKS)).toContain("exportPlaybook.call");
+    expect(read(PLAYBOOKS)).toContain("work.playbooks.export");
+  });
+});
+
 describe("remaining-screen catalogs", () => {
   it("covers the new copy in every locale", () => {
     for (const locale of LOCALES) {
@@ -219,6 +245,11 @@ describe("remaining-screen catalogs", () => {
         "catalog.inventory.releaseHold",
         "imports.map",
         "imports.review",
+        "work.runtime.title",
+        "work.hire.title",
+        "work.hire.noConnection",
+        "work.playbooks.export",
+        "work.workers.save",
       ]) {
         expect(keys, `${locale} missing ${key}`).toContain(key);
       }
