@@ -1,7 +1,7 @@
 # FREEHOLDER — Product Specification and Completion Plan
 
 **The open-source operating system for a one-person business.**
-Living edition · reconciled 2026-09-04 · created, authored, and owned by Tony Aly · Apache-2.0
+Living edition · reconciled 2026-09-13 · created, authored, and owned by Tony Aly · Apache-2.0
 
 This is the project's **only product and delivery source of truth**. It defines
 the product, architecture, complete scope, dependency order, current state, and
@@ -74,7 +74,7 @@ cd my-business && cp .env.example .env   # add Postgres + storage
 npm run setup                             # migrate, then open /setup
 ```
 
-Docker, Railway, Render, and DigitalOcean recipes are in `/docs/deploy`.
+Docker, Railway, Render, and DigitalOcean recipes are in `deploy/`.
 
 Load the demo business from the setup wizard to explore everything populated, then purge it with one click.
 
@@ -177,7 +177,7 @@ freeholder/
 ├── growth/                  # Keep & grow the audience
 │   ├── email-marketing      # Broadcasts, simple automations, list segments (spine-native)
 │   ├── reviews              # Post-job review requests, moderation, display widgets
-│   ├── social               # Media prep (crop/trim presets, captions) + scheduled publishing [v2: auto-clip]
+│   ├── social               # Media prep (crop/trim presets, captions) + scheduled publishing
 │   ├── affiliates           # Referral & commission engine: dual-sided codes, attribution touches, holdbacks, payout batches
 │   ├── loyalty              # Points ledger, earn rules over spine events, tiers, rewards, redemption & liability
 │   ├── ads                  # Ad slots at IAB sizes per breakpoint, house & sold campaigns, third-party tags, first-party counts
@@ -356,10 +356,12 @@ out to mean "in six weeks" is the fastest way to earn a chargeback.
 | Entity | Purpose | Key fields |
 |---|---|---|
 | `DigitalFulfillment` | What a digital purchase grants. | variant_id, asset_ids[], download_limit, expires_after_days, license_template_id, watermark_policy |
-| `LicenseKey` | Issued per purchase where the goods need one. | variant_id, order_item_id, contact_id, key, status (issued/active/revoked), seats, activations (jsonb) |
 | `RentalTerms` | For `rental` products — equipment, venues, gear. | variant_id, unit (hour/day/week), min_units, max_units, buffer_before/after_hours, deposit_cents, damage_policy, replacement_value_cents |
 | `Pass` | Prepaid entitlement: ten classes, five sessions, an annual membership. | product_id, kind (count/period/unlimited), credits, valid_days, applies_to (jsonb: services, categories), transferable |
 | `PassBalance` | What a contact has left. | contact_id, pass_id, invoice_id, credits_remaining, starts_at, expires_at |
+
+A digital purchase grants a `digital_deliveries` token (C5.19), not a
+license-key table.
 
 A rental is a bookable *thing* rather than a bookable *person*, so it reuses
 the scheduling engine's resource calendars (§4.4) rather than inventing a
@@ -401,7 +403,7 @@ shipping and return policy — the fields Google actually reads.
 | `AffiliateCode` | A referrer's code within a program (IROCK). | program_id, contact_id (the referrer — a Contact like everyone else), code, landing_path, clicks, status |
 | `CommissionEvent` | One earned commission on the ledger. | affiliate_code_id, referred_contact_id, conversion_type, subject_type + subject_id, invoice_id (nullable — signups have no invoice), amount_cents, status (pending → approved → paid, or reversed on refund) |
 
-Paywalls, tips, and commissions all obey the convergence rule: an unlock or tip is realized as an `Invoice` + `Payment` like any other money-in, and commission payouts settle through the invoicing module (manual/batch in v1; payout-provider adapter such as Stripe Connect as a v2 adapter) — no parallel money paths. Attribution is first-party: a visit with `?ref=IROCK` sets the code on the session, conversion within `cookie_window_days` writes the `CommissionEvent`, refunds reverse it automatically.
+Paywalls, tips, and commissions all obey the convergence rule: an unlock or tip is realized as an `Invoice` + `Payment` like any other money-in, and commission payouts settle through the invoicing module as manual/batched CSV the owner hands to their bank — no parallel money paths, and no payout-provider adapter in this plan. Attribution is first-party: a visit with `?ref=IROCK` sets the code on the session, conversion within `cookie_window_days` writes the `CommissionEvent`, refunds reverse it automatically.
 
 **Money state machines (enforce in service layer, not UI):**
 
@@ -505,7 +507,6 @@ preferred person, and returns slots. It accounts for:
 | Entity | Purpose | Key fields |
 |---|---|---|
 | `Booking` | A scheduled commitment. | contact_id, service_offering_id, calendar_id, secondary_calendar_ids[], starts_at, ends_at, timezone_at_booking, status, location_id, location_detail (address/meeting URL), capacity_used, invoice_id, pass_balance_id, reschedule_token, intake_submission_id, waiver_id, source (site/admin/agent/import), notes, cancellation_reason |
-| `BookingSeries` | Recurring appointments and multi-session courses. | rule (RRULE), count, service_offering_id, contact_id, status |
 | `BookingParticipant` | Group bookings, classes, and a client bringing two people. | booking_id, contact_id (nullable for a named guest), name, status (registered/attended/no_show), seat_count |
 | `Waitlist` | Who wants a full slot, in order. | service_offering_id, calendar_id (nullable), window (range), contact_id, position, notify_state |
 | `CancellationPolicy` | Named, reusable, attached per service. | name, free_until_hours, fee_type (none/fixed/percent/forfeit_deposit), fee_value, reschedule_limit, no_show_fee_cents |
@@ -514,8 +515,11 @@ preferred person, and returns slots. It accounts for:
 ```
 Booking:  requested → confirmed → in_progress → completed | no_show
           any → rescheduled (new row, links to prior) | cancelled (policy applied → refund/credit/fee)
-Series:   active → paused → completed | cancelled   (per-occurrence overrides allowed)
 ```
+
+A repeating course or standing appointment is several `Booking` rows, not a
+series entity. ICS import records the first occurrence of an `RRULE` and does
+not expand recurrence (`src/core/ics.ts`).
 
 **Rules:**
 
@@ -645,7 +649,7 @@ structure a search engine and a skim-reading human can both follow.
 | `Page` / `Post` | CMS. Block-based body. | title, slug, blocks (jsonb), status, published_at, seo (jsonb), og_image_asset_id |
 | `Form` | Definable forms. | name, fields (jsonb schema), destination (contact_create/update), notify, automation_trigger |
 | `FormSubmission` | Responses → linked/creating contacts. | form_id, contact_id, data (jsonb), source_url |
-| `Redirect`, `SeoSetting` | 301s, sitewide schema.org config, sitemap inclusion rules. | — |
+| `Redirect` | 301s. Sitewide schema.org type, locales and NAP live on `business_profile`; per-page SEO jsonb and sitemap inclusion live on the CMS row. | from_path, to_path, status |
 | `HelpArticle` | A help-centre entry. Same block body as a page, because it is one. | title, slug, category_id, blocks (jsonb), status, locale, seo (jsonb), helpful_yes, helpful_no, updated_at |
 | `HelpCategory` | How the help centre is arranged. | name, slug, position, description |
 
@@ -706,7 +710,7 @@ Funnel = `AnalyticsEvent` joined through `contact_id` to money tables. Visit →
 
 The MCP server authenticates as a scoped `ApiKey`, calls the same service layer, and every mutation lands in `AuditLog` with `actor = agent:<key-name>`. The owner can read a plain-English log of everything their AI did.
 
-**Instance release notes (mandated best practice):** every Freeholder keeps its *own* changelog. Whenever functionality on the site is CRUD'd — the platform upgrades, a module is toggled, a plugin is installed/updated/removed, a consequential setting changes — a `ReleaseNote` is auto-drafted from the triggering event (platform upgrades pull the relevant entries straight from the core changelog; plugin changes pull from the plugin's changelog). Agents making functional changes via MCP must write the note as part of the change — the service layer won't complete a functionality-mutating call from an agent without one. Admin gets a "What Changed" timeline; owners can optionally publish selected notes to a public `/changelog` page (server-rendered, in the sitemap — a live site that documents its own evolution is both a trust signal and an SEO asset). The discipline that keeps the platform honest at the repo level (§15.6) is thereby inherited by every deployed site: no functionality ever changes silently, anywhere in the ecosystem.
+**Instance release notes (mandated best practice):** every Freeholder keeps its *own* changelog. Whenever functionality on the site is CRUD'd — the platform upgrades, a module is toggled, a plugin is installed/updated/removed, a consequential setting changes — a `ReleaseNote` is auto-drafted from the triggering event (platform upgrades pull the relevant entries straight from the core changelog; plugin changes pull from the plugin's changelog). Agents making functional changes via MCP must write the note as part of the change — the service layer won't complete a functionality-mutating call from an agent without one. Admin `/admin/updates` is the "What Changed" timeline. A dedicated public `/changelog` route is not in this plan; an owner who wants selected notes public writes a CMS page. The discipline that keeps the platform honest at the repo level (§15.6) is thereby inherited by every deployed site: no functionality ever changes silently, anywhere in the ecosystem.
 
 ### 4.9 Internationalization (core/i18n)
 
@@ -714,16 +718,14 @@ The MCP server authenticates as a scoped `ApiKey`, calls the same service layer,
 
 | Entity | Purpose | Key fields |
 |---|---|---|
-| `LocaleSetting` | Enabled locales for the instance. | locale (BCP-47: en, fr-CA, de…), enabled, is_default, url_strategy_position |
+| `BusinessProfile` (locale/money columns) | Enabled locales, default locale, base currency, timezone, units and first day of week — one row, not satellite setting tables. | default_locale, enabled_locales[], base_currency, timezone, units, first_day_of_week |
 | `EntityTranslation` | Translations for content entities. One row per entity × locale. | entity_type, entity_id, locale, fields (jsonb: title, body, seo…), status (draft/machine/reviewed), translated_by (user/agent) |
-| `CurrencySetting` | Currencies the business operates in. | currency (ISO-4217), is_base, enabled, rounding_rule |
-| `FxRate` | Display-conversion rates (informational). | from, to, rate, as_of, source (manual/adapter) |
 | `PriceListEntry` | Explicit per-currency prices (real multi-currency selling — never auto-convert charges). | product_variant_id, currency, amount_cents |
 
 **Rules:**
 - **UI strings** (buttons, labels, emails' boilerplate) live in message catalogs (ICU MessageFormat JSON), shipped per locale, community-translatable. **Content** (pages, products, galleries, campaigns) lives in `EntityTranslation`.
 - **URL strategy:** default locale unprefixed, others path-prefixed (`/fr/services/...`). Every localized page emits full `hreflang` alternates + `x-default`. One sitemap per locale, indexed by a sitemap index.
-- **Money is never auto-converted at charge time.** A variant is either priced in a currency (PriceListEntry) or unavailable in it. FX rates are for display/reporting only. Invoices, payments, and refunds stay in their original currency forever.
+- **Money is never auto-converted at charge time.** A variant is either priced in a currency (PriceListEntry) or unavailable in it. There is no FX-rate table and no `adapters/fx` family: display conversion stays off (§8). Invoices, payments, and refunds stay in their original currency forever.
 - **Customer-facing everything follows `Contact.preferred_locale`:** portal, quotes, invoices, contracts, booking reminders, marketing emails. A quote sent to a French client renders in French with EUR prices if priced; the admin sees it in the owner's locale.
 - **Timezone discipline:** store UTC; bookings render in *both* business and contact timezone on every customer surface (the #1 no-show cause is timezone confusion).
 - **Tax follows location, not locale:** tax zones key off business location + customer country (see §4.10).
@@ -929,9 +931,9 @@ What follows is the machinery that makes attribution defensible.
 - **Dual-sided rewards can pay in points.** A referrer may earn commission,
   loyalty points, a pass, or a credit — the reward is a configuration, which is
   precisely why loyalty and affiliates share these rails.
-- **Payouts settle through invoicing** (§4.3). v1 is manual and batched with a
-  CSV the owner can hand to their bank or accountant; a payout-provider adapter
-  is a later implementation of the same interface.
+- **Payouts settle through invoicing** (§4.3). They are manual and batched with a
+  CSV the owner can hand to their bank or accountant. A payout-provider adapter
+  is not in this plan.
 - **Tax paperwork is acknowledged, not automated**: `tax_form_state` tracks
   whether the information a jurisdiction requires above a threshold (1099-NEC,
   T4A, equivalents) has been collected. The platform prompts and records; it
@@ -1294,7 +1296,7 @@ The v1 that is genuinely shippable on Replit and already better than the tool-ma
 
 11. messaging + inbox (two-way SMS with consent, keywords and quiet hours — §4.14 — threaded per contact), then loyalty on the referral rails already built (§4.13)
 
-Deferred to v2: subscriptions/memberships, gift cards, social auto-clipping (manual crop/trim presets ship in v1.5), PayPal adapter, voice and video (plugins, §4.14).
+The original deferred-to-v2 list (subscriptions/memberships, gift cards, PayPal, voice/video plugins) later shipped under §43. Social auto-clipping did not, and is not in this plan; C9.26 is reviewed per-account variants.
 
 **Deviation in force (decided 2026-07-26): the project's own site before the money path.** The order above is the right order for a business deploying Freeholder. It is not the right order for *building* Freeholder, and the difference is worth stating rather than rediscovering. The first thing this codebase ships is `freeholder.ai` itself, which needs steps 1 and 6 — settings, media, jobs, cms, forms, seo, analytics and an admin shell — and none of commerce, booking, quotes, galleries or the portal.
 
@@ -1311,7 +1313,7 @@ The money path (steps 2–3) follows immediately after, ahead of booking, quotes
 
 - **Custom fields:** jsonb on Contact with generated columns + indexes for hot fields — not EAV tables. Fast, honest about Postgres, and reversible if a field graduates to a real column.
 - **Multi-currency:** store currency per money row from day one; v1 UI = base currency + optional PriceListEntry overrides per enabled currency. Auto-FX display of prices is off by default (honest pricing beats approximate pricing).
-- **Tax:** a real engine, specified in §4.12 — categories per product, zones matched most-specific-first, compound and sequential rates, registrations with threshold watching, exemptions and reverse charge, per-zone inclusive/exclusive display, and `TaxLine` snapshots that outlive rate changes. v1 ships correct templates for Canada, the EU, the UK, the US, Australia and New Zealand; every other country is a zone an owner defines by hand. The tax adapter family (Stripe Tax, Avalara, TaxJar) is the same interface with somebody else's arithmetic behind it, for businesses that outgrow the templates.
+- **Tax:** a real engine, specified in §4.12 — categories per product, zones matched most-specific-first, compound and sequential rates, registrations with threshold watching, exemptions and reverse charge, per-zone inclusive/exclusive display, and `TaxLine` snapshots that outlive rate changes. v1 ships correct templates for Canada, the EU, the UK, the US, Australia and New Zealand; every other country is a zone an owner defines by hand. `adapters/tax` is the `none` seam plus that engine; named Stripe Tax / Avalara / TaxJar implementations are not in this plan.
 - **v1 shipped locales:** propose en + fr + es (covers Canada bilingual compliance and the largest creator markets); community PRs add catalogs. Machine-translation assist for content from day one, always flagged for review.
 - **RTL:** the CSS layer uses logical properties from the start so Arabic/Hebrew are a catalog away, not a rewrite.
 - **hreflang + sitemap generation:** build in core routing, not as a plugin — every module's public pages inherit it for free.
@@ -1396,11 +1398,10 @@ freeholder/                          # Apache-2.0
 │   │   ├── payments/  (stripe/, paypal/, manual/)
 │   │   ├── mail/      (gmail/, outlook/, resend/, smtp/)
 │   │   ├── storage/   (s3/, replit/, local/)   # local = dev-only; production mandates managed object storage (§18)
-│   │   ├── calendar/  (google/, microsoft/)
+│   │   ├── calendar/  (none/ — Google/Microsoft live in core/connections)
 │   │   ├── sms/       (twilio/, none/)
 │   │   ├── ai/        (anthropic/, openai/, none/)   # BYO key — grounding, drafting
-│   │   ├── agent/     (pm_brain/, anthropic/, openai/, local/, none/)  # the builder (§37)
-│   │   └── fx/        (manual/, ecb/)
+│   │   └── agent/     (pm_brain/, anthropic/, openai/, local/, none/)  # the builder (§37)
 │   │
 │   └── mcp/                         # bundled MCP server — tools generated from service registry
 │
@@ -1414,8 +1415,12 @@ freeholder/                          # Apache-2.0
     ├── sdk/                         # @freeholder/sdk — typed API client
     ├── create-freeholder/           # npx create-freeholder — deploy bootstrapper
     ├── templates/                   # @freeholder/templates — theme starters
-    └── mobile-app/                  # white-label Expo/React Native app (§35)
+    ├── mobile-app/                  # white-label Expo/React Native app (§35)
+    ├── cli/                         # @freeholder/cli
+    └── plugin-kit/                  # @freeholder/plugin-kit
 ```
+
+**As implemented (C11.16):** the public surface is `app/(public)/[[...slug]]` — one catch-all, because structure is data (§32), not a file per section. The portal lives at `app/portal/`. Catalog owns carts, orders, inventory and shipping; scheduling owns bookings; newsletters owns broadcasts; there are no `src/modules/{orders,payments,booking,email-marketing}` folders. Adapter families on disk are payments, mail, storage, sms, ai, agent, tax (`none`), carrier (`none`), calendar (`none`), social, point-of-sale, malware, notifications, git and alt-text. There is no `adapters/fx` directory. Recipes live in `deploy/`.
 
 **License policy:** all Freeholder-authored code and documentation, including `packages/`, use Apache-2.0. Every published package carries the same license text as the repository root. Third-party material keeps its own license and notice; the license gate verifies Freeholder SPDX headers, package manifests, and distributable license texts.
 
@@ -1547,15 +1552,11 @@ which one that was, forever.
 | **PayPal** | Not a technical choice — a trust one. A meaningful share of buyers will not enter a card on a site they have not heard of, and will pay instantly with PayPal. Includes PayPal Subscriptions and Venmo in the US. | 200+ markets |
 | **Manual / offline** | Bank transfer, e-transfer, cash, cheque, "pay me at the shoot". Not a fallback: for a large share of service businesses it is the *primary* method, and a platform that cannot record it forces a second ledger. | Everywhere |
 
-**The next four, as first-party adapters after 1.0**, chosen for the markets
-Stripe and PayPal serve worst rather than for logo count: **Square** (retail and
-in-person North America, and the incumbent for many salons and studios),
-**Mollie** (European SMBs — iDEAL, Bancontact, SEPA, with pricing and onboarding
-that suit a one-person business better than Adyen's), **Razorpay** (India: UPI,
-netbanking, RuPay — none of which Stripe covers well locally), and **Paystack
-or Flutterwave** (Africa). **Mercado Pago** follows for Latin America. Each is
-one adapter implementing the interface above; none requires a core change,
-which is the point of having the interface.
+**Also shipped (C5.07),** chosen for the markets Stripe and PayPal serve worst
+rather than for logo count: **Square** (retail and in-person North America),
+**Mollie** (European SMBs), **Razorpay** (India: UPI, netbanking, RuPay), and
+**Paystack / Flutterwave** (Africa). Each is one adapter implementing the
+interface above. Mercado Pago is not in this plan.
 
 **Deliberately not shipped:** crypto (volatility and refund semantics that do
 not fit the invoice model), and any provider requiring the platform to touch
@@ -1575,7 +1576,7 @@ export interface MailAdapter {
 
 **Routing rule:** transactional mail (receipts, OTPs, booking confirmations, quote notifications) goes through the owner's connected Gmail/Outlook. Bulk (campaigns) requires a bulk adapter (Resend/SES/Postmark) — the email-marketing module refuses to broadcast through a personal mailbox, protecting the owner's domain reputation from themselves.
 
-Same pattern for storage, calendar (2-way sync w/ webhook or polling fallback), sms, fx, ai, **tax** (§4.12 — `quote(order) → TaxLine[]`, whose default implementation is the built-in engine), **carrier** (live rates, label purchase, tracking webhooks), **accounting** (export shapes for QuickBooks, Xero and plain CSV), and **agent** (§37). The `none/` implementations let every optional family be absent without null-checks scattered through modules.
+Same pattern for storage, calendar (2-way sync w/ webhook or polling fallback), sms, ai, **tax** (§4.12 — `quote(order) → TaxLine[]`, whose default implementation is the built-in engine; no Stripe Tax / Avalara / TaxJar adapter), **carrier** (`none` until a live-rate plugin exists), **accounting** (export shapes for QuickBooks, Xero and plain CSV — not an adapter family), and **agent** (§37). There is no FX adapter family. The `none/` implementations let every optional family be absent without null-checks scattered through modules.
 
 ---
 
@@ -1611,7 +1612,7 @@ normal tested extension rather than bespoke UI work.
 ## 14. Replit-First Deploy Story
 
 - `.replit` + `replit.nix` committed; **Run** = migrate → seed-if-empty → dev server. Deploy = Replit Deployments with PG + Object Storage provisioned.
-- `npx create-freeholder` (MIT) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + MinIO for full self-host).
+- `npx create-freeholder` (Apache-2.0) scaffolds/forks for Railway, Render, DO App Platform, and bare Docker (`Dockerfile` + `compose.yml` with PG + MinIO for full self-host).
 - All config via env with a single `env.ts` Zod schema — `doctor` prints exactly what's missing in plain English.
 - **Export is a feature:** one admin button produces a full archive (SQL dump + media + a human-readable JSON of every entity). Ownership isn't a slogan; leaving must be easy — that's what makes staying a choice.
 
@@ -3304,12 +3305,18 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-13 |
-| Evidence snapshot | On `main` after C10.18 capture batches #345, C10.17 companion #343, C10.28 #341, C10.27 galleries #336, C11.09 F04 screens #335, C3.13 honesty #334, and MinIO-from-Quay CI #357. C10.30 remains open for native-device evidence. C3.13 first-party plugins are still stacked off main. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` after C11.10–13 #350, C11.15 #349, journeys #347, schema baseline #346, C10.17/18/27/28, honesty #334, and MinIO-from-Quay #357. C11.16 recon is `deploy/spec-reconciliation.md`. C10.30 remains open for native-device evidence. C3.13 first-party plugins are still stacked off main. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.09 leftover F05 stamps, C11.08 remaining hops, C11.10 independent security review, C11.11 performance budgets, C10.15, C10.16, C3.13 first-party plugins |
+| Current focus | C11.17 owner sign-off, C11.08 Tier-1 restore, C11.09 F05 stamps, C11.10 independent security review, C11.11 large seed, C10.15, C10.16, C3.13 first-party plugins |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
+| Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
+| Record date | 2026-09-13 |
+| Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
+| Remaining open | Device evidence (C10.15–C10.18, C10.25–C10.28, C10.30). Independent security review (C11.10). Live settlement (C11.05 honesty). C11.08 Tier-1 restore. C11.09 F05 stamps (and C0.11). C11.11 medium/large seed and browser vitals. C11.12/C11.14/C11.15 named leftovers. C11.17 itself. |
+| Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
+| Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
 §§1–42, including work previously labelled v1.1, v1.5, v2, a first-party
@@ -8652,12 +8659,35 @@ schema they inherit reads as a designed thing rather than an excavation.
   changesets and gated to `package.json`. Doctor and the §18 recipe/public/
   upgrade gates refuse health `0.0.0`. **Left open:** not every documentation
   claim in §§1–42 has a passing acceptance test, so this item is not checked.)*
-- [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
+- [x] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
   prove there is no affirmative feature without a completed checklist item.
+  *(Evidence 2026-09-13: `deploy/spec-reconciliation.md` tables §§1–42 against
+  343 `pgTable`s, the service registry, 136 admin pages and 20 portal pages.
+  Affirmative leftovers without a C-item were struck in this change
+  (`BookingSeries`, `LicenseKey`, Stripe Connect as DONE, social auto-clip,
+  public `/changelog` route, `LocaleSetting`/`CurrencySetting`/`FxRate`/
+  `adapters/fx`, `SeoSetting` table, `/docs/deploy`, MIT on create-freeholder,
+  Mercado Pago, named Stripe Tax/Avalara/TaxJar). Remaining affirmative work
+  keeps its open C-item (device evidence, C11.08–C11.12, C11.14–C11.15, C0.11,
+  live settlement honesty). **F04** N/A — reconciliation is the spec table, not a
+  screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes
+  no customer data; honesty is the safety property. **F09** `pnpm plan:check`
+  and `tests/core/spec-reconciliation.test.ts`. **F12** N/A — mapping, not a
+  composed product journey. Changeset `done.md`.)*
 - [ ] **C11.17 — DONE** Run the full clean-room install, migration, test,
   browser, accessibility, security, performance, export/restore, update/
   rollback and cross-module journey suite with zero unexplained failures; have
   the product owner sign the completion record in this control block.
+  *(Record prepared 2026-09-13 in §43.1. **Not signed. Not checked.** Command
+  list: `pnpm plan:check`, `pnpm gates`, `pnpm test`, `pnpm test:journeys`,
+  `pnpm test:a11y`, `pnpm ownership:drill`, `bash scripts/upgrade-gate.sh`.
+  This worktree can run plan:check and gates; journeys, ownership-drill and
+  upgrade-gate need CI, Docker images or a second host. Do not treat a local
+  green gates run as DONE. **F04** N/A until the owner signs — not a screen.
+  **F05** N/A — not an agent capability. **F07** N/A until the signed suite.
+  **F09** the command list in `deploy/spec-reconciliation.md`. **F12** N/A
+  until the signed suite. Changeset `done.md` is owner-facing and does not
+  claim DONE.)*
 
 ### 43.17 Working protocol
 
