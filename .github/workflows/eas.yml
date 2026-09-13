@@ -1,0 +1,51 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# Signed iOS/Android binaries. Not a required check: EAS needs Expo, Apple
+# and Google credentials this repository does not store, and a pull request
+# must not spend EAS quota. Dispatch this workflow when those credentials
+# exist. CI already exports both native bundles and gates the demo contract.
+name: EAS store binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Native platform to build
+        type: choice
+        default: all
+        options: [all, ios, android]
+
+permissions:
+  contents: read
+
+jobs:
+  eas:
+    name: Signed store binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Require Expo credentials
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN is not configured. Signed store binaries need an Expo account and Apple/Google credentials via EAS."
+            echo "CI already exported iOS/Android bundles and gated the demo contract, store assets and privacy manifest."
+            exit 1
+          fi
+      - name: Install the customer app
+        working-directory: apps/mobile
+        run: npm ci --no-audit --no-fund
+      - name: Validate demo contract, store assets and privacy
+        run: node scripts/mobile-store-gate.mjs
+      - name: Start the EAS production build
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx --yes eas-cli build --platform "${{ inputs.platform }}" --profile production --non-interactive --no-wait

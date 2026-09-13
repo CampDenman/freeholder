@@ -142,9 +142,16 @@ outstanding, so C10.28 stays open.
 
 ## Limits
 
-`npm start` needs a simulator or Expo Go. CI typechecks and bundles Android
-and iOS on every change. Brand the stub for a real instance with
-`npx freeholder-app init <url>` from the repository root (C10.15) — that
-writes icons, splash, store metadata and a config diff without EAS login.
-Building actual store binaries is C10.16, where EAS and the submission
-checklists belong.
+`npm start` needs a simulator or Expo Go. CI typechecks, bundles Android and
+iOS, and fails the customer-app job on an unparsable demo contract, a missing
+store asset from `freeholder-app init`, or a privacy manifest that does not
+match the permissions the binary requests (C10.16). Brand the stub for a real
+instance with `npx freeholder-app init <url>` from the repository root
+(C10.15) — that writes icons, splash, store metadata and a config diff
+without EAS login.
+
+Signed store-submittable binaries still need Expo, Apple and Google
+credentials. CI does not start `eas build` on a pull request. Dispatch
+`.github/workflows/eas.yml` when those credentials exist. Apple and Play
+checklists live in `deploy/app-store-privacy.md` and
+`deploy/play-data-safety.md`; review outcomes remain the stores' call.

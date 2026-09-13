@@ -20,7 +20,9 @@ profile, writes placeholder screenshots from the same branding, and prints an
 auditable diff of `app.json` and `eas.json`.
 
 It does **not** require EAS credentials, and it does not run `eas build`.
-Producing store binaries is a later step (C10.16).
+CI already exports both native bundles and fails on a missing asset this
+command writes (C10.16). Signed store-submittable binaries still need Expo,
+Apple and Google credentials via EAS.
 
 ## What it writes
 

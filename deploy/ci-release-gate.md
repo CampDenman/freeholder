@@ -3,9 +3,11 @@
 Freeholder treats the `checks` job in `.github/workflows/ci.yml` as the single
 protected-branch fan-in. It succeeds only after application checks, security
 checks, all runtime-balanced isolated test shards, the ownership restore drill,
-browser tests, and the deployment recipe matrix have passed. Do not add a
-required check outside that fan-in without updating the branch-protection
-contract.
+browser tests, the customer-app export (iOS and Android against the demo
+contract, including store-asset and privacy-manifest gates), and the
+deployment recipe matrix have passed. Do not add a required check outside that
+fan-in without updating the branch-protection contract. Signed store binaries
+are a separate, skippable EAS workflow and are not a required check.
 
 GitHub treats a skipped required check as success. The fan-in job therefore
 uses `if: always()` and fails unless every needed job result is `success`.
