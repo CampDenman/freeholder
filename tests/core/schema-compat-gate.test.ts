@@ -111,8 +111,8 @@ describe("the migrations already in the tree", () => {
   it("the reviewed baseline is the acknowledged one-time N-1 break", async () => {
     const { readdirSync, readFileSync } = await import("node:fs");
     const dir = "db/migrations";
-    const files = readdirSync(dir).filter((f) => f.endsWith(".sql"));
-    expect(files).toEqual(["0000_reviewed-baseline.sql"]);
+    const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
+    expect(files[0]).toBe("0000_reviewed-baseline.sql");
     const review = reviewMigration(
       files[0]!,
       readFileSync(`${dir}/${files[0]!}`, "utf8"),
@@ -122,6 +122,14 @@ describe("the migrations already in the tree", () => {
     expect(review.reason).toMatch(/collapse of 0000-0167/);
     expect(assertSchemaRisk("compatible", [review]).ok).toBe(false);
     expect(assertSchemaRisk("breaking", [review]).ok).toBe(true);
+    for (const file of files.slice(1)) {
+      const later = reviewMigration(file, readFileSync(`${dir}/${file}`, "utf8"));
+      expect({ file, ok: later.ok, breaking: later.breaking }).toEqual({
+        file,
+        ok: true,
+        breaking: [],
+      });
+    }
     expect(
       declaredSchemaRisk(readFileSync("src/core/update/this-release.ts", "utf8")),
     ).toBe("breaking");
