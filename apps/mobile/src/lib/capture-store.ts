@@ -92,7 +92,7 @@ const store = createCaptureBatchStore(fileCache(), {
 });
 
 export async function bindCaptureBatches(session: { instanceUrl: string; token: string }): Promise<void> {
-  owner = captureBatchOwner(session);
+  owner = await captureBatchOwner(session);
   await store.bind(owner);
 }
 

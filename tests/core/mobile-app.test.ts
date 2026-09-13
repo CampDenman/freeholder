@@ -375,7 +375,7 @@ describe("the customer app (C10.12)", () => {
       const puts = { proxy: 0, part: 0 };
       const file = { filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1, 2, 3]), byteLength: 3 };
       const consent = { grantedAt: "2026-09-12T12:00:00.000Z", notice: "This app will use the camera or photos you choose." };
-      const owner = captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
+      const owner = await captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
       let ids = 0;
       const store = createCaptureBatchStore(memoryCache(), { id: () => `id-${++ids}` });
       await store.bind(owner);
@@ -445,7 +445,7 @@ describe("the customer app (C10.12)", () => {
 
     it("pauses, cancels, retries and reports progress on a capture batch (C10.18)", async () => {
       const consent = { grantedAt: "2026-09-12T12:00:00.000Z", notice: "This app will use the camera or photos you choose." };
-      const owner = captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
+      const owner = await captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
       const file = { filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1, 2, 3]), byteLength: 3 };
       let ids = 0;
       const store = createCaptureBatchStore(memoryCache(), { id: () => `id-${++ids}` });
@@ -524,14 +524,30 @@ describe("the customer app (C10.12)", () => {
 
     it("reloads queued file bytes from cache and refuses another account's flush (C10.18)", async () => {
       const consent = { grantedAt: "2026-09-12T12:00:00.000Z", notice: "This app will use the camera or photos you choose." };
-      const owner = captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
-      const other = captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-b" });
-      const cache = memoryCache();
+      const token = "session-a-secret-token";
+      const owner = await captureBatchOwner({ instanceUrl: "https://studio.test", token });
+      const other = await captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-b" });
+      const held = new Map<string, string>();
+      const cache: Cache = {
+        async get(key) {
+          return held.get(key) ?? null;
+        },
+        async set(key, value) {
+          held.set(key, value);
+        },
+        async delete(key) {
+          held.delete(key);
+        },
+      };
       const file = { filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([9, 8, 7]), byteLength: 3 };
       let ids = 0;
       const first = createCaptureBatchStore(cache, { id: () => `keep-${++ids}` });
       await first.bind(owner);
       await first.enqueue({ source: "camera_roll", files: [file], destination: { kind: "library" }, consent, owner });
+      const dumped = [...held.keys(), ...held.values()].join("\n");
+      expect(dumped).not.toContain(token);
+      expect(dumped).not.toContain("session-b");
+      expect(dumped).not.toContain("https://studio.test");
       const received: Uint8Array[] = [];
       const transport: CaptureTransport = {
         async call<T>(service: string) {
