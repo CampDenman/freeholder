@@ -100,6 +100,7 @@ export default async function AdminLayout({
             labels={{
               region: t("admin.nav.label"),
               overview: t("admin.nav.overview"),
+              search: t("admin.nav.search"),
               briefing: t("briefing.title"),
               guidance: t("guidance.allTitle"),
               notifications: t("notifications.title"),

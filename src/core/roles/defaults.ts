@@ -62,6 +62,7 @@ const ADMIN_MODULES = [
   "reviews",
   "roles",
   "scheduling",
+  "search",
   "seo",
   "settings",
   "time",
@@ -89,7 +90,7 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     description: "Publishes the site, forms, media, translations, and SEO.",
     assignable: true,
     grants: [
-      ...view(["admin", "analytics", "settings"]),
+      ...view(["admin", "analytics", "search", "settings"]),
       ...manage(["cms", "forms", "i18n", "media", "seo"]),
     ],
   },
@@ -99,7 +100,7 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     description: "Manages invoicing and reads business, contact, activity, and reporting information.",
     assignable: true,
     grants: [
-      ...view(["admin", "analytics", "contacts", "events", "settings"]),
+      ...view(["admin", "analytics", "contacts", "events", "search", "settings"]),
       ...manage(["invoicing"]),
     ],
   },
@@ -109,7 +110,7 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     description: "Works with customers and day-to-day service information.",
     assignable: true,
     grants: [
-      ...view(["admin", "events", "forms", "locations", "media", "settings"]),
+      ...view(["admin", "events", "forms", "locations", "media", "search", "settings"]),
       // Somebody whose day is appointments needs the diary they appear in.
       ...manage(["contacts", "scheduling"]),
     ],

@@ -16,7 +16,6 @@ import { ready } from "@/core/runtime";
 import { listServices } from "@/core/service";
 
 export const C11_14_REMAINING = [
-  "No product-wide search index: findability is per-list (contacts.list.search, conversations.search, cms.searchHelp), not one query over every user-owned table.",
   "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
   "Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.",
 ] as const;

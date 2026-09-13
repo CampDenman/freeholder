@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Transactional product lifecycle shared by admin, HTTP and MCP (C5.09).
 
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
@@ -12,6 +12,11 @@ import {
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { recordRedirect } from "@/core/seo/service";
 import { blockTreeSchema } from "@/modules/cms/blocks/registry";
 import { taxCategoryRow } from "@/modules/invoicing/contract";
@@ -929,6 +934,33 @@ export const restoreProduct = defineService({
     ctx.queueEvent("catalog.productRestored", { productId: product.id, reason: input.reason });
     await syncProductPublicPage(ctx, product.id);
     return product;
+  },
+});
+
+registerSearchSource({
+  kind: "product",
+  module: "catalog",
+  tables: ["products"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: products.id,
+        name: products.name,
+        slug: products.slug,
+      })
+      .from(products)
+      .where(or(matchesIlike(products.name, pattern), matchesIlike(products.slug, pattern)))
+      .orderBy(desc(products.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "product",
+      id: row.id,
+      title: row.name,
+      href: `/admin/products/${row.id}`,
+      snippet: clipSnippet(row.slug),
+      contactId: null,
+      module: "catalog",
+    }));
   },
 });
 
