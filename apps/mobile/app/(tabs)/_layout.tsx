@@ -10,9 +10,6 @@ import { TAB_ORDER, SCREENS } from "@freeholder/mobile-app";
 import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 
-/** Only the tabs this release actually renders. C10.28 fills the rest. */
-const BUILT = new Set(["home", "catalog", "bookings", "invoices", "galleries"]);
-
 export default function TabsLayout() {
   const { brand } = useInstance();
   const t = useAppText();
@@ -24,7 +21,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: brand?.colors.inkMuted,
       }}
     >
-      {TAB_ORDER.filter((id) => BUILT.has(id)).map((id) => (
+      {TAB_ORDER.map((id) => (
         <Tabs.Screen
           key={id}
           name={id === "home" ? "index" : id}

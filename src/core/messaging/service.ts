@@ -612,7 +612,15 @@ export const getConversation = defineService({
   summary: "One thread and everything said in it.",
   kind: "query",
   permission: "scoped",
-  input: z.object({ id, limit: z.number().int().min(1).max(500).default(200) }),
+  // C10.28: the customer this thread is with may read it themselves. The
+  // contact field is required for that audience so an absent filter cannot
+  // become "any conversation id I can guess".
+  selfService: { contactField: "contactId" },
+  input: z.object({
+    id,
+    contactId: id.optional(),
+    limit: z.number().int().min(1).max(500).default(200),
+  }),
   output: conversationRow
     .extend({
       contactName: z.string().nullable(),
@@ -638,6 +646,7 @@ export const getConversation = defineService({
       .where(eq(conversations.id, input.id))
       .limit(1);
     if (!found) return null;
+    if (input.contactId && found.thread.contactId !== input.contactId) return null;
 
     const said = await ctx.tx
       .select()

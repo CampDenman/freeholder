@@ -563,6 +563,7 @@ export const SERVICE_NAMES = [
   "conversations.record",
   "conversations.recordDelivery",
   "conversations.reply",
+  "conversations.replyAsContact",
   "conversations.search",
   "conversations.setStatus",
   "conversations.snooze",
@@ -1757,7 +1758,7 @@ export interface ServiceCatalog {
   };
   "auth.login": {
     input: { email: string; password: string };
-    output: { userId: string; role: string; twoFactorRequired: boolean; token: string; expiresAt: string; [key: string]: unknown };
+    output: { userId: string; role: string; twoFactorRequired: boolean; token: string; expiresAt: string; challengeToken: string; methods: { totp: boolean; recovery: boolean; webauthn: boolean }; webauthnOptions?: unknown; [key: string]: unknown };
   };
   "auth.loginChallengeDetails": {
     input: { challengeToken: string };
@@ -3484,7 +3485,7 @@ export interface ServiceCatalog {
     output: { open: number; unread: number; unassigned: number; mine: number; [key: string]: unknown };
   };
   "conversations.get": {
-    input: { id: string; limit?: number };
+    input: { id: string; contactId?: string; limit?: number };
     output: { id: string; contactId: string; subject: string | null; replyChannel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; numberId: string | null; status: "open" | "snoozed" | "closed"; snoozedUntil: string | null; assigneeUserId: string | null; threadKey: string | null; lastInboundAt: string | null; lastOutboundAt: string | null; unread: boolean; assistantEscalatedAt: string | null; assistantEscalationReason: string | null; assistantEscalationResolvedAt: string | null; messageCount: number; updatedAt: string; contactName: string | null; messages: { id: string; conversationId: string; contactId: string; direction: "inbound" | "outbound"; channel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; purpose: ("transactional" | "marketing" | "support") | null; policyException: ("security_code" | "booking_update" | "order_update" | "customer_requested_reply") | null; policyExceptionRef: string | null; body: string; mediaAssetIds: string[]; chatSessionId: string | null; templateId: string | null; sentBy: "contact" | "user" | "system" | "automation" | "agent"; sentByUserId: string | null; providerRef: string | null; recipientAddress: string | null; segments: number | null; costMinor: number | null; costCurrency: string | null; occurredAt: string; deliveries: { status: "queued" | "sent" | "delivered" | "failed" | "undelivered" | "read"; errorCode: string | null; errorText: string | null; occurredAt: string; [key: string]: unknown }[]; [key: string]: unknown }[]; [key: string]: unknown } | null;
   };
   "conversations.list": {
@@ -3506,6 +3507,10 @@ export interface ServiceCatalog {
   "conversations.reply": {
     input: { id: string; body: string; close?: boolean };
     output: { id: string; channel: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; [key: string]: unknown };
+  };
+  "conversations.replyAsContact": {
+    input: { id: string; body: string };
+    output: { id: string; conversationId: string; [key: string]: unknown };
   };
   "conversations.search": {
     input: { status?: "open" | "snoozed" | "closed"; openOnly?: boolean; assigneeUserId?: string; unassigned?: boolean; channel?: "form" | "email" | "sms" | "mms" | "chat" | "assistant" | "social"; unreadOnly?: boolean; q?: string; limit?: number };
@@ -6940,6 +6945,7 @@ export interface FreeholderApi {
     record: (input: ServiceCatalog["conversations.record"]["input"]) => Promise<ServiceCatalog["conversations.record"]["output"]>;
     recordDelivery: (input: ServiceCatalog["conversations.recordDelivery"]["input"]) => Promise<ServiceCatalog["conversations.recordDelivery"]["output"]>;
     reply: (input: ServiceCatalog["conversations.reply"]["input"]) => Promise<ServiceCatalog["conversations.reply"]["output"]>;
+    replyAsContact: (input: ServiceCatalog["conversations.replyAsContact"]["input"]) => Promise<ServiceCatalog["conversations.replyAsContact"]["output"]>;
     search: (input?: ServiceCatalog["conversations.search"]["input"]) => Promise<ServiceCatalog["conversations.search"]["output"]>;
     setStatus: (input: ServiceCatalog["conversations.setStatus"]["input"]) => Promise<ServiceCatalog["conversations.setStatus"]["output"]>;
     snooze: (input: ServiceCatalog["conversations.snooze"]["input"]) => Promise<ServiceCatalog["conversations.snooze"]["output"]>;
