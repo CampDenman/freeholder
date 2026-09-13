@@ -621,7 +621,7 @@ describe.runIf(hasDatabase)("contact consent and privacy rights", () => {
 });
 
 describe("contact privacy migration", () => {
-  it("is additive and carries the required constraints and indexes", () => {
+  it("carries the required constraints and indexes in the reviewed baseline", () => {
     const migration = readFileSync(
       "db/migrations/0000_reviewed-baseline.sql",
       "utf8",

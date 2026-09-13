@@ -8412,8 +8412,13 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `-- freeholder:schema-breaking` on the baseline plus
   `schemaRisk: "breaking"` in `src/core/update/this-release.ts`; the
   unattended updater refuses it. **F09** `deploy/n1-schema.md`. **F12**
-  catalog diff, `db:migrate` from empty, seed/demo load, §23 ownership
-  drill still the restore path. Changeset `schema-baseline.md`.)*
+  `scripts/schema-baseline-identity.mjs` (and
+  `tests/core/schema-baseline-identity.test.ts`) applies the chain from the
+  git parent of the `0000_core-spine.sql` deletion and this baseline to empty
+  databases, diffs catalogs after normalizing drizzle `*_id_*_id_fk` names,
+  and compares against `tests/fixtures/c1019-chain.catalog`; `db:migrate`
+  from empty; seed/demo load; §23 ownership drill still the restore path.
+  Changeset `schema-baseline.md`.)*
 
 **C10 exit:** an owner can leave, restore, update, fork and serve customers on
 mobile without surrendering the code, data, deployment or upgrade path, and the
