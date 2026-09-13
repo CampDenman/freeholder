@@ -16,7 +16,7 @@ import {
 } from "./registry";
 
 function noteVisible(actor: Actor) {
-  if (actor.kind === "system" || actor.kind === "agent") return undefined;
+  if (actor.kind === "system") return undefined;
   const self = actor.kind === "user" ? actor.userId : null;
   return self
     ? sql`(${notes.visibility} <> 'private' or ${notes.authorUserId} = ${self})`
@@ -52,7 +52,7 @@ registerSearchSource({
 
 registerSearchSource({
   kind: "conversation",
-  module: "conversations",
+  module: "crm",
   tables: ["conversations", "messages"],
   search: async ({ tx, pattern, limit }) => {
     const rows = await tx
@@ -92,14 +92,14 @@ registerSearchSource({
       href: `/admin/inbox/${row.id}`,
       snippet: clipSnippet(row.preview ?? row.subject),
       contactId: row.contactId,
-      module: "conversations",
+      module: "crm",
     }));
   },
 });
 
 registerSearchSource({
   kind: "note",
-  module: "notes",
+  module: "crm",
   tables: ["notes"],
   search: async ({ tx, actor, pattern, limit }) => {
     const visibility = noteVisible(actor);
@@ -124,14 +124,14 @@ registerSearchSource({
         : subjectHref(row.subjectType, row.subjectId),
       snippet: clipSnippet(row.body),
       contactId: row.contactId,
-      module: "notes",
+      module: "crm",
     }));
   },
 });
 
 registerSearchSource({
   kind: "task",
-  module: "tasks",
+  module: "crm",
   tables: ["tasks"],
   search: async ({ tx, pattern, limit }) => {
     const rows = await tx
@@ -152,7 +152,7 @@ registerSearchSource({
       href: "/admin/tasks",
       snippet: clipSnippet(row.details),
       contactId: row.contactId,
-      module: "tasks",
+      module: "crm",
     }));
   },
 });

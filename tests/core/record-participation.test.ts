@@ -18,6 +18,7 @@ import { listServices } from "@/core/service";
 export const C11_14_REMAINING = [
   "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
   "Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.",
+  "Other titled contact-attached stores still on per-list search (orders, subscriptions, and remaining SEARCH_TABLE_OPT_OUTS) are not mixed into search.query.",
 ] as const;
 
 let tables: PgTable[] = [];

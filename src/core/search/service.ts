@@ -19,9 +19,14 @@ const hit = row({
 });
 
 function canSeeSource(actor: Actor, module: string): boolean {
-  if (actor.kind === "system" || actor.kind === "agent") return true;
-  if (actor.kind !== "user") return false;
-  return hasModuleAccess(actor, module);
+  if (actor.kind === "system") return true;
+  if (actor.kind === "user") return hasModuleAccess(actor, module);
+  if (actor.kind === "agent") {
+    return actor.scopes.some(
+      (scope) => scope === `${module}.*` || scope.startsWith(`${module}.`),
+    );
+  }
+  return false;
 }
 
 export const querySearch = defineService({
@@ -38,10 +43,12 @@ export const querySearch = defineService({
   handler: async (input, ctx) => {
     const pattern = ilikeContains(input.q);
     const wanted = input.kinds ? new Set(input.kinds) : null;
+    const selected = searchSources().filter((source) => {
+      if (wanted && !wanted.has(source.kind)) return false;
+      return canSeeSource(ctx.actor, source.module);
+    });
     const hits = [];
-    for (const source of searchSources()) {
-      if (wanted && !wanted.has(source.kind)) continue;
-      if (!canSeeSource(ctx.actor, source.module)) continue;
+    for (const source of selected) {
       hits.push(
         ...(await source.search({
           tx: ctx.tx,
@@ -51,7 +58,7 @@ export const querySearch = defineService({
         })),
       );
     }
-    return hits;
+    return hits.slice(0, input.limit);
   },
 });
 

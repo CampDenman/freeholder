@@ -144,7 +144,7 @@ export interface AdminNavLabels {
 // the interface cannot keep; entries arrive with their modules.
 const LINKS = [
   { href: "/admin", key: "overview", module: "admin", Icon: Gauge },
-  { href: "/admin/search", key: "search", module: "admin", Icon: MagnifyingGlass },
+  { href: "/admin/search", key: "search", module: "search", Icon: MagnifyingGlass },
   { href: "/admin/briefing", key: "briefing", module: "admin", Icon: Sun },
   { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
   { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },

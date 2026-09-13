@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Staff findability across user-owned records (C11.14). Hits are filtered by
-// module grants inside search.query; this page does not require one module.
+// Staff findability across user-owned records (C11.14). The page requires the
+// search grant; hits are then filtered by each source's module.
 import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader } from "@/ui/primitives";
 import { querySearch } from "@/core/search/service";
@@ -15,6 +15,8 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 const KIND_KEYS: Record<string, string> = {
   contact: "admin.search.kind.contact",
   conversation: "admin.search.kind.conversation",
+  deal: "admin.search.kind.deal",
+  document: "admin.search.kind.document",
   note: "admin.search.kind.note",
   task: "admin.search.kind.task",
   invoice: "admin.search.kind.invoice",
@@ -29,21 +31,21 @@ const KIND_KEYS: Record<string, string> = {
 export default async function AdminSearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; error?: string }>;
+  searchParams: Promise<{ q?: string }>;
 }) {
-  const actor = await requireStaffActor();
+  const actor = await requireStaffActor("search");
   const query = await searchParams;
   const q = query.q?.trim() ?? "";
   const t = await getT();
 
   let hits: Awaited<ReturnType<typeof querySearch.call>> | null = null;
-  let error: string | null = query.error?.trim() ? query.error : null;
+  let error: string | null = null;
   if (q) {
     try {
       hits = await querySearch.call({ q, limit: 20 }, actor);
     } catch (caught) {
       if (caught instanceof ServiceError) {
-        error = caught.message;
+        error = t("admin.search.failed");
         hits = [];
       } else {
         throw caught;
@@ -85,7 +87,7 @@ export default async function AdminSearchPage({
 
       {error ? (
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
-          {error.includes(" ") ? error : t("admin.search.failed")}
+          {error}
         </p>
       ) : null}
 
