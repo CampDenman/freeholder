@@ -8344,6 +8344,28 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
 - [ ] **C10.18** Add offline/background-safe mobile capture batches with clear
   consent, progress, pause/resume/cancel, retry and destination selection, and
   prove the native app and app-free phone path create equivalent Assets.
+  *(Implementation 2026-09-12: the §35.1 write-queue exception is
+  `createCaptureBatchStore` in `packages/mobile-app`. Consent, destination
+  (library / product / page), progress, pause/resume/cancel and retry are
+  local; `writeThrough` still refuses every service, including media uploads.
+  Flush is online-only through the C10.17 contract — `media.createCaptureSession`
+  or `createUploadLink`, `beginUpload`, `POST /api/media` or
+  `signUploadParts` / `completeUpload`, `bindCaptureAsset`, `confirmCapture`.
+  `tests/core/mobile-capture-batches.test.ts` creates Assets both from a native
+  batch flush and from the app-free `/capture/[token]` pipeline and compares
+  source, kind, mime, filename, bytes, status and `provenance.captureSessionId`;
+  a product destination attaches both paths onto the same product. **F01** no
+  schema. **F02/F03/F05** no new services. **F04** capture screen: consent,
+  destination, queued/uploading/paused/failed/cancelled, pause/resume/cancel/
+  retry; OS background upload (iOS BGTask / Android WorkManager) was not
+  exercised on a device, so this checkbox stays open. **F06** en/es/fr; native
+  screen-reader and light/dark inspection still required. **F07** staff-only;
+  no mobile-only upload API. **F08** package, shell, screen-contract and
+  pipeline-equivalence tests. **F09** no new jobs. **F10** `/capture/[token]`
+  already exists. **F11** app/package READMEs and changeset
+  `mobile-capture-batches.md`. **F12** consent/offline-queue/pause/retry and
+  native≡phone Asset records are executable; a physical background-upload
+  journey still needs an installed native build.)*
 
 - [ ] **C10.19** Collapse the migration chain into one reviewed baseline once
   the schema is complete, keeping seed, demo and restore working, and

@@ -13,6 +13,9 @@
 //
 // That rule is enforced here rather than remembered: `readThrough` is the only
 // way this module talks to the network, and it refuses a mutation outright.
+// The C10.18 exception is not a retry of `writeThrough` — it is a local queue
+// of files (`createCaptureBatchStore`) that says what has and has not been
+// uploaded, and only flushes through the live capture contract once online.
 
 export interface CacheEntry<T> {
   value: T;
@@ -41,6 +44,17 @@ export async function writeThrough<T>(
 ): Promise<T> {
   if (!input.online) throw new OfflineWriteRefused(input.service);
   return call();
+}
+
+/**
+ * §35.1's only write that may sit on the device: a capture file batch, not a
+ * booking, payment, or other decision. `writeThrough` still refuses every
+ * service name, including media uploads — those flush later, while online.
+ */
+export const OFFLINE_WRITE_EXCEPTION = "media.capture.batch" as const;
+
+export function isOfflineWriteException(service: string): boolean {
+  return service === OFFLINE_WRITE_EXCEPTION;
 }
 
 export type Freshness =

@@ -29,8 +29,13 @@ import {
   openCaptureSession,
   ingestCaptureUpload,
   confirmCaptureSession,
+  createCaptureBatchStore,
+  captureBatchProgress,
+  isOfflineWriteException,
+  OFFLINE_WRITE_EXCEPTION,
   unlockOnResume,
   type Cache,
+  type CaptureTransport,
   type Instance,
   type SecretStore,
 } from "../../packages/mobile-app/src/index";
@@ -359,6 +364,155 @@ describe("the customer app (C10.12)", () => {
       expect(roll.token).toBe("upload-token-value-ok");
       await expect(ingestCaptureUpload({ session: opened, file, online: false }, transport)).rejects.toBeInstanceOf(OfflineWriteRefused);
     });
+
+    it("queues capture files offline and flushes through the same media contract (C10.18)", async () => {
+      expect(isOfflineWriteException(OFFLINE_WRITE_EXCEPTION)).toBe(true);
+      expect(isOfflineWriteException("booking.create")).toBe(false);
+      expect(isOfflineWriteException("media.beginUpload")).toBe(false);
+      const calls: Array<{ service: string; body: unknown }> = [];
+      const puts = { proxy: 0, part: 0 };
+      const file = { filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1, 2, 3]), byteLength: 3 };
+      const consent = { grantedAt: "2026-09-12T12:00:00.000Z", notice: "This app will use the camera or photos you choose." };
+      let ids = 0;
+      const store = createCaptureBatchStore(memoryCache(), { id: () => `id-${++ids}` });
+      const transport: CaptureTransport = {
+        async call<T>(service: string, body: unknown) {
+          calls.push({ service, body });
+          if (service === "media.createCaptureSession" || service === "media.grantCapturePermission") {
+            return { id: "session-1", source: "camera", status: "pending" } as T;
+          }
+          if (service === "media.createUploadLink") {
+            return { id: "session-2", source: "camera_roll", status: "pending", token: "upload-token-value-ok" } as T;
+          }
+          if (service === "media.beginUpload") {
+            return { id: "upload-1", strategy: "proxy", partSize: null, partCount: null } as T;
+          }
+          if (service === "media.bindCaptureAsset" || service === "media.confirmCapture" || service === "media.getCaptureSession") {
+            return { id: "session-2", source: "camera_roll", status: "confirmed", assetId: "asset-1" } as T;
+          }
+          throw new Error(service);
+        },
+        async putProxy() {
+          puts.proxy += 1;
+          return { id: "asset-1" };
+        },
+        async putPart() {
+          puts.part += 1;
+          return { etag: `"etag-${puts.part}"` };
+        },
+      };
+      await expect(store.enqueue({ source: "camera_roll", files: [file], destination: { kind: "library" }, consent: { grantedAt: "", notice: "" } })).rejects.toThrow(/consent/);
+      await expect(store.enqueue({ source: "camera_roll", files: [file], destination: { kind: "product" }, consent })).rejects.toThrow(/land/);
+      const queued = await store.enqueue({
+        source: "camera_roll",
+        files: [file],
+        destination: { kind: "product", targetId: "product-1", label: "Print set" },
+        consent,
+      });
+      expect(queued.status).toBe("queued");
+      expect(queued.consent.grantedAt).toBe(consent.grantedAt);
+      expect(calls).toEqual([]);
+      expect(await store.flush({ online: false, transport })).toMatchObject({ flushed: 0, reason: "offline" });
+      expect(calls).toEqual([]);
+      expect((await store.get(queued.id)).status).toBe("queued");
+      await store.pause(queued.id);
+      expect((await store.get(queued.id)).status).toBe("paused");
+      await store.resume(queued.id);
+      const flushed = await store.flush({ online: true, transport });
+      expect(flushed.flushed).toBe(1);
+      expect(flushed.confirmed).toEqual([queued.id]);
+      expect(calls.map((entry) => entry.service)).toEqual([
+        "media.createUploadLink",
+        "media.beginUpload",
+        "media.bindCaptureAsset",
+        "media.confirmCapture",
+      ]);
+      expect((calls[0]?.body as { targetType?: string; targetId?: string }).targetType).toBe("product");
+      expect((calls[0]?.body as { targetId?: string }).targetId).toBe("product-1");
+      expect((calls[1]?.body as { source?: string; provenance?: { captureSessionId?: string } }).source).toBe("capture");
+      expect(puts.proxy).toBe(1);
+      expect(puts.part).toBe(0);
+      const done = await store.get(queued.id);
+      expect(done.status).toBe("confirmed");
+      expect(done.items[0]?.assetId).toBe("asset-1");
+      expect(captureBatchProgress(done)).toEqual({ uploaded: 1, total: 1, percent: 100 });
+    });
+
+    it("pauses, cancels, retries and reports progress on a capture batch (C10.18)", async () => {
+      const consent = { grantedAt: "2026-09-12T12:00:00.000Z", notice: "This app will use the camera or photos you choose." };
+      const file = { filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1, 2, 3]), byteLength: 3 };
+      let ids = 0;
+      const store = createCaptureBatchStore(memoryCache(), { id: () => `id-${++ids}` });
+      let hanging: ((value: { id: string }) => void) | null = null;
+      let puts = 0;
+      const transport: CaptureTransport = {
+        async call<T>(service: string) {
+          if (service === "media.createUploadLink") return { id: "session-2", source: "camera_roll", status: "pending", token: "upload-token-value-ok" } as T;
+          if (service === "media.beginUpload") return { id: "upload-1", strategy: "proxy", partSize: null, partCount: null } as T;
+          if (service === "media.bindCaptureAsset" || service === "media.confirmCapture" || service === "media.getCaptureSession") {
+            return { id: "session-2", source: "camera_roll", status: "confirmed", assetId: "asset-1" } as T;
+          }
+          throw new Error(service);
+        },
+        async putProxy(input) {
+          puts += 1;
+          if (puts === 1) {
+            await new Promise<{ id: string }>((resolve, reject) => {
+              hanging = resolve;
+              input.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+            });
+          }
+          return { id: "asset-1" };
+        },
+        async putPart() {
+          return { etag: `"etag"` };
+        },
+      };
+      const batch = await store.enqueue({ source: "camera_roll", files: [file, { ...file, filename: "two.png" }], destination: { kind: "library" }, consent });
+      const flushing = store.flush({ online: true, transport });
+      await vi.waitFor(() => expect(hanging).not.toBeNull());
+      expect(captureBatchProgress(store.snapshot()[0]!).percent).toBeLessThan(100);
+      await store.pause(batch.id);
+      await flushing;
+      expect((await store.get(batch.id)).status).toBe("paused");
+      await store.cancel(batch.id);
+      expect((await store.get(batch.id)).status).toBe("cancelled");
+      expect((await store.get(batch.id)).items.every((item) => item.status === "cancelled")).toBe(true);
+
+      ids = 0;
+      const retryStore = createCaptureBatchStore(memoryCache(), { id: () => `retry-${++ids}` });
+      let failOnce = true;
+      const failing: CaptureTransport = {
+        async call<T>(service: string) {
+          if (service === "media.createUploadLink") return { id: "session-3", source: "camera_roll", status: "pending", token: "upload-token-value-ok" } as T;
+          if (service === "media.beginUpload") {
+            if (failOnce) {
+              failOnce = false;
+              throw new Error("The object store did not accept that upload.");
+            }
+            return { id: "upload-2", strategy: "proxy", partSize: null, partCount: null } as T;
+          }
+          if (service === "media.bindCaptureAsset" || service === "media.confirmCapture" || service === "media.getCaptureSession") {
+            return { id: "session-3", source: "camera_roll", status: "confirmed", assetId: "asset-2" } as T;
+          }
+          throw new Error(service);
+        },
+        async putProxy() {
+          return { id: "asset-2" };
+        },
+        async putPart() {
+          return { etag: `"etag"` };
+        },
+      };
+      const failed = await retryStore.enqueue({ source: "camera_roll", files: [file], destination: { kind: "library" }, consent });
+      await retryStore.flush({ online: true, transport: failing });
+      expect((await retryStore.get(failed.id)).status).toBe("failed");
+      await retryStore.retry(failed.id);
+      expect((await retryStore.get(failed.id)).status).toBe("queued");
+      const recovered = await retryStore.flush({ online: true, transport: failing });
+      expect(recovered.confirmed).toEqual([failed.id]);
+      expect((await retryStore.get(failed.id)).status).toBe("confirmed");
+    });
     it("refuses to queue a mutation, loudly", async () => {
       await expect(
         readThrough(
@@ -469,7 +623,7 @@ describe("the customer app (C10.12)", () => {
       // explaining why bookings are not queued — a tripwire that needs
       // exceptions is not a test. What actually keeps this honest is that the
       // package cannot reach the database or the platform's source at all.
-      for (const name of ["discovery", "session", "offline", "branding"]) {
+      for (const name of ["discovery", "session", "offline", "branding", "capture", "capture-batches"]) {
         const source = readFileSync(`packages/mobile-app/src/${name}.ts`, "utf8")
           .replace(/\/\*[\s\S]*?\*\//g, "")
           .replace(/^\s*\/\/.*$/gm, "");

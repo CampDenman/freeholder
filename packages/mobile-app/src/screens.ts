@@ -319,7 +319,7 @@ export const SCREENS: Record<ScreenId, ScreenContract> = {
     id: "capture",
     audience: "staff",
     titleKey: "app.capture.title",
-    reads: ["media.getCaptureSession", "media.listCaptureSessions"],
+    reads: ["media.getCaptureSession", "media.listCaptureSessions", "catalog.listProducts", "cms.listPages"],
     writes: [
       "media.createCaptureSession",
       "media.createUploadLink",

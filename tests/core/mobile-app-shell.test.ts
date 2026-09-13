@@ -99,7 +99,7 @@ describe("the Expo application (C10.23)", () => {
   it("renders no colour of its own", () => {
     // Colours come from the instance's semantic tokens. A literal here is a
     // colour that cannot be rebranded without a store review.
-    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx", "app/(tabs)/today.tsx", "app/(tabs)/owner-invoices.tsx", "app/owner-invoice/[id].tsx", "app/(tabs)/inbox.tsx", "app/inbox-thread/[id].tsx", "app/(tabs)/reviews.tsx", "app/approvals.tsx", "app/agents.tsx", "app/(tabs)/alerts.tsx", "app/capture.tsx", "app/(tabs)/staff-account.tsx", "src/lib/capture.ts", "src/lib/staff.tsx"]) {
+    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx", "app/(tabs)/today.tsx", "app/(tabs)/owner-invoices.tsx", "app/owner-invoice/[id].tsx", "app/(tabs)/inbox.tsx", "app/inbox-thread/[id].tsx", "app/(tabs)/reviews.tsx", "app/approvals.tsx", "app/agents.tsx", "app/(tabs)/alerts.tsx", "app/capture.tsx", "app/(tabs)/staff-account.tsx", "src/lib/capture.ts", "src/lib/capture-store.ts", "src/lib/staff.tsx"]) {
       const source = read(file).replace(/^\s*\/\/.*$/gm, "");
       expect(source, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     }
@@ -191,9 +191,19 @@ describe("the Expo application (C10.23)", () => {
     expect(read("app/approvals.tsx")).toContain('service: "agents.listApprovals"');
     expect(read("app/agents.tsx")).toContain('service: "agents.list"');
     expect(read("app/(tabs)/alerts.tsx")).toContain('service: "notifications.list"');
-    expect(read("app/capture.tsx")).toContain("uploadPickedCapture");
+    expect(read("app/capture.tsx")).toContain("enqueuePickedCapture");
     expect(read("app/capture.tsx")).toContain("app.capture.discard");
     expect(read("app/capture.tsx")).toContain("app.capture.confirm");
+    expect(read("app/capture.tsx")).toContain("app.capture.consent");
+    expect(read("app/capture.tsx")).toContain("app.capture.pause");
+    expect(read("app/capture.tsx")).toContain("app.capture.resume");
+    expect(read("app/capture.tsx")).toContain("app.capture.cancel");
+    expect(read("app/capture.tsx")).toContain("app.capture.retry");
+    expect(read("app/capture.tsx")).toContain("app.capture.destination");
+    expect(read("app/capture.tsx")).toContain("catalog.listProducts");
+    expect(read("app/capture.tsx")).toContain("cms.listPages");
+    expect(code("src/lib/capture-store.ts")).toContain("createCaptureBatchStore");
+    expect(code("src/lib/capture.ts")).toContain("enqueuePickedCapture");
     expect(code("src/lib/capture.ts")).toContain("/api/media");
     expect(code("src/lib/capture.ts")).toContain("media.signUploadParts");
     expect(code("src/lib/capture.ts")).toContain("media.completeUpload");

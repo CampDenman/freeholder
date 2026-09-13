@@ -6,8 +6,8 @@
 // website already understands. Bytes follow the same two strategies the web
 // uploader uses: bounded `POST /api/media` for proxy storage, or signed
 // multipart parts plus `media.completeUpload` for private S3. There is no
-// mobile-only upload endpoint. C10.18 is the offline queue; this path is
-// live-only.
+// mobile-only upload endpoint. This path stays live-only; C10.18 queues files
+// locally and flushes through these functions once a connection exists.
 
 import { OfflineWriteRefused } from "./offline.js";
 
@@ -47,6 +47,7 @@ export interface CaptureTransport {
     contentType: string;
     bytes?: Uint8Array;
     uri?: string;
+    signal?: AbortSignal;
   }): Promise<{ id?: string } | null>;
   /** One signed S3 part (`PUT` the part URL). */
   putPart(input: {
@@ -55,11 +56,27 @@ export interface CaptureTransport {
     end: number;
     bytes?: Uint8Array;
     uri?: string;
+    signal?: AbortSignal;
   }): Promise<{ etag: string }>;
+}
+
+export class CaptureUploadAborted extends Error {
+  constructor() {
+    super("The capture upload was paused or cancelled.");
+    this.name = "CaptureUploadAborted";
+  }
+}
+
+export function isCaptureUploadAborted(error: unknown): boolean {
+  return error instanceof CaptureUploadAborted || (error instanceof Error && error.name === "CaptureUploadAborted");
 }
 
 function live(online: boolean, service: string): void {
   if (!online) throw new OfflineWriteRefused(service);
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new CaptureUploadAborted();
 }
 
 export function captureStartService(source: CaptureSource): string {
@@ -144,12 +161,16 @@ export async function ingestCaptureUpload(
     session: CaptureSession;
     file: CaptureFile;
     online: boolean;
+    signal?: AbortSignal;
+    onProgress?: (progress: { uploadedBytes: number; totalBytes: number }) => void;
   },
   transport: CaptureTransport,
 ): Promise<CaptureSession> {
+  throwIfAborted(input.signal);
   live(input.online, "media.beginUpload");
   const byteLength = input.file.byteLength || input.file.bytes?.byteLength || 0;
   if (byteLength === 0) throw new Error("An empty file cannot be stored.");
+  input.onProgress?.({ uploadedBytes: 0, totalBytes: byteLength });
   const reservation = await transport.call<UploadReservation>("media.beginUpload", {
     filename: input.file.filename,
     contentType: input.file.contentType,
@@ -162,12 +183,14 @@ export async function ingestCaptureUpload(
     },
     metadata: {},
   });
+  throwIfAborted(input.signal);
   if (reservation.strategy === "direct_multipart") {
     const partSize = reservation.partSize;
     const partCount = reservation.partCount;
     if (!partSize || !partCount) throw new Error("That direct upload did not say how to split the file.");
     const parts: { partNumber: number; etag: string }[] = [];
     for (let partNumber = 1; partNumber <= partCount; partNumber += 1) {
+      throwIfAborted(input.signal);
       live(input.online, "media.signUploadParts");
       const signed = await transport.call<{ parts: { partNumber: number; url: string }[] }>("media.signUploadParts", {
         id: reservation.id,
@@ -177,32 +200,51 @@ export async function ingestCaptureUpload(
       if (!url) throw new Error("The object store did not sign that upload part.");
       const start = (partNumber - 1) * partSize;
       const end = Math.min(start + partSize, byteLength);
-      const { etag } = await transport.putPart({
-        url,
-        start,
-        end,
-        bytes: input.file.bytes,
-        uri: input.file.uri,
-      });
+      let etag: string;
+      try {
+        ({ etag } = await transport.putPart({
+          url,
+          start,
+          end,
+          bytes: input.file.bytes,
+          uri: input.file.uri,
+          signal: input.signal,
+        }));
+      } catch (error) {
+        throwIfAborted(input.signal);
+        throw error;
+      }
       parts.push({ partNumber, etag });
+      input.onProgress?.({ uploadedBytes: end, totalBytes: byteLength });
     }
+    throwIfAborted(input.signal);
     live(input.online, "media.completeUpload");
     const completed = await transport.call<{ ok?: boolean; asset?: { id?: string } | null }>("media.completeUpload", {
       id: reservation.id,
       parts,
     });
+    input.onProgress?.({ uploadedBytes: byteLength, totalBytes: byteLength });
     return bindOrReload(input.session, completed.asset?.id, input.online, transport);
   }
   if (reservation.strategy !== "proxy") {
     throw new Error("This app does not know that upload strategy.");
   }
-  const uploaded = await transport.putProxy({
-    uploadId: reservation.id,
-    filename: input.file.filename,
-    contentType: input.file.contentType,
-    bytes: input.file.bytes,
-    uri: input.file.uri,
-  });
+  throwIfAborted(input.signal);
+  let uploaded: { id?: string } | null;
+  try {
+    uploaded = await transport.putProxy({
+      uploadId: reservation.id,
+      filename: input.file.filename,
+      contentType: input.file.contentType,
+      bytes: input.file.bytes,
+      uri: input.file.uri,
+      signal: input.signal,
+    });
+  } catch (error) {
+    throwIfAborted(input.signal);
+    throw error;
+  }
+  input.onProgress?.({ uploadedBytes: byteLength, totalBytes: byteLength });
   return bindOrReload(input.session, uploaded?.id, input.online, transport);
 }
 

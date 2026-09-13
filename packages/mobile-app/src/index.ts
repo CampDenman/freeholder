@@ -46,11 +46,13 @@ export {
 } from "./session.js";
 export {
   OfflineWriteRefused,
+  OFFLINE_WRITE_EXCEPTION,
   cacheKey,
   freshnessLabel,
   readThrough,
   PRIVATE_CACHE_LEASE_MS,
   isAccessDenied,
+  isOfflineWriteException,
   writeThrough,
   type Cache,
   type Freshness,
@@ -79,16 +81,33 @@ export {
 } from "./screens.js";
 export {
   CAPTURE_SOURCES,
+  CaptureUploadAborted,
   captureStartService,
   openCaptureSession,
   ingestCaptureUpload,
   confirmCaptureSession,
+  isCaptureUploadAborted,
   type CaptureSource,
   type CaptureSession,
   type CaptureFile,
   type CaptureTransport,
   type UploadReservation,
 } from "./capture.js";
+export {
+  CAPTURE_DESTINATIONS,
+  captureBatchProgress,
+  createCaptureBatchStore,
+  type CaptureBatch,
+  type CaptureBatchItem,
+  type CaptureBatchProgress,
+  type CaptureBatchStatus,
+  type CaptureBatchStore,
+  type CaptureConsent,
+  type CaptureDestination,
+  type CaptureDestinationKind,
+  type CaptureItemStatus,
+  type FlushResult,
+} from "./capture-batches.js";
 export {
   APP_SCHEME,
   needsSignIn,
