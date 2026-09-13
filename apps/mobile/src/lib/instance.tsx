@@ -12,6 +12,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { privateCaches, privateCacheOwner } from "./cache";
+import { bindCaptureBatches, clearCaptureBatches } from "./capture-store";
 import { fetchWithTimeout } from "./transport";
 import {
   brandFrom,
@@ -114,8 +115,10 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
       if (matching) {
         // Cache/keychain failure may disable offline reads, never force plaintext.
         await privateCaches.activate(privateCacheOwner(matching)).catch(() => {});
+        await bindCaptureBatches(matching).catch(() => {});
       } else {
         await privateCaches.clear();
+        await clearCaptureBatches();
       }
       if (request !== revision.current) return;
       const cache = matching ? privateCaches.get(privateCacheOwner(matching)) : noCache;
@@ -149,7 +152,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
 
   const forget = useCallback(async () => {
     ++revision.current;
-    const cleanup = privateCaches.clear();
+    const cleanup = Promise.all([privateCaches.clear(), clearCaptureBatches()]);
     void cleanup.catch(() => {});
     setInstance(null);
     setSession(null);
@@ -166,7 +169,7 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     ++revision.current;
-    const cleanup = privateCaches.clear();
+    const cleanup = Promise.all([privateCaches.clear(), clearCaptureBatches()]);
     void cleanup.catch(() => {});
     setSession(null);
     setDeviceToken(null);
@@ -202,6 +205,8 @@ export function InstanceProvider({ children }: { children: React.ReactNode }) {
         await saveSession(keychain, result.session);
         if (generation !== revision.current) return;
         await privateCaches.activate(privateCacheOwner(result.session)).catch(() => {});
+        if (generation !== revision.current) return;
+        await bindCaptureBatches(result.session).catch(() => {});
         if (generation !== revision.current) return;
         await rememberInstance(instance, privateCaches.get(privateCacheOwner(result.session)));
         if (generation !== revision.current) return;

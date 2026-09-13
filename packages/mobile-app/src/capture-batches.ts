@@ -6,7 +6,8 @@
 // records consent, says which files have and have not been uploaded, and
 // flushes through the same live capture contract C10.17 already uses. Pause,
 // resume, cancel and retry are local controls over that queue — they are not a
-// second media pipeline.
+// second media pipeline. The queue is bound to one instance and session so a
+// later sign-in cannot upload somebody else's files.
 
 import {
   CaptureUploadAborted,
@@ -76,6 +77,17 @@ export interface FlushResult {
   reason?: "offline" | "empty";
 }
 
+export class CaptureBatchOwnerMismatch extends Error {
+  constructor() {
+    super("Those capture files belong to a different account.");
+    this.name = "CaptureBatchOwnerMismatch";
+  }
+}
+
+export function captureBatchOwner(input: { instanceUrl: string; token: string }): string {
+  return `${input.instanceUrl}|${input.token}`;
+}
+
 export function captureBatchProgress(batch: CaptureBatch): CaptureBatchProgress {
   const total = batch.items.length;
   const uploaded = batch.items.filter((item) => item.status === "uploaded").length;
@@ -110,6 +122,19 @@ function withoutBytes(batch: CaptureBatch): CaptureBatch {
   };
 }
 
+function encodeBytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return globalThis.btoa(binary);
+}
+
+function decodeBytes(value: string): Uint8Array {
+  const binary = globalThis.atob(value);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
 function requireConsent(consent: CaptureConsent | undefined): CaptureConsent {
   if (!consent?.grantedAt || !consent.notice.trim()) {
     throw new Error("Capture consent is required before files can be queued.");
@@ -127,24 +152,42 @@ function requireDestination(destination: CaptureDestination): CaptureDestination
   return destination;
 }
 
-function fileForFlush(item: CaptureBatchItem, bytes: Map<string, Uint8Array>): CaptureFile {
-  const held = bytes.get(item.id) ?? item.file.bytes;
-  return { ...item.file, bytes: held };
+function fileForFlush(item: CaptureBatchItem, held: Map<string, Uint8Array>): CaptureFile {
+  const bytes = held.get(item.id) ?? item.file.bytes;
+  return { ...item.file, bytes };
+}
+
+interface PersistedQueue {
+  owner: string;
+  batches: CaptureBatch[];
+  files: Record<string, string>;
 }
 
 export function createCaptureBatchStore(
   cache: Cache,
-  options: { key?: string; now?: () => Date; id?: () => string } = {},
+  options: {
+    key?: string;
+    now?: () => Date;
+    id?: () => string;
+    retainFile?: (file: CaptureFile, itemId: string) => Promise<CaptureFile>;
+    releaseFile?: (file: CaptureFile) => Promise<void>;
+    wipe?: () => Promise<void>;
+  } = {},
 ) {
-  const key = options.key ?? "freeholder.capture-batches";
+  const prefix = options.key ?? "freeholder.capture-batches";
   const nowIso = () => (options.now ?? (() => new Date()))().toISOString();
   const nextId = options.id ?? (() => globalThis.crypto.randomUUID());
+  let owner: string | null = null;
   let batches: CaptureBatch[] = [];
-  const bytes = new Map<string, Uint8Array>();
+  const files = new Map<string, Uint8Array>();
   const controllers = new Map<string, AbortController>();
   const listeners = new Set<() => void>();
   let loaded = false;
   let inFlight: Promise<FlushResult> | null = null;
+
+  function storageKey(forOwner: string): string {
+    return `${prefix}|${forOwner}`;
+  }
 
   function notify() {
     for (const listener of listeners) listener();
@@ -154,21 +197,41 @@ export function createCaptureBatchStore(
     return batches.map(cloneBatch);
   }
 
+  function requireOwner(expected?: string): string {
+    if (!owner || (expected !== undefined && expected !== owner)) {
+      throw new CaptureBatchOwnerMismatch();
+    }
+    return owner;
+  }
+
   async function persist() {
-    await cache.set(key, JSON.stringify(batches.map(withoutBytes)));
+    if (!owner) return;
+    const payload: PersistedQueue = {
+      owner,
+      batches: batches.map(withoutBytes),
+      files: Object.fromEntries([...files.entries()].map(([id, bytes]) => [id, encodeBytes(bytes)])),
+    };
+    await cache.set(storageKey(owner), JSON.stringify(payload));
     notify();
   }
 
   async function ensureLoaded() {
     if (loaded) return;
     loaded = true;
-    const raw = await cache.get(key).catch(() => null);
+    if (!owner) return;
+    const raw = await cache.get(storageKey(owner)).catch(() => null);
     if (!raw) return;
     try {
-      const parsed = JSON.parse(raw) as CaptureBatch[];
-      if (Array.isArray(parsed)) batches = parsed;
+      const parsed = JSON.parse(raw) as PersistedQueue;
+      if (parsed.owner !== owner || !Array.isArray(parsed.batches)) return;
+      batches = parsed.batches;
+      files.clear();
+      for (const [id, encoded] of Object.entries(parsed.files ?? {})) {
+        files.set(id, decodeBytes(encoded));
+      }
     } catch {
       batches = [];
+      files.clear();
     }
   }
 
@@ -178,31 +241,70 @@ export function createCaptureBatchStore(
     return batch;
   }
 
+  async function releaseItem(item: CaptureBatchItem) {
+    files.delete(item.id);
+    await options.releaseFile?.(item.file).catch(() => {});
+  }
+
+  async function bind(next: string): Promise<void> {
+    if (owner === next && loaded) return;
+    for (const controller of controllers.values()) controller.abort();
+    controllers.clear();
+    owner = next;
+    batches = [];
+    files.clear();
+    loaded = false;
+    await ensureLoaded();
+    notify();
+  }
+
+  async function clear(): Promise<void> {
+    for (const controller of controllers.values()) controller.abort();
+    controllers.clear();
+    const previous = owner;
+    batches = [];
+    files.clear();
+    loaded = true;
+    if (previous) await cache.delete(storageKey(previous)).catch(() => {});
+    await options.wipe?.().catch(() => {});
+    owner = null;
+    notify();
+  }
+
   async function enqueue(input: {
     source: CaptureSource;
     files: CaptureFile[];
     destination: CaptureDestination;
     consent: CaptureConsent;
+    owner: string;
   }): Promise<CaptureBatch> {
     if (!isOfflineWriteException(OFFLINE_WRITE_EXCEPTION)) {
       throw new OfflineWriteRefused(input.source);
     }
+    requireOwner(input.owner);
     await ensureLoaded();
     const consent = requireConsent(input.consent);
     const destination = requireDestination(input.destination);
-    const files = input.files.filter((file) => (file.byteLength || file.bytes?.byteLength || 0) > 0);
-    if (files.length === 0) throw new Error("An empty file cannot be stored.");
+    const incoming = input.files.filter((file) => (file.byteLength || file.bytes?.byteLength || 0) > 0);
+    if (incoming.length === 0) throw new Error("An empty file cannot be stored.");
     const createdAt = nowIso();
-    const items: CaptureBatchItem[] = files.map((file) => {
+    const items: CaptureBatchItem[] = [];
+    for (const file of incoming) {
       const id = nextId();
-      if (file.bytes) bytes.set(id, file.bytes);
-      return {
+      const retained = options.retainFile ? await options.retainFile(file, id) : file;
+      if (retained.bytes) files.set(id, retained.bytes);
+      items.push({
         id,
-        file: { filename: file.filename, contentType: file.contentType, byteLength: file.byteLength || file.bytes?.byteLength || 0, uri: file.uri },
+        file: {
+          filename: retained.filename,
+          contentType: retained.contentType,
+          byteLength: retained.byteLength || retained.bytes?.byteLength || 0,
+          uri: retained.uri,
+        },
         status: "queued",
         progress: 0,
-      };
-    });
+      });
+    }
     const batch: CaptureBatch = {
       id: nextId(),
       source: input.source,
@@ -220,6 +322,7 @@ export function createCaptureBatchStore(
 
   async function pause(id: string): Promise<CaptureBatch> {
     await ensureLoaded();
+    requireOwner();
     const batch = requireBatch(id);
     controllers.get(id)?.abort();
     if (batch.status === "confirmed" || batch.status === "cancelled") return cloneBatch(batch);
@@ -239,6 +342,7 @@ export function createCaptureBatchStore(
 
   async function resume(id: string): Promise<CaptureBatch> {
     await ensureLoaded();
+    requireOwner();
     const batch = requireBatch(id);
     if (batch.status === "confirmed" || batch.status === "cancelled") return cloneBatch(batch);
     batch.status = "queued";
@@ -257,6 +361,7 @@ export function createCaptureBatchStore(
 
   async function cancel(id: string): Promise<CaptureBatch> {
     await ensureLoaded();
+    requireOwner();
     const batch = requireBatch(id);
     controllers.get(id)?.abort();
     if (batch.status === "confirmed") return cloneBatch(batch);
@@ -268,6 +373,7 @@ export function createCaptureBatchStore(
         item.status = "cancelled";
         item.progress = 0;
         item.error = undefined;
+        await releaseItem(item);
       }
     }
     await persist();
@@ -276,6 +382,7 @@ export function createCaptureBatchStore(
 
   async function retry(id: string): Promise<CaptureBatch> {
     await ensureLoaded();
+    requireOwner();
     const batch = requireBatch(id);
     if (batch.status === "confirmed" || batch.status === "cancelled") return cloneBatch(batch);
     batch.status = "queued";
@@ -292,7 +399,8 @@ export function createCaptureBatchStore(
     return cloneBatch(batch);
   }
 
-  async function runFlush(input: { online: boolean; transport: CaptureTransport }): Promise<FlushResult> {
+  async function runFlush(input: { online: boolean; transport: CaptureTransport; owner: string }): Promise<FlushResult> {
+    requireOwner(input.owner);
     await ensureLoaded();
     if (!input.online) return { flushed: 0, confirmed: [], reason: "offline" };
     const pending = batches.filter((batch) => batch.status === "queued" || batch.status === "uploading");
@@ -329,7 +437,7 @@ export function createCaptureBatchStore(
           const staged = await ingestCaptureUpload(
             {
               session,
-              file: fileForFlush(item, bytes),
+              file: fileForFlush(item, files),
               online: input.online,
               signal: controller.signal,
               onProgress: (progress) => {
@@ -347,6 +455,7 @@ export function createCaptureBatchStore(
           item.progress = 100;
           item.assetId = confirmedSession.assetId ?? staged.assetId ?? null;
           item.sessionId = confirmedSession.id;
+          await releaseItem(item);
           flushed += 1;
           batch.updatedAt = nowIso();
           await persist();
@@ -401,7 +510,8 @@ export function createCaptureBatchStore(
     return { flushed, confirmed };
   }
 
-  async function flush(input: { online: boolean; transport: CaptureTransport }): Promise<FlushResult> {
+  async function flush(input: { online: boolean; transport: CaptureTransport; owner: string }): Promise<FlushResult> {
+    requireOwner(input.owner);
     while (inFlight) await inFlight;
     inFlight = runFlush(input).finally(() => {
       inFlight = null;
@@ -410,6 +520,8 @@ export function createCaptureBatchStore(
   }
 
   return {
+    bind,
+    clear,
     async list() {
       await ensureLoaded();
       return snapshot();

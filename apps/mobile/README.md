@@ -137,8 +137,10 @@ stack screens from Today. Ingest uses `media.createCaptureSession` /
 `media.confirmCapture` — the website's capture pipeline, not a mobile upload
 API. Offline batches (C10.18) stay on the phone with recorded consent, destination,
 progress, pause/resume/cancel and retry, then flush through that same pipeline
-once online. Physical camera, share-target, background-upload and accessibility
-checks remain outstanding, so C10.17 and C10.18 stay open.
+once online. Files are copied into app storage and bound to the signed-in
+session; sign-out does not upload them as someone else. Physical camera,
+share-target, background-upload and accessibility checks remain outstanding, so
+C10.17 and C10.18 stay open.
 
 ## Rules the code keeps
 

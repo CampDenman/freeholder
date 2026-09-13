@@ -4,10 +4,12 @@
 import * as ImagePicker from "expo-image-picker";
 import { File, FileMode } from "expo-file-system";
 import {
+  captureBatchOwner,
   captureStartService,
   confirmCaptureSession,
   ingestCaptureUpload,
   openCaptureSession,
+  SCREENS,
   writeThrough,
   type CaptureBatch,
   type CaptureConsent,
@@ -23,6 +25,7 @@ import { assertOnContract, callService, type Caller } from "./screen-data";
 function transport(caller: Caller) {
   return {
     call<T>(service: string, body: unknown) {
+      assertOnContract("capture", service, SCREENS.capture.writes.includes(service));
       return callService<T>(caller, service, body);
     },
     async putProxy(input: { uploadId: string; filename: string; contentType: string; bytes?: Uint8Array; uri?: string; signal?: AbortSignal }) {
@@ -120,12 +123,20 @@ export function captureTransport(caller: Caller): CaptureTransport {
 }
 
 export async function enqueuePickedCapture(input: {
+  caller: Caller;
   source: CaptureSource;
   files: CaptureFile[];
   destination: CaptureDestination;
   consent: CaptureConsent;
 }): Promise<CaptureBatch> {
-  return captureBatches.enqueue(input);
+  if (!input.caller.token) throw new Error("Sign in before capturing.");
+  return captureBatches.enqueue({
+    source: input.source,
+    files: input.files,
+    destination: input.destination,
+    consent: input.consent,
+    owner: captureBatchOwner({ instanceUrl: input.caller.instanceUrl, token: input.caller.token }),
+  });
 }
 
 export async function uploadPickedCapture(input: {

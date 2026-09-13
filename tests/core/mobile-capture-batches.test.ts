@@ -18,7 +18,7 @@ import {
   signUploadParts,
   uploadAsset,
 } from "@/core/media/service";
-import { createCaptureBatchStore, type CaptureTransport } from "../../packages/mobile-app/src/index";
+import { captureBatchOwner, createCaptureBatchStore, type CaptureTransport } from "../../packages/mobile-app/src/index";
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 async function png(): Promise<Uint8Array<ArrayBuffer>> {
@@ -124,15 +124,18 @@ describe.runIf(hasDatabase)("native capture batches match /capture/[token] (C10.
     const phoneAsset = await getAsset.call({ id: phoneSession.assetId! }, OWNER);
 
     const nativeServices: string[] = [];
+    const owner = captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
     const store = createCaptureBatchStore(memoryCache());
+    await store.bind(owner);
     const queued = await store.enqueue({
       source: "camera_roll",
       files: [file],
       destination: { kind: "library" },
       consent: { grantedAt: new Date().toISOString(), notice: "This app will use the camera or photos you choose." },
+      owner,
     });
     expect(nativeServices).toEqual([]);
-    const flushed = await store.flush({ online: true, transport: ownerTransport(nativeServices) });
+    const flushed = await store.flush({ online: true, transport: ownerTransport(nativeServices), owner });
     expect(flushed.confirmed).toEqual([queued.id]);
     const native = await store.get(queued.id);
     const nativeAsset = await getAsset.call({ id: native.items[0]!.assetId! }, OWNER);
@@ -201,14 +204,17 @@ describe.runIf(hasDatabase)("native capture batches match /capture/[token] (C10.
     await bindCaptureAsset.call({ token: link.token, assetId: uploaded.id }, ANONYMOUS);
     await confirmCapture.call({ token: link.token }, ANONYMOUS);
 
+    const owner = captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
     const store = createCaptureBatchStore(memoryCache());
+    await store.bind(owner);
     await store.enqueue({
       source: "camera_roll",
       files: [{ ...file, filename: "native-hero.png" }],
       destination: { kind: "product", targetId: product.id, label: product.name },
       consent: { grantedAt: new Date().toISOString(), notice: "This app will use the camera or photos you choose." },
+      owner,
     });
-    await store.flush({ online: true, transport: ownerTransport([]) });
+    await store.flush({ online: true, transport: ownerTransport([]), owner });
     const media = await listProductMedia.call({ productId: product.id }, OWNER);
     expect(media).toHaveLength(2);
     expect(media.map((row) => row.asset.source)).toEqual(["capture", "capture"]);

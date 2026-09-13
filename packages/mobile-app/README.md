@@ -110,7 +110,9 @@ portal tabs and every other role opens `OWNER_TAB_ORDER`. Capture ingest talks
 to the existing media services and `/api/media`. The one sanctioned write queue
 is media capture (C10.18): `createCaptureBatchStore` records consent, destination,
 progress, pause/resume/cancel/retry, and flushes through the same live contract
-once online. `writeThrough` still refuses every other mutation.
+once online. The queue is bound to one instance and session, persists file
+bytes, and is dropped on sign-out. `writeThrough` still refuses every other
+mutation.
 
 `writeThrough({ service, online }, call)` is the live-only counterpart:
 offline calls throw `OfflineWriteRefused` before transport is invoked. Online

@@ -200,10 +200,15 @@ describe("the Expo application (C10.23)", () => {
     expect(read("app/capture.tsx")).toContain("app.capture.cancel");
     expect(read("app/capture.tsx")).toContain("app.capture.retry");
     expect(read("app/capture.tsx")).toContain("app.capture.destination");
+    expect(read("app/capture.tsx")).toContain("app.capture.batches");
     expect(read("app/capture.tsx")).toContain("catalog.listProducts");
     expect(read("app/capture.tsx")).toContain("cms.listPages");
+    expect(code("app/capture.tsx")).not.toMatch(/data\.error \? <Problem[\s\S]*?: <ScrollView/);
     expect(code("src/lib/capture-store.ts")).toContain("createCaptureBatchStore");
+    expect(code("src/lib/capture-store.ts")).toContain("copySync");
     expect(code("src/lib/capture.ts")).toContain("enqueuePickedCapture");
+    expect(read("src/lib/instance.tsx")).toContain("bindCaptureBatches");
+    expect(read("src/lib/instance.tsx")).toContain("clearCaptureBatches");
     expect(code("src/lib/capture.ts")).toContain("/api/media");
     expect(code("src/lib/capture.ts")).toContain("media.signUploadParts");
     expect(code("src/lib/capture.ts")).toContain("media.completeUpload");
