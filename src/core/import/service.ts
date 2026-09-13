@@ -4,7 +4,7 @@
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { actorString, defineService, getService, ServiceError } from "@/core/service";
+import { actorString, defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
 import { importRuns } from "@/core/plugins/schema";
 import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
 import {
@@ -53,6 +53,32 @@ function previewPages(preview: unknown): PreviewPage[] {
   return out;
 }
 
+const cmsPageRef = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  title: z.string(),
+  blocks: z.unknown(),
+  seo: z.unknown(),
+  status: z.enum(["draft", "published"]),
+});
+type CmsPageRef = z.infer<typeof cmsPageRef>;
+
+function listedCmsPages(value: unknown): CmsPageRef[] {
+  const parsed = z.array(cmsPageRef).safeParse(value);
+  if (!parsed.success) {
+    throw new ServiceError("internal", "cms.listPages returned an unexpected shape.");
+  }
+  return parsed.data;
+}
+
+function createdCmsPage(value: unknown): { id: string; slug: string } {
+  const parsed = cmsPageRef.pick({ id: true, slug: true }).safeParse(value);
+  if (!parsed.success) {
+    throw new ServiceError("internal", "cms.createPage returned an unexpected shape.");
+  }
+  return parsed.data;
+}
+
 function conflictDecisions(value: unknown): Map<string, ConflictDecision> {
   const map = new Map<string, ConflictDecision>();
   if (!Array.isArray(value)) return map;
@@ -63,35 +89,83 @@ function conflictDecisions(value: unknown): Map<string, ConflictDecision> {
     if (item.resolution !== "keep-existing" && item.resolution !== "replace" && item.resolution !== "rename") {
       continue;
     }
-    map.set(item.slug, {
+    const decision: ConflictDecision = {
       slug: item.slug,
       resolution: item.resolution,
       renamedSlug: typeof item.renamedSlug === "string" ? item.renamedSlug : undefined,
-    });
+    };
+    map.set(item.slug, decision);
+    map.set(cmsSlug(item.slug), decision);
   }
   return map;
 }
 
-function pageIdsFrom(checkpoint: unknown): string[] {
-  if (!checkpoint || typeof checkpoint !== "object") return [];
-  const ids = (checkpoint as { pageIds?: unknown }).pageIds;
-  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+function stringIds(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
 }
 
-function withPageIds(checkpoint: unknown, pageIds: string[]): Record<string, unknown> {
+function pageIdsFrom(checkpoint: unknown): string[] {
+  if (!checkpoint || typeof checkpoint !== "object") return [];
+  return stringIds((checkpoint as { pageIds?: unknown }).pageIds);
+}
+
+function createdPageIdsFrom(checkpoint: unknown): string[] {
+  if (!checkpoint || typeof checkpoint !== "object") return [];
+  const created = stringIds((checkpoint as { createdPageIds?: unknown }).createdPageIds);
+  if (created.length > 0) return created;
+  const replaced = new Set(replacedPagesFrom(checkpoint).map((page) => page.id));
+  return pageIdsFrom(checkpoint).filter((id) => !replaced.has(id));
+}
+
+function replacedPagesFrom(checkpoint: unknown): CmsPageRef[] {
+  if (!checkpoint || typeof checkpoint !== "object") return [];
+  const parsed = z.array(cmsPageRef).safeParse((checkpoint as { replacedPages?: unknown }).replacedPages);
+  return parsed.success ? parsed.data : [];
+}
+
+function withImportPages(
+  checkpoint: unknown,
+  createdPageIds: string[],
+  replacedPages: CmsPageRef[],
+): Record<string, unknown> {
   const previous =
     checkpoint && typeof checkpoint === "object" && !Array.isArray(checkpoint)
       ? { ...(checkpoint as Record<string, unknown>) }
       : {};
-  previous.pageIds = pageIds;
+  previous.createdPageIds = createdPageIds;
+  previous.replacedPages = replacedPages;
+  previous.pageIds = [...createdPageIds, ...replacedPages.map((page) => page.id)];
   return previous;
 }
 
+/** Empty stays empty: that is the CMS home page, not `/page`. */
 function cmsSlug(value: string): string {
   const trimmed = value.trim().replace(/^\/+|\/+$/g, "").toLowerCase();
-  if (trimmed === "") return "page";
+  if (trimmed === "") return "";
   if (/^[a-z0-9]+(?:[-/][a-z0-9]+)*$/.test(trimmed)) return trimmed;
   return trimmed.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "page";
+}
+
+async function restoreReplacedPage(ctx: ServiceContext, snapshot: CmsPageRef): Promise<void> {
+  let current: CmsPageRef;
+  try {
+    current = cmsPageRef.parse(await ctx.call(getService("cms.getPage"), { id: snapshot.id }));
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "not_found") return;
+    throw error;
+  }
+  if (current.status === "published" && snapshot.status === "draft") {
+    await ctx.call(getService("cms.publishPage"), { id: snapshot.id, published: false });
+  }
+  await ctx.call(getService("cms.updatePage"), {
+    id: snapshot.id,
+    title: snapshot.title,
+    blocks: snapshot.blocks,
+    seo: snapshot.seo ?? {},
+  });
+  if (snapshot.status === "published") {
+    await ctx.call(getService("cms.publishPage"), { id: snapshot.id, published: true });
+  }
 }
 
 function importedBlocks(slug: string, title: string, body: string) {
@@ -221,16 +295,14 @@ export const commitImport = defineService({
     }
     const staged = previewPages(before.preview);
     const decisions = conflictDecisions(before.conflicts);
-    const existing = (await ctx.call(getService("cms.listPages"), {})) as Array<{
-      id: string;
-      slug: string;
-    }>;
+    const existing = listedCmsPages(await ctx.call(getService("cms.listPages"), {}));
     const bySlug = new Map(existing.map((page) => [page.slug, page]));
     const used = new Set(bySlug.keys());
-    const pageIds: string[] = [];
+    const createdPageIds: string[] = [];
+    const replacedPages: CmsPageRef[] = [];
     for (const page of staged) {
-      const decision = decisions.get(page.slug);
       let slug = cmsSlug(page.slug);
+      const decision = decisions.get(slug) ?? decisions.get(page.slug);
       if (bySlug.has(slug) && decision?.resolution === "keep-existing") continue;
       if (bySlug.has(slug) && decision?.resolution === "rename") {
         slug = cmsSlug(decision.renamedSlug?.trim() || `${page.slug}-imported`);
@@ -242,30 +314,34 @@ export const commitImport = defineService({
           title: page.title,
           blocks: importedBlocks(slug, page.title, page.body),
         });
-        pageIds.push(current.id);
+        replacedPages.push(current);
         continue;
       }
       if (used.has(slug)) {
         throw new ServiceError(
           "conflict",
-          `Another page already lives at /${slug}. Review conflicts before committing.`,
+          slug === ""
+            ? "There is already a home page. Review conflicts before committing."
+            : `Another page already lives at /${slug}. Review conflicts before committing.`,
         );
       }
-      const created = (await ctx.call(getService("cms.createPage"), {
-        slug,
-        title: page.title || slug,
-        blocks: importedBlocks(slug, page.title, page.body),
-        seo: {},
-      })) as { id: string; slug: string };
-      pageIds.push(created.id);
+      const created = createdCmsPage(
+        await ctx.call(getService("cms.createPage"), {
+          slug,
+          title: page.title || slug || "Imported page",
+          blocks: importedBlocks(slug, page.title, page.body),
+          seo: {},
+        }),
+      );
+      createdPageIds.push(created.id);
       used.add(created.slug);
     }
     const [row] = await ctx.tx
       .update(importRuns)
       .set({
         status: "committed",
-        checkpoint: withPageIds(before.checkpoint, pageIds),
-        counts: { pages: pageIds.length, media: 0, redirects: 0 },
+        checkpoint: withImportPages(before.checkpoint, createdPageIds, replacedPages),
+        counts: { pages: createdPageIds.length + replacedPages.length, media: 0, redirects: 0 },
       })
       .where(eq(importRuns.id, input.id))
       .returning();
@@ -285,7 +361,10 @@ export const rollbackImport = defineService({
   handler: async (input, ctx) => {
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
     if (!before) throw new ServiceError("not_found", "No such import run.");
-    for (const id of pageIdsFrom(before.checkpoint)) {
+    for (const snapshot of replacedPagesFrom(before.checkpoint)) {
+      await restoreReplacedPage(ctx, snapshot);
+    }
+    for (const id of createdPageIdsFrom(before.checkpoint)) {
       try {
         await ctx.call(getService("cms.publishPage"), { id, published: false });
       } catch (error) {
@@ -301,7 +380,10 @@ export const rollbackImport = defineService({
     }
     const [row] = await ctx.tx
       .update(importRuns)
-      .set({ status: "rolled_back", checkpoint: withPageIds(before.checkpoint, []) })
+      .set({
+        status: "rolled_back",
+        checkpoint: withImportPages(before.checkpoint, [], []),
+      })
       .where(eq(importRuns.id, input.id))
       .returning();
     ctx.setSubject("import_run", row!.id);
