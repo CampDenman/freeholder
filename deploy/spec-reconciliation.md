@@ -87,7 +87,7 @@ Anti-roadmap rows are refusals, not leftovers.
 | 32 | Universal editor | Block editor, sections, templates, layouts, tokens, experiments, email-safe output. `/admin/pages`, sections, templates, design, experiments. | Built | C2.01–C2.23. |
 | 33 | Social hub | OAuth, ingest, composer, GBP, publication calendar. `/admin/social`. | Built | C9.24–C9.27, C9.31. Auto-clip struck. |
 | 34 | Sharing DNA | Share targets, tracked links, gallery partner, quote partner, product/gift share, embeds. `/admin/sharing`, embed routes. | Built | C9.28–C9.29, C9.34–C9.36. |
-| 35 | React Native app | `packages/mobile-app`, `apps/mobile`, screen contracts, push tokens, private cache, companion/capture code. | Remaining | **Device evidence:** C10.15 init, C10.16 store/CI, C10.17 companion, C10.18 capture batches, C10.25–C10.28 tabs, C10.30 cache. Implementation is present; physical-device / store proof is not. |
+| 35 | React Native app | `packages/mobile-app`, `apps/mobile`, screen contracts, push tokens, private cache, companion/capture code, `freeholder-app init`, store/CI gates. | Remaining | **C10.15 and C10.16 are checked.** Device leftover is physical proof: C10.17 companion, C10.18 capture batches, C10.25–C10.28 tabs, C10.30 cache. Signed store binaries still need EAS credentials. |
 | 36 | Mined roadmap | Core absorptions and first-party plugins match C3.13 / C5–C9. Anti-roadmap held. Autofill gate §36.1 / §15.10. | Built | Anti-roadmap is exclusion, not leftover. |
 | 37 | Self-building instance | Builder content + code lanes, MCP, `/source`, budgets, approvals. `/admin/builder`. | Built | C4.19–C4.22. GitHub PR delivery still needs a connected repo (C11.06 honesty). |
 | 38 | Day-one surface | Demos, guidance, capture, services, calendars, catalog, shipping/tax, passes, loyalty, SMS, subscriptions, ads, time, POS, projects, galleries, SEO, CRM, automations, reporting, roles, export, help, waivers, updates. | Built except named leftovers | In-person Terminal is adapter representation (C5.24), not a claimed live reader. 3D/AR is accepted media roles (C5.11), not a storefront AR viewer. |
@@ -118,7 +118,7 @@ These stay in the spec. They are why C11.17 cannot be checked.
 
 | Item | What is still true |
 |---|---|
-| Device evidence | C10.15, C10.16, C10.17, C10.18, C10.25, C10.26, C10.27, C10.28, C10.30: native screens/cache/init exist in tree; physical device, keychain, store-contract and accessibility inspection are not claimed on this stack. |
+| Device evidence | C10.17, C10.18, C10.25, C10.26, C10.27, C10.28, C10.30: native screens/cache exist in tree; physical device, keychain and accessibility inspection are not claimed. C10.15 init and C10.16 store/CI gates are checked. |
 | Independent security review | C11.10 — packet at `security/independent-review-packet.md` is not a signed review. |
 | Live settlement | C11.05 remaining honesty. Manual/offline and adapter doubles are what journeys run. Hosted Stripe/PayPal charges are not claimed. |
 | C11.08 Tier-1 restore | Fresh demo + WordPress/generic import + local signed apply/rollback exist. Restore onto another live Tier-1 target remains the ownership-drill pair matrix, not a second instance in the journey. |

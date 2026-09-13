@@ -1,0 +1,22 @@
+{
+  "source": "https://demo.freeholder.example",
+  "name": "Freeholder",
+  "tagline": "Client app",
+  "ios": {
+    "name": "Freeholder",
+    "subtitle": "Client app",
+    "description": "Freeholder is the customer app for this business.\n\nClient app\n\nBook, view galleries, and pay invoices from your phone — the same records as the website, never a second copy.",
+    "keywords": "booking,gallery,invoice,client"
+  },
+  "android": {
+    "title": "Freeholder",
+    "shortDescription": "Client app",
+    "fullDescription": "Freeholder is the customer app for this business.\n\nClient app\n\nBook, view galleries, and pay invoices from your phone — the same records as the website, never a second copy."
+  },
+  "privacyPolicyUrl": "https://demo.freeholder.example/privacy",
+  "screenshots": [
+    "store/screenshots/01-home.png",
+    "store/screenshots/02-catalog.png",
+    "store/screenshots/03-bookings.png"
+  ]
+}
