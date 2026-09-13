@@ -34,9 +34,10 @@ Producing store binaries is a later step (C10.16).
 | `app.json` | Name, slug, icon, splash, package ids, instance URL |
 | `eas.json` | Build profiles with no secrets |
 
-Re-running is safe: branding fields in `app.json` update, and an existing
-`eas.json` is filled in rather than overwritten, so credentials you add later
-are not clobbered.
+Re-running is safe: branding fields in `app.json` update, but an existing
+Expo slug and iOS/Android package ids are left alone — those identify a store
+listing. An existing `eas.json` is filled in rather than overwritten, so
+credentials you add later are not clobbered.
 
 ## Connecting
 

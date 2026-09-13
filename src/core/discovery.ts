@@ -48,6 +48,43 @@ export type Compatibility =
   | { ok: false; reason: "too-old"; message: string }
   | { ok: false; reason: "not-freeholder"; message: string };
 
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end -= 1;
+  return value.slice(0, end);
+}
+
+/**
+ * Discovery must publish a URL the instance itself will serve.
+ *
+ * `media.resolveImage` returns `/media/{key}` on local/Replit storage and a
+ * CDN or signed URL on public S3. Init will only GET the discovery origin
+ * (same-origin, size-capped), so an off-origin adapter URL is rewritten
+ * through `/media/{key}` — the same object-delivery route a page uses.
+ * `/media/download/{id}` is documents only and must not appear here.
+ */
+export function instanceLogoUrl(base: string, src: string | null | undefined): string | null {
+  if (!src) return null;
+  const origin = stripTrailingSlashes(base);
+  if (src.startsWith("/")) {
+    // `/media/download/{id}` only serves documents. A logo that lands there
+    // is the C10.12 bug this helper exists to stop repeating.
+    if (!src.startsWith("/media/") || src.startsWith("/media/download/") || src.includes("..")) {
+      return null;
+    }
+    return `${origin}${src}`;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(src);
+  } catch {
+    return null;
+  }
+  const key = decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+  if (!key || key.includes("..")) return null;
+  return `${origin}/media/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 /**
  * Whether an app built against `appContract` may talk to this instance.
  *
