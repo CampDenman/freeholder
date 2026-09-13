@@ -14,9 +14,9 @@ history all hang off one CRM timeline.
 > CMS, CRM, privacy, commerce, scheduling, communications, galleries, portal,
 > reporting, automation, sharing and growth foundations are implemented through
 > the current C9 work. Remaining work is documentation and F-matrix integrity
-> (C0), package and first-party plugin depth (C3), automatic subscription
-> billing (C9), the updater/mobile workstream (C10), and the final whole-product
-> evidence program (C11). Checked items are reopened
+> (C0), first-party plugin depth to §36 (reopened C3.13), the updater/mobile
+> workstream (C10), and the final whole-product evidence program (C11). Checked
+> items are reopened
 > whenever executable evidence does not prove their full wording. The complete
 > scope, verified baseline and remaining checklist live only in
 > [`MASTER.md` §43](MASTER.md#43-product-completion-plan--the-live-checklist).
