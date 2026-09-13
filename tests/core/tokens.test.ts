@@ -77,6 +77,7 @@ describe("the token set", () => {
       it(`${scheme}: muted text clears AA on paper and surface`, () => {
         expect(contrast(c.inkMuted, c.paper)).toBeGreaterThanOrEqual(4.5);
         expect(contrast(c.inkMuted, c.surface)).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(c.inkMuted, c.surfaceMuted)).toBeGreaterThanOrEqual(4.5);
       });
 
       it(`${scheme}: text on the accent is legible`, () => {

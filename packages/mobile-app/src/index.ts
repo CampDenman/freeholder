@@ -60,7 +60,7 @@ export {
 } from "./offline.js";
 export { revocableCache, encryptedCache, privateCacheScope, noCache, type CacheStorage } from "./private-cache.js";
 export { discoverWithCache, rememberInstance } from "./cached-discovery.js";
-export { serviceResponse } from "./transport.js";
+export { bytesToBase64, decodeGalleryImageResponse, serviceResponse } from "./transport.js";
 export { brandFrom, type Brand } from "./branding.js";
 export { appText } from "./strings.js";
 export { formatMoney } from "./format.js";

@@ -32,6 +32,7 @@ import { createContact } from "@/core/contacts/service";
 import { db, closeDb as closePool } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
 import { defineJob, enqueueJob, registerJob, stopJobs } from "@/core/jobs";
+import { deliverMail } from "@/core/jobs/core-jobs";
 import { beginMailOAuth, completeMailOAuth } from "@/core/mail/oauth";
 import { mailOauthStates, mailSenders, mailDeliveries, mailOutbox } from "@/core/mail/schema";
 import { deliverQueuedMail, sendMail } from "@/core/mail/service";
@@ -241,6 +242,7 @@ describe.runIf(hasDatabase)("C11.13 recovery drills", { timeout: 90_000 }, () =>
   beforeEach(async () => {
     await truncateSpine();
     registerJob(drillJob);
+    registerJob(deliverMail);
     await db().insert(users).values({
       id: OWNER.userId,
       email: "owner@example.test",

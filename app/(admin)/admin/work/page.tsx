@@ -199,6 +199,7 @@ export default async function WorkBoardPage({
                   model: t("work.runtime.model"),
                   credential: t("work.runtime.credential"),
                   credentialHint: t("work.runtime.credentialHint"),
+                  credentialPlaceholder: t("work.runtime.credentialPlaceholder"),
                   submit: t("work.runtime.submit"),
                 }}
               />
@@ -217,6 +218,7 @@ export default async function WorkBoardPage({
                   instructions: t("work.hire.instructions"),
                   scopes: t("work.hire.scopes"),
                   scopesHint: t("work.hire.scopesHint"),
+                  scopesPlaceholder: t("work.hire.scopesPlaceholder"),
                   autonomy: t("work.workers.autonomy"),
                   suggest: t("work.workers.suggest"),
                   approve: t("work.workers.approve"),

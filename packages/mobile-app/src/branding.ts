@@ -39,7 +39,7 @@ export interface Brand {
 export const FALLBACK_COLORS: Brand["colors"] = {
   surface: "#ffffff",
   ink: "#23262a",
-  inkMuted: "#6b7076",
+  inkMuted: "#5a5f66",
   accent: "#2551e0",
   onAccent: "#ffffff",
   danger: "#b3261e",

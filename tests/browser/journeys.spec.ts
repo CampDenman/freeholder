@@ -198,7 +198,7 @@ test.describe("real-browser product journeys", () => {
     await test.step("admin invoices create and issue a draft, then install a tax starter", async () => {
       await page.goto("/admin/invoices/new");
       await expect(page.getByRole("heading", { name: "New invoice" })).toBeVisible();
-      await page.getByLabel("Contact").selectOption({ label: "Payment Journey · payment-journey@example.test" });
+      await page.getByRole("combobox", { name: "Contact", exact: true }).selectOption({ label: "Payment Journey · payment-journey@example.test" });
       await page.getByLabel("Line 1 description").fill("Discovery session");
       await page.getByLabel("Line 1 unit amount").fill("50.00");
       await page.getByRole("button", { name: "Create draft invoice" }).click();

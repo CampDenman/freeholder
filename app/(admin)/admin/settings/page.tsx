@@ -107,7 +107,7 @@ export default async function AdminSettingsPage({
                     {row.enabled ? t("settings.modules.on") : t("settings.modules.off")}
                   </Pill>
                   {row.alwaysOn ? (
-                    <span className="text-xs text-ink-muted">{t("settings.modules.alwaysOn")}</span>
+                    <span className="text-sm text-ink-muted">{t("settings.modules.alwaysOn")}</span>
                   ) : canManageSettings ? (
                     <form action={setModuleEnabledAction} className="ms-auto">
                       <input type="hidden" name="module" value={row.module} />
@@ -121,7 +121,7 @@ export default async function AdminSettingsPage({
               ))}
             </ul>
           )}
-          <p className="mt-3 max-w-prose text-xs text-ink-muted">{t("settings.modules.coreHint")}</p>
+          <p className="mt-3 max-w-prose text-sm text-ink-muted">{t("settings.modules.coreHint")}</p>
         </CardBody>
       </Card>
 

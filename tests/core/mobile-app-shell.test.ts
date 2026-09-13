@@ -145,7 +145,8 @@ describe("the Expo application (C10.23)", () => {
     expect(images).toContain("result.expiresAt - Date.now()");
     expect(images).not.toMatch(/\/api\/v1\/galleries\.viewItem/);
     expect(code("src/lib/transport.ts")).toContain("status: response.status");
-    expect(code("src/lib/transport.ts")).toContain("export async function decodeGalleryImageResponse");
+    expect(readFileSync("packages/mobile-app/src/transport.ts", "utf8")).toContain("export async function decodeGalleryImageResponse");
+    expect(code("src/lib/gallery-image.ts")).toContain("decodeGalleryImageResponse");
   });
 
   it("wires customer reply, newsletters and account sign-out (C10.28)", () => {

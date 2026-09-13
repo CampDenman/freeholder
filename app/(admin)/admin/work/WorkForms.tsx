@@ -178,6 +178,7 @@ export function ConnectRuntimeForm({
     model: string;
     credential: string;
     credentialHint: string;
+    credentialPlaceholder: string;
     submit: string;
     noConnection?: string;
   };
@@ -218,7 +219,7 @@ export function ConnectRuntimeForm({
             id="runtime-credential"
             name="credentialRef"
             maxLength={120}
-            placeholder="ANTHROPIC_API_KEY"
+            placeholder={labels.credentialPlaceholder}
             className="font-mono uppercase"
           />
         </Field>
@@ -240,6 +241,7 @@ export function HireAgentForm({
     instructions: string;
     scopes: string;
     scopesHint: string;
+    scopesPlaceholder: string;
     autonomy: string;
     suggest: string;
     approve: string;
@@ -293,7 +295,7 @@ export function HireAgentForm({
         />
       </Field>
       <Field htmlFor="hire-scopes" label={labels.scopes} hint={labels.scopesHint}>
-        <Input id="hire-scopes" name="toolScopes" placeholder="contacts.list, inbox.list" />
+        <Input id="hire-scopes" name="toolScopes" placeholder={labels.scopesPlaceholder} />
       </Field>
       <Field htmlFor="hire-autonomy" label={labels.autonomy}>
         <Select id="hire-autonomy" name="autonomy" defaultValue="suggest">

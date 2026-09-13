@@ -10,7 +10,7 @@
 // idea at two scales, and §4.1 defines them with the same two tables.
 import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
-import { formatMoney } from "@/core/i18n";
+import { formatMoney, moneyDecimal } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { listContacts } from "@/core/contacts/service";
 import { lifecycleBoard, listDeals, listPipelines } from "@/modules/crm/service";
@@ -204,7 +204,7 @@ export default async function PipelinePage({
                               <input
                                 name="value"
                                 inputMode="decimal"
-                                defaultValue={(deal.valueMinor / 100).toFixed(2)}
+                                defaultValue={moneyDecimal(deal.valueMinor, deal.currency ?? currency)}
                                 aria-label={t("pipeline.field.worth")}
                                 className="w-full rounded-md border border-rule bg-field px-1 py-1 text-xs tabular-nums"
                               />
