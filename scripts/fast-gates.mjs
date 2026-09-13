@@ -58,6 +58,7 @@ const steps = [
       "tests/core/runtime-shutdown.test.ts",
       "tests/core/long-running-service-boundary.test.ts",
       "tests/core/colour-literals.test.ts",
+      "tests/core/primitives.test.ts",
       "tests/core/changelog-output.test.ts",
       "tests/core/demo-paths.test.ts",
       "tests/core/record-participation.test.ts",
