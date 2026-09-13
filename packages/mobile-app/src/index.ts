@@ -95,6 +95,8 @@ export {
 } from "./capture.js";
 export {
   CAPTURE_DESTINATIONS,
+  CaptureBatchOwnerMismatch,
+  captureBatchOwner,
   captureBatchProgress,
   createCaptureBatchStore,
   type CaptureBatch,

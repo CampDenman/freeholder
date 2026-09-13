@@ -7,6 +7,7 @@ import { AppState, ScrollView, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useNetworkState } from "expo-network";
 import {
+  captureBatchOwner,
   captureBatchProgress,
   SCREENS,
   type CaptureBatch,
@@ -18,7 +19,7 @@ import { useAppText } from "@/lib/strings";
 import { memoryCache } from "@/lib/cache";
 import { useScreenData, useScreenWrite } from "@/lib/screen-data";
 import { captureTransport, enqueuePickedCapture, pickCapture } from "@/lib/capture";
-import { captureBatches } from "@/lib/capture-store";
+import { bindCaptureBatches, captureBatches } from "@/lib/capture-store";
 import { StaffScreen } from "@/lib/staff";
 import { Body, Button, Empty, Loading, Muted, Problem, Row, Screen, Title } from "@/lib/ui";
 
@@ -61,12 +62,20 @@ export default function Capture() {
     void captureBatches.list().then(setBatches);
   }, []);
   const flushQueued = useCallback(async () => {
-    if (!caller || !online) return;
-    await captureBatches.flush({ online, transport: captureTransport(caller) });
+    if (!caller?.token || !online) return;
+    await captureBatches.flush({
+      online,
+      transport: captureTransport(caller),
+      owner: captureBatchOwner({ instanceUrl: caller.instanceUrl, token: caller.token }),
+    });
     refreshBatches();
     reload();
   }, [caller, online, refreshBatches, reload]);
   useEffect(() => captureBatches.subscribe(refreshBatches), [refreshBatches]);
+  useEffect(() => {
+    if (!instance || !session?.token) return;
+    void bindCaptureBatches({ instanceUrl: instance.url, token: session.token }).then(refreshBatches);
+  }, [instance, session, refreshBatches]);
   useFocusEffect(useCallback(() => { reload(); refreshBatches(); if (online) void flushQueued(); }, [reload, refreshBatches, online, flushQueued]));
   useEffect(() => {
     if (online) void flushQueued();
@@ -89,6 +98,7 @@ export default function Capture() {
       const files = await pickCapture(source);
       if (!files.length) { setProblem(t("app.capture.pickFailed")); return; }
       const queued = await enqueuePickedCapture({
+        caller,
         source,
         files,
         destination: { kind: destination, targetId, label: targetLabel },
@@ -115,7 +125,7 @@ export default function Capture() {
   };
   return <StaffScreen><Screen brand={brand}>
     <Title brand={brand}>{t(SCREENS.capture.titleKey)}</Title>
-    {data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={reload} /> : <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
+    <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
       <Muted brand={brand}>{t("app.capture.permission")}</Muted>
       {consent ? null : <Button brand={brand} label={t("app.capture.consent")} onPress={() => setConsentAt(new Date().toISOString())} />}
       <Body brand={brand}>{t("app.capture.destination")}</Body>
@@ -134,6 +144,7 @@ export default function Capture() {
       {notice ? <Body brand={brand}>{notice}</Body> : null}
       {problem ? <Problem brand={brand} message={problem} /> : null}
       {discard.error || confirm.error ? <Problem brand={brand} message={discard.error ?? confirm.error!} /> : null}
+      {data.error ? <Problem brand={brand} message={data.error} onRetry={reload} /> : null}
       <Body brand={brand}>{t("app.capture.batches")}</Body>
       {!batches.length ? <Empty brand={brand} message={t(SCREENS.capture.emptyKey)} /> : batches.map((batch) => {
         const progress = captureBatchProgress(batch);
@@ -146,6 +157,7 @@ export default function Capture() {
           {batch.status !== "confirmed" && batch.status !== "cancelled" ? <Button brand={brand} label={t("app.capture.cancel")} onPress={() => void act(batch.id, "cancel")} variant="quiet" /> : null}
         </View>;
       })}
+      {data.loading ? <Loading brand={brand} /> : null}
       {!data.value?.length ? null : data.value.map((item) => <View key={item.id} style={{ gap: 8 }}>
         <Row brand={brand} title={item.source} detail={item.status} onPress={() => setChosen(item.id)} />
         {chosen === item.id && item.status !== "confirmed" && online ? <>
@@ -154,6 +166,6 @@ export default function Capture() {
         </> : null}
       </View>)}
       <Button brand={brand} label={t("app.retry")} onPress={() => { reload(); refreshBatches(); }} variant="quiet" />
-    </ScrollView>}
+    </ScrollView>
   </Screen></StaffScreen>;
 }
