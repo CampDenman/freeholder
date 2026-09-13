@@ -67,9 +67,6 @@ export function clipSnippet(value: string | null | undefined): string | null {
  * Completeness is asserted in `tests/core/c11-14-search.test.ts`.
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
-  community_members: "Join table of space membership; find the person or the space.",
-  community_join_requests:
-    "Membership queue, not a titled record an owner looks up.",
   contact_relationships:
     "Join table of two contacts; find each person through the contact source.",
   customer_magic_links:
@@ -153,5 +150,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   affiliate_tax_profiles: "Tax profile attached to an affiliate.",
   gift_registries: "Find from gifts admin; not mixed into search.query.",
   community_members: "Join table of a contact to a room.",
+  community_join_requests:
+    "Membership queue, not a titled record an owner looks up.",
   voice_video_artifacts: "Recording/transcript blobs; find the room, not search.",
 };
