@@ -216,7 +216,7 @@ export function Segmented({
       {options.map((option) => (
         <label
           key={option.value}
-          className="cursor-pointer border-e border-rule text-sm last:border-e-0 has-[:checked]:bg-accent has-[:checked]:font-semibold has-[:checked]:text-on-accent"
+          className="cursor-pointer border-e border-rule text-sm text-ink-muted last:border-e-0 has-[:checked]:bg-accent has-[:checked]:font-semibold has-[:checked]:text-on-accent"
         >
           <input
             type="radio"
@@ -225,7 +225,7 @@ export function Segmented({
             defaultChecked={option.value === defaultValue}
             className="sr-only"
           />
-          <span className="block px-4 py-2 text-ink-muted has-[:checked]:text-on-accent">
+          <span className="block px-4 py-2">
             {option.label}
           </span>
         </label>
