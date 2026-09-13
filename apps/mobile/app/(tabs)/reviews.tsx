@@ -10,7 +10,7 @@ import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 import { memoryCache } from "@/lib/cache";
 import { useScreenData, useScreenWrite } from "@/lib/screen-data";
-import { SignIn } from "@/screens/sign-in";
+import { StaffScreen } from "@/lib/staff";
 import { Body, Button, Empty, Loading, Muted, Problem, Screen, StalenessNotice, Title } from "@/lib/ui";
 
 function RowBlock({ children }: { children: React.ReactNode }) {
@@ -20,12 +20,12 @@ function RowBlock({ children }: { children: React.ReactNode }) {
 type Review = { id: string; rating: number; title: string | null; body: string; status: string; displayName: string | null };
 
 export default function Reviews() {
-  const { instance, brand, session } = useInstance();
+  const { instance, brand, session, audience } = useInstance();
   const t = useAppText();
   const network = useNetworkState();
   const caller = instance ? { instanceUrl: instance.url, token: session?.token ?? null } : null;
   const online = network.isConnected === true && network.isInternetReachable !== false;
-  const data = useScreenData<Review[]>({ screen: "reviews", service: "reviews.list", caller, cache: memoryCache, params: { limit: 50 }, enabled: Boolean(session) });
+  const data = useScreenData<Review[]>({ screen: "reviews", service: "reviews.list", caller, cache: memoryCache, params: { limit: 50 }, enabled: Boolean(session && audience === "staff") });
   const moderate = useScreenWrite<Review>({ screen: "reviews", service: "reviews.moderate", caller, online });
   const reload = data.reload;
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
@@ -34,9 +34,9 @@ export default function Reviews() {
     if (!online) return;
     void moderate.execute({ id, status }).then(() => data.reload()).catch(() => {});
   };
-  return <Screen brand={brand}>
+  return <StaffScreen><Screen brand={brand}>
     <Title brand={brand}>{t(SCREENS.reviews.titleKey)}</Title>
-    {!session ? <SignIn /> : data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={reload} /> : !data.value?.length ? <Empty brand={brand} message={t(SCREENS.reviews.emptyKey)} /> : <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 24 }}>
+    {data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={reload} /> : !data.value?.length ? <Empty brand={brand} message={t(SCREENS.reviews.emptyKey)} /> : <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 24 }}>
       <StalenessNotice brand={brand} label={data.staleness} />
       {!online ? <Muted brand={brand}>{t("app.reviews.offline")}</Muted> : null}
       {moderate.error ? <Problem brand={brand} message={moderate.error} /> : null}
@@ -52,5 +52,5 @@ export default function Reviews() {
       </RowBlock>)}
       <Button brand={brand} label={t("app.retry")} onPress={reload} variant="quiet" />
     </ScrollView>}
-  </Screen>;
+  </Screen></StaffScreen>;
 }

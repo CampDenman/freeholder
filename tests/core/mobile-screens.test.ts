@@ -161,7 +161,11 @@ describe("screen contracts (C10.13)", () => {
     expect(SCREENS.message.writes).toContain("conversations.replyAsContact");
     expect(SCREENS.capture.writes).toContain("media.createCaptureSession");
     expect(SCREENS.capture.writes).toContain("media.createUploadLink");
+    expect(SCREENS.capture.writes).toContain("media.signUploadParts");
+    expect(SCREENS.capture.writes).toContain("media.completeUpload");
     expect(SCREENS.capture.writes).toContain("media.confirmCapture");
+    expect(SCREENS.ownerInvoices.writes).toEqual(["invoicing.createDraft"]);
+    expect(SCREENS.ownerInvoice.writes).toEqual(["invoicing.issue"]);
   });
 
   it("only writes from screens where a write is a decision, not a queue", () => {

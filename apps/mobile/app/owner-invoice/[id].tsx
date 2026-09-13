@@ -10,7 +10,7 @@ import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 import { memoryCache } from "@/lib/cache";
 import { useScreenData, useScreenWrite } from "@/lib/screen-data";
-import { SignIn } from "@/screens/sign-in";
+import { StaffScreen } from "@/lib/staff";
 import { Body, Button, Empty, Loading, Muted, Problem, Row, Screen, StalenessNotice, Title } from "@/lib/ui";
 
 type Bundle = { invoice: { id: string; number: string | null; status: string; currency: string; totalMinor: number; memo: string | null }; lines: { id: string; description: string; totalMinor: number }[] };
@@ -18,13 +18,13 @@ type Bundle = { invoice: { id: string; number: string | null; status: string; cu
 export default function OwnerInvoice() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === "string" ? params.id : "";
-  const { instance, brand, session } = useInstance();
+  const { instance, brand, session, audience } = useInstance();
   const t = useAppText();
   const network = useNetworkState();
   const [notice, setNotice] = useState<string | null>(null);
   const caller = instance ? { instanceUrl: instance.url, token: session?.token ?? null } : null;
   const online = network.isConnected === true && network.isInternetReachable !== false;
-  const data = useScreenData<Bundle>({ screen: "ownerInvoice", service: "invoicing.get", caller, cache: memoryCache, params: { id }, enabled: Boolean(session && id) });
+  const data = useScreenData<Bundle>({ screen: "ownerInvoice", service: "invoicing.get", caller, cache: memoryCache, params: { id }, enabled: Boolean(session && audience === "staff" && id) });
   const issue = useScreenWrite<Bundle>({ screen: "ownerInvoice", service: "invoicing.issue", caller, online });
   const reload = data.reload;
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
@@ -39,9 +39,9 @@ export default function OwnerInvoice() {
       data.reload();
     } catch { /* recorded */ }
   };
-  return <Screen brand={brand}>
+  return <StaffScreen><Screen brand={brand}>
     <Title brand={brand}>{t(SCREENS.ownerInvoice.titleKey)}</Title>
-    {!session ? <SignIn /> : data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={reload} /> : !invoice ? <Empty brand={brand} message={t(SCREENS.ownerInvoice.emptyKey)} /> : <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
+    {data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={reload} /> : !invoice ? <Empty brand={brand} message={t(SCREENS.ownerInvoice.emptyKey)} /> : <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
       <StalenessNotice brand={brand} label={data.staleness} />
       <Body brand={brand}>{invoice.number ?? invoice.id}</Body>
       <Body brand={brand}>{invoice.status}</Body>
@@ -53,5 +53,5 @@ export default function OwnerInvoice() {
       {invoice.status === "draft" ? online ? <Button brand={brand} label={t("app.ownerInvoice.issue")} onPress={() => void send()} /> : <Muted brand={brand}>{t("app.ownerInvoice.offline")}</Muted> : null}
       <Button brand={brand} label={t("app.retry")} onPress={reload} variant="quiet" />
     </ScrollView>}
-  </Screen>;
+  </Screen></StaffScreen>;
 }

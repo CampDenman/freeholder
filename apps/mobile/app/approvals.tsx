@@ -10,19 +10,19 @@ import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 import { memoryCache } from "@/lib/cache";
 import { useScreenData, useScreenWrite } from "@/lib/screen-data";
-import { SignIn } from "@/screens/sign-in";
+import { StaffScreen } from "@/lib/staff";
 import { Body, Button, Empty, Loading, Muted, Problem, Screen, StalenessNotice, Title } from "@/lib/ui";
 
 type Approval = { id: string; summary: string; status: string; kind: string; serviceName: string };
 
 export default function Approvals() {
-  const { instance, brand, session } = useInstance();
+  const { instance, brand, session, audience } = useInstance();
   const t = useAppText();
   const network = useNetworkState();
   const [note, setNote] = useState("");
   const caller = instance ? { instanceUrl: instance.url, token: session?.token ?? null } : null;
   const online = network.isConnected === true && network.isInternetReachable !== false;
-  const data = useScreenData<Approval[]>({ screen: "approvals", service: "agents.listApprovals", caller, cache: memoryCache, params: { status: "pending", limit: 50 }, enabled: Boolean(session) });
+  const data = useScreenData<Approval[]>({ screen: "approvals", service: "agents.listApprovals", caller, cache: memoryCache, params: { status: "pending", limit: 50 }, enabled: Boolean(session && audience === "staff") });
   const approve = useScreenWrite<{ approval: Approval }>({ screen: "approvals", service: "agents.approveWrite", caller, online });
   const reject = useScreenWrite<{ approval: Approval }>({ screen: "approvals", service: "agents.rejectWrite", caller, online });
   const reload = data.reload;
@@ -30,9 +30,9 @@ export default function Approvals() {
   if (!instance || !brand) return null;
   const field = { borderWidth: 1, borderColor: brand.colors.rule, color: brand.colors.ink, backgroundColor: brand.colors.surface, padding: 12, borderRadius: 8 };
   const pending = data.value ?? [];
-  return <Screen brand={brand}>
+  return <StaffScreen><Screen brand={brand}>
     <Title brand={brand}>{t(SCREENS.approvals.titleKey)}</Title>
-    {!session ? <SignIn /> : data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={reload} /> : !pending.length ? <Empty brand={brand} message={t(SCREENS.approvals.emptyKey)} /> : <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 24 }}>
+    {data.loading ? <Loading brand={brand} /> : data.error ? <Problem brand={brand} message={data.error} onRetry={reload} /> : !pending.length ? <Empty brand={brand} message={t(SCREENS.approvals.emptyKey)} /> : <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 24 }}>
       <StalenessNotice brand={brand} label={data.staleness} />
       {!online ? <Muted brand={brand}>{t("app.approvals.offline")}</Muted> : null}
       {approve.error || reject.error ? <Problem brand={brand} message={approve.error ?? reject.error!} /> : null}
@@ -42,10 +42,10 @@ export default function Approvals() {
         <Muted brand={brand}>{item.serviceName}</Muted>
         {online ? <>
           <Button brand={brand} label={t("app.approvals.approve")} onPress={() => void approve.execute({ id: item.id, note: note.trim() || undefined }).then(() => data.reload()).catch(() => {})} />
-          <Button brand={brand} label={t("app.approvals.reject")} onPress={() => { if (note.trim()) void reject.execute({ id: item.id, note: note.trim() }).then(() => data.reload()).catch(() => {}); }} variant="quiet" />
+          {note.trim() ? <Button brand={brand} label={t("app.approvals.reject")} onPress={() => void reject.execute({ id: item.id, note: note.trim() }).then(() => data.reload()).catch(() => {})} variant="quiet" /> : <Muted brand={brand}>{t("app.approvals.needNote")}</Muted>}
         </> : null}
       </View>)}
       <Button brand={brand} label={t("app.retry")} onPress={reload} variant="quiet" />
     </ScrollView>}
-  </Screen>;
+  </Screen></StaffScreen>;
 }

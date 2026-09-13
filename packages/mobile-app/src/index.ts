@@ -79,12 +79,15 @@ export {
 } from "./screens.js";
 export {
   CAPTURE_SOURCES,
+  captureStartService,
   openCaptureSession,
   ingestCaptureUpload,
   confirmCaptureSession,
   type CaptureSource,
   type CaptureSession,
+  type CaptureFile,
   type CaptureTransport,
+  type UploadReservation,
 } from "./capture.js";
 export {
   APP_SCHEME,
