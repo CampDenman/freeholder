@@ -145,7 +145,7 @@ test.describe("C11.01 visitor to paid", () => {
 
     await test.step("inbox, owner follow-up task, quote, conversion, contract, invoice and payment", async () => {
       await page.goto("/admin/inbox");
-      await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
       await expect(page.getByText(VISITOR.name)).toBeVisible();
 
       // Tasks have no contactId; this is the owner's follow-up, not a row
