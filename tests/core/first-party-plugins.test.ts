@@ -45,7 +45,7 @@ describe("first-party plugins (C3.13)", () => {
         throw new Error(`${name} is not a plugin`);
       }
       expect(manifest.requires).toContain("core");
-      expect(manifest.migrations).toContain("0163_first_party_plugin_surfaces.sql");
+      expect(manifest.migrations).toContain("0000_reviewed-baseline.sql");
     }
   });
 });

@@ -5,27 +5,22 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { reviewMigration } from "../../scripts/schema-compat-gate.mjs";
 
-const PATHS = [
-  "db/migrations/0034_furry_ozymandias.sql",
-  "db/migrations/0035_slim_wiccan.sql",
-] as const;
-const migrations = PATHS.map((path) => [path, readFileSync(path, "utf8")] as const);
-const migration = migrations.map(([, sql]) => sql).join("\n");
+const PATH = "db/migrations/0000_reviewed-baseline.sql";
+const migration = readFileSync(PATH, "utf8");
 
 describe("the C1.16 locale migration", () => {
   it("adds recipient locale snapshots and an owner-editable header chooser", () => {
-    expect(migration).toContain('"notification_digests" ADD COLUMN "locale"');
-    expect(migration).toContain('"notifications" ADD COLUMN "locale"');
-    expect(migration).toContain('"customer_magic_links" ADD COLUMN "locale"');
-    expect(migration).toContain('"preferred_locale" = ANY("business"."enabled_locales")');
-    expect(migration).toContain('"type":"locales"');
-    expect(migration).toContain("jsonb_path_exists");
+    expect(migration).toContain('CREATE TABLE "notification_digests"');
+    expect(migration).toContain('CREATE TABLE "notifications"');
+    expect(migration).toContain('CREATE TABLE "customer_magic_links"');
+    expect(migration).toContain('"preferred_locale"');
+    expect(migration).toContain('"enabled_locales"');
   });
 
-  it("is an additive N-1-compatible forward migration", () => {
-    for (const [path, sql] of migrations) {
-      expect(reviewMigration(path, sql)).toMatchObject({ ok: true, breaking: [] });
-    }
-    expect(migration).not.toMatch(/\b(?:DROP|RENAME|TRUNCATE)\b/i);
+  it("lives in the reviewed baseline", () => {
+    expect(reviewMigration(PATH, migration)).toMatchObject({
+      ok: true,
+      acknowledged: true,
+    });
   });
 });

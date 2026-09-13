@@ -108,28 +108,26 @@ describe("the acknowledgement", () => {
 });
 
 describe("the migrations already in the tree", () => {
-  // Everything up to and including this file predates the gate. They are not
-  // exempt because they are innocent — 0001 retypes a column — but because a
-  // migration's hash is recorded in the journal of every database that has run
-  // it, so editing one to add an acknowledgement would break every existing
-  // deployment. The baseline is written down here rather than implied.
-  const PRE_GATE = "0005";
-
-  it("everything written since the gate keeps the previous release readable", async () => {
+  it("the reviewed baseline is the acknowledged one-time N-1 break", async () => {
     const { readdirSync, readFileSync } = await import("node:fs");
     const dir = "db/migrations";
-    const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".sql"))
-      .filter((f) => f.slice(0, 4) > PRE_GATE);
-
-    const offenders = files
-      .map((f) => reviewMigration(f, readFileSync(`${dir}/${f}`, "utf8")))
-      .filter((r: { ok: boolean }) => !r.ok)
-      .map((r: { path: string }) => r.path);
-    expect(offenders).toEqual([]);
+    const files = readdirSync(dir).filter((f) => f.endsWith(".sql"));
+    expect(files).toEqual(["0000_reviewed-baseline.sql"]);
+    const review = reviewMigration(
+      files[0]!,
+      readFileSync(`${dir}/${files[0]!}`, "utf8"),
+    );
+    expect(review.ok).toBe(true);
+    expect(review.acknowledged).toBe(true);
+    expect(review.reason).toMatch(/collapse of 0000-0167/);
+    expect(assertSchemaRisk("compatible", [review]).ok).toBe(false);
+    expect(assertSchemaRisk("breaking", [review]).ok).toBe(true);
+    expect(
+      declaredSchemaRisk(readFileSync("src/core/update/this-release.ts", "utf8")),
+    ).toBe("breaking");
   });
 
-  it("refuses a breaking migration when this build still claims schemaRisk compatible", async () => {
+  it("refuses a breaking migration when this build still claims schemaRisk compatible", () => {
     const review = reviewMigration(
       "0165_x.sql",
       `-- freeholder:schema-breaking drops pages.legacy_ref, expanded in 1.4
@@ -141,19 +139,26 @@ ALTER TABLE "pages" DROP COLUMN "legacy_ref";`,
     expect(mismatch.message).toMatch(/this-release\.ts/);
     expect(assertSchemaRisk("breaking", [review]).ok).toBe(true);
     expect(declaredSchemaRisk('schemaRisk: "compatible"')).toBe("compatible");
-    const { readFileSync } = await import("node:fs");
-    expect(declaredSchemaRisk(readFileSync("src/core/update/this-release.ts", "utf8"))).toBe(
-      "compatible",
-    );
   });
 
-  it("would have caught the one pre-gate migration that breaks N-1", async () => {
-    // Proof the detector fires on real SQL and not only on fixtures: 0001
-    // contains `ALTER COLUMN ... SET DATA TYPE`. It was harmless then — there
-    // was no previous release to break — and it is the reason the baseline
-    // exists rather than a claim that the history was always compliant.
-    const { readFileSync } = await import("node:fs");
-    const sql = readFileSync("db/migrations/0001_business-profile.sql", "utf8");
-    expect(ids(sql)).toContain("retype-column");
+  it("treats an acknowledged collapse as a break even without DROP TABLE", () => {
+    // C10.19's replacement SQL is CREATE TABLE. The break is the journal, not
+    // a dropped column, and the gate has to see the acknowledgement anyway.
+    const review = reviewMigration(
+      "0000_reviewed-baseline.sql",
+      `-- freeholder:schema-breaking one-time pre-1.0 collapse of 0000-0167
+CREATE TABLE "x" ("id" uuid);`,
+    );
+    expect(review.ok).toBe(true);
+    expect(review.acknowledged).toBe(true);
+    expect(review.breaking).toEqual([]);
+  });
+
+  it("still catches a retype, which is why the pre-gate history was collapsed", () => {
+    // 0001_business-profile.sql is gone with the chain. The statement is kept
+    // here so the detector is still proved against real SQL, not only fixtures.
+    expect(
+      ids('ALTER TABLE "timeline_events" ALTER COLUMN "subject_id" SET DATA TYPE text;'),
+    ).toContain("retype-column");
   });
 });

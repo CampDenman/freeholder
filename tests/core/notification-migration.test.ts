@@ -15,10 +15,7 @@ import {
 import { reviewMigration } from "../../scripts/schema-compat-gate.mjs";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
-const MIGRATIONS = [
-  "db/migrations/0032_fancy_namora.sql",
-  "db/migrations/0033_thin_lady_bullseye.sql",
-] as const;
+const MIGRATIONS = ["db/migrations/0000_reviewed-baseline.sql"] as const;
 
 describe("the C1.15 migration artifacts", () => {
   const migrations = MIGRATIONS.map((path) => [path, readFileSync(path, "utf8")] as const);
@@ -41,14 +38,24 @@ describe("the C1.15 migration artifacts", () => {
 
   it("is additive and readable by the previous release", () => {
     for (const [path, migration] of migrations) {
-      expect(reviewMigration(path, migration)).toMatchObject({ ok: true, breaking: [] });
+      expect(reviewMigration(path, migration)).toMatchObject({
+        ok: true,
+        acknowledged: true,
+      });
     }
   });
 
   it("stores bounded delivery evidence rather than secrets or provider payloads", () => {
     const all = migrations.map(([, migration]) => migration).join("\n");
-    expect(all).not.toMatch(/access_token|refresh_token|client_secret|api_key|raw_(?:body|payload)/i);
-    expect(all).not.toContain('"html"');
+    const notificationSql = [
+      ...all.matchAll(/CREATE TABLE "notification[^"]*" \([\s\S]*?\);/g),
+    ]
+      .map((row) => row[0])
+      .join("\n");
+    expect(notificationSql).not.toMatch(
+      /access_token|refresh_token|client_secret|api_key|raw_(?:body|payload)/i,
+    );
+    expect(notificationSql).not.toContain('"html"');
   });
 });
 

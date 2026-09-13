@@ -139,8 +139,17 @@ export function acknowledgement(sql) {
 /** The gate's verdict for one migration file. */
 export function reviewMigration(path, sql) {
   const breaking = findBreakingStatements(sql);
-  if (breaking.length === 0) return { path, ok: true, breaking };
   const ack = acknowledgement(sql);
+  // A collapse of the chain is schema-breaking even when the replacement SQL
+  // is all CREATE TABLE: the previous journal cannot apply, and N-1 image-swap
+  // loses its anchor. An acknowledgement with a reason is therefore a break
+  // even when the regexes are quiet.
+  if (breaking.length === 0) {
+    if (ack?.reason) {
+      return { path, ok: true, breaking, reason: ack.reason, acknowledged: true };
+    }
+    return { path, ok: true, breaking };
+  }
   if (!ack) return { path, ok: false, breaking, reason: null };
   if (!ack.reason) {
     return { path, ok: false, breaking, reason: "", empty: true };

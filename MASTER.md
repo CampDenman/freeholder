@@ -3303,12 +3303,12 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-12 |
-| Evidence snapshot | On `main` at `09679d8` after C10.30 private cache #333. C10.30 remains open for native-device evidence. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Last reconciled | 2026-09-13 |
+| Evidence snapshot | On `main` after C10.18 capture batches #345, C10.17 companion #343, C10.28 #341, C10.27 galleries #336, C11.09 F04 screens #335, C3.13 honesty #334, and MinIO-from-Quay CI #357. C10.30 remains open for native-device evidence. C3.13 first-party plugins are still stacked off main. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3.13 (rebuild to §36), then C10.27–C10.28, then C10.15–C10.18, then C10.19, then C11 |
+| Current focus | C10.19 (this baseline collapse), then C10.15–C10.16, then C3.13 plugins, then C11 |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -8380,7 +8380,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   records are executable; a physical background-upload journey still needs an
   installed native build.)*
 
-- [ ] **C10.19** Collapse the migration chain into one reviewed baseline once
+- [x] **C10.19** Collapse the migration chain into one reviewed baseline once
   the schema is complete, keeping seed, demo and restore working, and
   re-baseline the reference instance deliberately rather than by surprise.
   (Scheduled here on purpose: it must land **after every table C10 adds** and
@@ -8401,7 +8401,24 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   demo scenarios load; §23's migration round-trip still passes. §39.9's
   upgrade gate loses its N-1 anchor at this commit — that break is
   one-time, expected and must be stated in the changeset per §39.9's
-  schema-compatibility rule rather than discovered by CI.)
+  schema-compatibility rule rather than discovered by CI.
+  *Implementation 2026-09-12:* `0000_reviewed-baseline.sql` is drizzle-kit
+  generate from `schema.ts` plus the SQL drizzle cannot emit (pg_trgm,
+  btree_gist, `EXCLUDE USING gist` on bookings, asset triggers, leftover
+  `project_tasks`, enum CHECKs, catalogue INSERTs). A fresh chain apply vs a
+  fresh baseline apply diffs empty once constraint/index *names* are
+  normalized (drizzle `*_id_*_id_fk` vs Postgres `*_fkey`); tables, columns,
+  types, defaults, CHECKs, FK definitions, indexes, functions and triggers
+  match. Seed row counts for roles, grants, guidance, demo scenarios,
+  messaging windows and update_settings match. Sibling `0168_*` first-party
+  plugin migrations are not on this branch and must be folded in when those
+  PRs land. **F04** N/A — no new human surface; Doctor `update.n1` warns that
+  rollback is a restore. **F05** N/A — no new agent surface. **F07**
+  `-- freeholder:schema-breaking` on the baseline plus
+  `schemaRisk: "breaking"` in `src/core/update/this-release.ts`; the
+  unattended updater refuses it. **F09** `deploy/n1-schema.md`. **F12**
+  catalog diff, `db:migrate` from empty, seed/demo load, §23 ownership
+  drill still the restore path. Changeset `schema-baseline.md`.)*
 
 **C10 exit:** an owner can leave, restore, update, fork and serve customers on
 mobile without surrendering the code, data, deployment or upgrade path, and the
