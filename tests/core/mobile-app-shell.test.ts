@@ -99,7 +99,7 @@ describe("the Expo application (C10.23)", () => {
   it("renders no colour of its own", () => {
     // Colours come from the instance's semantic tokens. A literal here is a
     // colour that cannot be rebranded without a store review.
-    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx", "app/(tabs)/today.tsx", "app/(tabs)/owner-invoices.tsx", "app/owner-invoice/[id].tsx", "app/(tabs)/inbox.tsx", "app/inbox-thread/[id].tsx", "app/(tabs)/reviews.tsx", "app/approvals.tsx", "app/agents.tsx", "app/(tabs)/alerts.tsx", "app/capture.tsx", "app/(tabs)/staff-account.tsx", "src/lib/capture.ts"]) {
+    for (const file of ["src/lib/ui.tsx", "src/screens/sign-in.tsx", "app/(tabs)/index.tsx", "app/(tabs)/catalog.tsx", "app/(tabs)/bookings.tsx", "app/booking/[token].tsx", "app/(tabs)/invoices.tsx", "app/invoice/[id].tsx", "app/(tabs)/galleries.tsx", "app/gallery/[slug].tsx", "src/lib/gallery-image.ts", "app/(tabs)/account.tsx", "app/messages.tsx", "app/message/[id].tsx", "app/newsletters.tsx", "app/(tabs)/today.tsx", "app/(tabs)/owner-invoices.tsx", "app/owner-invoice/[id].tsx", "app/(tabs)/inbox.tsx", "app/inbox-thread/[id].tsx", "app/(tabs)/reviews.tsx", "app/approvals.tsx", "app/agents.tsx", "app/(tabs)/alerts.tsx", "app/capture.tsx", "app/(tabs)/staff-account.tsx", "src/lib/capture.ts", "src/lib/staff.tsx"]) {
       const source = read(file).replace(/^\s*\/\/.*$/gm, "");
       expect(source, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     }
@@ -179,7 +179,11 @@ describe("the Expo application (C10.23)", () => {
     expect(read("app/(tabs)/today.tsx")).toContain('service: "bookings.list"');
     expect(read("app/(tabs)/owner-invoices.tsx")).toContain('service: "invoicing.list"');
     expect(read("app/(tabs)/owner-invoices.tsx")).toContain('service: "invoicing.createDraft"');
+    expect(code("app/(tabs)/owner-invoices.tsx")).not.toContain("invoicing.issue");
+    expect(code("app/(tabs)/owner-invoices.tsx")).not.toContain("not_applicable");
+    expect(code("app/(tabs)/owner-invoices.tsx")).toContain('mode: "calculate"');
     expect(read("app/owner-invoice/[id].tsx")).toContain('service: "invoicing.get"');
+    expect(read("app/owner-invoice/[id].tsx")).toContain('service: "invoicing.issue"');
     expect(read("app/(tabs)/inbox.tsx")).toContain('service: "conversations.list"');
     expect(read("app/inbox-thread/[id].tsx")).toContain('service: "conversations.reply"');
     expect(code("app/inbox-thread/[id].tsx")).not.toMatch(/\breplyAsContact\b/);
@@ -188,13 +192,27 @@ describe("the Expo application (C10.23)", () => {
     expect(read("app/agents.tsx")).toContain('service: "agents.list"');
     expect(read("app/(tabs)/alerts.tsx")).toContain('service: "notifications.list"');
     expect(read("app/capture.tsx")).toContain("uploadPickedCapture");
+    expect(read("app/capture.tsx")).toContain("app.capture.discard");
+    expect(read("app/capture.tsx")).toContain("app.capture.confirm");
     expect(code("src/lib/capture.ts")).toContain("/api/media");
+    expect(code("src/lib/capture.ts")).toContain("media.signUploadParts");
+    expect(code("src/lib/capture.ts")).toContain("media.completeUpload");
+    expect(code("src/lib/capture.ts")).toContain("captureStartService");
     expect(code("src/lib/capture.ts")).not.toMatch(/\/api\/mobile/);
+    expect(read("src/lib/staff.tsx")).toContain('audience !== "staff"');
+    for (const file of ["app/(tabs)/today.tsx", "app/(tabs)/owner-invoices.tsx", "app/owner-invoice/[id].tsx", "app/(tabs)/inbox.tsx", "app/inbox-thread/[id].tsx", "app/(tabs)/reviews.tsx", "app/approvals.tsx", "app/agents.tsx", "app/(tabs)/alerts.tsx", "app/capture.tsx", "app/(tabs)/staff-account.tsx"]) {
+      expect(read(file), file).toContain("StaffScreen");
+      expect(read(file), file).toContain('audience === "staff"');
+    }
+    expect(read("app/inbox-thread/[id].tsx")).toContain("app.inbox.customer");
+    expect(read("app/approvals.tsx")).toContain("app.approvals.needNote");
     expect(read("app/(tabs)/staff-account.tsx")).toContain('service: "auth.whoami"');
     for (const id of OWNER_TAB_ORDER) {
       expect(read("app/(tabs)/_layout.tsx")).toContain("tabFileName");
       expect(tabFileName(id)).toBeTruthy();
     }
     expect(SCREENS.capture.writes).toContain("media.beginUpload");
+    expect(SCREENS.capture.writes).toContain("media.signUploadParts");
+    expect(SCREENS.capture.writes).toContain("media.completeUpload");
   });
 });

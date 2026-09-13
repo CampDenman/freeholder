@@ -10,7 +10,7 @@ import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 import { memoryCache } from "@/lib/cache";
 import { useScreenData, useScreenWrite } from "@/lib/screen-data";
-import { SignIn } from "@/screens/sign-in";
+import { StaffScreen } from "@/lib/staff";
 import { Body, Button, Empty, Loading, Muted, Problem, Row, Screen, StalenessNotice, Title } from "@/lib/ui";
 
 type Briefing = { id: string; onDate: string; status: string; sections: { key: string; title: string; body: string | null; items: { label: string; detail?: string }[] }[] };
@@ -28,15 +28,16 @@ function dayWindow(timezone: string): { from: string; to: string } {
 }
 
 export default function Today() {
-  const { instance, brand, session } = useInstance();
+  const { instance, brand, session, audience } = useInstance();
   const t = useAppText();
   const router = useRouter();
   const network = useNetworkState();
   const caller = instance ? { instanceUrl: instance.url, token: session?.token ?? null } : null;
   const online = network.isConnected === true && network.isInternetReachable !== false;
   const window = instance ? dayWindow(instance.timezone) : { from: "", to: "" };
-  const briefing = useScreenData<Briefing | null>({ screen: "today", service: "briefing.today", caller, cache: memoryCache, enabled: Boolean(session) });
-  const bookings = useScreenData<Appointment[]>({ screen: "today", service: "bookings.list", caller, cache: memoryCache, params: { ...window, limit: 50 }, enabled: Boolean(session && window.from) });
+  const staff = audience === "staff";
+  const briefing = useScreenData<Briefing | null>({ screen: "today", service: "briefing.today", caller, cache: memoryCache, enabled: Boolean(session && staff) });
+  const bookings = useScreenData<Appointment[]>({ screen: "today", service: "bookings.list", caller, cache: memoryCache, params: { ...window, limit: 50 }, enabled: Boolean(session && staff && window.from) });
   const markRead = useScreenWrite<{ id: string }>({ screen: "today", service: "briefing.markRead", caller, online });
   const reloadBriefing = briefing.reload;
   const reloadBookings = bookings.reload;
@@ -45,9 +46,9 @@ export default function Today() {
   const sections = briefing.value?.sections ?? [];
   const appointments = bookings.value ?? [];
   const reload = () => { briefing.reload(); bookings.reload(); };
-  return <Screen brand={brand}>
+  return <StaffScreen><Screen brand={brand}>
     <Title brand={brand}>{t(SCREENS.today.titleKey)}</Title>
-    {!session ? <SignIn /> : briefing.loading || bookings.loading ? <Loading brand={brand} /> : briefing.error || bookings.error ? <Problem brand={brand} message={briefing.error ?? bookings.error!} onRetry={reload} /> : <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
+    {briefing.loading || bookings.loading ? <Loading brand={brand} /> : briefing.error || bookings.error ? <Problem brand={brand} message={briefing.error ?? bookings.error!} onRetry={reload} /> : <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
       <StalenessNotice brand={brand} label={briefing.staleness ?? bookings.staleness} />
       {sections.length === 0 && appointments.length === 0 ? <Empty brand={brand} message={t(SCREENS.today.emptyKey)} /> : null}
       {sections.map((section) => <Row key={section.key} brand={brand} title={section.title} detail={section.body ?? (section.items.map((item) => item.label).join(" · ") || undefined)} />)}
@@ -60,5 +61,5 @@ export default function Today() {
       {markRead.error ? <Problem brand={brand} message={markRead.error} /> : null}
       <Button brand={brand} label={t("app.retry")} onPress={reload} variant="quiet" />
     </ScrollView>}
-  </Screen>;
+  </Screen></StaffScreen>;
 }

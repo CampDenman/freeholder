@@ -5852,6 +5852,7 @@
   "app.ownerInvoice.amount": "Amount",
   "app.ownerInvoice.contact": "Customer",
   "app.ownerInvoice.create": "Create draft",
+  "app.ownerInvoice.drafted": "The draft is ready to review.",
   "app.ownerInvoice.offline": "Connect to the internet before changing an invoice.",
   "app.ownerInvoice.taxReason": "Tax is calculated on the website for this invoice.",
   "app.inbox.title": "Inbox",
@@ -5861,6 +5862,8 @@
   "app.inbox.reply": "Write a reply",
   "app.inbox.send": "Send",
   "app.inbox.sent": "Reply sent.",
+  "app.inbox.customer": "Customer",
+  "app.inbox.you": "You",
   "app.inbox.offline": "Connect to the internet before sending a reply.",
   "app.reviews.title": "Reviews",
   "app.reviews.empty": "No reviews to moderate.",
@@ -5873,6 +5876,7 @@
   "app.approvals.approve": "Approve",
   "app.approvals.reject": "Reject",
   "app.approvals.note": "Note",
+  "app.approvals.needNote": "Add a note before rejecting.",
   "app.approvals.offline": "Connect to the internet before deciding an approval.",
   "app.agents.title": "Agents",
   "app.agents.empty": "No agents are hired yet.",
@@ -5894,5 +5898,7 @@
   "app.staffAccount.title": "Account",
   "app.staffAccount.empty": "Your staff account will appear here.",
   "app.staffAccount.signOut": "Sign out",
-  "app.companion.mode": "Owner mode"
+  "app.companion.mode": "Owner mode",
+  "app.companion.staffOnly": "This screen is for the business, not a customer account.",
+  "app.companion.customerHome": "Back to the customer app"
 }

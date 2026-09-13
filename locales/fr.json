@@ -5852,6 +5852,7 @@
   "app.ownerInvoice.amount": "Montant",
   "app.ownerInvoice.contact": "Client",
   "app.ownerInvoice.create": "Créer un brouillon",
+  "app.ownerInvoice.drafted": "Le brouillon est prêt à être relu.",
   "app.ownerInvoice.offline": "Connectez-vous à internet avant de modifier une facture.",
   "app.ownerInvoice.taxReason": "Les taxes de cette facture se calculent sur le site web.",
   "app.inbox.title": "Boîte de réception",
@@ -5861,6 +5862,8 @@
   "app.inbox.reply": "Écrire une réponse",
   "app.inbox.send": "Envoyer",
   "app.inbox.sent": "Réponse envoyée.",
+  "app.inbox.customer": "Client",
+  "app.inbox.you": "Vous",
   "app.inbox.offline": "Connectez-vous à internet avant d’envoyer une réponse.",
   "app.reviews.title": "Avis",
   "app.reviews.empty": "Aucun avis à modérer.",
@@ -5873,6 +5876,7 @@
   "app.approvals.approve": "Approuver",
   "app.approvals.reject": "Rejeter",
   "app.approvals.note": "Note",
+  "app.approvals.needNote": "Ajoutez une note avant de rejeter.",
   "app.approvals.offline": "Connectez-vous à internet avant de trancher une approbation.",
   "app.agents.title": "Agents",
   "app.agents.empty": "Aucun agent n’est encore embauché.",
@@ -5894,5 +5898,7 @@
   "app.staffAccount.title": "Compte",
   "app.staffAccount.empty": "Votre compte personnel apparaîtra ici.",
   "app.staffAccount.signOut": "Se déconnecter",
-  "app.companion.mode": "Mode propriétaire"
+  "app.companion.mode": "Mode propriétaire",
+  "app.companion.staffOnly": "Cet écran est réservé à l’entreprise, pas à un compte client.",
+  "app.companion.customerHome": "Retour à l’application client"
 }

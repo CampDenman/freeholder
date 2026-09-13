@@ -8325,7 +8325,9 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   / `rejectWrite`, `agents.list` / `board`, `notifications.list` with
   `state: "critical"`. Capture ingest is `media.createCaptureSession` or
   `createUploadLink`, then `media.beginUpload`, `POST /api/media`,
-  `media.bindCaptureAsset` and `media.confirmCapture`. Writes are live-only;
+  `media.signUploadParts` / `media.completeUpload` on private S3, or
+  `POST /api/media` when the reservation is proxy, then `media.bindCaptureAsset`
+  and `media.confirmCapture`. Writes are live-only;
   offline batches remain C10.18. **F01** no schema. **F02/F03/F05** no new
   services or customer model; the SDK already enforces grants.
   **F04** loading/empty/error/offline on every companion screen; physical

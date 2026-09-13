@@ -300,6 +300,8 @@ describe("the customer app (C10.12)", () => {
 
     it("ingests capture through core media services and refuses offline (C10.17)", async () => {
       const calls: Array<{ service: string; body: unknown }> = [];
+      const puts = { proxy: 0, part: 0 };
+      const file = { filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1, 2, 3]), byteLength: 3 };
       const transport = {
         async call<T>(service: string, body: unknown) {
           calls.push({ service, body });
@@ -309,32 +311,53 @@ describe("the customer app (C10.12)", () => {
           if (service === "media.createUploadLink") {
             return { id: "session-2", source: "camera_roll", status: "pending", token: "upload-token-value-ok" } as T;
           }
-          if (service === "media.beginUpload") return { id: "upload-1" } as T;
+          if (service === "media.beginUpload") {
+            const strategy = (body as { filename?: string }).filename === "s3.bin" ? "direct_multipart" : "proxy";
+            return { id: "upload-1", strategy, partSize: strategy === "direct_multipart" ? 2 : null, partCount: strategy === "direct_multipart" ? 2 : null } as T;
+          }
+          if (service === "media.signUploadParts") {
+            return { parts: [{ partNumber: (body as { partNumbers: number[] }).partNumbers[0], url: "https://s3.test/part", method: "PUT" }] } as T;
+          }
+          if (service === "media.completeUpload") {
+            return { ok: true, asset: { id: "asset-s3" } } as T;
+          }
           if (service === "media.bindCaptureAsset" || service === "media.confirmCapture" || service === "media.getCaptureSession") {
-            return { id: "session-1", source: "camera", status: "confirmed", assetId: "asset-1" } as T;
+            const assetId = service === "media.bindCaptureAsset" ? (body as { assetId?: string }).assetId : "asset-1";
+            return { id: "session-1", source: "camera", status: "confirmed", assetId } as T;
           }
           throw new Error(service);
         },
         async putProxy() {
+          puts.proxy += 1;
           return { id: "asset-1" };
+        },
+        async putPart() {
+          puts.part += 1;
+          return { etag: `"etag-${puts.part}"` };
         },
       };
       await expect(openCaptureSession({ source: "camera", online: false }, transport)).rejects.toBeInstanceOf(OfflineWriteRefused);
       const opened = await openCaptureSession({ source: "camera", online: true }, transport);
       expect(opened.id).toBe("session-1");
       expect(calls.map((entry) => entry.service)).toEqual(["media.createCaptureSession", "media.grantCapturePermission"]);
-      const staged = await ingestCaptureUpload(
-        { session: opened, filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1, 2, 3]), online: true },
-        transport,
-      );
+      const staged = await ingestCaptureUpload({ session: opened, file, online: true }, transport);
       expect(calls.some((entry) => entry.service === "media.beginUpload")).toBe(true);
+      expect(puts.proxy).toBe(1);
+      expect(puts.part).toBe(0);
       const confirmed = await confirmCaptureSession({ session: staged, online: true }, transport);
       expect(confirmed.assetId).toBe("asset-1");
+      const s3 = await ingestCaptureUpload(
+        { session: opened, file: { filename: "s3.bin", contentType: "application/octet-stream", bytes: new Uint8Array([1, 2, 3]), byteLength: 3 }, online: true },
+        transport,
+      );
+      expect(calls.filter((entry) => entry.service === "media.signUploadParts")).toHaveLength(2);
+      expect(calls.some((entry) => entry.service === "media.completeUpload")).toBe(true);
+      expect(puts.part).toBe(2);
+      expect(puts.proxy).toBe(1);
+      expect(s3.assetId).toBe("asset-s3");
       const roll = await openCaptureSession({ source: "camera_roll", online: true }, transport);
       expect(roll.token).toBe("upload-token-value-ok");
-      await expect(
-        ingestCaptureUpload({ session: opened, filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1]), online: false }, transport),
-      ).rejects.toBeInstanceOf(OfflineWriteRefused);
+      await expect(ingestCaptureUpload({ session: opened, file, online: false }, transport)).rejects.toBeInstanceOf(OfflineWriteRefused);
     });
     it("refuses to queue a mutation, loudly", async () => {
       await expect(

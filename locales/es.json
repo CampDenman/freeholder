@@ -5852,6 +5852,7 @@
   "app.ownerInvoice.amount": "Importe",
   "app.ownerInvoice.contact": "Cliente",
   "app.ownerInvoice.create": "Crear borrador",
+  "app.ownerInvoice.drafted": "El borrador está listo para revisar.",
   "app.ownerInvoice.offline": "Conéctate a internet antes de cambiar una factura.",
   "app.ownerInvoice.taxReason": "Los impuestos de esta factura se calculan en el sitio web.",
   "app.inbox.title": "Bandeja",
@@ -5861,6 +5862,8 @@
   "app.inbox.reply": "Escribe una respuesta",
   "app.inbox.send": "Enviar",
   "app.inbox.sent": "Respuesta enviada.",
+  "app.inbox.customer": "Cliente",
+  "app.inbox.you": "Tú",
   "app.inbox.offline": "Conéctate a internet antes de enviar una respuesta.",
   "app.reviews.title": "Reseñas",
   "app.reviews.empty": "No hay reseñas que moderar.",
@@ -5873,6 +5876,7 @@
   "app.approvals.approve": "Aprobar",
   "app.approvals.reject": "Rechazar",
   "app.approvals.note": "Nota",
+  "app.approvals.needNote": "Añade una nota antes de rechazar.",
   "app.approvals.offline": "Conéctate a internet antes de decidir una aprobación.",
   "app.agents.title": "Agentes",
   "app.agents.empty": "Todavía no hay agentes contratados.",
@@ -5894,5 +5898,7 @@
   "app.staffAccount.title": "Cuenta",
   "app.staffAccount.empty": "Aquí aparecerá tu cuenta de personal.",
   "app.staffAccount.signOut": "Cerrar sesión",
-  "app.companion.mode": "Modo propietario"
+  "app.companion.mode": "Modo propietario",
+  "app.companion.staffOnly": "Esta pantalla es para el negocio, no para una cuenta de cliente.",
+  "app.companion.customerHome": "Volver a la aplicación de cliente"
 }
