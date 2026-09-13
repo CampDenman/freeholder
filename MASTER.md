@@ -8624,7 +8624,8 @@ schema they inherit reads as a designed thing rather than an excavation.
   leftovers remain. **F12** `tests/core/c11-14-search.test.ts` mixed-kind
   query. **Remaining named worklist:**
   Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
-  Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.)*
+  Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.
+  Other titled contact-attached stores still on per-list search (orders, subscriptions, and remaining SEARCH_TABLE_OPT_OUTS) are not mixed into search.query.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
   passing acceptance test.

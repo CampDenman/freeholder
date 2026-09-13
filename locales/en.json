@@ -48,6 +48,8 @@
   "admin.search.intro": "Find contacts, conversations, notes, invoices, pages and other records you can already open.",
   "admin.search.kind.contact": "Contacts",
   "admin.search.kind.conversation": "Conversations",
+  "admin.search.kind.deal": "Deals",
+  "admin.search.kind.document": "Documents",
   "admin.search.kind.gallery": "Galleries",
   "admin.search.kind.invoice": "Invoices",
   "admin.search.kind.media": "Media",

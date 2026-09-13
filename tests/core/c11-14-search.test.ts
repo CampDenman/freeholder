@@ -39,6 +39,9 @@ describe("C11.14 search leftovers", () => {
     expect(master).toContain(
       "Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.",
     );
+    expect(master).toContain(
+      "Other titled contact-attached stores still on per-list search (orders, subscriptions, and remaining SEARCH_TABLE_OPT_OUTS) are not mixed into search.query.",
+    );
     expect(master).not.toMatch(/No product-wide search index:/);
   });
 });
@@ -170,6 +173,82 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
     expect(hits.some((hit) => hit.kind === "conversation")).toBe(false);
   });
 
+  it("shows conversation hits to staff with crm even without a conversations grant", async () => {
+    const crmStaff: Actor = {
+      kind: "user",
+      userId: STAFF.userId,
+      role: "staff",
+      grants: [
+        { module: "search", access: "view" },
+        { module: "crm", access: "view" },
+      ],
+    };
+    await recordMessage.call(
+      {
+        email: "crm@example.test",
+        name: "Crm Lane",
+        direction: "inbound",
+        channel: "email",
+        body: `Inbox ${TOKEN} thread`,
+        subject: `${TOKEN} crm subject`,
+      },
+      OWNER,
+    );
+    const hits = await querySearch.call({ q: TOKEN, limit: 20 }, crmStaff);
+    expect(hits.some((hit) => hit.kind === "conversation")).toBe(true);
+    expect(hits.some((hit) => hit.kind === "contact")).toBe(false);
+  });
+
+  it("hides private notes from agents", async () => {
+    const agent: Actor = {
+      kind: "agent",
+      keyName: "search-key",
+      scopes: ["search.query", "crm.*"],
+    };
+    const id = await person("priv@example.test", "Priv Lane");
+    await writeNote.call(
+      {
+        subjectType: "contact",
+        subjectId: id,
+        body: "private zxqvpriv only me",
+        visibility: "private",
+      },
+      OWNER,
+    );
+    await writeNote.call(
+      {
+        subjectType: "contact",
+        subjectId: id,
+        body: "shared zxqvpriv for the team",
+        visibility: "shared",
+      },
+      OWNER,
+    );
+    const hits = await querySearch.call({ q: "zxqvpriv" }, agent);
+    const notes = hits.filter((hit) => hit.kind === "note");
+    expect(notes.some((hit) => hit.snippet?.includes("shared zxqvpriv"))).toBe(true);
+    expect(notes.some((hit) => hit.snippet?.includes("private zxqvpriv"))).toBe(false);
+  });
+
+  it("caps the concatenated result at limit", async () => {
+    const id = await person("cap@example.test", "Cap Lane");
+    await person("cap-one@example.test", "zxqvcap one");
+    await person("cap-two@example.test", "zxqvcap two");
+    await writeNote.call(
+      { subjectType: "contact", subjectId: id, body: "zxqvcap note one" },
+      OWNER,
+    );
+    await writeNote.call(
+      { subjectType: "contact", subjectId: id, body: "zxqvcap note two" },
+      OWNER,
+    );
+    const hits = await querySearch.call(
+      { q: "zxqvcap", kinds: ["contact", "note"], limit: 2 },
+      OWNER,
+    );
+    expect(hits).toHaveLength(2);
+  });
+
   it("treats % and _ in the query as literals", async () => {
     await person("underscore@example.test", "hello_world_zxqv");
     await person("wildcard@example.test", "helloXworld_zxqv");
@@ -182,6 +261,95 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
 
     const percent = await querySearch.call({ q: "hello%world_zxqv" }, OWNER);
     expect(percent.some((hit) => hit.kind === "contact")).toBe(false);
+  });
+
+  it("treats %, _ and \\ as literals on notes and invoices", async () => {
+    const id = await person("wild@example.test", "Wild Lane");
+    await writeNote.call(
+      { subjectType: "contact", subjectId: id, body: "note_hello_zxqvbody" },
+      OWNER,
+    );
+    await writeNote.call(
+      { subjectType: "contact", subjectId: id, body: "noteXhello_zxqvbody" },
+      OWNER,
+    );
+    await writeNote.call(
+      { subjectType: "contact", subjectId: id, body: "note\\hello_zxqvslash" },
+      OWNER,
+    );
+    await createDraftInvoice.call(
+      {
+        contactId: id,
+        currency: "CAD",
+        idempotencyKey: "search-wild-under",
+        memo: "fee_100_zxqvinv",
+        lines: [
+          {
+            description: "Sitting",
+            quantityMicros: 1_000_000,
+            unitAmountMinor: 10_000,
+            discountMinor: 0,
+            taxCategoryCode: "standard",
+            requiresShipping: false,
+            snapshot: {},
+          },
+        ],
+        shippingMinor: 0,
+        tax: {
+          mode: "not_applicable",
+          reason: "No collection obligation applies to this test transaction.",
+        },
+      },
+      OWNER,
+    );
+    await createDraftInvoice.call(
+      {
+        contactId: id,
+        currency: "CAD",
+        idempotencyKey: "search-wild-x",
+        memo: "feeX100_zxqvinv",
+        lines: [
+          {
+            description: "Sitting",
+            quantityMicros: 1_000_000,
+            unitAmountMinor: 10_000,
+            discountMinor: 0,
+            taxCategoryCode: "standard",
+            requiresShipping: false,
+            snapshot: {},
+          },
+        ],
+        shippingMinor: 0,
+        tax: {
+          mode: "not_applicable",
+          reason: "No collection obligation applies to this test transaction.",
+        },
+      },
+      OWNER,
+    );
+
+    const under = await querySearch.call({ q: "note_hello_zxqvbody" }, OWNER);
+    expect(under.some((hit) => hit.kind === "note" && hit.snippet?.includes("note_hello_zxqvbody"))).toBe(
+      true,
+    );
+    expect(under.some((hit) => hit.snippet?.includes("noteXhello_zxqvbody"))).toBe(false);
+
+    const percent = await querySearch.call({ q: "note%hello_zxqvbody" }, OWNER);
+    expect(percent.some((hit) => hit.kind === "note")).toBe(false);
+
+    const slash = await querySearch.call({ q: "note\\hello_zxqvslash" }, OWNER);
+    expect(slash.some((hit) => hit.kind === "note" && hit.snippet?.includes("note\\hello_zxqvslash"))).toBe(
+      true,
+    );
+
+    const invoiceUnder = await querySearch.call({ q: "fee_100_zxqvinv" }, OWNER);
+    expect(invoiceUnder.some((hit) => hit.kind === "invoice" && hit.snippet === "fee_100_zxqvinv")).toBe(
+      true,
+    );
+    expect(invoiceUnder.some((hit) => hit.snippet === "feeX100_zxqvinv")).toBe(false);
+
+    const invoicePercent = await querySearch.call({ q: "fee%100_zxqvinv" }, OWNER);
+    expect(invoicePercent.some((hit) => hit.kind === "invoice")).toBe(false);
   });
 
   it("finds records after contacts.merge repoints contact_id", async () => {
