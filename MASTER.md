@@ -8348,8 +8348,9 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `createCaptureBatchStore` in `packages/mobile-app`. Consent, destination
   (library / product / page), progress, pause/resume/cancel and retry are
   local; `writeThrough` still refuses every service, including media uploads.
-  The queue is bound to instance URL + session token, cleared on sign-out /
-  forget / instance switch, and refuses flush for another account. File bytes
+  The queue is bound to a SHA-256 digest of instance URL + session, never the
+  raw bearer; it is cleared on sign-out / forget / instance switch, and refuses
+  flush for another account. File bytes
   are persisted (copied off picker URIs into app document storage) so a new
   store can still flush after reload. The Capture screen shows local batches
   and ingest controls when `media.listCaptureSessions` fails, including

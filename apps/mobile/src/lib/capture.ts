@@ -135,7 +135,7 @@ export async function enqueuePickedCapture(input: {
     files: input.files,
     destination: input.destination,
     consent: input.consent,
-    owner: captureBatchOwner({ instanceUrl: input.caller.instanceUrl, token: input.caller.token }),
+    owner: await captureBatchOwner({ instanceUrl: input.caller.instanceUrl, token: input.caller.token }),
   });
 }
 

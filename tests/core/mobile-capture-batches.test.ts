@@ -124,7 +124,7 @@ describe.runIf(hasDatabase)("native capture batches match /capture/[token] (C10.
     const phoneAsset = await getAsset.call({ id: phoneSession.assetId! }, OWNER);
 
     const nativeServices: string[] = [];
-    const owner = captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
+    const owner = await captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
     const store = createCaptureBatchStore(memoryCache());
     await store.bind(owner);
     const queued = await store.enqueue({
@@ -204,7 +204,7 @@ describe.runIf(hasDatabase)("native capture batches match /capture/[token] (C10.
     await bindCaptureAsset.call({ token: link.token, assetId: uploaded.id }, ANONYMOUS);
     await confirmCapture.call({ token: link.token }, ANONYMOUS);
 
-    const owner = captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
+    const owner = await captureBatchOwner({ instanceUrl: "https://studio.test", token: "session-a" });
     const store = createCaptureBatchStore(memoryCache());
     await store.bind(owner);
     await store.enqueue({

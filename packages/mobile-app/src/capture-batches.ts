@@ -84,8 +84,14 @@ export class CaptureBatchOwnerMismatch extends Error {
   }
 }
 
-export function captureBatchOwner(input: { instanceUrl: string; token: string }): string {
-  return `${input.instanceUrl}|${input.token}`;
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** A durable id for one instance+session. Never the raw bearer — that stays in the keychain. */
+export async function captureBatchOwner(input: { instanceUrl: string; token: string }): Promise<string> {
+  return sha256Hex(`${input.instanceUrl}\0${input.token}`);
 }
 
 export function captureBatchProgress(batch: CaptureBatch): CaptureBatchProgress {
@@ -158,7 +164,6 @@ function fileForFlush(item: CaptureBatchItem, held: Map<string, Uint8Array>): Ca
 }
 
 interface PersistedQueue {
-  owner: string;
   batches: CaptureBatch[];
   files: Record<string, string>;
 }
@@ -207,7 +212,6 @@ export function createCaptureBatchStore(
   async function persist() {
     if (!owner) return;
     const payload: PersistedQueue = {
-      owner,
       batches: batches.map(withoutBytes),
       files: Object.fromEntries([...files.entries()].map(([id, bytes]) => [id, encodeBytes(bytes)])),
     };
@@ -223,7 +227,7 @@ export function createCaptureBatchStore(
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as PersistedQueue;
-      if (parsed.owner !== owner || !Array.isArray(parsed.batches)) return;
+      if (!Array.isArray(parsed.batches)) return;
       batches = parsed.batches;
       files.clear();
       for (const [id, encoded] of Object.entries(parsed.files ?? {})) {

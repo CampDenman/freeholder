@@ -66,7 +66,7 @@ export default function Capture() {
     await captureBatches.flush({
       online,
       transport: captureTransport(caller),
-      owner: captureBatchOwner({ instanceUrl: caller.instanceUrl, token: caller.token }),
+      owner: await captureBatchOwner({ instanceUrl: caller.instanceUrl, token: caller.token }),
     });
     refreshBatches();
     reload();
