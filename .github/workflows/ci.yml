@@ -150,10 +150,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # vitest.config.ts uses the runtime-balanced sequencer. Twenty isolated
-        # databases keep the 25-minute limit safe even when one hosted runner
-        # executes DB-backed files at the measured 6.7x degraded rate. The
-        # sequencer integrity test binds this topology to that resilience budget.
+        # vitest.config.ts uses the runtime-balanced sequencer. Twenty-three
+        # isolated databases keep the 25-minute limit safe even when one hosted
+        # runner executes DB-backed files at the measured 6.7x degraded rate.
+        # The sequencer integrity test binds this topology to that resilience
+        # budget. C11.13 added shards rather than raising the timeout.
         shard:
           - 1/23
           - 2/23

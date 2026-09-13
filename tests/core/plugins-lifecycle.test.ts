@@ -29,6 +29,9 @@ import {
   startImport,
 } from "@/core/import/service";
 import { assertPublicHttpUrl } from "@/core/import/contract";
+import { pages } from "@/modules/cms/schema";
+import { eq } from "drizzle-orm";
+import { db } from "@/core/db";
 import {
   closeDb,
   failure,
@@ -171,6 +174,7 @@ describe.runIf(hasDatabase)("import studio ledger", { timeout: 30_000 }, () => {
     expect(previewed.status).toBe("previewed");
     const committed = await commitImport.call({ id: started.id }, OWNER);
     expect(committed.status).toBe("committed");
+    expect(await db().select().from(pages).where(eq(pages.slug, "about"))).toHaveLength(1);
     const reconciled = await reconcileImport.call(
       { id: started.id, counts: { pages: 1, media: 0, redirects: 0 } },
       OWNER,
@@ -180,6 +184,7 @@ describe.runIf(hasDatabase)("import studio ledger", { timeout: 30_000 }, () => {
     expect(published.status).toBe("published");
     const rolled = await rollbackImport.call({ id: started.id }, OWNER);
     expect(rolled.status).toBe("rolled_back");
+    expect(await db().select().from(pages).where(eq(pages.slug, "about"))).toHaveLength(0);
   });
 
   it("refuses a private origin", async () => {

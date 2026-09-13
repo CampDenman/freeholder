@@ -40,3 +40,12 @@ migrate, and prints the setup URL (C3.14). `pnpm packages:release` proves
 package versions match the platform and a `vX.Y.Z` tag (C3.20). Recipe
 update/rollback automation remains open under C10.10. C1.23 supplies the
 guarded ownership substrate.
+
+`pnpm perf:budgets` is the §15.1 harness (C11.11). It parses the budget table
+from MASTER.md and runs `tests/core/performance-budgets.test.ts`. Default is
+the small seed. `PERF_DATASET=medium` or `large` fails closed if the database
+is missing. Browser, job-queue, migration and cold-boot clocks are opt-in
+(`PERF_MEASURE_*=1`) and also fail closed when requested without the
+capability. C11.13 failure drills live in
+`tests/core/c11-13-failure-drills.test.ts`. The C11.10 review packet is
+`security/independent-review-packet.md`.

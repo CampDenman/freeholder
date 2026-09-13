@@ -4065,7 +4065,7 @@ export interface ServiceCatalog {
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.preview": {
-    input: { id: string; pages: { url: string; slug: string; title: string }[] };
+    input: { id: string; pages: { url: string; slug: string; title: string; body?: string; kind?: "page" | "post" }[] };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.previewFromSource": {

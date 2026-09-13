@@ -30,7 +30,7 @@ The shard topology has a checked degradation budget, not an arbitrary count.
 Run `33904651417` established the normal duration of a deterministic shard;
 run `33905822088` then placed that exact file list on a contended hosted runner,
 where representative database files slowed uniformly by as much as 6.7x. CI
-therefore partitions the suite across twenty databases and keeps a tested 7x
+therefore partitions the suite across twenty-three databases and keeps a tested 7x
 work allowance plus fixed setup overhead below the unchanged 25-minute job
 limit. `tests/core/runtime-balanced-sequencer.test.ts` proves full, unique test
 coverage, bounded predicted skew, the degradation budget, and exact workflow

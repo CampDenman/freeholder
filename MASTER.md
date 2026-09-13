@@ -3308,7 +3308,7 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.09 leftover F-clause honesty, C11.08 remaining hops, C10.15, C10.16, C3.13 first-party plugins, then remaining C11 |
+| Current focus | C11.09 leftover F05 stamps, C11.08 remaining hops, C11.10 independent security review, C11.11 performance budgets, C10.15, C10.16, C3.13 first-party plugins |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 
 **Scope of DONE.** DONE includes every affirmative capability specified in
@@ -8517,11 +8517,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   → restore on another Tier-1 target → signed update → failed-update rollback.
   *(Partial 2026-09-12: `tests/browser/demo-scenarios.spec.ts` already proves
   role-guided demo load/reload/reset/purge. `tests/core/c11-08-install-update-journey.test.ts`
-  loads that demo, runs WordPress REST parse → preview → commit → reconcile →
-  publish on the import ledger, checks the ownership-export format and a
-  local signed apply plus `failAt: "smoke"` rollback. **Left open:** import
-  commit does not materialize CMS pages (the "imported site" is a ledger, not
-  a site), and restore on another Tier-1 target remains the ownership-drill
+  loads that demo, runs WordPress REST parse → preview → commit (CMS draft
+  pages are written from the preview body) → reconcile → publish (those
+  pages go live), plus a generic HTML import commit, empty-slug home, and
+  replace-then-rollback restoring the original CMS page. Ownership-export
+  format and a local signed apply plus `failAt: "smoke"` rollback.
+  **Left open:** restore on another Tier-1 target remains the ownership-drill
   pair matrix rather than a second live instance in this journey.)*
 
 #### Whole-product quality
@@ -8551,9 +8552,21 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.
+  *(Packet 2026-09-12: `security/independent-review-packet.md` lists threat
+  surfaces, existing tests and known residuals. This is not the review; the
+  checkbox stays open until an independent reviewer signs it.)*
 - [ ] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
+  *(Harness 2026-09-12: `scripts/performance-budgets.mjs` parses the §15.1
+  table; `tests/core/performance-budgets.test.ts` measures admin list/detail,
+  contacts search, empty `reports.revenue`, and `cms.resolvePage` on a small
+  seed of contacts plus one page in CI and fails when a cap is exceeded.
+  That seed does not insert the §15.1 medium message/order/product/asset
+  counts. Medium/large, Core Web Vitals, editor, job-queue, migration and
+  cold-boot are opt-in and fail closed when requested without the capability.
+  **Left open:** this tree cannot run the medium/large seed or browser vitals
+  here, so the item is not checked.)*
 - [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.
   *(Partial 2026-09-12: `tests/browser/accessibility.spec.ts` now also walks
@@ -8564,9 +8577,23 @@ schema they inherit reads as a designed thing rather than an excavation.
   browser suite is the evidence, not a local run here; not every F04 screen is
   in the axe loop, and RTL is injected `dir` rather than a shipped Arabic
   catalog.)*
-- [ ] **C11.13** Complete failure drills for database/storage/mail/payment/SMS/
+- [x] **C11.13** Complete failure drills for database/storage/mail/payment/SMS/
   OAuth/AI/provider outages, process death, duplicate webhook/job, clock skew,
   low disk, lost credential key and interrupted update.
+  *(Evidence 2026-09-12: `tests/core/c11-13-failure-drills.test.ts` simulates
+  each named failure and asserts recovery — pool reconnect, ENOSPC then a
+  successful put, retryable mail then submit, Stripe 500 then checkout,
+  Twilio 500 then send, unconfigured AI then a recovered generate, consumed
+  OAuth state then a fresh begin, SIGTERM drain-once, duplicate payment
+  webhook and job idempotency, TOTP/webhook clock windows, lost
+  `CREDENTIAL_KEY` until `CREDENTIAL_KEY_PREVIOUS`, and update `failAt`
+  migrate/smoke/cutover rollback. **F04** N/A — drills are operational
+  recovery, not a new screen; health/doctor/update-admin already surface
+  outages. **F05** N/A — not an agent capability; the same services agents
+  already call are what fail and recover. **F07** the drills cover fail-closed
+  adapter errors, idempotent duplicates, preserved ciphertext and automatic
+  update rollback. **F09** the suite is the operational story. **F12** the
+  vitest chain. Live provider accounts are not claimed.)*
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
