@@ -16,7 +16,8 @@ export function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [link, setLink] = useState("");
-  const [code, setCode] = useState("");
+  const [totp, setTotp] = useState("");
+  const [recovery, setRecovery] = useState("");
   const [challenge, setChallenge] = useState<{ token: string; methods: TwoFactorMethods } | null>(null);
   const [pending, setPending] = useState(false);
   const inFlight = useRef(false);
@@ -28,6 +29,7 @@ export function SignIn() {
     inFlight.current = true;
     setPending(true); setProblem(null); setNotice(null);
     try {
+      const code = totp.trim() || recovery.trim();
       const result = await signIn({
         email: email.trim(),
         ...(kind === "password" ? { password } : {}),
@@ -49,7 +51,7 @@ export function SignIn() {
         else setProblem(t(`app.auth.${result.reason}`));
       }
     } catch { setProblem(t("app.auth.unreachable")); }
-    finally { setPassword(""); setLink(""); setCode(""); setPending(false); inFlight.current = false; }
+    finally { setPassword(""); setLink(""); setTotp(""); setRecovery(""); setPending(false); inFlight.current = false; }
   };
   const style = { borderWidth: 1, borderRadius: 8, padding: 12, borderColor: brand.colors.rule, color: brand.colors.ink, backgroundColor: brand.colors.surface };
   return <ScrollView contentContainerStyle={{ gap: 12, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
@@ -57,8 +59,9 @@ export function SignIn() {
     <Body brand={brand}>{t("app.auth.hint")}</Body>
     {pending ? <Loading brand={brand} /> : challenge ? <>
       <Body brand={brand}>{t("app.auth.two-factor")}</Body>
-      <TextInput accessibilityLabel={t("app.auth.code")} placeholder={t("app.auth.code")} placeholderTextColor={brand.colors.inkMuted} value={code} onChangeText={setCode} autoComplete="one-time-code" keyboardType="number-pad" style={style} />
-      <Button brand={brand} label={t("app.auth.verify")} onPress={() => { if (code.trim()) void submit("code"); else setProblem(t("app.auth.invalid")); }} />
+      {challenge.methods.totp ? <TextInput accessibilityLabel={t("app.auth.code")} placeholder={t("app.auth.code")} placeholderTextColor={brand.colors.inkMuted} value={totp} onChangeText={setTotp} autoComplete="one-time-code" keyboardType="number-pad" style={style} /> : null}
+      {challenge.methods.recovery ? <TextInput accessibilityLabel={t("app.auth.recovery")} placeholder={t("app.auth.recovery")} placeholderTextColor={brand.colors.inkMuted} value={recovery} onChangeText={setRecovery} autoCapitalize="none" autoCorrect={false} autoComplete="off" keyboardType="default" style={style} /> : null}
+      <Button brand={brand} label={t("app.auth.verify")} onPress={() => { if (totp.trim() || recovery.trim()) void submit("code"); else setProblem(t("app.auth.invalid")); }} />
       <Button brand={brand} label={t("app.auth.startAgain")} onPress={() => { setChallenge(null); setProblem(null); }} variant="quiet" />
     </> : <>
       <TextInput accessibilityLabel={t("app.auth.email")} placeholder={t("app.auth.email")} placeholderTextColor={brand.colors.inkMuted} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" style={style} />
