@@ -5801,6 +5801,7 @@
   "app.auth.two-factor": "Enter the verification code for this account.",
   "app.auth.two-factor.web": "This account requires a security key. Please use the business website.",
   "app.auth.code": "Verification code",
+  "app.auth.recovery": "Recovery code",
   "app.auth.verify": "Verify",
   "app.auth.startAgain": "Start sign-in again",
   "app.auth.localSignOut": "Sign out on this device",

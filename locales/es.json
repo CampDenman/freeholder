@@ -5801,6 +5801,7 @@
   "app.auth.two-factor": "Introduce el código de verificación de esta cuenta.",
   "app.auth.two-factor.web": "Esta cuenta requiere una llave de seguridad. Usa el sitio web del negocio.",
   "app.auth.code": "Código de verificación",
+  "app.auth.recovery": "Código de recuperación",
   "app.auth.verify": "Verificar",
   "app.auth.startAgain": "Volver a iniciar sesión",
   "app.auth.localSignOut": "Cerrar sesión en este dispositivo",

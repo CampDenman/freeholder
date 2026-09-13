@@ -163,5 +163,10 @@ describe("the Expo application (C10.23)", () => {
     expect(code("app/newsletters.tsx")).not.toMatch(/\bnewsletters\.unsubscribe\b/);
     expect(read("src/screens/sign-in.tsx")).toContain("challengeToken");
     expect(read("src/screens/sign-in.tsx")).toContain("app.auth.verify");
+    expect(read("src/screens/sign-in.tsx")).toContain("app.auth.recovery");
+    expect(code("src/screens/sign-in.tsx")).toContain('keyboardType="number-pad"');
+    expect(code("src/screens/sign-in.tsx")).toContain('keyboardType="default"');
+    expect(code("src/screens/sign-in.tsx")).toContain("methods.recovery");
+    expect(code("src/screens/sign-in.tsx")).toContain("methods.totp");
   });
 });
