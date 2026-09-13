@@ -10,12 +10,17 @@ import { SettingsForm } from "./SettingsForm";
 import { PasswordForm } from "./PasswordForm";
 import { ApiKeysCard } from "./ApiKeysCard";
 import { listApiKeys, listScopes } from "@/core/apikeys/service";
-import { listDeliveries, listWebhooks } from "@/core/webhooks/service";
+import { inspectDelivery, listDeliveries, listWebhooks } from "@/core/webhooks/service";
 import { WebhooksCard } from "./WebhooksCard";
 import { currentBusiness } from "@/core/settings/read";
+import { listModules } from "@/core/settings/service";
 import { hasModuleAccess, type Actor } from "@/core/service";
 import { mailStatus } from "@/core/mail/service";
 import { MailSettingsCard } from "./MailSettingsCard";
+import { ready } from "@/core/runtime";
+import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { setModuleEnabledAction } from "../../settings-module-actions";
+import { domainOrNull } from "../../read-helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -23,18 +28,30 @@ export const dynamic = "force-dynamic";
 export default async function AdminSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mail?: string }>;
+  searchParams: Promise<{ mail?: string; delivery?: string; webhook?: string; saved?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("settings");
   const business = await currentBusiness();
   // Reachable only if setup was skipped somehow; the wizard is the way in.
   if (!business) redirect("/setup");
 
-  const [t, locale, query] = await Promise.all([
+  const [t, locale, query, report, storedModules] = await Promise.all([
     getT(),
     getLocale(),
     searchParams,
+    ready(),
+    domainOrNull(listModules.call({}, actor)),
   ]);
+  const inspected = query.delivery
+    ? await domainOrNull(inspectDelivery.call({ id: query.delivery }, actor))
+    : null;
+  const byName = new Map((storedModules ?? []).map((row) => [row.module, row]));
+  const moduleRows = report.modules.map((name) => ({
+    module: name,
+    enabled: name === "core" ? true : (byName.get(name)?.enabled ?? true),
+    alwaysOn: name === "core",
+  }));
+  const canManageSettings = hasModuleAccess(actor, "settings", "manage");
 
   // Sensitive integration cards are fetched only when this stored role may
   // manage their modules, rather than rendered from calls that would refuse.
@@ -56,6 +73,82 @@ export default async function AdminSettingsPage({
           {t("admin.settings.intro")}
         </p>
       </div>
+      {query.saved === "module" ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("settings.modules.saved")}
+        </p>
+      ) : null}
+      {query.webhook === "replayed" ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("webhooks.replayed")}
+        </p>
+      ) : null}
+      {query.error ? (
+        <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+          {query.error.includes(" ") ? query.error : t("webhooks.replayFailed")}
+        </p>
+      ) : null}
+
+      <Card>
+        <CardHeader title={t("settings.modules.title")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("settings.modules.intro")}</p>
+          {!canManageSettings ? (
+            <p className="text-sm text-ink-muted">{t("settings.modules.readOnly")}</p>
+          ) : null}
+          {storedModules === null ? (
+            <p className="text-sm text-danger">{t("settings.modules.unavailable")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-2 p-0">
+              {moduleRows.map((row) => (
+                <li key={row.module} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                  <span className="font-medium">{row.module}</span>
+                  <Pill tone={row.enabled ? "success" : "neutral"}>
+                    {row.enabled ? t("settings.modules.on") : t("settings.modules.off")}
+                  </Pill>
+                  {row.alwaysOn ? (
+                    <span className="text-xs text-ink-muted">{t("settings.modules.alwaysOn")}</span>
+                  ) : canManageSettings ? (
+                    <form action={setModuleEnabledAction} className="ms-auto">
+                      <input type="hidden" name="module" value={row.module} />
+                      <input type="hidden" name="enabled" value={row.enabled ? "false" : "true"} />
+                      <Button type="submit" variant="quiet">
+                        {row.enabled ? t("settings.modules.off") : t("settings.modules.on")}
+                      </Button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 max-w-prose text-xs text-ink-muted">{t("settings.modules.coreHint")}</p>
+        </CardBody>
+      </Card>
+
+      {inspected ? (
+        <Card>
+          <CardHeader title={t("webhooks.inspect")} />
+          <CardBody>
+            <p className="text-sm">
+              {inspected.eventName} · {inspected.status} · {inspected.attempts} {t("webhooks.attempts")}
+            </p>
+            {inspected.error ? (
+              <p className="mt-2 text-sm text-danger">{inspected.error}</p>
+            ) : null}
+            <pre className="mt-3 overflow-x-auto rounded-md border border-rule bg-surface-muted p-3 text-xs">
+              {JSON.stringify(inspected.payload, null, 2)}
+            </pre>
+            {inspected.responseBody ? (
+              <pre className="mt-3 overflow-x-auto rounded-md border border-rule bg-surface-muted p-3 text-xs">
+                {inspected.responseBody}
+              </pre>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : query.delivery ? (
+        <p className="text-sm text-danger">{t("webhooks.inspectMissing")}</p>
+      ) : null}
+
       <SettingsForm
         readOnly={!hasModuleAccess(actor, "settings", "manage")}
         labels={{
@@ -230,6 +323,8 @@ export default async function AdminSettingsPage({
             secretHint: t("webhooks.secretHint"),
             recent: t("webhooks.recent"),
             noDeliveries: t("webhooks.noDeliveries"),
+            inspect: t("webhooks.inspect"),
+            replay: t("webhooks.replay"),
           }}
         />
       ) : null}

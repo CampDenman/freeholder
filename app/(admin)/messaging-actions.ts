@@ -15,6 +15,12 @@ import {
   setRegistration,
   updateMessagingNumber,
 } from "@/core/messaging/sms";
+import {
+  createKeywordRule,
+  deleteKeywordRule,
+} from "@/core/messaging/keywords";
+import { setMessagingWindow } from "@/core/messaging/policy";
+import { KEYWORD_ACTIONS, KEYWORD_MATCH_KINDS } from "@/core/messaging/schema";
 import { ownerFacing } from "./action-helpers";
 
 const MESSAGING = "/admin/messaging";
@@ -108,4 +114,59 @@ export async function setRegistrationAction(form: FormData): Promise<void> {
   }
   revalidatePath(MESSAGING);
   redirect(`${MESSAGING}?saved=registration`);
+}
+
+export async function createKeywordRuleAction(form: FormData): Promise<void> {
+  const match = KEYWORD_MATCH_KINDS.find((kind) => kind === text(form, "match")) ?? "exact";
+  const action = KEYWORD_ACTIONS.find((kind) => kind === text(form, "action")) ?? "auto_reply";
+  try {
+    await createKeywordRule.call(
+      {
+        keyword: text(form, "keyword"),
+        match,
+        action,
+        actionValue: text(form, "actionValue") || null,
+        replyBody: text(form, "replyBody") || null,
+        locale: text(form, "locale") || "*",
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, "That keyword rule could not be saved.");
+  }
+  revalidatePath(MESSAGING);
+  redirect(`${MESSAGING}?saved=keyword`);
+}
+
+export async function deleteKeywordRuleAction(form: FormData): Promise<void> {
+  try {
+    await deleteKeywordRule.call({ id: text(form, "id") }, await actor());
+  } catch (error) {
+    refused(error, "That keyword rule could not be deleted.");
+  }
+  revalidatePath(MESSAGING);
+  redirect(`${MESSAGING}?saved=keyword`);
+}
+
+export async function setMessagingWindowAction(form: FormData): Promise<void> {
+  try {
+    await setMessagingWindow.call(
+      {
+        name: text(form, "name"),
+        scope: "global",
+        quietFrom: text(form, "quietFrom") || null,
+        quietTo: text(form, "quietTo") || null,
+        maxPerDay: text(form, "maxPerDay") ? Number(text(form, "maxPerDay")) : null,
+        maxPerWeek: text(form, "maxPerWeek") ? Number(text(form, "maxPerWeek")) : null,
+        appliesTo: "marketing",
+        timezoneSource: "contact",
+        active: true,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, "That quiet-hours window could not be saved.");
+  }
+  revalidatePath(MESSAGING);
+  redirect(`${MESSAGING}?saved=window`);
 }

@@ -16,8 +16,14 @@ import {
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { invoiceAction } from "../../../invoice-actions";
+import {
+  assessLateFeeAction,
+  cancelPaymentPlanAction,
+  createPaymentPlanAction,
+} from "../../../advanced-money-actions";
 import { scheduleRemindersAction } from "../../../recurring-actions";
 import { listInvoiceReminders } from "@/modules/invoicing/recurring-service";
+import { getPaymentPlan } from "@/modules/invoicing/advanced-money-service";
 import { requireStaffActor } from "../../guard";
 import { formatPpm, invoiceTone, money, quantityFromMicros } from "../format";
 import { domainOrNull } from "../../../read-helpers";
@@ -38,13 +44,14 @@ export default async function InvoiceDetailPage({
     if (error instanceof ServiceError && error.code === "not_found") notFound();
     throw error;
   });
-  const [contact, business, t, reminders] = await Promise.all([
+  const [contact, business, t, reminders, plan] = await Promise.all([
     domainOrNull(getContact.call({ id: bundle.invoice.contactId }, actor)),
     currentBusiness(),
     getT(),
     // Empty rather than null on failure: chasing is a detail on this page, and
     // an unreadable reminder list must not take the invoice down with it.
     listInvoiceReminders.call({ invoiceId: id }, actor).catch(() => []),
+    domainOrNull(getPaymentPlan.call({ invoiceId: id }, actor)),
   ]);
   const canManage = hasModuleAccess(actor, "invoicing", "manage");
   const stepUpValid = actor.kind === "user" && actor.security?.stepUpValid !== false;
@@ -284,6 +291,94 @@ export default async function InvoiceDetailPage({
           ) : null}
         </CardBody>
       </Card>
+
+      {canManage && ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) ? (
+        <Card>
+          <CardHeader title={t("invoices.plan.title")} />
+          <CardBody>
+            {plan ? (
+              <div className="grid gap-3">
+                <p className="text-sm text-ink-muted">
+                  {t("invoices.plan.intro")} · {plan.plan.status}
+                </p>
+                <ul className="grid list-none gap-2 p-0 text-sm">
+                  {plan.installments.map((row, index) => (
+                    <li key={row.id} className="flex flex-wrap gap-3">
+                      <span>{t("invoices.plan.installment", { n: index + 1 })}</span>
+                      <span className="font-mono">{money(row.amountMinor, invoice.currency)}</span>
+                      <span className="text-ink-muted">{formatDateTime(row.dueAt, timezone, locale)}</span>
+                      <Pill tone="neutral">{row.status}</Pill>
+                    </li>
+                  ))}
+                </ul>
+                {plan.plan.status !== "cancelled" && plan.plan.status !== "completed" ? (
+                  <form action={cancelPaymentPlanAction} className="grid gap-3">
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <input type="hidden" name="planId" value={plan.plan.id} />
+                    <Field label={t("invoices.plan.cancelReason")} htmlFor="plan-reason">
+                      <Input id="plan-reason" name="reason" required minLength={3} maxLength={1000} />
+                    </Field>
+                    <div>
+                      <Button type="submit" variant="danger">{t("invoices.plan.cancel")}</Button>
+                    </div>
+                  </form>
+                ) : null}
+              </div>
+            ) : (
+              <form action={createPaymentPlanAction} className="grid gap-4 sm:grid-cols-2">
+                <input type="hidden" name="invoiceId" value={invoice.id} />
+                <input type="hidden" name="currency" value={invoice.currency} />
+                <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+                <p className="sm:col-span-2 max-w-prose text-sm text-ink-muted">{t("invoices.plan.empty")}</p>
+                <Field label={t("invoices.plan.amount")} htmlFor="plan-amount1">
+                  <Input id="plan-amount1" name="amount1" inputMode="decimal" required />
+                </Field>
+                <Field label={t("invoices.plan.due")} htmlFor="plan-due1">
+                  <Input id="plan-due1" name="dueAt1" type="date" required />
+                </Field>
+                <Field label={t("invoices.plan.amount")} htmlFor="plan-amount2">
+                  <Input id="plan-amount2" name="amount2" inputMode="decimal" required />
+                </Field>
+                <Field label={t("invoices.plan.due")} htmlFor="plan-due2">
+                  <Input id="plan-due2" name="dueAt2" type="date" required />
+                </Field>
+                <div>
+                  <Button type="submit">{t("invoices.plan.create")}</Button>
+                </div>
+              </form>
+            )}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {canManage && invoice.dueAt && ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) ? (
+        <Card>
+          <CardHeader title={t("invoices.lateFee.title")} />
+          <CardBody>
+            <p className="max-w-prose text-sm text-ink-muted">{t("invoices.lateFee.intro")}</p>
+            <form action={assessLateFeeAction} className="mt-3 grid gap-4 sm:grid-cols-2">
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <input type="hidden" name="currency" value={invoice.currency} />
+              <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+              <Field label={t("invoices.lateFee.amount")} htmlFor="late-amount">
+                <Input id="late-amount" name="amount" inputMode="decimal" required />
+              </Field>
+              <Field label={t("invoices.lateFee.grace")} htmlFor="late-grace">
+                <Input id="late-grace" name="graceDays" inputMode="numeric" defaultValue="0" />
+              </Field>
+              <Field label={t("invoices.lateFee.reason")} htmlFor="late-reason">
+                <Input id="late-reason" name="reason" required minLength={3} maxLength={1000} />
+              </Field>
+              <Field label={t("invoices.lateFee.taxReason")} htmlFor="late-tax">
+                <Input id="late-tax" name="taxReason" defaultValue={t("invoices.lateFee.taxDefault")} />
+              </Field>
+              <div>
+                <Button type="submit">{t("invoices.lateFee.assess")}</Button>
+              </div>
+            </form>
+          </CardBody>
+        </Card>
+      ) : null}
 
       {receipts.length > 0 ? (
         <Card>

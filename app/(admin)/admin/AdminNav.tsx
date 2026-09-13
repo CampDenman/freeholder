@@ -22,6 +22,7 @@ import {
   ClipboardText,
   AirplaneTakeoff,
   ArrowUUpLeft,
+  ArrowBendUpRight,
   ArrowsClockwise,
   Ticket,
   DeviceMobile,
@@ -78,6 +79,7 @@ export interface AdminNavLabels {
   updates: string;
   jobs: string;
   settings: string;
+  redirects: string;
   roles: string;
   invitations: string;
   builder: string;
@@ -210,6 +212,7 @@ const LINKS = [
   { href: "/admin/roles", key: "roles", module: "roles", Icon: ShieldCheck },
   { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
   { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
+  { href: "/admin/redirects", key: "redirects", module: "seo", Icon: ArrowBendUpRight },
   { href: "/admin/work", key: "work", module: "agents", Icon: Kanban },
   { href: "/admin/contribute", key: "contribute", module: "contribute", Icon: ChatCircleText },
   { href: "/admin/plugins", key: "plugins", module: "platform", Icon: PuzzlePiece },

@@ -4,19 +4,24 @@ import type { Metadata } from "next";
 import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
-import { listInstalledPlugins, listPluginRegistries } from "@/core/plugins/service";
+import {
+  listInstalledPlugins,
+  listPluginCatalog,
+  listPluginRegistries,
+} from "@/core/plugins/service";
 import { platformCompatibility } from "@/core/portability/service";
-import { InstallPluginForm, PluginRowActions } from "./PluginForms";
+import { AddRegistryForm, InstallPluginForm, PluginRowActions } from "./PluginForms";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function PluginsPage() {
   const actor = await requireStaffActor("platform");
-  const [t, plugins, registries, compatibility] = await Promise.all([
+  const [t, plugins, registries, catalog, compatibility] = await Promise.all([
     getT(),
     listInstalledPlugins.call({}, actor),
     listPluginRegistries.call({}, actor),
+    listPluginCatalog.call({}, actor),
     platformCompatibility.call({}, actor),
   ]);
 
@@ -62,14 +67,26 @@ export default async function PluginsPage() {
                   <PluginRowActions
                     name={plugin.name}
                     status={plugin.status}
+                    source={plugin.source}
+                    previousVersion={plugin.previousVersion}
                     labels={{
                       enable: t("plugins.enable"),
                       disable: t("plugins.disable"),
                       uninstall: t("plugins.uninstall"),
                       keep: t("plugins.retention.keep"),
                       purge: t("plugins.retention.purge"),
+                      update: t("plugins.update"),
+                      path: t("plugins.updatePath"),
+                      rollback: t("plugins.rollback"),
+                      rollbackUnavailable: t("plugins.rollbackUnavailable"),
+                      error: t("plugins.error"),
                     }}
                   />
+                  {plugin.previousVersion ? (
+                    <p className="text-xs text-ink-muted">
+                      {t("plugins.previous", { version: plugin.previousVersion })}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -87,6 +104,41 @@ export default async function PluginsPage() {
               {registries.map((registry) => (
                 <li key={registry.id} className="text-sm">
                   {registry.name} — {registry.url}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4">
+            <AddRegistryForm
+              labels={{
+                name: t("plugins.registryName"),
+                url: t("plugins.registryUrl"),
+                tier: t("plugins.registryTier"),
+                submit: t("plugins.addRegistry"),
+                error: t("plugins.error"),
+                verified: t("plugins.tier.verified"),
+                community: t("plugins.tier.community"),
+                private: t("plugins.tier.private"),
+                local: t("plugins.tier.local"),
+              }}
+            />
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("plugins.catalog")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("plugins.catalogIntro")}</p>
+          {catalog.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("plugins.catalogEmpty")}</p>
+          ) : (
+            <ul className="mt-2 grid list-none gap-2 p-0">
+              {catalog.map((plugin) => (
+                <li key={`${plugin.name}@${plugin.version}`} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="font-medium">{plugin.name}</span>
+                  <Pill tone="neutral">{plugin.version}</Pill>
+                  <Pill tone="neutral">{t(`plugins.tier.${plugin.tier}`)}</Pill>
                 </li>
               ))}
             </ul>

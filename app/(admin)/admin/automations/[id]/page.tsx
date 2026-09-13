@@ -33,6 +33,7 @@ import {
 import { currentBusiness } from "@/core/settings/read";
 import {
   getAutomation,
+  listRuns,
   triggers,
   verbs,
   versions,
@@ -43,6 +44,7 @@ import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
 import {
   addStepAction,
+  killRunAction,
   publishAction,
   removeStepAction,
   restoreVersionAction,
@@ -98,7 +100,7 @@ export default async function AutomationEditor({
   const detail = await domainOrNull(getAutomation.call({ automationId: id }, actor));
   if (!detail) notFound();
 
-  const [t, business, palette, available, history, audiences] = await Promise.all([
+  const [t, business, palette, available, history, audiences, runs] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(verbs.call({}, actor)),
@@ -107,6 +109,7 @@ export default async function AutomationEditor({
     // The audiences the business has already defined (§30). Offering the list
     // rather than a rule builder is the point of C7.17.
     domainOrNull(listSegments.call({}, actor)),
+    domainOrNull(listRuns.call({ automationId: id, limit: 20 }, actor)),
   ]);
 
   const locale = business?.defaultLocale ?? "en";
@@ -146,6 +149,37 @@ export default async function AutomationEditor({
           {query.error}
         </p>
       ) : null}
+
+      <Card>
+        <CardHeader title={t("automations.runs")} />
+        <CardBody>
+          {runs === null ? (
+            <p className="text-sm text-danger">{t("automations.unavailable")}</p>
+          ) : runs.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("automations.runsEmpty")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {runs.map((run) => (
+                <li key={run.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                  <Pill tone={run.status === "running" ? "warning" : run.status === "failed" ? "danger" : "neutral"}>
+                    {t(`automations.run.status.${run.status}`)}
+                  </Pill>
+                  <span className="text-ink-muted">{when(run.startedAt)}</span>
+                  {run.error ? <span className="text-danger">{run.error}</span> : null}
+                  {run.status === "running" ? (
+                    <form action={killRunAction} className="ms-auto flex flex-wrap items-end gap-2">
+                      <input type="hidden" name="automationId" value={id} />
+                      <input type="hidden" name="runId" value={run.id} />
+                      <Input name="reason" placeholder={t("automations.killReason")} />
+                      <Button type="submit" variant="danger">{t("automations.kill")}</Button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
 
       {/* What stops this being switched on, before the button is pressed. */}
       {detail.problems.length > 0 ? (

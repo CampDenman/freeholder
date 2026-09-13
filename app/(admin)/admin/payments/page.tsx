@@ -15,6 +15,7 @@ import {
   listSavedPaymentMethods,
   reconcilePaymentProviders,
 } from "@/modules/invoicing/payment-provider-service";
+import { listProviderPayouts } from "@/modules/invoicing/advanced-money-service";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { paymentAction } from "../../payment-actions";
@@ -36,13 +37,14 @@ export default async function PaymentsPage({
   const errorCode = ["validation", "conflict", "not_found", "permission", "rate_limited"].includes(query.error ?? "")
     ? query.error!
     : "failed";
-  const [providers, invoices, succeeded, methods, disputes, reconciliation, t] = await Promise.all([
+  const [providers, invoices, succeeded, methods, disputes, reconciliation, payouts, t] = await Promise.all([
     listPaymentProviders.call({ country: "US", currency: "USD", recurring: false }, actor),
     listInvoices.call({ limit: 300 }, actor),
     listPayments.call({ status: "succeeded", limit: 500 }, actor),
     listSavedPaymentMethods.call({ includeRevoked: false, limit: 500 }, actor),
     listPaymentDisputes.call({ limit: 200 }, actor),
     reconcilePaymentProviders.call({ limit: 200 }, actor),
+    listProviderPayouts.call({ limit: 100 }, actor),
     getT(),
   ]);
   const canManage = hasModuleAccess(actor, "invoicing", "manage");
@@ -169,6 +171,27 @@ export default async function PaymentsPage({
           {methods.length === 0 ? <p className="text-sm text-ink-muted">{t("payments.methods.empty")}</p> : (
             <ul className="grid list-none gap-3 p-0">
               {methods.map((method) => <li key={method.id} className="flex flex-wrap items-center gap-2 border-b border-rule pb-3 last:border-0"><span className="text-sm font-medium">{method.label}</span><Pill tone="neutral">{method.provider}</Pill>{canManage ? <form action={paymentAction} className="ms-auto flex items-center gap-2"><input type="hidden" name="intent" value="revoke" /><input type="hidden" name="methodId" value={method.id} /><input type="hidden" name="idempotencyKey" value={`admin-revoke-${method.id}`} /><label className="text-xs"><input type="checkbox" name="confirm" value="yes" required /> {t("payments.confirmRevoke")}</label><Button type="submit" variant="danger">{t("payments.revoke")}</Button></form> : null}</li>)}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("payments.payouts.title")} status={<Pill tone="neutral">{payouts.length}</Pill>} />
+        <CardBody>
+          {payouts.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("payments.payouts.empty")}</p>
+          ) : (
+            <ul className="grid list-none gap-3 p-0">
+              {payouts.map(({ payout, matchedNetMinor }) => (
+                <li key={payout.id} className="flex flex-wrap items-center gap-2 border-b border-rule pb-3 last:border-0 text-sm">
+                  <Pill tone={payout.reconciledAt ? "success" : "warning"}>{payout.status}</Pill>
+                  <span>{payout.provider} · {money(payout.amountMinor, payout.currency)}</span>
+                  <span className="text-ink-muted">
+                    {t("payments.payouts.matched", { amount: money(matchedNetMinor, payout.currency) })}
+                  </span>
+                </li>
+              ))}
             </ul>
           )}
         </CardBody>
