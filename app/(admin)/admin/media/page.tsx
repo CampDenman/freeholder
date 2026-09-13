@@ -175,7 +175,7 @@ export default async function MediaPage({
             submit: t("media.upload"),
             pending: t("media.uploading"),
             failed: t("media.uploadFailed"),
-            progress: t("media.uploadProgress"),
+            progress: t("media.uploadProgress", { percent: "{percent}" }),
             resumable: t("media.uploadResuming"),
             cancel: t("common.cancel"),
           }}

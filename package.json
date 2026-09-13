@@ -24,7 +24,7 @@
     "test": "vitest run",
     "gates": "node scripts/fast-gates.mjs",
     "test:a11y": "playwright test tests/browser/accessibility.spec.ts --config playwright.a11y.config.ts",
-    "test:journeys": "playwright test tests/browser/journeys.spec.ts --config playwright.a11y.config.ts",
+    "test:journeys": "playwright test tests/browser/journeys.spec.ts tests/browser/c11-*.spec.ts --config playwright.a11y.config.ts",
     "test:browser": "playwright test --config playwright.a11y.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
