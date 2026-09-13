@@ -3309,12 +3309,12 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.17 owner sign-off; C11.08 Tier-1 restore; C11.09 F05 stamps; C11.10 independent security review; C11.11 large seed; C10.16 device evidence. |
+| Current focus | C11.17 owner sign-off; C11.08 Tier-1 restore; C11.10 independent security review; C11.11 large seed; C10.16 device evidence. |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Device evidence (C10.15–C10.18, C10.25–C10.28, C10.30). Independent security review (C11.10). Live settlement (C11.05 honesty). C11.08 Tier-1 restore. C11.09 F05 stamps (and C0.11). C11.11 medium/large seed and browser vitals. C11.12/C11.14/C11.15 named leftovers. C11.17 itself. |
+| Remaining open | Device evidence (C10.15–C10.18, C10.25–C10.28, C10.30). Independent security review (C11.10). Live settlement (C11.05 honesty). C11.08 Tier-1 restore. C11.11 medium/large seed and browser vitals. C11.12/C11.14/C11.15 named leftovers. C11.17 itself. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3478,7 +3478,7 @@ one with unchecked dependency items.
   enforce the canonical license text, manifest fields, package copies, and
   source SPDX headers. *(`LICENSE`, `LICENSING.md`,
   `scripts/license-headers.mjs`, and changeset `apache-license.md`. **F04** N/A — license text and SPDX headers, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** changeset `apache-license.md` landed with the rest of the spine.)*
-- [ ] **C0.11** Audit every checked C-item against the twelve F-criteria, reopen or narrow
+- [x] **C0.11** Audit every checked C-item against the twelve F-criteria, reopen or narrow
   every claim that its executable evidence does not prove, retire stale
   handoffs as planning authorities, and record the audit date and evidence.
   *(2026-09-04 pass: the service call graph exposed nine nested-transaction
@@ -3511,9 +3511,12 @@ one with unchecked dependency items.
   `PROOF_DEBT` set and emptied it. A later pass pasted a false **F12**
   onto C0 planning items, claimed C11.14's F09 while C11.14 is still
   open, and parked ~20 F-blocks on the next section heading. Those are
-  corrected in this change; **F05** catalogue stamps remain template
-  paste, so this audit stays open. **F04** N/A — this item is the audit,
-  not a screen. **F05** N/A — not an agent capability. **F07**
+  corrected in this change.
+  2026-09-13: the leftover ~194 **F05** catalogue stamps are replaced
+  with per-item HTTP (`/api/v1/{service}`), MCP (`POST /api/mcp`),
+  OpenAPI/SDK, plugin, CLI/package, or N/A-why sentences, so this
+  audit closes. **F04** N/A — this item is the audit, not a screen.
+  **F05** N/A — not an agent capability. **F07**
   `scripts/plan-gate.mjs` refuses a checked item that does not name the
   five proofs. **F09** `pnpm plan:check` in CI. **F12** N/A — the audit
   is not a composed product journey.)*
@@ -3552,40 +3555,40 @@ reading chat logs.
 - [x] **C1.01** Replace coarse roles with named roles and per-module grants;
   seed owner, administrator, editor, bookkeeper, service-provider, and customer
   defaults without hard-coding their permissions. (`0017_named-roles-grants.sql`;
-  `tests/core/roles.test.ts`; changeset `named-roles-grants.md` **F04** `/admin/roles` RoleManager empty/error/destructive. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/roles.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/roles.test.ts` is the composition proof.)
+  `tests/core/roles.test.ts`; changeset `named-roles-grants.md` **F04** `/admin/roles` RoleManager empty/error/destructive. **F05** `roles.list`/`create`/`update`/`delete`/`assign`/`modules`/`users` at `/api/v1/roles.*`, OpenAPI/SDK, MCP `roles_*`. **F07** `tests/core/roles.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/roles.test.ts` is the composition proof.)
 - [x] **C1.02** Build staff invitations, acceptance, expiry/revocation,
   resend, role assignment, and invitation audit history.
   (`0018_staff-invitations.sql`; `tests/core/invitations.test.ts`; changeset
-  `staff-invitations.md` **F04** `/admin/invitations` InvitationManager. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/invitations.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/invitations.test.ts` is the composition proof.)
+  `staff-invitations.md` **F04** `/admin/invitations` InvitationManager. **F05** `invitations.create`/`list`/`revoke`/`resend`/`inspect`/`roles` at `/api/v1/invitations.*` and OpenAPI/SDK; MCP excludes the `invitations` family (credential issuance). `invitations.accept` is the public HTTP accept path, not a tool. **F07** `tests/core/invitations.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/invitations.test.ts` is the composition proof.)
 - [x] **C1.03** Add TOTP/WebAuthn-capable 2FA, recovery codes, mandatory 2FA
   policy for privileged roles, and step-up authentication for critical work.
   (`0019_privileged-2fa-step-up.sql`; `tests/core/two-factor.test.ts`;
   canonical fail-closed encrypted-envelope parsing; changesets
-  `privileged-two-factor.md` and `canonical-two-factor-envelope.md` **F04** `/security` TOTP/WebAuthn/recovery and step-up. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/two-factor.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/two-factor.test.ts` is the composition proof.)
+  `privileged-two-factor.md` and `canonical-two-factor-envelope.md` **F04** `/security` TOTP/WebAuthn/recovery and step-up. **F05** `auth.beginTotpEnrollment`/`confirmTotpEnrollment`/`beginWebAuthnRegistration`/`finishWebAuthnRegistration`/`beginWebAuthnStepUp`/`finishWebAuthnStepUp`/`regenerateRecoveryCodes` at `/api/v1/auth.*` and OpenAPI/SDK; MCP excludes the `auth` family. **F07** `tests/core/two-factor.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/two-factor.test.ts` is the composition proof.)
 - [x] **C1.04** Add owner-visible session/device management, revoke-one,
   revoke-all, suspicious-login notices, and secure session metadata retention.
   (`0020_session-device-management.sql`;
   `tests/core/session-management.test.ts`; changeset
-  `session-device-management.md` **F04** `/security` session/device revoke-one/revoke-all. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/session-management.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/session-management.test.ts` is the composition proof.)
+  `session-device-management.md` **F04** `/security` session/device revoke-one/revoke-all. **F05** `auth.listSessions`/`revokeSession`/`revokeOtherSessions`/`recentLoginSecurity` at `/api/v1/auth.*` and OpenAPI/SDK; MCP excludes `auth`. **F07** `tests/core/session-management.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/session-management.test.ts` is the composition proof.)
 - [x] **C1.05** Add customer magic links and portal account linking without
   creating a second contact identity. (`0021_customer-magic-links.sql`;
   `tests/core/customer-magic-links.test.ts`; changeset
-  `customer-magic-links.md` **F04** customer portal magic-link sign-in, not a second contact identity. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/customer-magic-links.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/customer-magic-links.test.ts` is the composition proof.)
+  `customer-magic-links.md` **F04** customer portal magic-link sign-in, not a second contact identity. **F05** `auth.requestCustomerMagicLink`/`consumeCustomerMagicLink` at `/api/v1/auth.*` plus portal sign-in; MCP excludes `auth`. **F07** `tests/core/customer-magic-links.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/customer-magic-links.test.ts` is the composition proof.)
 - [x] **C1.06** Complete organizations, contact tags, owner-defined custom
   fields, relationships, preferred locale/timezone/country, and lifecycle data.
   (`0022_contact-data-depth.sql`; `tests/core/contact-data-depth.test.ts`;
-  changeset `contact-data-depth.md` **F04** `/admin/contacts` organizations, tags, custom fields, relationships. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contact-data-depth.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contact-data-depth.test.ts` is the composition proof.)
+  changeset `contact-data-depth.md` **F04** `/admin/contacts` organizations, tags, custom fields, relationships. **F05** `contacts.create`/`update`/`list`/`get`/`listTags` plus `contacts.createOrganization`/`listOrganizations` and custom-field/relationship services at `/api/v1/contacts.*`, OpenAPI/SDK, MCP `contacts_*`. **F07** `tests/core/contact-data-depth.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contact-data-depth.test.ts` is the composition proof.)
 - [x] **C1.07** Build duplicate candidate detection/queue, explainable scores,
   dismiss/merge workflow, and merge undo where no destructive conflict exists.
   (`0023_contact-duplicate-review.sql`;
   `tests/core/contact-duplicate-review.test.ts`; changeset
-  `contact-duplicate-review.md` **F04** `/admin/contacts/duplicates` dismiss/merge/undo. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contact-duplicate-review.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contact-duplicate-review.test.ts` is the composition proof.)
+  `contact-duplicate-review.md` **F04** `/admin/contacts/duplicates` dismiss/merge/undo. **F05** `contacts.scanDuplicates`/`listDuplicateCandidates`/`dismissDuplicateCandidate`/`mergeDuplicateCandidate`/`merge`/`undoMerge` at `/api/v1/contacts.*`, MCP `contacts_*`. **F07** `tests/core/contact-duplicate-review.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contact-duplicate-review.test.ts` is the composition proof.)
 - [x] **C1.08** Build consent records, preference centre, data-access/export/
   correction/erasure workflows, legal-retention exceptions, and audit artifacts.
   (`0024_contact-privacy-rights.sql`;
   `tests/core/contact-privacy-rights.test.ts`; privacy-source completeness in
   `tests/core/merge-completeness.test.ts`; changeset
-  `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md` **F04** `/admin/contacts/privacy` access/export/erasure. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contact-privacy-rights.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/privacy-rights.md`. **F12** `tests/core/contact-privacy-rights.test.ts` is the composition proof.)
+  `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md` **F04** `/admin/contacts/privacy` access/export/erasure. **F05** `contacts.createDataRequest`/`fulfillDataRequest`/`recordConsent` and `privacy.getMyProfile`/`createMyDataRequest`/`downloadMyDataRequestArtifact` at `/api/v1/contacts.*` and `/api/v1/privacy.*`; MCP `privacy_*`/`contacts_*`. **F07** `tests/core/contact-privacy-rights.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/privacy-rights.md`. **F12** `tests/core/contact-privacy-rights.test.ts` is the composition proof.)
 
 #### Jobs, events, files, mail, and notifications
 - [x] **C1.09** Enqueue jobs inside the caller transaction; add idempotency
@@ -3595,13 +3598,13 @@ reading chat logs.
   `tests/core/webhooks.test.ts`; handler call-graph enforcement in
   `tests/core/service-composition.test.ts`; changesets `transactional-jobs.md`
   and `transaction-composition-integrity.md`; operator runbook
-  `deploy/background-jobs.md` **F04** N/A as a new screen — F04 is C1.10 `/admin/jobs`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/transactional-jobs.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/background-jobs.md`. **F12** `tests/core/transactional-jobs.test.ts` is the composition proof.)
+  `deploy/background-jobs.md` **F04** N/A as a new screen — F04 is C1.10 `/admin/jobs`. **F05** N/A as a new agent tool — enqueue is inside the caller transaction; owner/agent job control is C1.10 `platform.listJobs`/`retryJob`. **F07** `tests/core/transactional-jobs.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/background-jobs.md`. **F12** `tests/core/transactional-jobs.test.ts` is the composition proof.)
 - [x] **C1.10** Build owner job history, run detail, retry/cancel controls,
   dead-letter queue, stuck-job detection, and briefing contribution.
   (`src/core/jobs/service.ts`; `/admin/jobs`; live routing/redrive, permissions,
   redaction, audit, lease and briefing evidence in
   `tests/core/transactional-jobs.test.ts`; changeset `job-operations.md`;
-  operator runbook `deploy/background-jobs.md` **F04** `/admin/jobs` history, retry, cancel, dead-letter. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/transactional-jobs.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/background-jobs.md`. **F12** `tests/core/transactional-jobs.test.ts` is the composition proof.)
+  operator runbook `deploy/background-jobs.md` **F04** `/admin/jobs` history, retry, cancel, dead-letter. **F05** `platform.listJobs`/`getJob`/`jobSummary`/`listJobQueues`/`cancelJob`/`retryJob`/`redriveDeadLetters` at `/api/v1/platform.*`, OpenAPI/SDK, MCP `platform_*`. **F07** `tests/core/transactional-jobs.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/background-jobs.md`. **F12** `tests/core/transactional-jobs.test.ts` is the composition proof.)
 - [x] **C1.11** Add dead-letter handling for unconsumed or permanently failing
   outbox events and prove replay cannot duplicate side effects.
   (`0026_outbox-dead-letters.sql` through
@@ -3610,7 +3613,7 @@ reading chat logs.
   `src/core/events`; human-only redacted `/admin/jobs/outbox` recovery with
   step-up, typed confirmation and audit evidence in `tests/core/outbox.test.ts`;
   webhook replay convergence in `tests/core/webhooks.test.ts`; changeset
-  `outbox-dead-letters.md`; operator runbook `deploy/event-outbox.md` **F04** `/admin/jobs/outbox` redacted replay with step-up. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/outbox.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/event-outbox.md`. **F12** `tests/core/outbox.test.ts` is the composition proof.)
+  `outbox-dead-letters.md`; operator runbook `deploy/event-outbox.md` **F04** `/admin/jobs/outbox` redacted replay with step-up. **F05** `platform.listOutboxEvents`/`getOutboxEvent`/`replayOutboxEvent`/`outboxSummary` at `/api/v1/platform.*`, MCP `platform_*` (replay is step-up). **F07** `tests/core/outbox.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/event-outbox.md`. **F12** `tests/core/outbox.test.ts` is the composition proof.)
 - [x] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.
@@ -3620,7 +3623,7 @@ reading chat logs.
   SHA-256, provenance, focal point and media metadata; controlled downloads;
   quarantine/rescan; 30-day trash, restore, owner-confirmed purge and scheduled
   cleanup; admin/API/MCP parity; 83 focused media/storage/scanner/MCP tests;
-  changeset `media-lifecycle.md`; runbook `deploy/media-lifecycle.md` **F04** `/admin/media` upload, trash, restore, purge. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/media-lifecycle.md`. **F12** changeset `media-lifecycle.md` landed with the rest of the spine.)
+  changeset `media-lifecycle.md`; runbook `deploy/media-lifecycle.md` **F04** `/admin/media` upload, trash, restore, purge. **F05** `media.upload`/`beginUpload`/`completeUpload`/`abortUpload`/`trash`/`restore`/`purge` at `/api/v1/media.*` and `/api/media/uploads`; OpenAPI/SDK, MCP `media_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/media-lifecycle.md`. **F12** changeset `media-lifecycle.md` landed with the rest of the spine.)
 - [x] **C1.13** Add generated image alt-text suggestions with explicit human
   review and never silently overwrite authored alt text.
   (`0030_tired_northstar.sql`; normalized proposal/review ledger separate from
@@ -3631,7 +3634,7 @@ reading chat logs.
   doctor configuration check that makes no billable request; English, French
   and Spanish UI; 74 focused adapter/media/doctor/MCP tests and 900-test full
   suite; changeset `alt-text-suggestions.md`; operator guide
-  `deploy/alt-text-suggestions.md` **F04** `/admin/media` alt-text proposal review. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/alt-text-suggestions.md`. **F12** changeset `alt-text-suggestions.md` landed with the rest of the spine.)
+  `deploy/alt-text-suggestions.md` **F04** `/admin/media` alt-text proposal review. **F05** `media.generateAltTextSuggestion`/`listAltTextSuggestionStates`/`acceptAltTextSuggestion`/`applyAltTextSuggestion` at `/api/v1/media.*` and SDK; provider generation is MCP-opted-out, accept/apply stay on HTTP/SDK. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/alt-text-suggestions.md`. **F12** changeset `alt-text-suggestions.md` landed with the rest of the spine.)
 - [x] **C1.14** Complete Gmail and Microsoft transactional OAuth adapters,
   bulk-mail adapters, sender verification, bounce/complaint state, and test-send.
   (`0031_lucky_maria_hill.sql`; least-privilege Gmail and Microsoft delegated
@@ -3643,7 +3646,7 @@ reading chat logs.
   coverage; password-reset, portal-link, invitation, security-notice and form
   integration; doctor and threat-model/migration runbook; 69 focused mail/
   doctor tests and 961-test full suite; changeset `mail-adapter-completion.md`;
-  operator guide `deploy/mail-delivery.md` **F04** `/admin/settings` mail connect/verify/pause/test. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/mail-delivery.md`. **F12** changeset `mail-adapter-completion.md` landed with the rest of the spine.)
+  operator guide `deploy/mail-delivery.md` **F04** `/admin/settings` mail connect/verify/pause/test. **F05** `mail.beginOAuth`/`status`/`registerSender`/`verifySender`/`testSend`/`setDefaultSender` at `/api/v1/mail.*`, MCP `mail_*`; OAuth callback is `/api/mail/oauth/[provider]/callback` (not a tool). Feedback webhooks at `/api/mail/webhooks/{postmark,resend,ses}`. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/mail-delivery.md`. **F12** changeset `mail-adapter-completion.md` landed with the rest of the spine.)
 - [x] **C1.15** Build the notification fanout model and inbox: in-app, email,
   SMS/push adapters, preferences, digesting, deduplication and escalation.
   (`0032_fancy_namora.sql` and `0033_thin_lady_bullseye.sql`; separate durable
@@ -3659,7 +3662,7 @@ reading chat logs.
   axe/keyboard coverage; doctor readiness without provider calls; 23 focused
   notification/migration/UI tests and 982-test full suite; changeset
   `notification-fanout-inbox.md`; operator guide
-  `deploy/notification-fanout.md` **F04** `/admin/notifications` bell, queue and preferences. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/notification-fanout.md`. **F12** changeset `notification-fanout-inbox.md` landed with the rest of the spine.)
+  `deploy/notification-fanout.md` **F04** `/admin/notifications` bell, queue and preferences. **F05** `notifications.list`/`markRead`/`preferences`/`updateSettings`/`registerDevice` at `/api/v1/notifications.*`, MCP `notifications_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/notification-fanout.md`. **F12** changeset `notification-fanout-inbox.md` landed with the rest of the spine.)
 
 #### International, analytics, security, and quality
 - [x] **C1.16** Finish translated site chrome and all customer-facing locale
@@ -3669,7 +3672,7 @@ reading chat logs.
   `tests/core/customer-locale-ui.test.ts`; `tests/core/customer-magic-links.test.ts`;
   `tests/core/cms-service.test.ts`; `tests/core/notifications.test.ts`;
   changeset `locale-driven-customer-surfaces.md`; operator guide
-  `deploy/customer-locales.md` **F04** public chrome and customer portal locale, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/customer-locale.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/customer-locales.md`. **F12** `tests/core/customer-locale.test.ts` is the composition proof.)
+  `deploy/customer-locales.md` **F04** public chrome and customer portal locale, not a new admin screen. **F05** `i18n.getMyLocale`/`setMyLocale`/`setTranslation`/`listTranslations` at `/api/v1/i18n.*`, MCP `i18n_*`; contact locale is `contacts.update`. **F07** `tests/core/customer-locale.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/customer-locales.md`. **F12** `tests/core/customer-locale.test.ts` is the composition proof.)
 - [x] **C1.17** Complete and continuously verify English, French and Spanish
   catalogs; add pseudo-locale, RTL layout tests and locale-specific fixtures.
   (`tests/core/i18n-gate.test.ts`; `tests/core/locale-quality.test.ts`;
@@ -3686,7 +3689,7 @@ reading chat logs.
   `tests/core/analytics-consent.test.ts`;
   `tests/core/analytics-governance-migration.test.ts`; 1,040-test full suite;
   changeset `analytics-governance.md`; operator guide
-  `deploy/analytics-governance.md` **F04** `/admin/traffic` consent and retention. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/analytics.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/analytics-governance.md`. **F12** `tests/core/analytics.test.ts` is the composition proof.)
+  `deploy/analytics-governance.md` **F04** `/admin/traffic` consent and retention. **F05** `analytics.track`/`identify`/`overview`/`exportAnonymized`/`webVitals` at `/api/v1/analytics.*`, MCP `analytics_*`; public beacons are `/api/analytics/consent` and `/api/analytics/vitals`. **F07** `tests/core/analytics.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/analytics-governance.md`. **F12** `tests/core/analytics.test.ts` is the composition proof.)
 - [x] **C1.19** Add a Content Security Policy compatible with editor preview,
   uploads and explicitly consented third-party creatives; report violations.
   (per-request nonce and strict-dynamic document policy; same-origin preview
@@ -3748,7 +3751,7 @@ reading chat logs.
   1,070-test Vitest suite plus the five-surface accessibility and ten-area
   product journey matrices in production Chromium;
   operator/developer guide `deploy/browser-journeys.md`; changeset
-  `browser-journeys.md` **F04** N/A as a new screen — Playwright journeys over existing setup/auth/edit. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/browser/journeys.spec.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/browser-journeys.md`. **F12** `tests/browser/journeys.spec.ts` is the composition proof.)
+  `browser-journeys.md` **F04** N/A as a new screen — Playwright journeys over existing setup/auth/edit. **F05** N/A as a new capability — the journey already mints an API key and calls `POST /api/mcp` `contacts_list`; no extra agent route. **F07** `tests/browser/journeys.spec.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/browser-journeys.md`. **F12** `tests/browser/journeys.spec.ts` is the composition proof.)
 - [x] **C1.23** Add database backup/restore drills, complete export, media
   manifest, configuration/credential-key handling, retention and erasure proof.
   (two deliberately separate ownership artifacts: complete custom-format
@@ -3784,7 +3787,7 @@ reading chat logs.
   then proves `/setup` renders the first-owner form; unit/database coverage for
   default, opt-out, explicit production request, pristine guard and restart
   idempotence; 88-file/1,085-test Vitest suite; production build; changeset
-  `seeded-development-home.md` **F04** setup wizard demo install, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `seeded-development-home.md` landed with the rest of the spine.)
+  `seeded-development-home.md` **F04** setup wizard demo install, not a new admin screen. **F05** `demo.install` and `seed.installPreset` at `/api/v1/demo.install` and `/api/v1/seed.installPreset`, MCP `demo_install`/`seed_installPreset`. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `seeded-development-home.md` landed with the rest of the spine.)
 - [x] **C1.25** Build resumable, role/capability-derived onboarding for owner,
   administrator, editor, bookkeeper, service provider and customer, with
   first-win tasks, contextual relaunch, skip/reset, progress and forbidden-
@@ -3796,7 +3799,7 @@ reading chat logs.
   durable-progress coverage in `tests/core/guidance*.test.ts`; owner/staff/
   customer isolation, forbidden-control and axe coverage in the four-test
   real-browser gate; 91-file/1,098-test Vitest suite; production build;
-  operator guide `deploy/role-guidance.md`; changeset `role-guidance.md` **F04** `/admin/guidance` resumable onboarding. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/guidance*.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/role-guidance.md`. **F12** `tests/core/guidance*.test.ts` is the composition proof.)
+  operator guide `deploy/role-guidance.md`; changeset `role-guidance.md` **F04** `/admin/guidance` resumable onboarding. **F05** `guidance.list`/`start`/`dismiss`/`reset`/`contexts` at `/api/v1/guidance.*`, MCP `guidance_*`. **F07** `tests/core/guidance*.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/role-guidance.md`. **F12** `tests/core/guidance*.test.ts` is the composition proof.)
 - [x] **C1.26** Build the normalized, versioned `DemoScenario` definition/run/
   provenance model and typed public manifest contract through which core,
   modules and plugins contribute fixtures, guidance steps, locale variants,
@@ -3820,7 +3823,7 @@ reading chat logs.
   real Chromium gate including the complete localized lifecycle; 94-file/
   1,108-test suite; production build; 92-table/5,133-row ownership backup,
   restore and export drill; operator guide `deploy/demo-scenarios.md`; changeset
-  `deterministic-demo-scenarios.md`. **F04** `/admin/demos` load/reload/reset/purge. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/demo-scenarios.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/demo-scenarios.md`. **F12** `tests/core/demo-scenarios.test.ts` is the composition proof.)*
+  `deterministic-demo-scenarios.md`. **F04** `/admin/demos` load/reload/reset/purge. **F05** `demo.list`/`load`/`reload`/`reset`/`purge` at `/api/v1/demo.*`, MCP `demo_*`. **F07** `tests/core/demo-scenarios.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/demo-scenarios.md`. **F12** `tests/core/demo-scenarios.test.ts` is the composition proof.)*
 - [x] **C1.27** After the required C5–C9 domain modules exist, ship complete
   creator, service-business, shop and everything scenarios assembled only from
   those contributions, with realistic contacts, media, content, locations,
@@ -3856,7 +3859,7 @@ reading chat logs.
   provenance and trim metadata; discard and `media.expireCaptureSessions`
   (`core.expireCaptureSessions` every 15 minutes) delete staged bytes so an
   unconfirmed recording never stays in the library. Coverage in
-  `tests/core/media-capture.test.ts`; changeset `media-capture-review.md`. **F04** `/admin/media/record` camera/microphone capture. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/media-capture.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/media-capture.test.ts` is the composition proof.)*
+  `tests/core/media-capture.test.ts`; changeset `media-capture-review.md`. **F04** `/admin/media/record` camera/microphone capture. **F05** `media.appendCaptureChunk`/`assembleCapture`/`applyCaptureComplete` at `/api/v1/media.*`, MCP `media_*`. **F07** `tests/core/media-capture.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/media-capture.test.ts` is the composition proof.)*
 - [x] **C1.29** Make phone ingest require no app: QR and expiring upload-link
   capture, camera roll/file picker and PWA/Web Share target feed resumable
   batches into any permitted media target, survive weak connections and
@@ -3867,36 +3870,36 @@ reading chat logs.
   `media_capture_items` instead of a ready Asset; confirm runs
   `media.registerStoredOriginal` (same validate/scan/hash path) and can attach
   to a product (`catalog.attachProductMedia`) or page working tree. Coverage in
-  `tests/core/media-capture.test.ts`; changeset `media-phone-ingest.md`. **F04** public capture link `/capture/[token]`, not a second app. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/media-capture.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/media-capture.test.ts` is the composition proof.)*
+  `tests/core/media-capture.test.ts`; changeset `media-phone-ingest.md`. **F04** public capture link `/capture/[token]`, not a second app. **F05** public `/capture/[token]` plus `media.completeUpload`/`registerStoredOriginal` at `/api/v1/media.*`; the token page is not an MCP tool. **F07** `tests/core/media-capture.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/media-capture.test.ts` is the composition proof.)*
 - [x] **C1.30** Model and services for the contribution channel: kinds, local
   draft/submit, hub ingest, `contacts.resolve`, merge/undo, privacy
   export/erasure, rate limits, idempotent content hash, opt-in doctor attach
   and output schemas.
   (`0068_careless_jack_power.sql`; `src/core/contribute/`;
   `tests/core/contribute.test.ts`; merge/privacy completeness;
-  changeset `contribute-channel.md`; operator guide `deploy/contribute.md` **F04** N/A as a screen — F04 is C1.31 `/admin/contribute`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contribute.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/contribute.md`. **F12** `tests/core/contribute.test.ts` is the composition proof.)
+  changeset `contribute-channel.md`; operator guide `deploy/contribute.md` **F04** N/A as a screen — F04 is C1.31 `/admin/contribute`. **F05** `contribute.draft`/`submit`/`list`/`get`/`attach` at `/api/v1/contribute.*` (C1.32 is the MCP/HTTP parity item). **F07** `tests/core/contribute.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/contribute.md`. **F12** `tests/core/contribute.test.ts` is the composition proof.)
 - [x] **C1.31** Human surfaces: spoke compose/history, hub inbox/determination,
   public freeholder.ai form, EN/FR/ES, WCAG AA in light and dark, empty and
   error states.
   (`/admin/contribute`, `/contribute`; EN/FR/ES catalogs; empty and error
-  states; tokens only **F04** `/admin/contribute` compose, history, determination. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
+  states; tokens only **F04** `/admin/contribute` compose, history, determination. **F05** `contribute.ingest`/`triage`/`determine`/`list`/`get` at `/api/v1/contribute.*`; public `/contribute` is the human form, not a second contract. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
 - [x] **C1.32** Agent and delivery: MCP/HTTP parity from the registry; deliver
   job to the configured hub; signed optional receipt; no send without submit;
   empty hubUrl is local-only; update-check path unchanged.
   (`contribute.deliver` job; `contribute_*` MCP tools from the registry;
-  signed ingest test; empty hubUrl stays local **F04** N/A as a new screen — MCP/HTTP parity of C1.31. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
+  signed ingest test; empty hubUrl stays local **F04** N/A as a new screen — MCP/HTTP parity of C1.31. **F05** this item *is* the agent surface — `contribute.*` at `/api/v1/contribute.*` and MCP `contribute_*`; hub POST is the `contribute.deliver` job, not a second catalogue. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
 - [x] **C1.33** Code submissions: patch/diff/PR URL, DCO attestation, license
   notice, never auto-merge; a determination may cite a §43 ID;
   CONTRIBUTING.md and SECURITY.md pointers.
   (patch without DCO refused; `externalUrl` GitHub-only; determination
-  `checklistId`; CONTRIBUTING.md channel paragraph **F04** `/admin/contribute` code-submission kind. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
+  `checklistId`; CONTRIBUTING.md channel paragraph **F04** `/admin/contribute` code-submission kind. **F05** `contribute.submit` with the code-submission kind at `/api/v1/contribute.submit`, MCP `contribute_submit` (never auto-merge). **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
 - [x] **C1.34** Reply hub determinations to the speaking instance: store a
   reply URL and capability token on ingest, POST status on determine, apply
   it on the spoke, notify the filer, and keep hub ingest a required on/off.
   (`0069_colossal_maria_hill.sql`; `contribute.setHubEnabled`,
   `contribute.recordStatus`, `contribute.reply` job; default-on when
   `APP_URL` is freeholder.ai; `tests/core/contribute.test.ts`; changeset
-  `contribute-status-replies.md` **F04** `/admin/contribute` determination reply. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contribute.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
+  `contribute-status-replies.md` **F04** `/admin/contribute` determination reply. **F05** `contribute.setHubEnabled`/`recordStatus` at `/api/v1/contribute.*`, MCP `contribute_setHubEnabled`/`contribute_recordStatus`; spoke apply is the `contribute.reply` job. **F07** `tests/core/contribute.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
 - [x] **C1.35** Close outbound-request SSRF completely: resolve every webhook
   hostname, reject loopback/link-local/private/special-use addresses for every
   address family, pin the checked connection, disable redirects, and prove DNS
@@ -3910,7 +3913,7 @@ reading chat logs.
   catalogues, while contribution hub/reply POSTs reuse the pinned webhook
   transport; `tests/core/social-http.test.ts` and
   `tests/core/outbound-boundaries.test.ts` keep that inventory explicit.
-  Operator contract in `deploy/webhook-delivery.md`. **F04** N/A — webhook destination pinning, not a screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/webhooks.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/webhook-delivery.md`. **F12** `tests/core/webhooks.test.ts` is the composition proof.)*
+  Operator contract in `deploy/webhook-delivery.md`. **F04** N/A — webhook destination pinning, not a screen. **F05** N/A — destination pinning lives under `webhooks.create`/`test`/`replay` transport, not a new tool. **F07** `tests/core/webhooks.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/webhook-delivery.md`. **F12** `tests/core/webhooks.test.ts` is the composition proof.)*
 - [x] **C1.36** Make required background work operationally truthful: expose
   producer/worker startup, heartbeat, queue lag and degraded state; separate
   liveness from readiness; make Doctor test the live worker rather than the job
@@ -3926,7 +3929,7 @@ reading chat logs.
   transition-only sanitized alerts are implemented in `jobs/health.ts`,
   `jobs/index.ts`, `instrumentation.ts`, `instrumentation.node.ts`, migration 0154 and
   `deploy/background-jobs.md`. Framework-integrated shutdown draining still
-  needs a lifecycle hook that cannot race Next's own signal exit. **F04** `/admin/health` Doctor runtime evidence. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/background-jobs.md`. **F12** Doctor health is the operational composition proof.)*
+  needs a lifecycle hook that cannot race Next's own signal exit. **F04** `/admin/health` Doctor runtime evidence. **F05** `platform.doctor` at `/api/v1/platform.doctor`, MCP `platform_doctor`, plus public `/api/health` and `/api/health/live` (liveness is not an MCP tool). **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/background-jobs.md`. **F12** Doctor health is the operational composition proof.)*
 - [x] **C1.37** Make supply-chain and release provenance enforceable: split and
   shard CI to meet an owned feedback SLO, key dependency-audit attestations to
   the lockfile without weakening fresh scheduled checks, enable code/dependency
@@ -3951,7 +3954,7 @@ project without silent telemetry, and ready to carry money.
 - [x] **C2.01** Separate working drafts from published revisions for every
   public entity; autosave must never mutate the live version.
   (`cms.savePage` / `publishPage`; `tests/core/cms-lifecycle.test.ts`;
-  changeset `cms-content-lifecycle.md` **F04** `/admin/pages/[id]` working draft vs published. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
+  changeset `cms-content-lifecycle.md` **F04** `/admin/pages/[id]` working draft vs published. **F05** `cms.updatePage`/`publishPage` at `/api/v1/cms.updatePage` and `/api/v1/cms.publishPage`, MCP `cms_updatePage`/`cms_publishPage`. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
 - [x] **C2.02** Add preview links, scheduled publish/unpublish, approval state,
   compare/diff, named revisions, restore-as-draft and complete author history.
   (`cms.createPreviewLink` / `schedulePage` / `requestApproval` /
@@ -3960,71 +3963,71 @@ project without silent telemetry, and ready to carry money.
   `cms.pageAuthorSummary`; create/save/publish/unpublish/restore/schedule/
   approval write attributed revisions; editor lists authors. Coverage in
   `tests/core/cms-lifecycle.test.ts` and `tests/core/cms-history.test.ts`;
-  changeset `cms-author-history.md`. **F04** `/admin/pages/[id]` preview, schedule, approval. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
+  changeset `cms-author-history.md`. **F04** `/admin/pages/[id]` preview, schedule, approval. **F05** `cms.createPreviewLink`/`schedulePage`/`requestApproval`/`compareRevisions`/`snapshotRevision`/`restoreRevision`/`listRevisions` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
 - [x] **C2.03** Add optimistic concurrency/version tokens, presence, edit
   leases, conflict detection and an explicit merge/reload workflow.
   (`cms.savePage` version tokens; `tests/core/cms-lifecycle.test.ts`;
-  changeset `cms-collab-presence-comments.md` **F04** `/admin/pages/[id]` presence and edit lease. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
+  changeset `cms-collab-presence-comments.md` **F04** `/admin/pages/[id]` presence and edit lease. **F05** `cms.updatePage` version tokens plus `cms.heartbeatPresence`/`listPresence`/`leavePresence` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
 - [x] **C2.04** Add comments, mentions, review requests and resolved threads
   attached to blocks/revisions without contaminating published content.
   (`cms.commentCreated` events; `tests/core/cms-lifecycle.test.ts`;
-  changeset `cms-collab-presence-comments.md` **F04** `/admin/pages/[id]` comments and review requests. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
+  changeset `cms-collab-presence-comments.md` **F04** `/admin/pages/[id]` comments and review requests. **F05** `cms.addComment`/`listComments`/`resolveThread`/`requestReview`/`decideReview` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
 - [x] **C2.05** Specify and implement constrained typed rich-text inline nodes
   for emphasis, links, code and lists—never stored HTML soup.
-  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md` **F04** `/admin/pages/[id]` PageEditor rich text. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)
+  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md` **F04** `/admin/pages/[id]` PageEditor rich text. **F05** N/A as a distinct tool — typed inline nodes persist through `cms.updatePage` at `/api/v1/cms.updatePage` / MCP `cms_updatePage`. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)
 - [x] **C2.06** Add slash-command insertion, keyboard block movement, undo/
   redo, duplicate/copy/paste, multi-select and reliable nested drag semantics.
-  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md` **F04** `/admin/pages/[id]` slash-command and keyboard movement. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)
+  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md` **F04** `/admin/pages/[id]` slash-command and keyboard movement. **F05** N/A as a distinct tool — slash-command/keyboard/undo are editor chrome; the page is still `cms.updatePage`. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)
 
 #### Complete block and design vocabulary
 - [x] **C2.07** Finish foundational blocks: rich text, heading, image, video,
   button, columns/container, divider/spacer and admin-only custom HTML.
   *(Custom HTML is parsed and rebuilt from an element, attribute and URL-scheme
   allowlist in `src/modules/cms/blocks/html.ts`; encoded-scheme and executable
-  markup coverage lives in `tests/core/cms-rich.test.ts`. **F04** `/admin/pages/[id]` foundational blocks. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)*
+  markup coverage lives in `tests/core/cms-rich.test.ts`. **F04** `/admin/pages/[id]` foundational blocks. **F05** foundational blocks persist through `cms.updatePage`; the custom-HTML sanitizer is not an MCP tool. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)*
 - [x] **C2.08** Finish trust/content blocks: FAQ with schema, testimonial/
   review, gallery, map/location, social embed, share and knowledge-base blocks.
-  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` FAQ/testimonial blocks. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` FAQ/testimonial blocks. **F05** FAQ/testimonial/gallery/map/share blocks persist through `cms.updatePage` at `/api/v1/cms.updatePage`, MCP `cms_updatePage`. **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
 - [x] **C2.09** Finish conversion blocks: live product/service card, booking,
   form, quote request, newsletter signup, tip/support and site-chat assistant.
-  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` conversion blocks. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` conversion blocks. **F05** conversion blocks persist through `cms.updatePage`; public submit paths are `cms.submitQuoteRequest`/`cms.submitSiteChat`/`cms.submitTipIntent`. **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
 - [x] **C2.10** Finish controlled-access/revenue blocks: paywall gate and ad
   slot with server-side content exclusion and layout-shift-safe sizing.
-  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` paywall/ad blocks. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` paywall/ad blocks. **F05** paywall/ad blocks persist through `cms.updatePage`; evaluation is `paywalls.evaluate` / `ads.slotByCode` (C9.15/C9.17). **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
 - [x] **C2.11** Make headers, footers, navigation, announcement bars and menus
   first-class synced Sections with accessible responsive behavior.
-  (`tests/core/cms-sections.test.ts`; changeset `cms-chrome-sections.md` **F04** `/admin/sections` header/footer/nav/announcement. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-sections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-sections.test.ts` is the composition proof.)
+  (`tests/core/cms-sections.test.ts`; changeset `cms-chrome-sections.md` **F04** `/admin/sections` header/footer/nav/announcement. **F05** `cms.createSection`/`listSections`/`updateSection`/`getSection` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-sections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-sections.test.ts` is the composition proof.)
 - [x] **C2.12** Support save-as-Section, synced instances, detach-to-copy,
   dependency-aware deletion, and searchable palettes.
   (`sectionInstance` block; `cms.saveAsSection` / `detachSection` /
   `deleteSection` / `listSectionUsages`; palette search includes saved
   Sections; chrome delete refused; `tests/core/cms-sections.test.ts`;
-  changeset `cms-section-instances.md` **F04** `/admin/sections` save-as-section and detach. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-sections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-sections.test.ts` is the composition proof.)
+  changeset `cms-section-instances.md` **F04** `/admin/sections` save-as-section and detach. **F05** `cms.saveAsSection`/`detachSection`/`deleteSection` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-sections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-sections.test.ts` is the composition proof.)
 - [x] **C2.13** Build page/post/product/service/email templates and per-business
   presets with reset-to-default, create-from-template and preview.
   (`content_templates`; `cms.ensureTemplates` / `listTemplates` / `updateTemplate`
   / `resetTemplate` / `createFromTemplate` / `previewTemplate`; admin
   `/admin/templates`; new-page picker; `tests/core/cms-templates.test.ts`;
-  changeset `cms-templates.md` **F04** `/admin/templates` page/email templates. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-templates.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-templates.test.ts` is the composition proof.)
+  changeset `cms-templates.md` **F04** `/admin/templates` page/email templates. **F05** `cms.listTemplates`/`updateTemplate`/`resetTemplate`/`createFromTemplate`/`previewTemplate`/`ensureTemplates` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-templates.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-templates.test.ts` is the composition proof.)
 - [x] **C2.14** Add per-entity layout overrides and clean detach/rejoin behavior
   for products, services, posts, locations, events and galleries.
   (`content_layouts`; `cms.attachLayout` / `detachLayout` / `rejoinLayout`;
   product/event/location public pages follow the template until detached;
   editing a page auto-detaches; `tests/core/cms-layouts.test.ts`;
-  changeset `cms-entity-layouts.md` **F04** `/admin/pages/[id]` layout detach/rejoin. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-layouts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-layouts.test.ts` is the composition proof.)
+  changeset `cms-entity-layouts.md` **F04** `/admin/pages/[id]` layout detach/rejoin. **F05** `cms.attachLayout`/`detachLayout`/`rejoinLayout`/`getLayout` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-layouts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-layouts.test.ts` is the composition proof.)
 - [x] **C2.15** Build visual design controls over semantic tokens: colors,
   typography, spacing, radius, borders, shadows, responsive layout, logo and
   motion—preserving light/dark and WCAG invariants.
   (`design_settings`; `settings.getDesign` / `updateDesign` / `resetDesign`;
   admin `/admin/design`; public measure/gutter/logo; WCAG AA refusal;
-  `tests/core/design-tokens.test.ts`; changeset `cms-design-tokens.md` **F04** `/admin/design` semantic tokens. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/design-tokens.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/design-tokens.test.ts` is the composition proof.)
+  `tests/core/design-tokens.test.ts`; changeset `cms-design-tokens.md` **F04** `/admin/design` semantic tokens. **F05** `settings.getDesign`/`updateDesign`/`resetDesign` at `/api/v1/settings.*`, MCP `settings_*`. **F07** `tests/core/design-tokens.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/design-tokens.test.ts` is the composition proof.)
 - [x] **C2.16** Support locale-aware content workflow, side-by-side source/
   translation editing, machine drafts, reviewer state, translated chrome and
   locale-specific SEO completeness.
   (`cms.draftPageTranslation` / `pageTranslationReport`; SEO description on
   the translation editor; chrome locale variants listed on `/admin/translations`;
   machine drafts stay off the public surface; `tests/core/cms-translation-workflow.test.ts`;
-  changeset `cms-locale-workflow.md` **F04** `/admin/translations` side-by-side workflow. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-translation-workflow.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-translation-workflow.test.ts` is the composition proof.)
+  changeset `cms-locale-workflow.md` **F04** `/admin/translations` side-by-side workflow. **F05** `cms.draftPageTranslation`/`pageTranslationReport` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-translation-workflow.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-translation-workflow.test.ts` is the composition proof.)
 
 #### Experiments, email, SEO, and performance
 - [x] **C2.17** Add variants to blocks, Sections, pages and entity layouts;
@@ -4032,19 +4035,19 @@ project without silent telemetry, and ready to carry money.
   (`experiment` / `variant` blocks; hash of visitor id + key; crawlers get
   control; `experimentCacheKey` for the cache Vary surface; editor preview
   shows every variant; `tests/core/cms-experiments.test.ts`; changeset
-  `cms-experiments.md` **F04** `/admin/experiments` variants. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-experiments.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-experiments.test.ts` is the composition proof.)
+  `cms-experiments.md` **F04** `/admin/experiments` variants. **F05** experiment/variant blocks persist through `cms.updatePage`; sticky assignment is server-side, not a separate MCP family. **F07** `tests/core/cms-experiments.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-experiments.test.ts` is the composition proof.)
 - [x] **C2.18** Record experiment impressions/conversions and join outcomes to
   contacts, bookings, invoices and revenue with statistically honest reporting.
   (`analytics.recordExperimentImpressions` / `recordExperimentConversion` /
   `experimentReport`; conversions from forms, quotes, chat, tips, event
   registration and orders; no winner below 30 unique visitors; admin
   `/admin/experiments`; `tests/core/analytics-experiments.test.ts`; changeset
-  `cms-experiment-reporting.md` **F04** `/admin/experiments` impressions. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/analytics-experiments.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/analytics-experiments.test.ts` is the composition proof.)
+  `cms-experiment-reporting.md` **F04** `/admin/experiments` impressions. **F05** `analytics.recordExperimentImpressions`/`recordExperimentConversion`/`experimentReport` at `/api/v1/analytics.*`, MCP `analytics_*`. **F07** `tests/core/analytics-experiments.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/analytics-experiments.test.ts` is the composition proof.)
 - [x] **C2.19** Reuse the block editor for email-safe output with restricted
   palette, table rendering, variable slots, inbox preview and test-send.
   (`email` block context; `variable` slots; `renderEmailHtml` / `renderEmailText`;
   `cms.previewEmail` / `testSendEmail`; inbox preview on email templates;
-  `tests/core/cms-email.test.ts`; changeset `cms-email-editor.md` **F04** `/admin/pages` empty/error/recovery. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-email.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-email.test.ts` is the composition proof.)
+  `tests/core/cms-email.test.ts`; changeset `cms-email-editor.md` **F04** `/admin/pages` empty/error/recovery. **F05** `cms.previewEmail`/`testSendEmail` at `/api/v1/cms.previewEmail` and `/api/v1/cms.testSendEmail`, MCP `cms_previewEmail`/`cms_testSendEmail`. **F07** `tests/core/cms-email.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-email.test.ts` is the composition proof.)
 - [x] **C2.20** Enforce one H1, heading order, semantic landmarks, required alt
   decisions, link meaning, responsive images and per-page accessibility hints.
   (`analyzeAccessibility`; `cms.pageAccessibilityReport`; publish refuses 0 or
@@ -4061,13 +4064,13 @@ project without silent telemetry, and ready to carry money.
   script-breakout-safe JSON-LD serialization),
   `tests/core/seo-public-entities.test.ts`,
   `tests/core/catalog-public-pages.test.ts`, `tests/core/events.test.ts` and
-  `tests/core/newsletters.test.ts`; changeset `events-newsletters-seo.md`. **F04** `/admin/builder` prompt-to-proposal. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/seo-surface.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/seo-surface.test.ts` is the composition proof.)*
+  `tests/core/newsletters.test.ts`; changeset `events-newsletters-seo.md`. **F04** `/admin/builder` prompt-to-proposal. **F05** public `/og`, `/feeds/[kind]`, `/indexnow-key` plus `seo.submitIndexNow` at `/api/v1/seo.submitIndexNow`, MCP `seo_submitIndexNow`. **F07** `tests/core/seo-surface.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/seo-surface.test.ts` is the composition proof.)*
 - [x] **C2.22** Add draft/published cache invalidation, image and page budgets,
   zero client-side layout swap, and performance regression tests.
   (`invalidationPlan` — draft saves skip the public slug; publish busts it;
   chrome busts layout; `experimentCacheKey` is the Vary surface; page/image/HTML
   budgets on create/update/publish; public experiments still return one variant;
-  `tests/core/cms-cache.test.ts`; changeset `cms-cache-budgets.md` **F04** `/admin/builder` apply/rollback proposal. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/cms-cache.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-cache.test.ts` is the composition proof.)
+  `tests/core/cms-cache.test.ts`; changeset `cms-cache-budgets.md` **F04** `/admin/builder` apply/rollback proposal. **F05** N/A as a new tool — cache bust and page/image budgets run inside `cms.publishPage`/`cms.updatePage`. **F07** `tests/core/cms-cache.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-cache.test.ts` is the composition proof.)
 - [x] **C2.23** Prove a plugin can register a schema, renderer, editor fields,
   migration, sitemap source and seed block with zero core-editor changes.
   (`proof` module: `notice` block, `proof_notices` + `0073_plain_lilandra.sql`,
@@ -4090,7 +4093,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   (`buildOpenApi`: 200 from output schemas, 4xx/500 from `ServiceError`,
   public ops `security: []`, `FreeholderEvent` webhook component,
   `info.x-freeholder` platform/webhook/MCP versions. Coverage in
-  `tests/core/contract-projections.test.ts`. **F04** HTTP `/api/v1` OpenAPI, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contract-projections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-projections.test.ts` is the composition proof.)
+  `tests/core/contract-projections.test.ts`. **F04** HTTP `/api/v1` OpenAPI, not a new admin screen. **F05** this item *is* `GET /api/openapi.json` documenting every `/api/v1/{service}` path. **F07** `tests/core/contract-projections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-projections.test.ts` is the composition proof.)
 - [x] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
   service registry; remove every package scaffold/no-op build.
   (`generateSdkCatalog` in `src/core/contract/sdk.ts` walks
@@ -4100,27 +4103,27 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `withToken` / `paginate` wrappers are typed against that layer. Drift gate in
   `tests/core/sdk.test.ts`; schema conversion in
   `tests/core/sdk-schema.test.ts`; regenerate with `pnpm sdk:generate`.
-  Changeset `typed-sdk.md`. PR #291, `99c1a7a`. **F04** N/A — generated SDK, not a screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/sdk.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sdk.test.ts` is the composition proof.)
+  Changeset `typed-sdk.md`. PR #291, `99c1a7a`. **F04** N/A — generated SDK, not a screen. **F05** this item *is* `@freeholder/sdk` generated from that OpenAPI; no extra routes. **F07** `tests/core/sdk.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sdk.test.ts` is the composition proof.)
 - [x] **C3.04** Make MCP discovery actor-aware—including actor kind, service
   opt-out and approval annotations—so listed tools are genuinely callable.
   (`ServiceDef.mcpExclude`; `hiddenFromMcp`; tool `annotations.actorKind` and
   `approval`; step-up tools listed only for users. Coverage in
-  `tests/core/mcp.test.ts`. **F04** `/admin/settings` API keys. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/mcp.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/mcp.test.ts` is the composition proof.)
+  `tests/core/mcp.test.ts`. **F04** `/admin/settings` API keys. **F05** `POST /api/mcp` tools/list is actor-filtered; `apikeys.create`/`list`/`revoke`/`scopes` stay HTTP/SDK (`/api/v1/apikeys.*`) because MCP excludes the `apikeys` family. **F07** `tests/core/mcp.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/mcp.test.ts` is the composition proof.)
 - [x] **C3.05** Complete MCP resources/prompts and supported transport/session
   behavior where they improve discovery without creating a second registry.
   (`resources/list|read` on `freeholder://contract/*`; `prompts/list|get`;
-  `Mcp-Session-Id` echoed, nothing stored. Coverage in `tests/core/mcp.test.ts`. **F04** MCP `/api/mcp`, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/mcp.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/mcp.test.ts` is the composition proof.)
+  `Mcp-Session-Id` echoed, nothing stored. Coverage in `tests/core/mcp.test.ts`. **F04** MCP `/api/mcp`, not a new admin screen. **F05** `POST /api/mcp` `resources/list|read` on `freeholder://contract/*` and `prompts/list|get`; session header only, no second registry. **F07** `tests/core/mcp.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/mcp.test.ts` is the composition proof.)
 - [x] **C3.06** Generate human reference docs and `llms.txt` contract sections
   from the same schemas; add a drift/completeness gate over all projections.
   (`contractProjections` / `humanReference` / `llmsContractSection`;
   `/llms-full.txt`; OpenAPI paths === external registry projection, while
   system services remain internal. Coverage in
-  `tests/core/contract-projections.test.ts`. **F04** `/admin/settings` webhooks create/pause/test. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contract-projections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-projections.test.ts` is the composition proof.)
+  `tests/core/contract-projections.test.ts`. **F04** `/admin/settings` webhooks create/pause/test. **F05** `GET /llms.txt` and `GET /llms-full.txt` are the human/LLM projection of the same registry. **F07** `tests/core/contract-projections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-projections.test.ts` is the composition proof.)
 - [x] **C3.07** Add webhook subscriptions, delivery inspection/replay, schema
   versioning, endpoint rotation and explicit sensitive-field redaction.
   (`webhooks.inspectDelivery` redacts; `webhooks.replay`;
   `webhooks.rotateEndpoint`; envelope `schemaVersion`; C1.35 address-pinned
-  transport. Coverage in `tests/core/webhooks.test.ts`. **F04** `/admin/settings` webhook inspect/replay (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/webhooks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/webhooks.test.ts` is the composition proof.)
+  transport. Coverage in `tests/core/webhooks.test.ts`. **F04** `/admin/settings` webhook inspect/replay (C11.09 F04). **F05** `webhooks.create`/`list`/`update`/`remove`/`test`/`inspectDelivery`/`replay`/`rotateEndpoint`/`rotateSecret` at `/api/v1/webhooks.*`, MCP `webhooks_*`. **F07** `tests/core/webhooks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/webhooks.test.ts` is the composition proof.)
 
 #### Plugin system and registries
 - [x] **C3.08** Finalize plugin manifest/version/capability contracts, module
@@ -4129,27 +4132,27 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   SPDX license, `permissions`, `migrations`, `capabilities`;
   `assertPluginFitsInstance` at boot; proof module uses the contract.
   Coverage in `tests/core/plugin-contract.test.ts`; changeset
-  `plugin-contract.md`. **F04** N/A — plugin contract, not a screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/plugin-contract.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-contract.test.ts` is the composition proof.)
+  `plugin-contract.md`. **F04** N/A — plugin contract, not a screen. **F05** N/A as an instance agent tool — `@freeholder/plugin-kit` `definePlugin` contract; plugin services join `/api/v1` and MCP only after install (C3.09). **F07** `tests/core/plugin-contract.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-contract.test.ts` is the composition proof.)
 - [x] **C3.09** Implement install, enable, disable, update and uninstall with
   signature/integrity verification, rollback, data-retention choice and doctor.
   (`plugins.install|enable|disable|update|rollback|uninstall`; directory
   sha256 + HMAC signature; `plugin_retentions` keep|purge; doctor
   `plugins.installed` / `plugins.disabled`. Coverage in
-  `tests/core/plugins-lifecycle.test.ts`. **F04** `/admin/plugins` install/enable/disable/uninstall. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
+  `tests/core/plugins-lifecycle.test.ts`. **F04** `/admin/plugins` install/enable/disable/uninstall. **F05** `plugins.install`/`enable`/`disable`/`update`/`rollback`/`uninstall`/`list`/`get` at `/api/v1/plugins.*`, MCP `plugins_*`. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
 - [x] **C3.10** Enforce plugin boundaries and failure isolation so a bad plugin
   is named and disabled rather than taking down the instance.
   (`isolatePlugins` / `isolatePluginLoad`; boot records
   `name (disabled: …)` and continues. Coverage in
-  `tests/core/plugins-lifecycle.test.ts`. **F04** `/admin/plugins` update/rollback (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
+  `tests/core/plugins-lifecycle.test.ts`. **F04** `/admin/plugins` update/rollback (C11.09 F04). **F05** isolation is boot-time; the operator tool is `plugins.disable` at `/api/v1/plugins.disable`, MCP `plugins_disable`. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
 - [x] **C3.11** Build local/community/verified/private registries, signed
   metadata, federation, caching and declarative instance configuration.
   (`plugin_registries` + signed index cache; `plugins.cacheRegistry` /
   `plugins.listCatalog`; `config.plugins`. Coverage in
-  `tests/core/plugins-lifecycle.test.ts`. **F04** `/admin/plugins` registries and catalogue (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
+  `tests/core/plugins-lifecycle.test.ts`. **F04** `/admin/plugins` registries and catalogue (C11.09 F04). **F05** `plugins.addRegistry`/`listRegistries`/`cacheRegistry`/`listCatalog` at `/api/v1/plugins.*`, MCP `plugins_*`. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
 - [x] **C3.12** Ship plugin scaffolding, dev harness, fixture instance, contract
   tests and examples for a block, service, adapter, automation verb and route.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
-  Coverage in `tests/core/plugin-scaffold.test.ts`. **F04** `/admin/imports` start/preview/commit. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/plugin-scaffold.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-scaffold.test.ts` is the composition proof.)
+  Coverage in `tests/core/plugin-scaffold.test.ts`. **F04** `/admin/imports` start/preview/commit. **F05** N/A — `packages/plugin-kit` scaffold/dev harness and `tests/fixtures/sample-plugin`, not an HTTP/MCP route. **F07** `tests/core/plugin-scaffold.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-scaffold.test.ts` is the composition proof.)
 - [x] **C3.13** Ship first-party plugins for gift options/registries, print-on-
   demand, advanced communities, voice and video artifacts, and marketplace
   channel sync seams, as assigned by §§4.14 and 36.
@@ -4216,7 +4219,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   PostgreSQL, private S3-compatible storage, health checks and secret inputs;
   `scripts/recipe-matrix.sh` boots the built image for all six target contracts
   against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.
-  Parsed/current-IaC coverage in `tests/core/recipes.test.ts`. **F04** `packages/cli` doctor/migrate, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/recipes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recipes.test.ts` is the composition proof.)
+  Parsed/current-IaC coverage in `tests/core/recipes.test.ts`. **F04** `packages/cli` doctor/migrate, not a new admin screen. **F05** N/A — IaC recipes (`replit.nix`, `render.yaml`, compose, DO/Railway); operator CLI is C10.21. **F07** `tests/core/recipes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recipes.test.ts` is the composition proof.)
 - [x] **C3.17** Give every Tier-1 recipe install, verify, backup, restore,
   migrate-in, migrate-out, update and rollback steps; continuously test matrix.
   (Every parsed `recipe.yaml` carries executable `install`, `verify`, `backup`,
@@ -4228,7 +4231,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C3.18** Build one-command full export of normalized data, media manifest,
   human-readable archive, configuration and checksums without exporting secrets.
   (`pnpm ownership:export`; `platform.export`; `EXPORT_FORMAT`. Coverage in
-  `tests/core/ownership-export.test.ts` and `tests/core/portability.test.ts`. **F04** `/admin/health` Doctor checks. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/ownership-export.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/ownership-export.test.ts` is the composition proof.)
+  `tests/core/ownership-export.test.ts` and `tests/core/portability.test.ts`. **F04** `/admin/health` Doctor checks. **F05** `platform.export` at `/api/v1/platform.export`, MCP `platform_export`, plus `pnpm ownership:export` CLI. **F07** `tests/core/ownership-export.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/ownership-export.test.ts` is the composition proof.)
 - [x] **C3.19** Prove round-trip migration between every Tier-1 pair while
   preserving IDs, money, timestamps, media, locales and public URLs.
   (`pnpm ownership:drill` dumps a source PostgreSQL database once, restores it
@@ -4255,20 +4258,20 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   transforms into core service inputs, provenance, fixtures and hostile/
   partial-source conformance; core retains jobs, preview, commit and rollback.
   (`defineImporter`; `assertPublicHttpUrl`; robots/limits. Coverage in
-  `tests/core/importers.test.ts`. **F04** `/admin/imports` map/review-conflicts. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/importers.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
+  `tests/core/importers.test.ts`. **F04** `/admin/imports` map/review-conflicts. **F05** N/A as a new HTTP family — `defineImporter` in plugin-kit; owner runs go through `imports.*` (C3.23). **F07** `tests/core/importers.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
 - [x] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
   sitemap/RSS/Atom/semantic-HTML importers plus static archive/common hosted-
   site paths; preserve content/media/SEO/URL intent and generate redirects
   while enforcing SSRF, origin, robots, rate, page, byte and depth limits.
   (`parseWordpressRest` / `parseWordpressWxr` / `parseSitemap` /
   `parseRssOrAtom` / `parseSemanticHtml` / `discoverFromPublicOrigin`.
-  Coverage in `tests/core/importers.test.ts`. **F04** N/A — first-party plugin seam, not a new screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/importers.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
+  Coverage in `tests/core/importers.test.ts`. **F04** N/A — first-party plugin seam, not a new screen. **F05** parsers sit behind `imports.start`/`previewFromSource` at `/api/v1/imports.*`, MCP `imports_*`; no extra importer family. **F07** `tests/core/importers.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,
   with actionable progress, retry and audit for core and plugin sources.
   (`imports.start|preview|map|reviewConflicts|commit|reconcile|publish|rollback`;
-  `/admin/imports`. Coverage in `tests/core/plugins-lifecycle.test.ts`. **F04** N/A — federated registry signature, not a screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
+  `/admin/imports`. Coverage in `tests/core/plugins-lifecycle.test.ts`. **F04** N/A — federated registry signature, not a screen. **F05** `imports.start`/`preview`/`map`/`reviewConflicts`/`commit`/`reconcile`/`publish`/`rollback`/`list` at `/api/v1/imports.*`, MCP `imports_*`. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.
@@ -4280,12 +4283,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   filters, due/priority controls and needs-attention workflow.
   (`agents.board` / `agents.updateTask` / `agents.flagTask` /
   `agents.reopenTask`; `/admin/work` columns and `/admin/work/[id]` tree.
-  Coverage in `tests/core/agents-board.test.ts`. **F04** `/admin/work` agent hire/connect. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-board.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-board.test.ts` is the composition proof.)
+  Coverage in `tests/core/agents-board.test.ts`. **F04** `/admin/work` agent hire/connect. **F05** `agents.board`/`updateTask`/`flagTask`/`reopenTask`/`createTask`/`assignTask` at `/api/v1/agents.*`, MCP `agents_*`. **F07** `tests/core/agents-board.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-board.test.ts` is the composition proof.)
 - [x] **C4.02** Build live run streaming, redacted step inspection, retry,
   cancellation and a stop control that revokes/ends active work.
   (`agents.inspectRun` / `agents.tailRun` / `agents.stopRun` /
   `agents.retryTask`; `reportStep` redacts on write; cancel revokes leases.
-  `/admin/work/[id]` live run view. Coverage in `tests/core/agents-run.test.ts`. **F04** `/admin/work` tasks/runs. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-run.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-run.test.ts` is the composition proof.)
+  `/admin/work/[id]` live run view. Coverage in `tests/core/agents-run.test.ts`. **F04** `/admin/work` tasks/runs. **F05** `agents.inspectRun`/`tailRun`/`stopRun`/`retryTask` at `/api/v1/agents.*`, MCP `agents_*`. **F07** `tests/core/agents-run.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-run.test.ts` is the composition proof.)
 - [x] **C4.03** Enforce suggest/approve/autonomous behavior for every managed
   write, with previews for block diffs, messages, money and destructive actions.
   (`agents.proposeWrite` / `agents.listApprovals`; write classification is a
@@ -4295,7 +4298,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   every other agent verb and refuses proposals outside the agent's scopes;
   approval input is stored verbatim for once-only execution and redacted on
   every read; `0077_agent_approval_autonomy.sql` records the proposing rung.
-  Coverage in `tests/core/agents-autonomy.test.ts`. **F04** `/admin/work/approvals` approval inbox. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-autonomy.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-autonomy.test.ts` is the composition proof.)
+  Coverage in `tests/core/agents-autonomy.test.ts`. **F04** `/admin/work/approvals` approval inbox. **F05** `agents.proposeWrite`/`listApprovals` at `/api/v1/agents.*`, MCP `agents_*` (writes queue; suggest never escalates). **F07** `tests/core/agents-autonomy.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-autonomy.test.ts` is the composition proof.)
 - [x] **C4.04** Build approval inbox, expiry, rejection notes, step-up auth,
   execution of approved input exactly once and immutable decision audit.
   (`agents.approveWrite` / `agents.rejectWrite` / `agents.expireApprovals`;
@@ -4306,7 +4309,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   `core.expireAgentApprovals` lapses unanswered rows and releases their
   tasks; step-up + human-only on both decision verbs; `/admin/work/approvals`
   inbox with pending and decided views in EN/FR/ES. Coverage in
-  `tests/core/agents-approvals.test.ts`. **F04** `/admin/work/spend` budgets. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-approvals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-approvals.test.ts` is the composition proof.)
+  `tests/core/agents-approvals.test.ts`. **F04** `/admin/work/spend` budgets. **F05** `agents.approveWrite`/`rejectWrite`/`expireApprovals` at `/api/v1/agents.*`, MCP `agents_*` (step-up + human-only on decisions). **F07** `tests/core/agents-approvals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-approvals.test.ts` is the composition proof.)
 - [x] **C4.05** Implement the managed-agent adapter family, provider/model
   selection, tool loop, time/step limits, retries and provider-independent use.
   (Delivered in two slices under one box. Adapters: the workforce turn
@@ -4326,7 +4329,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   park as `needs_attention`; the kill switch stops claiming; `completeTask`
   no longer overwrites a task the gate parked as `waiting_approval`.
   Provider pricing into `cost_cents` is C4.06's ledger. Coverage in
-  `tests/core/agents-managed-loop.test.ts` with a scripted provider. **F04** `/admin/work` pause/kill. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-workforce-adapter.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-workforce-adapter.test.ts` is the composition proof.)
+  `tests/core/agents-managed-loop.test.ts` with a scripted provider. **F04** `/admin/work` pause/kill. **F05** `agents.connect`/`claimTask`/`reportStep`/`completeTask` at `/api/v1/agents.*`; the managed loop's tool surface is `mcp/tools.toolsFor` (same catalogue). **F07** `tests/core/agents-workforce-adapter.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-workforce-adapter.test.ts` is the composition proof.)
 - [x] **C4.06** Enforce per-run/task/agent/period budgets before every step;
   build spend ledger, estimates, alerts and owner-readable reporting.
   (`src/core/agents/pricing.ts` prices a turn in integer cents with bigint
@@ -4343,7 +4346,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   runs and whether the model is priced at all; `/admin/work/spend` shows it
   per agent and in total against the cap in EN/FR/ES; crossing 80% and the
   cap notify the owner once per period on the new `agents.budget` topic.
-  Coverage in `tests/core/agents-budgets.test.ts`. **F04** `/admin/work/playbooks` playbook export/run. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-budgets.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-budgets.test.ts` is the composition proof.)
+  Coverage in `tests/core/agents-budgets.test.ts`. **F04** `/admin/work/playbooks` playbook export/run. **F05** `agents.spend` at `/api/v1/agents.spend`, MCP `agents_spend` (the budget topic is a notification, not a second API). **F07** `tests/core/agents-budgets.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-budgets.test.ts` is the composition proof.)
 - [x] **C4.07** Add per-agent pause and global kill switch that prevent new
   claims and safely stop or expire current leases.
   (`agents.pause` and the extended `agents.pauseAll` both revoke the leases
@@ -4358,7 +4361,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   task the pause re-queued. Owner controls are the Workers card on
   `/admin/work` — per-agent pause/resume plus pause-everything — as plain
   form posts that work without JavaScript, in EN/FR/ES. Coverage in
-  `tests/core/agents-pause.test.ts`. **F04** N/A — untrusted-input markers, not a new screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-pause.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-pause.test.ts` is the composition proof.)
+  `tests/core/agents-pause.test.ts`. **F04** N/A — untrusted-input markers, not a new screen. **F05** `agents.pause`/`pauseAll` at `/api/v1/agents.pause` and `/api/v1/agents.pauseAll`, MCP `agents_pause`/`agents_pauseAll`. **F07** `tests/core/agents-pause.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-pause.test.ts` is the composition proof.)
 - [x] **C4.08** Complete playbooks with parameter schemas, manual/event/schedule
   triggers, versioned prompts, permissions and import/export as data.
   (`src/core/agents/playbooks.ts` plus `playbook-params.ts` and
@@ -4379,7 +4382,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   document with no ids, credentials or agent binding, and an import arrives
   switched off and unassigned. `/admin/work/playbooks` carries writing,
   running, enabling, deleting and importing in EN/FR/ES. Coverage in
-  `tests/core/agents-playbooks.test.ts`. **F04** `/admin/calendar` connected calendars. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-playbooks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-playbooks.test.ts` is the composition proof.)
+  `tests/core/agents-playbooks.test.ts`. **F04** `/admin/calendar` connected calendars. **F05** `agents.createPlaybook`/`exportPlaybook`/`importPlaybook`/`deletePlaybook` at `/api/v1/agents.*` for humans/SDK; playbook authoring is hidden from MCP. **F07** `tests/core/agents-playbooks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-playbooks.test.ts` is the composition proof.)
 - [x] **C4.09** Harden untrusted-input envelopes, indirect prompt-injection
   tests, secret/output redaction, URL/network policies and exfiltration limits.
   (`src/core/agents/envelope.ts`: the fence is an unguessable per-run marker
@@ -4400,7 +4403,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   configuration tools are never offered to a key, and an end-to-end run where
   the model does exactly what a hostile payload says still changes nothing —
   untrusted input forces the suggest rung, so every attempted write is a
-  proposal and the spine is untouched. **F04** `/admin/inbox` mail-read begin-OAuth (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-injection.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-injection.test.ts` is the composition proof.)
+  proposal and the spine is untouched. **F04** `/admin/inbox` mail-read begin-OAuth (C11.09 F04). **F05** N/A as a new tool — this item *removes* playbook authoring from MCP and fences untrusted input on existing `agents_*` tools. **F07** `tests/core/agents-injection.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-injection.test.ts` is the composition proof.)
 
 #### Connected accounts and recurring work
 - [x] **C4.10** Complete credential-key rotation, backup/recovery documentation,
@@ -4423,7 +4426,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   reconnect notification now names how many agents are waiting. Operator guide
   extended in `deploy/ownership-recovery.md`, including reviewing grants after
   restoring a database elsewhere. Coverage in
-  `tests/core/connection-grants.test.ts`. **F04** `/admin/calendar` busy/writeback. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/connection-grants.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/ownership-recovery.md`. **F12** `tests/core/connection-grants.test.ts` is the composition proof.)
+  `tests/core/connection-grants.test.ts`. **F04** `/admin/calendar` busy/writeback. **F05** `connections.rotateCredentials`/`grantToAgent`/`revokeFromAgent`/`mine` at `/api/v1/connections.*`, MCP `connections_*` (grant is step-up/human-only). **F07** `tests/core/connection-grants.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/ownership-recovery.md`. **F12** `tests/core/connection-grants.test.ts` is the composition proof.)
 - [x] **C4.11** Implement Google and Microsoft OAuth with incremental calendar
   scopes and several accounts per provider/person.
   (`src/core/connections/oauth-core.ts` holds the handshake mail built in
@@ -4441,7 +4444,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   adds `purpose` and `access` to the OAuth state table, which the claim now
   matches on — writing this test found that the mail flow could consume a
   calendar state, now closed. Coverage in `tests/core/calendar-oauth.test.ts`;
-  the mail suites pass unchanged against the shared core. **F04** `/admin/work` inbound agent claim. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/calendar-oauth.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/calendar-oauth.test.ts` is the composition proof.)
+  the mail suites pass unchanged against the shared core. **F04** `/admin/work` inbound agent claim. **F05** `connections.beginCalendarOAuth` at `/api/v1/connections.beginCalendarOAuth`, MCP `connections_beginCalendarOAuth`; callback `/api/connections/calendar/[provider]/callback` is not a tool. **F07** `tests/core/calendar-oauth.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/calendar-oauth.test.ts` is the composition proof.)
 - [x] **C4.12** Sync external calendars with tokens, busy-only default,
   optional details, health/errors and privacy-preserving storage.
   (`src/core/connections/calendar-providers.ts` reads Google Calendar and
@@ -4464,7 +4467,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   Writing this moved the token refresh into `oauth-core.ts` so mail and
   calendars share one path and a rotated credential is never written twice.
   Coverage in `tests/core/calendar-sync.test.ts`; the display and the
-  availability union are C4.13. **F04** N/A — credential encryption, not a screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/calendar-sync.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/calendar-sync.test.ts` is the composition proof.)
+  availability union are C4.13. **F04** N/A — credential encryption, not a screen. **F05** sync is `core.syncExternalCalendars` (system, hidden from MCP/HTTP); owner query is `connections.calendarSources` at `/api/v1/connections.calendarSources`. **F07** `tests/core/calendar-sync.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/calendar-sync.test.ts` is the composition proof.)
 - [x] **C4.13** Build unified calendar display and connect busy unions to the
   availability engine without leaking private event details.
   (`src/core/connections/busy.ts` is the union and the only supported way to
@@ -4487,7 +4490,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   clock skipped resolves forward rather than starting a day early. The
   availability resolver (C6.03) consumes `externalBusyWindows` and needs no
   other door into this data. Coverage in `tests/core/calendar-busy.test.ts`
-  and `tests/core/zoned.test.ts`. **F04** `/admin/health` connection doctor. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/calendar-busy.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/calendar-busy.test.ts` is the composition proof.)
+  and `tests/core/zoned.test.ts`. **F04** `/admin/health` connection doctor. **F05** `connections.busyWindows` at `/api/v1/connections.busyWindows`, MCP `connections_busyWindows` (shape is `{startsAt,endsAt}` only). **F07** `tests/core/calendar-busy.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/calendar-busy.test.ts` is the composition proof.)
 - [x] **C4.14** Implement runtime playbook scheduling with timezone/DST,
   `next_run_at`, catch-up policy, overlap refusal and outage-safe advancement.
   (One scheduled job — `core.runPlaybooks`, every minute — and the work list is
@@ -4513,7 +4516,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   regex with a parser that says what it could not read. `0082` adds
   `timezone`, `next_run_at`, `last_run_at`, `catch_up` and `last_outcome` with
   a partial index on the due predicate. Coverage in
-  `tests/core/agents-schedule.test.ts`. **F04** `/admin/briefing` daily briefing. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/agents-schedule.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-schedule.test.ts` is the composition proof.)
+  `tests/core/agents-schedule.test.ts`. **F04** `/admin/briefing` daily briefing. **F05** `agents.setPlaybookSchedule` at `/api/v1/agents.setPlaybookSchedule`, MCP `agents_setPlaybookSchedule`; `agents.runDuePlaybooks` is the system tick (hidden). **F07** `tests/core/agents-schedule.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-schedule.test.ts` is the composition proof.)
 - [x] **C4.15** Build briefing entities, contributor registry, preassembly,
   needs-me-first ordering, read state and per-section preferences.
   (`src/core/briefing/` holds the three tables §42 names and the mechanism
@@ -4539,7 +4542,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   that fire irreversible work off a summary screen. Core's own contributors are
   C4.16 and playbook/module delivery is C4.17; today the registry honestly
   returns none, which yields an empty briefing rather than a broken one.
-  `0083_briefings.sql`. Coverage in `tests/core/briefing.test.ts`. **F04** `/admin/work` scheduled playbooks. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/briefing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/briefing.test.ts` is the composition proof.)
+  `0083_briefings.sql`. Coverage in `tests/core/briefing.test.ts`. **F04** `/admin/work` scheduled playbooks. **F05** `briefing.today`/`assemble`/`markRead`/`recent`/`setSection` at `/api/v1/briefing.*`, MCP `briefing_*`. **F07** `tests/core/briefing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/briefing.test.ts` is the composition proof.)
 - [x] **C4.16** Add core briefing contributors for appointments, enquiries,
   overdue invoices, agent failures, webhook failures, reconnects and updates.
   (`src/core/briefing/contributors.ts` holds the five core sections and the
@@ -4565,7 +4568,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   Coverage in `tests/core/briefing-contributors.test.ts`, plus a registry
   assertion that every declared contributor resolves to a service that
   actually exists — a section that silently never appears is the failure mode
-  this design would otherwise have. **F04** N/A — agent isolation, not a screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/briefing-contributors.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/briefing-contributors.test.ts` is the composition proof.)
+  this design would otherwise have. **F04** N/A — agent isolation, not a screen. **F05** core contributors feed `briefing.assemble`; no extra HTTP family beyond C4.15 `briefing_*`. **F07** `tests/core/briefing-contributors.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/briefing-contributors.test.ts` is the composition proof.)
 - [x] **C4.17** Add playbook/module contributions plus email, SMS and push
   delivery through notification preferences.
   (§42 calls "report into my briefing" the mechanism behind an owner adding
@@ -4589,7 +4592,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   and digests apply for free. It is deduplicated per person per day, so
   re-assembling a day cannot buzz the same phone twice, and a briefing with
   nothing in it never sends at all. Coverage in
-  `tests/core/briefing-playbooks.test.ts`. **F04** `/admin/work` live run. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/briefing-playbooks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/briefing-playbooks.test.ts` is the composition proof.)
+  `tests/core/briefing-playbooks.test.ts`. **F04** `/admin/work` live run. **F05** `briefing.playbookSection`/`setSection` at `/api/v1/briefing.playbookSection` and `/api/v1/briefing.setSection`, MCP `briefing_playbookSection`/`briefing_setSection`. **F07** `tests/core/briefing-playbooks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/briefing-playbooks.test.ts` is the composition proof.)
 - [x] **C4.18** Add Gmail/Microsoft mail read and contact import as untrusted
   data through `contacts.resolve`, timeline and duplicate workflow.
   (§41: "Mail is read as data about people, not as an inbox to reimplement."
@@ -4617,14 +4620,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   as them. `core.importConnectedMail` runs hourly and is idempotent per
   `(contact, provider message id)`, because the "since" window is coarse. No
   migration: `mail_oauth_states.purpose` was already an application-level enum.
-  Coverage in `tests/core/mail-import.test.ts`. **F04** N/A — autonomy write classes, not a new screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/mail-import.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/mail-import.test.ts` is the composition proof.)
+  Coverage in `tests/core/mail-import.test.ts`. **F04** N/A — autonomy write classes, not a new screen. **F05** `connections.beginMailReadOAuth` at `/api/v1/connections.beginMailReadOAuth`, MCP `connections_beginMailReadOAuth`; callback `/api/connections/mail-read/[provider]/callback`. Import is `core.importConnectedMail` (system). **F07** `tests/core/mail-import.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/mail-import.test.ts` is the composition proof.)
 
 #### Owner-facing self-builder
 - [x] **C4.19** Implement the content lane: owner brief → scoped proposal →
   block/content diff → preview → approval → atomic apply → one-click rollback.
   Evidence: `src/modules/builder/`, `/admin/builder`, generated API/MCP
   services, and `tests/core/builder-content-lane.test.ts` (including real
-  Postgres migration, apply, attribution, rollback and stale-write coverage). **F04** `/admin/work` catalogue of tools. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/builder-content-lane.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/builder-content-lane.test.ts` is the composition proof.
+  Postgres migration, apply, attribution, rollback and stale-write coverage). **F04** `/admin/work` catalogue of tools. **F05** `builder.propose`/`listProposals`/`getProposal`/`apply`/`reject`/`rollback`/`status` at `/api/v1/builder.*`, MCP `builder_*`. **F07** `tests/core/builder-content-lane.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/builder-content-lane.test.ts` is the composition proof.
 - [x] **C4.20** Implement the code lane: isolated worktree, budget/permission
   envelope, gates, preview environment, owner-readable diff and pull request.
   (§37 settles what "isolated" means here: "the instance does not compile code
@@ -4652,7 +4655,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   here. Budget is the same visible monthly ceiling the structure lane spends,
   reserved under the same advisory lock so two tabs cannot both spend the last
   of it. `0088_builder_code_lane.sql`. Coverage in
-  `tests/core/builder-code-lane.test.ts`. **F04** N/A — injection hardening, not a screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/builder-code-lane.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/builder-code-lane.test.ts` is the composition proof.)
+  `tests/core/builder-code-lane.test.ts`. **F04** N/A — injection hardening, not a screen. **F05** `builder.proposeCode`/`deliverCode`/`rejectCode`/`listCodeProposals`/`getCodeProposal`/`codeStatus` at `/api/v1/builder.*`, MCP `builder_*`. **F07** `tests/core/builder-code-lane.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/builder-code-lane.test.ts` is the composition proof.)
 - [x] **C4.21** Keep `builder.*` separately granted from workforce scopes and
   prove content/customer input can never instruct either builder lane.
   (Both halves were already structurally true; this item is the proof, which is
@@ -4670,7 +4673,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   nothing to inject into, which is stronger than sanitising. The test hands the
   adapter an "IGNORE ALL PREVIOUS INSTRUCTIONS" string and asserts the brief
   arrives verbatim, the injection never reaches the instruction position, and
-  the prompt states the boundary it also enforces. **F04** `/admin/inbox` conversations. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/builder-authority.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/builder-authority.test.ts` is the composition proof.)
+  the prompt states the boundary it also enforces. **F04** `/admin/inbox` conversations. **F05** N/A as a new family — `builder.*` stays a separately granted module from `agents.*` on the same `/api/v1` and MCP catalogue. **F07** `tests/core/builder-authority.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/builder-authority.test.ts` is the composition proof.)
 - [x] **C4.22** Expose the builder safely through admin, API and MCP and emit
   complete source/audit provenance through `/source`, including the running
   version, applied plugins, builder diff, license, and notices.
@@ -4688,7 +4691,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   oversight — Apache-2.0 does not require an operator to publish private
   modifications merely because they run them over a network, so the route owes
   the world nothing, while a map of an instance's plugins and changes is
-  exactly what somebody attacking it would want first. **F04** `/admin/calendar` begin-OAuth (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** calendar OAuth is the same begin/callback path as mail-read.)
+  exactly what somebody attacking it would want first. **F04** `/admin/calendar` begin-OAuth (C11.09 F04). **F05** `builder.*` plus `platform.source` at `/api/v1/builder.*` and `/api/v1/platform.source`, MCP `builder_*`/`platform_source`. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** calendar OAuth is the same begin/callback path as mail-read.)
 - [x] **C4.23** Add a federated catalogue for shareable agent/playbook
   definitions with declared scopes, compatibility, provenance, preview and
   owner approval before installation; definitions remain data, never bundled
@@ -4714,7 +4717,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   surprising, and must outlive the catalogue being unfollowed. A catalogue that
   cannot be read is a state and not an exception — throwing would have rolled
   back the row recording why it failed, which the test caught.
-  `0089_catalogue.sql`. Coverage in `tests/core/catalogue.test.ts`. **F04** N/A as a new screen — catalogue install reuses `agents.importPlaybook` on `/admin/work/playbooks`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalogue.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalogue.test.ts` is the composition proof.)
+  `0089_catalogue.sql`. Coverage in `tests/core/catalogue.test.ts`. **F04** N/A as a new screen — catalogue install reuses `agents.importPlaybook` on `/admin/work/playbooks`. **F05** `catalogue.list`/`preview`/`install`/`sources` at `/api/v1/catalogue.*`, MCP `catalogue_*`; install reuses `agents.importPlaybook`. **F07** `tests/core/catalogue.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalogue.test.ts` is the composition proof.)
 
 **C4 exit:** owners can delegate recurring work and product changes while
 permissions, budgets, untrusted input, approvals and rollback remain enforceable.
@@ -4749,7 +4752,7 @@ owner operations, never substitute for them.
   adapter errors; honest disabled implementations that cannot fabricate tax,
   money, delivery or provider references; existing bulk-mail non-delivery
   incorporated; six-test contract/hostile suite; operator/developer guide
-  `deploy/edge-adapters.md`; changeset `commerce-edge-contracts.md`. **F04** `/admin/invoices` draft/issue/void. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/edge-adapters.md`. **F12** changeset `commerce-edge-contracts.md` landed with the rest of the spine.)
+  `deploy/edge-adapters.md`; changeset `commerce-edge-contracts.md`. **F04** `/admin/invoices` draft/issue/void. **F05** N/A as a new HTTP family — `none` plus adapter contracts are used by `invoicing.*` (C5.05–C5.08); no agent calls an adapter directly. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/edge-adapters.md`. **F12** changeset `commerce-edge-contracts.md` landed with the rest of the spine.)
 - [x] **C5.02** Implement tax zones and most-specific matching, categories,
   registrations/thresholds, compound/sequential rates and inclusive/exclusive
   presentation. *(Evidence: normalized tax schema in additive migrations
@@ -4760,7 +4763,7 @@ owner operations, never substitute for them.
   interlocks; currency-separated calendar/rolling threshold reports through
   the generated `invoicing.*` API/MCP services; arithmetic, database and
   location coverage in `tests/core/money-arithmetic.test.ts` and
-  `tests/core/invoicing.test.ts`; operator guide `deploy/commerce-money.md`. **F04** `/admin/invoices` tax evidence. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/money-arithmetic.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/commerce-money.md`. **F12** `tests/core/money-arithmetic.test.ts` is the composition proof.)*
+  `tests/core/invoicing.test.ts`; operator guide `deploy/commerce-money.md`. **F04** `/admin/invoices` tax evidence. **F05** `invoicing.addTaxRate` and tax-zone services at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/money-arithmetic.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/commerce-money.md`. **F12** `tests/core/money-arithmetic.test.ts` is the composition proof.)*
 - [x] **C5.03** Implement exemptions, reverse charge, shipping tax, rounding,
   immutable `TaxLine` snapshots and owner-visible calculation explanations.
   *(Evidence: validated/unexpired exemption enforcement in services and
@@ -4773,7 +4776,7 @@ owner operations, never substitute for them.
   suite, production build and changeset `commerce-money-foundation.md`.
   Translated `/admin/invoices` and `/admin/invoices/tax` now project these
   services for list/create/issue/void/credit, tax-line evidence, receipts,
-  starter install and acknowledged collection activation. **F04** `/admin/payments` record/refund. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `commerce-money-foundation.md` landed with the rest of the spine.)*
+  starter install and acknowledged collection activation. **F04** `/admin/payments` record/refund. **F05** exemption/reverse-charge/shipping-tax services at `/api/v1/invoicing.*`, MCP `invoicing_*` (same family as C5.02, different verbs). **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `commerce-money-foundation.md` landed with the rest of the spine.)*
 - [x] **C5.04** Ship and verify Canada, EU, UK, US, Australia and New Zealand
   tax templates, while allowing explicit owner-defined zones elsewhere.
   *(Evidence: 94 source-attributed starters in
@@ -4784,7 +4787,7 @@ owner operations, never substitute for them.
   `createTaxZone` still accepts an owner-defined country the catalog does not
   cover, without that interlock. Coverage in
   `tests/core/money-arithmetic.test.ts`, `tests/core/invoicing.test.ts` and
-  `tests/core/tax-templates.test.ts`; changeset `commerce-tax-templates.md`. **F04** `/admin/invoices` credits. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/money-arithmetic.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/money-arithmetic.test.ts` is the composition proof.)*
+  `tests/core/tax-templates.test.ts`; changeset `commerce-tax-templates.md`. **F04** `/admin/invoices` credits. **F05** N/A as a new route — CA/EU/UK/US/AU/NZ templates seed `invoicing.addTaxRate`; not a separate MCP family. **F07** `tests/core/money-arithmetic.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/money-arithmetic.test.ts` is the composition proof.)*
 - [x] **C5.05** Implement invoice/line/payment/refund/credit-note state machines,
   integer-money invariants, numbering, receipts, reconciliation and audit.
   *(Evidence: one normalized 14-table `invoicing` module; integer minor units
@@ -4798,7 +4801,7 @@ owner operations, never substitute for them.
   lifecycle/database coverage in `tests/core/invoicing.test.ts`; migrations
   `0043_worried_shaman.sql` through `0045_peaceful_puck.sql`; operator guide
   and full local gates; `/admin/invoices` now lists, creates, issues, voids
-  and credits through these services. **F04** `/portal` customer invoice view. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/invoicing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/invoicing.test.ts` is the composition proof.)*
+  and credits through these services. **F04** `/portal` customer invoice view. **F05** `invoicing.createDraft`/`issue`/`void`/`issueCreditNote`/`listPayments` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/invoicing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/invoicing.test.ts` is the composition proof.)*
 - [x] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
   signed/idempotent webhooks, saved methods, disputes and refunds. *(Evidence:
   one capability-discovered adapter contract for owner-attested offline money,
@@ -4814,7 +4817,7 @@ owner operations, never substitute for them.
   privacy coverage, migration `0046_right_swordsman.sql`, 46-test focused
   suite, production build, real Chromium offline-payment/refund journey and
   WCAG A/AA scan; `deploy/commerce-payments.md` and changeset
-  `commerce-payment-providers.md`. **F04** `/admin/invoices/tax` zones/rates. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/commerce-payments.md`. **F12** changeset `commerce-payment-providers.md` landed with the rest of the spine.)*
+  `commerce-payment-providers.md`. **F04** `/admin/invoices/tax` zones/rates. **F05** `invoicing.beginPaymentCheckout`/`completePaymentCheckout`/`recordOfflinePayment` at `/api/v1/invoicing.*`, MCP `invoicing_*`; Stripe/PayPal feedback is `/api/payments/webhooks/stripe` and `/api/payments/webhooks/paypal` (not MCP). **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/commerce-payments.md`. **F12** changeset `commerce-payment-providers.md` landed with the rest of the spine.)*
 - [x] **C5.07** Implement Square, Mollie, Razorpay and Paystack/Flutterwave
   adapters behind the identical contract and contract test suite. *(Evidence:
   Square Payment Links/order recheck/refunds with rotating exact URL-plus-body
@@ -4830,7 +4833,7 @@ owner operations, never substitute for them.
   receipts; 14-test provider wire/signature suite and 35-test focused database/
   config/doctor gate; 99 files/1,155 tests, typecheck, lint, licensing, plan,
   dependency and production-build gates; `deploy/commerce-payments.md` and
-  changeset `commerce-provider-parity.md`. **F04** `/admin/invoices/recurring` schedules. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/commerce-payments.md`. **F12** changeset `commerce-provider-parity.md` landed with the rest of the spine.)*
+  changeset `commerce-provider-parity.md`. **F04** `/admin/invoices/recurring` schedules. **F05** same invoicing checkout services as C5.06; Square/Mollie/Razorpay/Paystack/Flutterwave webhooks at `/api/payments/webhooks/{square,mollie,razorpay,paystack,flutterwave}`. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/commerce-payments.md`. **F12** changeset `commerce-provider-parity.md` landed with the rest of the spine.)*
 - [x] **C5.08** Support deposits, balances, payment plans, tips, pay-what-you-
   want, late fees, partial/multi-payment invoices and provider payout tracking.
   *(Evidence: additive migration `0047_fantastic_miss_america.sql` with ten
@@ -4846,7 +4849,7 @@ owner operations, never substitute for them.
   `tests/core/advanced-money.test.ts`, provider service and adapter suites;
   production build and real Chromium payment/refund/WCAG journey;
   `deploy/commerce-money.md`, `deploy/commerce-payments.md` and changeset
-  `commerce-advanced-money.md`. **F04** `/admin/invoices/[id]` payment plan/late fee; `/admin/invoices/new` deposit/balance; `/admin/payments` payouts (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/advanced-money.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/commerce-money.md`. **F12** `tests/core/advanced-money.test.ts` is the composition proof.)*
+  `commerce-advanced-money.md`. **F04** `/admin/invoices/[id]` payment plan/late fee; `/admin/invoices/new` deposit/balance; `/admin/payments` payouts (C11.09 F04). **F05** `invoicing.createDepositAndBalance`/`createPaymentPlan`/`assessLateFee`/`adjustCustomerBalance`/`recordProviderPayout` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/advanced-money.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/commerce-money.md`. **F12** `tests/core/advanced-money.test.ts` is the composition proof.)*
 
 #### Catalog and pricing
 - [x] **C5.09** Build product lifecycle for physical, digital, service,
@@ -4864,7 +4867,7 @@ owner operations, never substitute for them.
   administrator role integration; five-test hostile/database/concurrency suite,
   32-test focused registry/i18n/role gate, 101 files/1,171 tests, production
   build and real Chromium create/activate/autosave/WCAG journey; operator guide
-  `deploy/commerce-catalog.md` and changeset `commerce-product-lifecycle.md`. **F04** `/admin/pos` in-person collection. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/commerce-catalog.md`. **F12** changeset `commerce-product-lifecycle.md` landed with the rest of the spine.)*
+  `deploy/commerce-catalog.md` and changeset `commerce-product-lifecycle.md`. **F04** `/admin/pos` in-person collection. **F05** `catalog.createProduct`/`updateProduct`/`activateProduct`/`publishProduct`/`archiveProduct`/`restoreProduct` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/commerce-catalog.md`. **F12** changeset `commerce-product-lifecycle.md` landed with the rest of the spine.)*
 - [x] **C5.10** Build option types/values, reusable dimensions, generated
   variant matrices, SKU fragments, defaults and safe matrix reconciliation.
   *(Evidence: additive `0049_blue_naoko.sql` with option types/values, product
@@ -4873,7 +4876,7 @@ owner operations, never substitute for them.
   deleting identities; SKU fragments compose from assigned dimension order;
   optimistic `products.version`; translated `/admin/products` option/matrix
   workspace; API/MCP from the same services; `tests/core/catalog-variants.test.ts`;
-  changeset `commerce-variant-matrices.md` and `deploy/commerce-catalog.md`. **F04** `/admin/products` catalog. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-variants.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/commerce-catalog.md`. **F12** `tests/core/catalog-variants.test.ts` is the composition proof.)*
+  changeset `commerce-variant-matrices.md` and `deploy/commerce-catalog.md`. **F04** `/admin/products` catalog. **F05** `catalog.createOptionType`/`addOptionValue`/`applyVariantMatrix`/`getProductVariants` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-variants.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/commerce-catalog.md`. **F12** `tests/core/catalog-variants.test.ts` is the composition proof.)*
 - [x] **C5.11** Build attributes/filtering/comparison, unlimited ordered media,
   role/variant swaps, video, documents and 3D/AR assets.
   *(Evidence: additive `0050_classy_colleen_wing.sql`; reusable
@@ -4881,7 +4884,7 @@ owner operations, never substitute for them.
   `catalog.filterProductsByAttribute` and `catalog.compareProducts`; ordered
   `product_media` with hero/gallery/swatch/size_chart/lifestyle/360/model
   roles and variant-specific swaps; GLB/glTF/USDZ accepted as library docs;
-  translated product merchandising workspace; `tests/core/catalog-merchandising.test.ts`. **F04** `/admin/products/[id]` variants. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-merchandising.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-merchandising.test.ts` is the composition proof.)*
+  translated product merchandising workspace; `tests/core/catalog-merchandising.test.ts`. **F04** `/admin/products/[id]` variants. **F05** `catalog.setProductAttribute`/`filterProductsByAttribute`/`compareProducts`/`attachProductMedia` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-merchandising.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-merchandising.test.ts` is the composition proof.)*
 - [x] **C5.12** Build product relations, bundle components, upsell/cross-sell/
   accessory/replacement semantics and deterministic bundle price/stock rules.
   *(Evidence: `product_relations` and `bundle_components` in
@@ -4889,7 +4892,7 @@ owner operations, never substitute for them.
   bundle quote sums resolved, fixed or percent-off components through
   `catalog.resolvePrice`; a bundle cannot contain itself; stock is untracked
   so availability follows active component variants; translated product
-  workspace; `tests/core/catalog-relations.test.ts`. **F04** `/admin/inventory` stock. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-relations.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-relations.test.ts` is the composition proof.)*
+  workspace; `tests/core/catalog-relations.test.ts`. **F04** `/admin/inventory` stock. **F05** relation/bundle/upsell services at `/api/v1/catalog.*`, MCP `catalog_*` (same family as C5.09–C5.11, relation verbs). **F07** `tests/core/catalog-relations.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-relations.test.ts` is the composition proof.)*
 - [x] **C5.13** Build price lists, entries, audiences, customer groups,
   contracts, sale windows and explicit per-currency availability.
   *(Evidence: customer groups by tag/lifecycle; currency-locked price lists
@@ -4899,7 +4902,7 @@ owner operations, never substitute for them.
   contract lists; `/admin/price-lists` and product price card; standalone
   default variant so optionless products can be priced;
   `tests/core/catalog-pricing.test.ts` and changeset
-  `commerce-catalog-merchandising.md`. **F04** `/admin/shipping` zones. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-pricing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-pricing.test.ts` is the composition proof.)*
+  `commerce-catalog-merchandising.md`. **F04** `/admin/shipping` zones. **F05** price-list/audience services at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-pricing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-pricing.test.ts` is the composition proof.)*
 - [x] **C5.14** Implement tiered and volume price breaks plus one deterministic,
   explainable resolver with exhaustive arithmetic/property tests.
   *(Evidence: `price_breaks` with XOR unit/percent, no-overlap checks;
@@ -4907,7 +4910,7 @@ owner operations, never substitute for them.
   `src/modules/catalog/price-breaks.ts`; `catalog.resolvePrice` applies
   variant-specific then list-wide bands and explains the result;
   `tests/core/price-breaks.test.ts` plus database coverage in
-  `tests/core/catalog-pricing.test.ts`. **F04** `/admin/carts` saved carts. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/price-breaks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/price-breaks.test.ts` is the composition proof.)*
+  `tests/core/catalog-pricing.test.ts`. **F04** `/admin/carts` saved carts. **F05** `catalog.resolvePrice` plus price-break services at `/api/v1/catalog.resolvePrice`, MCP `catalog_resolvePrice`. **F07** `tests/core/price-breaks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/price-breaks.test.ts` is the composition proof.)*
 - [x] **C5.15** Complete service offerings, deposits, policies, forms, waivers,
   calendars, capacity and price-rule configuration over the shared catalog.
   *(Evidence: `cancellation_policies`, `service_offerings` and `price_rules`
@@ -4920,7 +4923,7 @@ owner operations, never substitute for them.
   and waiver templates are reserved attach-points that refuse live values
   until C6.01/C6.14; translated product offering card; API/MCP from the same
   services; `tests/core/catalog-offerings.test.ts` and Chromium journey save;
-  changeset `commerce-service-offerings.md`. **F04** `/admin/orders` checkout. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-offerings.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-offerings.test.ts` is the composition proof.)*
+  changeset `commerce-service-offerings.md`. **F04** `/admin/orders` checkout. **F05** service-offering/deposit/waiver services at `/api/v1/catalog.*`, MCP `catalog_*`; intake forms stay `forms.*`. **F07** `tests/core/catalog-offerings.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-offerings.test.ts` is the composition proof.)*
 
 #### Inventory, shipping, checkout, and orders
 - [x] **C5.16** Implement append-only stock movements, multi-location balances,
@@ -4935,7 +4938,7 @@ owner operations, never substitute for them.
   minutes; consume writes a sale movement; negative shelf and reserved-overdraw
   refused; translated `/admin/inventory` ledger/count/adjust/transfer;
   API/MCP from the same services; `tests/core/catalog-inventory.test.ts`;
-  changeset `commerce-inventory-ledger.md`. **F04** `/admin/fulfillment` shipments. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-inventory.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-inventory.test.ts` is the composition proof.)*
+  changeset `commerce-inventory-ledger.md`. **F04** `/admin/fulfillment` shipments. **F05** `catalog.recordStockMovement`/`adjustStock`/`transferStock`/`listInventory`/`listStockMovements` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-inventory.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-inventory.test.ts` is the composition proof.)*
 - [x] **C5.17** Implement safety/reorder levels, incoming stock, backorders,
   back-in-stock subscriptions, suppliers, purchase orders and receiving,
   including admin procurement, reorder and receiving queues.
@@ -4948,7 +4951,7 @@ owner operations, never substitute for them.
   backorders; contact merge/privacy for suppliers and subscriptions;
   `/admin/procurement` plus levels on `/admin/inventory`;
   `tests/core/catalog-procurement.test.ts`; changeset
-  `commerce-procurement.md`. **F04** `/admin/returns` RMAs. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-procurement.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-procurement.test.ts` is the composition proof.)*
+  `commerce-procurement.md`. **F04** `/admin/returns` RMAs. **F05** `catalog.reserveStock`/`expireReservations`/`availability`/`listReservations` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-procurement.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-procurement.test.ts` is the composition proof.)*
 - [x] **C5.18** Implement shipping zones, deterministic rate engine, packaging,
   dimensional weight, carrier seam, pickup and local-delivery windows.
   *(Evidence: variant weight/dims/`requires_shipping`; `shipping_zones`,
@@ -4958,7 +4961,7 @@ owner operations, never substitute for them.
   dimensional weight uses the 5000 divisor; smallest fitting box; calculated
   carrier methods skipped until an adapter exists; translated
   `/admin/shipping`; `tests/core/shipping-quote.test.ts`; changeset
-  `commerce-shipping-rates.md`. **F04** `/admin/promotions` coupons. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/shipping-quote.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/shipping-quote.test.ts` is the composition proof.)*
+  `commerce-shipping-rates.md`. **F04** `/admin/promotions` coupons. **F05** `catalog.createShippingZone`/`quoteShipping`/`listShippingCatalog`/`addShippingRateBand` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/shipping-quote.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/shipping-quote.test.ts` is the composition proof.)*
 - [x] **C5.19** Implement shipments, split fulfillment, tracking, digital
   delivery, returns/RMA, restock/refund convergence and customer notices, with
   admin fulfillment, return and exception workspaces.
@@ -4970,7 +4973,7 @@ owner operations, never substitute for them.
   (credit note + invoice refund); contact notices on ship/deliver/decide/
   refund; translated `/admin/fulfillment` and `/admin/returns`; live
   carrier labels stay on the adapter; `tests/core/catalog-fulfillment.test.ts`;
-  changeset `commerce-fulfillment.md`. **F04** `/admin/price-lists` price lists. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-fulfillment.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-fulfillment.test.ts` is the composition proof.)*
+  changeset `commerce-fulfillment.md`. **F04** `/admin/price-lists` price lists. **F05** `catalog.createFulfillment`/`shipFulfillment`/`grantDigitalFulfillment`/`requestReturn`/`listFulfillments` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-fulfillment.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-fulfillment.test.ts` is the composition proof.)*
 - [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
   cross-device restore, price/stock refresh and abandonment events.
   *(Evidence: `carts`, `cart_items`, `wishlists`, `wishlist_items` in
@@ -4980,7 +4983,7 @@ owner operations, never substitute for them.
   refreshes `resolvePrice` + availability; cart holds use `reserveStock`
   (`holderType=cart`); `catalog.abandonStaleCarts` hourly; translated
   `/admin/carts`; `tests/core/catalog-carts.test.ts`; changeset
-  `commerce-carts-orders.md`. **F04** `/admin/procurement` vendors. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-carts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-carts.test.ts` is the composition proof.)*
+  `commerce-carts-orders.md`. **F04** `/admin/procurement` vendors. **F05** `catalog.addCartItem`/`attachCartToContact`/`addWishlistItem`/`checkoutCart` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-carts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-carts.test.ts` is the composition proof.)*
 - [x] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
   consent, payment, idempotency, failure recovery and accessible confirmation.
   *(Evidence: `catalog.checkoutCart` attaches the guest cart, requires
@@ -5002,7 +5005,7 @@ owner operations, never substitute for them.
   from cart to order then consume on pay; timeline `order.placed` /
   `order.paid` / `order.cancelled`; translated `/admin/orders` and contact
   order history; customer portal order list waits on the portal; shipment
-  transitions stay C5.19; `tests/core/catalog-orders.test.ts`. **F04** `/admin/payments` provider status. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/catalog-orders.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-orders.test.ts` is the composition proof.)*
+  transitions stay C5.19; `tests/core/catalog-orders.test.ts`. **F04** `/admin/payments` provider status. **F05** `catalog.checkoutCart`/`payOrder`/`cancelOrder`/`getOrder`/`listOrders` at `/api/v1/catalog.*`, MCP `catalog_*`; `order.placed`/`paid`/`cancelled` fan out on the webhook bus. **F07** `tests/core/catalog-orders.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-orders.test.ts` is the composition proof.)*
 - [x] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
   post-add offers and abandoned-cart recovery without parallel money paths.
   *(Evidence: `coupons`, `coupon_redemptions`, `cart_coupons`, `gift_cards`,
@@ -5014,7 +5017,7 @@ owner operations, never substitute for them.
   sends one coupon + contact notice via `catalog.recoverAbandonedCarts`;
   translated `/admin/promotions`; `tests/core/promo-quote.test.ts` and
   `tests/core/catalog-promotions.test.ts`; changeset
-  `commerce-promotions.md`. **F04** customer gift-card/balance portal, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/promo-quote.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/promo-quote.test.ts` is the composition proof.)*
+  `commerce-promotions.md`. **F04** customer gift-card/balance portal, not a new admin screen. **F05** `catalog.applyCouponToCart`/`applyGiftCardToInvoice` plus promotion services at `/api/v1/catalog.*`, MCP `catalog_*`; customer gift-card portal is HTTP, not a new MCP family. **F07** `tests/core/promo-quote.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/promo-quote.test.ts` is the composition proof.)*
 - [x] **C5.24** Add in-person payment through capable adapters, including
   Stripe Terminal/tap-to-pay representation, receipts and reconciliation.
   *(Evidence: POS family now has `manual` cash and `stripe` Terminal/tap-to-pay
@@ -5102,7 +5105,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   owns that cursor, and a second copy is a second thing to get out of step.
   `/admin/calendars` is the workspace. `0085_calendars.sql`. Coverage in
   `tests/core/calendars.test.ts`; availability rules are C6.02 and the
-  resolver C6.03. **F04** `/admin/calendars` per-service calendars. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/calendars.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/calendars.test.ts` is the composition proof.)
+  resolver C6.03. **F04** `/admin/calendars` per-service calendars. **F05** `calendars.list`/`create`/`update`/`archive`/`setForService`/`forService` at `/api/v1/calendars.*`, MCP `calendars_*`. **F07** `tests/core/calendars.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/calendars.test.ts` is the composition proof.)
 - [x] **C6.02** Build normalized availability rules, opening hours, exceptions,
   buffers, lead time, horizon and recurrence with an admin availability editor.
   (`availability_rules` is the weekly pattern — weekday, hours, an optional
@@ -5128,7 +5131,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   exceptions one at a time, matching how each is actually edited; an empty day
   is a closed day rather than a row to delete. `0086_availability.sql`.
   Coverage in `tests/core/availability.test.ts`; the resolver that subtracts
-  bookings from these windows is C6.03. **F04** `/admin/calendars` availability. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/availability.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/availability.test.ts` is the composition proof.)
+  bookings from these windows is C6.03. **F04** `/admin/calendars` availability. **F05** `availability.rules`/`setRules`/`addException`/`windows`/`copyDay` at `/api/v1/availability.*`, MCP `availability_*`. **F07** `tests/core/availability.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/availability.test.ts` is the composition proof.)
 - [x] **C6.03** Implement the availability resolver for compound resources,
   assignment pools/round-robin, capacity, travel time and daily/period caps.
   (`src/core/scheduling/resolver.ts` derives slots at request time from all
@@ -5158,7 +5161,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   Coverage in `tests/core/resolver.test.ts` — each of the seven subtractions
   tested on its own against one simple week, so a failure names what broke.
   The catalog and business reads reuse the public call's transaction, enforced
-  repository-wide by `tests/core/service-composition.test.ts`. **F04** `/admin/appointments` bookings. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/resolver.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/resolver.test.ts` is the composition proof.)
+  repository-wide by `tests/core/service-composition.test.ts`. **F04** `/admin/appointments` bookings. **F05** `scheduling.slots` at `/api/v1/scheduling.slots`, MCP `scheduling_slots`. **F07** `tests/core/resolver.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/resolver.test.ts` is the composition proof.)
 - [x] **C6.04** Enforce no-overlap/exclusion constraints in Postgres and prove
   concurrent attempts cannot double-book.
   (Two shapes of calendar need two mechanisms, and only one of them is the
@@ -5181,7 +5184,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   test reads `pg_constraint` and asserts the `EXCLUDE USING gist` definition
   is really in the database, because a service-layer check that happened to
   pass every race would still be the wrong implementation. Coverage in
-  `tests/core/booking-concurrency.test.ts`. **F04** `/admin/calendars/audiences` audience links. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/booking-concurrency.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/booking-concurrency.test.ts` is the composition proof.)
+  `tests/core/booking-concurrency.test.ts`. **F04** `/admin/calendars/audiences` audience links. **F05** N/A as a new tool — overlap/exclusion is a Postgres constraint behind `bookings.create`. **F07** `tests/core/booking-concurrency.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/booking-concurrency.test.ts` is the composition proof.)
 - [x] **C6.05** Add booking audiences—public, token, tags and sign-in—with
   separate hours, services, calendars, notice, horizon and buffers.
   (§41's example is the specification: customers book during shop hours,
@@ -5209,7 +5212,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   tested that way, and the public path passes null rather than guessing from
   whoever happens to be signed in. `/admin/calendars/audiences`.
   `0090_booking_audiences.sql`. Coverage in
-  `tests/core/booking-audiences.test.ts`. **F04** public ICS `/ics/calendars/[token]`, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/booking-audiences.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/booking-audiences.test.ts` is the composition proof.)
+  `tests/core/booking-audiences.test.ts`. **F04** public ICS `/ics/calendars/[token]`, not a new admin screen. **F05** `audiences.create`/`link`/`rotateLink`/`setCalendars`/`setHours`/`setServices` at `/api/v1/audiences.*`, MCP `audiences_*`. **F07** `tests/core/booking-audiences.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/booking-audiences.test.ts` is the composition proof.)
 - [x] **C6.06** Publish/import ICS and implement Google/Microsoft booking write,
   cancellation and read-busy reconciliation without general event sync.
   (Two paths that must not add up to the same hour twice. The ICS path is text
@@ -5253,7 +5256,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   registry, and `getService` on an empty one throws — so a valid feed token
   answered 500. Both `/ics` routes and `/source` now `await ready()`, and
   `tests/core/route-boot.test.ts` refuses a route that names `getService`
-  without it. **F04** `/admin/calendars/waitlist`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/ics-and-writeback.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/ics-and-writeback.test.ts` is the composition proof.)
+  without it. **F04** `/admin/calendars/waitlist`. **F05** `calendars.issueFeed`/`feed`/`setIcsImport`/`revokeFeed` at `/api/v1/calendars.*`, MCP `calendars_*`; public ICS is `/ics/calendars/[token]` (not MCP). `bookings.ics` is MCP-excluded. **F07** `tests/core/ics-and-writeback.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/ics-and-writeback.test.ts` is the composition proof.)
 
 #### Bookings, rentals, and events
 - [x] **C6.07** Build booking create/hold/confirm/complete/cancel/no-show state,
@@ -5290,7 +5293,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   service allows, showing the zone the appointment was agreed in when it
   differs. Coverage in `tests/core/bookings.test.ts`, including two real
   concurrent transactions racing for one slot where exactly one wins —
-  C6.04 extends that proof. **F04** `/embed/booking` public booking. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/bookings.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/bookings.test.ts` is the composition proof.)
+  C6.04 extends that proof. **F04** `/embed/booking` public booking. **F05** `bookings.create`/`setStatus`/`list`/`get` at `/api/v1/bookings.*`, MCP `bookings_*`; public widget is `/embed/booking`. **F07** `tests/core/bookings.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/bookings.test.ts` is the composition proof.)
 - [x] **C6.08** Add group bookings, waitlists/promotion, reschedule tokens,
   policy/deadline enforcement and cancellation/refund outcomes with admin
   waitlist, reschedule and refund controls.
@@ -5323,7 +5326,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   exclusion constraint deliberately does not fire on a calendar whose bookings
   overlap by design. `/admin/calendars/waitlist`, guests and outcome on
   `/admin/appointments/<id>`. `0092_waitlists_and_policy.sql`. Coverage in
-  `tests/core/waitlists-and-policy.test.ts`. **F04** `/admin/appointments/[id]` reschedule/cancel. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/waitlists-and-policy.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/waitlists-and-policy.test.ts` is the composition proof.)
+  `tests/core/waitlists-and-policy.test.ts`. **F04** `/admin/appointments/[id]` reschedule/cancel. **F05** `waitlist.join`/`offer`/`claim`/`list` plus `bookings.reschedule`/`addParticipant` at `/api/v1`, MCP `waitlist_*`/`bookings_*`. Token reschedule is MCP-excluded. **F07** `tests/core/waitlists-and-policy.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/waitlists-and-policy.test.ts` is the composition proof.)
 - [x] **C6.09** Add intake forms, e-sign waivers/documents, reminders over
   consented channels and completion preconditions.
   (**The gate is on confirming, not on booking.** §4.4 asks for intake and a
@@ -5370,7 +5373,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   purpose-built `contracts.signedFor`, and `contracts.signingLink` was tightened
   from public to scoped-by-elevation, since a booking id appears in admin URLs
   and is not a credential. `0093_intake_waivers_reminders.sql`. Coverage in
-  `tests/core/intake-waivers-reminders.test.ts`. **F04** portal bookings, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/intake-waivers-reminders.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/intake-waivers-reminders.test.ts` is the composition proof.)
+  `tests/core/intake-waivers-reminders.test.ts`. **F04** portal bookings, not a new admin screen. **F05** `bookings.attachIntake`/`issueWaiver` plus `contracts.issueFromTemplate` at `/api/v1`; signing-link tokens are MCP-excluded. **F07** `tests/core/intake-waivers-reminders.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/intake-waivers-reminders.test.ts` is the composition proof.)
 - [x] **C6.10** Build rentals as resources plus catalog/inventory, availability,
   pickup/return, deposits, late/damage state and order/payment convergence.
   (**This module owns no availability, and that is the feature.** §4.2 settles
@@ -5399,7 +5402,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   the remedy must not then send a bill — while `lost` is a replacement whatever
   the policy says, because there is nothing left to inspect. `/admin/hire`,
   ordered overdue-first. `0094_rentals.sql`. Coverage in
-  `tests/core/rentals.test.ts`. **F04** `/admin/hire` rentals. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/rentals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/rentals.test.ts` is the composition proof.)
+  `tests/core/rentals.test.ts`. **F04** `/admin/hire` rentals. **F05** `rentals.quote`/`reserve`/`handOver`/`takeBack`/`setTerms`/`list` at `/api/v1/rentals.*`, MCP `rentals_*`. **F07** `tests/core/rentals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/rentals.test.ts` is the composition proof.)
 - [x] **C6.11** Build events/classes with venue, sessions, seat inventory,
   tickets/passes, waitlists, schema.org Event, ICS and check-in.
   *(Evidence: `events` module — venue fields, sessions with capacity,
@@ -5407,7 +5410,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   full and promote on cancel, check-in, Event JSON-LD, `/ics/events/{slug}`,
   public `/events` pages and `/admin/events`. Merge and privacy cover
   `event_registrations`. Migration `0059_concerned_sumo.sql`;
-  `tests/core/events.test.ts`. **F04** `/admin/events` list/create. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/events.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/events.test.ts` is the composition proof.)*
+  `tests/core/events.test.ts`. **F04** `/admin/events` list/create. **F05** `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at `/api/v1/events.*`, MCP `events_*`. **F07** `tests/core/events.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/events.test.ts` is the composition proof.)*
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
@@ -5441,7 +5444,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   whole record through a loose object and carrying the view token into every
   list; columns are now named one by one. `/admin/quotes`,
   `/portal/quotes/<token>`. `0095_quotes.sql`. Coverage in
-  `tests/core/quotes.test.ts`. **F04** `/admin/events/[id]` tickets. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/quotes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/quotes.test.ts` is the composition proof.)
+  `tests/core/quotes.test.ts`. **F04** `/admin/events/[id]` tickets. **F05** `quotes.create`/`setItems`/`send`/`revise`/`list`/`get` at `/api/v1/quotes.*`, MCP `quotes_*`. **F07** `tests/core/quotes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/quotes.test.ts` is the composition proof.)
 - [x] **C6.13** Convert accepted quotes atomically into contracts, projects,
   bookings and invoices as configured, without copied customer identities.
   (**Without copied customer identities** is the phrase the item chose to
@@ -5477,7 +5480,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   test found `requirePerson` in `projects.*` and `contracts.*` refusing the
   system actor — the same bug C6.09 hit, and both now admit elevation with the
   reasoning recorded at the guard. `0098_quote_conversion.sql`. Coverage in
-  `tests/core/quote-conversion.test.ts`. **F04** `/admin/quotes` list/create. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/quote-conversion.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/quote-conversion.test.ts` is the composition proof.)
+  `tests/core/quote-conversion.test.ts`. **F04** `/admin/quotes` list/create. **F05** `quotes.convert`/`setConversion`/`accept` at `/api/v1/quotes.*`, MCP `quotes_*`. **F07** `tests/core/quote-conversion.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/quote-conversion.test.ts` is the composition proof.)
 - [x] **C6.14** Build contract/waiver templates, variables, click/e-sign,
   signer identity, immutable evidence, countersignature and document export.
   **Taken ahead of C6.13 deliberately** (2026-08-22): C6.13 converts an
@@ -5511,7 +5514,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   true is that the words, the hashes, the signer and the times are all there
   and independently checkable, in a format that will still open in thirty
   years. `/admin/agreements`. `0096_contract_templates.sql`. Coverage in
-  `tests/core/contract-templates.test.ts`. **F04** `/admin/quotes/[id]` convert-to-invoice (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contract-templates.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-templates.test.ts` is the composition proof.)
+  `tests/core/contract-templates.test.ts`. **F04** `/admin/quotes/[id]` convert-to-invoice (C11.09 F04). **F05** `contracts.issue`/`issueFromTemplate`/`sign`/`byToken` at `/api/v1/contracts.*`; token sign is MCP-excluded. **F07** `tests/core/contract-templates.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-templates.test.ts` is the composition proof.)
 - [x] **C6.15** Build project/work records linking contacts, services, quotes,
   contracts, bookings, tasks, files, outcomes and invoices.
   (**This is the same entity C8.01 will publish, not a second one.** §4.7's
@@ -5546,7 +5549,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   neither half can exist without the other's key, because retrofitting that
   means asking an owner to re-upload work they have already filed.
   `/admin/projects`. `0097_projects.sql`. Coverage in
-  `tests/core/projects.test.ts`. **F04** `/admin/agreements` contracts. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/projects.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/projects.test.ts` is the composition proof.)
+  `tests/core/projects.test.ts`. **F04** `/admin/agreements` contracts. **F05** `projects.create`/`link`/`forSubject`/`list`/`get` at `/api/v1/projects.*`, MCP `projects_*`. **F07** `tests/core/projects.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/projects.test.ts` is the composition proof.)
 - [x] **C6.16** Build time entries against projects/bookings, rate resolution,
   billable review and one-step conversion to invoice lines.
   (§4.13 makes the case in one sentence — a time entry is "the difference
@@ -5584,7 +5587,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   `NULLS NOT DISTINCT` now, written in the migration because Drizzle has no
   expression for it — the same arrangement `0087`'s exclusion constraint uses.
   `/admin/time`. `0099_time_entries.sql`. Coverage in
-  `tests/core/time-entries.test.ts`. **F04** `/admin/agreements/[id]` sign. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/time-entries.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/time-entries.test.ts` is the composition proof.)
+  `tests/core/time-entries.test.ts`. **F04** `/admin/agreements/[id]` sign. **F05** `time.log`/`start`/`stop`/`invoice`/`list`/`setRate` at `/api/v1/time.*`, MCP `time_*`. **F07** `tests/core/time-entries.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/time-entries.test.ts` is the composition proof.)
 - [x] **C6.17** Build manual invoicing, recurring/payment-plan schedules,
   overdue state, reminders, receipts and accounting-ready audit.
   (Four of the six were already standing and were verified rather than
@@ -5626,7 +5629,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   on one hourly job, because billing what recurs, marking what is late and
   nudging what is unpaid are one thought. `/admin/invoices/recurring` and the
   chasing panel on each invoice. `0100_recurring_invoices.sql`. Coverage in
-  `tests/core/recurring-invoices.test.ts`. **F04** `/admin/invoices/[id]` chase reminders. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/recurring-invoices.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recurring-invoices.test.ts` is the composition proof.)
+  `tests/core/recurring-invoices.test.ts`. **F04** `/admin/invoices/[id]` chase reminders. **F05** `invoicing.createDraft`/`createPaymentPlan`/`createSchedule`/`scheduleReminders`/`markOverdueSweep` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/recurring-invoices.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recurring-invoices.test.ts` is the composition proof.)
 
 **C6 exit:** the same availability and money engines can sell time, spaces,
 equipment, classes and expertise without double-booking or duplicated records.
@@ -5672,7 +5675,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   a branch inside the service. The board is a kanban that works with no
   JavaScript — one small form per card — because a board an owner cannot use on
   a phone with a bad connection is not a board. `/admin/pipeline`.
-  `0101_pipelines.sql`. Coverage in `tests/core/pipelines.test.ts`. **F04** `/admin/pipeline` deals and lifecycle. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/pipelines.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/pipelines.test.ts` is the composition proof.)
+  `0101_pipelines.sql`. Coverage in `tests/core/pipelines.test.ts`. **F04** `/admin/pipeline` deals and lifecycle. **F05** `crm.listPipelines`/`savePipeline`/`createDeal`/`moveDeal`/`updateDeal`/`listDeals`/`lifecycleBoard` at `/api/v1/crm.*`, MCP `crm_*`. **F07** `tests/core/pipelines.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/pipelines.test.ts` is the composition proof.)
 - [x] **C7.02** Build tasks attachable to any entity, assignment, due/reminder,
   priority, recurrence, completion and briefing/notification integration.
   (One work list, and it lives in `core/tasks` rather than the CRM module: §4.14
@@ -5695,7 +5698,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   nudge twice, and an unassigned one is skipped rather than broadcast because the
   briefing already carries it. `briefing.tasks` reports only what is late or due
   today and only the person's own or nobody's. `/admin/tasks`, no JavaScript.
-  `0102_tasks.sql`. Coverage in `tests/core/tasks.test.ts`. **F04** `/admin/pipeline` stage move. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/tasks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/tasks.test.ts` is the composition proof.)
+  `0102_tasks.sql`. Coverage in `tests/core/tasks.test.ts`. **F04** `/admin/pipeline` stage move. **F05** `tasks.create`/`list`/`update`/`setStatus` plus `projects.addTask` at `/api/v1/tasks.*` and `/api/v1/projects.addTask`, MCP `tasks_*`/`projects_addTask`. **F07** `tests/core/tasks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/tasks.test.ts` is the composition proof.)
 - [x] **C7.03** Build notes with mentions, pinning, visibility, edit history and
   entity/contact timeline projection. (A note is usually the only record of what
   somebody agreed on a phone call, and every decision follows from that. **An
@@ -5719,7 +5722,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   copies of the visibility rule; it is mounted on the contact record and works
   without JavaScript. §4.14's subject list and its resolver moved to
   `core/subjects` the moment notes became the second caller. §11's tree updated.
-  `0103_notes.sql`. Coverage in `tests/core/notes.test.ts`. **F04** `/admin/tasks` CRM tasks. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/notes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/notes.test.ts` is the composition proof.)
+  `0103_notes.sql`. Coverage in `tests/core/notes.test.ts`. **F04** `/admin/tasks` CRM tasks. **F05** `notes.write`/`edit`/`pin`/`list`/`history`/`remove` at `/api/v1/notes.*`, MCP `notes_*`. **F07** `tests/core/notes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/notes.test.ts` is the composition proof.)
 - [x] **C7.04** Build the canonical segment query model, static/dynamic modes,
   preview/count, explainability, and reuse by every audience surface that exists
   today — which is pricing.
@@ -5752,7 +5755,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   older column can be retired without an audience quietly widening.
   `/admin/segments` previews a count before anything is saved and answers "why
   is this person in it", with no JavaScript. §11's tree updated.
-  `0104_segments.sql`. Coverage in `tests/core/segments.test.ts`. **F04** `/admin/segments` save/preview (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/segments.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/segments.test.ts` is the composition proof.)
+  `0104_segments.sql`. Coverage in `tests/core/segments.test.ts`. **F04** `/admin/segments` save/preview (C11.09 F04). **F05** `segments.save`/`preview`/`list`/`members`/`contains` at `/api/v1/segments.*`, MCP `segments_*`. **F07** `tests/core/segments.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/segments.test.ts` is the composition proof.)
 - [x] **C7.05** Build transparent scoring rules with decay, reason display,
   stage actions and no black-box scoring path. (§4.14 asks that "an owner must
   be able to read why someone is a 40", and the schema answers it by omission:
@@ -5782,7 +5785,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   name it had. Erasure deletes the ledger, because a score is a behavioural
   profile. `/admin/scoring` shows every rule in full; the contact page shows the
   number and every reason for it. `0105_scoring.sql`. Coverage in
-  `tests/core/scoring.test.ts`. **F04** `/admin/scoring` scores. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/scoring.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/scoring.test.ts` is the composition proof.)
+  `tests/core/scoring.test.ts`. **F04** `/admin/scoring` scores. **F05** `scoring.rules`/`saveRule`/`why`/`for`/`award` at `/api/v1/scoring.*`, MCP `scoring_*` (`scoring.advance` is MCP-excluded). **F07** `tests/core/scoring.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/scoring.test.ts` is the composition proof.)
 - [x] **C7.06** Build saved views with filters/columns/sort, ownership/sharing
   and durable URL/state semantics across major admin entities. (The durable-URL
   half was already decided, at the top of the contacts list: "filtering is a GET
@@ -5807,7 +5810,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   Wired on `/admin/contacts` (with the column picker, the only list here that is
   a real table), `/admin/tasks`, and `/admin/quotes` — which also gained the
   status filter it needed to have state worth saving. `0106_saved_views.sql`.
-  Coverage in `tests/core/saved-views.test.ts`. **F04** `/admin/inbox` conversations. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/saved-views.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/saved-views.test.ts` is the composition proof.)
+  Coverage in `tests/core/saved-views.test.ts`. **F04** `/admin/inbox` conversations. **F05** `views.list`/`save`/`setDefault`/`remove` at `/api/v1/views.*`, MCP `views_*`. **F07** `tests/core/saved-views.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/saved-views.test.ts` is the composition proof.)
 - [x] **C7.07** Build CSV import as map → validate → dry-run diff → commit →
   audit → reversible batch, always using contact resolution. (Each step has a
   characteristic way of going wrong and the design answers each one. **Parsing:**
@@ -5838,7 +5841,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   ordered, booked or been quoted is kept and counted so the owner is told. The
   ledger survives the undo, because "what did that file do" is asked a week
   later. `/admin/imports/contacts`. `0107_contact_imports.sql`. Coverage in
-  `tests/core/contact-import.test.ts`. **F04** `/admin/inbox` assign/snooze/close. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/contact-import.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contact-import.test.ts` is the composition proof.)
+  `tests/core/contact-import.test.ts`. **F04** `/admin/inbox` assign/snooze/close. **F05** `contactImports.begin`/`map`/`commit`/`revert`/`list`/`get` at `/api/v1/contactImports.*`, MCP `contactImports_*`. **F07** `tests/core/contact-import.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contact-import.test.ts` is the composition proof.)
 
 #### Conversations and messaging
 - [x] **C7.08** Build canonical conversations/messages/deliveries threaded by
@@ -5869,7 +5872,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   the threading claim is exercised by a real source rather than only by a test.
   C7.09 builds the inbox workflows on this, C7.10 the SMS adapter, C7.12
   consent. `/admin/contacts/[id]` shows the thread. `0108_conversations.sql`.
-  Coverage in `tests/core/conversations.test.ts`. **F04** `/admin/inbox` timeline. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/conversations.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/conversations.test.ts` is the composition proof.)
+  Coverage in `tests/core/conversations.test.ts`. **F04** `/admin/inbox` timeline. **F05** `conversations.record`/`list`/`get`/`markRead`/`recordDelivery` at `/api/v1/conversations.*`, MCP `conversations_*`. **F07** `tests/core/conversations.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/conversations.test.ts` is the composition proof.)
 - [x] **C7.09** Build assign/snooze/close/unread/search/filter/bulk workflows,
   reply context and one unified inbox without reimplementing a mail client.
   ("Without reimplementing a mail client" is the design brief, not a caveat: a
@@ -5895,7 +5898,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   threads reads as a list of things rather than a list of names. Filters live in
   the URL like every other list (C7.06). `/admin/inbox`, no JavaScript, with the
   checkboxes and the action bar in one form. `0109_inbox_search.sql`. Coverage
-  in `tests/core/inbox.test.ts`. **F04** `/admin/inbox` search/bulk. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/inbox.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/inbox.test.ts` is the composition proof.)
+  in `tests/core/inbox.test.ts`. **F04** `/admin/inbox` search/bulk. **F05** `conversations.assign`/`snooze`/`setStatus`/`reply`/`bulk`/`search`/`counts` at `/api/v1/conversations.*`, MCP `conversations_*`. **F07** `tests/core/inbox.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/inbox.test.ts` is the composition proof.)
 - [x] **C7.10** Build SMS adapter contract and at least one production adapter,
   number provisioning/health and country/capability metadata. (The adapter
   transports; core decides — §4.14 puts consent, quiet hours and who may be
@@ -5931,7 +5934,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   maps a bad signature to 400 (never retry a forgery) and a
   transient failure to 503 (never drop a customer's text). C7.09's reply now
   sends by SMS instead of refusing. `/admin/messaging`, `/api/sms/webhooks/twilio`.
-  `0110_messaging_numbers.sql`. Coverage in `tests/core/sms.test.ts`. **F04** `/admin/messaging` numbers. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/sms.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sms.test.ts` is the composition proof.)
+  `0110_messaging_numbers.sql`. Coverage in `tests/core/sms.test.ts`. **F04** `/admin/messaging` numbers. **F05** `messaging.sendSms`/`numbers`/`importNumbers` at `/api/v1/messaging.*`, MCP `messaging_*`; Twilio feedback is `/api/sms/webhooks/twilio` (not MCP). **F07** `tests/core/sms.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sms.test.ts` is the composition proof.)
 - [x] **C7.11** Track 10DLC/toll-free/alphanumeric registration states and
   prevent unsupported/unapproved sending with actionable setup guidance.
   (§4.14 names the failure this exists for — "an unregistered number silently
@@ -5963,7 +5966,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   survives later updates because "how long has this been in review" is the
   question owners actually ask. `/admin/messaging` shows all of it.
   `0111_number_registrations.sql`. Coverage in
-  `tests/core/sms-registration.test.ts`. **F04** `/admin/messaging` registration. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/sms-registration.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sms-registration.test.ts` is the composition proof.)
+  `tests/core/sms-registration.test.ts`. **F04** `/admin/messaging` registration. **F05** `messaging.registrations`/`setRegistration`/`checkNumbers` at `/api/v1/messaging.*`, MCP `messaging_*`. **F07** `tests/core/sms-registration.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sms-registration.test.ts` is the composition proof.)
 - [x] **C7.12** Enforce per-purpose/channel consent, STOP/START/HELP before all
   other processing, localized keywords and global opt-out propagation.
   (`messaging.sendSms` checks immutable affirmative SMS evidence before the
@@ -5976,7 +5979,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   only after the consent transaction commits. Compliance evidence participates
   in contact merge/undo, privacy export and erasure. Coverage in
   `tests/core/sms-consent.test.ts` plus the SMS/conversation/privacy/merge
-  regression suites. **F04** `/admin/messaging` compliance events (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/sms-consent.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sms-consent.test.ts` is the composition proof.)
+  regression suites. **F04** `/admin/messaging` compliance events (C11.09 F04). **F05** `messaging.complianceEvents` plus the consent gate on `messaging.sendSms` at `/api/v1/messaging.*`, MCP `messaging_*`. **F07** `tests/core/sms-consent.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sms-consent.test.ts` is the composition proof.)
 - [x] **C7.13** Enforce recipient-timezone quiet hours, frequency caps and
   explicit transactional exceptions in the service layer.
   (`messaging.evaluateSmsPolicy` is the one pre-adapter decision used by
@@ -5988,7 +5991,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   with its supporting reference stored on the message. Contact-scoped policy
   participates in merge/undo, privacy export and erasure. Coverage in
   `tests/core/sms-policy.test.ts` plus the messaging/privacy/merge regression
-  group. **F04** `/admin/messaging` quiet hours (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/sms-policy.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sms-policy.test.ts` is the composition proof.)
+  group. **F04** `/admin/messaging` quiet hours (C11.09 F04). **F05** `messaging.evaluateSmsPolicy`/`setWindow` at `/api/v1/messaging.*`, MCP `messaging_*` (quiet hours/caps before send). **F07** `tests/core/sms-policy.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sms-policy.test.ts` is the composition proof.)
 - [x] **C7.14** Add templates/locale variables, two-way keywords, booking
   actions, MMS via media, delivery receipts, invalid-number state and cost.
   (`0114_messaging_keywords_templates_mms.sql`; SMS joins email in the same
@@ -6006,7 +6009,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   is corrected or proven by a new inbound; merge/undo and privacy sources,
   system-only webhook projection, 53 focused messaging/template tests plus 47
   cross-cutting contract/merge/privacy/MCP tests, and changeset
-  `sms-templates-keywords-mms.md` **F04** `/admin/messaging` keyword rules (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `sms-templates-keywords-mms.md` landed with the rest of the spine.)
+  `sms-templates-keywords-mms.md` **F04** `/admin/messaging` keyword rules (C11.09 F04). **F05** `messaging.keywordRules`/`createKeywordRule`/`updateKeywordRule`/`deleteKeywordRule`/`keywordEvents` at `/api/v1/messaging.*`, MCP `messaging_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `sms-templates-keywords-mms.md` landed with the rest of the spine.)
 - [x] **C7.15** Add site live chat, assistant escalation and WhatsApp/Messenger
   deep links while preserving contact threads and consent boundaries.
   (`0115_site_live_chat.sql`; the existing block now starts a canonical
@@ -6026,7 +6029,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   fail closed. 23 focused chat/inbox tests and a 132-test contract/i18n/
   migration/merge/privacy/API regression group pass; production Next compile
   and the 9,351-file/191,375,423-byte standalone boundary pass; changeset
-  `site-live-chat.md`. **F04** `/admin/contacts/[id]` notes. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `site-live-chat.md` landed with the rest of the spine.)
+  `site-live-chat.md`. **F04** `/admin/contacts/[id]` notes. **F05** `messaging.postSiteChat`/`getSiteChat`/`endSiteChat`/`escalateAssistantChat` at `/api/v1/messaging.*` plus `/api/chat`; MCP `messaging_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `site-live-chat.md` landed with the rest of the spine.)
 - [x] **C7.16** Let owners opt selected signup flows into a skippable post-
   signup contact import from Google/Microsoft, vCard, CSV and supported device
   selection, with source/field/count controls, least-privilege consent, exact
@@ -6057,7 +6060,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   migration and en/es/fr RTL tests pass. Full-repository lint and typecheck
   pass; production Next compilation includes both portal routes and the OAuth
   callback, and the 9,479-file/193,623,512-byte standalone boundary reports no
-  source or environment leakage; changeset `signup-contact-import.md`. **F04** contact timeline on `/admin/contacts/[id]`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `signup-contact-import.md` landed with the rest of the spine.)
+  source or environment leakage; changeset `signup-contact-import.md`. **F04** contact timeline on `/admin/contacts/[id]`. **F05** signup-contact OAuth callbacks at `/api/connections/signup-contacts/[provider]/callback`; claim/apply services are MCP-excluded (credential exchange). **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `signup-contact-import.md` landed with the rest of the spine.)
 - [x] **C7.17** Adopt the C7.04 segment model as the audience for campaign
   broadcasts, the entry condition for automations and the cohort for reports, so
   no surface grows a second answer to "who".
@@ -6087,7 +6090,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   and `segments.members` all name the same person
   (`tests/modules/one-audience.test.ts`). A rule saying "call this service" can
   be obeyed by code that ignores the answer.
-  Migration `0139_automation_entry_segment.sql`. **F04** `/admin/segments` as the one 'who'. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/one-audience.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/one-audience.test.ts` is the composition proof.)
+  Migration `0139_automation_entry_segment.sql`. **F04** `/admin/segments` as the one 'who'. **F05** `segments.contains`/`members` at `/api/v1/segments.contains` and `/api/v1/segments.members` as the campaign audience (same C7.04 family). **F07** `tests/modules/one-audience.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/one-audience.test.ts` is the composition proof.)
 
 **C7 exit:** Freeholder tells the owner what work is owed and carries every
 permitted conversation on the same contact timeline.
@@ -6127,7 +6130,7 @@ permitted conversation on the same contact timeline.
   do full-repository lint and TypeScript. The production build includes
   `/admin/projects/[id]`, `/preview/project/[id]` and the public CMS catch-all;
   its 9,813-file/199,105,198-byte standalone boundary reports no source or
-  environment leakage. Changeset `project-case-studies.md`. **F04** `/admin/projects` collections. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `project-case-studies.md` landed with the rest of the spine.)
+  environment leakage. Changeset `project-case-studies.md`. **F04** `/admin/projects` collections. **F05** `projects.create`/`publish`/`publicForService`/`list`/`get` at `/api/v1/projects.*`, MCP `projects_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `project-case-studies.md` landed with the rest of the spine.)
 - [x] **C8.02** Build public portfolios and collections using CMS templates,
   filters, sharing, structured data, sitemaps and accessible media. (Migration
   `0118_project_portfolios.sql` adds normalized `project_collections` and
@@ -6158,7 +6161,7 @@ permitted conversation on the same contact timeline.
   registries, with full lint, TypeScript and licensing also clean. The
   production build includes both collection admin routes and reports 9,858
   files / 201,458,835 bytes with no source or environment leakage. Changeset
-  `public-project-portfolios.md`. **F04** `/admin/projects/[id]` tasks. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `public-project-portfolios.md` landed with the rest of the spine.)
+  `public-project-portfolios.md`. **F04** `/admin/projects/[id]` tasks. **F05** `projects.createCollection`/`publishCollection`/`portfolioBrowse`/`listCollections` at `/api/v1/projects.*`, MCP `projects_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** changeset `public-project-portfolios.md` landed with the rest of the spine.)
 - [x] **C8.03** Build private client galleries with PIN/magic-link/login access,
   scoped guests, expiry, per-asset permissions and access audit.
   (New `galleries` module — not media, not projects, not the C2.23 `proof`
@@ -6194,7 +6197,7 @@ permitted conversation on the same contact timeline.
   merge, erasure, robots, keyless delivery, view-only galleries, the
   durable download limit, secret rotation, session ownership and invite
   delivery. Changesets `client-galleries.md` and
-  `client-gallery-delivery-audit.md`. **F04** `/admin/time` time entries. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/client-galleries.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/client-galleries.test.ts` is the composition proof.)
+  `client-gallery-delivery-audit.md`. **F04** `/admin/time` time entries. **F05** `galleries.create`/`inviteGuest`/`unlock`/`myGalleries`/`list` at `/api/v1/galleries.*`, MCP `galleries_*`. **F07** `tests/core/client-galleries.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/client-galleries.test.ts` is the composition proof.)
 - [x] **C8.04** Render watermarked variants, and make `download_policy` decide
   what a client actually receives: `web_res` a rendition, `full_res` the
   master, and `watermark` a marked rendition for what a proof gallery shows
@@ -6225,7 +6228,7 @@ permitted conversation on the same contact timeline.
   pixel spread on a flat field, so a blank overlay fails — and five more in
   `tests/core/client-galleries.test.ts` covering web_res, full_res, the
   watermark precedence and both refusals. Changesets
-  `watermarked-proof-renditions.md` and `gallery-download-policy.md`. **F04** `/admin/galleries` list/create. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/media-watermark.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/media-watermark.test.ts` is the composition proof.)
+  `watermarked-proof-renditions.md` and `gallery-download-policy.md`. **F04** `/admin/galleries` list/create. **F05** `media.backfillWatermarks` plus `galleries.downloadItem`/`viewItem` at `/api/v1/media.backfillWatermarks` and `/api/v1/galleries.*`, MCP `media_*`/`galleries_*`. **F07** `tests/core/media-watermark.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/media-watermark.test.ts` is the composition proof.)
 - [x] **C8.05** Add gallery proofing: `GallerySelection` favorites, selects and
   rejects with per-asset comments, on the contact spine, from the client
   surface and the phone.
@@ -6253,7 +6256,7 @@ permitted conversation on the same contact timeline.
   knows whose taste that was. Seven tests in
   `tests/core/gallery-proofing.test.ts` cover the mark, the replacement, the
   guest's separate view, the view ceiling, undo, merge and erasure. EN/FR/ES.
-  Changeset `gallery-proofing.md`. **F04** `/admin/galleries/[id]` proofing. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/gallery-proofing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-proofing.test.ts` is the composition proof.)
+  Changeset `gallery-proofing.md`. **F04** `/admin/galleries/[id]` proofing. **F05** `galleries.setSelection`/`listSelections`/`clearSelection` at `/api/v1/galleries.*`, MCP `galleries_*`. **F07** `tests/core/gallery-proofing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-proofing.test.ts` is the composition proof.)
 - [x] **C8.06** Add approval rounds over a selection set — the owner finalizes,
   the client sees the round's state, and a reopened round keeps its history.
   (Migration `0122_gallery_rounds.sql`. §4.5 names no entity for this, so the
@@ -6282,7 +6285,7 @@ permitted conversation on the same contact timeline.
   refuses an empty set and refuses a second send while one is waiting;
   approve and send-back both refuse a round nobody submitted. Nine tests in
   `tests/core/gallery-rounds.test.ts`, including that reading twice creates
-  nothing. EN/FR/ES. Changeset `gallery-approval-rounds.md`. **F04** `/embed/gallery/[slug]` public gallery. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/gallery-rounds.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-rounds.test.ts` is the composition proof.)
+  nothing. EN/FR/ES. Changeset `gallery-approval-rounds.md`. **F04** `/embed/gallery/[slug]` public gallery. **F05** `galleries.submitRound`/`approveRound`/`reopenRound`/`listRounds` at `/api/v1/galleries.*`, MCP `galleries_*`. **F07** `tests/core/gallery-rounds.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-rounds.test.ts` is the composition proof.)
 - [x] **C8.07** Add archive/package delivery of a finished gallery and the
   notifications that carry it: gallery ready, selection submitted, round
   approved.
@@ -6320,7 +6323,7 @@ permitted conversation on the same contact timeline.
   with the code that produced the bytes proves only self-consistency. The
   container was also verified against an outside implementation
   (PowerShell `Expand-Archive`) during development. EN/FR/ES. Changeset
-  `gallery-archive-delivery.md`. **F04** portal galleries, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/gallery-archive.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-archive.test.ts` is the composition proof.)
+  `gallery-archive-delivery.md`. **F04** portal galleries, not a new admin screen. **F05** `galleries.requestArchive` at `/api/v1/galleries.requestArchive`, MCP `galleries_requestArchive`; build is the `galleries.buildArchives` job. **F07** `tests/core/gallery-archive.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-archive.test.ts` is the composition proof.)
 - [x] **C8.08** Add print/digital gallery sales through catalog/cart/orders and
   preserve asset/product/selection provenance.
   (Migration `0124_gallery_sales.sql`. §4.5 is explicit — "`GalleryItem`
@@ -6350,7 +6353,7 @@ permitted conversation on the same contact timeline.
   `tests/core/gallery-sales.test.ts` cover the two-lines guarantee, that
   ordinary shopping still merges, the sheet, the view ceiling and provenance
   surviving checkout; the existing cart, order and fulfilment suites pass
-  unchanged. Changeset `gallery-sales.md`. **F04** `/admin/galleries/[id]` price sheet through catalog. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/gallery-sales.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-sales.test.ts` is the composition proof.)
+  unchanged. Changeset `gallery-sales.md`. **F04** `/admin/galleries/[id]` price sheet through catalog. **F05** `catalog.addCartItem` through the gallery price sheet at `/api/v1/catalog.addCartItem`, MCP `catalog_addCartItem`. **F07** `tests/core/gallery-sales.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-sales.test.ts` is the composition proof.)
 - [x] **C8.09** Build review requests after purchases/bookings, moderation,
   replies, photo/video media, incentives, review-wall blocks and
   `AggregateRating` rules that never misrepresent hidden reviews.
@@ -6384,7 +6387,7 @@ permitted conversation on the same contact timeline.
   and **keeps the rating**, because a business's public rating is not the
   reviewer's personal data to withdraw. Eleven tests in
   `tests/core/reviews.test.ts`, one per rule above. EN/FR/ES. Changeset
-  `reviews.md`. **F04** `/admin/reviews` moderate/reply/request (C11.09 F04 sibling). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/reviews.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/reviews.test.ts` is the composition proof.)
+  `reviews.md`. **F04** `/admin/reviews` moderate/reply/request (C11.09 F04 sibling). **F05** `reviews.list`/`moderate`/`reply`/`request`/`submit`/`published` at `/api/v1/reviews.*`, MCP `reviews_*`. **F07** `tests/core/reviews.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/reviews.test.ts` is the composition proof.)
 - [x] **C8.10** Build the customer portal shell with magic-link/password auth,
   profile, locale, consent/preferences, sessions and accessible navigation.
   (Most of what this line names already existed and is reused rather than
@@ -6427,7 +6430,7 @@ permitted conversation on the same contact timeline.
   and the hash never is. A staff account holds no contact row and is told
   so, rather than being shown an empty shell that looks broken. Five tests
   in `tests/core/portal-shell.test.ts`, one per rule. EN/FR/ES, 84 keys.
-  Changeset `portal-shell.md`. **F04** customer portal shell `/portal`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/portal-shell.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portal-shell.test.ts` is the composition proof.)
+  Changeset `portal-shell.md`. **F04** customer portal shell `/portal`. **F05** `portal.myProfile`/`updateMyProfile`/`myRecords` at `/api/v1/portal.*`, MCP `portal_*`; magic-link/password stay `auth.*` (MCP-excluded). **F07** `tests/core/portal-shell.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portal-shell.test.ts` is the composition proof.)
 - [x] **C8.11** Add portal quotes/contracts/invoices/payments, bookings/events/
   rentals, gallery/files, orders/returns, subscriptions/passes, loyalty/
   referrals and messages using the same services as admin.
@@ -6478,7 +6481,7 @@ permitted conversation on the same contact timeline.
   pages are per-module work rather than something the registry can invent.
   Twelve tests in `tests/core/portal-rooms.test.ts`, five of them on the
   permission boundary rather than the portal. EN/FR/ES, 33 keys. Changeset
-  `portal-rooms.md`. **F04** portal rooms for quotes/invoices/bookings. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/portal-rooms.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portal-rooms.test.ts` is the composition proof.)
+  `portal-rooms.md`. **F04** portal rooms for quotes/invoices/bookings. **F05** portal rooms reuse `quotes.list`/`invoicing.*`/`bookings.myLinks` under the signed-in actor at `/api/v1`; no extra MCP family. **F07** `tests/core/portal-rooms.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portal-rooms.test.ts` is the composition proof.)
 - [x] **C8.12** Build a CMS-backed help centre/knowledge base with categories,
   search, locale variants, feedback, SEO and owner editing.
   (Migration `0126_help_centre.sql`. There is no `help_articles` table,
@@ -6520,7 +6523,7 @@ permitted conversation on the same contact timeline.
   that redirects with a flag, so the public surface stays the unhydrated
   HTML §5 and the SEO gate depend on.
   Twelve tests in `tests/modules/help-centre.test.ts`, one per rule.
-  EN/FR/ES, 27 keys. Changeset `help-centre.md`. **F04** `/admin/pages` help categories and `/admin/pages/[id]` file-in-help-centre (C11.09 F04) — not a second CMS. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/help-centre.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/help-centre.test.ts` is the composition proof.)
+  EN/FR/ES, 27 keys. Changeset `help-centre.md`. **F04** `/admin/pages` help categories and `/admin/pages/[id]` file-in-help-centre (C11.09 F04) — not a second CMS. **F05** `cms.helpCategories`/`helpArticles`/`searchHelp`/`fileHelpArticle`/`saveHelpCategory` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/modules/help-centre.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/help-centre.test.ts` is the composition proof.)
 - [x] **C8.13** Build documents/files shared to contacts/projects/portal with
   versioning, access rules, expiry, download audit and export.
   (New `documents` module, migration `0132_documents.sql`. §4.5 gained the
@@ -6548,7 +6551,7 @@ permitted conversation on the same contact timeline.
   `contacts.merge` and register a privacy source; the access row survives
   erasure with its person removed, as an attribution touch does.
   Portal room registered through C8.11's registry, so no page changed.
-  Tests: `tests/modules/documents.test.ts`. **F04** `/admin/documents` share with contacts. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/documents.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/documents.test.ts` is the composition proof.)
+  Tests: `tests/modules/documents.test.ts`. **F04** `/admin/documents` share with contacts. **F05** `documents.save`/`share`/`open`/`list`/`export`/`revokeShare` at `/api/v1/documents.*`, MCP `documents_*`. **F07** `tests/modules/documents.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/documents.test.ts` is the composition proof.)
 
 **C8 exit:** the business can prove, deliver and support its work while each
 customer has one secure, comprehensible home for the relationship.
@@ -6584,7 +6587,7 @@ customer has one secure, comprehensible home for the relationship.
   not decisions, so publishing is the decision that writes history.
   Restoring an old version fills the draft rather than rewriting it.
   Runs, delays and per-contact state are C9.02; the guardrails are C9.03.
-  Tests: `tests/modules/automations.test.ts`. **F04** `/admin/automations` list/create. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/automations.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/automations.test.ts` is the composition proof.)
+  Tests: `tests/modules/automations.test.ts`. **F04** `/admin/automations` list/create. **F05** `automations.save`/`list`/`get`/`publish`/`triggers`/`verbs` at `/api/v1/automations.*`, MCP `automations_*`. **F07** `tests/modules/automations.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/automations.test.ts` is the composition proof.)
 - [x] **C9.02** Add delays, schedules, branches, loops with hard bounds,
   idempotency, per-contact state, retries, pause/kill and run inspection.
   (§4.17. Runs, steps, approvals and spend moved to `core/runs`, so a mixed
@@ -6602,7 +6605,7 @@ customer has one secure, comprehensible home for the relationship.
   unbounded. Bounds are checked before each step, not after. Idempotency is
   a unique index on (subject, key), since the outbox retries and a check in
   the handler loses that race.
-  Tests: `tests/modules/automations-runtime.test.ts`. **F04** `/admin/automations/[id]` graph editor. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/automations-runtime.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/automations-runtime.test.ts` is the composition proof.)
+  Tests: `tests/modules/automations-runtime.test.ts`. **F04** `/admin/automations/[id]` graph editor. **F05** `automations.validate`/`versions`/`versionGraph`/`restoreVersion` at `/api/v1/automations.*`, MCP `automations_*` (graph persists through `automations.save`). **F07** `tests/modules/automations-runtime.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/automations-runtime.test.ts` is the composition proof.)
 - [x] **C9.03** Enforce consent, quiet hours, budgets, approval requirements and
   untrusted-input rules for every automated action.
   (§4.17: the guardrails are properties of the run, not of the step kind, so a
@@ -6623,7 +6626,7 @@ customer has one secure, comprehensible home for the relationship.
   Consent is checked for marketing only — `CONSENT_PURPOSES` has no
   "transactional" because §4.14 does not require consent for what is owed to
   somebody, and the caller states which it is rather than the verb guessing.
-  Tests: `tests/modules/automations-guardrails.test.ts`. **F04** `/admin/automations/[id]` run list/kill (C11.09 F04). **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/automations-guardrails.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/automations-guardrails.test.ts` is the composition proof.)
+  Tests: `tests/modules/automations-guardrails.test.ts`. **F04** `/admin/automations/[id]` run list/kill (C11.09 F04). **F05** `automations.checkGuardrails`/`runs`/`inspectRun`/`killRun` at `/api/v1/automations.*`, MCP `automations_*`. **F07** `tests/modules/automations-guardrails.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/automations-guardrails.test.ts` is the composition proof.)
 - [x] **C9.04** Build newsletters, double-opt-in subscriptions, RFC 8058 one-
   click unsubscribe, public issue archive and per-newsletter preference state.
   *(Evidence: `newsletters` module — identities, draft/published issues,
@@ -6631,7 +6634,7 @@ customer has one secure, comprehensible home for the relationship.
   RFC 8058 `List-Unsubscribe` / one-click POST at `/unsubscribe`, public
   `/newsletters` archive and per-newsletter subscription status. Merge keeps
   one row per newsletter. Migration `0059_concerned_sumo.sql`;
-  `tests/core/newsletters.test.ts`. **F04** `/admin/newsletters` subscriptions. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/newsletters.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/newsletters.test.ts` is the composition proof.)*
+  `tests/core/newsletters.test.ts`. **F04** `/admin/newsletters` subscriptions. **F05** `newsletters.create`/`subscribe`/`confirm`/`unsubscribe`/`list` at `/api/v1/newsletters.*`, MCP `newsletters_*`; public `/newsletters/confirm` and `/unsubscribe`. **F07** `tests/core/newsletters.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/newsletters.test.ts` is the composition proof.)*
 - [x] **C9.05** Build shared block-based templates for transactional, campaign,
   newsletter, automation and SMS uses with locale variants and locked variables.
   (§30's "one template model serves everything", taken literally: one
@@ -6655,7 +6658,7 @@ customer has one secure, comprehensible home for the relationship.
   the variables and every translation survive.
   Admin at `/admin/newsletters/templates` — `/admin/templates` is already
   C2.13's *content* templates, a different thing wearing the same word.
-  Migration `0136_message_templates.sql`; `tests/modules/templates.test.ts`. **F04** `/admin/newsletters/templates`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/templates.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/templates.test.ts` is the composition proof.)
+  Migration `0136_message_templates.sql`; `tests/modules/templates.test.ts`. **F04** `/admin/newsletters/templates`. **F05** `templates.list`/`save`/`render`/`slots` plus `cms.ensureTemplates` at `/api/v1/templates.*` and `/api/v1/cms.ensureTemplates`, MCP `templates_*`. **F07** `tests/modules/templates.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/templates.test.ts` is the composition proof.)
 - [x] **C9.06** Build broadcasts/segments, test sends, scheduling, provider
   batches, suppression, bounce/complaint handling and honest local analytics.
   (A broadcast is a template (C9.05) plus a segment (§30's "unit of who") plus
@@ -6698,7 +6701,7 @@ customer has one secure, comprehensible home for the relationship.
   resume, cancel, test send and the per-recipient record. The newsletters index
   now links to it and to C9.05's templates, which nothing linked to.
   Migration `0137_broadcasts.sql`; `tests/modules/broadcasts.test.ts`, whose
-  webhook test runs the whole chain from provider event to campaign figure. **F04** `/admin/newsletters/broadcasts`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/broadcasts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/broadcasts.test.ts` is the composition proof.)
+  webhook test runs the whole chain from provider event to campaign figure. **F04** `/admin/newsletters/broadcasts`. **F05** `broadcasts.save`/`testSend`/`start`/`pause`/`resume`/`list`/`stats` at `/api/v1/broadcasts.*`, MCP `broadcasts_*`. **F07** `tests/modules/broadcasts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/broadcasts.test.ts` is the composition proof.)
 - [x] **C9.07** Complete the funnel from visit → lead → quote/booking/cart →
   invoice → paid/refunded and make attribution/query definitions inspectable.
   (§4.7 states the design in a line — "Funnel = `AnalyticsEvent` joined through
@@ -6728,7 +6731,7 @@ customer has one secure, comprehensible home for the relationship.
   the admin screen prints them under the chart. A number an owner cannot
   interrogate is a number they are entitled to disbelieve.
   Admin at `/admin/traffic/funnel`, linked from traffic. No migration — every
-  stage reads tables that already exist. `tests/modules/funnel.test.ts`. **F04** `/admin/traffic/funnel`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/funnel.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/funnel.test.ts` is the composition proof.)
+  stage reads tables that already exist. `tests/modules/funnel.test.ts`. **F04** `/admin/traffic/funnel`. **F05** `analytics.funnel`/`funnelDefinitions`/`identify` at `/api/v1/analytics.*`, MCP `analytics_*`. **F07** `tests/modules/funnel.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/funnel.test.ts` is the composition proof.)
 - [x] **C9.08** Build reporting saved views and the revenue/service/product/
   location/cohort/funnel report set.
   (Split under §43.17.1: the original item carried a module's worth of work in
@@ -6763,7 +6766,7 @@ customer has one secure, comprehensible home for the relationship.
   against the report's own input when saved rather than when opened, so a view
   cannot rot into a question the report will not answer.
   Admin at `/admin/reports`, with the definitions printed under the figures.
-  Migration `0138_report_views.sql`; `tests/modules/reporting.test.ts`. **F04** `/admin/reports`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/reporting.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/reporting.test.ts` is the composition proof.)
+  Migration `0138_report_views.sql`; `tests/modules/reporting.test.ts`. **F04** `/admin/reports`. **F05** `reports.revenue`/`revenueBy`/`funnel`/`cohort`/`saveView`/`listViews` at `/api/v1/reports.*`, MCP `reports_*`. **F07** `tests/modules/reporting.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/reporting.test.ts` is the composition proof.)
 
 #### Referral, loyalty, subscriptions, and paywalls
 - [x] **C9.09** Build first-party attribution touches, codes, invitations,
@@ -6810,7 +6813,7 @@ customer has one secure, comprehensible home for the relationship.
   business's own record of where its customers came from, so the count is
   not the individual's to withdraw, but the link to them is.
   Fifteen tests in `tests/modules/referrals.test.ts`. Changeset
-  `referral-attribution.md`. **F04** `/admin/referrals` attribution. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/referrals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/referrals.test.ts` is the composition proof.)
+  `referral-attribution.md`. **F04** `/admin/referrals` attribution. **F05** `referrals.recordTouch`/`issueCode`/`invite`/`codes`/`programs`/`saveProgram` at `/api/v1/referrals.*`, MCP `referrals_*`. **F07** `tests/modules/referrals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/referrals.test.ts` is the composition proof.)
 - [x] **C9.10** Build commission events, holdbacks, refund reversal, payout
   batches/CSV, tax-form status, portal earnings and one-hop enforcement,
   and dual-sided referral rewards that may pay in loyalty points.
@@ -6847,7 +6850,7 @@ customer has one secure, comprehensible home for the relationship.
   exists before C9.09. C9.12 built the half that belongs to loyalty: a
   reward is granted through `core/rewards/issue.ts`, so the referral rail
   will call the same seam commerce already answers rather than growing a
-  second way to pay somebody. **F04** `/admin/referrals/payouts`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/referrals-commission.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/referrals-commission.test.ts` is the composition proof.)
+  second way to pay somebody. **F04** `/admin/referrals/payouts`. **F05** `referrals.buildPayoutBatch`/`approvePayoutBatch`/`markPayoutBatchPaid`/`payoutBatches`/`payoutBatchCsv` at `/api/v1/referrals.*`, MCP `referrals_*`. **F07** `tests/modules/referrals-commission.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/referrals-commission.test.ts` is the composition proof.)
 - [x] **C9.11** Build loyalty programs, accounts and append-only points ledger,
   earn listeners/caps, reversal, expiry notices and explainable balances.
   (New `loyalty` module, migration `0127_loyalty.sql`. Tiers, rewards and
@@ -6899,7 +6902,7 @@ customer has one secure, comprehensible home for the relationship.
   because unlike a public review a balance is a private arrangement between
   one business and one person.
   Sixteen tests in `tests/modules/loyalty.test.ts`, driven through the bus
-  the way the outbox drives it. Changeset `loyalty-points.md`. **F04** `/admin/loyalty` ledger. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/loyalty.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/loyalty.test.ts` is the composition proof.)
+  the way the outbox drives it. Changeset `loyalty-points.md`. **F04** `/admin/loyalty` ledger. **F05** `loyalty.saveProgram`/`enrol`/`adjustPoints`/`statement`/`myStatement` at `/api/v1/loyalty.*`, MCP `loyalty_*`. **F07** `tests/modules/loyalty.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/loyalty.test.ts` is the composition proof.)
 - [x] **C9.12** Build tiers/evaluation, rewards/redemption through normal money,
   fraud controls and outstanding-liability reporting.
   (Migration `0128_loyalty_tiers_rewards.sql`, extending the C9.11 module.
@@ -6940,7 +6943,7 @@ customer has one secure, comprehensible home for the relationship.
   that debited points and then failed to produce anything is the single
   worst outcome available here.
   Sixteen tests in `tests/modules/loyalty-rewards.test.ts`; the C9.11 suite
-  passes unchanged. Changeset `loyalty-tiers-rewards.md`. **F04** `/admin/loyalty` tiers/rewards. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/loyalty-rewards.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/loyalty-rewards.test.ts` is the composition proof.)
+  passes unchanged. Changeset `loyalty-tiers-rewards.md`. **F04** `/admin/loyalty` tiers/rewards. **F05** `loyalty.saveTier`/`saveReward`/`redeem`/`reevaluateTier`/`tiers`/`rewards` at `/api/v1/loyalty.*`, MCP `loyalty_*`. **F07** `tests/modules/loyalty-rewards.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/loyalty-rewards.test.ts` is the composition proof.)
 - [x] **C9.13** Build plans, the subscription lifecycle and its events, trials,
   `manual` billing, pause/cancel and portal self-service.
   (Split under §43.17.1: the original line carried seven capabilities, and
@@ -6984,7 +6987,7 @@ customer has one secure, comprehensible home for the relationship.
   — plus §4.15's mandatory portal self-service: a customer's own room and
   `subscriptions.cancelMine`, which resolves the contact from the session and
   can only ever reach their own row.
-  Migration `0140_subscriptions.sql`; `tests/modules/subscriptions.test.ts`. **F04** `/admin/subscriptions` plans. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/subscriptions.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/subscriptions.test.ts` is the composition proof.)
+  Migration `0140_subscriptions.sql`; `tests/modules/subscriptions.test.ts`. **F04** `/admin/subscriptions` plans. **F05** `subscriptions.enroll`/`list`/`get`/`cancel`/`changePlan` at `/api/v1/subscriptions.*`, MCP `subscriptions_*`. **F07** `tests/modules/subscriptions.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/subscriptions.test.ts` is the composition proof.)
 - [x] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
   one-time unlocks, loyalty tiers and manually granted access.
   (Access lives in core, not in the subscriptions module: a grantor can be a
@@ -7007,7 +7010,7 @@ customer has one secure, comprehensible home for the relationship.
   colliding the unique index; erasure revokes rather than deleting the record
   of what was held.
   Admin at `/admin/access`. Migration `0142_entitlements.sql`;
-  `tests/core/entitlements.test.ts`. Changeset `access-from-grants.md`. **F04** `/admin/access` entitlements. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/entitlements.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/entitlements.test.ts` is the composition proof.)
+  `tests/core/entitlements.test.ts`. Changeset `access-from-grants.md`. **F04** `/admin/access` entitlements. **F05** `entitlements.save`/`grant`/`revoke`/`hasAccess`/`issuePass`/`issueUnlock` plus `subscriptions.grants` at `/api/v1/entitlements.*`, MCP `entitlements_*`. **F07** `tests/core/entitlements.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/entitlements.test.ts` is the composition proof.)
 - [x] **C9.15** Build hard/soft/metered/registration paywalls, server-side
   exclusion, anonymous/contact counters, teasers, upsell and accurate SEO markup.
   (A page does not carry "members only". `Paywall` selects content by kind and
@@ -7028,7 +7031,7 @@ customer has one secure, comprehensible home for the relationship.
   document head. `seo_policy` is stored as flexible sampling vs fully gated
   so the markup matches the choice rather than an owner's help-doc judgement.
   Admin at `/admin/paywalls`. Migration `0143_paywalls.sql`;
-  `tests/core/paywalls.test.ts`. Changeset `paywalls.md`. **F04** `/admin/paywalls`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/paywalls.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/paywalls.test.ts` is the composition proof.)
+  `tests/core/paywalls.test.ts`. Changeset `paywalls.md`. **F04** `/admin/paywalls`. **F05** `paywalls.evaluate`/`list`/`save` at `/api/v1/paywalls.*`, MCP `paywalls_*`. **F07** `tests/core/paywalls.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/paywalls.test.ts` is the composition proof.)
 - [x] **C9.16** Build dunning retries, grace periods, consented notices, final
   policy actions and access continuity/expiry guarantees.
   (`DunningPolicy` is one row per plan: retries as day offsets, `grace_days`,
@@ -7044,7 +7047,7 @@ customer has one secure, comprehensible home for the relationship.
   is what C9.13 already did.
   Admin on `/admin/subscriptions` with the plan. Migration
   `0144_dunning.sql`; `tests/modules/subscriptions.test.ts`. Changeset
-  `dunning.md`. **F04** `/admin/subscriptions` dunning. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/subscriptions.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/subscriptions.test.ts` is the composition proof.)
+  `dunning.md`. **F04** `/admin/subscriptions` dunning. **F05** `subscriptions.advanceDunning`/`recoverDunning` at `/api/v1/subscriptions.*`, MCP `subscriptions_*`; notices ride `notifications.create`. **F07** `tests/modules/subscriptions.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/subscriptions.test.ts` is the composition proof.)
 
 #### Advertising, assistant, social, and sharing
 - [x] **C9.17** Build ad sizes/slots, breakpoint reservations, advertisers,
@@ -7089,7 +7092,7 @@ customer has one secure, comprehensible home for the relationship.
   SQL. The list lives in TypeScript, `ads.ensureSizes` applies it
   idempotently, and the module answers `settings.setupCompleted` with it —
   the same seam cms already uses. The failing test is what found it.
-  Nineteen tests in `tests/modules/ads.test.ts`. Changeset `ad-inventory.md`. **F04** `/admin/ads` inventory. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/ads.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads.test.ts` is the composition proof.)
+  Nineteen tests in `tests/modules/ads.test.ts`. Changeset `ad-inventory.md`. **F04** `/admin/ads` inventory. **F05** `ads.saveAdvertiser`/`saveCampaign`/`saveLineItem`/`ensureSizes`/`adsTxt` at `/api/v1/ads.*`, MCP `ads_*`; public `/ads.txt`. **F07** `tests/modules/ads.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads.test.ts` is the composition proof.)
 - [x] **C9.18** Build house/sold creatives, money-path invoices, labelled
   sponsored markup, signed click redirect and house fill.
   (`ad_creatives` in migration 0141, `ads.serve`, `ads.recordClick`,
@@ -7144,7 +7147,7 @@ customer has one secure, comprehensible home for the relationship.
   C9.20 included, and its viewability rule (two continuous seconds rather
   than one) has nowhere to live. Recorded rather than quietly dropped.
   Thirty tests in `tests/modules/ads-serving.test.ts`. Changeset
-  `ad-creatives.md`. **F04** `/admin/ads` creatives. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/ads-serving.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads-serving.test.ts` is the composition proof.)
+  `ad-creatives.md`. **F04** `/admin/ads` creatives. **F05** `ads.saveCreative`/`reviewCreative`/`invoiceCampaign`/`serve` at `/api/v1/ads.*`, MCP `ads_*`. **F07** `tests/modules/ads-serving.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads-serving.test.ts` is the composition proof.)
 - [x] **C9.19** Build first-party impression/viewability/unique/click events,
   MRC timing, daily rollups, pacing, advertiser reports and reconciliation.
   (Events stream into analytics as `ad.impression`, `ad.viewable`, `ad.click`
@@ -7160,7 +7163,7 @@ customer has one secure, comprehensible home for the relationship.
   delivered amount. Video viewability (two seconds) is named and unused,
   matching the C9.18 gap.
   Admin on `/admin/ads`. Migration `0145_ad_stats.sql`;
-  `tests/modules/ads-measurement.test.ts`. Changeset `ad-measurement.md`. **F04** `/admin/ads` measurement. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/ads-measurement.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads-measurement.test.ts` is the composition proof.)
+  `tests/modules/ads-measurement.test.ts`. Changeset `ad-measurement.md`. **F04** `/admin/ads` measurement. **F05** `ads.recordBeacon`/`recordClick`/`rollUpStats`/`campaignReport` at `/api/v1/ads.*`, MCP `ads_*`; public `/api/ads/view`. **F07** `tests/modules/ads-measurement.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads-measurement.test.ts` is the composition proof.)
 - [x] **C9.20** Support consent-gated third-party tags off by default and
   generate accurate `ads.txt`/`app-ads.txt`.
   (`html_tag` and `provider` on `ad_creatives`; `ad_txt_entries` is the
@@ -7171,7 +7174,7 @@ customer has one secure, comprehensible home for the relationship.
   `fh_tc` cookie is `granted` — not implied by first-party analytics consent.
   A winning third-party creative without a choice reserves the hole and asks;
   a denial falls through to house fill. Migration `0146_ad_third_party.sql`;
-  `tests/modules/ads-third-party.test.ts`. Changeset `ad-third-party.md`. **F04** `/admin/ads` third-party tags. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/ads-third-party.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads-third-party.test.ts` is the composition proof.)
+  `tests/modules/ads-third-party.test.ts`. Changeset `ad-third-party.md`. **F04** `/admin/ads` third-party tags. **F05** consent-gated tags plus `/api/ads/third-party-consent`; campaign config stays `ads.*` at `/api/v1/ads.*`. **F07** `tests/modules/ads-third-party.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads-third-party.test.ts` is the composition proof.)
 - [x] **C9.21** Build the optional front-site assistant with AI adapters,
   provider/model/key settings, hard scopes, spend/rate limits and off fallback.
   (New `assistant` module, migration `0147_front_site_assistant.sql`, plus
@@ -7189,7 +7192,7 @@ customer has one secure, comprehensible home for the relationship.
   variable. Scopes are a catalogue in `actions.ts`, not a prompt; the
   model never supplies who a quote request is for. C9.22 is grounding;
   C9.23 is invented prices and injection. Tests in
-  `tests/modules/assistant.test.ts`. Changeset `front-site-assistant.md`. **F04** `/admin/assistant`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/assistant.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/assistant.test.ts` is the composition proof.)
+  `tests/modules/assistant.test.ts`. Changeset `front-site-assistant.md`. **F04** `/admin/assistant`. **F05** `assistant.answer`/`settings`/`updateSettings`/`turns` at `/api/v1/assistant.*` plus `/api/chat/assistant`, MCP `assistant_*`. **F07** `tests/modules/assistant.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/assistant.test.ts` is the composition proof.)
 - [x] **C9.22** Ground the assistant from published content/catalog/hours/
   policies plus locale-aware `KnowledgeEntry` rows in pgvector/Postgres.
   (`knowledge_entries` is the owner-written Q&A/fact/policy, locale-aware
@@ -7205,7 +7208,7 @@ customer has one secure, comprehensible home for the relationship.
   locale and the prompt may quote only from them. Migration
   `0148_assistant_grounding.sql`. Tests in
   `tests/modules/assistant-grounding.test.ts`. Changeset
-  `assistant-grounding.md`. **F04** `/admin/assistant` grounding. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/assistant-grounding.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/assistant-grounding.test.ts` is the composition proof.)
+  `assistant-grounding.md`. **F04** `/admin/assistant` grounding. **F05** `assistant.knowledgeList`/`saveKnowledge`/`reindex`/`setScope`/`scopes` at `/api/v1/assistant.*`, MCP `assistant_*`. **F07** `tests/modules/assistant-grounding.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/assistant-grounding.test.ts` is the composition proof.)
 - [x] **C9.23** Prevent invented price/availability, enforce refusals and
   escalation, attach consented transcripts to contacts, surface knowledge gaps
   and prove prompt-injection resistance.
@@ -7224,7 +7227,7 @@ customer has one secure, comprehensible home for the relationship.
   refused even when the visitor asks the model to grant it. Migration
   `0149_assistant_guardrails.sql`. Tests in
   `tests/modules/assistant-guardrails.test.ts`. Changeset
-  `assistant-guardrails.md`. **F04** `/admin/assistant` guardrails. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/assistant-guardrails.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/assistant-guardrails.test.ts` is the composition proof.)
+  `assistant-guardrails.md`. **F04** `/admin/assistant` guardrails. **F05** refusals live inside `assistant.answer` at `/api/v1/assistant.answer`; `assistant.replied`/`assistant.refused` fan out on the webhook bus. **F07** `tests/modules/assistant-guardrails.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/assistant-guardrails.test.ts` is the composition proof.)
 - [x] **C9.24** Build social OAuth/adapters for Instagram, Facebook, TikTok,
   YouTube, LinkedIn, X, Pinterest and Google Business Profile with multiple
   profiles/provider, capability discovery and health; explicitly assign each
@@ -7242,7 +7245,7 @@ customer has one secure, comprehensible home for the relationship.
   Migration `0150_social_profiles.sql`. Tests in
   `tests/modules/social.test.ts` and
   `tests/adapters/social-conformance.test.ts`. Changeset
-  `social-connections.md`. **F04** `/admin/social` connections. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/social.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social.test.ts` is the composition proof.)
+  `social-connections.md`. **F04** `/admin/social` connections. **F05** `social.beginOAuth`/`completeOAuth`/`assignProfile`/`disconnectProfile` at `/api/v1/social.*`, MCP `social_*`; callback `/api/social/[provider]/callback`. **F07** `tests/modules/social.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social.test.ts` is the composition proof.)
 - [x] **C9.25** Ingest owned posts/media into canonical packages with rights,
   checksum, source/publication ancestry and provenance; reclaim Assets, prevent
   repost loops, resolve identifiable contacts conservatively and route social
@@ -7260,7 +7263,7 @@ customer has one secure, comprehensible home for the relationship.
   `conversations.record` on channel `social`; a handle alone is stored
   but does not create a contact. Migration `0151_social_ingest.sql`.
   Tests in `tests/modules/social-ingest.test.ts`. Changeset
-  `social-ingest.md`. **F04** `/admin/social` ingest. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/social-ingest.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-ingest.test.ts` is the composition proof.)
+  `social-ingest.md`. **F04** `/admin/social` ingest. **F05** `social.ingestProfile`/`packageList`/`draftFromPackage`/`interactionList` at `/api/v1/social.*`, MCP `social_*`. **F07** `tests/modules/social-ingest.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-ingest.test.ts` is the composition proof.)
 - [x] **C9.26** Build multi-platform composer/cross-pollination from authored,
   ingested, phone and screen-captured media; generate editable safe-area crops,
   clips, thumbnails, captions/alt/hashtags and codec/size/duration variants via
@@ -7279,7 +7282,7 @@ customer has one secure, comprehensible home for the relationship.
   success on another.
   `social.publicationCalendar` is the one calendar. Migration
   `0152_social_composer.sql`. Tests in
-  `tests/modules/social-composer.test.ts`. Changeset `social-composer.md`. **F04** `/admin/social` composer. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/social-composer.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-composer.test.ts` is the composition proof.)
+  `tests/modules/social-composer.test.ts`. Changeset `social-composer.md`. **F04** `/admin/social` composer. **F05** `social.composePackage`/`createVariants`/`schedulePublications`/`publicationCalendar` at `/api/v1/social.*`, MCP `social_*`. **F07** `tests/modules/social-composer.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-composer.test.ts` is the composition proof.)
 - [x] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
   outbound social links to visits, contacts and revenue.
   (`social.syncGbp` queues a durable per-profile workflow that pulls owned GBP
@@ -7290,7 +7293,7 @@ customer has one secure, comprehensible home for the relationship.
   canonical URL on every publication. `social.attributionReport` joins
   those visits to identified contacts and paid invoices. Migration
   `0153_social_gbp.sql`. Tests in `tests/modules/social-gbp.test.ts`.
-  Changeset `social-gbp.md`. **F04** `/admin/social` GBP. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/social-gbp.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-gbp.test.ts` is the composition proof.)
+  Changeset `social-gbp.md`. **F04** `/admin/social` GBP. **F05** `social.syncGbp`/`attributionReport` plus `reviews.ingestExternal` at `/api/v1/social.*` and `/api/v1/reviews.ingestExternal`, MCP `social_*`/`reviews_*`. **F07** `tests/modules/social-gbp.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-gbp.test.ts` is the composition proof.)
 - [x] **C9.28** Build universal `ShareTarget`, native/channel intents, generated
   OG assets, tracked short links and entity-level controls.
   (New `share` module, migration `0155_share_targets.sql`, admin at
@@ -7360,7 +7363,7 @@ customer has one secure, comprehensible home for the relationship.
   the Web Share API is offered on top, only where the browser actually has it.
   §34's remaining client-side sharing is C9.29 (gallery partners), C9.34
   (quote view-only links), C9.35 (product/gift-registry sharing) and C9.36
-  (embeds with backlinks). **F04** `/admin/sharing`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/share.test.ts` is the composition proof.)
+  (embeds with backlinks). **F04** `/admin/sharing`. **F05** `share.targetFor`/`shareVia`/`saveTarget`/`resolveLink`/`linkReport` at `/api/v1/share.*`, MCP `share_*`; public `/share` and `/s/[ref]`. **F07** `tests/modules/share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/share.test.ts` is the composition proof.)
 - [x] **C9.29** Let a client share their proofing gallery with a partner:
   scoped guest access, owner-permitted, issued from the gallery the client
   already opened.
@@ -7391,7 +7394,7 @@ customer has one secure, comprehensible home for the relationship.
   keeps the partner guest. Nine tests in
   `tests/core/gallery-partner-share.test.ts`. Migration
   `0159_client_gallery_partner_share.sql`. Changeset
-  `gallery-partner-share.md`. **F04** gallery partner share, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/gallery-partner-share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-partner-share.test.ts` is the composition proof.)
+  `gallery-partner-share.md`. **F04** gallery partner share, not a new admin screen. **F05** `galleries.invitePartner`/`revokePartner` at `/api/v1/galleries.invitePartner` and `/api/v1/galleries.revokePartner`, MCP `galleries_*`. **F07** `tests/core/gallery-partner-share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/gallery-partner-share.test.ts` is the composition proof.)
 - [x] **C9.34** Let a prospect share a quote internally before accepting:
   "send to my business partner" issues a view-only link.
   (Split from C9.29 under §43.17.1. §34's quote half.
@@ -7403,7 +7406,7 @@ customer has one secure, comprehensible home for the relationship.
   prospect opening it. Merge repoints both contact columns; erasure of
   either person deletes the link. Eight tests in
   `tests/core/quote-partner-share.test.ts`. Migration
-  `0160_quote_partner_links.sql`. Changeset `quote-partner-share.md`. **F04** quote internal share, not a new admin screen. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/quote-partner-share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/quote-partner-share.test.ts` is the composition proof.)
+  `0160_quote_partner_links.sql`. Changeset `quote-partner-share.md`. **F04** quote internal share, not a new admin screen. **F05** `quotes.invitePartner`/`revokePartner`/`byPartnerToken` at `/api/v1/quotes.*`; `quotes.byPartnerToken` is MCP-excluded. **F07** `tests/core/quote-partner-share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/quote-partner-share.test.ts` is the composition proof.)
 - [x] **C9.35** Build gift-card/registry-style sharing on products.
   (Split from C9.29 under §43.17.1. §34's product half.
   A wishlist is the registry: `catalog.shareWishlist` mints a hashed token
@@ -7413,7 +7416,7 @@ customer has one secure, comprehensible home for the relationship.
   claim URL, not the bearer code, and `/gift/{token}` is how the recipient
   reads it. Four tests in `tests/core/product-gift-share.test.ts`.
   Migration `0161_product_gift_share.sql`. Changeset
-  `product-gift-share.md`. **F04** gift-card/registry public share `/gifts`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/product-gift-share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/product-gift-share.test.ts` is the composition proof.)
+  `product-gift-share.md`. **F04** gift-card/registry public share `/gifts`. **F05** `catalog.shareWishlist`/`catalog.sendGiftCard` at `/api/v1/catalog.*`, MCP `catalog_*`; public `/gifts` plus plugin `giftRegistry.*` when installed. **F07** `tests/core/product-gift-share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/product-gift-share.test.ts` is the composition proof.)
 - [x] **C9.36** Emit copy-paste embed codes for galleries, review walls,
   booking widgets and newsletter signup blocks, with backlinks.
   (Split from C9.29 under §43.17.1. §34's embed half.
@@ -7424,7 +7427,7 @@ customer has one secure, comprehensible home for the relationship.
   the link is the SEO. Gallery embeds use the lock-screen facts, never
   the files. `share.embedSnippet` builds the HTML with escaped names.
   Tests in `tests/core/embeds.test.ts` and `tests/core/csp.test.ts`.
-  Changeset `embeds-with-backlinks.md`. **F04** copy-paste embeds `/embed/*`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/core/embeds.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/embeds.test.ts` is the composition proof.)
+  Changeset `embeds-with-backlinks.md`. **F04** copy-paste embeds `/embed/*`. **F05** `share.embedSnippet` at `/api/v1/share.embedSnippet`, MCP `share_embedSnippet`; public `/embed/*`. **F07** `tests/core/embeds.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/embeds.test.ts` is the composition proof.)
 - [x] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,
   targeting, consent-aware capture and accessibility-safe dismissal.
   (New `popups` module, migration `0157_popups.sql`. §36 names the four
@@ -7520,7 +7523,7 @@ customer has one secure, comprehensible home for the relationship.
   tree, and a positive control asserts the audit can still fail.
   Thirty tests in `tests/modules/popups.test.ts` and four more in
   `tests/core/cms-a11y.test.ts`, so the popup rules run in the cheap contract
-  gate beside the ones they extend. Changeset `popups.md`. **F04** `/admin/popups`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/popups.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/popups.test.ts` is the composition proof.)
+  gate beside the ones they extend. Changeset `popups.md`. **F04** `/admin/popups`. **F05** `popups.save`/`decide`/`capture`/`list`/`setStatus`/`performance` at `/api/v1/popups.*`, MCP `popups_*`; public `/api/popups`. **F07** `tests/modules/popups.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/popups.test.ts` is the composition proof.)
 - [x] **C9.31** Enable the social connection/onboarding surface in normal
   presets while never auto-authorizing or auto-publishing; make every installed
   conforming social adapter discoverable through one capability-negotiated UI
@@ -7536,7 +7539,7 @@ customer has one secure, comprehensible home for the relationship.
   the profile table do not mention it. Tests in
   `tests/modules/social-onboarding.test.ts` and
   `tests/adapters/social-conformance.test.ts`. Changeset
-  `social-onboarding.md`. **F04** `/admin/social` onboarding. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/social-onboarding.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-onboarding.test.ts` is the composition proof.)
+  `social-onboarding.md`. **F04** `/admin/social` onboarding. **F05** `social.beginOAuth` plus onboarding `social.networks` at `/api/v1/social.*`, MCP `social_*` (same OAuth as C9.24, onboarding entry). **F07** `tests/modules/social-onboarding.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-onboarding.test.ts` is the composition proof.)
 
 **C9 exit:** audience, access, attribution and recurring revenue compound on
 the spine without surveillance, shadow ledgers or channel-specific silos.
@@ -7603,7 +7606,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   Admin at `/admin/reports/exports`, linked from reports, with the last
   delivery's outcome on every row and an overdue export said out loud at the
   top. Migration `0158_scheduled_exports.sql`;
-  `tests/modules/reporting-exports.test.ts`. **F04** `/admin/reports/exports`. **F05** the named services sit in the registry-derived HTTP, OpenAPI, SDK and MCP catalogue with the same grants as the UI. **F07** `tests/modules/reporting-exports.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/reporting-exports.test.ts` is the composition proof.)
+  `tests/modules/reporting-exports.test.ts`. **F04** `/admin/reports/exports`. **F05** `reports.saveExport`/`runExport`/`listExports`/`downloadExport`/`deliverScheduledExports` at `/api/v1/reports.*`, MCP `reports_*`. **F07** `tests/modules/reporting-exports.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/reporting-exports.test.ts` is the composition proof.)
 - [x] **C9.33** Build the automatic subscription billing modes — `provider`
   (Stripe/PayPal schedules and their webhook reconciliation) and `platform`
   (off-session charges against a stored payment method) — and plan changes with
@@ -8529,28 +8532,31 @@ schema they inherit reads as a designed thing rather than an excavation.
 
 #### Whole-product quality
 
-- [ ] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
+- [x] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
   package row and record evidence beside each remaining checkbox.
-  *(Partial 2026-09-12. `PROOF_DEBT` in `scripts/plan-gate.mjs` is empty —
-  every former member names **F04/F05/F07/F09/F12** or N/A why. False F12 on
+  *(2026-09-12: `PROOF_DEBT` in `scripts/plan-gate.mjs` is empty — every
+  former member names **F04/F05/F07/F09/F12** or N/A why. False F12 on
   C0.01–C0.08, F09 sentences that asserted still-open C11.14, and F-blocks
-  parked on the next `####` heading are corrected here. **F05** catalogue
-  stamps on ~194 items remain template paste, so this item stays open.
-  Human-surface holes with callers: `settings.setModuleEnabled`; invoicing
-  advanced money (`advanced-money-actions.ts`); plugins update/rollback/
-  catalogue; webhooks inspect/replay; help-centre filing; SEO redirects;
-  messaging keyword/quiet-hours/compliance; `segments.preview`; automations
-  run list/kill; `platform.rollbackUpdate`; `events.update` /
+  parked on the next `####` heading were corrected. Human-surface holes
+  with callers: `settings.setModuleEnabled`; invoicing advanced money
+  (`advanced-money-actions.ts`); plugins update/rollback/catalogue;
+  webhooks inspect/replay; help-centre filing; SEO redirects; messaging
+  keyword/quiet-hours/compliance; `segments.preview`; automations run
+  list/kill; `platform.rollbackUpdate`; `events.update` /
   `newsletters.update`; `crm.updateDeal`; gallery price sheet;
   `catalog.publishProduct` / reservations / digital grants; import
-  map/review-conflicts. Shipping zones, saved carts, scheduling ICS/
-  audiences were already called. **agents** hire / edit / runtime connect /
-  playbook export now have `/admin/work` callers (`hireAgent`,
-  `updateAgent`, `connectAgentRuntime`, `exportPlaybook`). Sibling #335
-  pays reviews, OAuth begin, quote convert, and guidance/notifications
-  nav — not duplicated here. `tests/core/f04-remaining-screens.test.ts`
+  map/review-conflicts. **agents** hire / edit / runtime connect /
+  playbook export have `/admin/work` callers. `tests/core/f04-remaining-screens.test.ts`
   greps the callers. Changesets `f-matrix.md`, `leftover-f04.md` and
-  `agent-f04.md`.)*
+  `agent-f04.md`.
+  2026-09-13: the leftover ~194 **F05** catalogue stamps are replaced
+  with per-item HTTP (`/api/v1/{service}`), MCP (`POST /api/mcp` tools),
+  OpenAPI/SDK, plugin, CLI/package, or N/A-why sentences. No template
+  paragraph remains. **F04** N/A as a new screen — the matrix is evidence
+  on each C-item. **F05** this item *is* the agent-surface audit, not a
+  route. **F07** `scripts/plan-gate.mjs` refuses a checked item that does
+  not name F05 or N/A why. **F09** `pnpm plan:check` in CI. **F12** N/A —
+  the matrix is not a composed product journey.)*
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.
@@ -8663,7 +8669,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   public `/changelog` route, `LocaleSetting`/`CurrencySetting`/`FxRate`/
   `adapters/fx`, `SeoSetting` table, `/docs/deploy`, MIT on create-freeholder,
   Mercado Pago, named Stripe Tax/Avalara/TaxJar). Remaining affirmative work
-  keeps its open C-item (device evidence, C11.08–C11.12, C11.14–C11.15, C0.11,
+  keeps its open C-item (device evidence, C11.08, C11.10–C11.12, C11.14–C11.15,
   live settlement honesty). **F04** N/A — reconciliation is the spec table, not a
   screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes
   no customer data; honesty is the safety property. **F09** `pnpm plan:check`

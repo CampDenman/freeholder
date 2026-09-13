@@ -28,10 +28,8 @@ describe("C11.16 spec reconciliation", () => {
     expect(items.get("C11.16")).toBe(true);
     expect(items.get("C11.17")).toBe(false);
     for (const id of [
-      "C0.11",
       "C10.16",
       "C11.08",
-      "C11.09",
       "C11.10",
       "C11.11",
       "C11.12",
