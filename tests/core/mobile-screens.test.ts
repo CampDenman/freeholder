@@ -164,6 +164,8 @@ describe("screen contracts (C10.13)", () => {
     expect(SCREENS.capture.writes).toContain("media.signUploadParts");
     expect(SCREENS.capture.writes).toContain("media.completeUpload");
     expect(SCREENS.capture.writes).toContain("media.confirmCapture");
+    expect(SCREENS.capture.reads).toContain("catalog.listProducts");
+    expect(SCREENS.capture.reads).toContain("cms.listPages");
     expect(SCREENS.ownerInvoices.writes).toEqual(["invoicing.createDraft"]);
     expect(SCREENS.ownerInvoice.writes).toEqual(["invoicing.issue"]);
   });

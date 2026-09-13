@@ -29,6 +29,7 @@ This package contains the shared client behavior:
 | `branding` | what does this business look like? |
 | `screens` | which services may each customer or staff screen call? |
 | `capture` | how does owner ingest reach the core media contract? |
+| `capture-batches` | the one offline write: a file queue with consent, progress, pause/resume/cancel/retry |
 | `strings` | how do the screen's catalog keys read in this locale? |
 
 Everything else — prices, availability, entitlements — comes from the instance
@@ -106,9 +107,12 @@ only for the remembered instance and cannot extend any private read lease.
 Companion mode (C10.17) is the same client with a staff session. `sessionAudience`
 reads the named role from `auth.whoami` / `auth.login`; `customer` keeps the
 portal tabs and every other role opens `OWNER_TAB_ORDER`. Capture ingest talks
-to the existing media services and `/api/media` while online. The one sanctioned
-write queue is media capture (C10.18), which is a queue of files rather than a
-queue of decisions.
+to the existing media services and `/api/media`. The one sanctioned write queue
+is media capture (C10.18): `createCaptureBatchStore` records consent, destination,
+progress, pause/resume/cancel/retry, and flushes through the same live contract
+once online. The queue is bound to one instance and session, persists file
+bytes, and is dropped on sign-out. `writeThrough` still refuses every other
+mutation.
 
 `writeThrough({ service, online }, call)` is the live-only counterpart:
 offline calls throw `OfflineWriteRefused` before transport is invoked. Online
