@@ -81,6 +81,7 @@ describe("the token set", () => {
       });
 
       it(`${scheme}: text on the accent is legible`, () => {
+        // Segmented checked fill, primary buttons, and other on-accent chrome.
         expect(contrast(c.onAccent, c.accent)).toBeGreaterThanOrEqual(4.5);
       });
 

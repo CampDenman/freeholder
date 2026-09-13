@@ -214,9 +214,10 @@ export function Segmented({
       className="inline-flex overflow-hidden rounded-md border border-rule"
     >
       {options.map((option) => (
+        // Colour lives on the label: has-[:checked] only matches a descendant.
         <label
           key={option.value}
-          className="cursor-pointer border-e border-rule text-sm last:border-e-0 has-[:checked]:bg-accent has-[:checked]:font-semibold has-[:checked]:text-on-accent"
+          className="cursor-pointer border-e border-rule text-sm text-ink-muted last:border-e-0 has-[:checked]:bg-accent has-[:checked]:font-semibold has-[:checked]:text-on-accent"
         >
           <input
             type="radio"
@@ -225,9 +226,7 @@ export function Segmented({
             defaultChecked={option.value === defaultValue}
             className="sr-only"
           />
-          <span className="block px-4 py-2 text-ink-muted has-[:checked]:text-on-accent">
-            {option.label}
-          </span>
+          <span className="block px-4 py-2">{option.label}</span>
         </label>
       ))}
     </div>

@@ -8577,7 +8577,8 @@ schema they inherit reads as a designed thing rather than an excavation.
   here, so the item is not checked.)*
 - [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.
-  *(Partial 2026-09-12: `tests/browser/accessibility.spec.ts` now also walks
+  *(Partial 2026-09-13: Segmented checked-on-accent contrast hole is closed.
+  `tests/browser/accessibility.spec.ts` now also walks
   admin F04 screens — roles, invitations, contacts, health, settings, plugins,
   work — plus portal home/profile, French/Spanish `lang`, and a representative
   RTL reflow/keyboard pass on admin. Setup/admin/editor/storefront/portal still
