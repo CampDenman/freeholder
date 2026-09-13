@@ -23,6 +23,12 @@ import {
   signIn,
   completeTwoFactorSignIn,
   redeemSignInLink,
+  resolveSessionRole,
+  sessionAudience,
+  isStaffRole,
+  openCaptureSession,
+  ingestCaptureUpload,
+  confirmCaptureSession,
   unlockOnResume,
   type Cache,
   type Instance,
@@ -208,6 +214,26 @@ describe("the customer app (C10.12)", () => {
       expect((await redeemSignInLink({ ...input, link: "https://example.test/portal/magic?token=abcdefghijklmnopqrstuv" }, denied)).ok).toBe(false);
       expect(denied).toHaveBeenCalledTimes(1);
     });
+    it("opens companion mode from the session role, not a second customer model (C10.17)", async () => {
+      expect(isStaffRole("customer")).toBe(false);
+      expect(isStaffRole("owner")).toBe(true);
+      expect(isStaffRole("editor")).toBe(true);
+      expect(sessionAudience({ role: "customer" })).toBe("customer");
+      expect(sessionAudience({ role: "owner" })).toBe("staff");
+      expect(sessionAudience(null)).toBe("customer");
+      const signedIn = await signIn(
+        { instanceUrl: "https://example.test", email: "owner@example.test", password: "password" },
+        async () => ({ ok: true, status: 200, json: async () => ({ token: "owner-token", role: "owner" }) }),
+      );
+      expect(signedIn).toMatchObject({ ok: true, session: { role: "owner", token: "owner-token" } });
+      const resolved = await resolveSessionRole(
+        { instanceUrl: "https://example.test", token: "tok", email: "owner@example.test", issuedAt: "2026-09-12T00:00:00.000Z" },
+        async () => ({ ok: true, status: 200, json: async () => ({ role: "administrator", email: "owner@example.test" }) }),
+      );
+      expect(resolved.role).toBe("administrator");
+      expect(sessionAudience(resolved)).toBe("staff");
+    });
+
     it("uses real auth services and never treats an OTP challenge or failed email request as a session", async () => {
       const transport = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ token: "", twoFactorRequired: true, challengeToken: "challenge-token-value-ok", methods: { totp: true, recovery: true, webauthn: false } }) }));
       const result = await signIn({ instanceUrl: "https://example.test", email: "rae@example.test", password: "password" }, transport);
@@ -270,6 +296,45 @@ describe("the customer app (C10.12)", () => {
         await expect(writeThrough({ service, online: false }, call)).rejects.toBeInstanceOf(OfflineWriteRefused);
         expect(call).not.toHaveBeenCalled();
       }
+    });
+
+    it("ingests capture through core media services and refuses offline (C10.17)", async () => {
+      const calls: Array<{ service: string; body: unknown }> = [];
+      const transport = {
+        async call<T>(service: string, body: unknown) {
+          calls.push({ service, body });
+          if (service === "media.createCaptureSession" || service === "media.grantCapturePermission") {
+            return { id: "session-1", source: "camera", status: "pending" } as T;
+          }
+          if (service === "media.createUploadLink") {
+            return { id: "session-2", source: "camera_roll", status: "pending", token: "upload-token-value-ok" } as T;
+          }
+          if (service === "media.beginUpload") return { id: "upload-1" } as T;
+          if (service === "media.bindCaptureAsset" || service === "media.confirmCapture" || service === "media.getCaptureSession") {
+            return { id: "session-1", source: "camera", status: "confirmed", assetId: "asset-1" } as T;
+          }
+          throw new Error(service);
+        },
+        async putProxy() {
+          return { id: "asset-1" };
+        },
+      };
+      await expect(openCaptureSession({ source: "camera", online: false }, transport)).rejects.toBeInstanceOf(OfflineWriteRefused);
+      const opened = await openCaptureSession({ source: "camera", online: true }, transport);
+      expect(opened.id).toBe("session-1");
+      expect(calls.map((entry) => entry.service)).toEqual(["media.createCaptureSession", "media.grantCapturePermission"]);
+      const staged = await ingestCaptureUpload(
+        { session: opened, filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1, 2, 3]), online: true },
+        transport,
+      );
+      expect(calls.some((entry) => entry.service === "media.beginUpload")).toBe(true);
+      const confirmed = await confirmCaptureSession({ session: staged, online: true }, transport);
+      expect(confirmed.assetId).toBe("asset-1");
+      const roll = await openCaptureSession({ source: "camera_roll", online: true }, transport);
+      expect(roll.token).toBe("upload-token-value-ok");
+      await expect(
+        ingestCaptureUpload({ session: opened, filename: "desk.png", contentType: "image/png", bytes: new Uint8Array([1]), online: false }, transport),
+      ).rejects.toBeInstanceOf(OfflineWriteRefused);
     });
     it("refuses to queue a mutation, loudly", async () => {
       await expect(

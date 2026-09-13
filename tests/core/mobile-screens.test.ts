@@ -7,7 +7,12 @@ import {
   SCREENS,
   SCREEN_IDS,
   TAB_ORDER,
+  OWNER_TAB_ORDER,
+  tabOrderFor,
+  tabFileName,
   screensNeedingSignIn,
+  staffScreens,
+  customerSignedInScreens,
   servicesUsed,
 } from "../../packages/mobile-app/src/screens";
 import {
@@ -48,7 +53,8 @@ describe("screen contracts (C10.13)", () => {
   it("uses session/contact equivalents instead of business replies and email-footer tokens (C10.24)", () => {
     expect(SCREENS.newsletters.writes).toContain("privacy.setMyMarketingPreference");
     expect(servicesUsed()).not.toContain("newsletters.unsubscribe");
-    expect(servicesUsed()).not.toContain("conversations.reply");
+    expect(customerSignedInScreens().flatMap((id) => [...SCREENS[id].reads, ...SCREENS[id].writes])).not.toContain("conversations.reply");
+    expect(SCREENS.inboxThread.writes).toContain("conversations.reply");
     expect(SCREENS.bookings.reads).toContain("portal.myProfile");
     expect(SCREENS.messages.reads).toContain("portal.myProfile");
     expect(SCREENS.message.writes).toContain("conversations.replyAsContact");
@@ -90,6 +96,8 @@ describe("screen contracts (C10.13)", () => {
       expect(SCREENS[id].audience, id).toBe("signed-in");
     }
     expect(screensNeedingSignIn()).toContain("bookings");
+    expect(screensNeedingSignIn()).toContain("today");
+    for (const id of staffScreens()) expect(SCREENS[id].audience, id).toBe("staff");
   });
 
   it("lets a public screen name only services a stranger may call", async () => {
@@ -120,7 +128,7 @@ describe("screen contracts (C10.13)", () => {
 
   it("lets signed-in screens call only customer-authorized services of the declared kind (C10.24)", async () => {
     await ready();
-    const offending = screensNeedingSignIn().flatMap((id) =>
+    const offending = customerSignedInScreens().flatMap((id) =>
       (["reads", "writes"] as const).flatMap((operation) => SCREENS[id][operation].flatMap((name) => {
         const definition = getService(name).def;
         const expected = operation === "reads" ? "query" : "mutation";
@@ -133,11 +141,38 @@ describe("screen contracts (C10.13)", () => {
     expect(offending).toEqual([]);
   });
 
+  it("lets staff companion screens call only existing owner services of the declared kind (C10.17)", async () => {
+    await ready();
+    expect(staffScreens().sort()).toEqual([
+      "agents", "alerts", "approvals", "capture", "inbox", "inboxThread",
+      "ownerInvoice", "ownerInvoices", "reviews", "staffAccount", "today",
+    ]);
+    const offending = staffScreens().flatMap((id) =>
+      (["reads", "writes"] as const).flatMap((operation) => SCREENS[id][operation].flatMap((name) => {
+        const definition = getService(name).def;
+        const expected = operation === "reads" ? "query" : "mutation";
+        const allowed = definition.permission === "public" || definition.permission === "authenticated" || definition.permission === "scoped";
+        return allowed && definition.kind === expected && definition.external !== false ? [] :
+          [{ screen: id, service: name, permission: definition.permission, kind: definition.kind, expected }];
+      })),
+    );
+    expect(offending).toEqual([]);
+    expect(SCREENS.inboxThread.writes).toContain("conversations.reply");
+    expect(SCREENS.message.writes).toContain("conversations.replyAsContact");
+    expect(SCREENS.capture.writes).toContain("media.createCaptureSession");
+    expect(SCREENS.capture.writes).toContain("media.createUploadLink");
+    expect(SCREENS.capture.writes).toContain("media.confirmCapture");
+  });
+
   it("only writes from screens where a write is a decision, not a queue", () => {
     // §35.1's offline rule: writes are never queued. A screen with no writes
     // behaves identically with and without signal.
     const writing = SCREEN_IDS.filter((id) => SCREENS[id].writes.length > 0);
-    expect(writing.sort()).toEqual(["account", "booking", "gallery", "message", "newsletters"]);
+    expect(writing.sort()).toEqual([
+      "account", "alerts", "approvals", "booking", "capture", "gallery",
+      "inboxThread", "message", "newsletters", "ownerInvoice", "ownerInvoices",
+      "reviews", "staffAccount", "today",
+    ]);
   });
 
   it("does not cache the one screen whose data expires", () => {
@@ -150,6 +185,13 @@ describe("screen contracts (C10.13)", () => {
     for (const id of TAB_ORDER) expect(SCREEN_IDS).toContain(id);
     expect(new Set(TAB_ORDER).size).toBe(TAB_ORDER.length);
     expect(TAB_ORDER).toEqual(["home", "catalog", "bookings", "invoices", "galleries", "account"]);
+    expect(OWNER_TAB_ORDER).toEqual(["today", "ownerInvoices", "inbox", "reviews", "alerts", "staffAccount"]);
+    expect(tabOrderFor("customer")).toEqual(TAB_ORDER);
+    expect(tabOrderFor("staff")).toEqual(OWNER_TAB_ORDER);
+    expect(tabFileName("home")).toBe("index");
+    expect(tabFileName("ownerInvoices")).toBe("owner-invoices");
+    expect(tabFileName("staffAccount")).toBe("staff-account");
+    for (const id of OWNER_TAB_ORDER) expect(SCREEN_IDS).toContain(id);
   });
 });
 
@@ -169,6 +211,17 @@ describe("deep links (C10.13)", () => {
       ["https://aurora.test/portal/messages", "messages", undefined],
       ["https://aurora.test/portal/messages/thread-9", "message", "thread-9"],
       ["https://aurora.test/portal", "account", undefined],
+      ["https://aurora.test/admin", "today", undefined],
+      ["https://aurora.test/admin/briefing", "today", undefined],
+      ["https://aurora.test/admin/invoices", "ownerInvoices", undefined],
+      ["https://aurora.test/admin/invoices/inv-9", "ownerInvoice", "inv-9"],
+      ["https://aurora.test/admin/inbox", "inbox", undefined],
+      ["https://aurora.test/admin/inbox/thread-9", "inboxThread", "thread-9"],
+      ["https://aurora.test/admin/reviews", "reviews", undefined],
+      ["https://aurora.test/admin/work", "agents", undefined],
+      ["https://aurora.test/admin/work/approvals", "approvals", undefined],
+      ["https://aurora.test/admin/notifications", "alerts", undefined],
+      ["https://aurora.test/admin/media/record", "capture", undefined],
     ];
     for (const [url, screen, param] of cases) {
       it(`opens ${url} on ${screen}`, () => {
@@ -262,6 +315,8 @@ describe("deep links (C10.13)", () => {
     // bouncing the customer to the home tab and losing what they tapped.
     expect(needsSignIn({ screen: "gallery", param: "x" })).toBe(true);
     expect(needsSignIn({ screen: "catalog" })).toBe(false);
+    expect(needsSignIn({ screen: "today" })).toBe(true);
+    expect(needsSignIn({ screen: "capture" })).toBe(true);
   });
 
   it("carries a screen and one argument, and nothing else", () => {

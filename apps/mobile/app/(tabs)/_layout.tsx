@@ -1,18 +1,22 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// The customer's tabs (C10.23).
+// The customer's tabs, or the owner companion tabs (C10.17).
 //
-// The order is `TAB_ORDER` from the screen contracts (C10.13), not a list
-// retyped here — so "which tabs exist and in what order" has one answer that a
-// test can check.
+// The order is `tabOrderFor` from the screen contracts, not a list retyped
+// here. Extra files in this folder stay registered so Expo Router can open
+// them, but `href: null` hides them from the bar the other audience sees.
 import { Tabs } from "expo-router";
-import { TAB_ORDER, SCREENS } from "@freeholder/mobile-app";
+import { SCREENS, TAB_ORDER, OWNER_TAB_ORDER, tabFileName, tabOrderFor } from "@freeholder/mobile-app";
 import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 
+const ALL_TABS = [...TAB_ORDER, ...OWNER_TAB_ORDER];
+
 export default function TabsLayout() {
-  const { brand } = useInstance();
+  const { brand, audience } = useInstance();
   const t = useAppText();
+  const order = tabOrderFor(audience);
+  const visible = new Set(order.map(tabFileName));
   return (
     <Tabs
       screenOptions={{
@@ -21,13 +25,19 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: brand?.colors.inkMuted,
       }}
     >
-      {TAB_ORDER.map((id) => (
-        <Tabs.Screen
-          key={id}
-          name={id === "home" ? "index" : id}
-          options={{ title: t(SCREENS[id].titleKey) }}
-        />
-      ))}
+      {ALL_TABS.map((id) => {
+        const name = tabFileName(id);
+        return (
+          <Tabs.Screen
+            key={id}
+            name={name}
+            options={{
+              title: t(SCREENS[id].titleKey),
+              href: visible.has(name) ? undefined : null,
+            }}
+          />
+        );
+      })}
     </Tabs>
   );
 }
