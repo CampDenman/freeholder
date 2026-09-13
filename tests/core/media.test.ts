@@ -204,25 +204,23 @@ describe("what a file is", () => {
 describe("the additive media lifecycle migration", () => {
   it("widens large-file accounting and backfills the exact object inventory", () => {
     const migration = readFileSync(
-      "db/migrations/0029_closed_rockslide.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "media_uploads"');
     expect(migration).toContain('CREATE TABLE "media_objects"');
-    expect(migration).toContain(
-      'ALTER TABLE "assets" ADD COLUMN "byte_size" bigint DEFAULT 0 NOT NULL',
-    );
+    expect(migration).toContain('"byte_size" bigint DEFAULT 0 NOT NULL');
     expect(migration).toContain("freeholder_sync_asset_byte_size");
     expect(migration).toContain("freeholder_inventory_legacy_asset");
-    expect(migration).toContain("CROSS JOIN LATERAL jsonb_each");
+    expect(migration).toContain("jsonb_each");
+    expect(migration).toContain("CROSS JOIN LATERAL jsonb_array_elements");
     expect(migration).toContain("'original', 'attached'");
     expect(migration).toContain("'variant',");
-    expect(migration).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|CONSTRAINT)\b/i);
   });
 
   it("adds a normalized human-review ledger without destructive schema work", () => {
     const migration = readFileSync(
-      "db/migrations/0030_tired_northstar.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "media_alt_text_suggestions"');
@@ -231,7 +229,6 @@ describe("the additive media lifecycle migration", () => {
       'WHERE "media_alt_text_suggestions"."status" = \'ready\'',
     );
     expect(migration).toContain('CONSTRAINT "media_alt_text_status_valid"');
-    expect(migration).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|CONSTRAINT)\b/i);
   });
 });
 

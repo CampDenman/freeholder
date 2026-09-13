@@ -19,7 +19,8 @@ notification the platform already decided to send.
 
 ## `device_tokens`
 
-One app install that may be pushed to. Migration `0167_device_tokens.sql`.
+One app install that may be pushed to. Table `device_tokens` in
+`0000_reviewed-baseline.sql`.
 
 **Unique on the token, not on (contact, token).** A device token identifies an
 *install*, not a person. When a phone is handed on, or a second customer signs

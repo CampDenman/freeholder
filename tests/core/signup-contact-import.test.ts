@@ -373,11 +373,11 @@ describe.runIf(hasDatabase)("optional post-signup contact import", { timeout: 90
 
 describe("signup contact import migration", () => {
   it("stores policy, choice, attribution, relationship undo, and the portal OAuth return", () => {
-    const migration = readFileSync("db/migrations/0116_signup_contact_import.sql", "utf8");
+    const migration = readFileSync("db/migrations/0000_reviewed-baseline.sql", "utf8");
     expect(migration).toContain('CREATE TABLE "signup_contact_import_policies"');
     expect(migration).toContain('CREATE TABLE "signup_contact_import_choices"');
-    expect(migration).toContain('ADD COLUMN "subject_contact_id"');
-    expect(migration).toContain('ADD COLUMN "relationship_id"');
+    expect(migration).toContain('"subject_contact_id"');
+    expect(migration).toContain('"relationship_id"');
     expect(migration).toContain("portal/contact-import");
   });
 });

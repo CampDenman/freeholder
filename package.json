@@ -28,6 +28,7 @@
     "test:browser": "playwright test --config playwright.a11y.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:baseline-identity": "node scripts/schema-baseline-identity.mjs",
     "plan:check": "node scripts/plan-gate.mjs",
     "workflow:check": "node scripts/workflow-integrity-gate.mjs",
     "dependency:audit": "node scripts/dependency-audit.mjs",
