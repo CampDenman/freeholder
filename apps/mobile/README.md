@@ -128,6 +128,17 @@ and are stored only for their issuing instance. Browser cookie requests retain
 CSRF checks. Physical-device interaction and accessibility checks remain
 outstanding, so C10.28 stays open.
 
+Owner companion mode (C10.17) is the same app after a staff session. `auth.whoami`
+names the role; `customer` keeps the portal tabs, and every other stored role
+opens today's briefing, tap-to-invoice, inbox, reviews, critical alerts and
+staff account. Approvals, agent status and camera/roll/screen/share ingest are
+stack screens from Today. Ingest uses `media.createCaptureSession` /
+`createUploadLink`, `media.beginUpload`, `POST /api/media` and
+`media.confirmCapture` — the website's capture pipeline, not a mobile upload
+API. Uploads require a live connection; offline batches are C10.18. Physical
+camera, share-target and accessibility checks remain outstanding, so C10.17
+stays open.
+
 ## Rules the code keeps
 
 - **The session lives in the platform keychain** (`expo-secure-store`), never

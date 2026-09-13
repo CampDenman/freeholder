@@ -68,6 +68,18 @@ const ROUTES: readonly Route[] = [
   { pattern: ["portal", "messages", ":param"], screen: "message" },
   { pattern: ["newsletters"], screen: "newsletters" },
   { pattern: ["portal"], screen: "account" },
+  { pattern: ["admin"], screen: "today" },
+  { pattern: ["admin", "briefing"], screen: "today" },
+  { pattern: ["admin", "invoices"], screen: "ownerInvoices" },
+  { pattern: ["admin", "invoices", "new"], screen: "ownerInvoices" },
+  { pattern: ["admin", "invoices", ":param"], screen: "ownerInvoice" },
+  { pattern: ["admin", "inbox"], screen: "inbox" },
+  { pattern: ["admin", "inbox", ":param"], screen: "inboxThread" },
+  { pattern: ["admin", "reviews"], screen: "reviews" },
+  { pattern: ["admin", "work"], screen: "agents" },
+  { pattern: ["admin", "work", "approvals"], screen: "approvals" },
+  { pattern: ["admin", "notifications"], screen: "alerts" },
+  { pattern: ["admin", "media", "record"], screen: "capture" },
 ];
 
 function segments(pathname: string): string[] {
@@ -230,5 +242,5 @@ export function pushLink(screen: ScreenId, param?: string): string {
  * what they tapped.
  */
 export function needsSignIn(destination: Destination): boolean {
-  return SCREENS[destination.screen].audience === "signed-in";
+  return SCREENS[destination.screen].audience !== "public";
 }
