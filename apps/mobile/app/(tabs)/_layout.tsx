@@ -10,8 +10,8 @@ import { TAB_ORDER, SCREENS } from "@freeholder/mobile-app";
 import { useInstance } from "@/lib/instance";
 import { useAppText } from "@/lib/strings";
 
-/** Only the tabs this release actually renders. C10.25–C10.28 fill the rest. */
-const BUILT = new Set(["home", "catalog", "bookings", "invoices"]);
+/** Only the tabs this release actually renders. C10.28 fills the rest. */
+const BUILT = new Set(["home", "catalog", "bookings", "invoices", "galleries"]);
 
 export default function TabsLayout() {
   const { brand } = useInstance();

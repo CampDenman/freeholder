@@ -53,6 +53,8 @@ describe("screen contracts (C10.13)", () => {
     expect(SCREENS.messages.reads).toContain("portal.myProfile");
     expect(SCREENS.gallery.reads).toContain("galleries.viewSession");
     expect(SCREENS.gallery.writes).toContain("galleries.openWithLogin");
+    expect(servicesUsed()).not.toContain("galleries.list");
+    expect(servicesUsed()).not.toContain("galleries.listSelections");
   });
   it("names only services the platform actually exposes", () => {
     // The whole point of declaring the contract: a screen that asks for a
@@ -145,6 +147,7 @@ describe("screen contracts (C10.13)", () => {
   it("puts every tab on a real screen", () => {
     for (const id of TAB_ORDER) expect(SCREEN_IDS).toContain(id);
     expect(new Set(TAB_ORDER).size).toBe(TAB_ORDER.length);
+    expect(TAB_ORDER).toEqual(["home", "catalog", "bookings", "invoices", "galleries", "account"]);
   });
 });
 
