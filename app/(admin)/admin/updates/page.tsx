@@ -211,6 +211,26 @@ export default async function UpdatesPage() {
         </Card>
       ) : null}
 
+      {status.earliestReachableVersion ? (
+        <Card>
+          <CardHeader title={t("updates.rollback")} />
+          <CardBody>
+            <p className="max-w-prose text-sm text-ink-muted">
+              {t("updates.rollbackIntro", { version: status.earliestReachableVersion })}
+            </p>
+            <div className="mt-4">
+              <UpdateActionForm
+                intent="rollback"
+                variant="danger"
+                confirm={t("updates.rollbackConfirm", { version: status.earliestReachableVersion })}
+                submitLabel={t("updates.action.rollback")}
+                pendingLabel={t("updates.action.rollingBack")}
+              />
+            </div>
+          </CardBody>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader title={t("updates.feed")} />
         <CardBody>

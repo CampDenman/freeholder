@@ -16,6 +16,7 @@ import {
   checkInRegistration,
   createEvent,
   publishEvent,
+  updateEvent,
 } from "@/modules/events/service";
 
 function field(form: FormData, key: string): string {
@@ -57,6 +58,20 @@ export async function eventAction(form: FormData): Promise<void> {
     const expectedVersion = Number(field(form, "expectedVersion") || 0);
     if (intent === "publish") await publishEvent.call({ id, expectedVersion }, signed);
     if (intent === "cancel") await cancelEvent.call({ id, expectedVersion }, signed);
+    if (intent === "update") {
+      await updateEvent.call(
+        {
+          id,
+          expectedVersion,
+          name: field(form, "name") || undefined,
+          slug: field(form, "slug") || undefined,
+          summary: field(form, "summary") || null,
+          venueName: field(form, "venueName") || null,
+          venueAddress: field(form, "venueAddress") || null,
+        },
+        signed,
+      );
+    }
     if (intent === "session") {
       await addEventSession.call(
         {

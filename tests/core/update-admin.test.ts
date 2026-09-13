@@ -76,6 +76,7 @@ describe("the update screen (C10.20)", () => {
       "applyUpdate",
       "saveUpdatePolicy",
       "openForkUpdate",
+      "rollbackUpdate",
     ]) {
       expect(actions).toContain(service);
     }

@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
-import { listPlaybooks } from "@/core/agents/playbooks";
+import { exportPlaybook, listPlaybooks } from "@/core/agents/playbooks";
 import { parseParamsSchema } from "@/core/agents/playbook-params";
 import {
   deletePlaybookAction,
@@ -16,6 +16,7 @@ import {
 } from "../../../playbook-actions";
 import { currentBusiness } from "@/core/settings/read";
 import { PlaybookForms } from "./PlaybookForms";
+import { domainOrNull } from "../../../read-helpers";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -23,7 +24,7 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 export default async function PlaybooksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; export?: string }>;
 }) {
   const actor = await requireStaffActor("agents");
   const [t, playbooks, query, business] = await Promise.all([
@@ -32,6 +33,9 @@ export default async function PlaybooksPage({
     searchParams,
     currentBusiness(),
   ]);
+  const exported = query.export
+    ? await domainOrNull(exportPlaybook.call({ id: query.export }, actor))
+    : null;
   const timezone = business?.timezone ?? "UTC";
   const when = new Intl.DateTimeFormat(business?.defaultLocale ?? "en", {
     timeZone: timezone,
@@ -59,6 +63,22 @@ export default async function PlaybooksPage({
           {query.error.includes(" ") ? query.error : t("work.playbooks.failed")}
         </p>
       ) : null}
+      {query.export && !exported ? (
+        <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+          {t("work.playbooks.exportMissing")}
+        </p>
+      ) : null}
+      {exported ? (
+        <Card>
+          <CardHeader title={t("work.playbooks.exportTitle")} />
+          <CardBody>
+            <p className="max-w-prose text-sm text-ink-muted">{t("work.playbooks.exportHint")}</p>
+            <pre className="mt-3 overflow-x-auto rounded-md border border-rule bg-surface-muted p-3 font-mono text-xs">
+              {JSON.stringify(exported, null, 2)}
+            </pre>
+          </CardBody>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title={t("work.playbooks.yours")} />
@@ -85,6 +105,12 @@ export default async function PlaybooksPage({
                           {t(`work.approval.mode.${playbook.autonomyCeiling}`)}
                         </Pill>
                       ) : null}
+                      <a
+                        href={`/admin/work/playbooks?export=${playbook.id}`}
+                        className="ms-auto text-sm font-medium underline"
+                      >
+                        {t("work.playbooks.export")}
+                      </a>
                     </div>
                     {playbook.description ? (
                       <p className="text-sm text-ink-muted">{playbook.description}</p>

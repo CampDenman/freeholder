@@ -74,14 +74,16 @@ export const colors: ThemeTokens = {
     surfaceMuted: "#f4f4f1",
     field: "#ffffff",
     ink: "#23262a",
-    inkMuted: "#6b7076",
+    // Darker than the original #6b7076: that pair was 4.53:1 on surfaceMuted,
+    // which axe fails on 11px labels and quiet controls (C11 settings).
+    inkMuted: "#5a5f66",
     rule: "#e3e3de",
     accent: "#2551e0",
     onAccent: "#ffffff",
     accentSoft: "#e6ecfd",
-    // Darker than it first looked right: the original #1a7f52 read at 4.32:1
-    // on its own soft ground, which fails AA. Contrast decided this, not taste.
-    success: "#17734a",
+    // Darker than it first looked right: #1a7f52 was 4.32:1 on its soft ground,
+    // and #17734a still failed axe on 11px "On" pills. Contrast, not taste.
+    success: "#146640",
     successSoft: "#e3f2ea",
     warning: "#8c5b0e",
     warningSoft: "#fbeed6",
@@ -254,6 +256,7 @@ export function contrastFailures(theme: ThemeTokens): ContrastFailure[] {
     }
     fail("inkMuted on paper", contrastRatio(c.inkMuted, c.paper), 4.5);
     fail("inkMuted on surface", contrastRatio(c.inkMuted, c.surface), 4.5);
+    fail("inkMuted on surfaceMuted", contrastRatio(c.inkMuted, c.surfaceMuted), 4.5);
     fail("onAccent on accent", contrastRatio(c.onAccent, c.accent), 4.5);
     fail("success on successSoft", contrastRatio(c.success, c.successSoft), 4.5);
     fail("warning on warningSoft", contrastRatio(c.warning, c.warningSoft), 4.5);

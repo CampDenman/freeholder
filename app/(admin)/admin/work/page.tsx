@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { formatDateTime } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
+import { hasModuleAccess } from "@/core/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
-import { BOARD_COLUMNS, listAgents, listBoard } from "@/core/agents/service";
+import { BOARD_COLUMNS, listAgents, listBoard, listConnections } from "@/core/agents/service";
+import { WORKFORCE_ADAPTER_IDS } from "@/adapters/agent/workforce-types";
 import { listApprovals } from "@/core/agents/writes";
-import { CreateTaskForm } from "./WorkForms";
-import { pauseAgentAction } from "../../work-actions";
+import { ConnectRuntimeForm, CreateTaskForm, HireAgentForm } from "./WorkForms";
+import { pauseAgentAction, updateAgentAction } from "../../work-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -29,10 +31,12 @@ export default async function WorkBoardPage({
   const agentId = one("agentId") || undefined;
   const unassigned = one("unassigned") === "1";
   const minPriority = one("minPriority") ? Number(one("minPriority")) : undefined;
-  const [t, business, agents, pendingApprovals, columns] = await Promise.all([
+  const canManage = hasModuleAccess(actor, "agents", "manage");
+  const [t, business, agents, connections, pendingApprovals, columns] = await Promise.all([
     getT(),
     currentBusiness(),
     listAgents.call({}, actor),
+    listConnections.call({}, actor),
     listApprovals.call({ status: "pending", limit: 200 }, actor),
     listBoard.call(
       {
@@ -78,12 +82,16 @@ export default async function WorkBoardPage({
 
       {one("saved") ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
-          {t(`work.saved.${one("saved") === "resumed" ? "resumed" : "paused"}`)}
+          {one("saved") === "connected"
+            ? t("work.saved.connected")
+            : one("saved") === "updated"
+              ? t("work.saved.updated")
+              : t(`work.saved.${one("saved") === "resumed" ? "resumed" : "paused"}`)}
         </p>
       ) : null}
       {one("error") ? (
         <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
-          {t("work.error.pause")}
+          {one("error").includes(" ") ? one("error") : t("work.error.pause")}
         </p>
       ) : null}
 
@@ -123,6 +131,22 @@ export default async function WorkBoardPage({
                         : t("work.workers.pause")}
                     </Button>
                   </form>
+                  {canManage ? (
+                    <form action={updateAgentAction} className="flex flex-wrap items-end gap-2">
+                      <input type="hidden" name="id" value={agent.id} />
+                      <Field htmlFor={`role-${agent.id}`} label={t("work.workers.role")}>
+                        <Input id={`role-${agent.id}`} name="role" defaultValue={agent.role} maxLength={200} />
+                      </Field>
+                      <Field htmlFor={`autonomy-${agent.id}`} label={t("work.workers.autonomy")}>
+                        <Select id={`autonomy-${agent.id}`} name="autonomy" defaultValue={agent.autonomy}>
+                          <option value="suggest">{t("work.workers.suggest")}</option>
+                          <option value="approve">{t("work.workers.approve")}</option>
+                          <option value="autonomous">{t("work.workers.autonomous")}</option>
+                        </Select>
+                      </Field>
+                      <Button type="submit" variant="quiet">{t("work.workers.save")}</Button>
+                    </form>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -144,6 +168,73 @@ export default async function WorkBoardPage({
           </div>
         </CardBody>
       </Card>
+
+      {canManage ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader title={t("work.runtime.title")} />
+            <CardBody>
+              <p className="mb-3 max-w-prose text-sm text-ink-muted">{t("work.runtime.intro")}</p>
+              {connections.length === 0 ? (
+                <p className="mb-3 text-sm text-ink-muted">{t("work.runtime.empty")}</p>
+              ) : (
+                <ul className="mb-3 grid list-none gap-2 p-0">
+                  {connections.map((connection) => (
+                    <li key={connection.id} className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-medium">{connection.name}</span>
+                      <Pill tone="neutral">{connection.kind}</Pill>
+                      {connection.adapter ? <span className="font-mono text-xs text-ink-muted">{connection.adapter}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <ConnectRuntimeForm
+                adapters={WORKFORCE_ADAPTER_IDS}
+                labels={{
+                  name: t("work.runtime.name"),
+                  kind: t("work.runtime.kind"),
+                  inbound: t("work.runtime.inbound"),
+                  managed: t("work.runtime.managed"),
+                  adapter: t("work.runtime.adapter"),
+                  model: t("work.runtime.model"),
+                  credential: t("work.runtime.credential"),
+                  credentialHint: t("work.runtime.credentialHint"),
+                  credentialPlaceholder: t("work.runtime.credentialPlaceholder"),
+                  submit: t("work.runtime.submit"),
+                }}
+              />
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader title={t("work.hire.title")} />
+            <CardBody>
+              <p className="mb-3 max-w-prose text-sm text-ink-muted">{t("work.hire.intro")}</p>
+              <HireAgentForm
+                connections={connections.map((connection) => ({ id: connection.id, name: connection.name }))}
+                labels={{
+                  name: t("work.hire.name"),
+                  role: t("work.hire.role"),
+                  connection: t("work.hire.connection"),
+                  instructions: t("work.hire.instructions"),
+                  scopes: t("work.hire.scopes"),
+                  scopesHint: t("work.hire.scopesHint"),
+                  scopesPlaceholder: t("work.hire.scopesPlaceholder"),
+                  autonomy: t("work.workers.autonomy"),
+                  suggest: t("work.workers.suggest"),
+                  approve: t("work.workers.approve"),
+                  autonomous: t("work.workers.autonomous"),
+                  submit: t("work.hire.submit"),
+                  tokenShown: t("work.hire.tokenShown"),
+                  tokenHint: t("work.hire.tokenHint"),
+                  noConnection: t("work.hire.noConnection"),
+                }}
+              />
+            </CardBody>
+          </Card>
+        </div>
+      ) : (
+        <p className="text-sm text-ink-muted">{t("work.hire.readOnly")}</p>
+      )}
 
       <Card>
         <CardHeader title={t("work.filter")} />

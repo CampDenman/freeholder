@@ -107,18 +107,28 @@ export default async function OrderDetailPage({
         </CardBody>
       </Card>
 
-      {grants.length ? (
-        <Card>
-          <CardHeader title={t("catalog.fulfill.digital")} />
-          <CardBody>
-            <ul className="grid list-none gap-2 p-0 text-sm">
+      <Card>
+        <CardHeader title={t("catalog.fulfill.digital")} />
+        <CardBody>
+          {grants.length === 0 ? (
+            <p className="mb-3 text-sm text-ink-muted">{t("catalog.fulfill.digitalEmpty")}</p>
+          ) : (
+            <ul className="mb-3 grid list-none gap-2 p-0 text-sm">
               {grants.map((grant) => (
                 <li key={grant.id} className="font-mono">{grant.token}</li>
               ))}
             </ul>
-          </CardBody>
-        </Card>
-      ) : null}
+          )}
+          {canManage && ["paid", "fulfilling", "fulfilled"].includes(order.status) ? (
+            <form action={productAction}>
+              <input type="hidden" name="intent" value="grantDigital" />
+              <input type="hidden" name="orderId" value={order.id} />
+              <input type="hidden" name="returnTo" value={`/admin/orders/${order.id}`} />
+              <Button type="submit">{t("catalog.fulfill.grantDigital")}</Button>
+            </form>
+          ) : null}
+        </CardBody>
+      </Card>
 
       <Card>
         <CardHeader title={t("catalog.fulfill.shipments")} />

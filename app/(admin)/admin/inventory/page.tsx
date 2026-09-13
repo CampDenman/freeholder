@@ -9,6 +9,7 @@ import { BACKORDER_POLICIES } from "@/modules/catalog/contract";
 import {
   listInventory,
   listReorderQueue,
+  listReservations,
   listStockMovements,
   listTrackedVariantChoices,
 } from "@/modules/catalog/service";
@@ -37,6 +38,9 @@ export default async function InventoryPage({
   const selected = query.item ? items.find((row) => row.id === query.item) : null;
   const movements = selected
     ? await listStockMovements.call({ itemId: selected.id, limit: 50 }, actor)
+    : [];
+  const holds = selected
+    ? await listReservations.call({ itemId: selected.id }, actor)
     : [];
   const hideLocation = locations.length <= 1;
   const onlyLocation = locations[0];
@@ -136,6 +140,27 @@ export default async function InventoryPage({
                 available: selected.available,
               })}
             </p>
+            {holds.length === 0 ? (
+              <p className="mb-4 text-sm text-ink-muted">{t("catalog.inventory.reservationsEmpty")}</p>
+            ) : (
+              <ul className="mb-4 grid list-none gap-2 p-0 text-sm">
+                {holds.map((hold) => (
+                  <li key={hold.id} className="flex flex-wrap items-center gap-2 rounded-md border border-rule p-2">
+                    <Pill>{hold.status}</Pill>
+                    <span>{t("catalog.inventory.reservedCount", { count: hold.quantity })}</span>
+                    <span className="text-ink-muted">{hold.holderType}</span>
+                    {hold.status === "active" ? (
+                      <form action={productAction} className="ms-auto">
+                        <input type="hidden" name="intent" value="releaseReservation" />
+                        <input type="hidden" name="reservationId" value={hold.id} />
+                        <input type="hidden" name="itemId" value={selected.id} />
+                        <Button type="submit" variant="quiet">{t("catalog.inventory.releaseHold")}</Button>
+                      </form>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
             <form action={productAction} className="mb-6 grid gap-3 sm:grid-cols-3">
               <input type="hidden" name="intent" value="setLevels" />
               <input type="hidden" name="itemId" value={selected.id} />

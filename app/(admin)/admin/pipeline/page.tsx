@@ -10,7 +10,7 @@
 // idea at two scales, and §4.1 defines them with the same two tables.
 import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
-import { formatMoney } from "@/core/i18n";
+import { formatMoney, moneyDecimal } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
 import { listContacts } from "@/core/contacts/service";
 import { lifecycleBoard, listDeals, listPipelines } from "@/modules/crm/service";
@@ -22,6 +22,7 @@ import {
   installDefaultsAction,
   moveContactStageAction,
   moveDealAction,
+  updateDealAction,
 } from "../../pipeline-actions";
 
 export const dynamic = "force-dynamic";
@@ -191,6 +192,40 @@ export default async function PipelinePage({
                             {/* One form per card, posting the stage to move to.
                                 No JavaScript, and the same service the API
                                 calls — so a drag and a curl behave alike. */}
+                            <form action={updateDealAction} className="grid gap-1">
+                              <input type="hidden" name="id" value={deal.id} />
+                              <input type="hidden" name="currency" value={deal.currency ?? currency} />
+                              <input
+                                name="title"
+                                defaultValue={deal.title}
+                                aria-label={t("pipeline.field.title")}
+                                className="w-full rounded-md border border-rule bg-field px-1 py-1 text-xs"
+                              />
+                              <input
+                                name="value"
+                                inputMode="decimal"
+                                defaultValue={moneyDecimal(deal.valueMinor, deal.currency ?? currency)}
+                                aria-label={t("pipeline.field.worth")}
+                                className="w-full rounded-md border border-rule bg-field px-1 py-1 text-xs tabular-nums"
+                              />
+                              <input
+                                name="probability"
+                                inputMode="numeric"
+                                defaultValue={deal.probability ?? ""}
+                                placeholder={t("pipeline.field.probability")}
+                                className="w-full rounded-md border border-rule bg-field px-1 py-1 text-xs"
+                              />
+                              <input
+                                type="date"
+                                name="expectedCloseOn"
+                                defaultValue={deal.expectedCloseOn ?? ""}
+                                aria-label={t("pipeline.field.closeBy")}
+                                className="w-full rounded-md border border-rule bg-field px-1 py-1 text-xs"
+                              />
+                              <Button type="submit" variant="quiet">
+                                {t("pipeline.action.edit")}
+                              </Button>
+                            </form>
                             <form action={moveDealAction} className="grid gap-1">
                               <input type="hidden" name="id" value={deal.id} />
                               <select

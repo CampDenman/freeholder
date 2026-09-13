@@ -26,6 +26,7 @@ import {
   getUpdatePolicy,
   openForkUpdate,
   preflightUpdate,
+  rollbackUpdate,
   saveUpdatePolicy,
 } from "@/core/update/service";
 import {
@@ -65,6 +66,7 @@ import { createApiKey, revokeApiKey } from "@/core/apikeys/service";
 import {
   createWebhook,
   deleteWebhook,
+  replayDelivery,
   revealWebhookSecret,
   testWebhook,
   updateWebhook,
@@ -779,6 +781,10 @@ export async function updateControlAction(
         messageKey = "updates.message.forkOpened";
         break;
       }
+      case "rollback":
+        await rollbackUpdate.call({}, actor);
+        messageKey = "updates.message.rolledBack";
+        break;
       default:
         throw new ServiceError("validation", "Choose an update action.");
     }
@@ -1372,6 +1378,18 @@ export async function webhookAction(
   }
   revalidatePath("/admin/settings");
   return { saved: true };
+}
+
+export async function replayWebhookDeliveryAction(form: FormData): Promise<void> {
+  const id = field(form, "id");
+  try {
+    await replayDelivery.call({ id }, await currentActor());
+  } catch (error) {
+    const message = error instanceof ServiceError ? error.message : "That delivery could not be replayed.";
+    redirect(`/admin/settings?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/admin/settings");
+  redirect("/admin/settings?webhook=replayed");
 }
 
 /* ------------------------------------------------------------------- mail */
