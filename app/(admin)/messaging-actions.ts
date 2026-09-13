@@ -18,9 +18,10 @@ import {
 import {
   createKeywordRule,
   deleteKeywordRule,
+  KEYWORD_ACTIONS,
+  KEYWORD_MATCH_KINDS,
 } from "@/core/messaging/keywords";
 import { setMessagingWindow } from "@/core/messaging/policy";
-import { KEYWORD_ACTIONS, KEYWORD_MATCH_KINDS } from "@/core/messaging/schema";
 import { ownerFacing } from "./action-helpers";
 
 const MESSAGING = "/admin/messaging";

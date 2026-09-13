@@ -238,7 +238,7 @@ export function Segmented({
 
 const VARIANTS = {
   primary: "bg-accent text-on-accent shadow-press",
-  quiet: "border border-rule bg-transparent text-ink-muted",
+  quiet: "border border-rule bg-transparent text-ink",
   danger: "bg-danger text-on-danger shadow-press",
 } as const;
 

@@ -35,9 +35,9 @@ export interface Brand {
 /** Neutral, legible on both grounds, and obviously not anybody's brand. */
 const NEUTRAL: Brand["colors"] = {
   surface: "#ffffff",
-  ink: "#16181d",
-  inkMuted: "#5b6270",
-  accent: "#2f5fd0",
+  ink: "#23262a",
+  inkMuted: "#5a5f66",
+  accent: "#2551e0",
   onAccent: "#ffffff",
   danger: "#a4232b",
   rule: "#dfe2e8",

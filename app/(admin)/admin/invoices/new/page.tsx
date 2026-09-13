@@ -166,7 +166,7 @@ export default async function NewInvoicePage({
             <form action={createDepositBalanceAction} className="mt-4 grid gap-4 sm:grid-cols-2">
               <input type="hidden" name="idempotencyKey" value={`admin-deposit-${randomUUID()}`} />
               <input type="hidden" name="sourceId" value={randomUUID()} />
-              <Field label={t("invoices.contact")} htmlFor="deposit-contact">
+              <Field label={t("invoices.deposit.contact")} htmlFor="deposit-contact">
                 <Select id="deposit-contact" name="contactId" required defaultValue={selected}>
                   <option value="">{t("invoices.contactChoose")}</option>
                   {contacts.rows.map((contact) => (

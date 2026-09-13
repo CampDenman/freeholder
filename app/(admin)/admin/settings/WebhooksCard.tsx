@@ -175,7 +175,7 @@ export function WebhooksCard({
                         <div className="flex flex-wrap gap-2">
                           <a
                             href={`/admin/settings?delivery=${delivery.id}`}
-                            className="text-xs font-medium underline"
+                            className="text-xs font-medium text-accent underline"
                           >
                             {labels.inspect}
                           </a>
