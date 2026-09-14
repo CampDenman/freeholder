@@ -4211,6 +4211,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   shipment refresh jobs and generated SDK are implemented. Database integration
   tests prove acceptance stays pending and verified tracking ships the canonical
   fulfillment. Live merchant acceptance and the other provider journeys remain.
+  Daily implementation: private expiring rooms, separate host/guest tokens,
+  provider-confirmed shutdown, recording downloads and real WebVTT refresh.
+  `0009_daily_voice_video.sql` adds vendor identity and fenced retry leases.
+  HTTP and database integration cover room/token/recording flows; missed calls
+  close the provider room before writing the timeline. Admin setup, invitations
+  and recording recovery are localized in en/fr/es. Changeset
+  `daily-private-rooms.md`. Live call/device acceptance, owner storage import
+  and provider-side recording erasure remain incomplete; no C3.13 completion
+  is claimed by these mocked provider checks.
   Shopify implementation in progress: an own-store client exchanges expiring
   credentials, verifies shop identity on every page and imports paid orders as
   reviewable draft invoices. `tests/core/shopify-adapter.test.ts` covers token

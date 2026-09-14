@@ -10,6 +10,9 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  /** C3.13: Daily private room and recording provider. */
+  DAILY_API_KEY: z.string().optional(),
+  DAILY_DOMAIN: z.string().optional(),
   /** C3.13: own-store Shopify app credentials; never exposed by channel reads. */
   SHOPIFY_SHOP: z.string().optional(),
   SHOPIFY_CLIENT_ID: z.string().optional(),

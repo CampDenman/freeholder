@@ -21,6 +21,8 @@ import {
   removeCommunityPost,
 } from "../../plugins/community/service";
 import {
+  createVoiceVideoMeetingLink,
+  voiceVideoRecordingAccess,
   joinVoiceVideoRoom,
   missVoiceVideoRoom,
   recordVoiceVideoArtifact,
@@ -245,7 +247,7 @@ export async function startVoiceVideoAction(form: FormData): Promise<void> {
       {
         contactId: text(form, "contactId"),
         kind: text(form, "kind") === "video" ? "video" : "voice",
-        provider: text(form, "provider") || "fixture",
+        provider: text(form, "provider") || "daily",
         title: text(form, "title"),
         roomId: text(form, "roomId") || undefined,
       },
@@ -278,7 +280,7 @@ export async function joinVoiceVideoAction(form: FormData): Promise<void> {
 export async function stopVoiceVideoAction(form: FormData): Promise<void> {
   const path = "/admin/voice-video";
   try {
-    await stopVoiceVideoRoom.call({ roomId: text(form, "roomId") }, await actor());
+    await stopVoiceVideoRoom.call({ roomId: text(form, "roomId"), capture: false }, await actor());
   } catch (error) {
     done(path, error);
   }
@@ -304,9 +306,10 @@ export async function recordVoiceVideoAction(form: FormData): Promise<void> {
       {
         contactId: text(form, "contactId"),
         kind: text(form, "kind") === "video" ? "video" : "voice",
-        provider: text(form, "provider") || "fixture",
+        provider: text(form, "provider") || "daily",
         title: text(form, "title"),
         artifactId: text(form, "artifactId") || undefined,
+        refresh: text(form, "refresh") === "true",
         roomId: text(form, "roomId") || undefined,
       },
       await actor(),
@@ -351,4 +354,28 @@ export async function syncMarketplaceAction(form: FormData): Promise<void> {
   }
   revalidatePath(path);
   done(path);
+}
+
+export async function voiceVideoHostAction(form: FormData): Promise<void> {
+  const result = await createVoiceVideoMeetingLink.call({ roomId: text(form, "roomId"), audience: "host", hostName: text(form, "hostName") || "Host" }, await actor());
+  const url = new URL(result.roomUrl);
+  url.searchParams.set("t", result.meetingToken);
+  redirect(url.toString());
+}
+
+export async function voiceVideoInviteAction(_previous: { inviteTokenUrl?: string; error?: string }, form: FormData): Promise<{ inviteTokenUrl?: string; error?: string }> {
+  try {
+    const result = await createVoiceVideoMeetingLink.call({ roomId: text(form, "roomId"), audience: "guest" }, await actor());
+    const url = new URL(result.roomUrl);
+    url.searchParams.set("t", result.meetingToken);
+    return { inviteTokenUrl: url.toString() };
+  } catch (error) {
+    if (error instanceof ServiceError) return { error: error.message };
+    throw error;
+  }
+}
+
+export async function voiceVideoDownloadAction(form: FormData): Promise<void> {
+  const result = await voiceVideoRecordingAccess.call({ artifactId: text(form, "artifactId") }, await actor());
+  redirect(result.downloadTokenUrl);
 }

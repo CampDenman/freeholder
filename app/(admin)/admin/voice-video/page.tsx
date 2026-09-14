@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { listContacts } from "@/core/contacts/service";
 import {
+  voiceVideoConfiguration,
   listVoiceVideoArtifacts,
   listVoiceVideoJoins,
   listVoiceVideoRooms,
@@ -13,12 +14,16 @@ import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
 import {
+  voiceVideoHostAction,
+  voiceVideoDownloadAction,
   joinVoiceVideoAction,
   missVoiceVideoAction,
   recordVoiceVideoAction,
   startVoiceVideoAction,
   stopVoiceVideoAction,
 } from "../../first-party-plugin-actions";
+
+import { GuestInvite } from "./GuestInvite";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -30,11 +35,12 @@ export default async function VoiceVideoPage({
 }) {
   const actor = await requireStaffActor("voiceVideo", "manage");
   const query = await searchParams;
-  const [t, rooms, artifacts, people] = await Promise.all([
+  const [t, rooms, artifacts, people, configuration] = await Promise.all([
     getT(),
     domainOrNull(listVoiceVideoRooms.call({}, actor)),
     domainOrNull(listVoiceVideoArtifacts.call({}, actor)),
     domainOrNull(listContacts.call({ limit: 100 }, actor)),
+    domainOrNull(voiceVideoConfiguration.call({}, actor)),
   ]);
   const chosen =
     (rooms ?? []).find((row) => row.id === query.room) ?? (rooms ?? [])[0] ?? null;
@@ -60,6 +66,10 @@ export default async function VoiceVideoPage({
         </p>
       ) : null}
       <Card>
+        <CardHeader title={t("voiceVideo.setup")} />
+        <CardBody><p className="text-sm text-ink-muted">{t(configuration?.configured ? "voiceVideo.configured" : "voiceVideo.setupHelp", { domain: configuration?.domain ?? "" })}</p></CardBody>
+      </Card>
+      <Card>
         <CardHeader title={t("voiceVideo.start")} />
         <CardBody>
           <form action={startVoiceVideoAction} className="grid gap-3 sm:grid-cols-2">
@@ -83,7 +93,7 @@ export default async function VoiceVideoPage({
               <Input id="vv-title" name="title" required />
             </Field>
             <Field label={t("voiceVideo.field.provider")} htmlFor="vv-provider">
-              <Input id="vv-provider" name="provider" defaultValue="fixture" required />
+              <Input id="vv-provider" name="provider" defaultValue="daily" readOnly required />
             </Field>
             <div className="sm:col-span-2">
               <Button type="submit">{t("voiceVideo.start")}</Button>
@@ -117,6 +127,12 @@ export default async function VoiceVideoPage({
                   {room.lastError ? <span className="text-danger">{room.lastError}</span> : null}
                   {room.status === "live" ? (
                     <>
+                      <form action={voiceVideoHostAction}>
+                        <input type="hidden" name="roomId" value={room.id} />
+                        <input type="hidden" name="hostName" value={t("voiceVideo.hostName")} />
+                        <Button type="submit" variant="quiet">{t("voiceVideo.openHost")}</Button>
+                      </form>
+                      <GuestInvite roomId={room.id} label={t("voiceVideo.invite")} help={t("voiceVideo.inviteHelp")} />
                       <form action={stopVoiceVideoAction}>
                         <input type="hidden" name="roomId" value={room.id} />
                         <Button type="submit" variant="quiet">
@@ -131,7 +147,17 @@ export default async function VoiceVideoPage({
                       </form>
                     </>
                   ) : null}
-                  {room.status === "failed" ? (
+                  {(room.status === "live" || room.status === "ended") && !recordings.some(item => item.roomId === room.id) ? (
+                    <form action={recordVoiceVideoAction}>
+                      <input type="hidden" name="roomId" value={room.id} />
+                      <input type="hidden" name="contactId" value={room.contactId} />
+                      <input type="hidden" name="kind" value={room.kind} />
+                      <input type="hidden" name="provider" value={room.provider} />
+                      <input type="hidden" name="title" value={room.title} />
+                      <Button type="submit" variant="quiet">{t("voiceVideo.checkRecording")}</Button>
+                    </form>
+                  ) : null}
+                  {["failed", "pending", "stopping"].includes(room.status) && (!room.providerLeaseExpiresAt || room.providerLeaseExpiresAt <= new Date()) ? (
                     room.externalRef ? (
                       <form action={stopVoiceVideoAction}>
                         <input type="hidden" name="roomId" value={room.id} />
@@ -209,19 +235,21 @@ export default async function VoiceVideoPage({
                       {t(`voiceVideo.status.${artifact.status}`)}
                     </Pill>
                     {artifact.lastError ? <span className="text-danger">{artifact.lastError}</span> : null}
-                    {artifact.status === "failed" && !artifact.roomId ? (
+                    {["failed", "recorded", "pending"].includes(artifact.status) && (!artifact.providerLeaseExpiresAt || artifact.providerLeaseExpiresAt <= new Date()) ? (
                       <form action={recordVoiceVideoAction}>
                         <input type="hidden" name="artifactId" value={artifact.id} />
+                        <input type="hidden" name="refresh" value="true" />
                         <input type="hidden" name="contactId" value={artifact.contactId} />
                         <input type="hidden" name="kind" value={artifact.kind} />
                         <input type="hidden" name="provider" value={artifact.provider} />
                         <input type="hidden" name="title" value={artifact.title} />
                         <input type="hidden" name="roomId" value={artifact.roomId ?? ""} />
                         <Button type="submit" variant="quiet">
-                          {t("voiceVideo.retry")}
+                          {t(artifact.status === "recorded" ? "voiceVideo.refreshTranscript" : "voiceVideo.retry")}
                         </Button>
                       </form>
                     ) : null}
+                    {artifact.status === "recorded" ? <form action={voiceVideoDownloadAction}><input type="hidden" name="artifactId" value={artifact.id} /><Button type="submit" variant="quiet">{t("voiceVideo.download")}</Button></form> : null}
                   </div>
                   {artifact.transcript ? (
                     <p className="text-ink-muted">

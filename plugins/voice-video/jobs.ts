@@ -16,10 +16,14 @@ export const retryFailedVoiceVideo = defineJob({
   handler: async () => {
     const actor = { kind: "system" as const };
     const rooms = await listVoiceVideoRooms.call({}, actor);
+    let roomAttempts = 0;
     for (const room of rooms) {
-      if (room.status !== "failed") continue;
+      if (!["failed", "pending", "stopping"].includes(room.status)) continue;
+      if (room.providerLeaseExpiresAt && room.providerLeaseExpiresAt > new Date()) continue;
+      if (room.createdAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) continue;
+      if (roomAttempts++ >= 50) break;
       if (room.externalRef) {
-        await stopVoiceVideoRoom.call({ roomId: room.id }, actor);
+        await stopVoiceVideoRoom.call({ roomId: room.id, capture: false }, actor);
       } else {
         await startVoiceVideoRoom.call(
           {
@@ -34,10 +38,14 @@ export const retryFailedVoiceVideo = defineJob({
       }
     }
     const artifacts = await listVoiceVideoArtifacts.call({}, actor);
+    let artifactAttempts = 0;
     for (const artifact of artifacts) {
-      if (artifact.status !== "failed" || artifact.kind === "transcript" || artifact.roomId) {
+      if (!["failed", "pending"].includes(artifact.status) || artifact.kind === "transcript" ||
+        (artifact.providerLeaseExpiresAt && artifact.providerLeaseExpiresAt > new Date()) ||
+        artifact.createdAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
         continue;
       }
+      if (artifactAttempts++ >= 50) break;
       await recordVoiceVideoArtifact.call(
         {
           artifactId: artifact.id,
@@ -45,6 +53,7 @@ export const retryFailedVoiceVideo = defineJob({
           kind: artifact.kind === "video" ? "video" : "voice",
           provider: artifact.provider,
           title: artifact.title,
+          roomId: artifact.roomId ?? undefined,
         },
         actor,
       );

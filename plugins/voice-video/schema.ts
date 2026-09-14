@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
@@ -17,6 +17,10 @@ export const voiceVideoRooms = pgTable(
     title: text("title").notNull(),
     status: text("status").notNull().default("pending"),
     externalRef: text("external_ref"),
+    providerRoomId: text("provider_room_id"),
+    providerDomain: text("provider_domain"),
+    providerLeaseToken: uuid("provider_lease_token"),
+    providerLeaseExpiresAt: timestamp("provider_lease_expires_at", { withTimezone: true }),
     lastError: text("last_error"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
@@ -60,6 +64,8 @@ export const voiceVideoArtifacts = pgTable(
     provider: text("provider").notNull(),
     title: text("title").notNull(),
     externalRef: text("external_ref"),
+    providerLeaseToken: uuid("provider_lease_token"),
+    providerLeaseExpiresAt: timestamp("provider_lease_expires_at", { withTimezone: true }),
     status: text("status").notNull().default("recorded"),
     conversationId: uuid("conversation_id"),
     transcript: text("transcript"),

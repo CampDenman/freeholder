@@ -255,3 +255,27 @@ The ledger of accepted dependency advisories is currently empty.
 | Critical/high open | |
 | Lower findings dispositioned | |
 | Follow-up tickets | |
+
+### Daily private calls (C3.13)
+
+**Code.** `plugins/voice-video/daily.ts`, `adapter.ts`, `service.ts`, and the
+admin voice/video actions. **Tests.** `daily-adapter.test.ts`,
+`daily-flow.test.ts`, `plugin-claims.test.ts`, `internal-services.test.ts`, and
+the unconfigured-provider browser journey.
+
+Provider requests use a fixed HTTPS API origin, bounded bodies, timeouts and
+no redirects. Transcript downloads use public-DNS-pinned transport without
+the API credential. Room and recording identities must match the persisted
+provider account. Private rooms expire; separate room-bound host/guest tokens
+expire within 30 minutes. Token-bearing result fields use explicit `Token`
+names for central redaction and never enter room/artifact list rows. Guest
+links are generated for manual sharing, not sent automatically. Provider
+shutdown expires the room, ejects participants and verifies empty presence;
+local state alone is not accepted as that evidence. Expiring leases reject
+stale provider results, with provider I/O outside database transactions.
+
+**Residuals.** Review actual Daily token/recording behavior and access-link
+handling against a live domain. Recording bytes remain at Daily; local contact
+erasure does not yet delete provider recordings or expired room metadata.
+Owner-storage import and provider-side erasure remain C3.13 requirements.
+This implementation and its mocked HTTP tests are not an independent review.

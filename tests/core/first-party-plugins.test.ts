@@ -653,9 +653,12 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
       },
       OWNER,
     );
+    const retryClaim = await getService("voiceVideo.claimStart").call({ roomId: failed.id,
+      contactId: person.id, kind: "voice", provider: "fixture", title: "fail-thread" }, { kind: "system" }) as { leaseToken: string };
     await getService("voiceVideo.applyStart").call(
       {
         roomId: failed.id,
+        leaseToken: retryClaim.leaseToken,
         externalRef: "vv-room:leaked",
         lastError: "The contact thread could not be written.",
       },
