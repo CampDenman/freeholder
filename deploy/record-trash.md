@@ -4,7 +4,8 @@
 # Note and task recovery (C11.14)
 
 **Move to trash** removes a note or task from normal lists and global search.
-Trashed tasks do not appear in briefings or claim reminder notifications.
+Trashed tasks do not appear in project checklists or their open-task counts,
+briefings, or reminder claims.
 The original row remains: restoring it preserves its ID, revisions, assignment,
 recurrence state and subject links. A contact merge and its undo also update
 contact-subject links, including on trashed rows.
