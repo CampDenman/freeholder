@@ -626,6 +626,19 @@ export const expireAgentApprovals = defineJob({
   },
 });
 
+/** Per-kind TTL for registered user-owned stores, honouring privacy holds. */
+export const applyRetentionPoliciesJob = defineJob({
+  name: "core.applyRetention",
+  summary: "Purge registered user-owned rows older than their retention policy.",
+  schedule: "23 5 * * *",
+  concurrency: 1,
+  leaseSeconds: 60 * 60,
+  handler: async () => {
+    const { applyRetentionPolicies } = await import("@/core/retention/apply");
+    return applyRetentionPolicies();
+  },
+});
+
 /** Trash is reversible for thirty days, then storage is reclaimed in batches. */
 export const purgeExpiredMediaAssets = defineJob({
   name: "core.purgeExpiredMedia",
@@ -920,6 +933,7 @@ export default [
   runPlaybooks,
   assembleBriefings,
   runManagedAgents,
+  applyRetentionPoliciesJob,
   purgeExpiredMediaAssets,
   backfillMediaWatermarks,
   deliverNotifications,

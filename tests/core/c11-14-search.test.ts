@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Product-wide search over live user-owned rows (C11.14). Does not close the
-// item: undelete-every-row and per-table TTL remain named leftovers.
+// item: undelete-every-row remains a named leftover.
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { is } from "drizzle-orm";
@@ -35,9 +35,6 @@ describe("C11.14 search leftovers", () => {
     );
     expect(master).toContain(
       "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
-    );
-    expect(master).toContain(
-      "Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.",
     );
     expect(master).toContain(
       "Other titled contact-attached stores still on per-list search (orders, subscriptions, and remaining SEARCH_TABLE_OPT_OUTS) are not mixed into search.query.",

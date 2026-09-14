@@ -65,6 +65,7 @@ const ADMIN_MODULES = [
   "search",
   "seo",
   "settings",
+  "retention",
   "time",
   "webhooks",
 ];

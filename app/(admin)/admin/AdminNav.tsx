@@ -9,6 +9,7 @@ import {
   Copy,
   CreditCard,
   Gauge,
+  Hourglass,
   MagnifyingGlass,
   Sun,
   Image as ImageIcon,
@@ -84,6 +85,7 @@ export interface AdminNavLabels {
   updates: string;
   jobs: string;
   settings: string;
+  retention: string;
   redirects: string;
   roles: string;
   invitations: string;
@@ -224,6 +226,7 @@ const LINKS = [
   { href: "/admin/roles", key: "roles", module: "roles", Icon: ShieldCheck },
   { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
   { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
+  { href: "/admin/retention", key: "retention", module: "retention", Icon: Hourglass },
   { href: "/admin/redirects", key: "redirects", module: "seo", Icon: ArrowBendUpRight },
   { href: "/admin/work", key: "work", module: "agents", Icon: Kanban },
   { href: "/admin/contribute", key: "contribute", module: "contribute", Icon: ChatCircleText },

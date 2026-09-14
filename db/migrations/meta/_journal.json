@@ -36,6 +36,13 @@
       "when": 1792166400007,
       "tag": "0004_marketplace_channel_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792166400008,
+      "tag": "0005_retention_policies",
+      "breakpoints": true
     }
   ]
 }

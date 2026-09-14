@@ -123,6 +123,7 @@ export default async function AdminLayout({
               locations: t("admin.nav.locations"),
               translations: t("admin.nav.translations"),
               settings: t("admin.nav.settings"),
+              retention: t("admin.nav.retention"),
               redirects: t("seo.redirects.title"),
               roles: t("admin.nav.roles"),
               invitations: t("admin.nav.invitations"),

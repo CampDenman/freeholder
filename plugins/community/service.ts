@@ -22,6 +22,10 @@ import {
   registerSearchSource,
 } from "@/core/search/registry";
 import {
+  purgeAgedContactRows,
+  registerRetentionSource,
+} from "@/core/retention/registry";
+import {
   COMMUNITY_ROLES,
   communityJoinRequests,
   communityMembers,
@@ -919,6 +923,13 @@ export const moderateCommunityPostBySlug = defineService({
     const [updated] = await postsQuery(ctx.tx).where(eq(communityPosts.id, post.id)).limit(1);
     return updated!;
   },
+});
+
+registerRetentionSource({
+  kind: "community_posts",
+  tables: ["community_posts"],
+  privacyScope: "plugins.community.posts",
+  purge: (args) => purgeAgedContactRows(communityPosts, args),
 });
 
 registerSearchSource({

@@ -175,3 +175,4 @@ export {
   pluginRetentions,
   importRuns,
 } from "@/core/plugins/schema";
+export { retentionPolicies } from "@/core/retention/schema";
