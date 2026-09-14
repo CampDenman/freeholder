@@ -7,7 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 
 > Historical snapshot only. Not a planning authority. `MASTER.md` §43 is the
 > only product, architecture, status, and delivery source of truth. Do not pick
-> the next work item from this file or from `RESTART_HANDOFF.md`.
+> the next work item from this file or from `RESTART_HANDOFF.md`. The latest
+> session snapshot is `SESSION_HANDOFF.md` (2026-09-14).
 
 ---
 
