@@ -130,7 +130,7 @@ const claimStart = defineService({
         .select()
         .from(voiceVideoRooms)
         .where(eq(voiceVideoRooms.id, input.roomId))
-        .limit(1);
+        .limit(1).for("update");
       if (!existing) throw new ServiceError("not_found", "No such room.");
       if (existing.status === "live") {
         throw new ServiceError("conflict", "That room is already open.");
@@ -360,7 +360,7 @@ const claimStop = defineService({
       .select()
       .from(voiceVideoRooms)
       .where(eq(voiceVideoRooms.id, input.roomId))
-      .limit(1);
+      .limit(1).for("update");
     if (!room) throw new ServiceError("not_found", "No such room.");
     if (room.status === "ended") {
       throw new ServiceError("conflict", "That room has already been recorded.");
@@ -479,10 +479,13 @@ const claimCapture = defineService({
         .select()
         .from(voiceVideoArtifacts)
         .where(eq(voiceVideoArtifacts.id, input.artifactId))
-        .limit(1);
+        .limit(1).for("update");
       if (!existing) throw new ServiceError("not_found", "No such recording.");
       if (existing.status === "recorded") {
         throw new ServiceError("conflict", "That recording is already stored.");
+      }
+      if (existing.status === "pending") {
+        throw new ServiceError("conflict", "That recording is already being stored.");
       }
       await ctx.tx
         .update(voiceVideoArtifacts)
@@ -840,6 +843,7 @@ export const listVoiceVideoArtifacts = defineService({
 
 registerSearchSource({
   kind: "voice_video_room",
+  readService: "voiceVideo.listRooms",
   module: "voiceVideo",
   tables: ["voice_video_rooms"],
   search: async ({ tx, pattern, limit }) => {

@@ -44,13 +44,11 @@ trap cleanup EXIT
 
 psql_db() { psql -h "$PGHOST" -U "$PGUSER" -d "$DB" -tA -c "$1"; }
 
-# A released image to upgrade *from* is the whole premise. On the very first
-# run of a fresh repository there is none, and failing then would mean a red
-# tick nobody can fix. Skipped loudly rather than passed quietly — a gate that
-# silently does nothing is worse than no gate.
+# C11.15: a missing image, denied credentials and a network outage all fail
+# docker pull. None proves a first release, and none verifies an upgrade.
 if ! docker pull "$PREVIOUS_IMAGE" >/dev/null 2>&1; then
-  echo "::warning title=Upgrade gate skipped::No previously published image at ${PREVIOUS_IMAGE}. Nothing to upgrade from; §39.9 is not being checked on this run."
-  exit 0
+  echo "::error title=Upgrade gate blocked::Could not pull ${PREVIOUS_IMAGE}. Check the image reference, registry access and network, then rerun. No upgrade or rollback was verified."
+  exit 1
 fi
 
 previous_digest=$(docker image inspect "$PREVIOUS_IMAGE" --format '{{index .RepoDigests 0}}' 2>/dev/null || echo "$PREVIOUS_IMAGE")

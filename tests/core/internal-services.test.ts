@@ -58,6 +58,8 @@ const INTERNAL = [
   "media.purgeExpired",
   "media.purgeExpiredClaim",
   "media.registerStoredOriginal",
+  "media.stageCompletedUpload",
+  "marketplace.importProviderOrder",
   "messaging.applySmsEvents",
   "messaging.applySmsEventsApply",
   "notifications.create",

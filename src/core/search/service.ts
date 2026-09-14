@@ -4,8 +4,8 @@
 // grant-filtered, no second document store.
 import { z } from "zod";
 import { listed, row, uuid } from "@/core/contract";
-import { defineService, hasModuleAccess, type Actor } from "@/core/service";
-import { ilikeContains, searchSources } from "./registry";
+import { defineService, getService, permits, type Actor } from "@/core/service";
+import { ilikeContains, searchSources, type SearchSource } from "./registry";
 import "./sources";
 
 const hit = row({
@@ -18,15 +18,14 @@ const hit = row({
   module: z.string(),
 });
 
-function canSeeSource(actor: Actor, module: string): boolean {
-  if (actor.kind === "system") return true;
-  if (actor.kind === "user") return hasModuleAccess(actor, module);
-  if (actor.kind === "agent") {
-    return actor.scopes.some(
-      (scope) => scope === `${module}.*` || scope.startsWith(`${module}.`),
-    );
-  }
-  return false;
+function canSeeSource(actor: Actor, source: SearchSource): boolean {
+  // C11.10/C11.14: a write scope is not read authority. Consult the actual
+  // query contract for humans and API keys alike; module-prefix matching
+  // leaked contact data and crossed notes/tasks/conversations grant families.
+  const { def } = getService(source.readService);
+  if (def.kind !== "query" || def.permission !== "scoped") return false;
+  if (actor.kind === "agent" && def.agentCallable === false) return false;
+  return permits(actor, def.permission, def.name, def.kind);
 }
 
 export const querySearch = defineService({
@@ -45,7 +44,7 @@ export const querySearch = defineService({
     const wanted = input.kinds ? new Set(input.kinds) : null;
     const selected = searchSources().filter((source) => {
       if (wanted && !wanted.has(source.kind)) return false;
-      return canSeeSource(ctx.actor, source.module);
+      return canSeeSource(ctx.actor, source);
     });
     const buckets = await Promise.all(
       selected.map((source) =>

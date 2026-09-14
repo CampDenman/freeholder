@@ -1,5 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import { cookies } from "next/headers";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Button, Card, CardBody, CardHeader, Field, Input, Select } from "@/ui/primitives";
@@ -8,7 +11,9 @@ import {
   getCommunitySpaceBySlug,
 } from "../../../../plugins/community/service";
 import { ServiceError } from "@/core/service";
-import { getT } from "../../../i18n";
+import { currentBusiness } from "@/core/settings/read";
+import { localizeCustomerHref } from "@/core/i18n/customer";
+import { getLocale, getT } from "../../../i18n";
 import {
   createCommunityPostPublicAction,
   joinCommunityPublicAction,
@@ -42,12 +47,15 @@ export default async function PublicCommunityPage({
     error?: string;
     requested?: string;
     reported?: string;
-    email?: string;
   }>;
 }) {
   const { slug } = await params;
   const query = await searchParams;
   const t = await getT();
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const signedIn = actor.kind === "user";
+  const [business, locale] = await Promise.all([currentBusiness(), getLocale()]);
+  const loginHref = business ? localizeCustomerHref("/portal/login", locale, business) : "/portal/login";
   let page;
   try {
     page = await getCommunitySpaceBySlug.call({ slug }, { kind: "anonymous" });
@@ -60,8 +68,8 @@ export default async function PublicCommunityPage({
   let feedFailed = false;
   try {
     feed = await getCommunityFeedBySlug.call(
-      { slug, email: query.email || undefined },
-      { kind: "anonymous" },
+      { slug },
+      actor,
     );
   } catch (error) {
     if (error instanceof ServiceError && error.code === "not_found") notFound();
@@ -146,28 +154,15 @@ export default async function PublicCommunityPage({
               </form>
             </CardBody>
           </Card>
-          <Card>
-            <CardHeader title={t("community.public.memberView")} />
-            <CardBody>
-              <form method="get" className="grid gap-3 sm:grid-cols-2">
-                <Field label={t("community.public.email")} htmlFor="community-member-email">
-                  <Input
-                    id="community-member-email"
-                    name="email"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    defaultValue={query.email ?? ""}
-                  />
-                </Field>
-                <div className="flex items-end">
-                  <Button type="submit">{t("community.public.memberView")}</Button>
-                </div>
-              </form>
-            </CardBody>
-          </Card>
+
         </>
       )}
+
+      {!signedIn ? (
+        <p className="text-sm text-ink-muted">
+          <a className="font-medium text-accent" href={loginHref}>{t("community.public.signIn")}</a>
+        </p>
+      ) : null}
 
       {feedFailed ? (
         <Card>
@@ -211,7 +206,6 @@ export default async function PublicCommunityPage({
                             type="email"
                             required
                             autoComplete="email"
-                            defaultValue={query.email ?? ""}
                           />
                         </Field>
                         <div className="sm:col-span-2">
@@ -226,7 +220,7 @@ export default async function PublicCommunityPage({
               )}
             </CardBody>
           </Card>
-          {rooms.length > 0 ? (
+          {rooms.length > 0 && signedIn ? (
             <Card>
               <CardHeader title={t("community.public.post")} />
               <CardBody>
@@ -240,19 +234,6 @@ export default async function PublicCommunityPage({
                         </option>
                       ))}
                     </Select>
-                  </Field>
-                  <Field label={t("community.public.name")} htmlFor="community-post-name">
-                    <Input id="community-post-name" name="name" required autoComplete="name" />
-                  </Field>
-                  <Field label={t("community.public.email")} htmlFor="community-post-email">
-                    <Input
-                      id="community-post-email"
-                      name="email"
-                      type="email"
-                      required
-                      autoComplete="email"
-                      defaultValue={query.email ?? ""}
-                    />
                   </Field>
                   <Field label={t("community.field.body")} htmlFor="community-post-body">
                     <textarea

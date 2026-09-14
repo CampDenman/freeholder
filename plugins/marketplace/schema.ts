@@ -16,6 +16,8 @@ export const marketplaceChannels = pgTable(
     lastError: text("last_error"),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     syncCursor: text("sync_cursor"),
+    syncLeaseToken: uuid("sync_lease_token"),
+    syncLeaseExpiresAt: timestamp("sync_lease_expires_at", { withTimezone: true }),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { and, desc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
@@ -10,6 +11,7 @@ import {
   defineService,
   getService,
   ServiceError,
+  type ServiceContext,
 } from "@/core/service";
 import { marketplaceProvider } from "./adapter";
 import { marketplaceChannels, marketplaceOrders } from "./schema";
@@ -24,6 +26,7 @@ attachPluginContactColumn({
 const PROVIDERS = ["shopify", "etsy", "amazon", "ebay"] as const;
 const SYNC_PAGE_SIZE = 50;
 const MAX_SYNC_PAGES = 500;
+const SYNC_LEASE_MS = 10 * 60 * 1000;
 
 function invoiceIdentity(channelId: string, externalRef: string): string {
   return `marketplace:${channelId}:${externalRef}`;
@@ -168,87 +171,56 @@ export const connectMarketplaceChannel = defineOrchestratedService({
   },
 });
 
+const syncClaim = z.object({ channelId: z.string().uuid(), leaseToken: z.string().uuid() });
+
+async function requireSyncLease(input: z.infer<typeof syncClaim>, ctx: ServiceContext) {
+  const [channel] = await ctx.tx.select({ id: marketplaceChannels.id }).from(marketplaceChannels)
+    .where(and(eq(marketplaceChannels.id, input.channelId),
+      eq(marketplaceChannels.status, "syncing"), eq(marketplaceChannels.syncLeaseToken, input.leaseToken),
+      gt(marketplaceChannels.syncLeaseExpiresAt, new Date())))
+    .limit(1).for("update");
+  if (!channel) throw new ServiceError("conflict", "That marketplace sync no longer owns its lease.");
+}
+
 const claimSync = defineService({
   name: "marketplace.claimSync",
-  summary: "Lock a connected channel before pulling orders.",
-  kind: "mutation",
-  permission: "scoped",
-  external: false,
-  writeClass: "write",
+  summary: "Exclusively lease a connected channel, or recover an expired sync.",
+  kind: "mutation", permission: "scoped", external: false, writeClass: "write",
   input: z.object({ channelId: z.string().uuid() }),
-  output: row({
-    channelId: uuid,
-    provider: z.string(),
-    externalRef: z.string(),
-    cursor: z.string().nullable(),
-  }),
+  output: row({ channelId: uuid, provider: z.string(), externalRef: z.string(), cursor: z.string().nullable(), leaseToken: uuid }),
   handler: async (input, ctx) => {
-    const [locked] = await ctx.tx
-      .update(marketplaceChannels)
-      .set({ status: "syncing", lastError: null })
-      .where(and(eq(marketplaceChannels.id, input.channelId), eq(marketplaceChannels.status, "connected")))
+    const now = new Date();
+    const leaseToken = randomUUID();
+    const [locked] = await ctx.tx.update(marketplaceChannels)
+      .set({ status: "syncing", lastError: null, syncLeaseToken: leaseToken,
+        syncLeaseExpiresAt: new Date(now.getTime() + SYNC_LEASE_MS) })
+      .where(and(eq(marketplaceChannels.id, input.channelId), or(
+        eq(marketplaceChannels.status, "connected"),
+        and(eq(marketplaceChannels.status, "syncing"), or(
+          isNull(marketplaceChannels.syncLeaseExpiresAt), lt(marketplaceChannels.syncLeaseExpiresAt, now))))))
       .returning();
-    if (locked?.externalRef) {
-      return {
-        channelId: locked.id,
-        provider: locked.provider,
-        externalRef: locked.externalRef,
-        cursor: locked.syncCursor,
-      };
-    }
-    const [existing] = await ctx.tx
-      .select()
-      .from(marketplaceChannels)
-      .where(eq(marketplaceChannels.id, input.channelId))
-      .limit(1);
-    if (!existing) throw new ServiceError("not_found", "No such marketplace channel.");
-    // A crashed sync leaves `syncing`; reclaim so Retry/the job can finish.
-    if (existing.status === "syncing" && existing.externalRef) {
-      return {
-        channelId: existing.id,
-        provider: existing.provider,
-        externalRef: existing.externalRef,
-        cursor: existing.syncCursor,
-      };
-    }
-    if (existing.status === "syncing") {
-      throw new ServiceError("conflict", "That channel is already syncing.");
-    }
-    throw new ServiceError("conflict", "Connect that channel before syncing orders.");
+    if (locked?.externalRef) return { channelId: locked.id, provider: locked.provider,
+      externalRef: locked.externalRef, cursor: locked.syncCursor, leaseToken };
+    throw new ServiceError("conflict", "Connect that channel or wait for its active sync to finish.");
   },
 });
 
 const applySync = defineService({
   name: "marketplace.applySync",
-  summary: "Stamp the last marketplace sync page.",
-  kind: "mutation",
-  permission: "scoped",
-  external: false,
-  writeClass: "write",
-  input: z.object({
-    channelId: z.string().uuid(),
-    lastError: z.string().max(500).optional(),
-    cursor: z.string().max(500).nullable().optional(),
-    completed: z.boolean().optional(),
-  }),
+  summary: "Renew or finish the current marketplace sync lease and checkpoint.",
+  kind: "mutation", permission: "scoped", external: false, writeClass: "write",
+  input: syncClaim.extend({ lastError: z.string().max(500).optional(), cursor: z.string().max(500).nullable().optional(), completed: z.boolean().optional() }),
   output: okResult,
   handler: async (input, ctx) => {
-    if (input.lastError) {
-      await ctx.tx
-        .update(marketplaceChannels)
-        .set({ status: "connected", lastError: input.lastError })
-        .where(eq(marketplaceChannels.id, input.channelId));
-    } else {
-      await ctx.tx
-        .update(marketplaceChannels)
-        .set({
-          lastError: null,
-          syncCursor: input.cursor ?? null,
-          status: input.completed ? "connected" : "syncing",
-          ...(input.completed ? { lastSyncedAt: new Date() } : {}),
-        })
-        .where(eq(marketplaceChannels.id, input.channelId));
-    }
+    await requireSyncLease(input, ctx);
+    const finished = Boolean(input.lastError || input.completed);
+    await ctx.tx.update(marketplaceChannels).set({
+      status: finished ? "connected" : "syncing", lastError: input.lastError ?? null,
+      syncLeaseToken: finished ? null : input.leaseToken,
+      syncLeaseExpiresAt: finished ? null : new Date(Date.now() + SYNC_LEASE_MS),
+      ...(!input.lastError ? { syncCursor: input.cursor ?? null } : {}),
+      ...(input.completed ? { lastSyncedAt: new Date() } : {}),
+    }).where(eq(marketplaceChannels.id, input.channelId));
     return { ok: true as const };
   },
 });
@@ -336,62 +308,58 @@ const recordImported = defineService({
   },
 });
 
-async function importProviderOrder(
-  channelId: string,
-  order: {
-    externalRef: string;
-    description: string;
-    amountMinor: number;
-    currency: string;
-    buyerEmail: string;
-    buyerName: string;
-  },
-): Promise<boolean> {
-  const already = await findImported.call(
-    { channelId, externalRef: order.externalRef },
-    { kind: "system" },
-  );
-  if (already.id) return false;
-  const resolved = (await getService("contacts.resolve").call(
-    { email: order.buyerEmail, name: order.buyerName, source: "marketplace" },
-    { kind: "system" },
-  )) as { contact: { id: string } };
-  const identity = invoiceIdentity(channelId, order.externalRef);
-  const draft = (await getService("invoicing.createDraft").call(
-    {
-      contactId: resolved.contact.id,
-      currency: order.currency,
-      sourceType: "order",
-      sourceId: identity,
-      idempotencyKey: identity,
-      lines: [
-        {
-          description: order.description,
-          quantityMicros: 1_000_000,
-          unitAmountMinor: order.amountMinor,
+const importProviderOrder = defineService({
+  name: "marketplace.importProviderOrder",
+  summary: "Import one leased channel order atomically onto the contact and invoice spine.",
+  kind: "mutation", permission: "system", writeClass: "money",
+  input: syncClaim.extend({ order: z.object({ externalRef: z.string().min(1).max(200),
+    description: z.string().min(1).max(1000), amountMinor: z.number().int().nonnegative(),
+    currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/), buyerEmail: z.email(), buyerName: z.string().min(1).max(200) }) }),
+  output: z.boolean(),
+  handler: async ({ channelId, leaseToken, order }, ctx) => {
+    await requireSyncLease({ channelId, leaseToken }, ctx);
+    const already = await ctx.call(findImported,
+      { channelId, externalRef: order.externalRef },
+    );
+    if (already.id) return false;
+    const resolved = (await ctx.callAsSystem(getService("contacts.resolve"),
+      { email: order.buyerEmail, name: order.buyerName, source: "marketplace" },
+    )) as { contact: { id: string } };
+    const identity = invoiceIdentity(channelId, order.externalRef);
+    const draft = (await ctx.callAsSystem(getService("invoicing.createDraft"),
+      {
+        contactId: resolved.contact.id,
+        currency: order.currency,
+        sourceType: "order",
+        sourceId: identity,
+        idempotencyKey: identity,
+        lines: [
+          {
+            description: order.description,
+            quantityMicros: 1_000_000,
+            unitAmountMinor: order.amountMinor,
+          },
+        ],
+        tax: {
+          mode: "not_applicable",
+          reason: "Imported marketplace order; tax was collected on the channel.",
         },
-      ],
-      tax: {
-        mode: "not_applicable",
-        reason: "Imported marketplace order; tax was collected on the channel.",
       },
-    },
-    { kind: "system" },
-  )) as { invoice: { id: string } };
-  const recorded = await recordImported.call(
-    {
-      channelId,
-      contactId: resolved.contact.id,
-      invoiceId: draft.invoice.id,
-      externalRef: order.externalRef,
-      description: order.description,
-      amountMinor: order.amountMinor,
-      currency: order.currency,
-    },
-    { kind: "system" },
-  );
-  return recorded.created;
-}
+    )) as { invoice: { id: string } };
+    const recorded = await ctx.call(recordImported,
+      {
+        channelId,
+        contactId: resolved.contact.id,
+        invoiceId: draft.invoice.id,
+        externalRef: order.externalRef,
+        description: order.description,
+        amountMinor: order.amountMinor,
+        currency: order.currency,
+      },
+    );
+    return recorded.created;
+  },
+});
 
 export const syncMarketplaceChannel = defineOrchestratedService({
   name: "marketplace.sync",
@@ -419,22 +387,23 @@ export const syncMarketplaceChannel = defineOrchestratedService({
           limit: SYNC_PAGE_SIZE,
         });
         for (const order of page.orders) {
-          if (await importProviderOrder(claimed.channelId, order)) imported += 1;
+          if (await importProviderOrder.call({ channelId: claimed.channelId, leaseToken: claimed.leaseToken, order }, { kind: "system" })) imported += 1;
         }
         const nextCursor = page.nextCursor;
+        if (nextCursor && nextCursor === cursor) throw new Error("The marketplace repeated its sync cursor.");
         const completed = !nextCursor;
         await applySync.call(
-          { channelId: claimed.channelId, cursor: nextCursor, completed },
+          { channelId: claimed.channelId, leaseToken: claimed.leaseToken, cursor: nextCursor, completed },
           { kind: "system" },
         );
-        if (completed || nextCursor === cursor) break;
+        if (completed) break;
         cursor = nextCursor;
       }
       return { imported, lastError: null };
     } catch (error) {
       const message = error instanceof Error ? error.message : "The marketplace could not list orders.";
       await applySync.call(
-        { channelId: claimed.channelId, lastError: message.slice(0, 500) },
+        { channelId: claimed.channelId, leaseToken: claimed.leaseToken, lastError: message.slice(0, 500) },
         { kind: "system" },
       );
       return { imported, lastError: message.slice(0, 500) };
@@ -476,6 +445,7 @@ export default [
   applySync,
   findImported,
   recordImported,
+  importProviderOrder,
   syncMarketplaceChannel,
   listMarketplaceChannels,
   listMarketplaceOrders,

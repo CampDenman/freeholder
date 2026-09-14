@@ -56,5 +56,10 @@ export const fixtureVoiceVideoProvider: VoiceVideoProvider = {
 };
 
 export function voiceVideoProvider(): VoiceVideoProvider {
+  // C3.13/C11.15: fixtures are executable test doubles, never proof that a
+  // vendor accepted a job, opened a call, or connected an account.
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("No live voice/video provider is configured. No call or recording has been created.");
+  }
   return fixtureVoiceVideoProvider;
 }

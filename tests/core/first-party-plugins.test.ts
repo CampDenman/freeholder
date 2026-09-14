@@ -1,13 +1,15 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // First-party plugins: human surfaces, provider sync, failure recovery (C3.13).
+import { randomUUID } from "node:crypto";
+import { users } from "@/core/auth/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import manifests from "@/modules";
 import { isPluginManifest } from "@/core/plugin";
 import { ready } from "@/core/runtime";
 import { createContact, mergeContacts } from "@/core/contacts/service";
-import { timelineEvents } from "@/core/contacts/schema";
+import { contacts, timelineEvents } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { getConversation } from "@/core/messaging/service";
 import { getService } from "@/core/service";
@@ -236,9 +238,9 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
     expect(job.fulfillmentId).toBeTruthy();
     expect(job.externalRef).toBe("pod:printify:printify-mug-1");
     const shipment = await getFulfillment.call({ id: job.fulfillmentId! }, OWNER);
-    expect(shipment.fulfillment.status).toBe("shipped");
-    expect(shipment.fulfillment.trackingNumber).toBe(job.externalRef);
-    expect((await getOrder.call({ id: paid.order.id }, OWNER)).order.status).toBe("fulfilled");
+    expect(shipment.fulfillment.status).toBe("pending");
+    expect(shipment.fulfillment.trackingNumber).toBeNull();
+    expect((await getOrder.call({ id: paid.order.id }, OWNER)).order.status).toBe("fulfilling");
 
     const refused = await paidPrintOrder("fail-mug");
     const failedJobs = await queueOrderLines.call({ orderId: refused.order.id }, OWNER);
@@ -722,6 +724,9 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
       OWNER,
     );
     expect(room.spaceId).toBe(space.id);
+    const memberUserId = randomUUID();
+    await db().insert(users).values({ id: memberUserId, email: "member@demo.freeholder.test", role: "customer" });
+    await db().update(contacts).set({ userId: memberUserId }).where(eq(contacts.id, joined.contactId));
     await createCommunityPostBySlug.call(
       {
         slug: "harbour",
@@ -730,7 +735,7 @@ describe.runIf(hasDatabase)("first-party plugin sync and recovery (C3.13)", { ti
         name: "Member",
         body: "Hello harbour.",
       },
-      { kind: "anonymous" },
+      { kind: "user", userId: memberUserId, role: "customer", grants: [] },
     );
     const openFeed = await getCommunityFeedBySlug.call(
       { slug: "harbour" },

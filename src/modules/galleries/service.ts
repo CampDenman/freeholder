@@ -2801,6 +2801,7 @@ registerContactPrivacySource({
 
 registerSearchSource({
   kind: "gallery",
+  readService: "galleries.list",
   module: "galleries",
   tables: ["galleries"],
   search: async ({ tx, pattern, limit }) => {

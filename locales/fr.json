@@ -1913,6 +1913,7 @@
   "community.public.gatedFeed": "Les membres voient le fil une fois ajoutes par le proprietaire. Utilisez le courriel avec lequel vous avez rejoint.",
   "community.public.intro": "Un espace communautaire sur ce site.",
   "community.public.join": "Rejoindre",
+  "community.public.signIn": "Connectez-vous pour lire ou publier en tant que membre de la communauté.",
   "community.public.memberView": "Je suis membre",
   "community.public.name": "Votre nom",
   "community.public.post": "Publier",

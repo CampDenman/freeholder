@@ -6,7 +6,9 @@
 // large-dataset runs are opt-in; requesting them without the capability is a
 // failure, not a skip.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const DATASET_SIZES = Object.freeze({
@@ -123,10 +125,12 @@ export function evaluateMeasurements(input) {
     if (input.bounded?.paginated !== true) {
       failures.push("Large-dataset run did not prove pagination stayed correct.");
     }
-    return { ok: failures.length === 0, failures };
   }
 
   const required = requiredSurfaces(input);
+  if (input.dataset === "large") {
+    for (const name of SERVER_SURFACES) required.delete(name);
+  }
   const bySurface = new Map((input.measurements ?? []).map((row) => [row.surface, row]));
   const budgets = new Map((input.budgets ?? []).map((row) => [row.surface, row]));
 
@@ -139,6 +143,14 @@ export function evaluateMeasurements(input) {
     }
     if (!budget) {
       failures.push(`No §15.1 budget for measured surface ${surface}.`);
+      continue;
+    }
+    if (!Number.isFinite(measured.value) || measured.value < 0) {
+      failures.push(`Invalid measurement for ${surface}: expected a finite nonnegative number.`);
+      continue;
+    }
+    if (!Number.isFinite(budget.limit) || budget.limit < 0) {
+      failures.push(`Invalid budget for ${surface}.`);
       continue;
     }
     if (measured.value > budget.limit) {
@@ -183,12 +195,14 @@ function main() {
   }
   if (checkOnly) return;
 
+  if (typeof process.loadEnvFile === "function") {
+    try { process.loadEnvFile(".env"); } catch { /* Optional, like Vitest's config. */ }
+  }
   const dataset = datasetFromEnv();
+  console.log(`Measuring ${dataset} dataset.`);
   const flags = measurementFlags();
-  if ((dataset === "medium" || dataset === "large") && !process.env.DATABASE_URL) {
-    console.error(
-      `PERF_DATASET=${dataset} requires DATABASE_URL. Refusing to skip a requested dataset.`,
-    );
+  if (!process.env.TEST_DATABASE_URL && !(process.env.CI && process.env.DATABASE_URL)) {
+    console.error("Performance measurements require TEST_DATABASE_URL (or CI DATABASE_URL) pointing at a disposable database. Use --check-only to validate the budget table without measurements.");
     process.exit(1);
   }
   if (flags.measureBrowser && process.env.PERF_HAS_PLAYWRIGHT !== "1") {
@@ -198,12 +212,25 @@ function main() {
     process.exit(1);
   }
 
-  const result = spawnSync(
-    "pnpm",
-    ["exec", "vitest", "run", "tests/core/performance-budgets.test.ts"],
-    { stdio: "inherit", env: process.env },
-  );
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  const directory = mkdtempSync(join(tmpdir(), "freeholder-performance-"));
+  try {
+    const reportPath = join(directory, "results.json");
+    const result = spawnSync(
+      "pnpm",
+      ["exec", "vitest", "run", "tests/core/performance-budgets.test.ts",
+        "--reporter=default", "--reporter=json", `--outputFile.json=${reportPath}`],
+      { stdio: "inherit", env: process.env },
+    );
+    if (result.status !== 0) throw new Error(`Performance test runner failed (${result.status ?? result.error?.message}).`);
+    const report = JSON.parse(readFileSync(reportPath, "utf8"));
+    const measured = report.testResults?.flatMap((file) => file.assertionResults ?? [])
+      .find((test) => test.title === "measures the requested dataset with verified fixture counts");
+    if (measured?.status !== "passed") {
+      throw new Error("The required seeded measurement did not pass; skipped tests are not performance evidence.");
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {

@@ -1499,6 +1499,7 @@ registerContactPrivacySource({
 
 registerSearchSource({
   kind: "quote",
+  readService: "quotes.list",
   module: "quotes",
   tables: ["quotes"],
   search: async ({ tx, pattern, limit }) => {

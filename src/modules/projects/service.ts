@@ -957,6 +957,7 @@ registerContactPrivacySource({
 
 registerSearchSource({
   kind: "project",
+  readService: "projects.list",
   module: "projects",
   tables: ["projects"],
   search: async ({ tx, pattern, limit }) => {

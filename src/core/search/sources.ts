@@ -25,6 +25,7 @@ function noteVisible(actor: Actor) {
 
 registerSearchSource({
   kind: "contact",
+  readService: "contacts.list",
   module: "contacts",
   tables: ["contacts"],
   search: async ({ tx, pattern, limit }) => {
@@ -52,6 +53,7 @@ registerSearchSource({
 
 registerSearchSource({
   kind: "conversation",
+  readService: "conversations.search",
   module: "crm",
   tables: ["conversations", "messages"],
   search: async ({ tx, pattern, limit }) => {
@@ -99,6 +101,7 @@ registerSearchSource({
 
 registerSearchSource({
   kind: "note",
+  readService: "notes.list",
   module: "contacts",
   tables: ["notes"],
   search: async ({ tx, actor, pattern, limit }) => {
@@ -131,6 +134,7 @@ registerSearchSource({
 
 registerSearchSource({
   kind: "task",
+  readService: "tasks.list",
   module: "crm",
   tables: ["tasks"],
   search: async ({ tx, pattern, limit }) => {
@@ -159,6 +163,7 @@ registerSearchSource({
 
 registerSearchSource({
   kind: "media",
+  readService: "media.list",
   module: "media",
   tables: ["assets"],
   search: async ({ tx, pattern, limit }) => {

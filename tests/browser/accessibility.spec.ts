@@ -407,9 +407,14 @@ async function assertHeadingAxeAndSkip(
   heading: string,
   locale = "en",
 ) {
-  await page.goto(path, { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-  await assertAxe(page, path, "light");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  for (const theme of ["light", "dark"] as const) {
+    await page.context().addCookies([{ name: THEME_COOKIE, value: theme, url: BASE_URL }]);
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    await assertAxe(page, path, theme);
+  }
   await page.keyboard.press("Tab");
   await expect(
     page.getByRole("link", { name: t(locale, "a11y.skipToContent") }),
@@ -467,7 +472,7 @@ test.describe("real-browser accessibility", () => {
       }
     });
 
-    // Bounded extra owner lists: heading + axe + skip, not the full surface
+    // C11.12 owner lists: both themes, heading + axe + skip, not the full surface
     // pass. Record-id detail pages stay out unless a fixture already exists.
     await test.step("admin F04 leftover list screens", async () => {
       for (const [path, heading] of [
@@ -481,6 +486,28 @@ test.describe("real-browser accessibility", () => {
         ["/admin/pages", t("en", "cms.pages.title")],
         ["/admin/community", t("en", "community.title")],
         ["/admin/voice-video", t("en", "voiceVideo.title")],
+        ["/admin/inbox", t("en", "inbox.title")],
+        ["/admin/invoices", t("en", "invoices.title")],
+        ["/admin/orders", t("en", "catalog.orders.title")],
+        ["/admin/galleries", t("en", "galleries.title")],
+        ["/admin/quotes", t("en", "quotes.title")],
+        ["/admin/forms", t("en", "forms.title")],
+        ["/admin/media", t("en", "media.title")],
+        ["/admin/jobs", t("en", "jobs.title")],
+        ["/admin/locations", t("en", "admin.locations.title")],
+        ["/admin/calendar", t("en", "calendar.title")],
+        ["/admin/automations", t("en", "automations.title")],
+        ["/admin/reports", t("en", "reports.title")],
+        ["/admin/newsletters", t("en", "newsletters.title")],
+        ["/admin/appointments", t("en", "appointments.title")],
+        ["/admin/documents", t("en", "documents.title")],
+        ["/admin/events", t("en", "events.title")],
+        ["/admin/projects", t("en", "projects.title")],
+        ["/admin/tasks", t("en", "tasks.title")],
+        ["/admin/segments", t("en", "segments.title")],
+        ["/admin/reviews", t("en", "reviews.title")],
+        ["/admin/social", t("en", "social.title")],
+        ["/admin/subscriptions", t("en", "subscriptions.title")],
       ] as const) {
         await assertHeadingAxeAndSkip(page, path, heading);
       }

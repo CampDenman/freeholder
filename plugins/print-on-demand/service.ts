@@ -123,7 +123,7 @@ const claimSubmit = defineService({
     payload: z.record(z.string(), z.unknown()),
   }),
   handler: async (input, ctx) => {
-    const [job] = await ctx.tx.select().from(podJobs).where(eq(podJobs.id, input.jobId)).limit(1);
+    const [job] = await ctx.tx.select().from(podJobs).where(eq(podJobs.id, input.jobId)).limit(1).for("update");
     if (!job) throw new ServiceError("not_found", "No such print job.");
     if (job.status === "submitted") {
       throw new ServiceError("conflict", "That print job is already with the provider.");
@@ -165,13 +165,8 @@ const applySubmit = defineService({
         .update(podJobs)
         .set({ status: "submitted", externalRef: input.externalRef, lastError: null })
         .where(eq(podJobs.id, job.id));
-      if (job.fulfillmentId) {
-        await catalogCall(ctx, "catalog.shipFulfillment", {
-          id: job.fulfillmentId,
-          carrier: job.provider.slice(0, 80),
-          trackingNumber: input.externalRef.slice(0, 120),
-        });
-      }
+      // C3.13: provider acceptance is not evidence of shipment. Keep the
+      // fulfillment open until actual carrier/tracking evidence arrives.
       ctx.queueEvent("printOnDemand.submitted", {
         id: job.id,
         sku: job.sku,

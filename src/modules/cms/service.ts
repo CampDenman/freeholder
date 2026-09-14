@@ -1468,6 +1468,7 @@ export async function onSetupCompleted(): Promise<void> {
 
 registerSearchSource({
   kind: "page",
+  readService: "cms.listPages",
   module: "cms",
   tables: ["pages"],
   search: async ({ tx, pattern, limit }) => {

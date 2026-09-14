@@ -177,7 +177,7 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
       role: "staff",
       grants: [
         { module: "search", access: "view" },
-        { module: "crm", access: "view" },
+        { module: "conversations", access: "view" },
       ],
     };
     await recordMessage.call(
@@ -197,11 +197,49 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
     expect(hits.some((hit) => hit.kind === "note")).toBe(false);
   });
 
+  it("does not turn a write-only API scope into contact read access", async () => {
+    await person("scope-private@example.test", "zxqvscope private contact");
+    const agent: Actor = {
+      kind: "agent", keyName: "write-only-search",
+      scopes: ["search.query", "contacts.create"],
+    };
+    expect(await querySearch.call({ q: "zxqvscope" }, agent)).toEqual([]);
+    const reader: Actor = { ...agent, scopes: ["search.query", "contacts.list"] };
+    expect(await querySearch.call({ q: "zxqvscope" }, reader)).toHaveLength(1);
+  });
+
+  it("requires the actual note and conversation grants, not related contact/CRM grants", async () => {
+    const contactId = await person("cross-family@example.test", "Cross family");
+    await writeNote.call({ subjectType: "contact", subjectId: contactId,
+      body: "zxqvgrant shared note", visibility: "shared" }, OWNER);
+    await recordMessage.call({ email: "cross-family@example.test", name: "Cross family",
+      direction: "inbound", channel: "email", body: "zxqvgrant conversation" }, OWNER);
+    const wrongFamily: Actor = { ...STAFF, grants: [
+      { module: "search", access: "view" }, { module: "contacts", access: "view" },
+      { module: "crm", access: "view" },
+    ] };
+    expect(await querySearch.call({ q: "zxqvgrant" }, wrongFamily)).toEqual([]);
+    const reader: Actor = { ...STAFF, grants: [
+      { module: "search", access: "view" }, { module: "notes", access: "view" },
+      { module: "conversations", access: "view" },
+    ] };
+    const hits = await querySearch.call({ q: "zxqvgrant" }, reader);
+    expect(hits.map((hit) => hit.kind).sort()).toEqual(["conversation", "note"]);
+  });
+
+  it("binds every search source to a registered scoped read service", () => {
+    for (const source of searchSources()) {
+      const { def } = getService(source.readService);
+      expect(def.kind, source.kind).toBe("query");
+      expect(def.permission, source.kind).toBe("scoped");
+    }
+  });
+
   it("hides private notes from agents", async () => {
     const agent: Actor = {
       kind: "agent",
       keyName: "search-key",
-      scopes: ["search.query", "contacts.*"],
+      scopes: ["search.query", "notes.list"],
     };
     const id = await person("priv@example.test", "Priv Lane");
     await writeNote.call(

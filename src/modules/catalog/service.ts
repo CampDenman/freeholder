@@ -939,6 +939,7 @@ export const restoreProduct = defineService({
 
 registerSearchSource({
   kind: "product",
+  readService: "catalog.listProducts",
   module: "catalog",
   tables: ["products"],
   search: async ({ tx, pattern, limit }) => {

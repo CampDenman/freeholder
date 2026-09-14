@@ -21,11 +21,15 @@ describe("C11.16 spec reconciliation", () => {
     }
   });
 
-  it("is checked only with remaining work named against open C-items", () => {
+  it("cannot be checked while affirmative product work remains incomplete", () => {
     const items = new Map(
       checklistItems(master).map((item) => [item.id, item.checked]),
     );
-    expect(items.get("C11.16")).toBe(true);
+    const incompleteProduct = checklistItems(master).filter((item) =>
+      /^C(?:[1-9]|10)\./.test(item.id) && !item.checked);
+    if (incompleteProduct.length > 0) {
+      expect(items.get("C11.16"), `Unfinished product items: ${incompleteProduct.map((item) => item.id).join(", ")}`).toBe(false);
+    }
     expect(items.get("C11.17")).toBe(false);
     for (const id of [
       "C11.08",

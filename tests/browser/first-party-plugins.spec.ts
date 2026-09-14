@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Real-browser proof that first-party plugins have owner and visitor surfaces (C3.13).
+import { randomUUID } from "node:crypto";
+import { communitySpaces, communityRooms, communityMembers, communityPosts } from "../../plugins/community/schema";
 import { expect, test } from "@playwright/test";
 import { users, totpFactors } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
@@ -74,4 +76,45 @@ test.describe("first-party plugin journeys", () => {
     await expect(page.getByText("Harbour print")).toBeVisible();
     await expect(page.getByRole("button", { name: "I will take this" })).toBeVisible();
   });
+
+  test("gated communities use the signed-in member, never a supplied email", async ({ page, context }) => {
+    test.setTimeout(90_000);
+    const memberUserId = randomUUID();
+    const outsiderUserId = randomUUID();
+    const memberContactId = randomUUID();
+    const outsiderContactId = randomUUID();
+    const spaceId = randomUUID();
+    const roomId = randomUUID();
+    await db().insert(users).values([
+      { id: memberUserId, email: "verified-member@example.test", role: "customer" },
+      { id: outsiderUserId, email: "outsider@example.test", role: "customer" },
+    ]);
+    await db().insert(contacts).values([
+      { id: memberContactId, userId: memberUserId, name: "Verified Member", email: "verified-member@example.test" },
+      { id: outsiderContactId, userId: outsiderUserId, name: "Outsider", email: "outsider@example.test" },
+    ]);
+    await db().insert(communitySpaces).values({ id: spaceId, slug: "private-browser", title: "Private browser circle", access: "gated" });
+    await db().insert(communityRooms).values({ id: roomId, spaceId, slug: "general", title: "General" });
+    await db().insert(communityMembers).values({ spaceId, contactId: memberContactId });
+    await db().insert(communityPosts).values({ roomId, contactId: memberContactId, body: "Confidential community discussion" });
+    const forgedUrl = "/community/private-browser?email=verified-member%40example.test";
+    await page.goto(forgedUrl);
+    await expect(page.getByText("Confidential community discussion")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Sign in to read or post as a community member." })).toBeVisible();
+
+    const outsiderSession = await db().transaction((tx) => createSession(tx, outsiderUserId));
+    await context.addCookies([{ name: SESSION_COOKIE, value: outsiderSession.token, url: BASE_URL }]);
+    await page.goto(forgedUrl);
+    await expect(page.getByText("Confidential community discussion")).toHaveCount(0);
+
+    const memberSession = await db().transaction((tx) => createSession(tx, memberUserId));
+    await context.addCookies([{ name: SESSION_COOKIE, value: memberSession.token, url: BASE_URL }]);
+    await page.goto("/community/private-browser");
+    await expect(page.getByText("Confidential community discussion")).toBeVisible();
+    await page.locator("#community-post-body").fill("A verified member reply");
+    await page.locator("form").filter({ has: page.locator("#community-post-body") }).getByRole("button", { name: "Post", exact: true }).click();
+    await expect(page.getByText("A verified member reply", { exact: true })).toBeVisible();
+    await expect(page).not.toHaveURL(/email=/);
+  });
+
 });
