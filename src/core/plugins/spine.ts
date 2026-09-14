@@ -13,7 +13,12 @@ type ContactTable = PgTable & {
   contactId: AnyPgColumn;
 };
 
-export function attachPluginContactColumn(options: {
+interface ErasureHooks {
+  retentionScopes?: readonly string[];
+  beforeErase?: (tx: Tx, contactId: string, context: { requestId: string }) => Promise<{ pendingJobs?: string[] }>;
+}
+
+export function attachPluginContactColumn(options: ErasureHooks & {
   table: string;
   schema: ContactTable;
   label: string;
@@ -38,7 +43,7 @@ export function attachPluginContactColumn(options: {
       restorePluginContactPointers(tx, schema, label, beforeState, afterState, duplicateId),
   });
 
-  registerPluginContactPrivacy(schema, table, scope);
+  registerPluginContactPrivacy(schema, table, scope, options);
 }
 
 /**
@@ -110,18 +115,20 @@ export function attachPluginUniqueContactColumn(options: {
   registerPluginContactPrivacy(schema, table, scope);
 }
 
-function registerPluginContactPrivacy(schema: ContactTable, table: string, scope: string): void {
+function registerPluginContactPrivacy(schema: ContactTable, table: string, scope: string, hooks: ErasureHooks = {}): void {
   registerContactPrivacySource({
     scope,
     tables: [table],
+    retentionScopes: hooks.retentionScopes,
     exportData: (tx: Tx, contactId: string) =>
       tx.select().from(schema).where(eq(schema.contactId, contactId)),
-    erase: async (tx: Tx, contactId: string) => {
+    erase: async (tx: Tx, contactId: string, context) => {
+      const prepared = await hooks.beforeErase?.(tx, contactId, context);
       const rows = await tx
         .delete(schema)
         .where(eq(schema.contactId, contactId))
         .returning({ id: schema.id });
-      return { affected: rows.length };
+      return { affected: rows.length, pendingJobs: prepared?.pendingJobs };
     },
   });
 }

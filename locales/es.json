@@ -6331,6 +6331,9 @@
   "subscriptions.detail.period": "Período de facturación actual",
   "subscriptions.detail.billing": "Facturación",
   "subscriptions.detail.manage": "Gestionar suscripciones",
+  "privacy.erasure.pending.title": "Eliminación del proveedor pendiente",
+  "privacy.erasure.pending.hint": "La eliminación local ha comenzado. Las grabaciones y transcripciones del proveedor deben eliminarse antes de completar esta solicitud. Las tareas fallidas se pueden reintentar.",
+  "privacy.erasure.pending.jobs": "Consultar tareas en segundo plano",
   "admin.search.kind.supplier": "Proveedores",
   "admin.search.kind.agreement": "Acuerdos"
 }
