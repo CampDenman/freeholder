@@ -4,6 +4,7 @@
 
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { registerSearchSource, matchesIlike } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { segments } from "@/core/segments/schema";
@@ -565,3 +566,13 @@ export default [
   setPriceBreak,
   resolvePrice,
 ];
+
+registerSearchSource({
+  kind: "priceList", module: "catalog", readService: "catalog.listPriceLists", tables: ["price_lists"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: priceLists.id, name: priceLists.name, contactId: priceLists.contactId })
+      .from(priceLists).where(matchesIlike(priceLists.name, pattern)).orderBy(asc(priceLists.name), asc(priceLists.id)).limit(limit);
+    return rows.map(item => ({ kind: "priceList", id: item.id, title: item.name,
+      href: `/admin/price-lists#price-list-${item.id}`, snippet: null, contactId: item.contactId, module: "catalog" }));
+  },
+});

@@ -97,9 +97,11 @@ room, attendance and artifact contact references.
 
 Recordings currently remain in Daily storage; local backup/export includes
 metadata and captured transcript text, not the recording bytes. Contact erasure
-of local rows does not yet remove Daily's recordings. Owner storage import and
-provider erasure are unfinished C3.13 work. HTTP and database tests do not
-establish a live call, device compatibility or recording acceptance.
+queues durable Daily recording/transcript deletion before removing local rows;
+the privacy request remains in progress until every cleanup job acknowledges.
+See [provider erasure and recovery](provider-recording-erasure.md). Owner storage
+import and live provider erasure acceptance remain unfinished C3.13 work. HTTP
+and database tests do not establish a live call or device compatibility.
 See [Daily room configuration](https://docs.daily.co/reference/rest-api/rooms/create-room)
 and [meeting tokens](https://docs.daily.co/reference/rest-api/meeting-tokens/create-meeting-token).
 

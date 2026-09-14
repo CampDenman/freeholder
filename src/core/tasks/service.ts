@@ -30,7 +30,8 @@
 // that selects the task, so a sweep that runs twice, or two workers that run
 // at once, cannot send the same nudge twice.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { withoutPrivacyHold } from "@/core/retention/holds";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { users } from "@/core/auth/schema";
@@ -74,6 +75,7 @@ function requirePerson(actor: Actor): void {
 
 const taskRow = row({
   id: uuid,
+  trashedAt: timestamp.nullable(),
   subjectType: z.enum(TASK_SUBJECTS).nullable(),
   subjectId: uuid.nullable(),
   contactId: uuid.nullable(),
@@ -195,8 +197,8 @@ export const updateTask = defineService({
     const [existing] = await ctx.tx
       .select()
       .from(tasks)
-      .where(eq(tasks.id, input.id))
-      .limit(1);
+      .where(and(eq(tasks.id, input.id), isNull(tasks.trashedAt)))
+      .limit(1).for("update");
     if (!existing) throw new ServiceError("not_found", "That task is not here.");
 
     const dueAt =
@@ -230,7 +232,7 @@ export const updateTask = defineService({
         ...(input.intervalCount !== undefined ? { intervalCount: input.intervalCount } : {}),
         updatedAt: sql`now()`,
       })
-      .where(eq(tasks.id, input.id))
+      .where(and(eq(tasks.id, input.id), isNull(tasks.trashedAt)))
       .returning();
     ctx.setSubject("task", updated!.id);
     return updated!;
@@ -261,8 +263,8 @@ export const setTaskStatus = defineService({
     const [existing] = await ctx.tx
       .select()
       .from(tasks)
-      .where(eq(tasks.id, input.id))
-      .limit(1);
+      .where(and(eq(tasks.id, input.id), isNull(tasks.trashedAt)))
+      .limit(1).for("update");
     if (!existing) throw new ServiceError("not_found", "That task is not here.");
 
     const finishing = input.status === "done";
@@ -278,7 +280,7 @@ export const setTaskStatus = defineService({
           finishing && ctx.actor.kind === "user" ? ctx.actor.userId : null,
         updatedAt: sql`now()`,
       })
-      .where(eq(tasks.id, input.id))
+      .where(and(eq(tasks.id, input.id), isNull(tasks.trashedAt)))
       .returning();
 
     let next: typeof updated | null = null;
@@ -323,22 +325,63 @@ export const setTaskStatus = defineService({
 });
 
 export const removeTask = defineService({
-  name: "tasks.remove",
-  summary: "Take a task off the list for good.",
-  kind: "mutation",
-  permission: "scoped",
-  writeClass: "destructive",
-  input: z.object({ id }),
-  output: row({ id: uuid }),
+  name: "tasks.remove", summary: "Move a task to trash for thirty days.",
+  kind: "mutation", permission: "scoped", writeClass: "destructive",
+  input: z.object({ id }), output: row({ id: uuid }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const [removed] = await ctx.tx
-      .delete(tasks)
-      .where(eq(tasks.id, input.id))
-      .returning({ id: tasks.id });
+    const [removed] = await ctx.tx.update(tasks).set({ trashedAt: new Date() })
+      .where(and(eq(tasks.id, input.id), isNull(tasks.trashedAt))).returning();
     if (!removed) throw new ServiceError("not_found", "That task is not here.");
     ctx.setSubject("task", removed.id);
-    return removed;
+    if (removed.contactId) await ctx.emitTimeline({ contactId: removed.contactId, eventType: "task.trashed",
+      subjectType: removed.subjectType ?? "task", subjectId: removed.subjectId ?? removed.id, payload: { taskId: removed.id } });
+    return { id: removed.id };
+  },
+});
+
+export const restoreTask = defineService({
+  name: "tasks.restore", summary: "Restore a trashed task with its original history and links.",
+  kind: "mutation", permission: "scoped", writeClass: "write",
+  input: z.object({ id }), output: taskRow,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const [restored] = await ctx.tx.update(tasks).set({ trashedAt: null })
+      .where(and(eq(tasks.id, input.id), isNotNull(tasks.trashedAt))).returning();
+    if (!restored) throw new ServiceError("not_found", "That trashed task is not here.");
+    ctx.setSubject("task", restored.id);
+    if (restored.contactId) await ctx.emitTimeline({ contactId: restored.contactId, eventType: "task.restored",
+      subjectType: restored.subjectType ?? "task", subjectId: restored.subjectId ?? restored.id, payload: { taskId: restored.id } });
+    return restored;
+  },
+});
+
+export const purgeTask = defineService({
+  name: "tasks.purge", summary: "Permanently delete a trashed task unless a retention hold protects it.",
+  kind: "mutation", permission: "scoped", writeClass: "destructive", stepUp: true,
+  input: z.object({ id, confirmation: z.literal("PURGE") }), output: row({ id: uuid }),
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const [removed] = await ctx.tx.delete(tasks)
+      .where(and(eq(tasks.id, input.id), isNotNull(tasks.trashedAt), withoutPrivacyHold(tasks.contactId, "contact.tasks")))
+      .returning();
+    if (!removed) throw new ServiceError("conflict", "That record cannot be purged. It may be unavailable or subject to a retention hold.");
+    ctx.setSubject("task", removed.id);
+    if (removed.contactId) await ctx.emitTimeline({ contactId: removed.contactId, eventType: "task.purged",
+      subjectType: removed.subjectType ?? "task", subjectId: removed.subjectId ?? removed.id, payload: { taskId: removed.id } });
+    return { id: removed.id };
+  },
+});
+
+export const purgeExpiredTasks = defineService({
+  name: "tasks.purgeExpired", summary: "Purge a bounded batch of thirty-day trash, respecting retention holds.",
+  kind: "mutation", permission: "system", external: false,
+  input: z.object({}), output: z.object({ purged: z.number().int().nonnegative() }),
+  handler: async (_input, ctx) => {
+    const where = and(lt(tasks.trashedAt, new Date(Date.now() - 30 * 86_400_000)), withoutPrivacyHold(tasks.contactId, "contact.tasks"));
+    const batch = ctx.tx.select({ id: tasks.id }).from(tasks).where(where).orderBy(asc(tasks.id)).limit(500).for("update", { skipLocked: true });
+    const removed = await ctx.tx.delete(tasks).where(inArray(tasks.id, batch)).returning({ id: tasks.id });
+    return { purged: removed.length };
   },
 });
 
@@ -348,6 +391,8 @@ export const listTasks = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({
+    trashedOnly: z.boolean().default(false),
+    offset: z.number().int().min(0).max(1_000_000).default(0),
     status: z.enum(TASK_STATUSES).optional(),
     /** Everything not finished, which is what a work list actually means. */
     openOnly: z.boolean().default(false),
@@ -371,6 +416,7 @@ export const listTasks = defineService({
   ),
   handler: async (input, ctx) => {
     const where = [
+      input.trashedOnly ? isNotNull(tasks.trashedAt) : isNull(tasks.trashedAt),
       ...(input.status ? [eq(tasks.status, input.status)] : []),
       ...(input.openOnly ? [inArray(tasks.status, ["open", "doing", "blocked"])] : []),
       ...(input.assigneeUserId ? [eq(tasks.assigneeUserId, input.assigneeUserId)] : []),
@@ -390,8 +436,8 @@ export const listTasks = defineService({
       // Dated work first and soonest first; undated last, because a list that
       // buries Friday's deadline under "sometime" is not a work list. Postgres
       // sorts nulls last on ASC by default, which is exactly this.
-      .orderBy(asc(tasks.dueAt), desc(tasks.priority), asc(tasks.position))
-      .limit(input.limit);
+      .orderBy(asc(tasks.dueAt), desc(tasks.priority), asc(tasks.position), asc(tasks.id))
+      .limit(input.limit).offset(input.offset);
 
     return rows.map(({ task, contactName, assigneeEmail }) => ({
       ...task,
@@ -441,7 +487,8 @@ export const briefingTasks = defineService({
       .leftJoin(contacts, eq(contacts.id, tasks.contactId))
       .where(
         and(
-          inArray(tasks.status, ["open", "doing", "blocked"]),
+          isNull(tasks.trashedAt),
+        inArray(tasks.status, ["open", "doing", "blocked"]),
           isNotNull(tasks.dueAt),
           lte(tasks.dueAt, endOfDay),
           // Theirs, or nobody's: an unclaimed task is everybody's problem, and
@@ -487,6 +534,7 @@ export async function sendTaskReminders(): Promise<{ sent: number; skipped: numb
     .set({ remindedAt: new Date() })
     .where(
       and(
+        isNull(tasks.trashedAt),
         inArray(tasks.status, ["open", "doing", "blocked"]),
         isNotNull(tasks.remindAt),
         lte(tasks.remindAt, sql`now()`),
@@ -537,7 +585,7 @@ export async function sendTaskReminders(): Promise<{ sent: number; skipped: numb
 registerContactReference({
   table: "tasks",
   repoint: (tx, duplicateId, survivingId) =>
-    tx.update(tasks).set({ contactId: survivingId }).where(eq(tasks.contactId, duplicateId)),
+    tx.update(tasks).set({ contactId: survivingId, subjectId: sql`case when ${tasks.subjectType} = 'contact' then ${survivingId}::uuid else ${tasks.subjectId} end` }).where(eq(tasks.contactId, duplicateId)),
   captureForUndo: async (tx, duplicateId, survivingId) => ({
     state: await tx
       .select({ id: tasks.id, contactId: tasks.contactId })
@@ -553,7 +601,7 @@ registerContactReference({
     if (moved.length) {
       await tx
         .update(tasks)
-        .set({ contactId: duplicateId })
+        .set({ contactId: duplicateId, subjectId: sql`case when ${tasks.subjectType} = 'contact' then ${duplicateId}::uuid else ${tasks.subjectId} end` })
         .where(inArray(tasks.id, moved.map((task) => task.id)));
     }
   },
@@ -583,4 +631,4 @@ registerContactPrivacySource({
   },
 });
 
-export default [createTask, updateTask, setTaskStatus, removeTask, listTasks, briefingTasks];
+export default [createTask, updateTask, setTaskStatus, removeTask, restoreTask, purgeTask, purgeExpiredTasks, listTasks, briefingTasks];
