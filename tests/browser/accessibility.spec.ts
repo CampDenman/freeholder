@@ -427,7 +427,7 @@ test.describe("real-browser accessibility", () => {
   });
 
   test("covers setup, admin, editor, storefront and portal", async ({ page, context }) => {
-    test.setTimeout(420_000);
+    test.setTimeout(540_000);
 
     await test.step("setup", async () => {
       await page.goto("/setup");
@@ -462,6 +462,25 @@ test.describe("real-browser accessibility", () => {
         ["/admin/settings", t("en", "admin.settings.title")],
         ["/admin/plugins", t("en", "plugins.title")],
         ["/admin/work", t("en", "work.title")],
+      ] as const) {
+        await assertHeadingAxeAndSkip(page, path, heading);
+      }
+    });
+
+    // Bounded extra owner lists: heading + axe + skip, not the full surface
+    // pass. Record-id detail pages stay out unless a fixture already exists.
+    await test.step("admin F04 leftover list screens", async () => {
+      for (const [path, heading] of [
+        ["/admin/search", t("en", "admin.search.title")],
+        ["/admin/retention", t("en", "admin.retention.title")],
+        ["/admin/payments", t("en", "payments.title")],
+        ["/admin/messaging", t("en", "messaging.title")],
+        ["/admin/pipeline", t("en", "pipeline.title")],
+        ["/admin/products", t("en", "catalog.title")],
+        ["/admin/redirects", t("en", "seo.redirects.title")],
+        ["/admin/pages", t("en", "cms.pages.title")],
+        ["/admin/community", t("en", "community.title")],
+        ["/admin/voice-video", t("en", "voiceVideo.title")],
       ] as const) {
         await assertHeadingAxeAndSkip(page, path, heading);
       }

@@ -8632,14 +8632,20 @@ schema they inherit reads as a designed thing rather than an excavation.
   here, so the item is not checked.)*
 - [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.
-  *(Partial 2026-09-12: `tests/browser/accessibility.spec.ts` now also walks
-  admin F04 screens — roles, invitations, contacts, health, settings, plugins,
-  work — plus portal home/profile, French/Spanish `lang`, and a representative
-  RTL reflow/keyboard pass on admin. Setup/admin/editor/storefront/portal still
-  run axe in light and dark with keyboard and 320px reflow. **Left open:** the
-  browser suite is the evidence, not a local run here; not every F04 screen is
-  in the axe loop, and RTL is injected `dir` rather than a shipped Arabic
-  catalog.)*
+  *(Partial 2026-09-13: `tests/browser/accessibility.spec.ts` walks
+  setup/admin/editor/storefront/portal in light and dark with keyboard and
+  320px reflow, plus French/Spanish `lang` and a representative RTL
+  reflow/keyboard pass on admin. The axe loop also covers owner F04 list
+  screens — roles, invitations, contacts, health, settings, plugins, work,
+  search, retention, payments, messaging, pipeline, products, redirects,
+  pages, community, voice-video — and portal home/profile. **Left open:** the
+  browser suite is the evidence, not a local run here. RTL remains injected
+  `dir` rather than a shipped Arabic catalog. Remaining F04 owner lists still
+  outside the axe loop include inbox, invoices, orders, galleries, quotes,
+  forms, media, jobs, locations, calendar, automations, reports, newsletters,
+  appointments, documents, events, projects, tasks, segments, reviews, social,
+  subscriptions, and other owner lists. Detail pages that need a seeded
+  record id stay out.)*
 - [x] **C11.13** Complete failure drills for database/storage/mail/payment/SMS/
   OAuth/AI/provider outages, process death, duplicate webhook/job, clock skew,
   low disk, lost credential key and interrupted update.
