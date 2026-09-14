@@ -49,6 +49,19 @@ stock after refusal, own-contact enrollment and cross-contact refusal. This
 follow-up remains separate from the frozen #361 evidence above and does not
 constitute independent security review.
 
+## Additional cart and wishlist findings — 2026-09-14
+
+Four regressions reproduced ID-only cart reads, unauthenticated cart edits,
+write-token disclosure to view-only readers, and anonymous saved-cart/wishlist
+access by contact ID. Cart operations now check the matching private token,
+verified contact ownership or the exact catalog scope. Read-only projections
+redact tokens; scoped mutation composition does not mint a broader capability.
+Saved profile records require contact ownership or catalog authority. Gallery
+sessions do not authorize arbitrary cart IDs, and promotions use the same cart
+boundary. Tests cover guest tokens, own/cross-contact access, exact API scopes,
+closed-cart refusal and the existing commerce journeys. This is additional
+repair evidence, not an independent review or a completion claim.
+
 ## Verification scope
 
 Completed local evidence:

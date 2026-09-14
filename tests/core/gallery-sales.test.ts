@@ -140,12 +140,15 @@ describe.runIf(hasDatabase)("gallery sales", { timeout: 90_000 }, () => {
     );
 
     const cart = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
+    await expect(addGalleryItemToCart.call(
+      { sessionToken, itemId: itemOne.id, variantId: variant.id, cartId: cart.cart.id }, ANONYMOUS,
+    )).rejects.toMatchObject({ code: "permission" });
     await addGalleryItemToCart.call(
-      { sessionToken, itemId: itemOne.id, variantId: variant.id, cartId: cart.cart.id },
+      { sessionToken, itemId: itemOne.id, variantId: variant.id, cartId: cart.cart.id, cartToken: cart.cart.token },
       ANONYMOUS,
     );
     await addGalleryItemToCart.call(
-      { sessionToken, itemId: itemTwo.id, variantId: variant.id, cartId: cart.cart.id },
+      { sessionToken, itemId: itemTwo.id, variantId: variant.id, cartId: cart.cart.id, cartToken: cart.cart.token },
       ANONYMOUS,
     );
 
@@ -165,11 +168,11 @@ describe.runIf(hasDatabase)("gallery sales", { timeout: 90_000 }, () => {
     const variant = await pricedVariant("print-b");
     const cart = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
     await addCartItem.call(
-      { cartId: cart.cart.id, variantId: variant.id, quantity: 2 },
+      { cartId: cart.cart.id, cartToken: cart.cart.token, variantId: variant.id, quantity: 2 },
       ANONYMOUS,
     );
     const filled = await addCartItem.call(
-      { cartId: cart.cart.id, variantId: variant.id, quantity: 3 },
+      { cartId: cart.cart.id, cartToken: cart.cart.token, variantId: variant.id, quantity: 3 },
       ANONYMOUS,
     );
     // The change must not turn every catalogue page into a line-per-click.
@@ -198,7 +201,7 @@ describe.runIf(hasDatabase)("gallery sales", { timeout: 90_000 }, () => {
       (
         await failure(
           addGalleryItemToCart.call(
-            { sessionToken, itemId: item.id, variantId: notOffered.id, cartId: cart.cart.id },
+            { sessionToken, itemId: item.id, variantId: notOffered.id, cartId: cart.cart.id, cartToken: cart.cart.token },
             ANONYMOUS,
           ),
         )
@@ -224,7 +227,7 @@ describe.runIf(hasDatabase)("gallery sales", { timeout: 90_000 }, () => {
       (
         await failure(
           addGalleryItemToCart.call(
-            { sessionToken, itemId: item.id, variantId: variant.id, cartId: cart.cart.id },
+            { sessionToken, itemId: item.id, variantId: variant.id, cartId: cart.cart.id, cartToken: cart.cart.token },
             ANONYMOUS,
           ),
         )
@@ -279,7 +282,7 @@ describe.runIf(hasDatabase)("gallery sales", { timeout: 90_000 }, () => {
       OWNER,
     );
     await addGalleryItemToCart.call(
-      { sessionToken, itemId: item.id, variantId: variant.id, cartId: cart.cart.id },
+      { sessionToken, itemId: item.id, variantId: variant.id, cartId: cart.cart.id, cartToken: cart.cart.token },
       ANONYMOUS,
     );
 

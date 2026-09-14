@@ -52,7 +52,7 @@ describe.runIf(hasDatabase)("catalog carts", { timeout: 30_000 }, () => {
     const variant = await pricedVariant();
     const guest = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
     expect(guest.cart.contactId).toBeNull();
-    const filled = await addCartItem.call({ cartId: guest.cart.id, variantId: variant.id, quantity: 2 }, ANONYMOUS);
+    const filled = await addCartItem.call({ cartId: guest.cart.id, cartToken: guest.cart.token, variantId: variant.id, quantity: 2 }, ANONYMOUS);
     expect(filled.lines).toHaveLength(1);
     expect(filled.subtotalMinor).toBe(8_000);
     expect(filled.allPriced).toBe(true);
@@ -92,7 +92,7 @@ describe.runIf(hasDatabase)("catalog carts", { timeout: 30_000 }, () => {
     const owned = await getOrCreateCart.call({ contactId: contact.id, currency: "CAD" }, OWNER);
     await addCartItem.call({ cartId: owned.cart.id, variantId: variant.id, quantity: 1 }, OWNER);
     const guest = await getOrCreateCart.call({ currency: "CAD" }, ANONYMOUS);
-    await addCartItem.call({ cartId: guest.cart.id, variantId: variant.id, quantity: 3 }, ANONYMOUS);
+    await addCartItem.call({ cartId: guest.cart.id, cartToken: guest.cart.token, variantId: variant.id, quantity: 3 }, ANONYMOUS);
     const merged = await attachCartToContact.call({ token: guest.cart.token, contactId: contact.id }, OWNER);
     expect(merged.cart.id).toBe(owned.cart.id);
     expect(merged.lines[0]?.quantity).toBe(4);
