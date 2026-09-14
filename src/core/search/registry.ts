@@ -116,7 +116,6 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   invoice_schedules: "Recurring invoice configuration, not a titled invoice.",
   back_in_stock_subscriptions: "Wait-list join rows.",
   price_lists: "Catalog pricing configuration.",
-  suppliers: "Procurement counterparties; find them from catalog, not search.query.",
   carts: "In-progress checkout rows.",
   wishlists: "Join table of saved products.",
   marketplace_orders:
@@ -129,7 +128,6 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   event_registrations: "Join table of a contact to an event.",
   newsletter_subscriptions: "List membership, not a titled record.",
   broadcast_recipients: "Fan-out rows for a send.",
-  contract_documents: "Find from agreements; signing tokens stay off search.",
   rental_agreements: "Find from hire; the agreement is the document, not a search hit.",
   time_entries: "Time against a project; find the project.",
   reviews: "Find the contact or the listing they reviewed.",

@@ -15,6 +15,8 @@ import { writeNote } from "@/core/notes/service";
 import { recordMessage } from "@/core/messaging/service";
 import { orders, orderItems } from "@/modules/catalog/schema";
 import { createProduct, applyVariantMatrix, getProductVariants } from "@/modules/catalog/service";
+import { createSupplier } from "@/modules/catalog/procurement";
+import { issueContract } from "@/modules/contracts/service";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
 import { createGiftRegistry } from "../../plugins/gift-registry/service";
 import { createPage } from "@/modules/cms/service";
@@ -41,7 +43,7 @@ describe("C11.14 search leftovers", () => {
       "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
     );
     expect(master).toContain(
-      "Remaining SEARCH_TABLE_OPT_OUTS include titled records such as suppliers and contract documents; these are not mixed into search.query.",
+      "Remaining SEARCH_TABLE_OPT_OUTS include pricing configuration, staged marketplace orders and privacy workflows; these are not mixed into search.query.",
     );
     expect(master).not.toMatch(/No product-wide search index:/);
   });
@@ -101,6 +103,25 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
     }
     return [...found];
   }
+
+  it("finds suppliers and agreements without widening their read authority", async () => {
+    const contactId = await person("supplier-contact@example.test", "Private contact name");
+    const supplier = await createSupplier.call({ name: `${TOKEN} supplier %_`, currency: "CAD", contactId }, OWNER);
+    const agreement = await issueContract.call({ contactId, subjectType: "contact", title: `${TOKEN} agreement %_`, body: "Private agreement body fixture" }, OWNER);
+    const hits = await querySearch.call({ q: TOKEN }, OWNER);
+    expect(hits.find(hit => hit.kind === "supplier")).toMatchObject({ id: supplier.id, href: `/admin/procurement#supplier-${supplier.id}`, snippet: null });
+    expect(hits.find(hit => hit.kind === "agreement")).toMatchObject({ id: agreement.id, href: `/admin/agreements/${agreement.id}`, snippet: null });
+    expect(JSON.stringify(hits)).not.toContain("Private contact name");
+    expect(JSON.stringify(hits)).not.toContain("Private agreement body fixture");
+    expect(JSON.stringify(hits)).not.toContain("signToken");
+    const viewer: Actor = { ...STAFF, grants: [{ module: "search", access: "view" }, { module: "contracts", access: "view" }] };
+    expect((await querySearch.call({ q: TOKEN }, viewer)).map(hit => hit.kind)).toEqual(["agreement"]);
+    const key: Actor = { kind: "agent", keyName: "supplier-reader", scopes: ["search.query", "catalog.listSuppliers", "contracts.get"] };
+    expect((await querySearch.call({ q: TOKEN }, key)).map(hit => hit.kind)).toEqual(["supplier"]);
+    expect(await querySearch.call({ q: TOKEN }, { ...key, scopes: ["search.query", "catalog.createSupplier", "contracts.issue"] })).toEqual([]);
+    expect((await querySearch.call({ q: "%_" }, OWNER)).map(hit => hit.kind).sort()).toEqual(["agreement", "supplier"]);
+    expect(await querySearch.call({ q: "Private agreement body fixture" }, OWNER)).toEqual([]);
+  });
 
   it("returns mixed kinds from one query", async () => {
     const id = await person("rae@example.test", `Rae ${TOKEN}`);
