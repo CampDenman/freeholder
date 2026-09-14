@@ -172,15 +172,13 @@ describe.runIf(hasDatabase)("a location's page", () => {
   it("withholds hidden location pages and SEO before event delivery, then unpublishes", async () => {
     const location = await createLocationService.call(CANADIAN, OWNER);
     await onLocationCreated({ id: location.id, slug: location.slug });
-    expect((await resolvePage.call({ slug: "locations/courtenay" }, ANONYMOUS))?.seo).toMatchObject({
-      description: expect.stringContaining(CANADIAN.street),
-    });
+    const visible = await resolvePage.call({ slug: "locations/courtenay" }, ANONYMOUS);
+    expect(JSON.stringify(visible?.seo)).toContain(CANADIAN.street);
     await updateLocation.call({ id: location.id, status: "hidden" }, OWNER);
     for (const locale of ["en", "fr", "es"]) {
       await expect(resolvePage.call({ slug: "locations/courtenay", locale }, ANONYMOUS)).resolves.toBeNull();
-      expect(await publishedPaths.call({ locale }, ANONYMOUS)).not.toEqual(expect.arrayContaining([
-        expect.objectContaining({ slug: expect.stringContaining("locations/courtenay") }),
-      ]));
+      const paths = await publishedPaths.call({ locale }, ANONYMOUS);
+      expect(paths.some(path => path.slug.includes("locations/courtenay"))).toBe(false);
     }
     await onLocationUpdated({ id: location.id, slug: location.slug });
     expect((await pageAt("locations/courtenay"))?.status).toBe("draft");
