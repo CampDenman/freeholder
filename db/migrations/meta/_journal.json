@@ -57,6 +57,13 @@
       "when": 1792166400010,
       "tag": "0007_marketplace_sync_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792166400011,
+      "tag": "0008_printify_live_fulfillment",
+      "breakpoints": true
     }
   ]
 }

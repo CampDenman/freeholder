@@ -4153,7 +4153,7 @@
   "pod.list": "Travaux",
   "pod.map": "Relier une UGS catalogue",
   "pod.maps.empty": "Aucune UGS catalogue reliee pour le moment.",
-  "pod.queue": "Mettre en file",
+  "pod.queue": "Commandes payées",
   "pod.retry": "Reessayer",
   "pod.saved": "Enregistre.",
   "pod.status.failed": "Echec",
@@ -6292,5 +6292,18 @@
   "app.staffAccount.signOut": "Se déconnecter",
   "app.companion.mode": "Mode propriétaire",
   "app.companion.staffOnly": "Cet écran est réservé à l’entreprise, pas à un compte client.",
-  "app.companion.customerHome": "Retour à l’application client"
+  "app.companion.customerHome": "Retour à l’application client",
+  "pod.connection": "Connexion Printify",
+  "pod.configured": "Configuration pour la boutique Printify {shopId}.",
+  "pod.configure": "Définissez PRINTIFY_API_TOKEN et PRINTIFY_SHOP_ID dans votre environnement de déploiement, puis redémarrez Freeholder.",
+  "pod.setupGuide": "Guide de configuration Printify",
+  "pod.field.providerVariant": "Identifiant de variante du fournisseur",
+  "pod.mapHint": "Les correspondances s’appliquent aux nouvelles lignes payées mises en attente. Les tâches existantes conservent leurs produits et coordonnées de livraison.",
+  "pod.variantMissing": "Variante requise",
+  "pod.automatic": "Les articles associés sont mis en attente automatiquement au paiement de la commande.",
+  "pod.viewOrders": "Voir les commandes",
+  "pod.viewOrder": "Voir la commande",
+  "pod.providerState": "Statut du fournisseur : {status}",
+  "pod.refresh": "Actualiser le suivi",
+  "pod.status.fulfilled": "Expédié"
 }

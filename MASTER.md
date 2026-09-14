@@ -4203,7 +4203,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   idempotency and rollback are tested in `tests/core/marketplace-claims.test.ts`.
   Provider acceptance no longer invents shipment evidence: the catalog fulfillment
   remains pending and the order stays fulfilling until actual shipping evidence.
-  Still [ ] while POD/marketplace/voice-video lack live providers.)
+  Printify implementation in progress: a real bounded HTTP client uses the
+  documented external-ID conflict response to recover the original vendor
+  order, verifies status ownership and reads actual shipment evidence.
+  `tests/core/printify-adapter.test.ts` passes seven mocked HTTP contract tests;
+  paid-order service integration, fenced retry recovery, configuration UI,
+  shipment refresh jobs and generated SDK are implemented. Database integration
+  tests prove acceptance stays pending and verified tracking ships the canonical
+  fulfillment. Live merchant acceptance and the other provider journeys remain.
+  Still [ ] while provider integrations and their complete journeys remain unfinished.)
 
 #### Packages, installation, export, and target parity
 

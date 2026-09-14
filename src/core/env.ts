@@ -131,6 +131,9 @@ const envSchema = z.object({
   TWILIO_FROM_NUMBER: z.string().optional(),
   TWILIO_WEBHOOK_URL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
+  /** C3.13: the print fulfillment plugin's merchant account. */
+  PRINTIFY_API_TOKEN: z.string().optional(),
+  PRINTIFY_SHOP_ID: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   /** Kept only during Stripe endpoint-secret rotation. */
   STRIPE_WEBHOOK_SECRET_PREVIOUS: z.string().optional(),

@@ -77,6 +77,20 @@ test.describe("first-party plugin journeys", () => {
     await expect(page.getByRole("button", { name: "I will take this" })).toBeVisible();
   });
 
+  test("owner configures a Printify product and variant", async ({ page, context }) => {
+    await context.addCookies([{ name: SESSION_COOKIE, value: token, url: BASE_URL }]);
+    await page.goto("/admin/print-on-demand");
+    await expect(page.getByRole("heading", { name: "Printify connection" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Printify setup guide" })).toHaveAttribute("href", "https://developers.printify.com/#access-the-printify-api");
+    await page.locator("#pod-map-sku").fill("browser-mug");
+    await page.locator("#pod-map-product").fill("product-browser-123");
+    await page.locator("#pod-map-variant").fill("17887");
+    await page.locator("form").filter({ has: page.locator("#pod-map-sku") }).getByRole("button").click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+    await expect(page.getByText("browser-mug → printify / product-browser-123 / 17887")).toBeVisible();
+    await expect(page.getByRole("link", { name: "View orders", exact: true })).toBeVisible();
+  });
+
   test("gated communities use the signed-in member, never a supplied email", async ({ page, context }) => {
     test.setTimeout(90_000);
     const memberUserId = randomUUID();

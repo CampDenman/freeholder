@@ -74,7 +74,7 @@ async function scrubBuildOnlyFiles() {
     const removeDirectory = entry.isDirectory() && FORBIDDEN_ROOTS.has(entry.name);
     const removeLink = entry.isSymbolicLink() && FORBIDDEN_ROOTS.has(entry.name);
     const removeFile = entry.isFile() && (
-      isEnvironmentFile(entry.name) || FORBIDDEN_ROOT_FILES.has(entry.name)
+      isEnvironmentFile(entry.name) || FORBIDDEN_ROOT_FILES.has(entry.name) || FORBIDDEN_ROOTS.has(entry.name)
     );
     if (!removeDirectory && !removeFile && !removeLink) continue;
     const target = path.join(STANDALONE, entry.name);

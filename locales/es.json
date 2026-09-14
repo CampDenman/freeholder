@@ -4153,7 +4153,7 @@
   "pod.list": "Trabajos",
   "pod.map": "Mapear SKU del catalogo",
   "pod.maps.empty": "Aun no hay SKUs de catalogo mapeadas.",
-  "pod.queue": "Poner en cola",
+  "pod.queue": "Pedidos pagados",
   "pod.retry": "Reintentar",
   "pod.saved": "Guardado.",
   "pod.status.failed": "Fallido",
@@ -6292,5 +6292,18 @@
   "app.staffAccount.signOut": "Cerrar sesión",
   "app.companion.mode": "Modo propietario",
   "app.companion.staffOnly": "Esta pantalla es para el negocio, no para una cuenta de cliente.",
-  "app.companion.customerHome": "Volver a la aplicación de cliente"
+  "app.companion.customerHome": "Volver a la aplicación de cliente",
+  "pod.connection": "Conexión con Printify",
+  "pod.configured": "Configurado para la tienda Printify {shopId}.",
+  "pod.configure": "Configura PRINTIFY_API_TOKEN y PRINTIFY_SHOP_ID en el entorno de despliegue y reinicia Freeholder.",
+  "pod.setupGuide": "Guía de configuración de Printify",
+  "pod.field.providerVariant": "ID de variante del proveedor",
+  "pod.mapHint": "Las asignaciones se aplican a nuevas líneas pagadas en cola. Los trabajos existentes conservan sus productos y datos de entrega originales.",
+  "pod.variantMissing": "Variante obligatoria",
+  "pod.automatic": "Los artículos asignados se ponen en cola automáticamente cuando se paga el pedido.",
+  "pod.viewOrders": "Ver pedidos",
+  "pod.viewOrder": "Ver pedido",
+  "pod.providerState": "Estado del proveedor: {status}",
+  "pod.refresh": "Actualizar seguimiento",
+  "pod.status.fulfilled": "Enviado"
 }

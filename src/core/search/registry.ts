@@ -122,6 +122,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   orders: "Looked up from the orders list; settlement is on the invoice.",
   marketplace_orders:
     "Staged channel orders; find from marketplace admin or the invoice.",
+  pod_jobs: "Vendor fulfillment jobs; find from print admin or the catalog order.",
   return_requests: "Workflow rows hanging off an order.",
   coupon_redemptions: "Join table of a coupon to a contact.",
   gift_cards: "Tokenised store credit; the code is not a search title.",

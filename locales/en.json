@@ -4153,7 +4153,7 @@
   "pod.list": "Jobs",
   "pod.map": "Map catalog SKU",
   "pod.maps.empty": "No catalog SKUs mapped yet.",
-  "pod.queue": "Queue job",
+  "pod.queue": "Paid orders",
   "pod.retry": "Retry",
   "pod.saved": "Saved.",
   "pod.status.failed": "Failed",
@@ -6292,5 +6292,18 @@
   "app.staffAccount.signOut": "Sign out",
   "app.companion.mode": "Owner mode",
   "app.companion.staffOnly": "This screen is for the business, not a customer account.",
-  "app.companion.customerHome": "Back to the customer app"
+  "app.companion.customerHome": "Back to the customer app",
+  "pod.connection": "Printify connection",
+  "pod.configured": "Configured for Printify shop {shopId}.",
+  "pod.configure": "Set PRINTIFY_API_TOKEN and PRINTIFY_SHOP_ID in your deployment environment, then restart Freeholder.",
+  "pod.setupGuide": "Printify setup guide",
+  "pod.field.providerVariant": "Provider variant ID",
+  "pod.mapHint": "Mappings apply to newly queued paid order lines. Existing jobs retain their original product and delivery details.",
+  "pod.variantMissing": "Variant required",
+  "pod.automatic": "Mapped items are queued automatically when a catalog order is paid.",
+  "pod.viewOrders": "View orders",
+  "pod.viewOrder": "View order",
+  "pod.providerState": "Provider status: {status}",
+  "pod.refresh": "Refresh tracking",
+  "pod.status.fulfilled": "Shipped"
 }
