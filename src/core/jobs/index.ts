@@ -8,6 +8,7 @@
 // row therefore commit together or do not exist at all.
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
+import { z } from "zod";
 import {
   PgBoss,
   fromDrizzle,
@@ -119,6 +120,8 @@ export interface ResolvedJobPolicy {
 }
 
 export interface EnqueueJobOptions {
+  /** Preallocate an identity when a durable payload must reference its first run. */
+  id?: string;
   /** Opaque logical-operation key, unique within this job name. */
   idempotencyKey?: string;
   /** How long the key continues suppressing duplicates. Defaults to 30 days. */
@@ -593,6 +596,9 @@ function transactionDatabase(tx: JobTx): PgBossDatabase {
 }
 
 function validateEnqueueOptions(options: EnqueueJobOptions): void {
+  if (options.id !== undefined && !z.uuid().safeParse(options.id).success) {
+    throw new JobContractError("A preallocated job ID must be a UUID.");
+  }
   if (options.idempotencyKey !== undefined) {
     const bytes = Buffer.byteLength(options.idempotencyKey, "utf8");
     if (!options.idempotencyKey.trim() || bytes > 200) {
@@ -633,7 +639,7 @@ export async function enqueueJob(
 
   const adapter = transactionDatabase(tx);
   const payloadHash = hashPayload(data);
-  let jobId: string = randomUUID();
+  let jobId: string = options.id ?? randomUUID();
 
   if (options.idempotencyKey) {
     const ttl = options.idempotencyTtlSeconds ?? 30 * DAY_SECONDS;

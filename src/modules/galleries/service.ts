@@ -2353,6 +2353,7 @@ export const addGalleryItemToCart = defineService({
     itemId: id,
     variantId: id,
     cartId: id,
+    cartToken: z.string().uuid().optional(),
     quantity: z.number().int().min(1).max(1_000).default(1),
   }),
   output: okResult,
@@ -2390,6 +2391,7 @@ export const addGalleryItemToCart = defineService({
 
     await ctx.call(getService("catalog.addCartItem"), {
       cartId: input.cartId,
+      cartToken: input.cartToken,
       variantId: input.variantId,
       quantity: input.quantity,
       galleryId: gallery.id,

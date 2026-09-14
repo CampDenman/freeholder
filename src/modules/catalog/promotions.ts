@@ -8,6 +8,7 @@
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { requireCartAccess } from "./cart-access";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { createNotification } from "@/core/notifications/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
@@ -281,9 +282,10 @@ export const applyCouponToCart = defineService({
   summary: "Attach one valid coupon to an open cart.",
   kind: "mutation",
   permission: "public",
-  input: z.object({ cartId: id, code: couponCode }),
+  input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), code: couponCode }),
   output: z.object({ cartId: uuid, coupon: couponRow }),
   handler: async (input, ctx) => {
+    await requireCartAccess(ctx, input, "catalog.applyCouponToCart", "mutation");
     const [cart] = await ctx.tx.select().from(carts).where(eq(carts.id, input.cartId)).limit(1);
     if (!cart || cart.status !== "open") throw new ServiceError("not_found", "That cart is not here.");
     const coupon = await loadCoupon(ctx.tx, input.code);
@@ -302,7 +304,7 @@ export const quoteCartPromotions = defineService({
   kind: "query",
   permission: "public",
   input: z.object({
-    cartId: id,
+    cartId: id, cartToken: z.string().uuid().optional(),
     couponCode: couponCode.optional(),
     subtotalMinor: z.number().int().min(0),
     shippingMinor: z.number().int().min(0),
@@ -316,6 +318,7 @@ export const quoteCartPromotions = defineService({
     coupons: listed(couponRow),
   }),
   handler: async (input, ctx) => {
+    await requireCartAccess(ctx, input, "catalog.quoteCartPromotions", "query");
     const attached = await ctx.tx
       .select({ coupon: coupons })
       .from(cartCoupons)
@@ -680,7 +683,7 @@ export const listCartOffers = defineService({
   summary: "Bumps and post-add offers that apply to the current cart lines.",
   kind: "query",
   permission: "public",
-  input: z.object({ cartId: id, justAddedVariantId: id.optional() }),
+  input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), justAddedVariantId: id.optional() }),
   output: listed(
     z.object({
       rule: offerRuleRow,
@@ -688,8 +691,9 @@ export const listCartOffers = defineService({
     }),
   ),
   handler: async (input, ctx) => {
+    await requireCartAccess(ctx, input, "catalog.listCartOffers", "query");
     const { getCart } = await import("./cart");
-    const basket = await ctx.call(getCart, { cartId: input.cartId });
+    const basket = await ctx.callAsSystem(getCart, { cartId: input.cartId });
     const inCart = new Set(basket.lines.map((line) => line.variantId));
     const rules = await ctx.tx.select().from(offerRules).where(eq(offerRules.active, true));
     const matches = rules.filter((rule) => {

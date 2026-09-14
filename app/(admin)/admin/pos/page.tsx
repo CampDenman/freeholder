@@ -32,7 +32,7 @@ export default async function PointOfSalePage({
     listInvoices.call({ limit: 200 }, actor),
     listInPersonPayments.call({ limit: 100 }, actor),
     reconcileInPersonPayments.call({}, actor),
-    listLocations.call({ includeHidden: true }, actor),
+    listLocations.call({ includeHidden: hasModuleAccess(actor, "locations") }, actor),
     getT(),
   ]);
   const canManage = hasModuleAccess(actor, "invoicing", "manage");

@@ -21,6 +21,7 @@ import {
   matchesIlike,
   registerSearchSource,
 } from "@/core/search/registry";
+import { queueRoomErasure } from "./erasure";
 import { voiceVideoProvider } from "./adapter";
 import { voiceVideoArtifacts, voiceVideoJoins, voiceVideoRooms } from "./schema";
 
@@ -29,6 +30,8 @@ attachPluginContactColumn({
   schema: voiceVideoRooms,
   label: "A voice or video room",
   scope: "plugins.voice-video.rooms",
+  retentionScopes: ["plugins.voice-video", "plugins.voice-video.joins"],
+  beforeErase: queueRoomErasure,
 });
 attachPluginUniqueContactColumn({
   table: "voice_video_joins",

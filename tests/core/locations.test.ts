@@ -387,6 +387,25 @@ describe.runIf(hasDatabase)("keeping locations", () => {
     ).resolves.toHaveLength(2);
   });
 
+  it("requires location read access for hidden addresses by list, ID or slug", async () => {
+    const hidden = await createLocationService.call(
+      { ...CANADIAN, slug: "private-studio", status: "hidden" }, OWNER,
+    );
+    const unrelated = { ...STAFF, grants: [{ module: "invoicing", access: "view" as const }] };
+    for (const actor of [ANONYMOUS, unrelated, { kind: "agent" as const, keyName: "location-writer", scopes: ["locations.create"] }]) {
+      expect((await failure(listLocations.call({ includeHidden: true }, actor))).code).toBe("permission");
+      await expect(getLocation.call({ id: hidden.id }, actor)).resolves.toBeNull();
+      await expect(getLocation.call({ slug: hidden.slug }, actor)).resolves.toBeNull();
+    }
+    const viewer = { ...STAFF, grants: [{ module: "locations", access: "view" as const }] };
+    await expect(listLocations.call({ includeHidden: true }, viewer)).resolves.toHaveLength(1);
+    await expect(getLocation.call({ id: hidden.id }, viewer)).resolves.toMatchObject({ street: CANADIAN.street });
+    const reader = { kind: "agent" as const, keyName: "location-reader", scopes: ["locations.get"] };
+    await expect(getLocation.call({ slug: hidden.slug }, reader)).resolves.toMatchObject({ id: hidden.id });
+    expect((await failure(listLocations.call({ includeHidden: true }, reader))).code).toBe("permission");
+    await expect(listLocations.call({ includeHidden: true }, { ...reader, scopes: ["locations.list"] })).resolves.toHaveLength(1);
+  });
+
   it("stops answering with a hidden primary", async () => {
     // Otherwise hiding the only location leaves its address in the footer.
     const location = await createLocationService.call(CANADIAN, OWNER);

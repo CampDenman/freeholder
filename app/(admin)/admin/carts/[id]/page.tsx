@@ -51,7 +51,7 @@ export default async function CartDetailPage({
       <div>
         <a href="/admin/carts" className="text-sm text-ink-muted">{t("catalog.carts.back")}</a>
         <h1 className="mt-2 flex flex-wrap items-center gap-3 text-xl font-bold tracking-tight">
-          {basket.cart.name ?? basket.cart.token.slice(0, 8)}
+          {basket.cart.name ?? basket.cart.id.slice(0, 8)}
           <Pill>{t(`catalog.carts.status.${basket.cart.status}`)}</Pill>
         </h1>
         <p className="mt-1 text-sm text-ink-muted">

@@ -234,7 +234,7 @@ describe.runIf(hasDatabase)("C11.04 gallery social referral", { timeout: 90_000 
     await addGalleryPriceSheetItem.call({ galleryId: gallery.id, variantId: variant.id }, OWNER);
     const basket = await getOrCreateCart.call({ contactId: client.id, currency: "CAD" }, OWNER);
     await addGalleryItemToCart.call(
-      { sessionToken: session.sessionToken, itemId: item.id, variantId: variant.id, cartId: basket.cart.id },
+      { sessionToken: session.sessionToken, itemId: item.id, variantId: variant.id, cartId: basket.cart.id, cartToken: basket.cart.token },
       ANONYMOUS,
     );
     const placed = await checkoutCart.call(
