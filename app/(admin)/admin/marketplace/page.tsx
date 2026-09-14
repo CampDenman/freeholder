@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Marketplace channel sync (MASTER.md §36, C3.13).
 import type { Metadata } from "next";
+import { hasModuleAccess } from "@/core/service";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { listMarketplaceChannels, listMarketplaceOrders, marketplaceConfiguration } from "../../../../plugins/marketplace/service";
 import { getT } from "../../../i18n";
@@ -17,7 +18,9 @@ export default async function MarketplacePage({
 }: {
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
-  const actor = await requireStaffActor("marketplace", "manage");
+  const actor = await requireStaffActor("marketplace");
+  const canManage = hasModuleAccess(actor, "marketplace", "manage");
+  const canReadInvoices = hasModuleAccess(actor, "invoicing");
   const query = await searchParams;
   const [t, channels, orders, configuration] = await Promise.all([
     getT(),
@@ -50,7 +53,7 @@ export default async function MarketplacePage({
           <a className="mt-2 inline-block underline" href="https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant" target="_blank" rel="noopener noreferrer">{t("marketplace.setupGuide")}</a>
         </CardBody>
       </Card>
-      <Card>
+      {canManage ? <Card>
         <CardHeader title={t("marketplace.connect")} />
         <CardBody>
           <form action={connectMarketplaceAction} className="grid gap-3 sm:grid-cols-2">
@@ -70,7 +73,7 @@ export default async function MarketplacePage({
             </div>
           </form>
         </CardBody>
-      </Card>
+      </Card> : null}
       <Card>
         <CardHeader title={t("marketplace.list")} />
         <CardBody>
@@ -85,7 +88,7 @@ export default async function MarketplacePage({
                     {t(`marketplace.status.${channel.status}`)}
                   </Pill>
                   {channel.lastError ? <span className="text-danger">{channel.lastError}</span> : null}
-                  {channel.status === "failed" || channel.status === "pending" ? (
+                  {canManage && (channel.status === "failed" || channel.status === "pending") ? (
                     <form action={connectMarketplaceAction}>
                       <input type="hidden" name="channelId" value={channel.id} />
                       <input type="hidden" name="name" value={channel.name} />
@@ -95,7 +98,7 @@ export default async function MarketplacePage({
                       </Button>
                     </form>
                   ) : null}
-                  {channel.status === "connected" || channel.status === "syncing" ? (
+                  {canManage && (channel.status === "connected" || channel.status === "syncing") ? (
                     <form action={syncMarketplaceAction}>
                       <input type="hidden" name="channelId" value={channel.id} />
                       <Button type="submit" variant="quiet">
@@ -119,9 +122,9 @@ export default async function MarketplacePage({
           ) : (
             <ul className="grid list-none gap-2 p-0">
               {(orders ?? []).map((order) => (
-                <li key={order.id} className="rounded-md border border-rule p-3 text-sm">
+                <li key={order.id} id={`order-${order.id}`} className="rounded-md border border-rule p-3 text-sm">
                   {order.externalRef} — {order.description}
-                  <a className="ms-3 underline" href={`/admin/invoices/${order.invoiceId}`}>{t("marketplace.reviewInvoice")}</a>
+                  {canReadInvoices ? <a className="ms-3 underline" href={`/admin/invoices/${order.invoiceId}`}>{t("marketplace.reviewInvoice")}</a> : null}
                 </li>
               ))}
             </ul>
