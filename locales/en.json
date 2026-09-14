@@ -6305,5 +6305,11 @@
   "pod.viewOrder": "View order",
   "pod.providerState": "Provider status: {status}",
   "pod.refresh": "Refresh tracking",
-  "pod.status.fulfilled": "Shipped"
+  "pod.status.fulfilled": "Shipped",
+  "marketplace.configuration": "Shopify configuration",
+  "marketplace.configured": "Configured for {shop}. Connect the channel to verify access.",
+  "marketplace.configure": "Set SHOPIFY_SHOP, SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET in your deployment environment, then restart Freeholder.",
+  "marketplace.importScope": "Paid, non-test Shopify orders become draft invoices for review. Sync imports accessible history and does not update earlier imports for later refunds or edits.",
+  "marketplace.setupGuide": "Shopify setup guide",
+  "marketplace.reviewInvoice": "Review draft invoice"
 }

@@ -4211,7 +4211,13 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   shipment refresh jobs and generated SDK are implemented. Database integration
   tests prove acceptance stays pending and verified tracking ships the canonical
   fulfillment. Live merchant acceptance and the other provider journeys remain.
-  Still [ ] while provider integrations and their complete journeys remain unfinished.)
+  Shopify implementation in progress: an own-store client exchanges expiring
+  credentials, verifies shop identity on every page and imports paid orders as
+  reviewable draft invoices. `tests/core/shopify-adapter.test.ts` covers token
+  renewal, destination bounds, pagination, protected email refusal and currency
+  precision; `tests/core/shopify-sync.test.ts` proves invoice/contact idempotency
+  and fenced connection retries. Live merchant acceptance, refund reconciliation
+  and other provider journeys remain open. Still [ ] while those requirements remain.)
 
 #### Packages, installation, export, and target parity
 

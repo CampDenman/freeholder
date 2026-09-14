@@ -3,7 +3,7 @@
 // Marketplace channel sync (MASTER.md §36, C3.13).
 import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
-import { listMarketplaceChannels, listMarketplaceOrders } from "../../../../plugins/marketplace/service";
+import { listMarketplaceChannels, listMarketplaceOrders, marketplaceConfiguration } from "../../../../plugins/marketplace/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -19,10 +19,11 @@ export default async function MarketplacePage({
 }) {
   const actor = await requireStaffActor("marketplace", "manage");
   const query = await searchParams;
-  const [t, channels, orders] = await Promise.all([
+  const [t, channels, orders, configuration] = await Promise.all([
     getT(),
     domainOrNull(listMarketplaceChannels.call({}, actor)),
     domainOrNull(listMarketplaceOrders.call({}, actor)),
+    domainOrNull(marketplaceConfiguration.call({}, actor)),
   ]);
 
   return (
@@ -42,6 +43,14 @@ export default async function MarketplacePage({
         </p>
       ) : null}
       <Card>
+        <CardHeader title={t("marketplace.configuration")} />
+        <CardBody>
+          <p>{configuration?.configured ? t("marketplace.configured", { shop: configuration.shop ?? "" }) : t("marketplace.configure")}</p>
+          <p className="mt-2 text-sm text-ink-muted">{t("marketplace.importScope")}</p>
+          <a className="mt-2 inline-block underline" href="https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant" target="_blank" rel="noopener noreferrer">{t("marketplace.setupGuide")}</a>
+        </CardBody>
+      </Card>
+      <Card>
         <CardHeader title={t("marketplace.connect")} />
         <CardBody>
           <form action={connectMarketplaceAction} className="grid gap-3 sm:grid-cols-2">
@@ -51,9 +60,9 @@ export default async function MarketplacePage({
             <Field label={t("marketplace.field.provider")} htmlFor="mkt-provider">
               <Select id="mkt-provider" name="provider" defaultValue="shopify">
                 <option value="shopify">{t("marketplace.provider.shopify")}</option>
-                <option value="etsy">{t("marketplace.provider.etsy")}</option>
-                <option value="amazon">{t("marketplace.provider.amazon")}</option>
-                <option value="ebay">{t("marketplace.provider.ebay")}</option>
+                <option value="etsy" disabled>{t("marketplace.provider.etsy")}</option>
+                <option value="amazon" disabled>{t("marketplace.provider.amazon")}</option>
+                <option value="ebay" disabled>{t("marketplace.provider.ebay")}</option>
               </Select>
             </Field>
             <div className="sm:col-span-2">
@@ -112,6 +121,7 @@ export default async function MarketplacePage({
               {(orders ?? []).map((order) => (
                 <li key={order.id} className="rounded-md border border-rule p-3 text-sm">
                   {order.externalRef} — {order.description}
+                  <a className="ms-3 underline" href={`/admin/invoices/${order.invoiceId}`}>{t("marketplace.reviewInvoice")}</a>
                 </li>
               ))}
             </ul>

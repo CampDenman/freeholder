@@ -91,6 +91,19 @@ test.describe("first-party plugin journeys", () => {
     await expect(page.getByRole("link", { name: "View orders", exact: true })).toBeVisible();
   });
 
+  test("marketplace setup explains draft imports and refuses unconfigured access", async ({ page, context }) => {
+    await context.addCookies([{ name: SESSION_COOKIE, value: token, url: BASE_URL }]);
+    await page.goto("/admin/marketplace");
+    await expect(page.getByRole("heading", { name: "Shopify configuration" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Shopify setup guide" })).toBeVisible();
+    await expect(page.getByText(/Paid, non-test Shopify orders become draft invoices/)).toBeVisible();
+    await page.locator("#mkt-name").fill("Browser Shopify");
+    await page.locator("form").filter({ has: page.locator("#mkt-name") }).getByRole("button").click();
+    await expect(page.getByText("Browser Shopify", { exact: true })).toBeVisible();
+    await expect(page.getByText(/No live marketplace provider is configured/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+  });
+
   test("gated communities use the signed-in member, never a supplied email", async ({ page, context }) => {
     test.setTimeout(90_000);
     const memberUserId = randomUUID();

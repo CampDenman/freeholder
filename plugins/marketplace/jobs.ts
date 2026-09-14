@@ -9,12 +9,13 @@ import {
 
 export const retryFailedMarketplace = defineJob({
   name: "marketplace.retryFailed",
-  summary: "Retry failed marketplace handshakes and channel syncs in place.",
+  summary: "Sync connected marketplace channels and recover failed or expired work.",
   schedule: "13,43 * * * *",
   handler: async () => {
     const actor = { kind: "system" as const };
     const channels = await listMarketplaceChannels.call({}, actor);
     for (const channel of channels) {
+      if (["pending", "syncing"].includes(channel.status) && channel.syncLeaseExpiresAt && channel.syncLeaseExpiresAt > new Date()) continue;
       if (channel.status === "failed" || channel.status === "pending") {
         await connectMarketplaceChannel.call(
           {
@@ -26,7 +27,7 @@ export const retryFailedMarketplace = defineJob({
         );
         continue;
       }
-      if (channel.status === "syncing" || (channel.status === "connected" && channel.lastError)) {
+      if (channel.status === "syncing" || channel.status === "connected") {
         await syncMarketplaceChannel.call({ channelId: channel.id }, actor);
       }
     }

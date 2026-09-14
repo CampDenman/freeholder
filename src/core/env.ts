@@ -10,6 +10,10 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  /** C3.13: own-store Shopify app credentials; never exposed by channel reads. */
+  SHOPIFY_SHOP: z.string().optional(),
+  SHOPIFY_CLIENT_ID: z.string().optional(),
+  SHOPIFY_CLIENT_SECRET: z.string().optional(),
   /** Postgres connection string. Required at runtime, not at build time. */
   DATABASE_URL: z.string().url().optional(),
   /**
