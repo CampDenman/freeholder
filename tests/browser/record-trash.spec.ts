@@ -89,8 +89,8 @@ test("view-only staff can read permitted trash without management controls or pr
     await page.goto("/admin/trash?kind=tasks");
     await expect(page.getByText("Visible trash task", { exact: true })).toBeVisible();
     await expect(page.getByRole("main").locator("form")).toHaveCount(0);
-    const taskList = await page.goto("/admin/tasks");
-    expect(taskList?.ok()).toBe(true);
+    await page.locator('a[href="/admin/tasks"]').press("Enter");
+    await expect(page).toHaveURL(/\/admin\/tasks$/);
     await expect(page.getByRole("button", { name: "Add it", exact: true })).toHaveCount(0);
   } finally { await resetBrowserDatabase(); await closeDb(); }
 });

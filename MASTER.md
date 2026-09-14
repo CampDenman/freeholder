@@ -8863,7 +8863,8 @@ schema they inherit reads as a designed thing rather than an excavation.
   trash, restore their original IDs/history/links, and stay out of ordinary
   lists, project checklists/counts, search, reminders and briefings while
   trashed. Private-note visibility
-  and view/manage grants apply throughout. Permanent deletion requires typed
+  and view/manage grants apply throughout. Task navigation and saved views
+  use the task grant. Permanent deletion requires typed
   confirmation and recent identity verification; both manual deletion and the
   bounded thirty-day job preserve active privacy holds. Privacy erasure still
   removes personal data, including from trash. Contact merge and undo also
