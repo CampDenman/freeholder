@@ -13,6 +13,7 @@ import {
   Pill,
   Select,
 } from "@/ui/primitives";
+import { hasModuleAccess } from "@/core/service";
 import { listLocations } from "@/core/locations/service";
 import {
   isKnownSocialExtra,
@@ -111,7 +112,7 @@ export default async function SocialPage({
     domainOrNull(networks.call({}, actor)),
     domainOrNull(profiles.call({}, actor)),
     domainOrNull(staffMembers.call({}, actor)),
-    domainOrNull(listLocations.call({ includeHidden: true }, actor)),
+    domainOrNull(listLocations.call({ includeHidden: hasModuleAccess(actor, "locations") }, actor)),
     domainOrNull(packageList.call({}, actor)),
     domainOrNull(interactionList.call({}, actor)),
     domainOrNull(variantList.call({}, actor)),
