@@ -41,6 +41,7 @@ export interface VoiceVideoCaptureResult {
 }
 
 export interface VoiceVideoProvider {
+  eraseRoomRecordings(input: VoiceVideoAccessInput): Promise<void>;
   endRoom(input: VoiceVideoAccessInput): Promise<void>;
   meetingToken(input: VoiceVideoAccessInput & { userId: string; userName: string; owner: boolean }): Promise<{ roomUrl: string; meetingToken: string; expiresAt: number }>;
   recordingAccess(input: VoiceVideoAccessInput & { recordingId: string }): Promise<{ downloadTokenUrl: string; expiresAt: number }>;
@@ -55,6 +56,7 @@ function refused(input: { title: string }): boolean {
 /** Fixture provider: start and capture fail when the title asks them to. */
 export const fixtureVoiceVideoProvider: VoiceVideoProvider = {
   async endRoom() {},
+  async eraseRoomRecordings() {},
   async meetingToken() { throw new Error("Fixture rooms have no live meeting token."); },
   async recordingAccess() { throw new Error("Fixture recordings have no live download link."); },
   async startRoom(input) {
@@ -94,6 +96,11 @@ export function createDailyVoiceVideoProvider(configuration: DailyConfiguration,
     return { externalRef: input.externalRef, providerRoomId: input.providerRoomId };
   }
   return {
+    async eraseRoomRecordings(input) {
+      await verify(input);
+      if (!input.externalRef) throw new DailyError("This erasure task has no original room reference.");
+      await client.eraseRoomRecordings({ externalRef: input.externalRef, providerRoomId: input.providerRoomId });
+    },
     async startRoom(input) {
       await verify(input);
       const room = await client.ensureRoom(input);

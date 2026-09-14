@@ -6330,5 +6330,8 @@
   "subscriptions.detail.status": "Status",
   "subscriptions.detail.period": "Current billing period",
   "subscriptions.detail.billing": "Billing",
-  "subscriptions.detail.manage": "Manage memberships"
+  "subscriptions.detail.manage": "Manage memberships",
+  "privacy.erasure.pending.title": "Provider erasure pending",
+  "privacy.erasure.pending.hint": "Local erasure has started. Provider recordings and transcripts must be removed before this request can be completed. Failed work remains available for retry.",
+  "privacy.erasure.pending.jobs": "Inspect background jobs"
 }

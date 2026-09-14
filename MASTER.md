@@ -2172,6 +2172,15 @@ last. These are core entities, not a plugin.
 
 **Rules:**
 
+- Provider erasure is durable background work committed with the local erasure.
+  Requests remain `in_progress`, without a completion timestamp, until every
+  registered provider task acknowledges success. Pending receipts survive
+  expiry cleanup; repeated fulfilment cannot discard pending tasks. Retention
+  holds also protect parent rows whose deletion would cascade into held data.
+  Once erasure starts, cancellation, denial and retention edits cannot claim
+  to reverse its irreversible work. The request screen links authorized staff
+  to job inspection and retry (C1.08/C3.13).
+
 - **A deal is optional.** A retail store never opens one; a wedding
   photographer opens one per enquiry. Pipelines are configuration (below), so
   the module is inert until an owner defines a stage.
@@ -4224,9 +4233,21 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   HTTP and database integration cover room/token/recording flows; missed calls
   close the provider room before writing the timeline. Admin setup, invitations
   and recording recovery are localized in en/fr/es. Changeset
-  `daily-private-rooms.md`. Live call/device acceptance, owner storage import
-  and provider-side recording erasure remain incomplete; no C3.13 completion
-  is claimed by these mocked provider checks.
+  `daily-private-rooms.md`. Live call/device acceptance and owner storage
+  import remain incomplete; no C3.13 completion is claimed by mocked
+  provider checks. Provider erasure implementation follows below.
+  Provider erasure follow-up: verified local erasure commits Daily cleanup
+  jobs before removing room/artifact rows. Workers verify the original domain,
+  close the room, erase recordings and transcripts, and confirm the inventory.
+  Failures remain pending with durable retry; the final worker completes the
+  privacy receipt. Recording retention holds preserve their parent room.
+  `provider-recording-erasure.md` records this bounded implementation; live
+  provider acceptance and owner-storage import remain open. The provider and
+  privacy regression suites, transactional queue tests and eight live-database
+  SDK checks pass. Production-build Chromium verifies the pending request,
+  removal of unsafe fulfillment controls, platform-access filtering and axe in
+  both themes. Dead-letter recovery preserves the original receipt task ID;
+  active room leases delay cleanup. See `deploy/provider-recording-erasure.md`.
   Shopify implementation in progress: an own-store client exchanges expiring
   credentials, verifies shop identity on every page and imports paid orders as
   reviewable draft invoices. `tests/core/shopify-adapter.test.ts` covers token
