@@ -545,9 +545,9 @@ export const cancelOrder = defineService({
 
 export const getOrder = defineService({
   name: "catalog.getOrder",
-  summary: "One order and its lines.",
+  summary: "One order and its lines for an authorized catalog reader.",
   kind: "query",
-  permission: "public",
+  permission: "scoped",
   input: z.object({ id }),
   output: orderDetail,
   handler: async (input, ctx) => {
