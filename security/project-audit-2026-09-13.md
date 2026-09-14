@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 Audit of the checkout inherited from the prior agent session, starting at
 `7cd57a5`. This is an evidence report, not a roadmap or completion authority.
 `MASTER.md` §43 remains the sole completion checklist. Findings below are
-repairs in the audit branch; this document does not claim deployment or an
+repairs merged through PR #361 (`96570e7`); this document does not claim deployment or an
 independent reviewer sign-off.
 
 ## Findings and repairs
@@ -38,7 +38,7 @@ The corrected test refuses that combination.
 Completed local evidence:
 
 - Production build and standalone artifact gate: passed; no source/environment leakage.
-- Fast gates: typecheck, lint, licensing, changelog, plan and 34 required contract suites passed (300 tests, one explicitly database-dependent skip). The post-agent/capture run passed; subsequent plugin claim/lease changes require final checks.
+- Fast gates: typecheck, lint, licensing, changelog, plan and 34 required contract suites passed (300 tests, one explicitly database-dependent skip). The frozen audit revision passed these gates.
 - Dependency audit: no known advisories reported by the configured live scanner.
 - Package artifact gate: seven packages packed, installed and exercised.
 - Local dump/restore rehearsal: 353 tables and 147 rows matched, then exported. This fixture had no media objects and did not exercise separate hosting providers.
@@ -56,8 +56,10 @@ empty test tables. The existing server was not changed. This functional run is
 not crash-durability or reference-performance proof. Subsequent changes have
 dedicated reruns. The first complete run reported 3,534 passed, 17 inapplicable recipe cases
 skipped and two failures from service snapshots loaded before the later
-shipping/capture fixes. Both affected files subsequently passed. A frozen-code
-full rerun is required before this branch is presented as fully checked.
+shipping/capture fixes. Both affected files subsequently passed. The frozen-code
+rerun subsequently passed all 339 files: 3,541 tests passed and 17 inapplicable
+recipe cases skipped. Hosted CI and the protected merge queue passed, including
+Docker recipe, public surface and upgrade gates. PR #361 merged without bypass.
 
 ## Limits of this evidence
 

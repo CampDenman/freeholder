@@ -1007,11 +1007,13 @@ export const SERVICE_NAMES = [
   "portal.myProfile",
   "portal.myRecords",
   "portal.updateMyProfile",
+  "printOnDemand.configuration",
   "printOnDemand.list",
   "printOnDemand.listMaps",
   "printOnDemand.mapSku",
   "printOnDemand.queue",
   "printOnDemand.queueOrder",
+  "printOnDemand.refresh",
   "printOnDemand.submit",
   "privacy.cancelMyDataRequest",
   "privacy.createMyDataRequest",
@@ -5310,29 +5312,37 @@ export interface ServiceCatalog {
     input: { name?: string; phone?: string | null };
     output: { contactId: string; name: string; email: string | null; phone: string | null; preferredLocale: string | null; hasPassword: boolean; createdAt: string; [key: string]: unknown };
   };
+  "printOnDemand.configuration": {
+    input: Record<string, never>;
+    output: { configured: boolean; shopId: string | null };
+  };
   "printOnDemand.list": {
     input: Record<string, never>;
-    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; [key: string]: unknown }[];
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; providerStatus: string | null; providerLeaseExpiresAt: string | null; shipments: { carrier: string; number: string; url: string | null; deliveredAt: string | null }[]; [key: string]: unknown }[];
   };
   "printOnDemand.listMaps": {
     input: Record<string, never>;
-    output: { id: string; sku: string; provider: string; providerProductId: string; [key: string]: unknown }[];
+    output: { id: string; sku: string; provider: string; providerProductId: string; providerVariantId: number | null; [key: string]: unknown }[];
   };
   "printOnDemand.mapSku": {
-    input: { sku: string; provider: string; providerProductId: string; payload?: { [key: string]: unknown } };
-    output: { id: string; sku: string; provider: string; providerProductId: string; [key: string]: unknown };
+    input: { sku: string; provider: string; providerProductId: string; providerVariantId?: number; payload?: { [key: string]: unknown } };
+    output: { id: string; sku: string; provider: string; providerProductId: string; providerVariantId: number | null; [key: string]: unknown };
   };
   "printOnDemand.queue": {
     input: { sku: string; provider: string; payload?: { [key: string]: unknown } };
-    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; [key: string]: unknown };
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; providerStatus: string | null; providerLeaseExpiresAt: string | null; shipments: { carrier: string; number: string; url: string | null; deliveredAt: string | null }[]; [key: string]: unknown };
   };
   "printOnDemand.queueOrder": {
     input: { orderId: string };
-    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; [key: string]: unknown }[];
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; providerStatus: string | null; providerLeaseExpiresAt: string | null; shipments: { carrier: string; number: string; url: string | null; deliveredAt: string | null }[]; [key: string]: unknown }[];
+  };
+  "printOnDemand.refresh": {
+    input: { jobId: string };
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; providerStatus: string | null; providerLeaseExpiresAt: string | null; shipments: { carrier: string; number: string; url: string | null; deliveredAt: string | null }[]; [key: string]: unknown };
   };
   "printOnDemand.submit": {
     input: { jobId: string };
-    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; [key: string]: unknown };
+    output: { id: string; sku: string; provider: string; status: string; externalRef: string | null; lastError: string | null; orderId: string | null; orderItemId: string | null; fulfillmentId: string | null; providerStatus: string | null; providerLeaseExpiresAt: string | null; shipments: { carrier: string; number: string; url: string | null; deliveredAt: string | null }[]; [key: string]: unknown };
   };
   "privacy.cancelMyDataRequest": {
     input: { id: string };
@@ -7577,11 +7587,13 @@ export interface FreeholderApi {
     updateMyProfile: (input?: ServiceCatalog["portal.updateMyProfile"]["input"]) => Promise<ServiceCatalog["portal.updateMyProfile"]["output"]>;
   };
   printOnDemand: {
+    configuration: (input?: ServiceCatalog["printOnDemand.configuration"]["input"]) => Promise<ServiceCatalog["printOnDemand.configuration"]["output"]>;
     list: (input?: ServiceCatalog["printOnDemand.list"]["input"]) => Promise<ServiceCatalog["printOnDemand.list"]["output"]>;
     listMaps: (input?: ServiceCatalog["printOnDemand.listMaps"]["input"]) => Promise<ServiceCatalog["printOnDemand.listMaps"]["output"]>;
     mapSku: (input: ServiceCatalog["printOnDemand.mapSku"]["input"]) => Promise<ServiceCatalog["printOnDemand.mapSku"]["output"]>;
     queue: (input: ServiceCatalog["printOnDemand.queue"]["input"]) => Promise<ServiceCatalog["printOnDemand.queue"]["output"]>;
     queueOrder: (input: ServiceCatalog["printOnDemand.queueOrder"]["input"]) => Promise<ServiceCatalog["printOnDemand.queueOrder"]["output"]>;
+    refresh: (input: ServiceCatalog["printOnDemand.refresh"]["input"]) => Promise<ServiceCatalog["printOnDemand.refresh"]["output"]>;
     submit: (input: ServiceCatalog["printOnDemand.submit"]["input"]) => Promise<ServiceCatalog["printOnDemand.submit"]["output"]>;
   };
   privacy: {

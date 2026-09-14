@@ -5,9 +5,8 @@ channel sync are first-party plugins (MASTER.md §36, C3.13). They install with
 the instance; disable one from Admin → Plugins if the business does not use it.
 
 **These are not complete products.** Community, voice/video, print-on-demand
-and marketplace channel sync have landed as first-party plugins. POD, voice/video and
-marketplace adapters are still test-only fixtures (staged orders, not a live Printify
-or channel API). Gift registries already raise ordinary invoices. Outside the test runner, missing live providers now fail explicitly; no print
+and marketplace channel sync have landed as first-party plugins. Printify has a real HTTP adapter; voice/video and
+marketplace adapters remain test-only fixtures. Gift registries already raise ordinary invoices. Outside the test runner, missing live providers now fail explicitly; no print
 submission, channel connection or call is reported as successful. Live provider
 I/O remains unfinished under C3.13.
 
@@ -21,15 +20,36 @@ Retry an item that failed to invoice from the same screen.
 
 ## Print on demand
 
-Admin → Print on demand maps a catalog SKU onto a provider product, then
-queues jobs. A paid order line whose SKU is mapped opens an ordinary catalog
-fulfillment and submits it to the plugin adapter. Provider acceptance marks
-the print job submitted; the fulfillment stays pending until shipment evidence
-arrives. A vendor order ID is not a carrier tracking number. The
-test fixture succeeds unless the SKU starts with `fail-`; production refuses
-submission until a live provider is configured. A failed job
-stays failed with the provider's message; Retry sends the same job again.
-`printOnDemand.submitQueued` retries queued and failed jobs on a schedule.
+Admin → Print on demand maps a catalog SKU to a Printify product and numeric
+variant ID. Set `PRINTIFY_API_TOKEN` and `PRINTIFY_SHOP_ID` in the deployment
+environment and restart Freeholder. Obtain the token and shop ID using the
+[Printify API guide](https://developers.printify.com/). The screen reports local
+configuration; it does not claim the credentials have been verified.
+
+A paid mapped catalog line opens an ordinary catalog fulfillment and submits
+its product, quantity, contact email and shipping address to Printify. A complete
+name, street, city, postal code and two-letter country are required. Each line
+is a separate Printify order with standard shipping. Merchant approval and
+production settings in Printify govern when it enters production; Freeholder
+does not call the separate send-to-production endpoint.
+
+Acceptance marks the print job submitted and leaves fulfillment pending.
+Scheduled checks and **Refresh tracking** apply verified carrier evidence.
+All tracking numbers appear on the print job; the first is the catalog
+fulfillment's primary tracking number. Fulfilled provider orders with tracking
+become shipped. Delivery is recorded only when all returned shipments carry
+valid past delivery timestamps. Automatic checks stop after shipment; refresh
+manually to check later delivery.
+
+Queued, failed and expired submissions retry twice hourly, in batches of 50.
+The original catalog line identity survives timeouts; Printify's documented
+matching duplicate response recovers the same vendor order. A ten-minute lease
+rejects stale workers. Existing jobs retain their original product/address and
+merchant shop binding; changing mappings affects newly queued lines only.
+Restore the original shop configuration before retrying a job from another shop.
+Review rejected address/product details before retrying: editing an existing
+job's snapshot is not currently supported. No live merchant acceptance test
+has been performed; mocked HTTP and database tests are not that evidence.
 
 ## Community
 

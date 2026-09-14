@@ -1,8 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { and, desc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { listed, okResult, row, uuid } from "@/core/contract";
+import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
+import { attachPluginContactColumn } from "@/core/plugins/spine";
+import { env } from "@/core/env";
 import { isUniqueViolation } from "@/core/db";
 import {
   defineOrchestratedService,
@@ -14,6 +17,9 @@ import {
 import { podProvider } from "./adapter";
 import { podJobs, podSkuMaps } from "./schema";
 
+attachPluginContactColumn({ table: "pod_jobs", schema: podJobs, label: "A print fulfillment job", scope: "plugins.print-on-demand" });
+const PROVIDER_LEASE_MS = 10 * 60 * 1000;
+const shipmentRow = z.object({ carrier: z.string(), number: z.string(), url: z.string().nullable(), deliveredAt: z.string().nullable() });
 const jobRow = row({
   id: uuid,
   sku: z.string(),
@@ -24,6 +30,9 @@ const jobRow = row({
   orderId: uuid.nullable(),
   orderItemId: uuid.nullable(),
   fulfillmentId: uuid.nullable(),
+  providerStatus: z.string().nullable(),
+  providerLeaseExpiresAt: timestamp.nullable(),
+  shipments: listed(shipmentRow),
 });
 
 const mapRow = row({
@@ -31,10 +40,11 @@ const mapRow = row({
   sku: z.string(),
   provider: z.string(),
   providerProductId: z.string(),
+  providerVariantId: z.number().int().nullable(),
 });
 
 type CatalogOrder = {
-  order: { id: string; status: string; shippingAddress: unknown };
+  order: { id: string; contactId: string; status: string; shippingAddress: unknown };
   lines: Array<{
     id: string;
     quantity: number;
@@ -121,25 +131,35 @@ const claimSubmit = defineService({
     sku: z.string(),
     provider: z.string(),
     payload: z.record(z.string(), z.unknown()),
+    externalId: z.string(),
+    accountId: z.string().nullable(),
+    leaseToken: uuid,
   }),
   handler: async (input, ctx) => {
     const [job] = await ctx.tx.select().from(podJobs).where(eq(podJobs.id, input.jobId)).limit(1).for("update");
     if (!job) throw new ServiceError("not_found", "No such print job.");
-    if (job.status === "submitted") {
+    if (job.status === "submitted" || job.status === "fulfilled") {
       throw new ServiceError("conflict", "That print job is already with the provider.");
     }
-    if (job.status === "submitting") {
+    if (job.status === "submitting" && job.providerLeaseExpiresAt && job.providerLeaseExpiresAt > new Date()) {
       throw new ServiceError("conflict", "That print job is already being submitted.");
     }
+    const leaseToken = randomUUID();
+    const accountId = job.providerAccountId ?? (job.provider === "printify" ? env().PRINTIFY_SHOP_ID ?? null : null);
     await ctx.tx
       .update(podJobs)
-      .set({ status: "submitting", lastError: null })
+      .set({ status: "submitting", lastError: null, providerLeaseToken: leaseToken,
+        providerAccountId: accountId,
+        providerLeaseExpiresAt: new Date(Date.now() + PROVIDER_LEASE_MS) })
       .where(eq(podJobs.id, job.id));
     return {
       jobId: job.id,
       sku: job.sku,
       provider: job.provider,
       payload: (job.payload ?? {}) as Record<string, unknown>,
+      externalId: `freeholder:pod:${job.orderItemId ?? job.id}`,
+      accountId,
+      leaseToken,
     };
   },
 });
@@ -153,17 +173,22 @@ const applySubmit = defineService({
   writeClass: "write",
   input: z.object({
     jobId: z.string().uuid(),
+    leaseToken: z.string().uuid(),
     externalRef: z.string().max(200).optional(),
     lastError: z.string().max(500).optional(),
   }),
   output: okResult,
   handler: async (input, ctx) => {
-    const [job] = await ctx.tx.select().from(podJobs).where(eq(podJobs.id, input.jobId)).limit(1);
+    const [job] = await ctx.tx.select().from(podJobs).where(eq(podJobs.id, input.jobId)).limit(1).for("update");
     if (!job) throw new ServiceError("not_found", "No such print job.");
+    if (job.providerLeaseToken !== input.leaseToken || !job.providerLeaseExpiresAt || job.providerLeaseExpiresAt <= new Date()) {
+      throw new ServiceError("conflict", "That print submission no longer owns its job.");
+    }
     if (input.externalRef) {
       await ctx.tx
         .update(podJobs)
-        .set({ status: "submitted", externalRef: input.externalRef, lastError: null })
+        .set({ status: "submitted", externalRef: input.externalRef, lastError: null,
+          providerLeaseToken: null, providerLeaseExpiresAt: null })
         .where(eq(podJobs.id, job.id));
       // C3.13: provider acceptance is not evidence of shipment. Keep the
       // fulfillment open until actual carrier/tracking evidence arrives.
@@ -179,6 +204,7 @@ const applySubmit = defineService({
         .set({
           status: "failed",
           lastError: input.lastError ?? "The print provider could not take that job.",
+          providerLeaseToken: null, providerLeaseExpiresAt: null,
         })
         .where(eq(podJobs.id, job.id));
     }
@@ -195,6 +221,7 @@ export const mapPodSku = defineService({
     sku: z.string().trim().min(1).max(180),
     provider: z.string().trim().min(1).max(80),
     providerProductId: z.string().trim().min(1).max(200),
+    providerVariantId: z.number().int().positive().optional(),
     payload: z.record(z.string(), z.unknown()).default({}),
   }),
   output: mapRow,
@@ -209,6 +236,7 @@ export const mapPodSku = defineService({
         .update(podSkuMaps)
         .set({
           providerProductId: input.providerProductId,
+          providerVariantId: input.providerVariantId ?? existing.providerVariantId,
           payload: input.payload,
         })
         .where(eq(podSkuMaps.id, existing.id))
@@ -258,6 +286,9 @@ export const queueOrderLines = defineService({
   input: z.object({ orderId: z.string().uuid() }),
   output: listed(jobRow),
   handler: async (input, ctx) => {
+    // Serialize first-time queueing as well as retries: a unique job index
+    // alone cannot prevent two workers from opening competing fulfillments.
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`pod-order:${input.orderId}`}, 0))`);
     const detail = await catalogCall<CatalogOrder>(ctx, "catalog.getOrder", { id: input.orderId });
     if (
       detail.order.status === "pending_payment" ||
@@ -266,6 +297,7 @@ export const queueOrderLines = defineService({
     ) {
       throw new ServiceError("conflict", "Only a paid order can be sent to the print provider.");
     }
+    const customer = await ctx.callAsSystem(getService("contacts.get"), { id: detail.order.contactId }) as { email: string | null; name: string } | null;
     const maps = await ctx.tx.select().from(podSkuMaps);
     const bySku = new Map(maps.map((row) => [row.sku, row]));
     const queued = [];
@@ -287,6 +319,9 @@ export const queueOrderLines = defineService({
       const payload = {
         ...((mapped.payload ?? {}) as Record<string, unknown>),
         providerProductId: mapped.providerProductId,
+        providerVariantId: mapped.providerVariantId ?? (mapped.payload as Record<string, unknown> | null)?.providerVariantId,
+        buyerEmail: customer?.email,
+        buyerName: customer?.name,
         quantity: line.quantity,
         orderId: detail.order.id,
         orderItemId: line.id,
@@ -298,6 +333,7 @@ export const queueOrderLines = defineService({
           .values({
             sku,
             provider: mapped.provider,
+            contactId: detail.order.contactId,
             payload,
             orderId: detail.order.id,
             orderItemId: line.id,
@@ -331,25 +367,27 @@ export const submitPodJob = defineOrchestratedService({
   summary: "Send a queued print job to the provider, or retry a failed one.",
   kind: "mutation",
   permission: "scoped",
-  writeClass: "write",
+  writeClass: "money",
   input: z.object({ jobId: z.string().uuid() }),
   output: jobRow,
   handler: async (input) => {
     const claimed = await claimSubmit.call(input, { kind: "system" });
     try {
       const result = await podProvider().submit({
+        externalId: claimed.externalId,
+        accountId: claimed.accountId,
         sku: claimed.sku,
         provider: claimed.provider,
         payload: claimed.payload,
       });
       await applySubmit.call(
-        { jobId: claimed.jobId, externalRef: result.externalRef },
+        { jobId: claimed.jobId, leaseToken: claimed.leaseToken, externalRef: result.externalRef },
         { kind: "system" },
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "The print provider could not take that job.";
       await applySubmit.call(
-        { jobId: claimed.jobId, lastError: message.slice(0, 500) },
+        { jobId: claimed.jobId, leaseToken: claimed.leaseToken, lastError: message.slice(0, 500) },
         { kind: "system" },
       );
     }
@@ -357,6 +395,101 @@ export const submitPodJob = defineOrchestratedService({
     if (!found) throw new ServiceError("not_found", "No such print job.");
     return found;
   },
+});
+
+const claimRefresh = defineService({
+  name: "printOnDemand.claimRefresh",
+  summary: "Lease a submitted print job before reading its provider status.",
+  kind: "mutation", permission: "scoped", external: false, writeClass: "write",
+  input: z.object({ jobId: z.string().uuid() }),
+  output: z.object({ jobId: uuid, provider: z.string(), externalRef: z.string(), externalId: z.string(), accountId: z.string().nullable(), leaseToken: uuid }),
+  handler: async (input, ctx) => {
+    const [job] = await ctx.tx.select().from(podJobs).where(eq(podJobs.id, input.jobId)).limit(1).for("update");
+    if (!job || !["submitted", "fulfilled"].includes(job.status) || !job.externalRef) throw new ServiceError("conflict", "Submit that print job before checking its shipment.");
+    if (job.providerLeaseToken && job.providerLeaseExpiresAt && job.providerLeaseExpiresAt > new Date()) {
+      throw new ServiceError("conflict", "That print job is already being checked.");
+    }
+    const leaseToken = randomUUID();
+    await ctx.tx.update(podJobs).set({ providerLeaseToken: leaseToken, providerLeaseExpiresAt: new Date(Date.now() + PROVIDER_LEASE_MS) }).where(eq(podJobs.id, job.id));
+    return { jobId: job.id, provider: job.provider, externalRef: job.externalRef,
+      accountId: job.providerAccountId,
+      externalId: `freeholder:pod:${job.orderItemId ?? job.id}`, leaseToken };
+  },
+});
+
+const applyRefresh = defineService({
+  name: "printOnDemand.applyRefresh",
+  summary: "Apply verified print-provider shipment evidence to its catalog fulfillment.",
+  kind: "mutation", permission: "scoped", external: false, writeClass: "write",
+  input: z.object({ jobId: z.string().uuid(), leaseToken: z.string().uuid(),
+    providerStatus: z.string().max(80).optional(), shipments: listed(shipmentRow).optional(),
+    lastError: z.string().max(500).optional() }),
+  output: jobRow,
+  handler: async (input, ctx) => {
+    const [job] = await ctx.tx.select().from(podJobs).where(eq(podJobs.id, input.jobId)).limit(1).for("update");
+    if (!job || job.providerLeaseToken !== input.leaseToken || !job.providerLeaseExpiresAt || job.providerLeaseExpiresAt <= new Date()) {
+      throw new ServiceError("conflict", "That shipment check no longer owns its print job.");
+    }
+    const shipments = input.shipments ?? [];
+    if (!input.lastError && input.providerStatus === "fulfilled" && job.fulfillmentId && shipments.length > 0) {
+      let fulfillment = await catalogCall<CatalogFulfillment>(ctx, "catalog.getFulfillment", { id: job.fulfillmentId });
+      if (["pending", "picking", "packed"].includes(fulfillment.fulfillment.status)) {
+        const primary = shipments[0]!;
+        fulfillment = await catalogCall<CatalogFulfillment>(ctx, "catalog.shipFulfillment", {
+          id: job.fulfillmentId, carrier: primary.carrier, trackingNumber: primary.number,
+          ...(primary.url ? { trackingUrl: primary.url } : {}),
+        });
+      }
+      if (fulfillment.fulfillment.status === "shipped" && shipments.every((entry) => entry.deliveredAt && Number.isFinite(Date.parse(entry.deliveredAt)) && Date.parse(entry.deliveredAt) <= Date.now())) {
+        await catalogCall(ctx, "catalog.deliverFulfillment", { id: job.fulfillmentId });
+      }
+    }
+    const [updated] = await ctx.tx.update(podJobs).set({
+      providerLeaseToken: null, providerLeaseExpiresAt: null, lastError: input.lastError ?? null,
+      ...(!input.lastError && input.providerStatus === "fulfilled" && shipments.length > 0 ? { status: "fulfilled" } : {}),
+      ...(!input.lastError ? { providerStatus: input.providerStatus ?? job.providerStatus, shipments } : {}),
+    }).where(eq(podJobs.id, job.id)).returning();
+    ctx.setSubject("pod_job", job.id);
+    return updated!;
+  },
+});
+
+export const refreshPodJob = defineOrchestratedService({
+  name: "printOnDemand.refresh",
+  summary: "Check the real provider order and apply its shipment evidence.",
+  kind: "mutation", permission: "scoped", writeClass: "write",
+  input: z.object({ jobId: z.string().uuid() }), output: jobRow,
+  handler: async (input) => {
+    const claimed = await claimRefresh.call(input, { kind: "system" });
+    try {
+      const result = await podProvider().getOrder(claimed);
+      return await applyRefresh.call({ jobId: claimed.jobId, leaseToken: claimed.leaseToken,
+        providerStatus: result.status, shipments: result.shipments }, { kind: "system" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The print provider could not check that shipment.";
+      return applyRefresh.call({ jobId: claimed.jobId, leaseToken: claimed.leaseToken, lastError: message.slice(0, 500) }, { kind: "system" });
+    }
+  },
+});
+
+export const podConfiguration = defineService({
+  name: "printOnDemand.configuration", summary: "Show whether this instance has configured a Printify merchant account.",
+  kind: "query", permission: "scoped", input: z.object({}),
+  output: z.object({ configured: z.boolean(), shopId: z.string().nullable() }),
+  handler: async () => {
+    const settings = env();
+    const configured = Boolean(settings.PRINTIFY_API_TOKEN && settings.PRINTIFY_SHOP_ID && /^[1-9][0-9]*$/.test(settings.PRINTIFY_SHOP_ID));
+    return { configured, shopId: settings.PRINTIFY_SHOP_ID ?? null };
+  },
+});
+
+export const podWorkBatch = defineService({
+  name: "printOnDemand.workBatch", summary: "Select a bounded, oldest-first batch of eligible print jobs.",
+  kind: "query", permission: "system", input: z.object({ kind: z.enum(["submit", "refresh"]) }), output: listed(jobRow),
+  handler: (input, ctx) => ctx.tx.select().from(podJobs).where(and(
+    inArray(podJobs.status, input.kind === "submit" ? ["queued", "failed", "submitting"] : ["submitted"]),
+    or(isNull(podJobs.providerLeaseExpiresAt), lt(podJobs.providerLeaseExpiresAt, new Date())),
+  )).orderBy(asc(podJobs.updatedAt), asc(podJobs.id)).limit(50),
 });
 
 export const listPodJobs = defineService({
@@ -389,5 +522,10 @@ export default [
   claimSubmit,
   applySubmit,
   submitPodJob,
+  claimRefresh,
+  applyRefresh,
+  refreshPodJob,
+  podConfiguration,
+  podWorkBatch,
   listPodJobs,
 ];

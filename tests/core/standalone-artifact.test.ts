@@ -27,6 +27,11 @@ it("rejects repository metadata and scrubs only the generated artifact", () => {
     expect(scrubbed.status).toBe(0);
     expect(scrubbed.stdout).toContain("1 files");
     expect(readFileSync(join(workspace, ".git/HEAD"), "utf8")).toBe("workspace must survive");
+    writeFileSync(join(artifact, ".git"), "gitdir: /private/worktree/metadata");
+    const worktree = spawnSync(process.execPath, [gate, "--scrub"], { cwd: workspace, encoding: "utf8" });
+    expect(worktree.status).toBe(0);
+    expect(worktree.stdout).toContain("1 files");
+    expect(readFileSync(join(workspace, ".git/HEAD"), "utf8")).toBe("workspace must survive");
   } finally {
     if (!resolve(workspace).startsWith(resolve(tmpdir()) + sep)) throw new Error("Refusing to remove outside the test temporary directory.");
     rmSync(workspace, { recursive: true, force: true });

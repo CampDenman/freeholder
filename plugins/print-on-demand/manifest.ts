@@ -7,10 +7,10 @@ export default definePlugin({
   version: "0.1.0",
   freeholder: ">=0.0.0",
   license: "Apache-2.0",
-  permissions: ["catalog:write"],
+  permissions: ["catalog:write", "contacts:read", "network:external"],
   requires: ["core", "catalog"],
-  migrations: ["0000_reviewed-baseline.sql", "0003_print_on_demand_fulfillment.sql"],
-  capabilities: { adapters: ["storage"] },
+  migrations: ["0000_reviewed-baseline.sql", "0003_print_on_demand_fulfillment.sql", "0008_printify_live_fulfillment.sql"],
+  capabilities: { adapters: [] },
   events: {
     emits: ["printOnDemand.queued", "printOnDemand.submitted"],
     listens: { "catalog.orderPaid": "onOrderPaid" },
