@@ -8721,7 +8721,16 @@ schema they inherit reads as a designed thing rather than an excavation.
   tests verify distinct first/second/final pages and exact tied-row ordering.
   Asset bytes and provider calls are not part of
   this database fixture. **Left open:** reference-target measurements,
-  whole-page HTTP/browser timing, editor, queue, migration and cold boot.
+  whole-page HTTP/browser timing, editor, migration and cold boot.
+  Queue follow-up (2026-09-14): `PERF_MEASURE_JOBS=1` now uses twenty real,
+  sequential transactional enqueues and the application worker. Database
+  creation/start timestamps produce p95; missing, failed, cancelled, duplicate
+  or invalidly timestamped work fails. The output includes every sample and
+  completion count. Small and medium local runs pass all ten tests, with
+  queue p95 of 1,985 ms and 1,982 ms respectively. This is baseline dispatch,
+  not a backlog/throughput test.
+  `deploy/performance-measurements.md` explains the command and limitations;
+  requested auxiliary measurements no longer disappear on the large fixture.
   The local machine is not the §15.1 1-vCPU/1GB reference target.)*
 - [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.
