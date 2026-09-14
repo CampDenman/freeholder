@@ -1,6 +1,12 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Community rooms, posts, gated feed and moderation (MASTER.md §36, C3.13).
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { db } from "@/core/db";
+import { contacts } from "@/core/contacts/schema";
+import { users } from "@/core/auth/schema";
+import type { Actor } from "@/core/service";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { contactTimeline, createContact, mergeContacts } from "@/core/contacts/service";
 import { ready } from "@/core/runtime";
@@ -19,8 +25,16 @@ import {
   listCommunityModeration,
   moderateCommunityPostBySlug,
   requestCommunityJoinBySlug,
+  reportCommunityPostBySlug,
 } from "../../plugins/community/service";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+
+async function memberActor(contactId: string, email: string): Promise<Actor> {
+  const userId = randomUUID();
+  await db().insert(users).values({ id: userId, email, role: "customer" });
+  await db().update(contacts).set({ userId }).where(eq(contacts.id, contactId));
+  return { kind: "user", userId, role: "customer", grants: [] };
+}
 
 describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () => {
   beforeEach(async () => {
@@ -100,10 +114,12 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
     expect(outsider.posts).toHaveLength(0);
     expect(outsider.rooms).toHaveLength(0);
 
-    const member = await getCommunityFeedBySlug.call(
-      { slug: "members", email: "bea@demo.freeholder.test" },
-      { kind: "anonymous" },
-    );
+    // Knowing the member's email does not authorize the anonymous caller.
+    const impersonator = await getCommunityFeedBySlug.call(
+      { slug: "members", email: "bea@demo.freeholder.test" }, { kind: "anonymous" });
+    expect(impersonator).toMatchObject({ canRead: false, rooms: [], posts: [] });
+    const actor = await memberActor(person.id, "bea@demo.freeholder.test");
+    const member = await getCommunityFeedBySlug.call({ slug: "members" }, actor);
     expect(member.canRead).toBe(true);
     expect(member.rooms.map((item) => item.slug)).toEqual(["general"]);
     expect(member.posts.map((post) => post.body)).toEqual(["Members only."]);
@@ -122,6 +138,7 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
       { slug: "harbour", email: "pat@demo.freeholder.test", name: "Pat" },
       { kind: "anonymous" },
     );
+    const actor = await memberActor(joined.contactId, "pat@demo.freeholder.test");
     const first = await createCommunityPostBySlug.call(
       {
         slug: "harbour",
@@ -130,7 +147,7 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
         name: "Pat",
         body: "First.",
       },
-      { kind: "anonymous" },
+      actor,
     );
     const second = await createCommunityPostBySlug.call(
       {
@@ -140,7 +157,7 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
         name: "Pat",
         body: "Second.",
       },
-      { kind: "anonymous" },
+      actor,
     );
     const third = await createCommunityPostBySlug.call(
       {
@@ -150,7 +167,7 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
         name: "Pat",
         body: "Third.",
       },
-      { kind: "anonymous" },
+      actor,
     );
     const feed = await listCommunityFeed.call({ spaceId: space.id, limit: 2 }, OWNER);
     expect(feed.map((post) => post.body)).toEqual(["Third.", "Second."]);
@@ -217,6 +234,17 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
     );
     expect(memberHide.code).toBe("permission");
 
+    const forged = await failure(moderateCommunityPostBySlug.call({
+      slug: "circle", postId: post.id, email: "mod@demo.freeholder.test",
+      name: "Mod", action: "hide",
+    }, { kind: "anonymous" }));
+    expect(forged.code).toBe("permission");
+    const authorActor = await memberActor(author.contactId, "author@demo.freeholder.test");
+    const forgedByMember = await failure(moderateCommunityPostBySlug.call({
+      slug: "circle", postId: post.id, email: "mod@demo.freeholder.test", action: "hide",
+    }, authorActor));
+    expect(forgedByMember.code).toBe("permission");
+    const moderatorActor = await memberActor(moderator.id, "mod@demo.freeholder.test");
     const hidden = await moderateCommunityPostBySlug.call(
       {
         slug: "circle",
@@ -225,7 +253,7 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
         name: "Mod",
         action: "hide",
       },
-      { kind: "anonymous" },
+      moderatorActor,
     );
     expect(hidden.status).toBe("hidden");
     expect(
@@ -235,6 +263,25 @@ describe.runIf(hasDatabase)("community rooms, posts and moderation (C3.13)", () 
 
     const staffHidden = await hideCommunityPost.call({ postId: post.id }, OWNER);
     expect(staffHidden.status).toBe("hidden");
+  });
+
+  it("rejects forged authors and gated post reports before disclosing or changing a post", async () => {
+    const space = await createCommunitySpace.call({ slug: "secret", title: "Secret", access: "gated" }, OWNER);
+    const room = await createCommunityRoom.call({ spaceId: space.id, slug: "room", title: "Room" }, OWNER);
+    const member = await createContact.call({ name: "Member", email: "member@example.test" }, OWNER);
+    await joinCommunity.call({ spaceId: space.id, contactId: member.id }, OWNER);
+    const post = await createCommunityPost.call({ roomId: room.id, contactId: member.id, body: "Confidential" }, OWNER);
+    const forged = { slug: "secret", email: "member@example.test", name: "Member" };
+    expect((await failure(createCommunityPostBySlug.call({ ...forged, roomSlug: "room", body: "Forged" }, { kind: "anonymous" }))).code).toBe("permission");
+    expect((await failure(reportCommunityPostBySlug.call({ ...forged, postId: post.id }, { kind: "anonymous" }))).code).toBe("permission");
+    const outsider = await createContact.call({ name: "Other", email: "other@example.test" }, OWNER);
+    const outsiderActor = await memberActor(outsider.id, "other@example.test");
+    expect((await getCommunityFeedBySlug.call(forged, outsiderActor)).canRead).toBe(false);
+    expect((await failure(createCommunityPostBySlug.call({ ...forged, roomSlug: "room", body: "Forged" }, outsiderActor))).code).toBe("permission");
+    const actor = await memberActor(member.id, "member@example.test");
+    const ownPost = await createCommunityPostBySlug.call({ ...forged, email: "other@example.test", roomSlug: "room", body: "Genuine" }, actor);
+    expect(ownPost.contactId).toBe(member.id);
+    expect((await listCommunityFeed.call({ spaceId: space.id }, OWNER)).map((row) => row.body)).toEqual(["Genuine", "Confidential"]);
   });
 
   it("drops the duplicate membership and join request when both people share a space", async () => {

@@ -1913,6 +1913,7 @@
   "community.public.gatedFeed": "Members see the feed once the owner adds them. Use the email you joined with.",
   "community.public.intro": "A community space on this site.",
   "community.public.join": "Join",
+  "community.public.signIn": "Sign in to read or post as a community member.",
   "community.public.memberView": "I am a member",
   "community.public.name": "Your name",
   "community.public.post": "Post",

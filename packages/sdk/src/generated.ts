@@ -885,7 +885,6 @@ export const SERVICE_NAMES = [
   "media.setAltText",
   "media.setFocalPoint",
   "media.signUploadParts",
-  "media.stageCompletedUpload",
   "media.startCapture",
   "media.stopCapture",
   "media.trash",
@@ -3096,7 +3095,7 @@ export interface ServiceCatalog {
     output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown };
   };
   "community.createPostBySlug": {
-    input: { email: string; name: string; slug: string; roomSlug: string; body: string };
+    input: { slug: string; roomSlug: string; body: string };
     output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown };
   };
   "community.createRoom": {
@@ -3112,7 +3111,7 @@ export interface ServiceCatalog {
     output: { space: { id: string; slug: string; title: string; access: string; [key: string]: unknown }; memberCount: number; [key: string]: unknown };
   };
   "community.getFeedBySlug": {
-    input: { slug: string; email?: string; roomSlug?: string; limit?: number; before?: string };
+    input: { slug: string; roomSlug?: string; limit?: number; before?: string };
     output: { space: { id: string; slug: string; title: string; access: string; [key: string]: unknown }; memberCount: number; canRead: boolean; rooms: { id: string; spaceId: string; slug: string; title: string; [key: string]: unknown }[]; posts: { id: string; roomId: string; roomSlug: string; roomTitle: string; authorName: string; body: string; createdAt: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "community.hidePost": {
@@ -3152,7 +3151,7 @@ export interface ServiceCatalog {
     output: { id: string; slug: string; title: string; access: string; [key: string]: unknown }[];
   };
   "community.moderatePostBySlug": {
-    input: { email: string; name: string; slug: string; postId: string; action: "hide" | "remove" };
+    input: { slug: string; postId: string; action: "hide" | "remove" };
     output: { id: string; roomId: string; spaceId: string; contactId: string; authorName: string; roomSlug: string; roomTitle: string; body: string; status: string; reportedAt: string | null; createdAt: string; [key: string]: unknown };
   };
   "community.removePost": {
@@ -4822,10 +4821,6 @@ export interface ServiceCatalog {
   "media.signUploadParts": {
     input: { id: string; partNumbers: number[] };
     output: { parts: { partNumber: number; url: string; method: "PUT" }[]; expiresAt: string };
-  };
-  "media.stageCompletedUpload": {
-    input: { uploadId: string; token?: string; sessionId?: string; filename: string; contentType: string; key: string; bytes: number; checksumSha256?: string };
-    output: { id: string; source: "camera" | "microphone" | "screen" | "share_sheet" | "camera_roll" | "upload_link" | "import" | "social"; status: "pending" | "live" | "preview" | "confirmed" | "discarded" | "expired"; targetType: string | null; targetId: string | null; uploadCount: number; displaySurface: string | null; permissionGrantedAt: string | null; trimStartMs: number; trimEndMs: number | null; caption: string | null; focalX: number; focalY: number; staged: boolean; stagedMime: string | null; stagedFilename: string | null; items: { id: string; filename: string; bytes: number; mime: string; assetId: string | null }[]; uploadId: string | null; assetId: string | null; expiresAt: string; completedAt: string | null; captureUrl: string | null; [key: string]: unknown };
   };
   "media.startCapture": {
     input: { id: string };
@@ -7440,7 +7435,6 @@ export interface FreeholderApi {
     setAltText: (input: ServiceCatalog["media.setAltText"]["input"]) => Promise<ServiceCatalog["media.setAltText"]["output"]>;
     setFocalPoint: (input: ServiceCatalog["media.setFocalPoint"]["input"]) => Promise<ServiceCatalog["media.setFocalPoint"]["output"]>;
     signUploadParts: (input: ServiceCatalog["media.signUploadParts"]["input"]) => Promise<ServiceCatalog["media.signUploadParts"]["output"]>;
-    stageCompletedUpload: (input: ServiceCatalog["media.stageCompletedUpload"]["input"]) => Promise<ServiceCatalog["media.stageCompletedUpload"]["output"]>;
     startCapture: (input: ServiceCatalog["media.startCapture"]["input"]) => Promise<ServiceCatalog["media.startCapture"]["output"]>;
     stopCapture: (input: ServiceCatalog["media.stopCapture"]["input"]) => Promise<ServiceCatalog["media.stopCapture"]["output"]>;
     trash: (input: ServiceCatalog["media.trash"]["input"]) => Promise<ServiceCatalog["media.trash"]["output"]>;

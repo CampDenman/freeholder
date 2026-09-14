@@ -1,6 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 "use server";
+import { cookies } from "next/headers";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
 import { redirect } from "next/navigation";
 import { ServiceError } from "@/core/service";
 import {
@@ -15,9 +18,12 @@ function text(form: FormData, name: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function communityPath(slug: string, extra?: string): string {
-  const path = `/community/${encodeURIComponent(slug)}`;
-  return extra ? `${path}?${extra}` : path;
+function communityPath(slug: string): string {
+  return `/community/${encodeURIComponent(slug)}`;
+}
+
+async function communityActor() {
+  return actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
 function fail(path: string, error: unknown): never {
@@ -37,7 +43,7 @@ export async function joinCommunityPublicAction(form: FormData): Promise<void> {
         email: text(form, "email"),
         name: text(form, "name"),
       },
-      { kind: "anonymous" },
+      await communityActor(),
     );
   } catch (error) {
     fail(path, error);
@@ -55,7 +61,7 @@ export async function requestCommunityJoinPublicAction(form: FormData): Promise<
         email: text(form, "email"),
         name: text(form, "name"),
       },
-      { kind: "anonymous" },
+      await communityActor(),
     );
   } catch (error) {
     fail(path, error);
@@ -65,18 +71,15 @@ export async function requestCommunityJoinPublicAction(form: FormData): Promise<
 
 export async function createCommunityPostPublicAction(form: FormData): Promise<void> {
   const slug = text(form, "slug");
-  const email = text(form, "email");
-  const path = communityPath(slug, email ? `email=${encodeURIComponent(email)}` : undefined);
+  const path = communityPath(slug);
   try {
     await createCommunityPostBySlug.call(
       {
         slug,
         roomSlug: text(form, "roomSlug"),
-        email,
-        name: text(form, "name"),
         body: text(form, "body"),
       },
-      { kind: "anonymous" },
+      await communityActor(),
     );
   } catch (error) {
     fail(path, error);
@@ -87,7 +90,7 @@ export async function createCommunityPostPublicAction(form: FormData): Promise<v
 export async function reportCommunityPostPublicAction(form: FormData): Promise<void> {
   const slug = text(form, "slug");
   const email = text(form, "email");
-  const path = communityPath(slug, email ? `email=${encodeURIComponent(email)}` : undefined);
+  const path = communityPath(slug);
   try {
     await reportCommunityPostBySlug.call(
       {
@@ -96,7 +99,7 @@ export async function reportCommunityPostPublicAction(form: FormData): Promise<v
         email,
         name: text(form, "name"),
       },
-      { kind: "anonymous" },
+      await communityActor(),
     );
   } catch (error) {
     fail(path, error);

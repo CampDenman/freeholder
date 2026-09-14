@@ -2379,7 +2379,7 @@ Method: the most-installed plugins/apps on both ecosystems are a revealed-prefer
   obligations rather than features: a plugin that gets them wrong is the
   owner's legal exposure, and the only honest place for a rule nobody may skip
   is the service layer.
-- **Gift options & registries**; **print-on-demand adapter** (Printify-style) as a fulfillment plugin; **memberships/gated communities** beyond simple subscriptions. (Local delivery and pickup scheduling also moved into core — §4.11.)
+- **Gift options & registries**; **print-on-demand adapter** (Printify-style) as a fulfillment plugin; **memberships/gated communities** beyond simple subscriptions. Community membership and moderation are bound to the authenticated user's contact, never a visitor-supplied email. Open feeds remain publicly readable; gated feed reads and reports require membership or the existing staff read grant. Member posts and moderation require sign-in. Provider fixtures may run only in tests; unconfigured live integrations must not fabricate success. (Local delivery and pickup scheduling also moved into core — §4.11.)
 - **Voice and video** (calls, video rooms, recordings, transcripts) through provider adapters. Core owns the conversation and the timeline; the vendor SDK, its compliance posture and its pricing stay behind a plugin boundary (§4.14).
 
 **Explicitly out (the anti-roadmap):** dropshipping marketplaces, third-party analytics pixels as core, page-builder lock-in formats, anything that makes the owner's data someone else's product. *(Narrowed 2026-08-02: ad **networks** were listed here outright. §4.16 now ships owner-sold and house ad inventory with first-party counting, and permits a third-party network tag as a consent-gated creative kind. The line that mattered was never "no advertising" — it was that the owner's audience must not be silently rented to an ad network by default, which the consent gate and the off-by-default flag preserve.)* The WordPress lesson cuts both ways — install-count proves demand, but half those plugins exist to patch an incoherent core. Freeholder absorbs the coherence and leaves the patchwork behind.
@@ -3309,12 +3309,12 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.17 owner sign-off, C11.08 Tier-1 restore, C11.10 independent security review, C11.11 large seed, C3.13 live Printify/channel adapters |
+| Current focus | C0.11 / C11.09 completion-evidence audit, C11.10 security repairs, C11.11 measurement integrity, C3.13 live provider integrations; C11.17 remains unsigned |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Device evidence (C10.17, C10.18, C10.25–C10.28, C10.30). Independent security review (C11.10). Live settlement (C11.05 honesty). C11.08 Tier-1 restore. C11.11 medium/large seed and browser vitals. C3.13 live Printify/channel adapters. C11.12 RTL catalog and remaining F04 lists. C11.14 undelete-every-row and per-list search opt-outs. C11.15 remaining spec tests. C11.17 itself. |
+| Remaining open | Device evidence (C10.17, C10.18, C10.25–C10.28, C10.30). Independent security review (C11.10). Live settlement (C11.05 honesty). C11.08 Tier-1 restore. C11.11 reference-target measurements and browser vitals. C3.13 live Printify/channel adapters. C11.12 RTL catalog and remaining keyboard/detail/viewport matrix. C11.14 undelete-every-row and per-list search opt-outs. C11.15 remaining spec tests. C11.17 itself. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3478,9 +3478,14 @@ one with unchecked dependency items.
   enforce the canonical license text, manifest fields, package copies, and
   source SPDX headers. *(`LICENSE`, `LICENSING.md`,
   `scripts/license-headers.mjs`, and changeset `apache-license.md`. **F04** N/A — license text and SPDX headers, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** changeset `apache-license.md` landed with the rest of the spine.)*
-- [x] **C0.11** Audit every checked C-item against the twelve F-criteria, reopen or narrow
+- [ ] **C0.11** Audit every checked C-item against the twelve F-criteria, reopen or narrow
   every claim that its executable evidence does not prove, retire stale
   handoffs as planning authorities, and record the audit date and evidence.
+  Reopened by the project audit: passing static evidence stamps did not catch
+  the community identity bypass, search scope escalation, simulated production
+  providers, or skipped SDK/performance generation. Repairs and concrete
+  tests are recorded in `security/project-audit-2026-09-13.md`; the whole
+  requirement-by-requirement review is still in progress.
   *(2026-09-04 pass: the service call graph exposed nine nested-transaction
   paths and now has executable enforcement in
   `tests/core/service-composition.test.ts`; the outbound/script-content pass
@@ -4161,10 +4166,13 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   Fixture adapters with claim/apply around provider I/O; failed jobs/channels/
   recordings retry in place. Gift contributions and marketplace orders land on
   invoices through `contacts.resolve`. **F04** empty/error/retry on each admin
-  screen and the two public pages. **F05** the plugins expose no services of
-  their own; their capabilities reach agents through the core services they
-  compose (`contacts.resolve`, invoicing), which is the seam §26 intends —
-  a plugin that minted its own agent surface would be a second contract.
+  screen and the two public pages. **F05** plugin services use the same
+  service registry, HTTP dispatcher, generated SDK and MCP projection as core:
+  `community.getFeedBySlug`, `community.createPostBySlug`,
+  `community.moderatePostBySlug`, `printOnDemand.submit`,
+  `marketplace.sync` and `voiceVideo.startRoom`. They compose canonical
+  contact/invoicing services. The prior claim that plugins exposed no services
+  was contradicted by the generated SDK and is corrected by this audit.
   **F07** unique-slug/member conflicts, gated join refusal, provider `fail-`
   recovery. **F08** `tests/core/first-party-plugins.test.ts` and
   `tests/browser/first-party-plugins.spec.ts`. **F09** provider work runs in
@@ -4180,7 +4188,22 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   Community: `0001_community_rooms.sql`. Voice/video: `0002_voice_video_rooms.sql`.
   POD: `0003_print_on_demand_fulfillment.sql`. Marketplace: `0004_marketplace_channel_sync.sql`
   pages staged provider orders onto invoices (`contacts.resolve` + invoicing).
-  Still [ ] while POD/marketplace adapters are fixtures, not live providers.)
+  Audit follow-up: POD, marketplace and voice/video fixtures are test-only;
+  deployed instances refuse unconfigured vendor operations instead of returning
+  fabricated success (`tests/core/plugin-provider-boundary.test.ts`). Gated
+  community feeds now use session-linked membership; posting and moderator
+  actions require authentication, and gated reports enforce the same read
+  boundary. A supplied member/moderator email grants no authority. Public
+  community pages use the existing customer sign-in and session actor.
+  Print and voice/video claims now lock existing jobs/rooms/artifacts and
+  reject competing pending claims; 17 integration/concurrency tests passed.
+  Marketplace sync uses expiring fenced leases, checks lease ownership before
+  every import/checkpoint, and resolves contact + invoice + channel order in
+  one transaction. Concurrent claims, expired-worker refusal, retry
+  idempotency and rollback are tested in `tests/core/marketplace-claims.test.ts`.
+  Provider acceptance no longer invents shipment evidence: the catalog fulfillment
+  remains pending and the order stays fulfilling until actual shipping evidence.
+  Still [ ] while POD/marketplace/voice-video lack live providers.)
 
 #### Packages, installation, export, and target parity
 
@@ -8587,8 +8610,14 @@ schema they inherit reads as a designed thing rather than an excavation.
 
 #### Whole-product quality
 
-- [x] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
+- [ ] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
   package row and record evidence beside each remaining checkbox.
+  Reopened by the audit: C3.13's F05 denied the plugin endpoints that the
+  generated SDK actually exposes. C11.11's measurement fixture did not
+  populate its declared dataset, and generation commands could succeed while
+  skipping their substantive work. An empty `PROOF_DEBT` set is not proof
+  that every criterion has been exercised. The findings report records the
+  repaired evidence; this item remains open until the matrix is verified.
   *(2026-09-12: `PROOF_DEBT` in `scripts/plan-gate.mjs` is empty — every
   former member names **F04/F05/F07/F09/F12** or N/A why. False F12 on
   C0.01–C0.08, F09 sentences that asserted still-open C11.14, and F-blocks
@@ -8612,6 +8641,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   route. **F07** `scripts/plan-gate.mjs` refuses a checked item that does
   not name F05 or N/A why. **F09** `pnpm plan:check` in CI. **F12** N/A —
   the matrix is not a composed product journey.)*
+  *(Audit follow-up: managed-agent proposals and approval execution now use
+  the external-service registry boundary, excluding internal payment phases.
+  Capture IDs require media permissions; phone-link tokens remain capabilities,
+  and completed-upload staging is system-only. Capture links bind only their
+  own uploads. Read-only capture access redacts bearer URLs and upload handles.
+  All 24 agent autonomy/approval tests and 14 capture/mobile tests passed locally.)*
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.
@@ -8621,15 +8656,24 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
-  *(Harness 2026-09-12: `scripts/performance-budgets.mjs` parses the §15.1
-  table; `tests/core/performance-budgets.test.ts` measures admin list/detail,
-  contacts search, empty `reports.revenue`, and `cms.resolvePage` on a small
-  seed of contacts plus one page in CI and fails when a cap is exceeded.
-  That seed does not insert the §15.1 medium message/order/product/asset
-  counts. Medium/large, Core Web Vitals, editor, job-queue, migration and
-  cold-boot are opt-in and fail closed when requested without the capability.
-  **Left open:** this tree cannot run the medium/large seed or browser vitals
-  here, so the item is not checked.)*
+  *(Audit follow-up: `scripts/performance-budgets.mjs` now requires an
+  explicitly disposable test database and a passing seeded measurement,
+  rather than accepting a green suite whose database test skipped. Invalid
+  timings (NaN, infinity, negatives) fail; large pagination cannot excuse
+  missing requested browser clocks. `tests/helpers/performance.ts` inserts
+  and counts all five §15.1 record families, with linked product variants,
+  order lines and paid invoices so the report has known nonzero revenue.
+  CMS measurement includes block rendering and HTML serialization, but does
+  not claim HTTP/layout overhead or Core Web Vitals. Local small and medium
+  runs passed all eight tests; medium has 5,000 contacts, 20,000 messages,
+  2,000 orders, 500 products and 10,000 asset metadata rows. The 100,000-contact
+  pagination run also passed. Tied contact-import timestamps now sort by
+  creation time plus unique ID, backed by `0006_contact_pagination.sql`;
+  tests verify distinct first/second/final pages and exact tied-row ordering.
+  Asset bytes and provider calls are not part of
+  this database fixture. **Left open:** reference-target measurements,
+  whole-page HTTP/browser timing, editor, queue, migration and cold boot.
+  The local machine is not the §15.1 1-vCPU/1GB reference target.)*
 - [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.
   *(Partial 2026-09-13: `tests/browser/accessibility.spec.ts` walks
@@ -8638,14 +8682,16 @@ schema they inherit reads as a designed thing rather than an excavation.
   reflow/keyboard pass on admin. The axe loop also covers owner F04 list
   screens — roles, invitations, contacts, health, settings, plugins, work,
   search, retention, payments, messaging, pipeline, products, redirects,
-  pages, community, voice-video — and portal home/profile. **Left open:** the
-  browser suite is the evidence, not a local run here. RTL remains injected
-  `dir` rather than a shipped Arabic catalog. Remaining F04 owner lists still
-  outside the axe loop include inbox, invoices, orders, galleries, quotes,
-  forms, media, jobs, locations, calendar, automations, reports, newsletters,
-  appointments, documents, events, projects, tasks, segments, reviews, social,
-  subscriptions, and other owner lists. Detail pages that need a seeded
-  record id stay out.)*
+  pages, community, voice-video — and portal home/profile. Audit follow-up
+  adds inbox, invoices, orders, galleries, quotes, forms, media, jobs,
+  locations, calendar, automations, reports, newsletters, appointments,
+  documents, events, projects, tasks, segments, reviews, social and
+  subscriptions. Every list explicitly sets and verifies light and dark
+  themes before axe, instead of labelling the inherited dark theme “light”.
+  The expanded production-build Chromium run passed locally in 2.1 minutes.
+  **Left open:** RTL remains injected `dir` rather than a shipped Arabic
+  catalog; remaining routes, populated detail forms, and complete keyboard
+  workflows across the locale/viewport matrix are not proved by list scans.)*
 - [x] **C11.13** Complete failure drills for database/storage/mail/payment/SMS/
   OAuth/AI/provider outages, process death, duplicate webhook/job, clock skew,
   low disk, lost credential key and interrupted update.
@@ -8688,6 +8734,11 @@ schema they inherit reads as a designed thing rather than an excavation.
   **F09** still open because undelete leftovers remain. **F12**
   `tests/core/c11-14-search.test.ts` mixed-kind query and
   `tests/core/c11-14-retention.test.ts` policy/apply/exception proof.
+  Audit follow-up: each search source declares its existing scoped read
+  service, and `search.query` uses that service's authorization for both
+  staff and API keys. A contact-write scope no longer leaks names/emails;
+  notes/tasks/conversations use their own grant families. The regression
+  reproduced the original leak and all 16 search tests passed after repair.
   **Remaining named worklist:**
   Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
   Other titled contact-attached stores still on per-list search (orders, subscriptions, and remaining SEARCH_TABLE_OPT_OUTS) are not mixed into search.query.)*
@@ -8737,8 +8788,17 @@ schema they inherit reads as a designed thing rather than an excavation.
   changesets and gated to `package.json`. Doctor and the §18 recipe/public/
   upgrade gates refuse health `0.0.0`. **Left open:** not every documentation
   claim in §§1–42 has a passing acceptance test, so this item is not checked.)*
-- [x] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
+  *(Audit follow-up: the upgrade gate now fails if its prior image cannot be
+  pulled; a network or registry failure is not proof of a first release.
+  `tests/core/upgrade-gate.test.ts` verifies the nonzero result before database
+  operations. No actual image upgrade is claimed by this local CLI test.)*
+- [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
   prove there is no affirmative feature without a completed checklist item.
+  Reopened by the audit: a table of sections and named open work does not
+  prove the stated requirement that every affirmative feature has a completed
+  item. C3.13 and mobile acceptance remain incomplete. The reconciliation
+  test now enforces this precondition instead of asserting this box is checked
+  while explicitly requiring unfinished product items to remain open.
   *(Evidence 2026-09-13: `deploy/spec-reconciliation.md` tables §§1–42 against
   343 `pgTable`s, the service registry, 136 admin pages and 20 portal pages.
   Affirmative leftovers without a C-item were struck in this change

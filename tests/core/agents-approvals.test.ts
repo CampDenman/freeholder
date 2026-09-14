@@ -74,6 +74,15 @@ describe.runIf(hasDatabase)("the approval inbox (C4.04)", { timeout: 30_000 }, (
   });
   afterAll(closeDb);
 
+  it("refuses a parked internal phase and rolls back its approval claim", async () => {
+    const { task, approval } = await parkedWrite("PrivateApproval", "private-approval@example.test");
+    await db().update(runApprovals).set({ serviceName: "invoicing.applyCustomerPayment", input: {} })
+      .where(eq(runApprovals.id, approval.id));
+    expect((await failure(approveWrite.call({ id: approval.id }, OWNER))).code).toBe("not_found");
+    expect((await listApprovals.call({ taskId: task.id }, OWNER))[0]?.status).toBe("pending");
+    expect((await getTask.call({ id: task.id }, OWNER))?.status).toBe("waiting_approval");
+  });
+
   it("approving executes the stored input exactly once and releases the task", async () => {
     const { person, task, approval } = await parkedWrite("Approver1", "a1@example.test");
     const before = await getTask.call({ id: task.id }, OWNER);

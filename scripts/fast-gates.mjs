@@ -33,6 +33,8 @@ const steps = [
     run: [
       "pnpm exec vitest run --reporter=dot",
       "tests/core/sdk-schema.test.ts",
+      "tests/core/sdk-generation.test.ts",
+      "tests/core/plugin-provider-boundary.test.ts",
       "tests/core/merge-completeness.test.ts",
       "tests/core/registry-completeness.test.ts",
       "tests/core/docs-availability.test.ts",

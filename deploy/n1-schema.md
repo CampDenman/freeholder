@@ -13,8 +13,9 @@ Two gates keep that true:
 2. **Upgrade gate.** `scripts/upgrade-gate.sh` boots the previous published
    image, writes a contact, migrates forward with this build, checks the
    contact and the home page, then boots the previous image against the new
-   schema with `FREEHOLDER_SKIP_MIGRATE=1`. If there is no previous image the
-   gate skips with a warning, not a silent pass.
+   schema with `FREEHOLDER_SKIP_MIGRATE=1`. A failed prior-image pull blocks
+   the gate: missing images, registry denial and network failure cannot be
+   distinguished as a successful first-release exception (C11.15).
 
 This is not unattended apply (C10.06) and not target-specific image swap
 (C10.10).

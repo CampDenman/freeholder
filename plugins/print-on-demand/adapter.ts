@@ -30,5 +30,10 @@ export const fixturePodProvider: PodProvider = {
 };
 
 export function podProvider(): PodProvider {
+  // C3.13/C11.15: fixtures are executable test doubles, never proof that a
+  // vendor accepted a job, opened a call, or connected an account.
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("No live print provider is configured. This print job has not been submitted.");
+  }
   return fixturePodProvider;
 }

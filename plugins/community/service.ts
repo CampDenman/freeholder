@@ -11,6 +11,7 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
   defineService,
   getService,
+  permits,
   ServiceError,
   type ServiceContext,
   type Tx,
@@ -297,13 +298,25 @@ async function requireMember(tx: Tx, spaceId: string, contactId: string): Promis
   return member;
 }
 
-async function contactByEmail(tx: Tx, email: string) {
-  const [person] = await tx
-    .select({ id: contacts.id, name: contacts.name, email: contacts.email })
-    .from(contacts)
-    .where(eq(contacts.email, email))
-    .limit(1);
+// C3.13/C11.10: an email supplied by a visitor is not proof of identity.
+// Only the contact linked by the existing authenticated session may exercise
+// membership or moderator rights; no lookup of caller-supplied email here.
+async function signedInContact(ctx: ServiceContext) {
+  if (ctx.actor.kind !== "user") {
+    throw new ServiceError("permission", "Sign in to use your community membership.");
+  }
+  const [person] = await ctx.tx.select({ id: contacts.id })
+    .from(contacts).where(eq(contacts.userId, ctx.actor.userId)).limit(1);
+  if (!person) throw new ServiceError("permission", "No community contact is linked to this account.");
   return person;
+}
+
+async function canReadSpace(ctx: ServiceContext, space: Space): Promise<boolean> {
+  if (space.access === "open" || permits(ctx.actor, "scoped", "community.listFeed", "query")) return true;
+  if (ctx.actor.kind !== "user") return false;
+  const [person] = await ctx.tx.select({ id: contacts.id })
+    .from(contacts).where(eq(contacts.userId, ctx.actor.userId)).limit(1);
+  return Boolean(person && await membership(ctx.tx, space.id, person.id));
 }
 
 async function resolveVisitor(
@@ -670,7 +683,6 @@ export const getCommunityFeedBySlug = defineService({
   permission: "public",
   input: z.object({
     slug: z.string().min(1).max(80),
-    email: z.string().trim().email().toLowerCase().optional(),
     roomSlug: z.string().min(1).max(80).optional(),
     limit: feedLimit,
     before: feedBefore,
@@ -688,11 +700,7 @@ export const getCommunityFeedBySlug = defineService({
       .select({ id: communityMembers.id })
       .from(communityMembers)
       .where(eq(communityMembers.spaceId, space.id));
-    let canRead = space.access === "open";
-    if (!canRead && input.email) {
-      const person = await contactByEmail(ctx.tx, input.email);
-      if (person && (await membership(ctx.tx, space.id, person.id))) canRead = true;
-    }
+    const canRead = await canReadSpace(ctx, space);
     if (!canRead) {
       return { space, memberCount: members.length, canRead: false, rooms: [], posts: [] };
     }
@@ -813,14 +821,14 @@ export const createCommunityPostBySlug = defineService({
   name: "community.createPostBySlug",
   summary: "A member posts in a public community room. Untrusted input.",
   kind: "mutation",
-  permission: "public",
+  permission: "authenticated",
   rateLimit: {
     limit: 10,
     windowSeconds: 15 * 60,
-    subject: (input) => input.email,
+    subject: (_input, actor) => actor.kind === "user" ? actor.userId : undefined,
     message: "Too many community posts from that address. Try again shortly.",
   },
-  input: visitor.extend({
+  input: z.object({
     slug: z.string().min(1).max(80),
     roomSlug: z.string().min(1).max(80),
     body: postBody,
@@ -834,7 +842,7 @@ export const createCommunityPostBySlug = defineService({
       .where(and(eq(communityRooms.spaceId, space.id), eq(communityRooms.slug, input.roomSlug)))
       .limit(1);
     if (!room) throw new ServiceError("not_found", "No such community room.");
-    const contact = await resolveVisitor(ctx, input);
+    const contact = await signedInContact(ctx);
     await requireMember(ctx.tx, space.id, contact.id);
     return insertPost(ctx, { roomId: room.id, contactId: contact.id, body: input.body });
   },
@@ -858,6 +866,9 @@ export const reportCommunityPostBySlug = defineService({
   output: publicPostRow,
   handler: async (input, ctx) => {
     const space = await spaceBySlug(ctx.tx, input.slug);
+    if (!(await canReadSpace(ctx, space))) {
+      throw new ServiceError("permission", "Sign in with a membership to report a post in this community.");
+    }
     const [post] = await postsQuery(ctx.tx)
       .where(and(eq(communityPosts.id, input.postId), eq(communityRooms.spaceId, space.id)))
       .limit(1);
@@ -888,14 +899,14 @@ export const moderateCommunityPostBySlug = defineService({
   name: "community.moderatePostBySlug",
   summary: "A moderator hides or removes a post.",
   kind: "mutation",
-  permission: "public",
+  permission: "authenticated",
   rateLimit: {
     limit: 30,
     windowSeconds: 15 * 60,
-    subject: (input) => input.email,
+    subject: (_input, actor) => actor.kind === "user" ? actor.userId : undefined,
     message: "Too many moderation attempts from that address. Try again shortly.",
   },
-  input: visitor.extend({
+  input: z.object({
     slug: z.string().min(1).max(80),
     postId: z.string().uuid(),
     action: z.enum(["hide", "remove"]),
@@ -903,7 +914,7 @@ export const moderateCommunityPostBySlug = defineService({
   output: postRow,
   handler: async (input, ctx) => {
     const space = await spaceBySlug(ctx.tx, input.slug);
-    const contact = await resolveVisitor(ctx, input);
+    const contact = await signedInContact(ctx);
     const member = await membership(ctx.tx, space.id, contact.id);
     if (!member || member.role !== "moderator") {
       throw new ServiceError("permission", "Only a moderator can hide or remove a post.");
@@ -934,6 +945,7 @@ registerRetentionSource({
 
 registerSearchSource({
   kind: "community_post",
+  readService: "community.listFeed",
   module: "community",
   tables: ["community_posts"],
   search: async ({ tx, pattern, limit }) => {

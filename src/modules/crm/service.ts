@@ -877,6 +877,7 @@ registerContactPrivacySource({
 
 registerSearchSource({
   kind: "deal",
+  readService: "crm.listDeals",
   module: "crm",
   tables: ["deals"],
   search: async ({ tx, pattern, limit }) => {

@@ -9,8 +9,13 @@ SPDX-License-Identifier: Apache-2.0
 
 C11.16 requires that every affirmative capability in §§1–42 either has a
 completed checklist item, is listed here as remaining work with an open
-checklist id, or is struck from the spec in the same change. This file is that
-table. It is not C11.17 and it does not claim DONE.
+checklist id, or is struck from the spec in the same change. This file is that historical
+mapping table. It is not C11.17 and it does not claim DONE. The project audit
+reopened C11.16: naming unfinished features is useful, but does not satisfy
+its requirement that every affirmative feature have a completed checklist
+item. Some original “Built” labels below mean presence in the tree, not
+verified operational completeness. Current evidence is in MASTER.md §43 and
+`security/project-audit-2026-09-13.md`.
 
 **Method.** Section headings in `MASTER.md` were read against:
 

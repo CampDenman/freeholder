@@ -7,6 +7,7 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineService,
   getService,
+  getExternalService,
   permits,
   redact,
   ServiceError,
@@ -128,7 +129,8 @@ export const proposeWrite = defineService({
       .limit(1);
     if (!task) throw new ServiceError("not_found", "That run has no task.");
 
-    const service = getService(input.serviceName);
+    // C4.03/C11.09: dispatch cannot expose private claim/apply phases.
+    const service = getExternalService(input.serviceName);
     // The gate must not widen the agent's reach: a proposal for a service the
     // key could not call directly is refused before any preview is built, so
     // neither the before-read nor the parked approval leaks or requests
@@ -324,7 +326,7 @@ export const approveWrite = defineService({
     // and redacted on every read instead. Executed as the approving person,
     // so their own permissions govern the write and the audit trail names
     // who let it happen.
-    const service = getService(claimed!.serviceName);
+    const service = getExternalService(claimed!.serviceName);
     const result = await ctx.call(service, claimed!.input);
 
     await releaseTask(ctx, claimed!.subjectId);

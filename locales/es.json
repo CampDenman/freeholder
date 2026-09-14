@@ -1913,6 +1913,7 @@
   "community.public.gatedFeed": "Los miembros ven el feed cuando el propietario los anade. Use el correo con el que se unio.",
   "community.public.intro": "Un espacio de comunidad en este sitio.",
   "community.public.join": "Unirse",
+  "community.public.signIn": "Inicia sesión para leer o publicar como miembro de la comunidad.",
   "community.public.memberView": "Soy miembro",
   "community.public.name": "Su nombre",
   "community.public.post": "Publicar",

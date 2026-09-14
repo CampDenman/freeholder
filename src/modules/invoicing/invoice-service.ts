@@ -248,6 +248,7 @@ registerPointer(
 
 registerSearchSource({
   kind: "invoice",
+  readService: "invoicing.list",
   module: "invoicing",
   tables: ["invoices"],
   search: async ({ tx, pattern, limit }) => {

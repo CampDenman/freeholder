@@ -44,9 +44,20 @@ guarded ownership substrate.
 
 `pnpm perf:budgets` is the §15.1 harness (C11.11). It parses the budget table
 from MASTER.md and runs `tests/core/performance-budgets.test.ts`. Default is
-the small seed. `PERF_DATASET=medium` or `large` fails closed if the database
-is missing. Browser, job-queue, migration and cold-boot clocks are opt-in
+the small seed. Every measurement run requires `TEST_DATABASE_URL` (or
+`DATABASE_URL` under CI) pointing at a disposable database. `--check-only`
+validates only the table. `PERF_DATASET=medium` inserts all five specified
+record families; `large` verifies pagination across 100,000 contacts. The
+harness checks actual row counts and nonempty paid-invoice report totals,
+and refuses a missing or skipped seeded test. Asset fixtures are metadata,
+not stored image bytes. CMS timing includes block rendering and serialization;
+whole-page HTTP/layout and reference-target browser timing remain separate. Browser, job-queue, migration and cold-boot clocks are opt-in
 (`PERF_MEASURE_*=1`) and also fail closed when requested without the
 capability. C11.13 failure drills live in
 `tests/core/c11-13-failure-drills.test.ts`. The C11.10 review packet is
 `security/independent-review-packet.md`.
+
+`pnpm sdk:generate` requires the same disposable database configuration as the
+measurement harness. It checks that the live-registry generation test passed;
+a passing transport-only suite with skipped generation is an error (C3.03,
+C11.15).

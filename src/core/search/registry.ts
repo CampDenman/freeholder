@@ -17,8 +17,10 @@ export interface SearchHit {
 
 export interface SearchSource {
   kind: string;
-  /** Grant module that must be viewable for hits from this source. */
+  /** Module label for the result; authorization uses readService. */
   module: string;
+  /** Existing scoped query that authorizes reading this source. */
+  readService: string;
   /** Physical tables this source is the findability for. */
   tables: readonly string[];
   search: (query: {
