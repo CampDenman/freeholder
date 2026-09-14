@@ -6321,5 +6321,14 @@
   "voiceVideo.inviteHelp": "Copia este enlace privado y compártelo con el contacto invitado. Caduca en un máximo de 30 minutos.",
   "voiceVideo.checkRecording": "Comprobar grabación",
   "voiceVideo.refreshTranscript": "Actualizar transcripción",
-  "voiceVideo.download": "Descargar grabación"
+  "voiceVideo.download": "Descargar grabación",
+  "admin.search.kind.order": "Pedidos",
+  "admin.search.kind.subscription": "Suscripciones",
+  "admin.search.kind.giftRegistry": "Listas de regalos",
+  "subscriptions.detail.identifier": "ID de suscripción",
+  "subscriptions.detail.contact": "Contacto",
+  "subscriptions.detail.status": "Estado",
+  "subscriptions.detail.period": "Período de facturación actual",
+  "subscriptions.detail.billing": "Facturación",
+  "subscriptions.detail.manage": "Gestionar suscripciones"
 }
