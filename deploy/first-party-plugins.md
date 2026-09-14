@@ -5,8 +5,9 @@ channel sync are first-party plugins (MASTER.md §36, C3.13). They install with
 the instance; disable one from Admin → Plugins if the business does not use it.
 
 **These are not complete products.** Community, voice/video, print-on-demand
-and marketplace channel sync have landed as first-party plugins. Printify has a real HTTP adapter; voice/video and
-marketplace adapters remain test-only fixtures. Gift registries already raise ordinary invoices. Outside the test runner, missing live providers now fail explicitly; no print
+and marketplace channel sync have landed as first-party plugins. Printify and
+Shopify have real HTTP adapters; voice/video remains a test-only fixture.
+Gift registries raise ordinary invoices. Missing live providers fail explicitly; no print
 submission, channel connection or call is reported as successful. Live provider
 I/O remains unfinished under C3.13.
 
@@ -95,3 +96,40 @@ creates its invoice and records the channel order in one transaction.
 Print/call reconciliation after an interrupted vendor request still belongs
 to the missing live-provider work; test fixtures do not prove recovery of
 real vendor operations.
+
+### Shopify own-store setup (C3.13)
+
+Create and install an app for a store in your Shopify organization using the
+[client credentials grant guide](https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant).
+Set `SHOPIFY_SHOP` to its `your-store.myshopify.com` domain, and set
+`SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET` in your deployment environment.
+Restart Freeholder, then connect Shopify in Admin → Marketplace. Local
+configuration is distinct from the verified channel connection. Tokens stay
+in process memory and renew before expiry; credentials never appear in channel
+reads, generated API results or stored provider errors.
+
+The app needs `read_orders`, `read_customers` and access to protected customer
+email/name fields. The [Customer API](https://shopify.dev/docs/api/admin-graphql/latest/objects/Customer)
+requires the customer scope used to resolve the buyer’s name. Shopify normally
+limits history to 60 days; older orders need additional approved access
+([Order API](https://shopify.dev/docs/api/admin-graphql/latest/objects/order)).
+A missing email stops the page with an actionable error rather than creating
+a fabricated contact. Fix permissions or the source order, then retry.
+
+Sync reads up to 50 orders per page using GraphQL Admin API `2026-07`. Only
+paid, non-test, non-cancelled orders are imported. Each produces a draft
+invoice for the gross shop-currency amount, linked to the resolved contact.
+Review channel tax details before issuing anything; Freeholder does not send
+an invoice, charge the customer, or assert a local settlement during import.
+Later source edits, refunds and cancellations do not update previous imports.
+These limitations are shown in the admin screen and remain under C3.13.
+
+Connected channels sync twice hourly; active leases are left to their owner.
+Completed scans start from the beginning on the next run; existing imports
+are skipped by channel/order identity. Interrupted scans retain the last
+completed page. A sync stops after 500 pages, so large histories need a future
+incremental history workflow. Shop identity must match the connected channel
+on every page. Restore the original configuration if it changes. Connection
+and sync leases reject competing or expired workers. No live store acceptance
+has been performed; HTTP fixtures and database integration tests establish
+local behavior only.

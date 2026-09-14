@@ -3,6 +3,9 @@
 // Channel sync stays behind this plugin (MASTER.md §36, C3.13).
 // The fixture never sees credentials; a real Shopify/Etsy/Amazon/eBay adapter
 // replaces this module without changing the channel record or admin screen.
+import { env } from "@/core/env";
+import { createShopifyProvider, type ShopifyConfiguration } from "./shopify";
+
 export interface MarketplaceConnectInput {
   name: string;
   provider: string;
@@ -99,11 +102,16 @@ export const fixtureMarketplaceProvider: MarketplaceProvider = {
   },
 };
 
+let live: { configuration: ShopifyConfiguration; provider: MarketplaceProvider } | undefined;
 export function marketplaceProvider(): MarketplaceProvider {
-  // C3.13/C11.15: fixtures are executable test doubles, never proof that a
-  // vendor accepted a job, opened a call, or connected an account.
-  if (process.env.NODE_ENV !== "test") {
-    throw new Error("No live marketplace provider is configured. No connection or order sync has completed.");
+  if (process.env.NODE_ENV === "test") return fixtureMarketplaceProvider;
+  const settings = env();
+  if (!settings.SHOPIFY_SHOP || !settings.SHOPIFY_CLIENT_ID || !settings.SHOPIFY_CLIENT_SECRET) {
+    throw new Error("No live marketplace provider is configured. Set the Shopify shop, client ID and client secret.");
   }
-  return fixtureMarketplaceProvider;
+  const configuration = { shop: settings.SHOPIFY_SHOP, clientId: settings.SHOPIFY_CLIENT_ID, clientSecret: settings.SHOPIFY_CLIENT_SECRET };
+  if (!live || Object.entries(configuration).some(([key, value]) => live!.configuration[key as keyof ShopifyConfiguration] !== value)) {
+    live = { configuration, provider: createShopifyProvider(configuration) };
+  }
+  return live.provider;
 }

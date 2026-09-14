@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
+import { env } from "@/core/env";
 import { isUniqueViolation } from "@/core/db";
 import { attachPluginContactColumn } from "@/core/plugins/spine";
 import {
@@ -41,6 +42,7 @@ const channelRow = row({
   lastError: z.string().nullable(),
   lastSyncedAt: timestamp.nullable(),
   syncCursor: z.string().nullable(),
+  syncLeaseExpiresAt: timestamp.nullable(),
 });
 
 const orderRow = row({
@@ -66,32 +68,34 @@ const insertPending = defineService({
     provider: z.enum(PROVIDERS),
     channelId: z.string().uuid().optional(),
   }),
-  output: row({ channelId: uuid, name: z.string(), provider: z.string() }),
+  output: row({ channelId: uuid, name: z.string(), provider: z.string(), leaseToken: uuid }),
   handler: async (input, ctx) => {
+    const leaseToken = randomUUID();
+    const leaseExpiresAt = new Date(Date.now() + SYNC_LEASE_MS);
     if (input.channelId) {
       const [existing] = await ctx.tx
         .select()
         .from(marketplaceChannels)
         .where(eq(marketplaceChannels.id, input.channelId))
-        .limit(1);
+        .limit(1).for("update");
       if (!existing) throw new ServiceError("not_found", "No such marketplace channel.");
-      if (existing.status === "connected") {
-        throw new ServiceError("conflict", "That channel is already connected.");
+      if (["connected", "syncing"].includes(existing.status) || (existing.status === "pending" && existing.syncLeaseExpiresAt && existing.syncLeaseExpiresAt > new Date())) {
+        throw new ServiceError("conflict", "That channel is already connected or has active provider work.");
       }
       await ctx.tx
         .update(marketplaceChannels)
-        .set({ status: "pending", lastError: null, name: input.name })
+        .set({ status: "pending", lastError: null, name: input.name, syncLeaseToken: leaseToken, syncLeaseExpiresAt: leaseExpiresAt })
         .where(eq(marketplaceChannels.id, existing.id));
-      return { channelId: existing.id, name: input.name, provider: existing.provider };
+      return { channelId: existing.id, name: input.name, provider: existing.provider, leaseToken };
     }
     try {
       const [created] = await ctx.tx
         .insert(marketplaceChannels)
-        .values({ name: input.name, provider: input.provider, status: "pending" })
+        .values({ name: input.name, provider: input.provider, status: "pending", syncLeaseToken: leaseToken, syncLeaseExpiresAt: leaseExpiresAt })
         .returning();
       ctx.setSubject("marketplace_channel", created!.id);
       ctx.queueEvent("marketplace.channelAdded", { id: created!.id, provider: created!.provider });
-      return { channelId: created!.id, name: created!.name, provider: created!.provider };
+      return { channelId: created!.id, name: created!.name, provider: created!.provider, leaseToken };
     } catch (error) {
       if (isUniqueViolation(error, "marketplace_channels_provider_idx")) {
         throw new ServiceError("conflict", "That marketplace is already connected on this instance.");
@@ -110,21 +114,29 @@ const applyConnect = defineService({
   writeClass: "write",
   input: z.object({
     channelId: z.string().uuid(),
+    leaseToken: z.string().uuid(),
     externalRef: z.string().max(200).optional(),
     lastError: z.string().max(500).optional(),
   }),
   output: okResult,
   handler: async (input, ctx) => {
+    const [channel] = await ctx.tx.select().from(marketplaceChannels).where(eq(marketplaceChannels.id, input.channelId)).limit(1).for("update");
+    if (!channel || channel.status !== "pending" || channel.syncLeaseToken !== input.leaseToken || !channel.syncLeaseExpiresAt || channel.syncLeaseExpiresAt <= new Date()) {
+      throw new ServiceError("conflict", "That connection attempt no longer owns the channel.");
+    }
+    if (input.externalRef && channel.externalRef && input.externalRef !== channel.externalRef) {
+      throw new ServiceError("conflict", "That channel belongs to a different merchant account.");
+    }
     if (input.externalRef) {
       await ctx.tx
         .update(marketplaceChannels)
-        .set({ status: "connected", externalRef: input.externalRef, lastError: null })
+        .set({ status: "connected", externalRef: input.externalRef, lastError: null, syncLeaseToken: null, syncLeaseExpiresAt: null })
         .where(eq(marketplaceChannels.id, input.channelId));
     } else {
       await ctx.tx
         .update(marketplaceChannels)
         .set({
-          status: "failed",
+          status: "failed", syncLeaseToken: null, syncLeaseExpiresAt: null,
           lastError: input.lastError ?? "The marketplace refused that connection.",
         })
         .where(eq(marketplaceChannels.id, input.channelId));
@@ -153,13 +165,13 @@ export const connectMarketplaceChannel = defineOrchestratedService({
         provider: claimed.provider,
       });
       await applyConnect.call(
-        { channelId: claimed.channelId, externalRef: result.externalRef },
+        { channelId: claimed.channelId, leaseToken: claimed.leaseToken, externalRef: result.externalRef },
         { kind: "system" },
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "The marketplace refused that connection.";
       await applyConnect.call(
-        { channelId: claimed.channelId, lastError: message.slice(0, 500) },
+        { channelId: claimed.channelId, leaseToken: claimed.leaseToken, lastError: message.slice(0, 500) },
         { kind: "system" },
       );
     }
@@ -342,7 +354,7 @@ const importProviderOrder = defineService({
         ],
         tax: {
           mode: "not_applicable",
-          reason: "Imported marketplace order; tax was collected on the channel.",
+          reason: "Imported gross marketplace amount; review channel tax details before issuing.",
         },
       },
     )) as { invoice: { id: string } };
@@ -411,6 +423,16 @@ export const syncMarketplaceChannel = defineOrchestratedService({
   },
 });
 
+export const marketplaceConfiguration = defineService({
+  name: "marketplace.configuration", summary: "Show the configured Shopify store without exposing app credentials.",
+  kind: "query", permission: "scoped", input: z.object({}),
+  output: z.object({ configured: z.boolean(), shop: z.string().nullable() }),
+  handler: async () => {
+    const settings = env();
+    return { configured: Boolean(settings.SHOPIFY_SHOP && settings.SHOPIFY_CLIENT_ID && settings.SHOPIFY_CLIENT_SECRET), shop: settings.SHOPIFY_SHOP ?? null };
+  },
+});
+
 export const listMarketplaceChannels = defineService({
   name: "marketplace.list",
   summary: "Configured marketplace channels.",
@@ -447,6 +469,7 @@ export default [
   recordImported,
   importProviderOrder,
   syncMarketplaceChannel,
+  marketplaceConfiguration,
   listMarketplaceChannels,
   listMarketplaceOrders,
 ];

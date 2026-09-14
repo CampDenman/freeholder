@@ -848,6 +848,7 @@ export const SERVICE_NAMES = [
   "mail.testSend",
   "mail.updateSender",
   "mail.verifySender",
+  "marketplace.configuration",
   "marketplace.connect",
   "marketplace.list",
   "marketplace.listOrders",
@@ -4676,13 +4677,17 @@ export interface ServiceCatalog {
     input: { id: string };
     output: { id: string; purpose: "transactional" | "bulk"; provider: "gmail" | "outlook" | "smtp" | "console" | "resend" | "postmark" | "ses"; connectedAccountId: string | null; email: string; displayName: string | null; providerIdentity: string | null; verificationStatus: "pending" | "verified" | "failed"; status: "active" | "paused" | "needs_attention"; isDefault: boolean; verificationDetail: unknown; lastVerifiedAt: string | null; lastError: string | null; createdBy: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "marketplace.configuration": {
+    input: Record<string, never>;
+    output: { configured: boolean; shop: string | null };
+  };
   "marketplace.connect": {
     input: { name: string; provider: "shopify" | "etsy" | "amazon" | "ebay"; channelId?: string };
-    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; syncCursor: string | null; [key: string]: unknown };
+    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; syncCursor: string | null; syncLeaseExpiresAt: string | null; [key: string]: unknown };
   };
   "marketplace.list": {
     input: Record<string, never>;
-    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; syncCursor: string | null; [key: string]: unknown }[];
+    output: { id: string; name: string; provider: string; status: string; externalRef: string | null; lastError: string | null; lastSyncedAt: string | null; syncCursor: string | null; syncLeaseExpiresAt: string | null; [key: string]: unknown }[];
   };
   "marketplace.listOrders": {
     input: { channelId?: string };
@@ -7406,6 +7411,7 @@ export interface FreeholderApi {
     verifySender: (input: ServiceCatalog["mail.verifySender"]["input"]) => Promise<ServiceCatalog["mail.verifySender"]["output"]>;
   };
   marketplace: {
+    configuration: (input?: ServiceCatalog["marketplace.configuration"]["input"]) => Promise<ServiceCatalog["marketplace.configuration"]["output"]>;
     connect: (input: ServiceCatalog["marketplace.connect"]["input"]) => Promise<ServiceCatalog["marketplace.connect"]["output"]>;
     list: (input?: ServiceCatalog["marketplace.list"]["input"]) => Promise<ServiceCatalog["marketplace.list"]["output"]>;
     listOrders: (input?: ServiceCatalog["marketplace.listOrders"]["input"]) => Promise<ServiceCatalog["marketplace.listOrders"]["output"]>;

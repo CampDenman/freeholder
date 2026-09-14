@@ -6305,5 +6305,11 @@
   "pod.viewOrder": "Ver pedido",
   "pod.providerState": "Estado del proveedor: {status}",
   "pod.refresh": "Actualizar seguimiento",
-  "pod.status.fulfilled": "Enviado"
+  "pod.status.fulfilled": "Enviado",
+  "marketplace.configuration": "Configuración de Shopify",
+  "marketplace.configured": "Configurado para {shop}. Conecta el canal para verificar el acceso.",
+  "marketplace.configure": "Configura SHOPIFY_SHOP, SHOPIFY_CLIENT_ID y SHOPIFY_CLIENT_SECRET en el entorno de despliegue y reinicia Freeholder.",
+  "marketplace.importScope": "Los pedidos pagados de Shopify que no sean de prueba se importan como borradores de factura para revisar. Se importa el historial accesible sin actualizar importaciones anteriores por reembolsos o cambios posteriores.",
+  "marketplace.setupGuide": "Guía de configuración de Shopify",
+  "marketplace.reviewInvoice": "Revisar borrador de factura"
 }
