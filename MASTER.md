@@ -8723,6 +8723,13 @@ schema they inherit reads as a designed thing rather than an excavation.
   Stock-notification enrollment (C5.17) verifies contact ownership or catalog
   authority. Regressions reproduced all three anonymous failures before repair.
   Changeset `order-read-authorization.md`; independent review remains open.
+  Notes audit follow-up (C7.03): pinning applies author visibility in its
+  update predicate; history uses the list visibility predicate for both its
+  note lookup and revision query, including API-key callers. Edit/remove
+  operations lock their authorized row against concurrent visibility changes.
+  Two regressions reproduced private-body disclosure before repair; all 51
+  note/search/privacy checks pass afterwards. Changeset `private-note-access.md`.
+  This repair is not independent review evidence.
 - [ ] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
