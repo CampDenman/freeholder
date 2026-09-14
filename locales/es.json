@@ -6330,5 +6330,7 @@
   "subscriptions.detail.status": "Estado",
   "subscriptions.detail.period": "Período de facturación actual",
   "subscriptions.detail.billing": "Facturación",
-  "subscriptions.detail.manage": "Gestionar suscripciones"
+  "subscriptions.detail.manage": "Gestionar suscripciones",
+  "admin.search.kind.supplier": "Proveedores",
+  "admin.search.kind.agreement": "Acuerdos"
 }

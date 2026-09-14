@@ -8797,10 +8797,15 @@ schema they inherit reads as a designed thing rather than an excavation.
   `record-search-orders-subscriptions-gifts.md`: 25 search/participation
   tests passed; the real-browser journey opens all three result types and
   checks the subscription screen in both themes and with view-only staff.
+  Supplier names and agreement titles also join the registry, with exact
+  catalog supplier-read and contract-read permission checks. Agreement search
+  additionally preserves the existing human-session requirement; API keys do
+  not bypass it. Signing credentials and document bodies are never selected.
+  Results open the supplier row or agreement detail, with en/fr/es labels.
   C11.14 stays open for the remaining opt-outs and record restore.
   **Remaining named worklist:**
   Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
-  Remaining SEARCH_TABLE_OPT_OUTS include titled records such as suppliers and contract documents; these are not mixed into search.query.)*
+  Remaining SEARCH_TABLE_OPT_OUTS include pricing configuration, staged marketplace orders and privacy workflows; these are not mixed into search.query.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
   passing acceptance test.

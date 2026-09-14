@@ -6330,5 +6330,7 @@
   "subscriptions.detail.status": "Status",
   "subscriptions.detail.period": "Current billing period",
   "subscriptions.detail.billing": "Billing",
-  "subscriptions.detail.manage": "Manage memberships"
+  "subscriptions.detail.manage": "Manage memberships",
+  "admin.search.kind.supplier": "Suppliers",
+  "admin.search.kind.agreement": "Agreements"
 }

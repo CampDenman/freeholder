@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 const KIND_KEYS: Record<string, string> = {
+  supplier: "admin.search.kind.supplier",
+  agreement: "admin.search.kind.agreement",
   order: "admin.search.kind.order",
   subscription: "admin.search.kind.subscription",
   giftRegistry: "admin.search.kind.giftRegistry",
