@@ -5052,6 +5052,10 @@ owner operations, never substitute for them.
   `order.paid` / `order.cancelled`; translated `/admin/orders` and contact
   order history; customer portal order list waits on the portal; shipment
   transitions stay C5.19; `tests/core/catalog-orders.test.ts`. **F04** `/admin/payments` provider status. **F05** `catalog.checkoutCart`/`payOrder`/`cancelOrder`/`getOrder`/`listOrders` at `/api/v1/catalog.*`, MCP `catalog_*`; `order.placed`/`paid`/`cancelled` fan out on the webhook bus. **F07** `tests/core/catalog-orders.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-orders.test.ts` is the composition proof.)*
+  Audit security follow-up (C11.10): `catalog.getOrder` now requires catalog
+  read authority; an order UUID alone no longer exposes addresses and lines.
+  The regression first reproduced anonymous disclosure, then passed for
+  denied callers and authorized staff/API keys (`order-read-authorization.md`).
 - [x] **C5.23** Build coupons, gift cards/credit ledger, bundles, order bumps,
   post-add offers and abandoned-cart recovery without parallel money paths.
   *(Evidence: `coupons`, `coupon_redemptions`, `cart_coupons`, `gift_cards`,
@@ -8667,6 +8671,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   *(Packet 2026-09-12: `security/independent-review-packet.md` lists threat
   surfaces, existing tests and known residuals. This is not the review; the
   checkbox stays open until an independent reviewer signs it.)*
+  Catalog audit follow-up: scoped order reads (C5.22) prevent UUID-only
+  address disclosure; raw stock reservations require catalog management
+  (C5.16), while checked cart composition still elevates internally.
+  Stock-notification enrollment (C5.17) verifies contact ownership or catalog
+  authority. Regressions reproduced all three anonymous failures before repair.
+  Changeset `order-read-authorization.md`; independent review remains open.
 - [ ] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.

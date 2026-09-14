@@ -33,6 +33,22 @@ section inventories did not establish the full completion claims; C11.16's
 old test explicitly asserted completion while requiring unfinished work.
 The corrected test refuses that combination.
 
+## Additional catalog authorization findings — 2026-09-14
+
+`catalog.getOrder` was public and returned private order addresses and line
+items for a supplied UUID. The regression reproduced anonymous disclosure.
+The query now requires scoped catalog read authority, matching its staff UI.
+`tests/core/catalog-orders.test.ts` covers anonymous/customer/unrelated staff
+and write-only key refusal, plus authorized staff and exact read-key access.
+The same review reproduced anonymous raw inventory holds with caller-chosen
+holder IDs/expiry, and stock-notification enrollment for a supplied contact ID.
+Raw holds now require catalog management; guest carts already use checked
+system composition. Enrollment verifies the signed-in contact or catalog
+management authority. Inventory/procurement tests cover the denials, unchanged
+stock after refusal, own-contact enrollment and cross-contact refusal. This
+follow-up remains separate from the frozen #361 evidence above and does not
+constitute independent security review.
+
 ## Verification scope
 
 Completed local evidence:

@@ -13,7 +13,7 @@ import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { decimalToMinor } from "@/adapters/payments/currency";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineService, permits, ServiceError, type Tx } from "@/core/service";
 import { BACKORDER_POLICIES, PURCHASE_ORDER_STATUSES } from "./contract";
 import { bumpIncoming, enableInventory, listInventory, recordStockMovement } from "./inventory";
 import {
@@ -618,6 +618,13 @@ export const subscribeBackInStock = defineService({
   input: z.object({ variantId: id, contactId: id, locationId: id.optional() }),
   output: backInStockRow,
   handler: async (input, ctx) => {
+    if (!permits(ctx.actor, "scoped", "catalog.subscribeBackInStock", "mutation")) {
+      const own = ctx.actor.kind === "user"
+        ? (await ctx.tx.select({ id: contacts.id }).from(contacts)
+          .where(and(eq(contacts.id, input.contactId), eq(contacts.userId, ctx.actor.userId))).limit(1))[0]
+        : undefined;
+      if (!own) throw new ServiceError("permission", "Sign in to request stock notifications for your own contact profile.");
+    }
     await requireContact(ctx.tx, input.contactId);
     const [existing] = await ctx.tx
       .select()
