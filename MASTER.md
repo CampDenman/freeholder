@@ -2159,8 +2159,8 @@ last. These are core entities, not a plugin.
 | Entity | Purpose | Key fields |
 |---|---|---|
 | `Deal` | A live opportunity worth tracking through stages. Created by hand, by a form, or by a quote being sent. | contact_id, pipeline_id, stage_id, title, value_cents, currency, probability, expected_close_on, source, owner_user_id, quote_id, status (open/won/lost), lost_reason, closed_at |
-| `Task` | Something a human has to do, attached to anything. | subject_type + subject_id, contact_id, title, due_at, remind_at, assignee_user_id, priority, status, completed_at, completed_by |
-| `Note` | Free text against a contact, deal, project or booking, with mentions. | subject_type + subject_id, author, body, pinned, mentions[] |
+| `Task` | Something a human has to do, attached to anything. | subject_type + subject_id, contact_id, title, due_at, remind_at, assignee_user_id, priority, status, completed_at, completed_by, trashed_at |
+| `Note` | Free text against a contact, deal, project or booking, with mentions. | subject_type + subject_id, author, body, pinned, mentions[], trashed_at |
 | `Segment` | A saved query over the spine. The unit of "who" for campaigns, price lists, automations and reports. | name, definition (jsonb), kind (dynamic/static), member_count_cached, last_evaluated_at |
 | `ScoringRule` | Transparent, inspectable lead scoring. | name, event_match (jsonb), points, decay_days, active |
 | `ConsentRecord` | What this contact agreed to, when, and how. | contact_id, purpose (marketing_email/sms/analytics/data_processing), state, method, source_url, ip, at, expires_at, withdrawn_at |
@@ -2172,6 +2172,16 @@ last. These are core entities, not a plugin.
 
 **Rules:**
 
+- Notes and tasks keep their original rows in trash for recovery, normally for
+  thirty days. Normal lists, search, task reminders and briefings exclude trash.
+  Restore preserves IDs, revisions and subject links; contact merge and undo
+  repoint both the contact FK and contact-subject pointer, including trash.
+  Permanent purge requires explicit confirmation and recent identity verification,
+  preserves active privacy retention holds, and removes note revisions. A daily
+  bounded sweep purges eligible expired trash. Privacy erasure and configured
+  retention policies still apply, including before thirty days; recovery never
+  recreates erased personal fields. Human trash controls use each record's
+  existing view/manage grants (C7.02/C7.03/C11.14).
 - Provider erasure is durable background work committed with the local erasure.
   Requests remain `in_progress`, without a completion timestamp, until every
   registered provider task acknowledges success. Pending receipts survive
@@ -5794,14 +5804,14 @@ equipment, classes and expertise without double-booking or duplicated records.
   nudge twice, and an unassigned one is skipped rather than broadcast because the
   briefing already carries it. `briefing.tasks` reports only what is late or due
   today and only the person's own or nobody's. `/admin/tasks`, no JavaScript.
-  `0102_tasks.sql`. Coverage in `tests/core/tasks.test.ts`. **F04** `/admin/pipeline` stage move. **F05** `tasks.create`/`list`/`update`/`setStatus` plus `projects.addTask` at `/api/v1/tasks.*` and `/api/v1/projects.addTask`, MCP `tasks_*`/`projects_addTask`. **F07** `tests/core/tasks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/tasks.test.ts` is the composition proof.)
+  `0102_tasks.sql`. Coverage in `tests/core/tasks.test.ts`. **F04** `/admin/tasks` and `/admin/trash?kind=tasks`. **F05** `tasks.create`/`list`/`update`/`setStatus`/`remove`/`restore`/`purge` plus `projects.addTask` at `/api/v1/tasks.*` and `/api/v1/projects.addTask`, MCP `tasks_*`/`projects_addTask`. **F07** `tests/core/tasks.test.ts` covers permission, refusal and recovery. **F09** `tests/core/record-trash.test.ts` covers restore, privacy erasure, retention holds and merged ownership; `deploy/record-trash.md` covers recovery and the bounded daily purge. Other record families remain C11.14 work. **F12** `tests/core/tasks.test.ts` is the composition proof.)
 - [x] **C7.03** Build notes with mentions, pinning, visibility, edit history and
   entity/contact timeline projection. (A note is usually the only record of what
   somebody agreed on a phone call, and every decision follows from that. **An
   edit files the previous body as a revision**, because a record that can be
   silently rewritten is not evidence; nothing in the service can overwrite a
-  body without leaving what it said behind, and deleting a note takes its
-  history with it. **Visibility is three states**: `team`, the author's own
+  body without leaving what it said behind. Trash keeps the original revisions;
+  permanent purge or privacy erasure removes them. **Visibility is three states**: `team`, the author's own
   `private`, and `shared` with the customer — two would force an owner to
   either hide a note from a colleague or show it to the client. Private is
   enforced in the *query*, so it holds for the API, exports and every surface
@@ -5818,7 +5828,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   copies of the visibility rule; it is mounted on the contact record and works
   without JavaScript. §4.14's subject list and its resolver moved to
   `core/subjects` the moment notes became the second caller. §11's tree updated.
-  `0103_notes.sql`. Coverage in `tests/core/notes.test.ts`. **F04** `/admin/tasks` CRM tasks. **F05** `notes.write`/`edit`/`pin`/`list`/`history`/`remove` at `/api/v1/notes.*`, MCP `notes_*`. **F07** `tests/core/notes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/notes.test.ts` is the composition proof.)
+  `0103_notes.sql`. Coverage in `tests/core/notes.test.ts`. **F04** shared `NotesPanel` on contact/entity records and `/admin/trash?kind=notes`. **F05** `notes.write`/`edit`/`pin`/`list`/`history`/`remove`/`restore`/`purge` at `/api/v1/notes.*`, MCP `notes_*`. **F07** `tests/core/notes.test.ts` covers permission, refusal and recovery. **F09** `tests/core/record-trash.test.ts` covers restore, privacy erasure, retention holds and merged ownership; `deploy/record-trash.md` covers recovery and the bounded daily purge. Other record families remain C11.14 work. **F12** `tests/core/notes.test.ts` is the composition proof.)
 - [x] **C7.04** Build the canonical segment query model, static/dynamic modes,
   preview/count, explainability, and reuse by every audience surface that exists
   today — which is pricing.
@@ -8840,8 +8850,24 @@ schema they inherit reads as a designed thing rather than an excavation.
   in en/fr/es. Changeset `workflow-record-search.md`: 27 search/participation
   tests pass; production-build Chromium opens all three destinations as
   view-only staff and checks axe in both themes. Per-record restore remains open.
+  Recovery follow-up (2026-09-14): notes and tasks now move to paginated
+  trash, restore their original IDs/history/links, and stay out of ordinary
+  lists, search, reminders and briefings while trashed. Private-note visibility
+  and view/manage grants apply throughout. Permanent deletion requires typed
+  confirmation and recent identity verification; both manual deletion and the
+  bounded thirty-day job preserve active privacy holds. Privacy erasure still
+  removes personal data, including from trash. Contact merge and undo also
+  repoint contact-subject links. `deploy/record-trash.md`, migration `0010`,
+  changeset `note-task-recovery.md`, generated SDK and eight recovery tests
+  record the behavior. Merge undo, retention, privacy, search/participation,
+  schema compatibility and CI shard-budget tests pass; fast gates pass 300
+  contracts with one intentional database skip, and SDK generation passes
+  eight database tests. A production build and two Chromium journeys pass,
+  including keyboard restore/purge, view-only access, and twelve axe/reflow
+  combinations (en/fr/es, light/dark, desktop/narrow). These are note/task
+  recovery proofs; the remaining record families and full F-matrix stay open.
   **Remaining named worklist:**
-  Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
+  Per-record restore includes note/task trash, media/product restoration, contact-merge undo and the ownership-drill instance restore; other entities still lack undelete.
   Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a

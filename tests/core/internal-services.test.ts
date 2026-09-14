@@ -16,6 +16,8 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "notes.purgeExpired",
+  "tasks.purgeExpired",
   "ads.rollUpStats",
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
@@ -105,6 +107,8 @@ const INTERNAL = [
 
 const CALLER_AUTHORIZED_PHASES = [
   "privacy.completeErasureJob",
+  "notes.purgeExpired",
+  "tasks.purgeExpired",
   "invoicing.claimCustomerCheckout",
   "invoicing.applyCustomerCheckout",
   "invoicing.customerPaymentSource",

@@ -29,6 +29,7 @@ import {
   noteHistory,
   pinNote,
   removeNote,
+  purgeNote,
   writeNote,
 } from "@/core/notes/service";
 import { closeDb, failure, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
@@ -285,11 +286,13 @@ describe.runIf(hasDatabase)("notes", { timeout: 90_000 }, () => {
     expect(mine.map((note) => note.body)).toEqual(["Sam's job."]);
   });
 
-  it("takes the history with the note when it is deleted", async () => {
+  it("takes the history with the note when trash is permanently purged", async () => {
     const person = await contactId();
     const written = await noteOn(person, { body: "First." });
     await editNote.call({ id: written.id, body: "Second." }, OWNER);
     await removeNote.call({ id: written.id }, OWNER);
+    expect(await db().select().from(noteRevisions)).toHaveLength(1);
+    await purgeNote.call({ id: written.id, confirmation: "PURGE" }, OWNER);
     expect(await db().select().from(notes)).toHaveLength(0);
     // Keeping a history of a note that no longer exists is keeping the thing
     // somebody asked to be rid of.

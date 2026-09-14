@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Core-owned search sources. Modules register their own from their services.
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { isNull, and, desc, eq, or, sql } from "drizzle-orm";
 import { contacts } from "@/core/contacts/schema";
 import { notes } from "@/core/notes/schema";
 import { tasks } from "@/core/tasks/schema";
@@ -115,7 +115,7 @@ registerSearchSource({
         subjectId: notes.subjectId,
       })
       .from(notes)
-      .where(and(matchesIlike(notes.body, pattern), visibility))
+      .where(and(matchesIlike(notes.body, pattern), visibility, isNull(notes.trashedAt)))
       .orderBy(desc(notes.updatedAt))
       .limit(limit);
     return rows.map((row) => ({
@@ -146,7 +146,7 @@ registerSearchSource({
         contactId: tasks.contactId,
       })
       .from(tasks)
-      .where(or(matchesIlike(tasks.title, pattern), matchesIlike(tasks.details, pattern)))
+      .where(and(isNull(tasks.trashedAt), or(matchesIlike(tasks.title, pattern), matchesIlike(tasks.details, pattern))))
       .orderBy(desc(tasks.updatedAt))
       .limit(limit);
     return rows.map((row) => ({

@@ -30,6 +30,7 @@ import {
   createTask,
   listTasks,
   removeTask,
+  purgeTask,
   sendTaskReminders,
   setTaskStatus,
   updateTask,
@@ -317,9 +318,11 @@ describe.runIf(hasDatabase)("tasks", { timeout: 90_000 }, () => {
     expect(kept.map((task) => task.title).sort()).toEqual(["Duplicate's", "Survivor's"]);
   });
 
-  it("removes a task for good when asked", async () => {
+  it("permanently purges a task only after it is trashed", async () => {
     const created = await createTask.call({ title: "Never mind" }, OWNER);
     await removeTask.call({ id: created.id }, OWNER);
+    expect(await listTasks.call({}, OWNER)).toHaveLength(0);
+    await purgeTask.call({ id: created.id, confirmation: "PURGE" }, OWNER);
     expect(await db().select().from(tasks)).toHaveLength(0);
   });
 

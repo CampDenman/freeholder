@@ -932,7 +932,9 @@ export const SERVICE_NAMES = [
   "notes.history",
   "notes.list",
   "notes.pin",
+  "notes.purge",
   "notes.remove",
+  "notes.restore",
   "notes.write",
   "notifications.archive",
   "notifications.list",
@@ -1246,7 +1248,9 @@ export const SERVICE_NAMES = [
   "subscriptions.subscribe",
   "tasks.create",
   "tasks.list",
+  "tasks.purge",
   "tasks.remove",
+  "tasks.restore",
   "tasks.setStatus",
   "tasks.update",
   "templates.get",
@@ -5002,27 +5006,35 @@ export interface ServiceCatalog {
   };
   "notes.edit": {
     input: { id: string; body?: string; visibility?: "team" | "private" | "shared"; mentions?: string[] };
-    output: { id: string; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
   };
   "notes.history": {
     input: { id: string };
     output: { id: string; body: string; editedBy: string | null; editedByEmail: string | null; editedAt: string; [key: string]: unknown }[];
   };
   "notes.list": {
-    input: { subjectType?: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId?: string; contactId?: string; mentioning?: string; pinnedOnly?: boolean; limit?: number };
-    output: { id: string; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; authorEmail: string | null; contactName: string | null; href: string; [key: string]: unknown }[];
+    input: { trashedOnly?: boolean; offset?: number; subjectType?: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId?: string; contactId?: string; mentioning?: string; pinnedOnly?: boolean; limit?: number };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; authorEmail: string | null; contactName: string | null; href: string; [key: string]: unknown }[];
   };
   "notes.pin": {
     input: { id: string; pinned: boolean };
-    output: { id: string; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
+  "notes.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
   };
   "notes.remove": {
     input: { id: string };
     output: { id: string; [key: string]: unknown };
   };
+  "notes.restore": {
+    input: { id: string };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
   "notes.write": {
     input: { subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; body: string; visibility?: "team" | "private" | "shared"; pinned?: boolean; mentions?: string[] };
-    output: { id: string; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
   };
   "notifications.archive": {
     input: { id: string };
@@ -6266,23 +6278,31 @@ export interface ServiceCatalog {
   };
   "tasks.create": {
     input: { subjectType?: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId?: string | null } & { title: string; details?: string | null; dueAt?: string | null; remindAt?: string | null; assigneeUserId?: string | null; priority?: "low" | "normal" | "high" | "urgent"; cadence?: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount?: number };
-    output: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
   };
   "tasks.list": {
-    input: { status?: "open" | "doing" | "blocked" | "done" | "cancelled"; openOnly?: boolean; assigneeUserId?: string; unassigned?: boolean; subjectType?: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId?: string; contactId?: string; overdue?: boolean; dueBefore?: string; limit?: number };
-    output: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; contactName: string | null; assigneeEmail: string | null; href: string | null; [key: string]: unknown }[];
+    input: { trashedOnly?: boolean; offset?: number; status?: "open" | "doing" | "blocked" | "done" | "cancelled"; openOnly?: boolean; assigneeUserId?: string; unassigned?: boolean; subjectType?: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId?: string; contactId?: string; overdue?: boolean; dueBefore?: string; limit?: number };
+    output: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; contactName: string | null; assigneeEmail: string | null; href: string | null; [key: string]: unknown }[];
+  };
+  "tasks.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
   };
   "tasks.remove": {
     input: { id: string };
     output: { id: string; [key: string]: unknown };
   };
+  "tasks.restore": {
+    input: { id: string };
+    output: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
+  };
   "tasks.setStatus": {
     input: { id: string; status: "open" | "doing" | "blocked" | "done" | "cancelled" };
-    output: { task: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown }; next: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown } | null; [key: string]: unknown };
+    output: { task: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown }; next: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown } | null; [key: string]: unknown };
   };
   "tasks.update": {
     input: { id: string; title?: string; details?: string | null; dueAt?: string | null; remindAt?: string | null; assigneeUserId?: string | null; priority?: "low" | "normal" | "high" | "urgent"; position?: number; cadence?: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount?: number };
-    output: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
   };
   "templates.get": {
     input: { id: string };
@@ -7518,7 +7538,9 @@ export interface FreeholderApi {
     history: (input: ServiceCatalog["notes.history"]["input"]) => Promise<ServiceCatalog["notes.history"]["output"]>;
     list: (input?: ServiceCatalog["notes.list"]["input"]) => Promise<ServiceCatalog["notes.list"]["output"]>;
     pin: (input: ServiceCatalog["notes.pin"]["input"]) => Promise<ServiceCatalog["notes.pin"]["output"]>;
+    purge: (input: ServiceCatalog["notes.purge"]["input"]) => Promise<ServiceCatalog["notes.purge"]["output"]>;
     remove: (input: ServiceCatalog["notes.remove"]["input"]) => Promise<ServiceCatalog["notes.remove"]["output"]>;
+    restore: (input: ServiceCatalog["notes.restore"]["input"]) => Promise<ServiceCatalog["notes.restore"]["output"]>;
     write: (input: ServiceCatalog["notes.write"]["input"]) => Promise<ServiceCatalog["notes.write"]["output"]>;
   };
   notifications: {
@@ -7892,7 +7914,9 @@ export interface FreeholderApi {
   tasks: {
     create: (input?: ServiceCatalog["tasks.create"]["input"]) => Promise<ServiceCatalog["tasks.create"]["output"]>;
     list: (input?: ServiceCatalog["tasks.list"]["input"]) => Promise<ServiceCatalog["tasks.list"]["output"]>;
+    purge: (input: ServiceCatalog["tasks.purge"]["input"]) => Promise<ServiceCatalog["tasks.purge"]["output"]>;
     remove: (input: ServiceCatalog["tasks.remove"]["input"]) => Promise<ServiceCatalog["tasks.remove"]["output"]>;
+    restore: (input: ServiceCatalog["tasks.restore"]["input"]) => Promise<ServiceCatalog["tasks.restore"]["output"]>;
     setStatus: (input: ServiceCatalog["tasks.setStatus"]["input"]) => Promise<ServiceCatalog["tasks.setStatus"]["output"]>;
     update: (input: ServiceCatalog["tasks.update"]["input"]) => Promise<ServiceCatalog["tasks.update"]["output"]>;
   };

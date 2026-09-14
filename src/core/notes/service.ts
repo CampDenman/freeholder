@@ -25,7 +25,8 @@
 // `shared` notes emit a timeline event; `private` ones deliberately do not,
 // because a timeline everybody reads is not where a private note belongs.
 import { z } from "zod";
-import { and, arrayContains, desc, eq, inArray, sql } from "drizzle-orm";
+import { withoutPrivacyHold } from "@/core/retention/holds";
+import { and, arrayContains, asc, desc, eq, inArray, isNull, isNotNull, lt, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { users } from "@/core/auth/schema";
@@ -64,6 +65,7 @@ function authorOf(actor: Actor): string | null {
 
 const noteRow = row({
   id: uuid,
+  trashedAt: timestamp.nullable(),
   subjectType: z.enum(SUBJECT_KINDS),
   subjectId: uuid,
   contactId: uuid.nullable(),
@@ -170,7 +172,7 @@ export const editNote = defineService({
   output: noteRow,
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const [existing] = await ctx.tx.select().from(notes).where(eq(notes.id, input.id)).limit(1).for("update");
+    const [existing] = await ctx.tx.select().from(notes).where(and(eq(notes.id, input.id), isNull(notes.trashedAt))).limit(1).for("update");
     if (!existing) throw new ServiceError("not_found", "That note is not here.");
     // A private note is its author's, and that includes editing it: a colleague
     // who cannot read it must not be able to rewrite it either.
@@ -214,7 +216,7 @@ export const editNote = defineService({
           : {}),
         updatedAt: sql`now()`,
       })
-      .where(eq(notes.id, input.id))
+      .where(and(eq(notes.id, input.id), isNull(notes.trashedAt)))
       .returning();
 
     // Only the newly mentioned hear about it. Re-telling everybody on every
@@ -245,7 +247,7 @@ export const pinNote = defineService({
         pinnedAt: input.pinned ? new Date() : null,
         updatedAt: sql`now()`,
       })
-      .where(and(eq(notes.id, input.id), visible(ctx.actor)))
+      .where(and(eq(notes.id, input.id), visible(ctx.actor), isNull(notes.trashedAt)))
       .returning();
     if (!updated) throw new ServiceError("not_found", "That note is not here.");
     ctx.setSubject("note", updated.id);
@@ -254,29 +256,63 @@ export const pinNote = defineService({
 });
 
 export const removeNote = defineService({
-  name: "notes.remove",
-  summary: "Delete a note and everything it used to say.",
-  kind: "mutation",
-  permission: "scoped",
-  writeClass: "destructive",
-  input: z.object({ id }),
-  output: row({ id: uuid }),
+  name: "notes.remove", summary: "Move a note to trash for thirty days.",
+  kind: "mutation", permission: "scoped", writeClass: "destructive",
+  input: z.object({ id }), output: row({ id: uuid }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const [existing] = await ctx.tx.select().from(notes).where(eq(notes.id, input.id)).limit(1).for("update");
-    if (!existing) throw new ServiceError("not_found", "That note is not here.");
-    if (
-      existing.visibility === "private" &&
-      ctx.actor.kind === "user" &&
-      existing.authorUserId !== ctx.actor.userId
-    ) {
-      throw new ServiceError("not_found", "That note is not here.");
-    }
-    // The revisions go with it. Keeping a history of a note that no longer
-    // exists is keeping the thing somebody asked to be rid of.
-    await ctx.tx.delete(notes).where(eq(notes.id, input.id));
-    ctx.setSubject("note", input.id);
-    return { id: input.id };
+    const [removed] = await ctx.tx.update(notes).set({ trashedAt: new Date() })
+      .where(and(eq(notes.id, input.id), isNull(notes.trashedAt), visible(ctx.actor))).returning();
+    if (!removed) throw new ServiceError("not_found", "That note is not here.");
+    ctx.setSubject("note", removed.id);
+    if (removed.contactId && removed.visibility !== "private") await ctx.emitTimeline({ contactId: removed.contactId, eventType: "note.trashed",
+      subjectType: removed.subjectType ?? "note", subjectId: removed.subjectId ?? removed.id, payload: { noteId: removed.id } });
+    return { id: removed.id };
+  },
+});
+
+export const restoreNote = defineService({
+  name: "notes.restore", summary: "Restore a trashed note with its original history and links.",
+  kind: "mutation", permission: "scoped", writeClass: "write",
+  input: z.object({ id }), output: noteRow,
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const [restored] = await ctx.tx.update(notes).set({ trashedAt: null })
+      .where(and(eq(notes.id, input.id), isNotNull(notes.trashedAt), visible(ctx.actor))).returning();
+    if (!restored) throw new ServiceError("not_found", "That trashed note is not here.");
+    ctx.setSubject("note", restored.id);
+    if (restored.contactId && restored.visibility !== "private") await ctx.emitTimeline({ contactId: restored.contactId, eventType: "note.restored",
+      subjectType: restored.subjectType ?? "note", subjectId: restored.subjectId ?? restored.id, payload: { noteId: restored.id } });
+    return restored;
+  },
+});
+
+export const purgeNote = defineService({
+  name: "notes.purge", summary: "Permanently delete a trashed note unless a retention hold protects it.",
+  kind: "mutation", permission: "scoped", writeClass: "destructive", stepUp: true,
+  input: z.object({ id, confirmation: z.literal("PURGE") }), output: row({ id: uuid }),
+  handler: async (input, ctx) => {
+    requirePerson(ctx.actor);
+    const [removed] = await ctx.tx.delete(notes)
+      .where(and(eq(notes.id, input.id), isNotNull(notes.trashedAt), visible(ctx.actor), withoutPrivacyHold(notes.contactId, "contact.notes")))
+      .returning();
+    if (!removed) throw new ServiceError("conflict", "That record cannot be purged. It may be unavailable or subject to a retention hold.");
+    ctx.setSubject("note", removed.id);
+    if (removed.contactId && removed.visibility !== "private") await ctx.emitTimeline({ contactId: removed.contactId, eventType: "note.purged",
+      subjectType: removed.subjectType ?? "note", subjectId: removed.subjectId ?? removed.id, payload: { noteId: removed.id } });
+    return { id: removed.id };
+  },
+});
+
+export const purgeExpiredNotes = defineService({
+  name: "notes.purgeExpired", summary: "Purge a bounded batch of thirty-day trash, respecting retention holds.",
+  kind: "mutation", permission: "system", external: false,
+  input: z.object({}), output: z.object({ purged: z.number().int().nonnegative() }),
+  handler: async (_input, ctx) => {
+    const where = and(lt(notes.trashedAt, new Date(Date.now() - 30 * 86_400_000)), withoutPrivacyHold(notes.contactId, "contact.notes"));
+    const batch = ctx.tx.select({ id: notes.id }).from(notes).where(where).orderBy(asc(notes.id)).limit(500).for("update", { skipLocked: true });
+    const removed = await ctx.tx.delete(notes).where(inArray(notes.id, batch)).returning({ id: notes.id });
+    return { purged: removed.length };
   },
 });
 
@@ -286,6 +322,8 @@ export const listNotes = defineService({
   kind: "query",
   permission: "scoped",
   input: z.object({
+    trashedOnly: z.boolean().default(false),
+    offset: z.number().int().min(0).max(1_000_000).default(0),
     subjectType: z.enum(SUBJECT_KINDS).optional(),
     subjectId: id.optional(),
     /** Everything about a person, whatever it was attached to. */
@@ -304,6 +342,7 @@ export const listNotes = defineService({
   ),
   handler: async (input, ctx) => {
     const where = [
+      input.trashedOnly ? isNotNull(notes.trashedAt) : isNull(notes.trashedAt),
       visible(ctx.actor),
       ...(input.subjectType ? [eq(notes.subjectType, input.subjectType)] : []),
       ...(input.subjectId ? [eq(notes.subjectId, input.subjectId)] : []),
@@ -320,8 +359,8 @@ export const listNotes = defineService({
       .where(where.length ? and(...where) : undefined)
       // Pinned first, then newest. The pin exists precisely to survive the
       // ordering everything else obeys.
-      .orderBy(desc(notes.pinned), desc(notes.createdAt))
-      .limit(input.limit);
+      .orderBy(desc(notes.pinned), desc(notes.createdAt), desc(notes.id))
+      .limit(input.limit).offset(input.offset);
 
     return rows.map(({ note, authorEmail, contactName }) => ({
       ...note,
@@ -424,7 +463,7 @@ async function tellTheMentioned(
 registerContactReference({
   table: "notes",
   repoint: (tx, duplicateId, survivingId) =>
-    tx.update(notes).set({ contactId: survivingId }).where(eq(notes.contactId, duplicateId)),
+    tx.update(notes).set({ contactId: survivingId, subjectId: sql`case when ${notes.subjectType} = 'contact' then ${survivingId}::uuid else ${notes.subjectId} end` }).where(eq(notes.contactId, duplicateId)),
   captureForUndo: async (tx, duplicateId, survivingId) => ({
     state: await tx
       .select({ id: notes.id, contactId: notes.contactId })
@@ -440,7 +479,7 @@ registerContactReference({
     if (moved.length) {
       await tx
         .update(notes)
-        .set({ contactId: duplicateId })
+        .set({ contactId: duplicateId, subjectId: sql`case when ${notes.subjectType} = 'contact' then ${duplicateId}::uuid else ${notes.subjectId} end` })
         .where(inArray(notes.id, moved.map((note) => note.id)));
     }
   },
@@ -471,4 +510,4 @@ registerContactPrivacySource({
   },
 });
 
-export default [writeNote, editNote, pinNote, removeNote, listNotes, noteHistory];
+export default [writeNote, editNote, pinNote, removeNote, restoreNote, purgeNote, purgeExpiredNotes, listNotes, noteHistory];
