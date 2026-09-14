@@ -141,6 +141,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   carts: "In-progress checkout rows.",
   wishlists: "Join table of saved products.",
   orders: "Commerce settlement; accounting/tax hold.",
+  pod_jobs: "Order fulfillment and vendor retry identity; contact privacy handles erasure, not content TTL.",
   marketplace_orders: "Staged channel orders; accounting hold.",
   return_requests: "Workflow rows hanging off an order.",
   coupon_redemptions: "Join table of a coupon to a contact.",
