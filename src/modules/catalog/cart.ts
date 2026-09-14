@@ -22,6 +22,7 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
+import { managesCartTokens, requireCartAccess, requireOwnedContact } from "./cart-access";
 import { CART_KINDS, CART_STATUSES } from "./contract";
 import { availability, releaseReservation, reserveStock } from "./inventory";
 import { resolvePrice } from "./pricing";
@@ -35,7 +36,7 @@ const ABANDON_AFTER_MS = 24 * 60 * 60 * 1000;
 
 const cartRow = row({
   id: uuid,
-  token: z.string(),
+  token: z.string().nullable(),
   contactId: uuid.nullable(),
   currency: z.string(),
   kind: z.enum(CART_KINDS),
@@ -284,7 +285,7 @@ async function releaseLineHold(
 
 export const getOrCreateCart = defineService({
   name: "catalog.getOrCreateCart",
-  summary: "Return the open cart for a token and/or contact, creating one if needed.",
+  summary: "Open a guest or authorized contact cart and issue its private access token.",
   kind: "mutation",
   permission: "public",
   input: z.object({
@@ -295,7 +296,7 @@ export const getOrCreateCart = defineService({
   output: cartProjection,
   handler: async (input, ctx) => {
     if (input.contactId) {
-      requireContactAuthority(ctx, "catalog.getOrCreateCart");
+      await requireOwnedContact(ctx, input.contactId, "catalog.getOrCreateCart", "mutation");
       await requireContact(ctx.tx, input.contactId);
     }
     const [byToken] = input.token
@@ -303,12 +304,12 @@ export const getOrCreateCart = defineService({
       : [];
     if (byToken && byToken.status === "open" && byToken.kind === "cart") {
       if (input.contactId && byToken.contactId !== input.contactId) {
-        return ctx.call(attachCartToContact, {
+        return ctx.callAsSystem(attachCartToContact, {
           token: input.token!,
           contactId: input.contactId,
         });
       }
-      return projectCart(ctx, byToken.id);
+      return projectCart(ctx, byToken.id, true);
     }
     if (input.contactId) {
       const [existing] = await ctx.tx
@@ -323,7 +324,7 @@ export const getOrCreateCart = defineService({
           ),
         )
         .limit(1);
-      if (existing) return projectCart(ctx, existing.id);
+      if (existing) return projectCart(ctx, existing.id, true);
     }
     const [created] = await ctx.tx
       .insert(carts)
@@ -335,7 +336,7 @@ export const getOrCreateCart = defineService({
       .returning();
     ctx.setSubject("cart", created!.id);
     ctx.queueEvent("catalog.cartOpened", { cartId: created!.id });
-    return projectCart(ctx, created!.id);
+    return projectCart(ctx, created!.id, true);
   },
 });
 
@@ -347,7 +348,7 @@ export const attachCartToContact = defineService({
   input: z.object({ token: z.string().uuid(), contactId: id }),
   output: cartProjection,
   handler: async (input, ctx) => {
-    requireContactAuthority(ctx, "catalog.attachCartToContact");
+    const own = await requireOwnedContact(ctx, input.contactId, "catalog.attachCartToContact", "mutation");
     await requireContact(ctx.tx, input.contactId);
     const [guest] = await ctx.tx.select().from(carts).where(eq(carts.token, input.token)).limit(1);
     if (!guest || guest.status !== "open" || guest.kind !== "cart") {
@@ -371,7 +372,7 @@ export const attachCartToContact = defineService({
         .update(carts)
         .set({ contactId: input.contactId, lastActivityAt: sql`now()`, updatedAt: sql`now()` })
         .where(eq(carts.id, guest.id));
-      return projectCart(ctx, guest.id);
+      return projectCart(ctx, guest.id, own);
     }
     const incoming = await ctx.tx.select().from(cartItems).where(eq(cartItems.cartId, guest.id));
     for (const line of incoming) {
@@ -383,7 +384,7 @@ export const attachCartToContact = defineService({
       if (already) {
         await releaseLineHold(ctx, line.reservationId);
         await ctx.tx.delete(cartItems).where(eq(cartItems.id, line.id));
-        await ctx.call(addCartItem, {
+        await ctx.callAsSystem(addCartItem, {
           cartId: owned.id,
           variantId: line.variantId,
           quantity: line.quantity,
@@ -400,7 +401,7 @@ export const attachCartToContact = defineService({
       .update(carts)
       .set({ status: "converted", contactId: input.contactId, updatedAt: sql`now()` })
       .where(eq(carts.id, guest.id));
-    return projectCart(ctx, owned.id);
+    return projectCart(ctx, owned.id, own);
   },
 });
 
@@ -411,6 +412,7 @@ export const addCartItem = defineService({
   permission: "public",
   input: z.object({
     cartId: id,
+    cartToken: z.string().uuid().optional(),
     variantId: id,
     quantity: z.number().int().min(1).max(1_000_000).default(1),
     locationId: id.optional(),
@@ -425,7 +427,8 @@ export const addCartItem = defineService({
   }),
   output: cartProjection,
   handler: async (input, ctx) => {
-    const cart = await loadCart(ctx.tx, input.cartId);
+    const access = await requireCartAccess(ctx, input, "catalog.addCartItem", "mutation");
+    const cart = access.cart;
     if (cart.status !== "open" || cart.kind !== "cart") {
       throw new ServiceError("conflict", "Only an open shopping cart can change lines.");
     }
@@ -506,7 +509,7 @@ export const addCartItem = defineService({
       .where(eq(carts.id, cart.id));
     ctx.setSubject("cart", cart.id);
     ctx.queueEvent("catalog.cartItemAdded", { cartId: cart.id, variantId: input.variantId });
-    return projectCart(ctx, cart.id);
+    return projectCart(ctx, cart.id, access.revealToken);
   },
 });
 
@@ -517,16 +520,20 @@ export const setCartItemQuantity = defineService({
   permission: "public",
   input: z.object({
     cartId: id,
+    cartToken: z.string().uuid().optional(),
     variantId: id,
     quantity: z.number().int().min(0).max(1_000_000),
     locationId: id.optional(),
   }),
   output: cartProjection,
   handler: async (input, ctx) => {
+    const access = await requireCartAccess(ctx, input, "catalog.setCartItemQuantity", "mutation");
+    if (access.cart.status !== "open") throw new ServiceError("conflict", "That cart is no longer open.");
     if (input.quantity === 0) {
-      return ctx.call(removeCartItem, { cartId: input.cartId, variantId: input.variantId });
+      await ctx.callAsSystem(removeCartItem, { cartId: input.cartId, variantId: input.variantId });
+      return projectCart(ctx, input.cartId, access.revealToken);
     }
-    const cart = await loadCart(ctx.tx, input.cartId);
+    const cart = access.cart;
     const [existing] = await ctx.tx
       .select()
       .from(cartItems)
@@ -535,12 +542,13 @@ export const setCartItemQuantity = defineService({
     if (!existing) throw new ServiceError("not_found", "That cart line is not here.");
     const delta = input.quantity - existing.quantity;
     if (delta > 0) {
-      return ctx.call(addCartItem, {
+      await ctx.callAsSystem(addCartItem, {
         cartId: input.cartId,
         variantId: input.variantId,
         quantity: delta,
         locationId: input.locationId ?? existing.locationId ?? undefined,
       });
+      return projectCart(ctx, input.cartId, access.revealToken);
     }
     await releaseLineHold(ctx, existing.reservationId);
     let reservationId: string | null = null;
@@ -564,7 +572,7 @@ export const setCartItemQuantity = defineService({
       .update(carts)
       .set({ lastActivityAt: sql`now()`, updatedAt: sql`now()` })
       .where(eq(carts.id, cart.id));
-    return projectCart(ctx, cart.id);
+    return projectCart(ctx, cart.id, access.revealToken);
   },
 });
 
@@ -573,10 +581,12 @@ export const removeCartItem = defineService({
   summary: "Remove a variant from an open cart and release its hold.",
   kind: "mutation",
   permission: "public",
-  input: z.object({ cartId: id, variantId: id }),
+  input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), variantId: id }),
   output: cartProjection,
   handler: async (input, ctx) => {
-    const cart = await loadCart(ctx.tx, input.cartId);
+    const access = await requireCartAccess(ctx, input, "catalog.removeCartItem", "mutation");
+    if (access.cart.status !== "open") throw new ServiceError("conflict", "That cart is no longer open.");
+    const cart = access.cart;
     const [existing] = await ctx.tx
       .select()
       .from(cartItems)
@@ -589,7 +599,7 @@ export const removeCartItem = defineService({
       .update(carts)
       .set({ lastActivityAt: sql`now()`, updatedAt: sql`now()` })
       .where(eq(carts.id, cart.id));
-    return projectCart(ctx, cart.id);
+    return projectCart(ctx, cart.id, access.revealToken);
   },
 });
 
@@ -608,7 +618,8 @@ export const getCart = defineService({
       ? await ctx.tx.select().from(carts).where(eq(carts.id, input.cartId)).limit(1)
       : await ctx.tx.select().from(carts).where(eq(carts.token, input.token!)).limit(1);
     if (!cart) throw new ServiceError("not_found", "That cart is not here.");
-    return projectCart(ctx, cart.id);
+    const access = await requireCartAccess(ctx, { cartId: cart.id, cartToken: input.token }, "catalog.getCart", "query");
+    return projectCart(ctx, cart.id, access.revealToken);
   },
 });
 
@@ -617,13 +628,15 @@ export const saveCart = defineService({
   summary: "Snapshot the current lines onto a named saved cart.",
   kind: "mutation",
   permission: "public",
-  input: z.object({ cartId: id, name: z.string().trim().min(1).max(80) }),
+  input: z.object({ cartId: id, cartToken: z.string().uuid().optional(), name: z.string().trim().min(1).max(80) }),
   output: cartProjection,
   handler: async (input, ctx) => {
-    const source = await projectCart(ctx, input.cartId);
+    const access = await requireCartAccess(ctx, input, "catalog.saveCart", "mutation");
+    const source = await projectCart(ctx, input.cartId, access.revealToken);
     if (!source.cart.contactId) {
       throw new ServiceError("validation", "A saved cart must belong to a contact.");
     }
+    await requireOwnedContact(ctx, source.cart.contactId, "catalog.saveCart", "mutation");
     const [saved] = await ctx.tx
       .insert(carts)
       .values({
@@ -644,7 +657,7 @@ export const saveCart = defineService({
       });
     }
     ctx.setSubject("cart", saved!.id);
-    return projectCart(ctx, saved!.id);
+    return projectCart(ctx, saved!.id, access.revealToken);
   },
 });
 
@@ -656,12 +669,13 @@ export const listSavedCarts = defineService({
   input: z.object({ contactId: id }),
   output: listed(cartProjection),
   handler: async (input, ctx) => {
+    const own = await requireOwnedContact(ctx, input.contactId, "catalog.listSavedCarts", "query");
     const rows = await ctx.tx
       .select()
       .from(carts)
       .where(and(eq(carts.contactId, input.contactId), eq(carts.kind, "saved")))
       .orderBy(desc(carts.updatedAt));
-    return Promise.all(rows.map((row) => projectCart(ctx, row.id)));
+    return Promise.all(rows.map((row) => projectCart(ctx, row.id, own)));
   },
 });
 
@@ -676,6 +690,7 @@ export const addWishlistItem = defineService({
     items: listed(wishlistItemRow),
   }),
   handler: async (input, ctx) => {
+    await requireOwnedContact(ctx, input.contactId, "catalog.addWishlistItem", "mutation");
     await requireContact(ctx.tx, input.contactId);
     let [list] = await ctx.tx.select().from(wishlists).where(eq(wishlists.contactId, input.contactId)).limit(1);
     if (!list) {
@@ -686,7 +701,7 @@ export const addWishlistItem = defineService({
       .values({ wishlistId: list!.id, variantId: input.variantId })
       .onConflictDoNothing({ target: [wishlistItems.wishlistId, wishlistItems.variantId] });
     ctx.setSubject("wishlist", list!.id);
-    return ctx.call(listWishlist, { contactId: input.contactId });
+    return ctx.callAsSystem(listWishlist, { contactId: input.contactId });
   },
 });
 
@@ -701,13 +716,14 @@ export const removeWishlistItem = defineService({
     items: listed(wishlistItemRow),
   }),
   handler: async (input, ctx) => {
+    await requireOwnedContact(ctx, input.contactId, "catalog.removeWishlistItem", "mutation");
     const [list] = await ctx.tx.select().from(wishlists).where(eq(wishlists.contactId, input.contactId)).limit(1);
     if (list) {
       await ctx.tx
         .delete(wishlistItems)
         .where(and(eq(wishlistItems.wishlistId, list.id), eq(wishlistItems.variantId, input.variantId)));
     }
-    return ctx.call(listWishlist, { contactId: input.contactId });
+    return ctx.callAsSystem(listWishlist, { contactId: input.contactId });
   },
 });
 
@@ -726,6 +742,7 @@ export const listWishlist = defineService({
       input.contactId ??
       (ctx.actor.kind === "user" ? await contactForUser(ctx.tx, ctx.actor.userId) : null);
     if (!contactId) return { wishlist: null, items: [] };
+    await requireOwnedContact(ctx, contactId, "catalog.listWishlist", "query");
     const [list] = await ctx.tx.select().from(wishlists).where(eq(wishlists.contactId, contactId)).limit(1);
     if (!list) return { wishlist: null, items: [] };
     const items = await ctx.tx
@@ -919,13 +936,15 @@ export const listCarts = defineService({
   permission: "scoped",
   input: z.object({ status: z.enum(["open", "converted", "abandoned"]).optional() }),
   output: listed(cartRow),
-  handler: (input, ctx) =>
-    ctx.tx
+  handler: async (input, ctx) => {
+    const rows = await ctx.tx
       .select()
       .from(carts)
       .where(input.status ? eq(carts.status, input.status) : undefined)
       .orderBy(desc(carts.lastActivityAt))
-      .limit(200),
+      .limit(200);
+    return rows.map(cart => ({ ...cart, token: managesCartTokens(ctx.actor) ? cart.token : null }));
+  },
 });
 
 export const abandonStaleCarts = defineService({
@@ -965,7 +984,7 @@ export const abandonStaleCarts = defineService({
   },
 });
 
-async function projectCart(ctx: ServiceContext, cartId: string) {
+async function projectCart(ctx: ServiceContext, cartId: string, revealToken = false) {
   const cart = await loadCart(ctx.tx, cartId);
   const rows = await ctx.tx
     .select({
@@ -1015,7 +1034,7 @@ async function projectCart(ctx: ServiceContext, cartId: string) {
   }
   const subtotalMinor = lines.reduce((sum, line) => sum + (line.lineTotalMinor ?? 0), 0);
   return {
-    cart,
+    cart: { ...cart, token: revealToken || managesCartTokens(ctx.actor) ? cart.token : null },
     lines,
     subtotalMinor,
     allPriced: lines.every((line) => line.priceAvailable && line.lineTotalMinor != null),

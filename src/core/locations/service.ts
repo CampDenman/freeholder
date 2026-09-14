@@ -24,6 +24,7 @@ import { violates } from "@/core/db/errors";
 import { requireSetupOwner } from "@/core/settings/setup";
 import {
   defineService,
+  permits,
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
@@ -180,6 +181,9 @@ export const listLocations = defineService({
   }),
   output: listed(locationRow),
   handler: async (input, ctx) => {
+    if (input.includeHidden && !permits(ctx.actor, "scoped", "locations.list", "query")) {
+      throw new ServiceError("permission", "Location read access is required to include hidden locations.");
+    }
     const rows = await ctx.tx
       .select()
       .from(businessLocations)
@@ -248,9 +252,14 @@ export const getLocation = defineService({
       .select()
       .from(businessLocations)
       .where(
-        input.id
-          ? eq(businessLocations.id, input.id)
-          : eq(businessLocations.slug, input.slug!),
+        and(
+          input.id
+            ? eq(businessLocations.id, input.id)
+            : eq(businessLocations.slug, input.slug!),
+          permits(ctx.actor, "scoped", "locations.get", "query")
+            ? undefined
+            : eq(businessLocations.status, "visible"),
+        ),
       )
       .limit(1);
     if (!location) return null;

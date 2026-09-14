@@ -158,10 +158,10 @@ export const checkoutCart = defineService({
     // storefront checkout (when it lands) verifies the shopper's email first
     // and composes through ctx.callAsSystem.
     requireContactAuthority(ctx, "catalog.checkoutCart");
-    let basket = await ctx.call(getCart, { cartId: input.cartId });
+    let basket = await ctx.callAsSystem(getCart, { cartId: input.cartId });
     if (basket.cart.status === "converted") {
       const [existing] = await ctx.tx.select().from(orders).where(eq(orders.cartId, basket.cart.id)).limit(1);
-      if (existing) return ctx.call(getOrder, { id: existing.id });
+      if (existing) return ctx.callAsSystem(getOrder, { id: existing.id });
       throw new ServiceError("conflict", "That cart was already converted.");
     }
     if (basket.cart.status !== "open" || basket.cart.kind !== "cart") {
@@ -171,7 +171,8 @@ export const checkoutCart = defineService({
       throw new ServiceError("conflict", "That cart belongs to a different contact.");
     }
     if (!basket.cart.contactId) {
-      basket = await ctx.call(attachCartToContact, {
+      if (!basket.cart.token) throw new ServiceError("conflict", "The checked-out cart has no private token.");
+      basket = await ctx.callAsSystem(attachCartToContact, {
         token: basket.cart.token,
         contactId: input.contactId,
       });
@@ -224,7 +225,7 @@ export const checkoutCart = defineService({
 
     const { quoteCartPromotions } = await import("./promotions");
     const { allocateDiscount } = await import("./promo-quote");
-    const promo = await ctx.call(quoteCartPromotions, {
+    const promo = await ctx.callAsSystem(quoteCartPromotions, {
       cartId: basket.cart.id,
       couponCode: input.couponCode,
       subtotalMinor: basket.subtotalMinor,
@@ -410,7 +411,7 @@ export const checkoutCart = defineService({
         currency: basket.cart.currency,
       },
     });
-    return ctx.call(getOrder, { id: order!.id });
+    return ctx.callAsSystem(getOrder, { id: order!.id });
   },
 });
 
@@ -488,7 +489,7 @@ export const payOrder = defineService({
       subjectId: order.id,
       payload: { invoiceId: order.invoiceId, totalMinor: order.totalMinor, currency: order.currency },
     });
-    return ctx.call(getOrder, { id: order.id });
+    return ctx.callAsSystem(getOrder, { id: order.id });
   },
 });
 
@@ -540,7 +541,7 @@ export const cancelOrder = defineService({
       subjectId: order.id,
       payload: { invoiceId: order.invoiceId },
     });
-    return ctx.call(getOrder, { id: order.id });
+    return ctx.callAsSystem(getOrder, { id: order.id });
   },
 });
 

@@ -371,6 +371,12 @@ same price resolver as everything else, and why redeeming one still produces an
 `Invoice` for zero with the pass named on it. Money in and value out stay
 visible even when no card is charged.
 
+Guest carts use a private token; their IDs alone grant no read or write access.
+Saved carts and private wishlists require the session-linked contact or an
+appropriate catalog grant. View-only cart reads redact bearer tokens. Gallery
+purchases prove both gallery access and cart access. These checks apply at the
+service boundary so browser, API and agent clients receive the same protection.
+
 #### Merchandising and feeds
 
 Wishlists, saved carts, "notify me", recently viewed, and comparison tables all
@@ -743,6 +749,7 @@ NAP (Name, Address, Phone) consistency is the backbone of local SEO. It's captur
 | `LocationPage` | Auto-generated, RIBA-structured local landing pages. | location_id, service ids[], generated blocks (jsonb, owner-editable), status |
 
 **Rules:**
+- Hidden locations require location read access, including list requests with `includeHidden` and direct ID/slug lookups. Public reads expose visible locations only (C11.10). Generated location pages and sitemap metadata enforce visibility before event delivery; the listener unpublishes the hidden location page.
 - Primary location's NAP renders identically everywhere (exact-match string discipline) — the render helper is the only way to output NAP, so it *can't* drift.
 - Each location emits `LocalBusiness` (or subtype: Photographer, HairSalon, etc. — owner picks from schema.org business types in setup) JSON-LD with geo, hours, priceRange, sameAs links.
 - Multi-location businesses get `/locations/` as a root-linked index page with each location one hop below — RIBA-compliant by construction.
@@ -5038,7 +5045,16 @@ owner operations, never substitute for them.
   refreshes `resolvePrice` + availability; cart holds use `reserveStock`
   (`holderType=cart`); `catalog.abandonStaleCarts` hourly; translated
   `/admin/carts`; `tests/core/catalog-carts.test.ts`; changeset
-  `commerce-carts-orders.md`. **F04** `/admin/procurement` vendors. **F05** `catalog.addCartItem`/`attachCartToContact`/`addWishlistItem`/`checkoutCart` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-carts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-carts.test.ts` is the composition proof.)*
+  `commerce-carts-orders.md`. **F04** `/admin/carts` list and detail, with role-gated management controls. **F05** `catalog.addCartItem`/`attachCartToContact`/`addWishlistItem`/`checkoutCart` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/catalog-carts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/catalog-carts.test.ts` is the composition proof.)*
+  Security follow-up: ID-only cart reads/edits and contact-only saved-cart or
+  wishlist access are refused. Matching cart tokens and signed-in contact
+  ownership preserve guest/customer paths; view-only reads return no write
+  token. Cart-token inputs propagate through gallery purchases and promotions,
+  and checked checkout composition preserves exact operation grants.
+  `tests/core/cart-access.test.ts` reproduced four access failures before repair;
+  55 commerce tests and seven production-build browser journeys passed,
+  including the HTTP capability/read-only boundary and visitor-to-paid flow;
+  changeset `cart-capability-authorization.md`, `deploy/catalog-cart-access.md`.
 - [x] **C5.21** Build checkout identity/address, fulfillment, tax, discounts,
   consent, payment, idempotency, failure recovery and accessible confirmation.
   *(Evidence: `catalog.checkoutCart` attaches the guest cart, requires

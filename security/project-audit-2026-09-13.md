@@ -49,6 +49,19 @@ stock after refusal, own-contact enrollment and cross-contact refusal. This
 follow-up remains separate from the frozen #361 evidence above and does not
 constitute independent security review.
 
+## Additional cart and wishlist findings — 2026-09-14
+
+Four regressions reproduced ID-only cart reads, unauthenticated cart edits,
+write-token disclosure to view-only readers, and anonymous saved-cart/wishlist
+access by contact ID. Cart operations now check the matching private token,
+verified contact ownership or the exact catalog scope. Read-only projections
+redact tokens; scoped mutation composition does not mint a broader capability.
+Saved profile records require contact ownership or catalog authority. Gallery
+sessions do not authorize arbitrary cart IDs, and promotions use the same cart
+boundary. Tests cover guest tokens, own/cross-contact access, exact API scopes,
+closed-cart refusal and the existing commerce journeys. This is additional
+repair evidence, not an independent review or a completion claim.
+
 ## Verification scope
 
 Completed local evidence:
@@ -91,6 +104,18 @@ and mutating it so a concurrent visibility change cannot invalidate the check.
 The previously failing regressions pass; all 51 note, search and contact-privacy
 tests pass. Author pinning and shared-note API history remain covered. This is
 an implementation repair, not an independent review or completion sign-off.
+## Hidden location read boundary
+
+A regression reproduced anonymous access to hidden location addresses through
+`locations.list` with `includeHidden`. The repair requires location read scope
+for that option and filters hidden records from public ID/slug lookups. Tests
+cover anonymous and unrelated staff, write-only and exact read API scopes, and
+location viewers. A second regression reproduced address snapshots remaining
+in generated-page SEO after hiding a location. Public page and sitemap reads
+now enforce linked location visibility before event delivery; the listener
+then unpublishes the page. POS and social selectors request hidden locations only for
+staff with location read access. This is an additional internal repair, not an
+independent security sign-off.
 
 ## Limits of this evidence
 

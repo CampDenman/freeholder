@@ -16,13 +16,14 @@ import {
   registerSearchSource,
 } from "@/core/search/registry";
 import { isUniqueViolation } from "@/core/db";
+import { businessLocations } from "@/core/locations/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { getTranslation, translatedIds } from "@/core/i18n/service";
 import { recordRedirect } from "@/core/seo/service";
 import { queueIndexNow } from "@/core/seo/indexnow";
 import { kindFromSlug, priorityFromSlug, PUBLIC_ENTITY_KINDS } from "@/core/seo/classify";
 import { resolveAuthors, writeRevision } from "./history";
-import { contentRevisions, pages, sections } from "./schema";
+import { contentLayouts, contentRevisions, pages, sections } from "./schema";
 import {
   applyDueSchedules,
   compareRevisions,
@@ -300,6 +301,19 @@ const restoreResult = z.discriminatedUnion("subjectType", [
  * because "unlisted" is not a permission model. The admin preview path reads
  * through `cms.getPage`, which is staff-only and can see drafts.
  */
+// Location pages snapshot addresses in SEO. Enforce visibility at read time,
+// before the asynchronous location listener has unpublished the stored page.
+const visibleLocationPage = sql`not exists (
+  select 1 from ${contentLayouts}
+  where ${contentLayouts.pageId} = ${pages.id}
+    and ${contentLayouts.entityType} = 'location'
+    and not exists (
+      select 1 from ${businessLocations}
+      where ${businessLocations.id} = ${contentLayouts.entityId}
+        and ${businessLocations.status} = 'visible'
+    )
+)`;
+
 export const resolvePage = defineService({
   name: "cms.resolvePage",
   summary: "The published page at a path, or null.",
@@ -320,7 +334,7 @@ export const resolvePage = defineService({
       })
       .from(pages)
       .leftJoin(businessProfile, sql`true`)
-      .where(and(eq(pages.slug, input.slug), eq(pages.status, "published")))
+      .where(and(eq(pages.slug, input.slug), eq(pages.status, "published"), visibleLocationPage))
       .limit(1);
 
     const page = source?.page;
@@ -408,7 +422,7 @@ export const publishedPaths = defineService({
         updatedAt: pages.updatedAt,
       })
       .from(pages)
-      .where(eq(pages.status, "published"))
+      .where(and(eq(pages.status, "published"), visibleLocationPage))
       .orderBy(pages.slug);
 
     const [business] = await ctx.tx
