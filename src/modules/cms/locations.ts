@@ -225,6 +225,10 @@ export async function onLocationUpdated(payload: unknown): Promise<void> {
   const { getLocation } = await import("@/core/locations/service");
   const location = await getLocation.call({ id }, SYSTEM);
   if (!location) return;
+  if (location.status === "hidden") {
+    await onLocationDeleted({ id });
+    return;
+  }
 
   const locale = await defaultLocale();
   const target = pathFor(slug);

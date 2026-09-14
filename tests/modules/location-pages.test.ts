@@ -15,6 +15,7 @@ import {
   ensureDefaults,
   getSection,
   publishedPaths,
+  resolvePage,
 } from "@/modules/cms/service";
 import { NAV_KEY } from "@/modules/cms/defaults";
 import {
@@ -166,6 +167,23 @@ describe.runIf(hasDatabase)("a location's page", () => {
     await expect(
       resolveRedirect.call({ path: "locations/courtenay", locale: "en" }, ANONYMOUS),
     ).resolves.toMatchObject({ toPath: "locations/comox-valley" });
+  });
+
+  it("withholds hidden location pages and SEO before event delivery, then unpublishes", async () => {
+    const location = await createLocationService.call(CANADIAN, OWNER);
+    await onLocationCreated({ id: location.id, slug: location.slug });
+    expect((await resolvePage.call({ slug: "locations/courtenay" }, ANONYMOUS))?.seo).toMatchObject({
+      description: expect.stringContaining(CANADIAN.street),
+    });
+    await updateLocation.call({ id: location.id, status: "hidden" }, OWNER);
+    for (const locale of ["en", "fr", "es"]) {
+      await expect(resolvePage.call({ slug: "locations/courtenay", locale }, ANONYMOUS)).resolves.toBeNull();
+      expect(await publishedPaths.call({ locale }, ANONYMOUS)).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ slug: expect.stringContaining("locations/courtenay") }),
+      ]));
+    }
+    await onLocationUpdated({ id: location.id, slug: location.slug });
+    expect((await pageAt("locations/courtenay"))?.status).toBe("draft");
   });
 
   it("survives the location being deleted, unpublished", async () => {
