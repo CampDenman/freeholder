@@ -6332,5 +6332,8 @@
   "subscriptions.detail.billing": "Billing",
   "subscriptions.detail.manage": "Manage memberships",
   "admin.search.kind.supplier": "Suppliers",
-  "admin.search.kind.agreement": "Agreements"
+  "admin.search.kind.agreement": "Agreements",
+  "search.kind.priceList": "Price list",
+  "search.kind.marketplaceOrder": "Marketplace order",
+  "search.kind.privacyRequest": "Privacy request"
 }

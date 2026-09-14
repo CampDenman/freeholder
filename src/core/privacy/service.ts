@@ -13,6 +13,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
+import { registerSearchSource, matchesIlike } from "@/core/search/registry";
 import { roleGrants, sessions, users } from "@/core/auth/schema";
 import {
   contactMergeOperations,
@@ -1848,3 +1849,15 @@ export default [
   downloadDataRequestArtifact,
   downloadMyDataRequestArtifact,
 ];
+
+registerSearchSource({
+  kind: "privacyRequest", module: "contacts", readService: "contacts.getDataRequest", tables: ["data_requests"],
+  search: async ({ tx, pattern, limit }) => {
+    // Search by the request reference, never the sensitive correction/erasure body.
+    const rows = await tx.select({ id: dataRequests.id, contactId: dataRequests.contactId })
+      .from(dataRequests).where(matchesIlike(sql`${dataRequests.id}::text`, pattern))
+      .orderBy(asc(dataRequests.responseDueAt), asc(dataRequests.id)).limit(limit);
+    return rows.map(item => ({ kind: "privacyRequest", id: item.id, title: item.id,
+      href: `/admin/contacts/privacy/${item.id}`, snippet: null, contactId: item.contactId, module: "contacts" }));
+  },
+});

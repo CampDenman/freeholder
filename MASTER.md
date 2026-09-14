@@ -8787,9 +8787,18 @@ schema they inherit reads as a designed thing rather than an excavation.
   not bypass it. Signing credentials and document bodies are never selected.
   Results open the supplier row or agreement detail, with en/fr/es labels.
   C11.14 stays open for the remaining opt-outs and record restore.
+  Workflow search follow-up: price-list names, marketplace order references
+  and descriptions, and privacy request IDs join the same live registry.
+  Existing exact read-service authorization applies; privacy request bodies
+  and customer names are excluded. Results open anchored price/order rows or
+  the exact privacy request. Marketplace readers can inspect imported orders
+  without gaining channel controls or unauthorized invoice links. Labels ship
+  in en/fr/es. Changeset `workflow-record-search.md`: 27 search/participation
+  tests pass; production-build Chromium opens all three destinations as
+  view-only staff and checks axe in both themes. Per-record restore remains open.
   **Remaining named worklist:**
   Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
-  Remaining SEARCH_TABLE_OPT_OUTS include pricing configuration, staged marketplace orders and privacy workflows; these are not mixed into search.query.)*
+  Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
   passing acceptance test.

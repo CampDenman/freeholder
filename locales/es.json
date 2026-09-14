@@ -6332,5 +6332,8 @@
   "subscriptions.detail.billing": "Facturación",
   "subscriptions.detail.manage": "Gestionar suscripciones",
   "admin.search.kind.supplier": "Proveedores",
-  "admin.search.kind.agreement": "Acuerdos"
+  "admin.search.kind.agreement": "Acuerdos",
+  "search.kind.priceList": "Lista de precios",
+  "search.kind.marketplaceOrder": "Pedido del mercado",
+  "search.kind.privacyRequest": "Solicitud de privacidad"
 }
