@@ -6,10 +6,9 @@ the instance; disable one from Admin → Plugins if the business does not use it
 
 **These are not complete products.** Community, voice/video, print-on-demand
 and marketplace channel sync have landed as first-party plugins. Printify and
-Shopify have real HTTP adapters; voice/video remains a test-only fixture.
+Shopify and Daily have real HTTP adapters.
 Gift registries raise ordinary invoices. Missing live providers fail explicitly; no print
-submission, channel connection or call is reported as successful. Live provider
-I/O remains unfinished under C3.13.
+submission, channel connection or call is reported as successful. Live acceptance and remaining product depth stay open under C3.13.
 
 ## Gift registries
 
@@ -66,25 +65,51 @@ land on the session-linked contact timeline.
 
 ## Voice and video
 
-Admin → Voice and video lists rooms. Start opens a room against a contact;
-Join records who entered; Stop captures the recording and transcript onto
-that contact's conversation and timeline; Missed call writes the missed-call
-timeline event. The vendor SDK stays in the plugin adapter. A title starting
-with `fail-` makes the test fixture refuse; without a live provider, all
-production calls refuse; the room or recording stays
-`failed` so Retry can run in place. Merge repoints room, join and artifact
-`contact_id` columns. There is no WebRTC vendor in core.
+Set `DAILY_API_KEY` and `DAILY_DOMAIN` (for example `your-business.daily.co`)
+in the deployment environment and restart Freeholder. Admin → Voice and video
+opens a private room attached to the canonical contact. The API key's domain
+is checked before each provider operation. Rooms expire after 24 hours, allow
+up to 20 participants, and start with microphones and cameras off.
+
+**Open as host** issues an owner token for that room. **Create guest link**
+returns a non-owner invitation to copy and share with the contact; Freeholder
+does not send it. Links expire within 30 minutes and never outlive the room.
+Treat these links as private credentials. **Record attendance** is a manual
+attendance entry, not evidence that the invited person joined.
+
+The host starts recording and transcription in Daily's call controls.
+**Stop** expires the room, ejects its participants and checks that none remain.
+**Missed call** performs that shutdown before writing the timeline event.
+An unavailable or missing provider room stays failed for reconciliation;
+Freeholder does not claim that deleting a room proves its call ended.
+
+**Check recording** retrieves a verified finished recording and any available
+WebVTT transcript. A recording still processing can be retried. **Refresh
+transcript** checks for later transcript text without duplicating the contact
+conversation or transcript artifact. Missing transcripts remain absent.
+**Download recording** obtains a fresh expiring provider link.
+
+Room creation uses a stable room name and recovers a lost creation response by
+reading that same private room. Ten-minute leases fence room and recording
+workers; stale results cannot overwrite recovered work. Scheduled retries run
+twice hourly for recent failures and expired leases. Contact merge repoints
+room, attendance and artifact contact references.
+
+Recordings currently remain in Daily storage; local backup/export includes
+metadata and captured transcript text, not the recording bytes. Contact erasure
+of local rows does not yet remove Daily's recordings. Owner storage import and
+provider erasure are unfinished C3.13 work. HTTP and database tests do not
+establish a live call, device compatibility or recording acceptance.
+See [Daily room configuration](https://docs.daily.co/reference/rest-api/rooms/create-room)
+and [meeting tokens](https://docs.daily.co/reference/rest-api/meeting-tokens/create-meeting-token).
 
 ## Marketplace channels
 
-Admin → Marketplace channels records a Shopify/Etsy/Amazon/eBay seam, then
-handshakes with the plugin adapter. A refused handshake stays `failed` so Retry
-can run without creating a second row. Sync pages provider orders onto
-invoices through `contacts.resolve`; the fixture adapter returns the
-in-memory list the test staged, not a hardcoded order. Credentials are not
-stored in this fixture adapter; a real provider adapter replaces it without
-changing the admin screen. `marketplace.retryFailed` retries a failed
-handshake or a failed sync in place.
+Admin → Marketplace channels connects the configured Shopify store and keeps
+failed handshakes available for retry. Etsy, Amazon and eBay remain unimplemented
+provider seams. The production adapter imports verified paid Shopify orders
+through the canonical contact and draft invoice services, as described below.
+Only tests use staged in-memory orders.
 
 ### Sync ownership and retries (C3.13)
 
@@ -93,9 +118,8 @@ Marketplace sync claims an expiring lease, renews it after each page, and
 checks its ownership before importing or checkpointing. An expired worker
 cannot overwrite a recovered sync. Each imported order resolves its contact,
 creates its invoice and records the channel order in one transaction.
-Print/call reconciliation after an interrupted vendor request still belongs
-to the missing live-provider work; test fixtures do not prove recovery of
-real vendor operations.
+Print and call adapters recover documented idempotent operations, but HTTP
+fixtures do not prove live merchant or call-provider acceptance.
 
 ### Shopify own-store setup (C3.13)
 

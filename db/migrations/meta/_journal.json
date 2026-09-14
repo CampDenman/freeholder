@@ -64,6 +64,13 @@
       "when": 1792166400011,
       "tag": "0008_printify_live_fulfillment",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792166400012,
+      "tag": "0009_daily_voice_video",
+      "breakpoints": true
     }
   ]
 }

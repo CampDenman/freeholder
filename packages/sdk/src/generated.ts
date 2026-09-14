@@ -1270,12 +1270,15 @@ export const SERVICE_NAMES = [
   "views.remove",
   "views.save",
   "views.setDefault",
+  "voiceVideo.configuration",
   "voiceVideo.joinRoom",
   "voiceVideo.list",
   "voiceVideo.listJoins",
   "voiceVideo.listRooms",
+  "voiceVideo.meetingLink",
   "voiceVideo.missRoom",
   "voiceVideo.record",
+  "voiceVideo.recordingAccess",
   "voiceVideo.startRoom",
   "voiceVideo.stopRoom",
   "waitlist.claim",
@@ -6365,13 +6368,17 @@ export interface ServiceCatalog {
     input: { id?: string | null; entity: string };
     output: { id: string | null; [key: string]: unknown };
   };
+  "voiceVideo.configuration": {
+    input: Record<string, never>;
+    output: { configured: boolean; domain: string | null };
+  };
   "voiceVideo.joinRoom": {
     input: { roomId: string; contactId: string };
     output: { id: string; roomId: string; contactId: string; conversationId: string | null; status: string; [key: string]: unknown };
   };
   "voiceVideo.list": {
     input: Record<string, never>;
-    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; [key: string]: unknown }[];
+    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown }[];
   };
   "voiceVideo.listJoins": {
     input: { roomId: string };
@@ -6379,23 +6386,31 @@ export interface ServiceCatalog {
   };
   "voiceVideo.listRooms": {
     input: Record<string, never>;
-    output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown }[];
+    output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown }[];
+  };
+  "voiceVideo.meetingLink": {
+    input: { roomId: string; audience: "host" | "guest"; hostName?: string };
+    output: { roomUrl: string; meetingToken: string; expiresAt: number };
   };
   "voiceVideo.missRoom": {
     input: { roomId: string };
-    output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown };
+    output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown };
   };
   "voiceVideo.record": {
-    input: { contactId: string; kind: "voice" | "video"; provider: string; title: string; artifactId?: string; roomId?: string };
-    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; [key: string]: unknown };
+    input: { contactId: string; kind: "voice" | "video"; provider: string; title: string; artifactId?: string; roomId?: string; refresh?: boolean };
+    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown };
+  };
+  "voiceVideo.recordingAccess": {
+    input: { artifactId: string };
+    output: { downloadTokenUrl: string; expiresAt: number };
   };
   "voiceVideo.startRoom": {
     input: { contactId: string; kind: "voice" | "video"; provider: string; title: string; roomId?: string };
-    output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown };
+    output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown };
   };
   "voiceVideo.stopRoom": {
-    input: { roomId: string };
-    output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; [key: string]: unknown };
+    input: { roomId: string; capture?: boolean };
+    output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown };
   };
   "waitlist.claim": {
     input: { token: string };
@@ -7909,12 +7924,15 @@ export interface FreeholderApi {
     setDefault: (input: ServiceCatalog["views.setDefault"]["input"]) => Promise<ServiceCatalog["views.setDefault"]["output"]>;
   };
   voiceVideo: {
+    configuration: (input?: ServiceCatalog["voiceVideo.configuration"]["input"]) => Promise<ServiceCatalog["voiceVideo.configuration"]["output"]>;
     joinRoom: (input: ServiceCatalog["voiceVideo.joinRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.joinRoom"]["output"]>;
     list: (input?: ServiceCatalog["voiceVideo.list"]["input"]) => Promise<ServiceCatalog["voiceVideo.list"]["output"]>;
     listJoins: (input: ServiceCatalog["voiceVideo.listJoins"]["input"]) => Promise<ServiceCatalog["voiceVideo.listJoins"]["output"]>;
     listRooms: (input?: ServiceCatalog["voiceVideo.listRooms"]["input"]) => Promise<ServiceCatalog["voiceVideo.listRooms"]["output"]>;
+    meetingLink: (input: ServiceCatalog["voiceVideo.meetingLink"]["input"]) => Promise<ServiceCatalog["voiceVideo.meetingLink"]["output"]>;
     missRoom: (input: ServiceCatalog["voiceVideo.missRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.missRoom"]["output"]>;
     record: (input: ServiceCatalog["voiceVideo.record"]["input"]) => Promise<ServiceCatalog["voiceVideo.record"]["output"]>;
+    recordingAccess: (input: ServiceCatalog["voiceVideo.recordingAccess"]["input"]) => Promise<ServiceCatalog["voiceVideo.recordingAccess"]["output"]>;
     startRoom: (input: ServiceCatalog["voiceVideo.startRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.startRoom"]["output"]>;
     stopRoom: (input: ServiceCatalog["voiceVideo.stopRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.stopRoom"]["output"]>;
   };
