@@ -16,6 +16,8 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "notes.purgeExpired",
+  "tasks.purgeExpired",
   "ads.rollUpStats",
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
@@ -62,6 +64,7 @@ const INTERNAL = [
   "marketplace.importProviderOrder",
   "printOnDemand.workBatch",
   "voiceVideo.roomAccessSource",
+  "privacy.completeErasureJob",
   "messaging.applySmsEvents",
   "messaging.applySmsEventsApply",
   "notifications.create",
@@ -103,6 +106,9 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "privacy.completeErasureJob",
+  "notes.purgeExpired",
+  "tasks.purgeExpired",
   "invoicing.claimCustomerCheckout",
   "invoicing.applyCustomerCheckout",
   "invoicing.customerPaymentSource",

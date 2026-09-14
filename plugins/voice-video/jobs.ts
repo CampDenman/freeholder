@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import { eraseProviderRecordings } from "./erasure";
 import { defineJob } from "@/core/jobs";
 import {
   listVoiceVideoArtifacts,
@@ -61,4 +62,4 @@ export const retryFailedVoiceVideo = defineJob({
   },
 });
 
-export default [retryFailedVoiceVideo];
+export default [retryFailedVoiceVideo, eraseProviderRecordings];

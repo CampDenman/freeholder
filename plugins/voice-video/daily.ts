@@ -137,6 +137,66 @@ export function createDailyClient(configuration: DailyConfiguration, fetcher: ty
       // would discard the evidence needed after a lost local apply result.
     },
 
+    async eraseRoomRecordings(input: { externalRef: string; providerRoomId: string | null }): Promise<void> {
+      const deadline = Date.now() + 120_000;
+      const checkpoint = () => { if (Date.now() > deadline) throw new DailyError("Provider erasure reached its time budget. Retry the same job."); };
+      const name = nameFromRef(input.externalRef);
+      const room = await readRoom(name);
+      if (room && input.providerRoomId && room.providerRoomId !== input.providerRoomId) throw new DailyError("This Daily room no longer has its original identity.");
+      const providerRoomId = input.providerRoomId ?? room?.providerRoomId;
+      if (!providerRoomId) throw new DailyError("Restore the original room identity before erasing provider recordings.");
+      if (room) await this.endRoom({ externalRef: input.externalRef, providerRoomId });
+      const recordingPath = `/recordings?room_name=${name}&limit=100`;
+      const recordingList = z.object({ total_count: z.number().int().nonnegative(), data: z.array(z.object({ id: z.uuid() })).max(100) });
+      const recordings = recordingList.safeParse(await request(recordingPath));
+      if (!recordings.success || recordings.data.total_count < recordings.data.data.length) throw new DailyError("Daily did not return a valid recording erasure inventory.");
+      for (const item of recordings.data.data) {
+        checkpoint();
+        const metadata = await request(`/recordings/${item.id}`, "GET", undefined, true);
+        if (metadata === null) continue;
+        const verified = z.object({ id: z.uuid(), room_name: z.string(), status: z.literal("finished") }).safeParse(metadata);
+        if (!verified.success || verified.data.id !== item.id || verified.data.room_name !== name) throw new DailyError("Daily has not verified a finished recording for erasure from this room.");
+        const deleted = await request(`/recordings/${item.id}`, "DELETE", undefined, true);
+        if (deleted !== null) {
+          const confirmation = z.object({ deleted: z.literal(true), id: z.uuid() }).safeParse(deleted);
+          if (!confirmation.success || confirmation.data.id !== item.id) throw new DailyError("Daily did not confirm erasure of this recording.");
+        }
+      }
+      const remaining = recordingList.safeParse(await request(recordingPath));
+      if (!remaining.success || remaining.data.total_count !== 0 || remaining.data.data.length !== 0) throw new DailyError("Daily recording erasure remains pending. Retry the same job.");
+      const transcript = z.object({ transcriptId: z.uuid(), roomId: z.uuid(), status: z.string() });
+      async function transcripts() {
+        const all: z.infer<typeof transcript>[] = [];
+        const seen = new Set<string>();
+        let cursor: string | undefined;
+        for (let page = 0; page < 20; page++) {
+          checkpoint();
+          const result = z.object({ total_count: z.number().int().nonnegative(), data: z.array(transcript).max(100) }).safeParse(
+            await request(`/transcript?roomId=${providerRoomId}&limit=100${cursor ? `&starting_after=${cursor}` : ""}`));
+          if (!result.success || result.data.total_count < all.length + result.data.data.length) throw new DailyError("Daily returned an incomplete transcript erasure inventory.");
+          for (const item of result.data.data) {
+            if (item.roomId !== providerRoomId || seen.has(item.transcriptId)) throw new DailyError("Daily returned a mismatched or repeated transcript for erasure.");
+            seen.add(item.transcriptId); all.push(item);
+          }
+          if (all.length === result.data.total_count) return all;
+          if (!result.data.data.length) throw new DailyError("Daily transcript pagination ended before every record was verified.");
+          cursor = result.data.data.at(-1)!.transcriptId;
+        }
+        throw new DailyError("The transcript erasure inventory exceeds the bounded page limit.");
+      }
+      for (const item of await transcripts()) {
+        checkpoint();
+        if (item.status === "t_deleted") continue;
+        if (item.status === "t_in_progress") throw new DailyError("Daily is still processing a transcript. Retry erasure shortly.");
+        const deleted = await request(`/transcript/${item.transcriptId}`, "DELETE", undefined, true);
+        if (deleted !== null) {
+          const confirmation = transcript.safeParse(deleted);
+          if (!confirmation.success || confirmation.data.transcriptId !== item.transcriptId || confirmation.data.roomId !== providerRoomId || confirmation.data.status !== "t_deleted") throw new DailyError("Daily did not confirm erasure of this transcript.");
+        }
+      }
+      if ((await transcripts()).some(item => item.status !== "t_deleted")) throw new DailyError("Daily transcript erasure remains pending. Retry the same job.");
+    },
+
     async findRecording(input: { externalRef: string; recordingId?: string }): Promise<DailyRecording> {
       const name = nameFromRef(input.externalRef);
       let candidateId = input.recordingId;

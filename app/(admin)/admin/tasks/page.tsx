@@ -13,6 +13,7 @@
 // No JavaScript anywhere: every control is a small form. A phone on a bad
 // connection is exactly where somebody ticks a task off.
 import type { Metadata } from "next";
+import { hasModuleAccess } from "@/core/service";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
 import { currentBusiness } from "@/core/settings/read";
 import { CADENCES, listTasks, TASK_PRIORITIES } from "@/core/tasks/service";
@@ -45,7 +46,8 @@ export default async function TasksPage({
 }: {
   searchParams: Promise<{ saved?: string; error?: string; view?: string }>;
 }) {
-  const actor = await requireStaffActor("crm");
+  const actor = await requireStaffActor("tasks");
+  const canManage = hasModuleAccess(actor, "tasks", "manage");
   const query = await searchParams;
   const mine = query.view === "mine";
   const applied = meaningfulParams(query);
@@ -98,13 +100,13 @@ export default async function TasksPage({
                 key={task.id}
                 className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm"
               >
-                <form action={setTaskStatusAction}>
+                {canManage ? <form action={setTaskStatusAction}>
                   <input type="hidden" name="id" value={task.id} />
                   <input type="hidden" name="status" value="done" />
                   <Button type="submit" variant="quiet">
                     {t("tasks.action.done")}
                   </Button>
-                </form>
+                </form> : null}
                 <span className="font-medium">{task.title}</span>
                 {task.priority !== "normal" ? (
                   <Pill tone={PRIORITY_TONES[task.priority] ?? "neutral"}>
@@ -132,7 +134,7 @@ export default async function TasksPage({
                     {day(task.dueAt)}
                   </span>
                 ) : null}
-                <form action={assignTaskAction} className="ms-auto flex items-center gap-2">
+                {canManage ? <form action={assignTaskAction} className="ms-auto flex items-center gap-2">
                   <input type="hidden" name="id" value={task.id} />
                   <label className="sr-only" htmlFor={`assignee-${task.id}`}>
                     {t("tasks.field.assignee")}
@@ -153,8 +155,8 @@ export default async function TasksPage({
                   <Button type="submit" variant="quiet">
                     {t("tasks.action.assign")}
                   </Button>
-                </form>
-                <form action={setTaskStatusAction}>
+                </form> : null}
+                {canManage ? <form action={setTaskStatusAction}>
                   <input type="hidden" name="id" value={task.id} />
                   <input
                     type="hidden"
@@ -166,13 +168,13 @@ export default async function TasksPage({
                       ? t("tasks.action.unblock")
                       : t("tasks.action.block")}
                   </Button>
-                </form>
-                <form action={removeTaskAction}>
+                </form> : null}
+                {canManage ? <form action={removeTaskAction}>
                   <input type="hidden" name="id" value={task.id} />
                   <Button type="submit" variant="quiet">
                     {t("tasks.action.remove")}
                   </Button>
-                </form>
+                </form> : null}
               </li>
             ))}
           </ul>
@@ -184,6 +186,7 @@ export default async function TasksPage({
     <div className="grid gap-6">
       <div>
         <h1 className="text-xl font-bold tracking-tight">{t("tasks.title")}</h1>
+        <a className="mt-2 inline-block text-sm underline" href="/admin/trash?kind=tasks">{t("records.trash.view")}</a>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("tasks.intro")}</p>
         <p className="mt-2 flex flex-wrap gap-4 text-sm">
           <a href="/admin/tasks" className={mine ? "underline" : "font-medium"}>
@@ -226,7 +229,7 @@ export default async function TasksPage({
         ]
       )}
 
-      <Card>
+      {canManage ? <Card>
         <CardHeader title={t("tasks.add")} />
         <CardBody>
           <form action={createTaskAction} className="flex flex-wrap items-end gap-3">
@@ -303,7 +306,7 @@ export default async function TasksPage({
           {/* Recurrence advances on completion, never on a clock. */}
           <p className="max-w-prose text-sm text-ink-muted">{t("tasks.addHint")}</p>
         </CardBody>
-      </Card>
+      </Card> : null}
     </div>
   );
 }

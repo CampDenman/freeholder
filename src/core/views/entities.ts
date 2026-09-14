@@ -39,7 +39,7 @@ registerViewEntity({
   key: "tasks",
   label: "Tasks",
   path: "/admin/tasks",
-  module: "crm",
+  module: "tasks",
   filters: [{ key: "view", label: "Whose" }],
   // A list of rows rather than a table: a column picker here would be a control
   // with nothing to control.
