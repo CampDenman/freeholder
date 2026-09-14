@@ -4,13 +4,15 @@
 // and does not check C11.14.
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { eq, is } from "drizzle-orm";
+import { eq, is, sql } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import manifests from "@/modules";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { listJobs } from "@/core/jobs";
+import { conversations } from "@/core/messaging/schema";
+import { recordMessage } from "@/core/messaging/service";
 import { notes } from "@/core/notes/schema";
 import { writeNote } from "@/core/notes/service";
 import {
@@ -19,6 +21,8 @@ import {
 } from "@/core/privacy/service";
 import { ready } from "@/core/runtime";
 import { getService } from "@/core/service";
+import { tasks } from "@/core/tasks/schema";
+import { createTask, setTaskStatus } from "@/core/tasks/service";
 import {
   RETENTION_TABLE_OPT_OUTS,
   applyRetentionPolicies,
@@ -53,9 +57,9 @@ describe("C11.14 retention leftovers", () => {
     expect(source).toContain('name: "retention.listPolicies"');
     expect(source).toContain('name: "retention.upsertPolicy"');
     expect(source).toContain('name: "retention.apply"');
-    expect(readFileSync("src/core/jobs/core-jobs.ts", "utf8")).toContain(
-      'name: "core.applyRetention"',
-    );
+    const jobs = readFileSync("src/core/jobs/core-jobs.ts", "utf8");
+    expect(jobs).toContain('name: "core.applyRetention"');
+    expect(jobs).toMatch(/leaseSeconds:\s*60\s*\*\s*60/);
     const keys = Object.keys(RETENTION_TABLE_OPT_OUTS);
     expect(new Set(keys).size).toBe(keys.length);
     expect(RETENTION_TABLE_OPT_OUTS.consent_records).toMatch(/legal|audit/i);
@@ -203,7 +207,95 @@ describe.runIf(hasDatabase)("retention policies (C11.14)", { timeout: 90_000 }, 
   });
 
   it("registers core.applyRetention", async () => {
-    expect(listJobs().has("core.applyRetention")).toBe(true);
+    const job = listJobs().get("core.applyRetention");
+    expect(job).toBeDefined();
+    expect(job?.leaseSeconds).toBe(60 * 60);
+  });
+
+  it("keeps a conversation with recent activity and only purges finished tasks", async () => {
+    const idleContact = await person("idle@example.test", "Idle Lane");
+    const liveContact = await person("live@example.test", "Live Lane");
+    const idle = await recordMessage.call(
+      {
+        email: "idle@example.test",
+        name: "Idle Lane",
+        direction: "inbound",
+        channel: "email",
+        body: "Old thread, no later activity.",
+        subject: "Idle visit",
+      },
+      OWNER,
+    );
+    const live = await recordMessage.call(
+      {
+        email: "live@example.test",
+        name: "Live Lane",
+        direction: "inbound",
+        channel: "email",
+        body: "Old thread that will get a new reply.",
+        subject: "Live visit",
+      },
+      OWNER,
+    );
+    const cutoff = new Date(Date.now() - 40 * DAY_MS);
+    const cutoffIso = cutoff.toISOString();
+    for (const id of [idle.conversation.id, live.conversation.id]) {
+      await db().execute(
+        sql`update conversations
+            set created_at = ${cutoffIso}::timestamptz,
+                updated_at = ${cutoffIso}::timestamptz,
+                last_inbound_at = ${cutoffIso}::timestamptz,
+                last_outbound_at = ${cutoffIso}::timestamptz
+            where id = ${id}`,
+      );
+    }
+    await recordMessage.call(
+      {
+        conversationId: live.conversation.id,
+        contactId: liveContact,
+        direction: "inbound",
+        channel: "email",
+        body: "Yesterday's reply keeps the thread.",
+      },
+      OWNER,
+    );
+
+    const open = await createTask.call(
+      { subjectType: "contact", subjectId: idleContact, title: "Still owed" },
+      OWNER,
+    );
+    const finished = await createTask.call(
+      { subjectType: "contact", subjectId: idleContact, title: "Already done" },
+      OWNER,
+    );
+    await setTaskStatus.call({ id: finished.id, status: "done" }, OWNER);
+    for (const id of [open.id, finished.id]) {
+      await db().execute(
+        sql`update tasks
+            set created_at = ${cutoffIso}::timestamptz,
+                updated_at = ${cutoffIso}::timestamptz,
+                completed_at = ${cutoffIso}::timestamptz
+            where id = ${id}`,
+      );
+    }
+
+    await upsertRetentionPolicy.call({ kind: "conversations", ttlDays: 30 }, OWNER);
+    await upsertRetentionPolicy.call({ kind: "tasks", ttlDays: 30 }, OWNER);
+    await listJobs().get("core.applyRetention")!.handler({});
+
+    const remainingThreads = await db()
+      .select({ id: conversations.id })
+      .from(conversations);
+    const threadIds = remainingThreads.map((row) => row.id);
+    expect(threadIds).toContain(live.conversation.id);
+    expect(threadIds).not.toContain(idle.conversation.id);
+
+    const remainingTasks = await db()
+      .select({ id: tasks.id, title: tasks.title })
+      .from(tasks);
+    const titles = remainingTasks.map((row) => row.title);
+    expect(titles).toContain(open.title);
+    expect(titles).not.toContain(finished.title);
   });
 
   it("accounts for every contact foreign key as a purge source or an opt-out", () => {

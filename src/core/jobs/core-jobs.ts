@@ -632,6 +632,7 @@ export const applyRetentionPoliciesJob = defineJob({
   summary: "Purge registered user-owned rows older than their retention policy.",
   schedule: "23 5 * * *",
   concurrency: 1,
+  leaseSeconds: 60 * 60,
   handler: async () => {
     const { applyRetentionPolicies } = await import("@/core/retention/apply");
     return applyRetentionPolicies();

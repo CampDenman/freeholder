@@ -2,13 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Bounded purgeable stores (C11.14). A kind is a policy key, not a deleted_at
 // column, and legal/audit rows stay out of the clock.
-import { and, isNull, lt, notInArray, or, type SQL } from "drizzle-orm";
+import { and, asc, inArray, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { db } from "@/core/db";
+
+export const RETENTION_PURGE_BATCH = 500;
 
 export interface RetentionPurgeArgs {
   cutoff: Date;
   exceptContactIds: readonly string[];
+  /** Clock the row ages on. Defaults to `created_at`. */
+  aged?: SQL | PgColumn;
+  extra?: SQL;
 }
 
 export interface RetentionSource {
@@ -43,7 +48,11 @@ export async function purgeAgedContactRows(
   table: ContactAgedTable,
   args: RetentionPurgeArgs,
 ): Promise<number> {
-  const conditions: SQL[] = [lt(table.createdAt, args.cutoff)];
+  const aged = args.aged ?? table.createdAt;
+  const conditions: SQL[] = [
+    sql`${aged} < ${args.cutoff.toISOString()}::timestamptz`,
+  ];
+  if (args.extra) conditions.push(args.extra);
   if (args.exceptContactIds.length > 0) {
     const hold = or(
       isNull(table.contactId),
@@ -51,11 +60,28 @@ export async function purgeAgedContactRows(
     );
     if (hold) conditions.push(hold);
   }
-  const deleted = await db()
-    .delete(table)
-    .where(and(...conditions))
-    .returning({ id: table.id });
-  return deleted.length;
+  const where = and(...conditions);
+  let purged = 0;
+  for (;;) {
+    const batch = await db()
+      .select({ id: table.id })
+      .from(table)
+      .where(where)
+      .orderBy(asc(table.id))
+      .limit(RETENTION_PURGE_BATCH);
+    if (batch.length === 0) break;
+    await db()
+      .delete(table)
+      .where(
+        inArray(
+          table.id,
+          batch.map((row) => row.id),
+        ),
+      );
+    purged += batch.length;
+    if (batch.length < RETENTION_PURGE_BATCH) break;
+  }
+  return purged;
 }
 
 /**
