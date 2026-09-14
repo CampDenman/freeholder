@@ -90,6 +90,19 @@ rerun subsequently passed all 339 files: 3,541 tests passed and 17 inapplicable
 recipe cases skipped. Hosted CI and the protected merge queue passed, including
 Docker recipe, public surface and upgrade gates. PR #361 merged without bypass.
 
+## Hidden location read boundary
+
+A regression reproduced anonymous access to hidden location addresses through
+`locations.list` with `includeHidden`. The repair requires location read scope
+for that option and filters hidden records from public ID/slug lookups. Tests
+cover anonymous and unrelated staff, write-only and exact read API scopes, and
+location viewers. A second regression reproduced address snapshots remaining
+in generated-page SEO after hiding a location. Public page and sitemap reads
+now enforce linked location visibility before event delivery; the listener
+then unpublishes the page. POS and social selectors request hidden locations only for
+staff with location read access. This is an additional internal repair, not an
+independent security sign-off.
+
 ## Limits of this evidence
 
 No live payment settlement, provider account connection, production deployment,

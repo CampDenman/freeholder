@@ -749,6 +749,7 @@ NAP (Name, Address, Phone) consistency is the backbone of local SEO. It's captur
 | `LocationPage` | Auto-generated, RIBA-structured local landing pages. | location_id, service ids[], generated blocks (jsonb, owner-editable), status |
 
 **Rules:**
+- Hidden locations require location read access, including list requests with `includeHidden` and direct ID/slug lookups. Public reads expose visible locations only (C11.10). Generated location pages and sitemap metadata enforce visibility before event delivery; the listener unpublishes the hidden location page.
 - Primary location's NAP renders identically everywhere (exact-match string discipline) — the render helper is the only way to output NAP, so it *can't* drift.
 - Each location emits `LocalBusiness` (or subtype: Photographer, HairSalon, etc. — owner picks from schema.org business types in setup) JSON-LD with geo, hours, priceRange, sameAs links.
 - Multi-location businesses get `/locations/` as a root-linked index page with each location one hop below — RIBA-compliant by construction.
