@@ -70,15 +70,19 @@ export async function purgeAgedContactRows(
       .orderBy(asc(table.id))
       .limit(RETENTION_PURGE_BATCH);
     if (batch.length === 0) break;
-    await db()
+    const deleted = await db()
       .delete(table)
       .where(
-        inArray(
-          table.id,
-          batch.map((row) => row.id),
+        and(
+          inArray(
+            table.id,
+            batch.map((row) => row.id),
+          ),
+          where,
         ),
-      );
-    purged += batch.length;
+      )
+      .returning({ id: table.id });
+    purged += deleted.length;
     if (batch.length < RETENTION_PURGE_BATCH) break;
   }
   return purged;
