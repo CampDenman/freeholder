@@ -51,6 +51,7 @@ export const notes = pgTable(
   "notes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
     /**
      * What it is about. Required, unlike a task's.
      *
@@ -93,6 +94,7 @@ export const notes = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
+    index("notes_trash_idx").on(t.trashedAt).where(sql`${t.trashedAt} is not null`),
     // Everything about one thing, pinned first then newest — which is the only
     // order this table is ever read in.
     index("notes_subject_idx").on(t.subjectType, t.subjectId, t.pinned, t.createdAt),
