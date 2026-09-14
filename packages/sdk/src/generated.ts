@@ -1122,6 +1122,9 @@ export const SERVICE_NAMES = [
   "reports.runExport",
   "reports.saveExport",
   "reports.saveView",
+  "retention.apply",
+  "retention.listPolicies",
+  "retention.upsertPolicy",
   "reviews.aggregate",
   "reviews.ingestExternal",
   "reviews.list",
@@ -5768,6 +5771,18 @@ export interface ServiceCatalog {
     input: { id?: string; name: string; key: "revenue" | "revenueBy" | "cohort" | "funnel"; params?: { [key: string]: unknown } };
     output: { id: string; name: string; key: "revenue" | "revenueBy" | "cohort" | "funnel"; params: { [key: string]: unknown }; updatedAt: string; [key: string]: unknown };
   };
+  "retention.apply": {
+    input: Record<string, never>;
+    output: { jobId: string; deduplicated: boolean };
+  };
+  "retention.listPolicies": {
+    input: Record<string, never>;
+    output: { kinds: { kind: string; table: string; privacyScope: string; [key: string]: unknown }[]; policies: { id: string; kind: string; ttlDays: number; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
+  };
+  "retention.upsertPolicy": {
+    input: { kind: string; ttlDays: number };
+    output: { id: string; kind: string; ttlDays: number; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
   "reviews.aggregate": {
     input: { subjectType?: "business" | "product" | "service"; subjectId?: string | null };
     output: { ratingValue: number | null; reviewCount: number; displayedCount: number; withheld: boolean; [key: string]: unknown };
@@ -7698,6 +7713,11 @@ export interface FreeholderApi {
     runExport: (input: ServiceCatalog["reports.runExport"]["input"]) => Promise<ServiceCatalog["reports.runExport"]["output"]>;
     saveExport: (input: ServiceCatalog["reports.saveExport"]["input"]) => Promise<ServiceCatalog["reports.saveExport"]["output"]>;
     saveView: (input: ServiceCatalog["reports.saveView"]["input"]) => Promise<ServiceCatalog["reports.saveView"]["output"]>;
+  };
+  retention: {
+    apply: (input?: ServiceCatalog["retention.apply"]["input"]) => Promise<ServiceCatalog["retention.apply"]["output"]>;
+    listPolicies: (input?: ServiceCatalog["retention.listPolicies"]["input"]) => Promise<ServiceCatalog["retention.listPolicies"]["output"]>;
+    upsertPolicy: (input: ServiceCatalog["retention.upsertPolicy"]["input"]) => Promise<ServiceCatalog["retention.upsertPolicy"]["output"]>;
   };
   reviews: {
     aggregate: (input?: ServiceCatalog["reviews.aggregate"]["input"]) => Promise<ServiceCatalog["reviews.aggregate"]["output"]>;

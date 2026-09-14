@@ -217,9 +217,10 @@ screens, `deploy/privacy-rights.md`.
   404s without leaking existence beyond timing.
 - Erasure vs retention exceptions: confirm a legal hold actually blocks
   fulfill, and that merge does not resurrect erased rows.
-- C11.14 still names undelete-every-row and per-table TTL as open. Product-wide
-  search is `search.query` over a live registry; do not treat contact-privacy
-  tests as coverage of every user-owned table.
+- C11.14 still names undelete-every-row as open. Retention is a bounded
+  per-kind policy registry plus `core.applyRetention`, not a TTL on every
+  table. Product-wide search is `search.query` over a live registry; do not
+  treat contact-privacy tests as coverage of every user-owned table.
 
 ## Cross-cutting controls already in CI
 

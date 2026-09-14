@@ -8661,20 +8661,29 @@ schema they inherit reads as a designed thing rather than an excavation.
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
   *(Partial 2026-09-13: `tests/core/record-participation.test.ts` plus
-  `tests/core/c11-14-search.test.ts`, `merge-completeness`, `ownership-export`,
-  `ownership-drill` and `contact-privacy-rights`. Contact foreign keys are
-  merge-repointed, privacy export/erasure registered, ownership export is
-  information_schema-complete, restore is the drill pair matrix, `search.query`
-  is one grant-filtered ILIKE over a registry of live contact-attached and
-  first-class owner records (not Elasticsearch, not a second customer store),
-  `contacts.list` still searches the spine, and mutations audit through
-  `defineService`. **F04** `/admin/search`. **F05** `search.query` at
-  `/api/v1/search.query`, OpenAPI/SDK, MCP `search_query`. **F07** grant
-  filtering plus escaped ILIKE. **F09** still open because undelete/retention
-  leftovers remain. **F12** `tests/core/c11-14-search.test.ts` mixed-kind
-  query. **Remaining named worklist:**
+  `tests/core/c11-14-search.test.ts`, `tests/core/c11-14-retention.test.ts`,
+  `merge-completeness`, `ownership-export`, `ownership-drill` and
+  `contact-privacy-rights`. Contact foreign keys are merge-repointed, privacy
+  export/erasure registered, ownership export is information_schema-complete,
+  restore is the drill pair matrix, `search.query` is one grant-filtered ILIKE
+  over a registry of live contact-attached and first-class owner records (not
+  Elasticsearch, not a second customer store), `contacts.list` still searches
+  the spine, and mutations audit through `defineService`. Retention is a
+  bounded per-kind policy registry (`retention_policies`,
+  `retention.listPolicies`/`retention.upsertPolicy`/`retention.apply`, job
+  `core.applyRetention`) that purges registered stores such as notes while
+  honouring `privacy_retention_exceptions`; consent, audit and accounting
+  tables are opted out. This is not a `deleted_at` or TTL column on every
+  user-owned table. **F04** `/admin/search` and `/admin/retention`. **F05**
+  `search.query` at `/api/v1/search.query` plus `retention.listPolicies` /
+  `retention.upsertPolicy` / `retention.apply` at `/api/v1/retention.*`,
+  OpenAPI/SDK, MCP `search_query`/`retention_*`. **F07** grant filtering plus
+  escaped ILIKE; retention skips privacy holds and refuses unknown kinds.
+  **F09** still open because undelete leftovers remain. **F12**
+  `tests/core/c11-14-search.test.ts` mixed-kind query and
+  `tests/core/c11-14-retention.test.ts` policy/apply/exception proof.
+  **Remaining named worklist:**
   Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
-  Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.
   Other titled contact-attached stores still on per-list search (orders, subscriptions, and remaining SEARCH_TABLE_OPT_OUTS) are not mixed into search.query.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
