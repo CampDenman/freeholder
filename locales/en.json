@@ -6321,5 +6321,14 @@
   "voiceVideo.inviteHelp": "Copy this private link and share it with the invited contact. It expires within 30 minutes.",
   "voiceVideo.checkRecording": "Check recording",
   "voiceVideo.refreshTranscript": "Refresh transcript",
-  "voiceVideo.download": "Download recording"
+  "voiceVideo.download": "Download recording",
+  "admin.search.kind.order": "Orders",
+  "admin.search.kind.subscription": "Subscriptions",
+  "admin.search.kind.giftRegistry": "Gift registries",
+  "subscriptions.detail.identifier": "Subscription ID",
+  "subscriptions.detail.contact": "Contact",
+  "subscriptions.detail.status": "Status",
+  "subscriptions.detail.period": "Current billing period",
+  "subscriptions.detail.billing": "Billing",
+  "subscriptions.detail.manage": "Manage memberships"
 }

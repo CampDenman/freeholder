@@ -8772,9 +8772,19 @@ schema they inherit reads as a designed thing rather than an excavation.
   staff and API keys. A contact-write scope no longer leaks names/emails;
   notes/tasks/conversations use their own grant families. The regression
   reproduced the original leak and all 16 search tests passed after repair.
+  Search follow-up: order IDs/product snapshots, subscription IDs/plan names,
+  and gift registry titles/slugs join the grant-filtered live search registry.
+  Each uses its exact scoped read service; write-only keys cannot search them.
+  Shipping data and contact names are not added to these sources. Subscription
+  results open an exact read-authorized detail screen; gift readers without
+  management access open the public registry. en/fr/es labels are provided.
+  `record-search-orders-subscriptions-gifts.md`: 25 search/participation
+  tests passed; the real-browser journey opens all three result types and
+  checks the subscription screen in both themes and with view-only staff.
+  C11.14 stays open for the remaining opt-outs and record restore.
   **Remaining named worklist:**
   Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
-  Other titled contact-attached stores still on per-list search (orders, subscriptions, and remaining SEARCH_TABLE_OPT_OUTS) are not mixed into search.query.)*
+  Remaining SEARCH_TABLE_OPT_OUTS include titled records such as suppliers and contract documents; these are not mixed into search.query.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
   passing acceptance test.

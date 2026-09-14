@@ -21,8 +21,9 @@
 // never edited: `status` says where a subscription is and the events say how
 // it got there, which is the only one of the two that can answer "why did this
 // customer stop paying in March".
-import { and, asc, desc, eq, inArray, isNotNull, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid as uuidSchema } from "@/core/contract";
 import {
   defineService,
@@ -1613,3 +1614,15 @@ export default [
   advanceDunning,
   recoverDunning,
 ];
+
+registerSearchSource({
+  kind: "subscription", module: "subscriptions", readService: "subscriptions.get", tables: ["subscriptions"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: subscriptions.id, contactId: subscriptions.contactId, name: plans.name })
+      .from(subscriptions).innerJoin(plans, eq(plans.id, subscriptions.planId))
+      .where(or(matchesIlike(plans.name, pattern), matchesIlike(sql`${subscriptions.id}::text`, pattern), matchesIlike(sql`${subscriptions.contactId}::text`, pattern)))
+      .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id)).limit(limit);
+    return rows.map(item => ({ kind: "subscription", id: item.id, title: item.name, href: `/admin/subscriptions/${item.id}`,
+      snippet: null, contactId: item.contactId, module: "subscriptions" }));
+  },
+});

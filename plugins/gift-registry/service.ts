@@ -1,13 +1,15 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, or } from "drizzle-orm";
 import { z } from "zod";
+import { clipSnippet, matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, okResult, row, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import {
   defineOrchestratedService,
   defineService,
   getService,
+  permits,
   ServiceError,
 } from "@/core/service";
 import { attachPluginContactColumn } from "@/core/plugins/spine";
@@ -330,3 +332,16 @@ export default [
   invoiceGiftRegistryItem,
   contributeToGiftRegistry,
 ];
+
+registerSearchSource({
+  kind: "giftRegistry", module: "giftRegistry", readService: "giftRegistry.list", tables: ["gift_registries"],
+  search: async ({ tx, actor, pattern, limit }) => {
+    const rows = await tx.select().from(giftRegistries)
+      .where(or(matchesIlike(giftRegistries.title, pattern), matchesIlike(giftRegistries.slug, pattern)))
+      .orderBy(desc(giftRegistries.createdAt), desc(giftRegistries.id)).limit(limit);
+    const manage = permits(actor, "scoped", "giftRegistry.create", "mutation");
+    return rows.map(item => ({ kind: "giftRegistry", id: item.id, title: item.title,
+      href: manage ? `/admin/gifts?registry=${item.id}` : `/gifts/${encodeURIComponent(item.slug)}`,
+      snippet: clipSnippet(item.slug), contactId: item.contactId, module: "giftRegistry" }));
+  },
+});

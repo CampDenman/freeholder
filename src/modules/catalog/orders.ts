@@ -6,8 +6,9 @@
 // settlement stays on the invoicing module; paying the order consumes stock
 // holds. Fulfillment shipments are C5.19.
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { clipSnippet, matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -577,6 +578,20 @@ export const listOrders = defineService({
       .where(input.contactId ? eq(orders.contactId, input.contactId) : undefined)
       .orderBy(desc(orders.createdAt))
       .limit(200),
+});
+
+registerSearchSource({
+  kind: "order", module: "catalog", readService: "catalog.getOrder", tables: ["orders", "order_items"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: orders.id, contactId: orders.contactId,
+      product: sql<string | null>`(select oi.snapshot->>'productName' from order_items oi where oi.order_id = ${orders.id} order by oi.id limit 1)` })
+      .from(orders).where(or(matchesIlike(sql`${orders.id}::text`, pattern), matchesIlike(sql`${orders.contactId}::text`, pattern),
+        sql`exists (select 1 from order_items oi where oi.order_id = ${orders.id} and
+          ((oi.snapshot->>'productName') ilike ${pattern} escape ${"\\"} or (oi.snapshot->>'sku') ilike ${pattern} escape ${"\\"}))`))
+      .orderBy(desc(orders.createdAt), desc(orders.id)).limit(limit);
+    return rows.map(item => ({ kind: "order", id: item.id, title: item.id.slice(0, 8), href: `/admin/orders/${item.id}`,
+      snippet: clipSnippet(item.product), contactId: item.contactId, module: "catalog" }));
+  },
 });
 
 export default [checkoutCart, payOrder, cancelOrder, getOrder, listOrders];

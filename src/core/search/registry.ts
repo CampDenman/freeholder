@@ -119,7 +119,6 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   suppliers: "Procurement counterparties; find them from catalog, not search.query.",
   carts: "In-progress checkout rows.",
   wishlists: "Join table of saved products.",
-  orders: "Looked up from the orders list; settlement is on the invoice.",
   marketplace_orders:
     "Staged channel orders; find from marketplace admin or the invoice.",
   pod_jobs: "Vendor fulfillment jobs; find from print admin or the catalog order.",
@@ -143,7 +142,6 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   document_shares: "Bearer share rows.",
   document_access_logs: "Operational access log.",
   automation_contact_state: "Per-contact automation cursor.",
-  subscriptions: "Billing membership; find from subscriptions or the invoice.",
   knowledge_gaps: "Assistant gap log, not a customer record.",
   social_interactions: "Inbound social events.",
   loyalty_accounts: "Points balances, not titled records.",
@@ -153,7 +151,6 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   commission_events: "Ledger events.",
   payout_lines: "Payout composition rows.",
   affiliate_tax_profiles: "Tax profile attached to an affiliate.",
-  gift_registries: "Find from gifts admin; not mixed into search.query.",
   community_members: "Join table of a contact to a room.",
   community_join_requests:
     "Membership queue, not a titled record an owner looks up.",

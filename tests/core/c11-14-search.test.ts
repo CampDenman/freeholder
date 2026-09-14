@@ -13,6 +13,10 @@ import { mergeContacts } from "@/core/contacts/service";
 import { db } from "@/core/db";
 import { writeNote } from "@/core/notes/service";
 import { recordMessage } from "@/core/messaging/service";
+import { orders, orderItems } from "@/modules/catalog/schema";
+import { createProduct, applyVariantMatrix, getProductVariants } from "@/modules/catalog/service";
+import { plans, subscriptions } from "@/modules/subscriptions/schema";
+import { createGiftRegistry } from "../../plugins/gift-registry/service";
 import { createPage } from "@/modules/cms/service";
 import { createDraftInvoice } from "@/modules/invoicing/invoice-service";
 import { ready } from "@/core/runtime";
@@ -37,7 +41,7 @@ describe("C11.14 search leftovers", () => {
       "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
     );
     expect(master).toContain(
-      "Other titled contact-attached stores still on per-list search (orders, subscriptions, and remaining SEARCH_TABLE_OPT_OUTS) are not mixed into search.query.",
+      "Remaining SEARCH_TABLE_OPT_OUTS include titled records such as suppliers and contract documents; these are not mixed into search.query.",
     );
     expect(master).not.toMatch(/No product-wide search index:/);
   });
@@ -149,6 +153,36 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
     expect(
       kinds.has("invoice") || kinds.has("page") || kinds.has("media") || kinds.has("product"),
     ).toBe(true);
+  });
+
+  it("finds orders, subscriptions and gifts through each record's read authority", async () => {
+    const contactId = await person("extended-search@example.test", "Private buyer name");
+    const product = await createProduct.call({ name: "Search fixture", slug: "search-fixture", kind: "service" }, OWNER);
+    await applyVariantMatrix.call({ productId: product.id, expectedVersion: product.version }, OWNER);
+    const variant = (await getProductVariants.call({ productId: product.id }, OWNER)).variants[0]!;
+    const [order] = await db().insert(orders).values({ contactId, currency: "CAD", shippingAddress: { secret: "not-a-search-field" } }).returning();
+    await db().insert(orderItems).values([1, 2].map(() => ({ orderId: order!.id, variantId: variant.id, quantity: 1,
+      unitAmountMinor: 100, lineTotalMinor: 100, snapshot: { productName: "zxqvextended print", sku: "literal%sku" } })));
+    const [plan] = await db().insert(plans).values({ productId: product.id, name: "zxqvextended membership", interval: "month" }).returning();
+    const [subscription] = await db().insert(subscriptions).values({ contactId, planId: plan!.id, productVariantId: variant.id,
+      currency: "CAD", billingMode: "manual", currentPeriodStart: new Date(), currentPeriodEnd: new Date(Date.now() + 86_400_000) }).returning();
+    const gift = await createGiftRegistry.call({ contactId, title: "zxqvextended gifts", slug: "zxqvextended-gifts" }, OWNER);
+    const kinds = ["order", "subscription", "giftRegistry"];
+    const hits = await querySearch.call({ q: "zxqvextended", kinds }, OWNER);
+    expect(hits.map(hit => hit.kind).sort()).toEqual([...kinds].sort());
+    expect(hits.find(hit => hit.kind === "order")!.href).toBe(`/admin/orders/${order!.id}`);
+    expect(hits.find(hit => hit.kind === "subscription")!.href).toBe(`/admin/subscriptions/${subscription!.id}`);
+    expect(hits.find(hit => hit.kind === "giftRegistry")!.href).toBe(`/admin/gifts?registry=${gift.id}`);
+    const agent: Actor = { kind: "agent", keyName: "search-reader", scopes: ["search.query", "catalog.getOrder"] };
+    expect((await querySearch.call({ q: "zxqvextended", kinds }, agent)).map(hit => hit.kind)).toEqual(["order"]);
+    const denied: Actor = { ...agent, scopes: ["search.query", "catalog.createProduct", "subscriptions.createPlan", "giftRegistry.create"] };
+    expect(await querySearch.call({ q: "zxqvextended", kinds }, denied)).toEqual([]);
+    expect(await querySearch.call({ q: "Private buyer name", kinds }, agent)).toEqual([]);
+    expect(await querySearch.call({ q: "not-a-search-field", kinds }, OWNER)).toEqual([]);
+    expect(await querySearch.call({ q: "literal%sku", kinds: ["order"] }, agent)).toHaveLength(1);
+    expect(await querySearch.call({ q: "literal_sku", kinds: ["order"] }, agent)).toHaveLength(0);
+    const giftReader: Actor = { ...agent, scopes: ["search.query", "giftRegistry.list"] };
+    expect((await querySearch.call({ q: "zxqvextended", kinds }, giftReader))[0]!.href).toBe("/gifts/zxqvextended-gifts");
   });
 
   it("omits kinds the staff actor cannot access", async () => {
