@@ -3304,17 +3304,17 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-13 |
-| Evidence snapshot | On `main` after C11.10–13 #350, C11.15 #349, journeys #347, schema baseline #346, C10.17/18/27/28, honesty #334, and MinIO-from-Quay #357. C11.16 recon is `deploy/spec-reconciliation.md`. C10.30 remains open for native-device evidence. C3.13 first-party plugins are still stacked off main. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md` and `RESTART_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Last reconciled | 2026-09-14 |
+| Evidence snapshot | On `main` at `c496198` after #359 (extra F04 axe screens), #358 (retention policies), #355 (`search.query`), #354 (F05 stamps), C11.16 #351, C11.10–13 #350, journeys #347, schema baseline #346, C10.15/16 #342/#344, C10.17/18/27/28, C3.13 plugins #337–#340 (code on main; box still open for live adapters), honesty #334, and MinIO-from-Quay #357. C11.16 recon is `deploy/spec-reconciliation.md`. Session snapshot: `SESSION_HANDOFF.md`. Digest: `deploy/release-notes-2026-09-14.md`. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md`, `RESTART_HANDOFF.md` and `SESSION_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.17 owner sign-off, C11.08 Tier-1 restore, C11.10 independent security review, C11.11 large seed, C3.13 first-party plugins |
+| Current focus | C11.17 owner sign-off, C11.08 Tier-1 restore, C11.10 independent security review, C11.11 large seed, C3.13 live Printify/channel adapters |
 | Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Device evidence (C10.15–C10.18, C10.25–C10.28, C10.30). Independent security review (C11.10). Live settlement (C11.05 honesty). C11.08 Tier-1 restore. C11.11 medium/large seed and browser vitals. C11.12/C11.14/C11.15 named leftovers. C11.17 itself. |
+| Remaining open | Device evidence (C10.17, C10.18, C10.25–C10.28, C10.30). Independent security review (C11.10). Live settlement (C11.05 honesty). C11.08 Tier-1 restore. C11.11 medium/large seed and browser vitals. C3.13 live Printify/channel adapters. C11.12 RTL catalog and remaining F04 lists. C11.14 undelete-every-row and per-list search opt-outs. C11.15 remaining spec tests. C11.17 itself. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
