@@ -57,7 +57,7 @@
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.0",
     "aws4fetch": "^1.0.20",
-    "cron-parser": "5.10.0",
+    "cron-parser": "5.10.1",
     "drizzle-orm": "^0.45.2",
     "intl-messageformat": "^11.2.12",
     "isbot": "^5.2.1",
