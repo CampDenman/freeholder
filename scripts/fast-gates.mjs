@@ -66,6 +66,7 @@ const steps = [
       "tests/core/demo-paths.test.ts",
       "tests/core/record-participation.test.ts",
       "tests/core/spec-reconciliation.test.ts",
+      "tests/core/f-matrix.test.ts",
     ].join(" "),
   },
 ];

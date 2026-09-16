@@ -3340,16 +3340,16 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-09-16 |
-| Evidence snapshot | On `main` at `c496198` after #359 (extra F04 axe screens), #358 (retention policies), #355 (`search.query`), #354 (F05 stamps), C11.16 #351, C11.10–13 #350, journeys #347, schema baseline #346, C10.15/16 #342/#344, C10.17/18/27/28, C3.13 plugins #337–#340 (code on main; box still open for live adapters), honesty #334, and MinIO-from-Quay #357. C11.16 recon is `deploy/spec-reconciliation.md`. Session snapshot: `SESSION_HANDOFF.md`. Digest: `deploy/release-notes-2026-09-14.md`. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md`, `RESTART_HANDOFF.md` and `SESSION_HANDOFF.md` are historical snapshots, not planning authorities. |
+| Evidence snapshot | On `main` at `c496198` after #359 (extra F04 axe screens), #358 (retention policies), #355 (`search.query`), #354 (F05 stamps), C11.16 #351, C11.10–13 #350, journeys #347, schema baseline #346, C10.15/16 #342/#344, C10.17/18/27/28, C3.13 plugins #337–#340 (code on main; box still open for live adapters), honesty #334, and MinIO-from-Quay #357. C11.16 recon is `deploy/spec-reconciliation.md`. Session snapshot: `SESSION_HANDOFF.md`. Digest: `deploy/release-notes-2026-09-14.md`. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. #394 (C3.13 software remainder) and #395 (C11.14 trash-every-row) landed on main before this change. C0.11/C11.09 close with the F-matrix change: `deploy/f-criteria-matrix.md` (286 rows × F01–F12) enforced by `scripts/f-matrix.mjs` + `tests/core/f-matrix.test.ts` in `pnpm gates`; the full-suite verification run is recorded in the matrix header. `HANDOFF.md`, `RESTART_HANDOFF.md` and `SESSION_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.11/C11.09 evidence audit, C11.15 doc-claim mapping, C3.13 software remainder (owner-side live acceptance pending); C11.17 remains unsigned |
+| Current focus | C11.15 doc-claim mapping (carrying the F-audit annotation-rewrite worklist), C3.13 software remainder (owner-side live acceptance pending); C11.17 remains unsigned |
 | Completion rule | Every unchecked item in C0–C11, except the seven items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C0.11 F-criteria audit of checked items. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.09 completion-evidence audit. C11.11 reference-target measurements and browser vitals. C11.15 remaining spec tests. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements and browser vitals. C11.15 remaining spec tests and the F-audit annotation-rewrite worklist. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3516,7 +3516,7 @@ one with unchecked dependency items.
   enforce the canonical license text, manifest fields, package copies, and
   source SPDX headers. *(`LICENSE`, `LICENSING.md`,
   `scripts/license-headers.mjs`, and changeset `apache-license.md`. **F04** N/A — license text and SPDX headers, not a screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes no customer data. **F09** `pnpm plan:check` / license / docs gates in CI. **F12** changeset `apache-license.md` landed with the rest of the spine.)*
-- [ ] **C0.11** Audit every checked C-item against the twelve F-criteria, reopen or narrow
+- [x] **C0.11** Audit every checked C-item against the twelve F-criteria, reopen or narrow
   every claim that its executable evidence does not prove, retire stale
   handoffs as planning authorities, and record the audit date and evidence.
   Reopened by the project audit: passing static evidence stamps did not catch
@@ -3563,6 +3563,41 @@ one with unchecked dependency items.
   `scripts/plan-gate.mjs` refuses a checked item that does not name the
   five proofs. **F09** `pnpm plan:check` in CI. **F12** N/A — the audit
   is not a composed product journey.)*
+  *(Closed 2026-09-16. Coverage: the C11.09 matrix
+  `deploy/f-criteria-matrix.md` audits all 266 live C-items (checked and
+  open), the seven §43.18 v2-deferred items, seven packages and six
+  first-party plugins against F01–F12 — 286 rows, every cell a citation or
+  a specific `N/A — reason`, enforced by `scripts/f-matrix.mjs` +
+  `tests/core/f-matrix.test.ts` inside `pnpm gates`. Method: every C-item
+  the 2026-09-13 audit (#361) and its 2026-09-14 follow-ups reopened or
+  repaired was read assertion-by-assertion — community identity, agent
+  proposals/approvals, capture authorization, search scope, provider
+  fixtures and claim concurrency, the performance fixture and runner,
+  contact pagination ties, the upgrade-gate pull failure, SDK generation
+  skip, accessibility lists, catalog order reads, cart/wishlist and note
+  visibility — plus a deterministic random 15% sample (25 items) of the
+  other checked items; all confirmed true against the cited tests except
+  the findings below. Findings: (1) C4.08's annotation claimed the C4.06
+  calendar screen as its F04 — corrected here to `/admin/work/playbooks`;
+  (2) 45 annotations carry a stock "covers permission, refusal and
+  recovery" stamp their cited file does not prove (validation/failure-mode
+  yes, service-layer permission no) — narrowed per-cell in the matrix with
+  `tests/core/api.test.ts` named for the scoped-permission half, and queued
+  on C11.15's worklist for annotation-text rewrites; (3) C11.12's and
+  C1.17's F02/F07 cells cited catalog gates as service-boundary proof —
+  curated to the true evidence (`tests/core/sms-keywords.test.ts`,
+  `tests/browser/accessibility.spec.ts`) and explicit N/A. Full-suite
+  verification: `CI=1 TEST_DATABASE_URL=<fresh disposable> pnpm test` on the
+  final tree of this change, run twice on fresh databases — 3,657 tests,
+  3,639 passed, 17 inapplicable recipe skips, one failure both times: the
+  pre-existing `tests/modules/funnel.test.ts` cross-file isolation flake
+  (exact analytics counts on a shared database; passes 8/8 in isolation and
+  failed identically on the pre-change tree; unrelated to this change,
+  recorded and reported, not silently fixed). Run 3 also caught this change's
+  own changelog miss — a changeset without a regenerated `CHANGELOG.md` —
+  fixed in this change and green in run 4. Every `tests/…` file the matrix
+  cites was part of these runs; the record lives in the matrix header. No
+  capability claim proved false; no unrelated box was checked or unchecked.)*
 - [x] **C0.12** Extend `plan:check` beyond identifier syntax: checked items must
   carry resolvable repository evidence, the control block must be current, and
   completion evidence must name the applicable human, agent, safety,
@@ -4513,7 +4548,9 @@ deployments are portable, testable and incapable of silently forking the truth.
   document with no ids, credentials or agent binding, and an import arrives
   switched off and unassigned. `/admin/work/playbooks` carries writing,
   running, enabling, deleting and importing in EN/FR/ES. Coverage in
-  `tests/core/agents-playbooks.test.ts`. **F04** `/admin/calendar` connected calendars. **F05** `agents.createPlaybook`/`exportPlaybook`/`importPlaybook`/`deletePlaybook` at `/api/v1/agents.*` for humans/SDK; playbook authoring is hidden from MCP. **F07** `tests/core/agents-playbooks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-playbooks.test.ts` is the composition proof.)
+  `tests/core/agents-playbooks.test.ts`. **F04** `/admin/work/playbooks`
+  writing/running/enabling/deleting/importing (the calendar screen belongs to
+  C4.06; corrected by the C0.11 audit). **F05** `agents.createPlaybook`/`exportPlaybook`/`importPlaybook`/`deletePlaybook` at `/api/v1/agents.*` for humans/SDK; playbook authoring is hidden from MCP. **F07** `tests/core/agents-playbooks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/agents-playbooks.test.ts` is the composition proof.)
 - [x] **C4.09** Harden untrusted-input envelopes, indirect prompt-injection
   tests, secret/output redaction, URL/network policies and exfiltration limits.
   (`src/core/agents/envelope.ts`: the fence is an unguessable per-run marker
@@ -8477,7 +8514,7 @@ schema they inherit reads as a designed thing rather than an excavation.
 
 #### Whole-product quality
 
-- [ ] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
+- [x] **C11.09** Run every F01–F12 criterion across every core/module/plugin/
   package row and record evidence beside each remaining checkbox.
   Reopened by the audit: C3.13's F05 denied the plugin endpoints that the
   generated SDK actually exposes. C11.11's measurement fixture did not
@@ -8514,6 +8551,27 @@ schema they inherit reads as a designed thing rather than an excavation.
   and completed-upload staging is system-only. Capture links bind only their
   own uploads. Read-only capture access redacts bearer URLs and upload handles.
   All 24 agent autonomy/approval tests and 14 capture/mobile tests passed locally.)*
+  *(Closed 2026-09-16: `deploy/f-criteria-matrix.md` runs F01–F12 across
+  286 rows — every live §43 C-item computed from `scripts/plan-gate.mjs`,
+  the seven §43.18 v2-deferred mobile items, all seven workspace packages and
+  all six first-party plugins — with a citation or a specific `N/A — reason`
+  in every cell. `scripts/f-matrix.mjs` + `tests/core/f-matrix.test.ts` make
+  it durable: row-set drift from the plan, empty cells, unresolvable
+  citations, cited test files outside the suite glob, and lazy N/A all fail
+  the gate, and the checker runs inside `pnpm gates`. The C0.11 audit sampled
+  the audit-repaired items plus a deterministic 15% of the rest and narrowed
+  45 stamped coverage claims in the matrix (annotation-text updates queued on
+  C11.15). Full-suite verification is recorded in the matrix header: every
+  cited `tests/…` file was part of the green run.
+  **F04** N/A as a new screen — the matrix is evidence on each C-item.
+  **F05** this item *is* the agent-surface audit, not a route; per-row F05
+  cells cite `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and
+  `tests/core/mcp.test.ts`. **F07** `scripts/f-matrix.mjs` +
+  `tests/core/f-matrix.test.ts` refuse empty cells, unresolvable citations
+  and lazy N/A. **F09** `scripts/f-matrix.mjs` runs in `pnpm gates`;
+  `pnpm plan:check` in CI. **F12** `tests/core/f-matrix.test.ts` validates
+  the matrix against the whole live plan, the tracked tree and the suite
+  glob in one call. Changeset `f-matrix-2026-09-16.md`.)*
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.
@@ -8768,6 +8826,20 @@ schema they inherit reads as a designed thing rather than an excavation.
   pulled; a network or registry failure is not proof of a first release.
   `tests/core/upgrade-gate.test.ts` verifies the nonzero result before database
   operations. No actual image upgrade is claimed by this local CLI test.)*
+  *(F-matrix follow-up, 2026-09-16, from the C0.11 audit: 45 §43 annotations
+  carry a stock "covers permission, refusal and recovery" (or typed-service
+  equivalent) claim whose cited file proves validation and failure-mode
+  refusal but does not dispatch the service layer or assert permission
+  behaviour. Each is narrowed in `deploy/f-criteria-matrix.md`, naming
+  `tests/core/api.test.ts` for the scoped-permission half; the annotation
+  texts still carry the stamp. Affected items: C1.04, C1.19, C1.22, C1.23,
+  C1.25, C2.05–C2.10, C2.14, C2.17, C2.19, C2.21, C2.23, C3.02, C3.06,
+  C3.08, C3.12, C3.16–C3.19, C3.21, C3.22, C4.16, C4.20, C5.02, C5.04,
+  C5.05, C5.08, C5.14, C5.18, C5.23, C5.24, C6.11, C9.07, C9.19, C9.22,
+  C9.26, C9.27, C9.31, C9.34 and C9.36 (plus C1.17, curated to an explicit
+  N/A in the matrix). Rewriting those sentences to name both halves closes
+  this entry; no capability claim is affected — the features stand, the
+  coverage wording was ahead of the cited file.)*
 - [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
   prove there is no affirmative feature without a completed checklist item.
   Reopened by the audit: a table of sections and named open work does not
