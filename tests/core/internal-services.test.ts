@@ -18,6 +18,13 @@ import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 const INTERNAL = [
   "notes.purgeExpired",
   "tasks.purgeExpired",
+  // The record-trash sweeps (C11.14): a trash window expiring is not something
+  // anybody did; the job purges eligible rows on nobody's behalf.
+  "cms.purgeExpiredPages",
+  "forms.purgeExpired",
+  "popups.purgeExpired",
+  "segments.purgeExpired",
+  "views.purgeExpired",
   "ads.rollUpStats",
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
@@ -109,6 +116,11 @@ const CALLER_AUTHORIZED_PHASES = [
   "privacy.completeErasureJob",
   "notes.purgeExpired",
   "tasks.purgeExpired",
+  "cms.purgeExpiredPages",
+  "forms.purgeExpired",
+  "popups.purgeExpired",
+  "segments.purgeExpired",
+  "views.purgeExpired",
   "invoicing.claimCustomerCheckout",
   "invoicing.applyCustomerCheckout",
   "invoicing.customerPaymentSource",

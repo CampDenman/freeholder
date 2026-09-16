@@ -78,6 +78,13 @@
       "when": 1792166400013,
       "tag": "0010_note_task_trash",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792166400014,
+      "tag": "0011_record_trash",
+      "breakpoints": true
     }
   ]
 }

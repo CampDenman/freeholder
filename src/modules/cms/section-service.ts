@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Save-as-Section, detach, and dependency-aware deletion (C2.12).
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError, type Tx } from "@/core/service";
 import { writeRevision } from "./history";
@@ -197,7 +197,8 @@ export const listSectionUsages = defineService({
         blocks: pages.blocks,
         workingBlocks: pages.workingBlocks,
       })
-      .from(pages);
+      .from(pages)
+      .where(isNull(pages.trashedAt));
     const sectionRows = await ctx.tx
       .select({
         id: sections.id,

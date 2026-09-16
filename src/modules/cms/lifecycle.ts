@@ -173,7 +173,7 @@ export const createPreviewLink = defineService({
     const [page] = await ctx.tx
       .select({ id: pages.id })
       .from(pages)
-      .where(eq(pages.id, input.pageId))
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
       .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
 
@@ -269,7 +269,7 @@ export const resolvePreviewLink = defineService({
       })
       .from(contentPreviewLinks)
       .innerJoin(pages, eq(pages.id, contentPreviewLinks.pageId))
-      .where(eq(contentPreviewLinks.tokenHash, hashToken(input.token)))
+      .where(and(eq(contentPreviewLinks.tokenHash, hashToken(input.token)), isNull(pages.trashedAt)))
       .limit(1);
     if (!row) return null;
     if (row.link.revokedAt) return null;
@@ -298,7 +298,11 @@ export const schedulePage = defineService({
   }),
   output: pageRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
+    const [before] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
+      .limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     if (input.publishAt === undefined && input.unpublishAt === undefined) {
       throw new ServiceError("validation", "cms.schedulePage: nothing to change");
@@ -367,6 +371,7 @@ export const applyDueSchedules = defineService({
       .where(
         and(
           eq(pages.status, "draft"),
+          isNull(pages.trashedAt),
           lte(pages.scheduledPublishAt, now),
           or(eq(pages.approvalState, "none"), eq(pages.approvalState, "approved")),
         ),
@@ -374,7 +379,13 @@ export const applyDueSchedules = defineService({
     const dueUnpublish = await ctx.tx
       .select({ id: pages.id })
       .from(pages)
-      .where(and(eq(pages.status, "published"), lte(pages.scheduledUnpublishAt, now)));
+      .where(
+        and(
+          eq(pages.status, "published"),
+          isNull(pages.trashedAt),
+          lte(pages.scheduledUnpublishAt, now),
+        ),
+      );
 
     const { publishPage } = await import("./service");
     const published: string[] = [];
@@ -407,7 +418,11 @@ export const requestApproval = defineService({
   input: z.object({ id: pageId, note: z.string().trim().max(2_000).optional() }),
   output: pageRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
+    const [before] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
+      .limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     const [page] = await ctx.tx
       .update(pages)
@@ -451,7 +466,11 @@ export const decideApproval = defineService({
   }),
   output: pageRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
+    const [before] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
+      .limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     if (before.approvalState !== "pending") {
       throw new ServiceError("conflict", "This page is not waiting for approval.");
@@ -497,7 +516,11 @@ export const snapshotRevision = defineService({
   }),
   output: revisionRow,
   handler: async (input, ctx) => {
-    const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
+    const [page] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
+      .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
     const revision = await writeRevision(ctx.tx, {
       subjectType: "page",
@@ -582,7 +605,7 @@ export const compareRevisions = defineService({
       const [page] = await ctx.tx
         .select()
         .from(pages)
-        .where(eq(pages.id, input.pageId!))
+        .where(and(eq(pages.id, input.pageId!), isNull(pages.trashedAt)))
         .limit(1);
       if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
       laterTitle = page.workingTitle ?? page.title;
@@ -634,7 +657,11 @@ export const describeConflict = defineService({
     blocks: blockDiff,
   }),
   handler: async (input, ctx) => {
-    const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
+    const [page] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
+      .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
     const serverTitle = page.workingTitle ?? page.title;
     const serverBlocks = page.workingBlocks ?? page.blocks;
@@ -675,7 +702,11 @@ export const reloadWorkingDraft = defineService({
     seo: z.unknown(),
   }),
   handler: async (input, ctx) => {
-    const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
+    const [page] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
+      .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.pageId}`);
     return {
       id: page.id,
@@ -697,7 +728,11 @@ export const touchEditLease = defineService({
   input: z.object({ id: pageId, steal: z.boolean().default(false) }),
   output: leaseResult,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
+    const [before] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
+      .limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     const actor = actorString(ctx.actor);
     const now = Date.now();

@@ -164,11 +164,23 @@ async function windowApplies(
   if (window.scope === "global") return true;
   if (window.scope === "contact") return window.contactId === contactId;
   if (!window.segmentId) return false;
-  const result = (await ctx.call(getService("segments.contains"), {
-    id: window.segmentId,
-    contactId,
-  })) as { member: boolean };
-  return result.member;
+  try {
+    const result = (await ctx.call(getService("segments.contains"), {
+      id: window.segmentId,
+      contactId,
+    })) as { member: boolean };
+    return result.member;
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "not_found") {
+      // The segment is trashed or gone. A segment-scoped window is an
+      // exception to the defaults; one whose audience can no longer be
+      // answered steps aside and lets the default quiet-hours and caps —
+      // which always exist — govern instead of blocking the send or
+      // guessing at membership.
+      return false;
+    }
+    throw error;
+  }
 }
 
 function messagePurposeCondition(purpose: PolicyWindow["appliesTo"]) {

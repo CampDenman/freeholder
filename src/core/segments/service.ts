@@ -25,12 +25,14 @@
 // is a deliberate, separate act. "Who received the March email" must not change
 // in April because somebody's lifecycle stage moved.
 import { z } from "zod";
-import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { isUniqueViolation } from "@/core/db";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { withoutHoldCascade } from "@/core/retention/holds";
+import { makeTrashServices } from "@/core/trash";
 import { defineService, ServiceError, type Actor, type Tx } from "@/core/service";
 import {
   OPERATORS,
@@ -110,6 +112,7 @@ export function compileDefinition(definition: SegmentDefinition): SQL {
 
 const segmentRow = row({
   id: uuid,
+  trashedAt: timestamp.nullable(),
   name: z.string(),
   slug: z.string(),
   description: z.string().nullable(),
@@ -119,6 +122,40 @@ const segmentRow = row({
   lastEvaluatedAt: timestamp.nullable(),
   capturedAt: timestamp.nullable(),
 });
+
+/**
+ * Reversible removal (C11.14). A trashed segment stops answering: every
+ * consumer asks through `findSegment`, which refuses trash, and each
+ * consumer fails closed — a price list stops applying, an automation does
+ * not start, a messaging window steps aside, a popup does not show — so an
+ * audience the platform cannot answer is never widened by guessing.
+ * Purging hard-deletes the definition and its captured membership, gated so
+ * a segment holding a person under an active retention exception cannot be
+ * purged, and refused with a plain sentence while any surface still wires
+ * the segment in (the database's restrict constraint says it last).
+ */
+const trash = makeTrashServices({
+  family: "segments",
+  table: segments,
+  rowSchema: segmentRow,
+  subjectKind: "segment",
+  gone: "That segment is not here.",
+  holdGuard: withoutHoldCascade(
+    segmentMembers,
+    segmentMembers.segmentId,
+    sql`${segments.id}`,
+    segmentMembers.contactId,
+    "contact.segments",
+  ),
+  inUseMessage:
+    "That segment is still wired into another surface — a popup, price list, automation, broadcast or messaging window. Disconnect it there first.",
+});
+export const {
+  remove: removeSegment,
+  restore: restoreSegment,
+  purge: purgeSegment,
+  purgeExpired: purgeExpiredSegments,
+} = trash;
 
 export const listSegmentFields = defineService({
   name: "segments.fields",
@@ -181,7 +218,7 @@ export const saveSegment = defineService({
       const [existing] = await ctx.tx
         .select({ kind: segments.kind })
         .from(segments)
-        .where(eq(segments.id, input.id))
+        .where(and(eq(segments.id, input.id), isNull(segments.trashedAt)))
         .limit(1);
       if (!existing) throw new ServiceError("not_found", "That segment is not here.");
       if (existing.kind === "static" && input.kind !== "static") {
@@ -239,35 +276,23 @@ export const listSegments = defineService({
   summary: "Every saved definition of who, with the last count taken.",
   kind: "query",
   permission: "scoped",
-  input: z.object({ kind: z.enum(SEGMENT_KINDS).optional() }),
+  input: z.object({
+    kind: z.enum(SEGMENT_KINDS).optional(),
+    /** The recovery view: trashed segments only (C11.14). */
+    trashedOnly: z.boolean().default(false),
+  }),
   output: listed(segmentRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
       .from(segments)
-      .where(input.kind ? eq(segments.kind, input.kind) : undefined)
+      .where(
+        input.trashedOnly
+          ? isNotNull(segments.trashedAt)
+          : and(isNull(segments.trashedAt), input.kind ? eq(segments.kind, input.kind) : undefined),
+      )
       .orderBy(asc(segments.name))
       .limit(200),
-});
-
-export const removeSegment = defineService({
-  name: "segments.remove",
-  summary: "Delete a segment.",
-  kind: "mutation",
-  permission: "scoped",
-  writeClass: "destructive",
-  input: z.object({ id }),
-  output: row({ id: uuid }),
-  handler: async (input, ctx) => {
-    requirePerson(ctx.actor);
-    const [removed] = await ctx.tx
-      .delete(segments)
-      .where(eq(segments.id, input.id))
-      .returning({ id: segments.id });
-    if (!removed) throw new ServiceError("not_found", "That segment is not here.");
-    ctx.setSubject("segment", removed.id);
-    return removed;
-  },
 });
 
 /**
@@ -366,7 +391,7 @@ export const captureSegment = defineService({
     const [segment] = await ctx.tx
       .select()
       .from(segments)
-      .where(eq(segments.id, input.id))
+      .where(and(eq(segments.id, input.id), isNull(segments.trashedAt)))
       .limit(1);
     if (!segment) throw new ServiceError("not_found", "That segment is not here.");
     if (segment.kind === "static") {
@@ -524,10 +549,32 @@ async function findSegment(tx: Tx, input: { id?: string; slug?: string }) {
   const [segment] = await tx
     .select()
     .from(segments)
-    .where(input.id ? eq(segments.id, input.id) : eq(segments.slug, input.slug!))
+    .where(
+      and(
+        input.id ? eq(segments.id, input.id) : eq(segments.slug, input.slug!),
+        // A trashed segment no longer answers. Consumers of `contains` catch
+        // this and fail closed; staff-facing reads get the plain sentence.
+        isNull(segments.trashedAt),
+      ),
+    )
     .limit(1);
   if (!segment) throw new ServiceError("not_found", "That segment is not here.");
   return segment;
+}
+
+/**
+ * Whether a segment exists and is not in trash — the liveness fact decision
+ * surfaces need before they ask who is in it. A trashed segment must take
+ * every dependent surface down with it (a popup whose audience is gone does
+ * not show), and this is the one query those surfaces can afford per check.
+ */
+export async function segmentIsLive(tx: Tx, id: string): Promise<boolean> {
+  const [found] = await tx
+    .select({ id: segments.id })
+    .from(segments)
+    .where(and(eq(segments.id, id), isNull(segments.trashedAt)))
+    .limit(1);
+  return Boolean(found);
 }
 
 async function countMatching(tx: Tx, condition: SQL): Promise<number> {
@@ -673,6 +720,9 @@ export default [
   saveSegment,
   listSegments,
   removeSegment,
+  restoreSegment,
+  purgeSegment,
+  purgeExpiredSegments,
   previewSegment,
   segmentMembership,
   captureSegment,

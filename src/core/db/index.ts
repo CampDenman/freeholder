@@ -39,6 +39,7 @@ export async function closeDb(): Promise<void> {
 }
 
 const UNIQUE_VIOLATION = "23505";
+const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
  * True when this error — or anything it wraps — is a Postgres unique-constraint
@@ -63,6 +64,22 @@ export function isUniqueViolation(
     if (candidate.code === UNIQUE_VIOLATION) {
       return !constraint || candidate.constraint_name === constraint;
     }
+    current = candidate.cause;
+  }
+  return false;
+}
+
+/**
+ * True when this error — or anything it wraps — is a Postgres
+ * foreign-key violation. A delete refused this way means a row elsewhere
+ * still points at the one being removed; services translate that into the
+ * conflict sentence a person can act on rather than the driver page.
+ */
+export function isForeignKeyViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    const candidate = current as { code?: unknown; cause?: unknown };
+    if (candidate.code === FOREIGN_KEY_VIOLATION) return true;
     current = candidate.cause;
   }
   return false;

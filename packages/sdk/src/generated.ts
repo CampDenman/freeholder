@@ -423,10 +423,12 @@ export const SERVICE_NAMES = [
   "cms.publishPage",
   "cms.publishedPaths",
   "cms.purgeDemoFixture",
+  "cms.purgePage",
   "cms.rateHelpArticle",
   "cms.rejoinLayout",
   "cms.releaseEditLease",
   "cms.reloadWorkingDraft",
+  "cms.removePage",
   "cms.reopenThread",
   "cms.requestApproval",
   "cms.requestReview",
@@ -434,6 +436,7 @@ export const SERVICE_NAMES = [
   "cms.resolvePage",
   "cms.resolvePreviewLink",
   "cms.resolveThread",
+  "cms.restorePage",
   "cms.restoreRevision",
   "cms.revokePreviewLink",
   "cms.saveAsSection",
@@ -648,7 +651,10 @@ export const SERVICE_NAMES = [
   "forms.list",
   "forms.listSubmissions",
   "forms.loadDemoFixture",
+  "forms.purge",
   "forms.purgeDemoFixture",
+  "forms.remove",
+  "forms.restore",
   "forms.reviewSubmission",
   "forms.submissionCounts",
   "forms.submit",
@@ -1002,8 +1008,10 @@ export const SERVICE_NAMES = [
   "popups.get",
   "popups.list",
   "popups.performance",
+  "popups.purge",
   "popups.record",
   "popups.remove",
+  "popups.restore",
   "popups.save",
   "popups.saveBlocks",
   "popups.setStatus",
@@ -1161,7 +1169,9 @@ export const SERVICE_NAMES = [
   "segments.list",
   "segments.members",
   "segments.preview",
+  "segments.purge",
   "segments.remove",
+  "segments.restore",
   "segments.save",
   "segments.why",
   "seo.deleteRedirect",
@@ -1271,7 +1281,9 @@ export const SERVICE_NAMES = [
   "views.default",
   "views.entities",
   "views.list",
+  "views.purge",
   "views.remove",
+  "views.restore",
   "views.save",
   "views.setDefault",
   "voiceVideo.configuration",
@@ -2798,7 +2810,7 @@ export interface ServiceCatalog {
   };
   "cms.createPage": {
     input: { slug: string; locale?: string; title: string; blocks?: unknown; seo?: { title?: string; description?: string; ogImage?: string } };
-    output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.createPreviewLink": {
     input: { pageId: string; expiresInHours?: number };
@@ -2870,7 +2882,7 @@ export interface ServiceCatalog {
   };
   "cms.getPage": {
     input: { id: string };
-    output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.getSection": {
     input: { key: string; locale?: string; fallback?: boolean };
@@ -2909,8 +2921,8 @@ export interface ServiceCatalog {
     output: { id: string; pageId: string; revisionId: string | null; blockId: string | null; parentId: string | null; body: string; mentions: string[]; kind: "comment" | "review_request"; reviewer: string | null; reviewState: "none" | "requested" | "approved" | "changes_requested"; resolvedAt: string | null; resolvedBy: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "cms.listPages": {
-    input: Record<string, never>;
-    output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    input: { trashedOnly?: boolean };
+    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
   "cms.listPresence": {
     input: { pageId: string };
@@ -2942,7 +2954,7 @@ export interface ServiceCatalog {
   };
   "cms.mergePage": {
     input: { id: string; expectedVersion: number; title?: string; blocks?: unknown; seo?: { title?: string; description?: string; ogImage?: string } };
-    output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.nameRevision": {
     input: { revisionId: string; name: string };
@@ -2974,7 +2986,7 @@ export interface ServiceCatalog {
   };
   "cms.publishPage": {
     input: { id: string; published: boolean };
-    output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.publishedPaths": {
     input: { locale?: string };
@@ -2983,6 +2995,10 @@ export interface ServiceCatalog {
   "cms.purgeDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { purged: { subjectType: string; subjectId: string }[] };
+  };
+  "cms.purgePage": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
   };
   "cms.rateHelpArticle": {
     input: { articleId: string; helpful: boolean };
@@ -2999,6 +3015,10 @@ export interface ServiceCatalog {
   "cms.reloadWorkingDraft": {
     input: { pageId: string };
     output: { id: string; version: number; title: string; blocks: unknown; seo: unknown; [key: string]: unknown };
+  };
+  "cms.removePage": {
+    input: { id: string };
+    output: { id: string; [key: string]: unknown };
   };
   "cms.reopenThread": {
     input: { id: string };
@@ -3018,7 +3038,7 @@ export interface ServiceCatalog {
   };
   "cms.resolvePage": {
     input: { slug: string; locale?: string };
-    output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
+    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "cms.resolvePreviewLink": {
     input: { token: string };
@@ -3027,6 +3047,10 @@ export interface ServiceCatalog {
   "cms.resolveThread": {
     input: { id: string };
     output: { id: string; pageId: string; revisionId: string | null; blockId: string | null; parentId: string | null; body: string; mentions: string[]; kind: "comment" | "review_request"; reviewer: string | null; reviewState: "none" | "requested" | "approved" | "changes_requested"; resolvedAt: string | null; resolvedBy: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "cms.restorePage": {
+    input: { id: string };
+    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.restoreRevision": {
     input: { revisionId: string };
@@ -3086,7 +3110,7 @@ export interface ServiceCatalog {
   };
   "cms.updatePage": {
     input: { id: string; expectedVersion?: number; slug?: string; title?: string; blocks?: unknown; seo?: { title?: string; description?: string; ogImage?: string } };
-    output: { id: string; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; slug: string; locale: string; title: string; blocks: unknown; status: "draft" | "published"; publishedAt: string | null; seo: unknown; workingTitle: string | null; workingBlocks: unknown | null; workingSeo: unknown | null; version: number; scheduledPublishAt: string | null; scheduledUnpublishAt: string | null; approvalState: "none" | "pending" | "approved" | "rejected"; approvalNote: string | null; approvedBy: string | null; approvedAt: string | null; editLeaseActor: string | null; editLeaseUntil: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "cms.updateSection": {
     input: { key: string; locale?: string; name?: string; blocks: unknown };
@@ -3873,7 +3897,7 @@ export interface ServiceCatalog {
     output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "forms.list": {
-    input: Record<string, never>;
+    input: { trashedOnly?: boolean };
     output: { id: string; slug: string; name: string; status: "active" | "closed"; destination: "contact" | "none"; fields: unknown; updatedAt: string; submissions: number; [key: string]: unknown }[];
   };
   "forms.listSubmissions": {
@@ -3884,9 +3908,21 @@ export interface ServiceCatalog {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
   };
+  "forms.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
+  };
   "forms.purgeDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
     output: { purged: { subjectType: string; subjectId: string }[] };
+  };
+  "forms.remove": {
+    input: { id: string };
+    output: { id: string; [key: string]: unknown };
+  };
+  "forms.restore": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "forms.reviewSubmission": {
     input: { id: string; status: "received" | "spam" };
@@ -5293,20 +5329,28 @@ export interface ServiceCatalog {
     output: { id: string; slug: string; name: string; title: string; surface: "modal" | "banner" | "corner"; trigger: "immediate" | "delay" | "scroll" | "exitIntent"; triggerValue: number; blocks: unknown; audience: "everyone" | "inSegment" | "notInSegment"; segmentId: string | null; pathPatterns: unknown; locales: unknown; frequencyCap: number | null; frequencyPeriodHours: number; dismissSuppressHours: number; stopAfterCapture: boolean; captureMode: "none" | "email"; newsletterId: string | null; consentStatement: string | null; consentVersion: string | null; successMessage: string | null; startsAt: string | null; endsAt: string | null; priority: number; status: "draft" | "active" | "paused"; [key: string]: unknown };
   };
   "popups.list": {
-    input: { status?: "draft" | "active" | "paused" };
+    input: { status?: "draft" | "active" | "paused"; trashedOnly?: boolean };
     output: { id: string; slug: string; name: string; title: string; surface: "modal" | "banner" | "corner"; trigger: "immediate" | "delay" | "scroll" | "exitIntent"; triggerValue: number; blocks: unknown; audience: "everyone" | "inSegment" | "notInSegment"; segmentId: string | null; pathPatterns: unknown; locales: unknown; frequencyCap: number | null; frequencyPeriodHours: number; dismissSuppressHours: number; stopAfterCapture: boolean; captureMode: "none" | "email"; newsletterId: string | null; consentStatement: string | null; consentVersion: string | null; successMessage: string | null; startsAt: string | null; endsAt: string | null; priority: number; status: "draft" | "active" | "paused"; [key: string]: unknown }[];
   };
   "popups.performance": {
     input: { sinceDays?: number; popupId?: string };
     output: { popupId: string; shown: number; dismissed: number; captured: number; [key: string]: unknown }[];
   };
+  "popups.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
+  };
   "popups.record": {
     input: { popupId: string; kind: "shown" | "dismissed"; path?: string | null; visitorKey?: string | null; tally?: string | null };
     output: { ok: true; tally: string; [key: string]: unknown };
   };
   "popups.remove": {
-    input: { id: string; confirm: true };
-    output: { ok: true; [key: string]: unknown };
+    input: { id: string };
+    output: { id: string; [key: string]: unknown };
+  };
+  "popups.restore": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; title: string; surface: "modal" | "banner" | "corner"; trigger: "immediate" | "delay" | "scroll" | "exitIntent"; triggerValue: number; blocks: unknown; audience: "everyone" | "inSegment" | "notInSegment"; segmentId: string | null; pathPatterns: unknown; locales: unknown; frequencyCap: number | null; frequencyPeriodHours: number; dismissSuppressHours: number; stopAfterCapture: boolean; captureMode: "none" | "email"; newsletterId: string | null; consentStatement: string | null; consentVersion: string | null; successMessage: string | null; startsAt: string | null; endsAt: string | null; priority: number; status: "draft" | "active" | "paused"; [key: string]: unknown };
   };
   "popups.save": {
     input: { id?: string; slug: string; name: string; title: string; surface?: "modal" | "banner" | "corner"; trigger?: "immediate" | "delay" | "scroll" | "exitIntent"; triggerValue?: number; audience?: "everyone" | "inSegment" | "notInSegment"; segmentId?: string | null; pathPatterns?: string[]; locales?: string[]; frequencyCap?: number | null; frequencyPeriodHours?: number; dismissSuppressHours?: number; stopAfterCapture?: boolean; captureMode?: "none" | "email"; newsletterId?: string | null; consentStatement?: string | null; consentVersion?: string | null; successMessage?: string | null; startsAt?: string | null; endsAt?: string | null; priority?: number };
@@ -5925,8 +5969,8 @@ export interface ServiceCatalog {
     output: { key: string; label: string; type: string; source: string; options: string[] | null; operators: string[]; [key: string]: unknown }[];
   };
   "segments.list": {
-    input: { kind?: "dynamic" | "static" };
-    output: { id: string; name: string; slug: string; description: string | null; kind: "dynamic" | "static"; definition: unknown; memberCountCached: number | null; lastEvaluatedAt: string | null; capturedAt: string | null; [key: string]: unknown }[];
+    input: { kind?: "dynamic" | "static"; trashedOnly?: boolean };
+    output: { id: string; trashedAt: string | null; name: string; slug: string; description: string | null; kind: "dynamic" | "static"; definition: unknown; memberCountCached: number | null; lastEvaluatedAt: string | null; capturedAt: string | null; [key: string]: unknown }[];
   };
   "segments.members": {
     input: { id?: string; slug?: string; limit?: number };
@@ -5936,13 +5980,21 @@ export interface ServiceCatalog {
     input: { definition: { match?: "all" | "any"; rules: { field: string; op: "is" | "isNot" | "isOneOf" | "contains" | "before" | "after" | "inLastDays" | "atLeast" | "atMost" | "isSet" | "isNotSet"; value?: unknown }[] }; sample?: number };
     output: { count: number; sample: { id: string; name: string; email: string | null; [key: string]: unknown }[]; [key: string]: unknown };
   };
+  "segments.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
+  };
   "segments.remove": {
     input: { id: string };
     output: { id: string; [key: string]: unknown };
   };
+  "segments.restore": {
+    input: { id: string };
+    output: { id: string; trashedAt: string | null; name: string; slug: string; description: string | null; kind: "dynamic" | "static"; definition: unknown; memberCountCached: number | null; lastEvaluatedAt: string | null; capturedAt: string | null; [key: string]: unknown };
+  };
   "segments.save": {
     input: { id?: string; name: string; slug?: string; description?: string | null; kind?: "dynamic" | "static"; definition: { match?: "all" | "any"; rules: { field: string; op: "is" | "isNot" | "isOneOf" | "contains" | "before" | "after" | "inLastDays" | "atLeast" | "atMost" | "isSet" | "isNotSet"; value?: unknown }[] } };
-    output: { id: string; name: string; slug: string; description: string | null; kind: "dynamic" | "static"; definition: unknown; memberCountCached: number | null; lastEvaluatedAt: string | null; capturedAt: string | null; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; name: string; slug: string; description: string | null; kind: "dynamic" | "static"; definition: unknown; memberCountCached: number | null; lastEvaluatedAt: string | null; capturedAt: string | null; [key: string]: unknown };
   };
   "segments.why": {
     input: { id?: string; slug?: string; contactId: string };
@@ -6366,23 +6418,31 @@ export interface ServiceCatalog {
   };
   "views.default": {
     input: { entity: string };
-    output: { id: string; entity: string; name: string; filters: { [key: string]: string }; columns: string[]; sortKey: string | null; sortDir: ("asc" | "desc") | null; ownerUserId: string | null; shared: boolean; isDefault: boolean; [key: string]: unknown } | null;
+    output: { id: string; trashedAt: string | null; entity: string; name: string; filters: { [key: string]: string }; columns: string[]; sortKey: string | null; sortDir: ("asc" | "desc") | null; ownerUserId: string | null; shared: boolean; isDefault: boolean; [key: string]: unknown } | null;
   };
   "views.entities": {
     input: Record<string, never>;
     output: { key: string; label: string; path: string; filters: { key: string; label: string; [key: string]: unknown }[]; columns: { key: string; label: string; fixed: boolean; [key: string]: unknown }[]; [key: string]: unknown }[];
   };
   "views.list": {
-    input: { entity: string };
-    output: { id: string; entity: string; name: string; filters: { [key: string]: string }; columns: string[]; sortKey: string | null; sortDir: ("asc" | "desc") | null; ownerUserId: string | null; shared: boolean; isDefault: boolean; mine: boolean; [key: string]: unknown }[];
+    input: { entity?: string; trashedOnly?: boolean };
+    output: { id: string; trashedAt: string | null; entity: string; name: string; filters: { [key: string]: string }; columns: string[]; sortKey: string | null; sortDir: ("asc" | "desc") | null; ownerUserId: string | null; shared: boolean; isDefault: boolean; mine: boolean; [key: string]: unknown }[];
+  };
+  "views.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
   };
   "views.remove": {
     input: { id: string };
     output: { id: string; [key: string]: unknown };
   };
+  "views.restore": {
+    input: { id: string };
+    output: { id: string; trashedAt: string | null; entity: string; name: string; filters: { [key: string]: string }; columns: string[]; sortKey: string | null; sortDir: ("asc" | "desc") | null; ownerUserId: string | null; shared: boolean; isDefault: boolean; [key: string]: unknown };
+  };
   "views.save": {
     input: { id?: string; entity: string; name: string; filters?: { [key: string]: string }; columns?: string[]; sortKey?: string | null; sortDir?: ("asc" | "desc") | null; shared?: boolean; isDefault?: boolean };
-    output: { id: string; entity: string; name: string; filters: { [key: string]: string }; columns: string[]; sortKey: string | null; sortDir: ("asc" | "desc") | null; ownerUserId: string | null; shared: boolean; isDefault: boolean; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; entity: string; name: string; filters: { [key: string]: string }; columns: string[]; sortKey: string | null; sortDir: ("asc" | "desc") | null; ownerUserId: string | null; shared: boolean; isDefault: boolean; [key: string]: unknown };
   };
   "views.setDefault": {
     input: { id?: string | null; entity: string };
@@ -6971,10 +7031,12 @@ export interface FreeholderApi {
     publishPage: (input: ServiceCatalog["cms.publishPage"]["input"]) => Promise<ServiceCatalog["cms.publishPage"]["output"]>;
     publishedPaths: (input?: ServiceCatalog["cms.publishedPaths"]["input"]) => Promise<ServiceCatalog["cms.publishedPaths"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["cms.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["cms.purgeDemoFixture"]["output"]>;
+    purgePage: (input: ServiceCatalog["cms.purgePage"]["input"]) => Promise<ServiceCatalog["cms.purgePage"]["output"]>;
     rateHelpArticle: (input: ServiceCatalog["cms.rateHelpArticle"]["input"]) => Promise<ServiceCatalog["cms.rateHelpArticle"]["output"]>;
     rejoinLayout: (input: ServiceCatalog["cms.rejoinLayout"]["input"]) => Promise<ServiceCatalog["cms.rejoinLayout"]["output"]>;
     releaseEditLease: (input: ServiceCatalog["cms.releaseEditLease"]["input"]) => Promise<ServiceCatalog["cms.releaseEditLease"]["output"]>;
     reloadWorkingDraft: (input: ServiceCatalog["cms.reloadWorkingDraft"]["input"]) => Promise<ServiceCatalog["cms.reloadWorkingDraft"]["output"]>;
+    removePage: (input: ServiceCatalog["cms.removePage"]["input"]) => Promise<ServiceCatalog["cms.removePage"]["output"]>;
     reopenThread: (input: ServiceCatalog["cms.reopenThread"]["input"]) => Promise<ServiceCatalog["cms.reopenThread"]["output"]>;
     requestApproval: (input: ServiceCatalog["cms.requestApproval"]["input"]) => Promise<ServiceCatalog["cms.requestApproval"]["output"]>;
     requestReview: (input: ServiceCatalog["cms.requestReview"]["input"]) => Promise<ServiceCatalog["cms.requestReview"]["output"]>;
@@ -6982,6 +7044,7 @@ export interface FreeholderApi {
     resolvePage: (input: ServiceCatalog["cms.resolvePage"]["input"]) => Promise<ServiceCatalog["cms.resolvePage"]["output"]>;
     resolvePreviewLink: (input: ServiceCatalog["cms.resolvePreviewLink"]["input"]) => Promise<ServiceCatalog["cms.resolvePreviewLink"]["output"]>;
     resolveThread: (input: ServiceCatalog["cms.resolveThread"]["input"]) => Promise<ServiceCatalog["cms.resolveThread"]["output"]>;
+    restorePage: (input: ServiceCatalog["cms.restorePage"]["input"]) => Promise<ServiceCatalog["cms.restorePage"]["output"]>;
     restoreRevision: (input: ServiceCatalog["cms.restoreRevision"]["input"]) => Promise<ServiceCatalog["cms.restoreRevision"]["output"]>;
     revokePreviewLink: (input: ServiceCatalog["cms.revokePreviewLink"]["input"]) => Promise<ServiceCatalog["cms.revokePreviewLink"]["output"]>;
     saveAsSection: (input: ServiceCatalog["cms.saveAsSection"]["input"]) => Promise<ServiceCatalog["cms.saveAsSection"]["output"]>;
@@ -7224,7 +7287,10 @@ export interface FreeholderApi {
     list: (input?: ServiceCatalog["forms.list"]["input"]) => Promise<ServiceCatalog["forms.list"]["output"]>;
     listSubmissions: (input: ServiceCatalog["forms.listSubmissions"]["input"]) => Promise<ServiceCatalog["forms.listSubmissions"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["forms.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["forms.loadDemoFixture"]["output"]>;
+    purge: (input: ServiceCatalog["forms.purge"]["input"]) => Promise<ServiceCatalog["forms.purge"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["forms.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["forms.purgeDemoFixture"]["output"]>;
+    remove: (input: ServiceCatalog["forms.remove"]["input"]) => Promise<ServiceCatalog["forms.remove"]["output"]>;
+    restore: (input: ServiceCatalog["forms.restore"]["input"]) => Promise<ServiceCatalog["forms.restore"]["output"]>;
     reviewSubmission: (input: ServiceCatalog["forms.reviewSubmission"]["input"]) => Promise<ServiceCatalog["forms.reviewSubmission"]["output"]>;
     submissionCounts: (input?: ServiceCatalog["forms.submissionCounts"]["input"]) => Promise<ServiceCatalog["forms.submissionCounts"]["output"]>;
     submit: (input: ServiceCatalog["forms.submit"]["input"]) => Promise<ServiceCatalog["forms.submit"]["output"]>;
@@ -7618,8 +7684,10 @@ export interface FreeholderApi {
     get: (input: ServiceCatalog["popups.get"]["input"]) => Promise<ServiceCatalog["popups.get"]["output"]>;
     list: (input?: ServiceCatalog["popups.list"]["input"]) => Promise<ServiceCatalog["popups.list"]["output"]>;
     performance: (input?: ServiceCatalog["popups.performance"]["input"]) => Promise<ServiceCatalog["popups.performance"]["output"]>;
+    purge: (input: ServiceCatalog["popups.purge"]["input"]) => Promise<ServiceCatalog["popups.purge"]["output"]>;
     record: (input: ServiceCatalog["popups.record"]["input"]) => Promise<ServiceCatalog["popups.record"]["output"]>;
     remove: (input: ServiceCatalog["popups.remove"]["input"]) => Promise<ServiceCatalog["popups.remove"]["output"]>;
+    restore: (input: ServiceCatalog["popups.restore"]["input"]) => Promise<ServiceCatalog["popups.restore"]["output"]>;
     save: (input: ServiceCatalog["popups.save"]["input"]) => Promise<ServiceCatalog["popups.save"]["output"]>;
     saveBlocks: (input: ServiceCatalog["popups.saveBlocks"]["input"]) => Promise<ServiceCatalog["popups.saveBlocks"]["output"]>;
     setStatus: (input: ServiceCatalog["popups.setStatus"]["input"]) => Promise<ServiceCatalog["popups.setStatus"]["output"]>;
@@ -7813,7 +7881,9 @@ export interface FreeholderApi {
     list: (input?: ServiceCatalog["segments.list"]["input"]) => Promise<ServiceCatalog["segments.list"]["output"]>;
     members: (input?: ServiceCatalog["segments.members"]["input"]) => Promise<ServiceCatalog["segments.members"]["output"]>;
     preview: (input: ServiceCatalog["segments.preview"]["input"]) => Promise<ServiceCatalog["segments.preview"]["output"]>;
+    purge: (input: ServiceCatalog["segments.purge"]["input"]) => Promise<ServiceCatalog["segments.purge"]["output"]>;
     remove: (input: ServiceCatalog["segments.remove"]["input"]) => Promise<ServiceCatalog["segments.remove"]["output"]>;
+    restore: (input: ServiceCatalog["segments.restore"]["input"]) => Promise<ServiceCatalog["segments.restore"]["output"]>;
     save: (input: ServiceCatalog["segments.save"]["input"]) => Promise<ServiceCatalog["segments.save"]["output"]>;
     why: (input: ServiceCatalog["segments.why"]["input"]) => Promise<ServiceCatalog["segments.why"]["output"]>;
   };
@@ -7942,8 +8012,10 @@ export interface FreeholderApi {
   views: {
     default: (input: ServiceCatalog["views.default"]["input"]) => Promise<ServiceCatalog["views.default"]["output"]>;
     entities: (input?: ServiceCatalog["views.entities"]["input"]) => Promise<ServiceCatalog["views.entities"]["output"]>;
-    list: (input: ServiceCatalog["views.list"]["input"]) => Promise<ServiceCatalog["views.list"]["output"]>;
+    list: (input?: ServiceCatalog["views.list"]["input"]) => Promise<ServiceCatalog["views.list"]["output"]>;
+    purge: (input: ServiceCatalog["views.purge"]["input"]) => Promise<ServiceCatalog["views.purge"]["output"]>;
     remove: (input: ServiceCatalog["views.remove"]["input"]) => Promise<ServiceCatalog["views.remove"]["output"]>;
+    restore: (input: ServiceCatalog["views.restore"]["input"]) => Promise<ServiceCatalog["views.restore"]["output"]>;
     save: (input: ServiceCatalog["views.save"]["input"]) => Promise<ServiceCatalog["views.save"]["output"]>;
     setDefault: (input: ServiceCatalog["views.setDefault"]["input"]) => Promise<ServiceCatalog["views.setDefault"]["output"]>;
   };
