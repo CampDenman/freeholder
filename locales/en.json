@@ -4177,7 +4177,6 @@
   "popups.composeIntro": "The same blocks as a page. Keep headings at level 2 or lower: the page it appears over already has its H1.",
   "popups.create": "Create it",
   "popups.delete": "Move to trash",
-  "popups.deleteConfirm": "I understand this also deletes its performance history",
   "popups.editIntro": "Write it, say where and to whom it appears, and set how often one person may see it.",
   "popups.empty": "No popups yet. Make one below, write it, then switch it on.",
   "popups.exitIntentNote": "A cursor leaving the window is the only honest exit signal, and a phone has no cursor. An exit-intent popup never appears on a touch screen.",

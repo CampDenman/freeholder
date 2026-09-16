@@ -4177,7 +4177,6 @@
   "popups.composeIntro": "Les mêmes blocs qu’une page. Gardez les titres au niveau 2 ou en dessous : la page par-dessus laquelle elle apparaît a déjà son H1.",
   "popups.create": "Créer",
   "popups.delete": "Mettre à la corbeille",
-  "popups.deleteConfirm": "Je comprends que l’historique des performances sera aussi supprimé",
   "popups.editIntro": "Rédigez-la, dites où et à qui elle apparaît, et fixez à quelle fréquence une même personne peut la voir.",
   "popups.empty": "Aucune fenêtre pour l’instant. Créez-en une ci-dessous, rédigez-la, puis activez-la.",
   "popups.exitIntentNote": "Un curseur qui quitte la fenêtre est le seul signal honnête de départ, et un téléphone n’a pas de curseur. Une fenêtre à l’intention de sortie n’apparaît jamais sur un écran tactile.",

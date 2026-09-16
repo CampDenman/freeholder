@@ -6358,5 +6358,14 @@
   "records.trash.denied": "ليس لديك إذن لتغيير هذا السجل.",
   "pages.title": "الصفحات",
   "views.title": "العروض المحفوظة",
-  "records.trash.restoreBlocked": "يتعذر استعادة هذا السجل لأن اسمه أو عنوانه أصبحا مستخدمَين من سجل آخر."
+  "records.trash.restoreBlocked": "يتعذر استعادة هذا السجل لأن اسمه أو عنوانه أصبحا مستخدمَين من سجل آخر.",
+  "voiceVideo.importPending": "الاستيراد قيد الانتظار",
+  "voiceVideo.imported": "تم النسخ إلى مساحة التخزين الخاصة بك",
+  "voiceVideo.importFailed": "فشل النسخ إلى مساحة التخزين",
+  "voiceVideo.importRetry": "انسخ إلى مساحة التخزين",
+  "marketplace.refunds": "المبالغ المستردة",
+  "marketplace.refunds.empty": "لا توجد مبالغ مستردة للتسوية.",
+  "marketplace.refund.status.pending_order": "بانتظار الطلب الخاص بها",
+  "marketplace.refund.status.pending_invoice": "بانتظار إصدار الفاتورة",
+  "marketplace.refund.status.reconciled": "تمت التسوية"
 }

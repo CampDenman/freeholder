@@ -4177,7 +4177,6 @@
   "popups.composeIntro": "Los mismos bloques que una página. Mantén los títulos en nivel 2 o inferior: la página sobre la que aparece ya tiene su H1.",
   "popups.create": "Crearla",
   "popups.delete": "Mover a la papelera",
-  "popups.deleteConfirm": "Entiendo que también se elimina el historial de rendimiento",
   "popups.editIntro": "Escríbela, di dónde y a quién aparece, y fija cuántas veces puede verla una misma persona.",
   "popups.empty": "Todavía no hay ninguna. Crea una abajo, escríbela y después actívala.",
   "popups.exitIntentNote": "Un cursor saliendo de la ventana es la única señal honesta de salida, y un teléfono no tiene cursor. Una ventana de intención de salida nunca aparece en una pantalla táctil.",
