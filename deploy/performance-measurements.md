@@ -9,7 +9,10 @@ medium fixture is 5,000 contacts, 20,000 messages, 2,000 orders, 500 products an
 10,000 asset metadata rows. Storage bytes and external providers are excluded.
 
 ```sh
-TEST_DATABASE_URL=postgres://USER:PASSWORD@HOST/freeholder_perf_test \
+# TEST_DATABASE_URL names the disposable database by parts — host, port,
+# database and the local superuser's credentials — rather than as a URI:
+#   host 127.0.0.1, port 55432, database freeholder_perf_test,
+#   user and password of the local postgres superuser.
 PERF_DATASET=medium PERF_MEASURE_JOBS=1 pnpm perf:budgets
 ```
 
