@@ -158,10 +158,9 @@ export async function setPopupStatusAction(form: FormData): Promise<void> {
 export async function deletePopupAction(form: FormData): Promise<void> {
   const caller = await actor();
   try {
-    await removePopup.call(
-      { id: text(form, "id"), confirm: form.get("confirm") === "1" },
-      caller,
-    );
+    // Removal is reversible now: the popup moves to trash, where it can be
+    // restored or purged with verification, so no on-page confirmation tick.
+    await removePopup.call({ id: text(form, "id") }, caller);
   } catch (error) {
     done("/admin/popups", error);
   }

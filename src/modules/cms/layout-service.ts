@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Per-entity layout detach / rejoin (C2.14).
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { parseBlockTree } from "./blocks/registry";
@@ -177,7 +177,11 @@ export const attachLayout = defineService({
   }),
   output: layoutRow,
   handler: async (input, ctx) => {
-    const [page] = await ctx.tx.select({ id: pages.id }).from(pages).where(eq(pages.id, input.pageId)).limit(1);
+    const [page] = await ctx.tx
+      .select({ id: pages.id })
+      .from(pages)
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
+      .limit(1);
     if (!page) throw new ServiceError("not_found", "That page is not on this site.");
     const [existing] = await ctx.tx
       .select()
@@ -283,7 +287,11 @@ export const rejoinLayout = defineService({
       cloneTree(parseBlockTree(template.blocks, "page"), stamp),
       input.bindings ?? {},
     );
-    const [page] = await ctx.tx.select().from(pages).where(eq(pages.id, input.pageId)).limit(1);
+    const [page] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.pageId), isNull(pages.trashedAt)))
+      .limit(1);
     if (!page) throw new ServiceError("not_found", "That page is not on this site.");
     await ctx.tx
       .update(pages)
