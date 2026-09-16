@@ -4275,7 +4275,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   the same storage adapter convention as media (content-addressed keys,
   content type, SHA-256 checksum). Retries converge on the same objects instead
   of duplicating them; a failed copy stays visible on the recording and retries
-  in place from the admin screen or the scheduled job. `0011_owner_storage_refunds.sql`
+  in place from the admin screen or the scheduled job. `0012_owner_storage_refunds.sql`
   tracks import state, storage keys and timestamps on the artifact row.
   Contact erasure queues a second durable worker that deletes the imported
   owner-storage copies and acknowledges the same privacy receipt; recording
@@ -4301,7 +4301,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   pending and reconciles on a later sync. `tests/core/shopify-refunds.test.ts`
   proves full, partial and repeated refunds, pending ordering, lease fencing
   and re-sync idempotency; `marketplace_refunds` lands in
-  `0011_owner_storage_refunds.sql`. Live merchant acceptance and other provider
+  `0012_owner_storage_refunds.sql`. Live merchant acceptance and other provider
   journeys remain open. Still [ ] while those requirements remain.)
 
 #### Packages, installation, export, and target parity

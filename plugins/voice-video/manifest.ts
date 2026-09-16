@@ -9,7 +9,7 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["contacts:read", "network:external"],
   requires: ["core"],
-  migrations: ["0000_reviewed-baseline.sql", "0002_voice_video_rooms.sql", "0009_daily_voice_video.sql", "0011_owner_storage_refunds.sql"],
+  migrations: ["0000_reviewed-baseline.sql", "0002_voice_video_rooms.sql", "0009_daily_voice_video.sql", "0012_owner_storage_refunds.sql"],
   capabilities: { adapters: [] },
   events: {
     emits: [

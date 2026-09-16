@@ -4919,7 +4919,7 @@
   "marketplace.configuration": "إعداد Shopify",
   "marketplace.configured": "مهيأ لـ {shop}. اربط القناة للتحقق من الوصول.",
   "marketplace.configure": "اضبط SHOPIFY_SHOP و SHOPIFY_CLIENT_ID و SHOPIFY_CLIENT_SECRET في بيئة نشرك، ثم أعد تشغيل Freeholder.",
-  "marketplace.importScope": "تصبح طلبات Shopify المدفوعة غير التجريبية فواتير مسودة للمراجعة. يستورد التزامن التاريخ المتاح ولا يحدّث الاستيرادات السابقة بالاستردادات أو التعديلات اللاحقة.",
+  "marketplace.importScope": "تصبح طلبات Shopify المدفوعة غير التجريبية مسودات فواتير للمراجعة. تستورد المزامنة السجل المتاح وتُطابق المبالغ المستردة من الطلبات المستوردة كإشعارات دائن صادرة بمجرد إصدار الفاتورة.",
   "marketplace.setupGuide": "دليل إعداد Shopify",
   "marketplace.reviewInvoice": "مراجعة فاتورة المسودة",
   "voiceVideo.setup": "إعداد Daily",
@@ -6360,12 +6360,12 @@
   "views.title": "العروض المحفوظة",
   "records.trash.restoreBlocked": "يتعذر استعادة هذا السجل لأن اسمه أو عنوانه أصبحا مستخدمَين من سجل آخر.",
   "voiceVideo.importPending": "الاستيراد قيد الانتظار",
-  "voiceVideo.imported": "تم النسخ إلى مساحة التخزين الخاصة بك",
-  "voiceVideo.importFailed": "فشل النسخ إلى مساحة التخزين",
-  "voiceVideo.importRetry": "انسخ إلى مساحة التخزين",
+  "voiceVideo.imported": "نُسخ إلى التخزين الخاص بك",
+  "voiceVideo.importFailed": "فشل النسخ إلى التخزين",
+  "voiceVideo.importRetry": "نسخ إلى التخزين",
   "marketplace.refunds": "المبالغ المستردة",
-  "marketplace.refunds.empty": "لا توجد مبالغ مستردة للتسوية.",
-  "marketplace.refund.status.pending_order": "بانتظار الطلب الخاص بها",
+  "marketplace.refunds.empty": "لا توجد مبالغ مستردة لمطابقتها.",
+  "marketplace.refund.status.pending_order": "بانتظار طلبها",
   "marketplace.refund.status.pending_invoice": "بانتظار إصدار الفاتورة",
-  "marketplace.refund.status.reconciled": "تمت التسوية"
+  "marketplace.refund.status.reconciled": "تمت المطابقة"
 }
