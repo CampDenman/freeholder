@@ -932,7 +932,9 @@ export const SERVICE_NAMES = [
   "notes.history",
   "notes.list",
   "notes.pin",
+  "notes.purge",
   "notes.remove",
+  "notes.restore",
   "notes.write",
   "notifications.archive",
   "notifications.list",
@@ -1246,7 +1248,9 @@ export const SERVICE_NAMES = [
   "subscriptions.subscribe",
   "tasks.create",
   "tasks.list",
+  "tasks.purge",
   "tasks.remove",
+  "tasks.restore",
   "tasks.setStatus",
   "tasks.update",
   "templates.get",
@@ -1762,11 +1766,11 @@ export interface ServiceCatalog {
   };
   "auth.completeTwoFactorLogin": {
     input: { challengeToken: string; code: string };
-    output: { userId: string; method: "totp" | "recovery"; [key: string]: unknown } & { token: string; sessionId: string; expiresAt: string; [key: string]: unknown };
+    output: { userId: string; method: "totp" | "recovery"; token: string; sessionId: string; expiresAt: string };
   };
   "auth.completeWebAuthnLogin": {
     input: { challengeToken: string; credentialResponse: { [key: string]: unknown } };
-    output: { userId: string; method: "webauthn"; [key: string]: unknown } & { token: string; sessionId: string; expiresAt: string; [key: string]: unknown };
+    output: { userId: string; method: "webauthn"; token: string; sessionId: string; expiresAt: string };
   };
   "auth.confirmTotpEnrollment": {
     input: { enrollmentToken: string; code: string };
@@ -1810,7 +1814,7 @@ export interface ServiceCatalog {
   };
   "auth.registerOwner": {
     input: { email: string; password: string };
-    output: { userId: string; [key: string]: unknown } & { token: string; sessionId: string; expiresAt: string; [key: string]: unknown };
+    output: { userId: string; token: string; sessionId: string; expiresAt: string };
   };
   "auth.removeTotpFactor": {
     input: Record<string, never>;
@@ -3370,11 +3374,11 @@ export interface ServiceCatalog {
   };
   "contacts.listOrganizations": {
     input: { search?: string; limit?: number; offset?: number };
-    output: { rows: ({ id: string; name: string; domain: string | null; customFields: unknown; createdAt: string; updatedAt: string; [key: string]: unknown } & { memberCount: number; [key: string]: unknown })[]; total: number };
+    output: { rows: { id: string; name: string; domain: string | null; customFields: unknown; createdAt: string; updatedAt: string; memberCount: number }[]; total: number };
   };
   "contacts.listRelationships": {
     input: { contactId: string };
-    output: ({ id: string; fromContactId: string; toContactId: string; kind: "household" | "employer" | "referred_by" | "partner" | "guardian" | "contact_book"; since: string | null; notes: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } & { direction: "peer" | "outgoing" | "incoming"; otherContact: { id: string; name: string; email: string | null; [key: string]: unknown }; [key: string]: unknown })[];
+    output: { id: string; fromContactId: string; toContactId: string; kind: "household" | "employer" | "referred_by" | "partner" | "guardian" | "contact_book"; since: string | null; notes: string | null; createdAt: string; updatedAt: string; direction: "peer" | "outgoing" | "incoming"; otherContact: { id: string; name: string; email: string | null; [key: string]: unknown } }[];
   };
   "contacts.listTags": {
     input: Record<string, never>;
@@ -3382,11 +3386,11 @@ export interface ServiceCatalog {
   };
   "contacts.merge": {
     input: { survivingId: string; duplicateId: string; candidateId?: string };
-    output: { id: string; userId: string | null; name: string; email: string | null; phone: string | null; phoneStatus: "unknown" | "valid" | "invalid"; phoneInvalidAt: string | null; phoneInvalidReason: string | null; phoneInvalidProviderCode: string | null; orgId: string | null; source: string | null; tags: string[]; customFields: unknown; lifecycleStage: "lead" | "prospect" | "customer" | "repeat"; preferredLocale: string | null; timezone: string | null; country: string | null; ownerNotes: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } & { mergeOperationId: string; [key: string]: unknown };
+    output: { id: string; userId: string | null; name: string; email: string | null; phone: string | null; phoneStatus: "unknown" | "valid" | "invalid"; phoneInvalidAt: string | null; phoneInvalidReason: string | null; phoneInvalidProviderCode: string | null; orgId: string | null; source: string | null; tags: string[]; customFields: unknown; lifecycleStage: "lead" | "prospect" | "customer" | "repeat"; preferredLocale: string | null; timezone: string | null; country: string | null; ownerNotes: string | null; createdAt: string; updatedAt: string; mergeOperationId: string };
   };
   "contacts.mergeDuplicateCandidate": {
     input: { candidateId: string; survivingId: string; duplicateId: string };
-    output: { id: string; userId: string | null; name: string; email: string | null; phone: string | null; phoneStatus: "unknown" | "valid" | "invalid"; phoneInvalidAt: string | null; phoneInvalidReason: string | null; phoneInvalidProviderCode: string | null; orgId: string | null; source: string | null; tags: string[]; customFields: unknown; lifecycleStage: "lead" | "prospect" | "customer" | "repeat"; preferredLocale: string | null; timezone: string | null; country: string | null; ownerNotes: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } & { mergeOperationId: string; [key: string]: unknown };
+    output: { id: string; userId: string | null; name: string; email: string | null; phone: string | null; phoneStatus: "unknown" | "valid" | "invalid"; phoneInvalidAt: string | null; phoneInvalidReason: string | null; phoneInvalidProviderCode: string | null; orgId: string | null; source: string | null; tags: string[]; customFields: unknown; lifecycleStage: "lead" | "prospect" | "customer" | "repeat"; preferredLocale: string | null; timezone: string | null; country: string | null; ownerNotes: string | null; createdAt: string; updatedAt: string; mergeOperationId: string };
   };
   "contacts.recordConsent": {
     input: { contactId: string; purpose: "marketing" | "analytics" | "data_processing"; channel?: ("email" | "sms" | "push" | "web") | null; state: "granted" | "denied" | "withdrawn"; method: "form" | "preference_center" | "double_opt_in" | "verbal" | "written" | "contract" | "import" | "system"; termsVersion?: string | null; sourceUrl?: string | null; sourceIp?: string | null; evidence?: { [key: string]: string | number | boolean | null }; occurredAt?: string; expiresAt?: string | null };
@@ -5002,27 +5006,35 @@ export interface ServiceCatalog {
   };
   "notes.edit": {
     input: { id: string; body?: string; visibility?: "team" | "private" | "shared"; mentions?: string[] };
-    output: { id: string; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
   };
   "notes.history": {
     input: { id: string };
     output: { id: string; body: string; editedBy: string | null; editedByEmail: string | null; editedAt: string; [key: string]: unknown }[];
   };
   "notes.list": {
-    input: { subjectType?: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId?: string; contactId?: string; mentioning?: string; pinnedOnly?: boolean; limit?: number };
-    output: { id: string; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; authorEmail: string | null; contactName: string | null; href: string; [key: string]: unknown }[];
+    input: { trashedOnly?: boolean; offset?: number; subjectType?: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId?: string; contactId?: string; mentioning?: string; pinnedOnly?: boolean; limit?: number };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; authorEmail: string | null; contactName: string | null; href: string; [key: string]: unknown }[];
   };
   "notes.pin": {
     input: { id: string; pinned: boolean };
-    output: { id: string; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
+  "notes.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
   };
   "notes.remove": {
     input: { id: string };
     output: { id: string; [key: string]: unknown };
   };
+  "notes.restore": {
+    input: { id: string };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+  };
   "notes.write": {
     input: { subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; body: string; visibility?: "team" | "private" | "shared"; pinned?: boolean; mentions?: string[] };
-    output: { id: string; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId: string; contactId: string | null; authorUserId: string | null; body: string; visibility: "team" | "private" | "shared"; pinned: boolean; pinnedAt: string | null; mentions: string[]; editCount: number; editedAt: string | null; createdAt: string; [key: string]: unknown };
   };
   "notifications.archive": {
     input: { id: string };
@@ -6265,24 +6277,32 @@ export interface ServiceCatalog {
     output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; invoiceId: string | null; [key: string]: unknown };
   };
   "tasks.create": {
-    input: { subjectType?: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId?: string | null } & { title: string; details?: string | null; dueAt?: string | null; remindAt?: string | null; assigneeUserId?: string | null; priority?: "low" | "normal" | "high" | "urgent"; cadence?: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount?: number };
-    output: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
+    input: { subjectType?: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId?: string | null; title: string; details?: string | null; dueAt?: string | null; remindAt?: string | null; assigneeUserId?: string | null; priority?: "low" | "normal" | "high" | "urgent"; cadence?: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount?: number };
+    output: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
   };
   "tasks.list": {
-    input: { status?: "open" | "doing" | "blocked" | "done" | "cancelled"; openOnly?: boolean; assigneeUserId?: string; unassigned?: boolean; subjectType?: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId?: string; contactId?: string; overdue?: boolean; dueBefore?: string; limit?: number };
-    output: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; contactName: string | null; assigneeEmail: string | null; href: string | null; [key: string]: unknown }[];
+    input: { trashedOnly?: boolean; offset?: number; status?: "open" | "doing" | "blocked" | "done" | "cancelled"; openOnly?: boolean; assigneeUserId?: string; unassigned?: boolean; subjectType?: "contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order"; subjectId?: string; contactId?: string; overdue?: boolean; dueBefore?: string; limit?: number };
+    output: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; contactName: string | null; assigneeEmail: string | null; href: string | null; [key: string]: unknown }[];
+  };
+  "tasks.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
   };
   "tasks.remove": {
     input: { id: string };
     output: { id: string; [key: string]: unknown };
   };
+  "tasks.restore": {
+    input: { id: string };
+    output: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
+  };
   "tasks.setStatus": {
     input: { id: string; status: "open" | "doing" | "blocked" | "done" | "cancelled" };
-    output: { task: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown }; next: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown } | null; [key: string]: unknown };
+    output: { task: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown }; next: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown } | null; [key: string]: unknown };
   };
   "tasks.update": {
     input: { id: string; title?: string; details?: string | null; dueAt?: string | null; remindAt?: string | null; assigneeUserId?: string | null; priority?: "low" | "normal" | "high" | "urgent"; position?: number; cadence?: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount?: number };
-    output: { id: string; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
+    output: { id: string; trashedAt: string | null; subjectType: ("contact" | "deal" | "quote" | "invoice" | "booking" | "project" | "contract" | "order") | null; subjectId: string | null; contactId: string | null; title: string; details: string | null; dueAt: string | null; remindAt: string | null; remindedAt: string | null; assigneeUserId: string | null; priority: "low" | "normal" | "high" | "urgent"; status: "open" | "doing" | "blocked" | "done" | "cancelled"; position: number; cadence: ("daily" | "weekly" | "monthly" | "quarterly" | "yearly") | null; intervalCount: number; recurredFromId: string | null; completedAt: string | null; completedBy: string | null; [key: string]: unknown };
   };
   "templates.get": {
     input: { id: string };
@@ -7518,7 +7538,9 @@ export interface FreeholderApi {
     history: (input: ServiceCatalog["notes.history"]["input"]) => Promise<ServiceCatalog["notes.history"]["output"]>;
     list: (input?: ServiceCatalog["notes.list"]["input"]) => Promise<ServiceCatalog["notes.list"]["output"]>;
     pin: (input: ServiceCatalog["notes.pin"]["input"]) => Promise<ServiceCatalog["notes.pin"]["output"]>;
+    purge: (input: ServiceCatalog["notes.purge"]["input"]) => Promise<ServiceCatalog["notes.purge"]["output"]>;
     remove: (input: ServiceCatalog["notes.remove"]["input"]) => Promise<ServiceCatalog["notes.remove"]["output"]>;
+    restore: (input: ServiceCatalog["notes.restore"]["input"]) => Promise<ServiceCatalog["notes.restore"]["output"]>;
     write: (input: ServiceCatalog["notes.write"]["input"]) => Promise<ServiceCatalog["notes.write"]["output"]>;
   };
   notifications: {
@@ -7890,9 +7912,11 @@ export interface FreeholderApi {
     subscribe: (input: ServiceCatalog["subscriptions.subscribe"]["input"]) => Promise<ServiceCatalog["subscriptions.subscribe"]["output"]>;
   };
   tasks: {
-    create: (input?: ServiceCatalog["tasks.create"]["input"]) => Promise<ServiceCatalog["tasks.create"]["output"]>;
+    create: (input: ServiceCatalog["tasks.create"]["input"]) => Promise<ServiceCatalog["tasks.create"]["output"]>;
     list: (input?: ServiceCatalog["tasks.list"]["input"]) => Promise<ServiceCatalog["tasks.list"]["output"]>;
+    purge: (input: ServiceCatalog["tasks.purge"]["input"]) => Promise<ServiceCatalog["tasks.purge"]["output"]>;
     remove: (input: ServiceCatalog["tasks.remove"]["input"]) => Promise<ServiceCatalog["tasks.remove"]["output"]>;
+    restore: (input: ServiceCatalog["tasks.restore"]["input"]) => Promise<ServiceCatalog["tasks.restore"]["output"]>;
     setStatus: (input: ServiceCatalog["tasks.setStatus"]["input"]) => Promise<ServiceCatalog["tasks.setStatus"]["output"]>;
     update: (input: ServiceCatalog["tasks.update"]["input"]) => Promise<ServiceCatalog["tasks.update"]["output"]>;
   };

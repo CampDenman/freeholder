@@ -183,7 +183,7 @@ const LINKS = [
   { href: "/admin/inbox", key: "inbox", module: "crm", Icon: ChatCircleText },
   { href: "/admin/messaging", key: "messaging", module: "crm", Icon: DeviceMobile },
   { href: "/admin/pipeline", key: "pipeline", module: "crm", Icon: Kanban },
-  { href: "/admin/tasks", key: "tasks", module: "crm", Icon: ClipboardText },
+  { href: "/admin/tasks", key: "tasks", module: "tasks", Icon: ClipboardText },
   { href: "/admin/segments", key: "segments", module: "crm", Icon: UsersThree },
   { href: "/admin/scoring", key: "scoring", module: "crm", Icon: Gauge },
   { href: "/admin/automations", key: "automations", module: "automations", Icon: Shuffle },

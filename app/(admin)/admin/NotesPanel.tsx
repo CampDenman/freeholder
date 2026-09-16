@@ -13,7 +13,7 @@
 import { Card, CardBody, CardHeader, Button, Pill } from "@/ui/primitives";
 import { formatDateTime } from "@/core/i18n";
 import { listNotes, NOTE_VISIBILITIES, type NoteSubject } from "@/core/notes/service";
-import type { Actor } from "@/core/service";
+import { hasModuleAccess, type Actor } from "@/core/service";
 import { getT } from "../../i18n";
 import { domainOrNull } from "../read-helpers";
 import {
@@ -44,6 +44,7 @@ export async function NotesPanel({
     domainOrNull(listNotes.call({ subjectType, subjectId, limit: 50 }, actor)),
   ]);
 
+  const canManage = hasModuleAccess(actor, "notes", "manage");
   return (
     <Card>
       <CardHeader title={t("notes.title")} />
@@ -76,7 +77,7 @@ export async function NotesPanel({
                 {/* A textarea rather than static text: an edit is one keystroke
                     and a button away, and the service files what it said
                     before, so nothing is lost by making it easy. */}
-                <form action={editNoteAction} className="grid gap-2">
+                {canManage ? <form action={editNoteAction} className="grid gap-2">
                   <input type="hidden" name="id" value={note.id} />
                   <input type="hidden" name="returnTo" value={returnTo} />
                   <label className="sr-only" htmlFor={`note-body-${note.id}`}>
@@ -94,8 +95,8 @@ export async function NotesPanel({
                       {t("notes.action.save")}
                     </Button>
                   </div>
-                </form>
-                <div className="flex flex-wrap items-center gap-2">
+                </form> : <p className="whitespace-pre-wrap break-words text-sm">{note.body}</p>}
+                {canManage ? <div className="flex flex-wrap items-center gap-2">
                   <form action={pinNoteAction}>
                     <input type="hidden" name="id" value={note.id} />
                     <input type="hidden" name="returnTo" value={returnTo} />
@@ -111,13 +112,13 @@ export async function NotesPanel({
                       {t("notes.action.remove")}
                     </Button>
                   </form>
-                </div>
+                </div> : null}
               </li>
             ))}
           </ul>
         )}
 
-        <form action={writeNoteAction} className="grid gap-2">
+        {canManage ? <form action={writeNoteAction} className="grid gap-2">
           <input type="hidden" name="subjectType" value={subjectType} />
           <input type="hidden" name="subjectId" value={subjectId} />
           <input type="hidden" name="returnTo" value={returnTo} />
@@ -152,7 +153,8 @@ export async function NotesPanel({
             <Button type="submit">{t("notes.action.add")}</Button>
           </div>
           <p className="max-w-prose text-sm text-ink-muted">{t("notes.hint")}</p>
-        </form>
+        </form> : null}
+        {notes !== null ? <a className="mt-3 inline-block text-sm underline" href="/admin/trash?kind=notes">{t("records.trash.view")}</a> : null}
       </CardBody>
     </Card>
   );

@@ -2159,8 +2159,8 @@ last. These are core entities, not a plugin.
 | Entity | Purpose | Key fields |
 |---|---|---|
 | `Deal` | A live opportunity worth tracking through stages. Created by hand, by a form, or by a quote being sent. | contact_id, pipeline_id, stage_id, title, value_cents, currency, probability, expected_close_on, source, owner_user_id, quote_id, status (open/won/lost), lost_reason, closed_at |
-| `Task` | Something a human has to do, attached to anything. | subject_type + subject_id, contact_id, title, due_at, remind_at, assignee_user_id, priority, status, completed_at, completed_by |
-| `Note` | Free text against a contact, deal, project or booking, with mentions. | subject_type + subject_id, author, body, pinned, mentions[] |
+| `Task` | Something a human has to do, attached to anything. | subject_type + subject_id, contact_id, title, due_at, remind_at, assignee_user_id, priority, status, completed_at, completed_by, trashed_at |
+| `Note` | Free text against a contact, deal, project or booking, with mentions. | subject_type + subject_id, author, body, pinned, mentions[], trashed_at |
 | `Segment` | A saved query over the spine. The unit of "who" for campaigns, price lists, automations and reports. | name, definition (jsonb), kind (dynamic/static), member_count_cached, last_evaluated_at |
 | `ScoringRule` | Transparent, inspectable lead scoring. | name, event_match (jsonb), points, decay_days, active |
 | `ConsentRecord` | What this contact agreed to, when, and how. | contact_id, purpose (marketing_email/sms/analytics/data_processing), state, method, source_url, ip, at, expires_at, withdrawn_at |
@@ -2172,6 +2172,16 @@ last. These are core entities, not a plugin.
 
 **Rules:**
 
+- Notes and tasks keep their original rows in trash for recovery, normally for
+  thirty days. Normal lists, search, task reminders and briefings exclude trash.
+  Restore preserves IDs, revisions and subject links; contact merge and undo
+  repoint both the contact FK and contact-subject pointer, including trash.
+  Permanent purge requires explicit confirmation and recent identity verification,
+  preserves active privacy retention holds, and removes note revisions. A daily
+  bounded sweep purges eligible expired trash. Privacy erasure and configured
+  retention policies still apply, including before thirty days; recovery never
+  recreates erased personal fields. Human trash controls use each record's
+  existing view/manage grants (C7.02/C7.03/C11.14).
 - Provider erasure is durable background work committed with the local erasure.
   Requests remain `in_progress`, without a completion timestamp, until every
   registered provider task acknowledges success. Pending receipts survive
@@ -3320,17 +3330,17 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-14 |
+| Last reconciled | 2026-09-15 |
 | Evidence snapshot | On `main` at `c496198` after #359 (extra F04 axe screens), #358 (retention policies), #355 (`search.query`), #354 (F05 stamps), C11.16 #351, C11.10–13 #350, journeys #347, schema baseline #346, C10.15/16 #342/#344, C10.17/18/27/28, C3.13 plugins #337–#340 (code on main; box still open for live adapters), honesty #334, and MinIO-from-Quay #357. C11.16 recon is `deploy/spec-reconciliation.md`. Session snapshot: `SESSION_HANDOFF.md`. Digest: `deploy/release-notes-2026-09-14.md`. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md`, `RESTART_HANDOFF.md` and `SESSION_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.11 / C11.09 completion-evidence audit, C11.10 security repairs, C11.11 measurement integrity, C3.13 live provider integrations; C11.17 remains unsigned |
-| Completion rule | Every unchecked item in C0–C11 is checked and the final C11.17 gate passes |
+| Current focus | C0.11/C11.09 evidence audit, C11.12 RTL catalog, C11.14 undelete for remaining record families, C11.15 doc-claim mapping, C3.13 software remainder (owner-side live acceptance pending); C11.17 remains unsigned |
+| Completion rule | Every unchecked item in C0–C11, except the seven items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | Device evidence (C10.17, C10.18, C10.25–C10.28, C10.30). Independent security review (C11.10). Live settlement (C11.05 honesty). C11.08 Tier-1 restore. C11.11 reference-target measurements and browser vitals. C3.13 live Printify/channel adapters. C11.12 RTL catalog and remaining keyboard/detail/viewport matrix. C11.14 undelete-every-row and per-list search opt-outs. C11.15 remaining spec tests. C11.17 itself. |
+| Remaining open | §43.2's F01–F12 row applies per item. C0.11 F-criteria audit of checked items. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.09 completion-evidence audit. C11.11 reference-target measurements and browser vitals. C11.12 RTL catalog and remaining keyboard/detail/viewport matrix. C11.14 undelete-every-row and per-list search opt-outs. C11.15 remaining spec tests. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3343,7 +3353,10 @@ filing, multi-level referrals, warehouse/WMS depth, a general mail client,
 core voice/video implementations, third-party surveillance as core, and
 page-builder lock-in formats. Where the spec assigns something to a plugin,
 DONE requires the plugin and its integration seam, not that capability in
-core.
+core. By owner decision dated 2026-09-15, exactly seven mobile-app checklist
+items — C10.17, C10.18, C10.25, C10.26, C10.27, C10.28 and C10.30 — are
+deferred to v2 under §43.18; v1's DONE excludes those seven items and nothing
+else.
 
 **What is not a completion criterion.** A public launch, marketing site,
 stars, downloads, design partners, revenue, and a release announcement are not
@@ -5794,14 +5807,14 @@ equipment, classes and expertise without double-booking or duplicated records.
   nudge twice, and an unassigned one is skipped rather than broadcast because the
   briefing already carries it. `briefing.tasks` reports only what is late or due
   today and only the person's own or nobody's. `/admin/tasks`, no JavaScript.
-  `0102_tasks.sql`. Coverage in `tests/core/tasks.test.ts`. **F04** `/admin/pipeline` stage move. **F05** `tasks.create`/`list`/`update`/`setStatus` plus `projects.addTask` at `/api/v1/tasks.*` and `/api/v1/projects.addTask`, MCP `tasks_*`/`projects_addTask`. **F07** `tests/core/tasks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/tasks.test.ts` is the composition proof.)
+  `0102_tasks.sql`. Coverage in `tests/core/tasks.test.ts`. **F04** `/admin/tasks` and `/admin/trash?kind=tasks`. **F05** `tasks.create`/`list`/`update`/`setStatus`/`remove`/`restore`/`purge` plus `projects.addTask` at `/api/v1/tasks.*` and `/api/v1/projects.addTask`, MCP `tasks_*`/`projects_addTask`. **F07** `tests/core/tasks.test.ts` covers permission, refusal and recovery. **F09** `tests/core/record-trash.test.ts` covers restore, privacy erasure, retention holds and merged ownership; `deploy/record-trash.md` covers recovery and the bounded daily purge. Other record families remain C11.14 work. **F12** `tests/core/tasks.test.ts` is the composition proof.)
 - [x] **C7.03** Build notes with mentions, pinning, visibility, edit history and
   entity/contact timeline projection. (A note is usually the only record of what
   somebody agreed on a phone call, and every decision follows from that. **An
   edit files the previous body as a revision**, because a record that can be
   silently rewritten is not evidence; nothing in the service can overwrite a
-  body without leaving what it said behind, and deleting a note takes its
-  history with it. **Visibility is three states**: `team`, the author's own
+  body without leaving what it said behind. Trash keeps the original revisions;
+  permanent purge or privacy erasure removes them. **Visibility is three states**: `team`, the author's own
   `private`, and `shared` with the customer — two would force an owner to
   either hide a note from a colleague or show it to the client. Private is
   enforced in the *query*, so it holds for the API, exports and every surface
@@ -5818,7 +5831,7 @@ equipment, classes and expertise without double-booking or duplicated records.
   copies of the visibility rule; it is mounted on the contact record and works
   without JavaScript. §4.14's subject list and its resolver moved to
   `core/subjects` the moment notes became the second caller. §11's tree updated.
-  `0103_notes.sql`. Coverage in `tests/core/notes.test.ts`. **F04** `/admin/tasks` CRM tasks. **F05** `notes.write`/`edit`/`pin`/`list`/`history`/`remove` at `/api/v1/notes.*`, MCP `notes_*`. **F07** `tests/core/notes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/notes.test.ts` is the composition proof.)
+  `0103_notes.sql`. Coverage in `tests/core/notes.test.ts`. **F04** shared `NotesPanel` on contact/entity records and `/admin/trash?kind=notes`. **F05** `notes.write`/`edit`/`pin`/`list`/`history`/`remove`/`restore`/`purge` at `/api/v1/notes.*`, MCP `notes_*`. **F07** `tests/core/notes.test.ts` covers permission, refusal and recovery. **F09** `tests/core/record-trash.test.ts` covers restore, privacy erasure, retention holds and merged ownership; `deploy/record-trash.md` covers recovery and the bounded daily purge. Other record families remain C11.14 work. **F12** `tests/core/notes.test.ts` is the composition proof.)
 - [x] **C7.04** Build the canonical segment query model, static/dynamic modes,
   preview/count, explainability, and reuse by every audience surface that exists
   today — which is pricing.
@@ -8149,86 +8162,8 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   **F12** shell test restricts the write assertion to the shared helper and
   refuses direct transport from screens. Native screen/device journeys remain
   C10.25–C10.28; this item delivers their contract and write foundation.)*
-- [ ] **C10.25** Build the bookings tab and the booking screen: the customer's
-  own list through `bookings.list` (`selfService`, so the screen first learns
-  its `contactId` from `portal.myProfile`), and reschedule, cancel and intake
-  through the existing token services, mirroring
-  `app/portal/appointments/[token]`. **Decided 2026-09-10 (§4.4):** a
-  `selfService` query (`bookings.myLinks` or equivalent) returns the caller's
-  own booking links, so the list opens a booking; owner-facing lists keep
-  `PortalRecord.href` as `null`. Evidence includes a test that the query
-  refuses a `contactId` other than the caller's and never appears in an
-  owner list. Booking *creation* stays on the web until a customer-callable
-  request path exists — `bookings.create` is an owner mutation.
-  **Integration audit 2026-09-10:** this item also repairs the native session
-  entry needed to exercise those screens: password sign-in calls the actual
-  `auth.login` API projection (the browser login route strips its token),
-  email-link request/consumption use the existing customer auth services,
-  and HTTP accepts a validated user session bearer without falling back to
-  cookies on invalid credentials. Cookie-bearing writes still require CSRF.
-  The app stores sessions only for their issuing instance. Native bundle
-  validation covers Metro's shared-package resolution and Expo's supported
-  React Native version, which typechecking alone did not prove. Intake and
-  waiver actions open their existing token-authorized web forms, then refresh
-  on returning to the app. An enrolled two-factor account uses the web sign-in
-  until a native challenge UI is delivered with the account/release work.
-  *(Implementation 2026-09-10: own list/link/detail screens, native date/time
-  picker, two clocks, policy refusal, cancellation confirmation and outcome,
-  live-only writes, intake/waiver web handoffs with resume refresh, and real
-  password/email-link entry. **F01** no schema change. **F02** `bookings.myLinks`
-  has typed input/output, self-service scoping and an explicit ownership check
-  even for privileged callers. **F03** existing contact/user linkage, booking
-  lifecycle events and policy/money services are reused. **F04** loading,
-  empty, failure, confirmation, pending and moved-link recovery paths are
-  implemented; on-device interaction/accessibility proof remains outstanding,
-  so this checkbox stays open. **F05** HTTP/OpenAPI/SDK expose the same query;
-  capability links remain excluded from agent/MCP discovery. **F06** en/es/fr
-  labels, native timezone-aware picking, locale/currency formatting and semantic
-  colours; device screen-reader and light/dark inspection still required.
-  **F07** own-link denial, uncached capabilities, session-isolated read caches,
-  issuing-instance binding, offline refusal, cookie omission, explicit-credential
-  precedence and cookie CSRF protection. **F08** service/HTTP/client/shell tests
-  and native bundle checks. **F09** no new storage/jobs; existing booking privacy,
-  backup and retention paths apply; CI now bundles both native platforms.
-  **F10** existing booking records and policy drive the screens; two-factor
-  accounts have an explicit web fallback. **F11** mobile READMEs, SDK, API auth
-  description and changeset updated. **F12** real HTTP password sign-in → own
-  profile/link → reschedule → new link → cancellation → revoked-session refusal
-  is covered by `tests/core/bookings.test.ts`; device journey still pending.)*
-- [ ] **C10.26** Build the invoices tab and the invoice screen against C5.25:
-  list from `portal.myRecords`, detail from a customer-authorized read, and a
-  Pay button that opens the C5.25 page in the system browser and returns by
-  deep link. Depends on C5.25. The contract test's ban on any `pay|checkout|
-  charge` service name stays; the handoff is a URL.
-  *(Implementation 2026-09-10: invoice list and detail render the customer
-  projection, line totals, tax/discount/shipping, paid amount and balance.
-  **F01** no schema changes. **F02** authenticated `invoicing.customerInvoiceLink`
-  reuses C5.25 ownership checks and returns only a payable invoice's browser
-  capability; another contact, anonymous caller or unlinked owner is refused.
-  **F03** existing invoice, contact, payment and provider flow remain the source
-  of truth. **F04** list/detail loading, empty, failed room, stale read,
-  unavailable payment, offline and browser-open failure states are implemented;
-  physical-device interaction/accessibility proof remains, so this checkbox
-  stays open. **F05** HTTP/OpenAPI/SDK expose the query; capability retrieval is
-  excluded from agent/MCP discovery. **F06** en/es/fr labels, currency exponents,
-  business timezone, semantic colours and web return links; native screen-reader
-  and light/dark inspection remain pending. **F07** no app payment mutation,
-  no session token in a URL, uncached invoice capabilities, same-origin browser
-  handoff, and instance-bound app return links. Paid invoices produce no link.
-  **F08** customer invoice authorization/retirement tests, mobile contract/shell
-  checks, currency rendering and browser return-link assertions. **F09** no new
-  jobs or storage; existing invoice privacy/backup/retention apply. **F10** manual
-  providers show instructions rather than claiming payment; browser return and
-  app foreground refresh always reread the ledger. **F11** SDK, READMEs and
-  changeset updated. **F12** own session → invoice capability → anonymous browser
-  invoice is service-tested; C5.25's browser journey checks return links in all
-  three locales/both themes and on the receipt. Physical browser-to-app return
-  still needs an installed native build.)*
-  **Build audit:** the local standalone trace included `.git`, a mobile README
-  and test-output files. C10.26 excludes repository/workspace roots from tracing
-  and makes the artifact gate reject/scrub them, with a regression proving the
-  real workspace's Git metadata survives. Scrubbing reduced the observed
-  artifact from 18,154 to 15,468 files without raising its 18,000-file limit.
+> C10.25 — deferred to v2 (§43.18, owner decision 2026-09-15).
+> C10.26 — deferred to v2 (§43.18, owner decision 2026-09-15).
 - [x] **C10.29** Supply C10.27's customer gallery foundation: a contact-bound
   gallery query and module-registered portal room, including active guest
   invitations and excluding expired/revoked access. Reuse the existing private
@@ -8260,117 +8195,9 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `tests/core/portal-rooms.test.ts` passed, as did 190 required contract tests.
   Browser validation and the merge queue passed in PR #332, merged as
   `c786e7680acb4eb87a79109a661731f20e8bceee`.)*
-- [ ] **C10.30** Supply C10.27's private cache foundation: encrypted, bounded
-  read snapshots bound to the active instance/session, a 60-second read lease,
-  immediate denial eviction, and synchronous invalidation of old callers at
-  sign-out or account/instance changes. Clear displayed private content on
-  expiry and revalidate on foreground. Support offline restart only for the
-  same remembered instance and still-valid snapshots. Verify denial, expiry,
-  persistence failure and delayed-request races with executable tests; native
-  cold-start/keychain/device interaction evidence remains required.
-  *(Implemented 2026-09-10: `packages/mobile-app/src/private-cache.ts` serializes
-  cache operations and account transitions; `apps/mobile/src/lib/cache.ts`
-  binds AES-GCM ciphertext to the session and cache key, stores its encryption
-  key in SecureStore, and limits storage to 64 files/20 MiB, 8 MiB per entry.
-  **F01/F02/F03/F05** no schema, service or permission changes; existing reads
-  remain authoritative across web, HTTP and agent clients. **F04/F06/F10** the
-  existing native loading/stale/error states remain; private data is hidden
-  while backgrounded and before an account/route transition can render an old
-  result. Expiry clears it and triggers a fresh query.
-  Uncached management links also follow session invalidation; the bookings
-  profile uses the private lease so it does not block an offline cached list.
-  Physical light/dark, screen-reader and foreground/cold-start checks remain pending.
-  **F07** 401 invalidates the active session's entire cache; 403/404 evict the
-  denied read. A late 401 from an old account cannot clear the new account.
-  Failed requests never renew the private lease; cache failures never switch
-  to plaintext. **F08/F12** `tests/core/mobile-private-cache.test.ts` covers
-  exact expiry, encryption/tampering, denial bodies, delayed reads/writes,
-  superseded keychain opens, cleanup failure and offline restart. **F09** cache
-  files are disposable, with no jobs or queued writes; public discovery may
-  restore branding offline, but grants no extension to private read leases.
-  **F11** app/package READMEs and the changeset describe the policy. Local
-  validation passed 219 required contract tests (25 files), 67 focused app/cache
-  tests, native/root typechecks, the shared package build, lint after correcting
-  a test-helper binding, and Android/iOS Hermes exports. PR #333 carries the
-  implementation; the item remains open for the native-device evidence above.)*
-- [ ] **C10.27** Build the galleries tab and the proofing screen on C10.29's
-  customer portal room and private image transport; then
-  `galleries.openWithLogin` → `galleries.viewSession`
-  → `viewItem`, `setSelection`, `clearSelection`, `submitRound`, mirroring
-  `app/g/[slug]` and `app/g/actions.ts`; remove `galleries.list` and
-  `galleries.listSelections` from the contract. Extend C10.30's read-through cache
-  to private gallery image bytes with the same revocation limit — a
-  gallery whose access was revoked must not remain readable on the phone past
-  that limit.
-  **Cache policy, decided 2026-09-10:** private read snapshots and image bytes
-  have a 60-second lease from successful server authorization, matching the
-  existing web image cache ceiling. Permission/not-found responses evict
-  immediately; offline/network failures never renew the lease. Expiry clears
-  displayed content even while the screen remains open, and foregrounding
-  rechecks time and access. Persist ciphertext in the app cache directory with
-  a session-specific encryption key in the platform keychain. Sign-out,
-  account/instance changes and failed authorization invalidate the cache;
-  late requests from the old session may not repopulate it. No proofing writes
-  are queued or retried automatically.
-  *(Implementation 2026-09-12: galleries tab from `portal.myRecords`, proofing
-  screen via `galleries.openWithLogin` → `viewSession` / `viewItem`, then
-  `setSelection`, `clearSelection` and `submitRound`. Image bytes load from
-  `/g/{slug}/view/{itemId}` with the gallery-session bearer and share C10.30's
-  60-second encrypted lease. **F01/F02/F03/F05** no schema or new services;
-  the app is a client of the existing gallery and portal APIs. The contract
-  still excludes owner-only `galleries.list` and `galleries.listSelections`.
-  **F04** list and proofing screens have loading, empty, failed, offline and
-  stale paths; expiry clears displayed photos while the screen stays open.
-  Physical-device interaction and accessibility proof remains outstanding, so
-  this checkbox stays open. **F06** en/es/fr proofing labels and semantic
-  colours; native screen-reader and light/dark inspection still required.
-  **F07** 401/403/404 evict image bytes immediately; offline failures never
-  renew the lease; sign-out cannot let a late image write refill the next
-  account; proofing writes go through `writeThrough` and are never queued.
-  **F08** focused mobile contract/shell/cache tests, Expo and package
-  typechecks. **F09** no new jobs or storage; C10.30's vault holds the
-  ciphertext. **F10** the website already has the room and proofing page.
-  **F11** app/package READMEs and changeset `native-gallery-proofing.md`.
-  **F12** lease expiry, denial eviction and refused offline writes are
-  executable tests; a physical proofing journey still needs an installed
-  native build. `TAB_ORDER` now includes invoices so that C10.26 tab is
-  actually shown.)*
-- [ ] **C10.28** Build messages, newsletters and the account tab. Messages:
-  the customer's threads through `conversations.list` (`selfService`), a thread
-  view, and a reply that is a *customer* message. **Decided 2026-09-10
-  (§4.14):** add `conversations.replyAsContact`, an `authenticated` mutation
-  that writes an `inbound` message from the caller's own contact into the
-  caller's own thread, never sends on `reply_channel`, is treated as untrusted
-  input and is rate-limited per contact; the web portal's messages room gains
-  the same thread view and reply so the app is not the only place it exists.
-  Newsletters: `newsletters.listPublic` to learn what may be
-  subscribed to, `subscribe`, and `privacy.setMyMarketingPreference` for the
-  signed-in preference — never the email-footer `unsubscribe` token. Account:
-  `portal.myProfile`, `portal.myRecords`, sign out with device-token revoke
-  (C10.14). Grow `BUILT` in `app/(tabs)/_layout.tsx` to the full `TAB_ORDER`
-  and complete the native two-factor challenge path for enrolled accounts
-  (C10.25 safely directs those accounts to the website in the interim),
-  and add every new file to the shell test's colour and state lists.
-  *(Implementation 2026-09-12: `conversations.replyAsContact` writes an inbound
-  `chat` message from the session's own contact into the session's own thread,
-  never sends on `reply_channel`, and is rate-limited per contact. `conversations.get`
-  is self-service with an explicit contact filter. The portal messages room
-  links to a thread page with the same reply. Native messages/newsletters/account
-  screens and TOTP/recovery sign-in use those services; WebAuthn-only accounts
-  still use the website. **F01** no schema. **F02** customer reply is
-  `authenticated` and ownership-checked; get is the existing query with a second
-  audience. **F03** contact/user linkage and `conversations.record` are reused.
-  **F04** loading/empty/failed/offline paths on the new screens; device
-  interaction and accessibility proof remain outstanding, so this checkbox
-  stays open. **F05** HTTP/OpenAPI/SDK expose the mutation. **F06** en/es/fr
-  labels and semantic colours; native screen-reader and light/dark inspection
-  still required. **F07** own-thread-only reply, no business `conversations.reply`,
-  no email-footer unsubscribe, sign-out revokes a held device token, writes
-  are live-only. **F08** service/HTTP/client/shell tests. **F09** no new storage
-  or jobs. **F10** the website now has the same thread view. **F11** app/package
-  READMEs and changeset `customer-reply-and-account.md`. **F12** HTTP customer
-  reply and native 2FA client path are executable tests; a physical journey
-  still needs an installed native build.)*
+> C10.30 — deferred to v2 (§43.18, owner decision 2026-09-15).
+> C10.27 — deferred to v2 (§43.18, owner decision 2026-09-15).
+> C10.28 — deferred to v2 (§43.18, owner decision 2026-09-15).
 - [x] **C10.14** Build push registration/preferences and booking, gallery,
   invoice and back-in-stock notifications through core notification services.
   §35.1's `DeviceToken` carries a `contact_id`, so this item **must repoint it
@@ -8454,67 +8281,8 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `deploy/app-store-privacy.md`, `deploy/play-data-safety.md`,
   `apps/mobile/README.md`. **F11** changeset `mobile-store-ci.md`. **F12**
   every CI run exports iOS and Android against the demo contract.)*
-- [ ] **C10.17** Build role-gated owner companion mode for today, invoice,
-  inbox, reviews, approvals, agent status, critical notifications and direct
-  camera-roll/camera/screen/share-target ingest through the core media contract.
-  *(Implementation 2026-09-12: same app, staff session. `auth.whoami` /
-  `auth.login` name the role; `customer` keeps the portal tabs and every other
-  stored role opens `OWNER_TAB_ORDER`. Screens call existing owner services —
-  `briefing.today`, `invoicing.list` / `createDraft` / `issue`, `conversations.list`
-  / `reply`, `reviews.list` / `moderate`, `agents.listApprovals` / `approveWrite`
-  / `rejectWrite`, `agents.list` / `board`, `notifications.list` with
-  `state: "critical"`. Capture ingest is `media.createCaptureSession` or
-  `createUploadLink`, then `media.beginUpload`, `POST /api/media`,
-  `media.signUploadParts` / `media.completeUpload` on private S3, or
-  `POST /api/media` when the reservation is proxy, then `media.bindCaptureAsset`
-  and `media.confirmCapture`. Writes are live-only;
-  offline batches remain C10.18. **F01** no schema. **F02/F03/F05** no new
-  services or customer model; the SDK already enforces grants.
-  **F04** loading/empty/error/offline on every companion screen; physical
-  camera, share-target and accessibility proof remain outstanding, so this
-  checkbox stays open. **F06** en/es/fr labels and semantic colours; native
-  screen-reader and light/dark inspection still required. **F07** staff
-  screens are audience-gated; customer tabs hide; ingest uses the website
-  media pipeline; no mobile-only upload API. **F08** contract, audience,
-  ingest and shell tests. **F09** no new jobs or storage. **F10** the website
-  already has these owner surfaces. **F11** app/package READMEs and changeset
-  `owner-companion.md`. **F12** role detection, staff-only contracts and
-  refused offline ingest are executable tests; a physical companion journey
-  still needs an installed native build.)*
-- [ ] **C10.18** Add offline/background-safe mobile capture batches with clear
-  consent, progress, pause/resume/cancel, retry and destination selection, and
-  prove the native app and app-free phone path create equivalent Assets.
-  *(Implementation 2026-09-12: the §35.1 write-queue exception is
-  `createCaptureBatchStore` in `packages/mobile-app`. Consent, destination
-  (library / product / page), progress, pause/resume/cancel and retry are
-  local; `writeThrough` still refuses every service, including media uploads.
-  The queue is bound to a SHA-256 digest of instance URL + session, never the
-  raw bearer; it is cleared on sign-out / forget / instance switch, and refuses
-  flush for another account. File bytes
-  are persisted (copied off picker URIs into app document storage) so a new
-  store can still flush after reload. The Capture screen shows local batches
-  and ingest controls when `media.listCaptureSessions` fails, including
-  offline. Flush is online-only through the C10.17 contract —
-  `media.createCaptureSession` or `createUploadLink`, `beginUpload`,
-  `POST /api/media` or `signUploadParts` / `completeUpload`, `bindCaptureAsset`,
-  `confirmCapture`. `tests/core/mobile-capture-batches.test.ts` creates Assets
-  both from a native batch flush and from the app-free `/capture/[token]`
-  pipeline and compares source, kind, mime, filename, bytes, status and
-  `provenance.captureSessionId`; a product destination attaches both paths onto
-  the same product. **F01** no schema. **F02/F03/F05** no new services. **F04**
-  capture screen: consent, destination, queued/uploading/paused/failed/cancelled,
-  pause/resume/cancel/retry, visible while offline; OS background upload
-  (iOS BGTask / Android WorkManager) was not exercised on a device, so this
-  checkbox stays open. **F06** en/es/fr; native screen-reader and light/dark
-  inspection still required. **F07** staff-only; no mobile-only upload API;
-  queue cannot flush as another account. **F08** package, shell, screen-contract
-  and pipeline-equivalence tests, including reload-from-cache bytes. **F09** no
-  new jobs. **F10** `/capture/[token]` already exists. **F11** app/package
-  READMEs and changeset `mobile-capture-batches.md`. **F12** consent/offline-
-  queue/pause/retry, session binding, persisted bytes and native≡phone Asset
-  records are executable; a physical background-upload journey still needs an
-  installed native build.)*
-
+> C10.17 — deferred to v2 (§43.18, owner decision 2026-09-15).
+> C10.18 — deferred to v2 (§43.18, owner decision 2026-09-15).
 - [x] **C10.19** Collapse the migration chain into one reviewed baseline once
   the schema is complete, keeping seed, demo and restore working, and
   re-baseline the reference instance deliberately rather than by surprise.
@@ -8749,7 +8517,16 @@ schema they inherit reads as a designed thing rather than an excavation.
   tests verify distinct first/second/final pages and exact tied-row ordering.
   Asset bytes and provider calls are not part of
   this database fixture. **Left open:** reference-target measurements,
-  whole-page HTTP/browser timing, editor, queue, migration and cold boot.
+  whole-page HTTP/browser timing, editor, migration and cold boot.
+  Queue follow-up (2026-09-14): `PERF_MEASURE_JOBS=1` now uses twenty real,
+  sequential transactional enqueues and the application worker. Database
+  creation/start timestamps produce p95; missing, failed, cancelled, duplicate
+  or invalidly timestamped work fails. The output includes every sample and
+  completion count. Small and medium local runs pass all ten tests, with
+  queue p95 of 1,985 ms and 1,982 ms respectively. This is baseline dispatch,
+  not a backlog/throughput test.
+  `deploy/performance-measurements.md` explains the command and limitations;
+  requested auxiliary measurements no longer disappear on the large fixture.
   The local machine is not the §15.1 1-vCPU/1GB reference target.)*
 - [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.
@@ -8840,8 +8617,26 @@ schema they inherit reads as a designed thing rather than an excavation.
   in en/fr/es. Changeset `workflow-record-search.md`: 27 search/participation
   tests pass; production-build Chromium opens all three destinations as
   view-only staff and checks axe in both themes. Per-record restore remains open.
+  Recovery follow-up (2026-09-14): notes and tasks now move to paginated
+  trash, restore their original IDs/history/links, and stay out of ordinary
+  lists, project checklists/counts, search, reminders and briefings while
+  trashed. Private-note visibility
+  and view/manage grants apply throughout. Task navigation and saved views
+  use the task grant. Permanent deletion requires typed
+  confirmation and recent identity verification; both manual deletion and the
+  bounded thirty-day job preserve active privacy holds. Privacy erasure still
+  removes personal data, including from trash. Contact merge and undo also
+  repoint contact-subject links. `deploy/record-trash.md`, migration `0010`,
+  changeset `note-task-recovery.md`, generated SDK and eight recovery tests
+  record the behavior. Merge undo, retention, privacy, search/participation,
+  schema compatibility and CI shard-budget tests pass; fast gates pass 300
+  contracts with one intentional database skip, and SDK generation passes
+  eight database tests. A production build and two Chromium journeys pass,
+  including keyboard restore/purge, view-only access, and twelve axe/reflow
+  combinations (en/fr/es, light/dark, desktop/narrow). These are note/task
+  recovery proofs; the remaining record families and full F-matrix stay open.
   **Remaining named worklist:**
-  Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.
+  Per-record restore includes note/task trash, media/product restoration, contact-merge undo and the ownership-drill instance restore; other entities still lack undelete.
   Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
@@ -8945,3 +8740,283 @@ schema they inherit reads as a designed thing rather than an excavation.
 6. Never optimize this plan for announcing the product. Optimize for an owner
    trusting it with the whole business and for the next maintainer being able
    to prove why that trust is warranted.
+
+### 43.18 Deferred to v2 — mobile apps (owner decision 2026-09-15)
+
+**Owner decision, 2026-09-15 (Tony Aly):** "DONE now means everything but the
+mobile apps — mobile happens as v2." The v1 completion set therefore excludes
+exactly the seven items quoted below — C10.17, C10.18, C10.25, C10.26,
+C10.27, C10.28 and C10.30 — and nothing else. §35 remains the v2
+specification for the mobile apps; each deferred item's obligation survives
+verbatim and moves to v2 with it.
+
+This is a dated, bounded, owner-approved scope decision, not a generic escape
+hatch. The §43.1 doctrine stands: version labels express dependency order,
+not an excuse to leave the product incomplete. The set below is closed — an
+item leaves it only by shipping in v2 or by an explicit owner reversal, never
+by silent deletion. `scripts/plan-gate.mjs` encodes the same set as
+`DEFERRED` and fails any change that re-enters one of these IDs into the
+live checklist as a checkbox.
+
+Checked mobile items stay checked; their evidence stands. The seven items are
+quoted verbatim from the 2026-09-14 checklist, each ID preserved as plain
+bold text so references to them still resolve while the live C10 sequence
+carries only a one-line marker per item.
+
+> **C10.17** Build role-gated owner companion mode for today, invoice,
+>   inbox, reviews, approvals, agent status, critical notifications and direct
+>   camera-roll/camera/screen/share-target ingest through the core media contract.
+>   *(Implementation 2026-09-12: same app, staff session. `auth.whoami` /
+>   `auth.login` name the role; `customer` keeps the portal tabs and every other
+>   stored role opens `OWNER_TAB_ORDER`. Screens call existing owner services —
+>   `briefing.today`, `invoicing.list` / `createDraft` / `issue`, `conversations.list`
+>   / `reply`, `reviews.list` / `moderate`, `agents.listApprovals` / `approveWrite`
+>   / `rejectWrite`, `agents.list` / `board`, `notifications.list` with
+>   `state: "critical"`. Capture ingest is `media.createCaptureSession` or
+>   `createUploadLink`, then `media.beginUpload`, `POST /api/media`,
+>   `media.signUploadParts` / `media.completeUpload` on private S3, or
+>   `POST /api/media` when the reservation is proxy, then `media.bindCaptureAsset`
+>   and `media.confirmCapture`. Writes are live-only;
+>   offline batches remain C10.18. **F01** no schema. **F02/F03/F05** no new
+>   services or customer model; the SDK already enforces grants.
+>   **F04** loading/empty/error/offline on every companion screen; physical
+>   camera, share-target and accessibility proof remain outstanding, so this
+>   checkbox stays open. **F06** en/es/fr labels and semantic colours; native
+>   screen-reader and light/dark inspection still required. **F07** staff
+>   screens are audience-gated; customer tabs hide; ingest uses the website
+>   media pipeline; no mobile-only upload API. **F08** contract, audience,
+>   ingest and shell tests. **F09** no new jobs or storage. **F10** the website
+>   already has these owner surfaces. **F11** app/package READMEs and changeset
+>   `owner-companion.md`. **F12** role detection, staff-only contracts and
+>   refused offline ingest are executable tests; a physical companion journey
+>   still needs an installed native build.)*
+
+> **C10.18** Add offline/background-safe mobile capture batches with clear
+>   consent, progress, pause/resume/cancel, retry and destination selection, and
+>   prove the native app and app-free phone path create equivalent Assets.
+>   *(Implementation 2026-09-12: the §35.1 write-queue exception is
+>   `createCaptureBatchStore` in `packages/mobile-app`. Consent, destination
+>   (library / product / page), progress, pause/resume/cancel and retry are
+>   local; `writeThrough` still refuses every service, including media uploads.
+>   The queue is bound to a SHA-256 digest of instance URL + session, never the
+>   raw bearer; it is cleared on sign-out / forget / instance switch, and refuses
+>   flush for another account. File bytes
+>   are persisted (copied off picker URIs into app document storage) so a new
+>   store can still flush after reload. The Capture screen shows local batches
+>   and ingest controls when `media.listCaptureSessions` fails, including
+>   offline. Flush is online-only through the C10.17 contract —
+>   `media.createCaptureSession` or `createUploadLink`, `beginUpload`,
+>   `POST /api/media` or `signUploadParts` / `completeUpload`, `bindCaptureAsset`,
+>   `confirmCapture`. `tests/core/mobile-capture-batches.test.ts` creates Assets
+>   both from a native batch flush and from the app-free `/capture/[token]`
+>   pipeline and compares source, kind, mime, filename, bytes, status and
+>   `provenance.captureSessionId`; a product destination attaches both paths onto
+>   the same product. **F01** no schema. **F02/F03/F05** no new services. **F04**
+>   capture screen: consent, destination, queued/uploading/paused/failed/cancelled,
+>   pause/resume/cancel/retry, visible while offline; OS background upload
+>   (iOS BGTask / Android WorkManager) was not exercised on a device, so this
+>   checkbox stays open. **F06** en/es/fr; native screen-reader and light/dark
+>   inspection still required. **F07** staff-only; no mobile-only upload API;
+>   queue cannot flush as another account. **F08** package, shell, screen-contract
+>   and pipeline-equivalence tests, including reload-from-cache bytes. **F09** no
+>   new jobs. **F10** `/capture/[token]` already exists. **F11** app/package
+>   READMEs and changeset `mobile-capture-batches.md`. **F12** consent/offline-
+>   queue/pause/retry, session binding, persisted bytes and native≡phone Asset
+>   records are executable; a physical background-upload journey still needs an
+>   installed native build.)*
+
+> **C10.25** Build the bookings tab and the booking screen: the customer's
+>   own list through `bookings.list` (`selfService`, so the screen first learns
+>   its `contactId` from `portal.myProfile`), and reschedule, cancel and intake
+>   through the existing token services, mirroring
+>   `app/portal/appointments/[token]`. **Decided 2026-09-10 (§4.4):** a
+>   `selfService` query (`bookings.myLinks` or equivalent) returns the caller's
+>   own booking links, so the list opens a booking; owner-facing lists keep
+>   `PortalRecord.href` as `null`. Evidence includes a test that the query
+>   refuses a `contactId` other than the caller's and never appears in an
+>   owner list. Booking *creation* stays on the web until a customer-callable
+>   request path exists — `bookings.create` is an owner mutation.
+>   **Integration audit 2026-09-10:** this item also repairs the native session
+>   entry needed to exercise those screens: password sign-in calls the actual
+>   `auth.login` API projection (the browser login route strips its token),
+>   email-link request/consumption use the existing customer auth services,
+>   and HTTP accepts a validated user session bearer without falling back to
+>   cookies on invalid credentials. Cookie-bearing writes still require CSRF.
+>   The app stores sessions only for their issuing instance. Native bundle
+>   validation covers Metro's shared-package resolution and Expo's supported
+>   React Native version, which typechecking alone did not prove. Intake and
+>   waiver actions open their existing token-authorized web forms, then refresh
+>   on returning to the app. An enrolled two-factor account uses the web sign-in
+>   until a native challenge UI is delivered with the account/release work.
+>   *(Implementation 2026-09-10: own list/link/detail screens, native date/time
+>   picker, two clocks, policy refusal, cancellation confirmation and outcome,
+>   live-only writes, intake/waiver web handoffs with resume refresh, and real
+>   password/email-link entry. **F01** no schema change. **F02** `bookings.myLinks`
+>   has typed input/output, self-service scoping and an explicit ownership check
+>   even for privileged callers. **F03** existing contact/user linkage, booking
+>   lifecycle events and policy/money services are reused. **F04** loading,
+>   empty, failure, confirmation, pending and moved-link recovery paths are
+>   implemented; on-device interaction/accessibility proof remains outstanding,
+>   so this checkbox stays open. **F05** HTTP/OpenAPI/SDK expose the same query;
+>   capability links remain excluded from agent/MCP discovery. **F06** en/es/fr
+>   labels, native timezone-aware picking, locale/currency formatting and semantic
+>   colours; device screen-reader and light/dark inspection still required.
+>   **F07** own-link denial, uncached capabilities, session-isolated read caches,
+>   issuing-instance binding, offline refusal, cookie omission, explicit-credential
+>   precedence and cookie CSRF protection. **F08** service/HTTP/client/shell tests
+>   and native bundle checks. **F09** no new storage/jobs; existing booking privacy,
+>   backup and retention paths apply; CI now bundles both native platforms.
+>   **F10** existing booking records and policy drive the screens; two-factor
+>   accounts have an explicit web fallback. **F11** mobile READMEs, SDK, API auth
+>   description and changeset updated. **F12** real HTTP password sign-in → own
+>   profile/link → reschedule → new link → cancellation → revoked-session refusal
+>   is covered by `tests/core/bookings.test.ts`; device journey still pending.)*
+
+> **C10.26** Build the invoices tab and the invoice screen against C5.25:
+>   list from `portal.myRecords`, detail from a customer-authorized read, and a
+>   Pay button that opens the C5.25 page in the system browser and returns by
+>   deep link. Depends on C5.25. The contract test's ban on any `pay|checkout|
+>   charge` service name stays; the handoff is a URL.
+>   *(Implementation 2026-09-10: invoice list and detail render the customer
+>   projection, line totals, tax/discount/shipping, paid amount and balance.
+>   **F01** no schema changes. **F02** authenticated `invoicing.customerInvoiceLink`
+>   reuses C5.25 ownership checks and returns only a payable invoice's browser
+>   capability; another contact, anonymous caller or unlinked owner is refused.
+>   **F03** existing invoice, contact, payment and provider flow remain the source
+>   of truth. **F04** list/detail loading, empty, failed room, stale read,
+>   unavailable payment, offline and browser-open failure states are implemented;
+>   physical-device interaction/accessibility proof remains, so this checkbox
+>   stays open. **F05** HTTP/OpenAPI/SDK expose the query; capability retrieval is
+>   excluded from agent/MCP discovery. **F06** en/es/fr labels, currency exponents,
+>   business timezone, semantic colours and web return links; native screen-reader
+>   and light/dark inspection remain pending. **F07** no app payment mutation,
+>   no session token in a URL, uncached invoice capabilities, same-origin browser
+>   handoff, and instance-bound app return links. Paid invoices produce no link.
+>   **F08** customer invoice authorization/retirement tests, mobile contract/shell
+>   checks, currency rendering and browser return-link assertions. **F09** no new
+>   jobs or storage; existing invoice privacy/backup/retention apply. **F10** manual
+>   providers show instructions rather than claiming payment; browser return and
+>   app foreground refresh always reread the ledger. **F11** SDK, READMEs and
+>   changeset updated. **F12** own session → invoice capability → anonymous browser
+>   invoice is service-tested; C5.25's browser journey checks return links in all
+>   three locales/both themes and on the receipt. Physical browser-to-app return
+>   still needs an installed native build.)*
+>   **Build audit:** the local standalone trace included `.git`, a mobile README
+>   and test-output files. C10.26 excludes repository/workspace roots from tracing
+>   and makes the artifact gate reject/scrub them, with a regression proving the
+>   real workspace's Git metadata survives. Scrubbing reduced the observed
+>   artifact from 18,154 to 15,468 files without raising its 18,000-file limit.
+
+> **C10.27** Build the galleries tab and the proofing screen on C10.29's
+>   customer portal room and private image transport; then
+>   `galleries.openWithLogin` → `galleries.viewSession`
+>   → `viewItem`, `setSelection`, `clearSelection`, `submitRound`, mirroring
+>   `app/g/[slug]` and `app/g/actions.ts`; remove `galleries.list` and
+>   `galleries.listSelections` from the contract. Extend C10.30's read-through cache
+>   to private gallery image bytes with the same revocation limit — a
+>   gallery whose access was revoked must not remain readable on the phone past
+>   that limit.
+>   **Cache policy, decided 2026-09-10:** private read snapshots and image bytes
+>   have a 60-second lease from successful server authorization, matching the
+>   existing web image cache ceiling. Permission/not-found responses evict
+>   immediately; offline/network failures never renew the lease. Expiry clears
+>   displayed content even while the screen remains open, and foregrounding
+>   rechecks time and access. Persist ciphertext in the app cache directory with
+>   a session-specific encryption key in the platform keychain. Sign-out,
+>   account/instance changes and failed authorization invalidate the cache;
+>   late requests from the old session may not repopulate it. No proofing writes
+>   are queued or retried automatically.
+>   *(Implementation 2026-09-12: galleries tab from `portal.myRecords`, proofing
+>   screen via `galleries.openWithLogin` → `viewSession` / `viewItem`, then
+>   `setSelection`, `clearSelection` and `submitRound`. Image bytes load from
+>   `/g/{slug}/view/{itemId}` with the gallery-session bearer and share C10.30's
+>   60-second encrypted lease. **F01/F02/F03/F05** no schema or new services;
+>   the app is a client of the existing gallery and portal APIs. The contract
+>   still excludes owner-only `galleries.list` and `galleries.listSelections`.
+>   **F04** list and proofing screens have loading, empty, failed, offline and
+>   stale paths; expiry clears displayed photos while the screen stays open.
+>   Physical-device interaction and accessibility proof remains outstanding, so
+>   this checkbox stays open. **F06** en/es/fr proofing labels and semantic
+>   colours; native screen-reader and light/dark inspection still required.
+>   **F07** 401/403/404 evict image bytes immediately; offline failures never
+>   renew the lease; sign-out cannot let a late image write refill the next
+>   account; proofing writes go through `writeThrough` and are never queued.
+>   **F08** focused mobile contract/shell/cache tests, Expo and package
+>   typechecks. **F09** no new jobs or storage; C10.30's vault holds the
+>   ciphertext. **F10** the website already has the room and proofing page.
+>   **F11** app/package READMEs and changeset `native-gallery-proofing.md`.
+>   **F12** lease expiry, denial eviction and refused offline writes are
+>   executable tests; a physical proofing journey still needs an installed
+>   native build. `TAB_ORDER` now includes invoices so that C10.26 tab is
+>   actually shown.)*
+
+> **C10.28** Build messages, newsletters and the account tab. Messages:
+>   the customer's threads through `conversations.list` (`selfService`), a thread
+>   view, and a reply that is a *customer* message. **Decided 2026-09-10
+>   (§4.14):** add `conversations.replyAsContact`, an `authenticated` mutation
+>   that writes an `inbound` message from the caller's own contact into the
+>   caller's own thread, never sends on `reply_channel`, is treated as untrusted
+>   input and is rate-limited per contact; the web portal's messages room gains
+>   the same thread view and reply so the app is not the only place it exists.
+>   Newsletters: `newsletters.listPublic` to learn what may be
+>   subscribed to, `subscribe`, and `privacy.setMyMarketingPreference` for the
+>   signed-in preference — never the email-footer `unsubscribe` token. Account:
+>   `portal.myProfile`, `portal.myRecords`, sign out with device-token revoke
+>   (C10.14). Grow `BUILT` in `app/(tabs)/_layout.tsx` to the full `TAB_ORDER`
+>   and complete the native two-factor challenge path for enrolled accounts
+>   (C10.25 safely directs those accounts to the website in the interim),
+>   and add every new file to the shell test's colour and state lists.
+>   *(Implementation 2026-09-12: `conversations.replyAsContact` writes an inbound
+>   `chat` message from the session's own contact into the session's own thread,
+>   never sends on `reply_channel`, and is rate-limited per contact. `conversations.get`
+>   is self-service with an explicit contact filter. The portal messages room
+>   links to a thread page with the same reply. Native messages/newsletters/account
+>   screens and TOTP/recovery sign-in use those services; WebAuthn-only accounts
+>   still use the website. **F01** no schema. **F02** customer reply is
+>   `authenticated` and ownership-checked; get is the existing query with a second
+>   audience. **F03** contact/user linkage and `conversations.record` are reused.
+>   **F04** loading/empty/failed/offline paths on the new screens; device
+>   interaction and accessibility proof remain outstanding, so this checkbox
+>   stays open. **F05** HTTP/OpenAPI/SDK expose the mutation. **F06** en/es/fr
+>   labels and semantic colours; native screen-reader and light/dark inspection
+>   still required. **F07** own-thread-only reply, no business `conversations.reply`,
+>   no email-footer unsubscribe, sign-out revokes a held device token, writes
+>   are live-only. **F08** service/HTTP/client/shell tests. **F09** no new storage
+>   or jobs. **F10** the website now has the same thread view. **F11** app/package
+>   READMEs and changeset `customer-reply-and-account.md`. **F12** HTTP customer
+>   reply and native 2FA client path are executable tests; a physical journey
+>   still needs an installed native build.)*
+
+> **C10.30** Supply C10.27's private cache foundation: encrypted, bounded
+>   read snapshots bound to the active instance/session, a 60-second read lease,
+>   immediate denial eviction, and synchronous invalidation of old callers at
+>   sign-out or account/instance changes. Clear displayed private content on
+>   expiry and revalidate on foreground. Support offline restart only for the
+>   same remembered instance and still-valid snapshots. Verify denial, expiry,
+>   persistence failure and delayed-request races with executable tests; native
+>   cold-start/keychain/device interaction evidence remains required.
+>   *(Implemented 2026-09-10: `packages/mobile-app/src/private-cache.ts` serializes
+>   cache operations and account transitions; `apps/mobile/src/lib/cache.ts`
+>   binds AES-GCM ciphertext to the session and cache key, stores its encryption
+>   key in SecureStore, and limits storage to 64 files/20 MiB, 8 MiB per entry.
+>   **F01/F02/F03/F05** no schema, service or permission changes; existing reads
+>   remain authoritative across web, HTTP and agent clients. **F04/F06/F10** the
+>   existing native loading/stale/error states remain; private data is hidden
+>   while backgrounded and before an account/route transition can render an old
+>   result. Expiry clears it and triggers a fresh query.
+>   Uncached management links also follow session invalidation; the bookings
+>   profile uses the private lease so it does not block an offline cached list.
+>   Physical light/dark, screen-reader and foreground/cold-start checks remain pending.
+>   **F07** 401 invalidates the active session's entire cache; 403/404 evict the
+>   denied read. A late 401 from an old account cannot clear the new account.
+>   Failed requests never renew the private lease; cache failures never switch
+>   to plaintext. **F08/F12** `tests/core/mobile-private-cache.test.ts` covers
+>   exact expiry, encryption/tampering, denial bodies, delayed reads/writes,
+>   superseded keychain opens, cleanup failure and offline restart. **F09** cache
+>   files are disposable, with no jobs or queued writes; public discovery may
+>   restore branding offline, but grants no extension to private read leases.
+>   **F11** app/package READMEs and the changeset describe the policy. Local
+>   validation passed 219 required contract tests (25 files), 67 focused app/cache
+>   tests, native/root typechecks, the shared package build, lint after correcting
+>   a test-helper binding, and Android/iOS Hermes exports. PR #333 carries the
+>   implementation; the item remains open for the native-device evidence above.)*
