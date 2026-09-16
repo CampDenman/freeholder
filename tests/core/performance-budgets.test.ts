@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C11.11: §15.1 budgets are machine-checked. Small dataset runs in CI when a
-// database is present. Medium/large and browser/job/migration/boot surfaces
-// are opt-in and fail closed when requested without the capability.
+// database is present. Medium/large and browser/editor/job/migration/boot
+// surfaces are opt-in and fail closed when requested without the capability.
 import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -18,6 +18,17 @@ import {
 import { measureServerSurfaces, seedPerformanceDataset } from "../helpers/performance";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 import { measureQueueLatency } from "../helpers/queue-performance";
+import {
+  assertPortFree,
+  browserPrerequisites,
+  ensureOwnerSessionToken,
+  measureBrowserSurfaces,
+  measureEditorClocks,
+  startPerfBrowserServer,
+  type RunningServer,
+} from "../helpers/performance-browser";
+import { measureMigrationClock } from "../helpers/performance-migration";
+import { bootPrerequisites, measureColdBoot } from "../helpers/performance-boot";
 import { contacts } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { revenueReport } from "@/modules/reporting/service";
@@ -25,6 +36,16 @@ import { listContacts } from "@/core/contacts/service";
 
 const master = readFileSync("MASTER.md", "utf8");
 const budgets = parsePerformanceBudgets(master);
+
+// The seeded measurement gains wall-clock budget when an opt-in family is
+// requested: each family below names its own worst-case cost.
+const requestedFlags = measurementFlags();
+const MEASURE_TIMEOUT =
+  180_000 +
+  (requestedFlags.measureBrowser ? 420_000 : 0) +
+  (requestedFlags.measureEditor ? 360_000 : 0) +
+  (requestedFlags.measureBoot ? 600_000 : 0) +
+  (requestedFlags.measureMigration ? 120_000 : 0);
 
 describe("§15.1 budget table", () => {
   it("names every surface the completion item asked for", () => {
@@ -173,17 +194,16 @@ describe.runIf(hasDatabase)("seeded dataset measurements", { timeout: 180_000 },
     expect(seen).toEqual([...ids].reverse());
   });
 
-  it("measures the requested dataset with verified fixture counts", async () => {
+  it("measures the requested dataset with verified fixture counts", { timeout: MEASURE_TIMEOUT }, async () => {
     const dataset = datasetFromEnv();
     const flags = measurementFlags();
-    if (flags.measureBrowser && process.env.PERF_HAS_PLAYWRIGHT !== "1") {
-      throw new Error("PERF_MEASURE_BROWSER=1 without Playwright is fail-closed.");
-    }
-    if (flags.measureMigration) {
-      throw new Error("PERF_MEASURE_MIGRATION=1 is fail-closed until a medium migrate clock is wired.");
-    }
-    if (flags.measureBoot) {
-      throw new Error("PERF_MEASURE_BOOT=1 is fail-closed until a cold process spawn is wired.");
+    if (
+      (flags.measureBrowser || flags.measureEditor) &&
+      process.env.PERF_HAS_PLAYWRIGHT !== "1"
+    ) {
+      throw new Error(
+        "PERF_MEASURE_BROWSER/PERF_MEASURE_EDITOR without Playwright is fail-closed.",
+      );
     }
 
     if (dataset === "large") {
@@ -212,13 +232,95 @@ describe.runIf(hasDatabase)("seeded dataset measurements", { timeout: 180_000 },
     expect(report.totals).toEqual([{ currency: "CAD", amountMinor: DATASET_SIZES[size].orders * 2500 }]);
     expect(report.months.reduce((sum, row) => sum + row.invoices, 0)).toBe(DATASET_SIZES[size].orders);
     const measurements = await measureServerSurfaces(seed);
+    const detail: Record<string, unknown> = {};
     if (flags.measureJobs) {
       const queue = await measureQueueLatency();
       expect(queue.samples).toHaveLength(20);
       expect(queue.completed).toBe(20);
       measurements.push(queue);
     }
-    console.info(JSON.stringify({ dataset: size, counts: DATASET_SIZES[size], measurements }));
+
+    // Browser, editor and cold-boot clocks need the production build; the
+    // harness refuses to run them against anything else, and the shared
+    // standalone server is started once for both browser-side families.
+    const browserSide = flags.measureBrowser || flags.measureEditor;
+    let server: RunningServer | undefined;
+    let sessionToken: string | undefined;
+    if (browserSide) {
+      const capable = browserPrerequisites({
+        hasPlaywrightMarker: process.env.PERF_HAS_PLAYWRIGHT === "1",
+        standaloneServerJs: resolve(".next/standalone/server.js"),
+        databaseUrl: process.env.DATABASE_URL,
+      });
+      if (!capable.ok) {
+        throw new Error(`Browser/editor measurement requested but cannot run: ${capable.reason}.`);
+      }
+      const port = Number(process.env.PERF_BROWSER_PORT ?? 3100);
+      await assertPortFree("127.0.0.1", port);
+      server = await startPerfBrowserServer({
+        host: "127.0.0.1",
+        port,
+        databaseUrl: process.env.DATABASE_URL!,
+        env: process.env,
+      });
+      sessionToken = await ensureOwnerSessionToken();
+    }
+    try {
+      if (flags.measureBrowser) {
+        const measured = await measureBrowserSurfaces({
+          baseUrl: server!.baseUrl,
+          sessionToken: sessionToken!,
+          slug: seed.slug,
+          contactId: seed.contactId,
+          samples: Number(process.env.PERF_BROWSER_SAMPLES ?? 7),
+        });
+        detail.browser = measured.detail;
+        // Whole-page HTTP timing supersedes the service/component clocks for
+        // the surfaces it honestly covers.
+        const bySurface = new Map(measurements.map((row) => [row.surface, row]));
+        for (const row of measured.rows) bySurface.set(row.surface, row);
+        measurements.splice(0, measurements.length, ...bySurface.values());
+      }
+      if (flags.measureEditor) {
+        const editor = await measureEditorClocks({
+          baseUrl: server!.baseUrl,
+          sessionToken: sessionToken!,
+          pageId: seed.pageId,
+          pageTitle: "Performance home",
+          headingFieldId: "perf-home-heading-text",
+          paintSamples: Number(process.env.PERF_EDITOR_SAMPLES ?? 7),
+          keystrokeSamples: Number(process.env.PERF_KEYSTROKE_SAMPLES ?? 5),
+        });
+        detail.editor = editor.detail;
+        measurements.push(...editor.rows);
+      }
+    } finally {
+      await server?.stop();
+    }
+
+    if (flags.measureMigration) {
+      const migration = await measureMigrationClock();
+      detail.migration = migration;
+      measurements.push(migration);
+    }
+    if (flags.measureBoot) {
+      const capable = bootPrerequisites({
+        buildId: resolve(".next/BUILD_ID"),
+        databaseUrl: process.env.DATABASE_URL,
+      });
+      if (!capable.ok) {
+        throw new Error(`Cold-boot measurement requested but cannot run: ${capable.reason}.`);
+      }
+      const boot = await measureColdBoot({
+        boots: Number(process.env.PERF_BOOT_SAMPLES ?? 3),
+        databaseUrl: process.env.DATABASE_URL!,
+        env: process.env,
+      });
+      detail.boot = boot;
+      measurements.push(boot);
+    }
+
+    console.info(JSON.stringify({ dataset: size, counts: DATASET_SIZES[size], measurements, detail }));
     const verdict = evaluateMeasurements({
       dataset: size,
       ...flags,
