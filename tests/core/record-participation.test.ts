@@ -17,7 +17,7 @@ import { listServices } from "@/core/service";
 
 export const C11_14_REMAINING = [
   "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
-  "Remaining SEARCH_TABLE_OPT_OUTS include titled records such as suppliers and contract documents; these are not mixed into search.query.",
+  "Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.",
 ] as const;
 
 let tables: PgTable[] = [];

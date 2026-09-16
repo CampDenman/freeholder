@@ -43,8 +43,9 @@ export default async function PrivacyRequestPage({
   const canManage = hasModuleAccess(actor, "contacts", "manage");
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
-  const open = OPEN.has(request.status);
-  const canFulfill = request.status === "verified" || request.status === "in_progress";
+  const pendingErasure = request.kind === "erasure" && request.status === "in_progress" && Boolean(artifact);
+  const open = OPEN.has(request.status) && !pendingErasure;
+  const canFulfill = !pendingErasure && (request.status === "verified" || request.status === "in_progress");
   const stepUpValid = actor.kind === "user" && Boolean(actor.security?.stepUpValid);
   const details = request.details && typeof request.details === "object"
     ? request.details as Record<string, unknown>
@@ -60,6 +61,13 @@ export default async function PrivacyRequestPage({
         </div>
         <p className="mt-1 font-mono text-xs text-ink-muted">{request.id}</p>
       </div>
+
+      {pendingErasure ? (
+        <Card><CardHeader title={t("privacy.erasure.pending.title")} /><CardBody>
+          <p className="text-sm text-ink-muted">{t("privacy.erasure.pending.hint")}</p>
+          {hasModuleAccess(actor, "platform") ? <a className="mt-2 inline-block text-sm text-accent underline" href="/admin/jobs">{t("privacy.erasure.pending.jobs")}</a> : null}
+        </CardBody></Card>
+      ) : null}
 
       <Card>
         <CardHeader title={t("privacy.request.details")} />

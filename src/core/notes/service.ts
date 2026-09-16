@@ -170,7 +170,7 @@ export const editNote = defineService({
   output: noteRow,
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const [existing] = await ctx.tx.select().from(notes).where(eq(notes.id, input.id)).limit(1);
+    const [existing] = await ctx.tx.select().from(notes).where(eq(notes.id, input.id)).limit(1).for("update");
     if (!existing) throw new ServiceError("not_found", "That note is not here.");
     // A private note is its author's, and that includes editing it: a colleague
     // who cannot read it must not be able to rewrite it either.
@@ -245,7 +245,7 @@ export const pinNote = defineService({
         pinnedAt: input.pinned ? new Date() : null,
         updatedAt: sql`now()`,
       })
-      .where(eq(notes.id, input.id))
+      .where(and(eq(notes.id, input.id), visible(ctx.actor)))
       .returning();
     if (!updated) throw new ServiceError("not_found", "That note is not here.");
     ctx.setSubject("note", updated.id);
@@ -263,7 +263,7 @@ export const removeNote = defineService({
   output: row({ id: uuid }),
   handler: async (input, ctx) => {
     requirePerson(ctx.actor);
-    const [existing] = await ctx.tx.select().from(notes).where(eq(notes.id, input.id)).limit(1);
+    const [existing] = await ctx.tx.select().from(notes).where(eq(notes.id, input.id)).limit(1).for("update");
     if (!existing) throw new ServiceError("not_found", "That note is not here.");
     if (
       existing.visibility === "private" &&
@@ -351,18 +351,9 @@ export const noteHistory = defineService({
     const [note] = await ctx.tx
       .select({ id: notes.id, visibility: notes.visibility, authorUserId: notes.authorUserId })
       .from(notes)
-      .where(eq(notes.id, input.id))
+      .where(and(eq(notes.id, input.id), visible(ctx.actor)))
       .limit(1);
     if (!note) throw new ServiceError("not_found", "That note is not here.");
-    // The history obeys the same visibility as the note. A private note whose
-    // past anybody could read would be private in name only.
-    if (
-      note.visibility === "private" &&
-      ctx.actor.kind === "user" &&
-      note.authorUserId !== ctx.actor.userId
-    ) {
-      throw new ServiceError("not_found", "That note is not here.");
-    }
     const rows = await ctx.tx
       .select({
         id: noteRevisions.id,
@@ -372,8 +363,9 @@ export const noteHistory = defineService({
         editedAt: noteRevisions.editedAt,
       })
       .from(noteRevisions)
+      .innerJoin(notes, eq(notes.id, noteRevisions.noteId))
       .leftJoin(users, eq(users.id, noteRevisions.editedBy))
-      .where(eq(noteRevisions.noteId, input.id))
+      .where(and(eq(noteRevisions.noteId, input.id), visible(ctx.actor)))
       .orderBy(desc(noteRevisions.editedAt))
       .limit(100);
     return rows;

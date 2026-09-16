@@ -3,6 +3,7 @@
 // Product-wide search over live user-owned rows (C11.14). Does not close the
 // item: undelete-every-row remains a named leftover.
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { is } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
@@ -13,8 +14,12 @@ import { mergeContacts } from "@/core/contacts/service";
 import { db } from "@/core/db";
 import { writeNote } from "@/core/notes/service";
 import { recordMessage } from "@/core/messaging/service";
-import { orders, orderItems } from "@/modules/catalog/schema";
+import { orders, orderItems, priceLists } from "@/modules/catalog/schema";
+import { createDataRequest } from "@/core/privacy/service";
+import { marketplaceChannels, marketplaceOrders } from "../../plugins/marketplace/schema";
 import { createProduct, applyVariantMatrix, getProductVariants } from "@/modules/catalog/service";
+import { createSupplier } from "@/modules/catalog/procurement";
+import { issueContract } from "@/modules/contracts/service";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
 import { createGiftRegistry } from "../../plugins/gift-registry/service";
 import { createPage } from "@/modules/cms/service";
@@ -41,7 +46,7 @@ describe("C11.14 search leftovers", () => {
       "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
     );
     expect(master).toContain(
-      "Remaining SEARCH_TABLE_OPT_OUTS include titled records such as suppliers and contract documents; these are not mixed into search.query.",
+      "Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.",
     );
     expect(master).not.toMatch(/No product-wide search index:/);
   });
@@ -101,6 +106,47 @@ describe.runIf(hasDatabase)("search.query (C11.14)", { timeout: 90_000 }, () => 
     }
     return [...found];
   }
+
+  it("finds suppliers and agreements without widening their read authority", async () => {
+    const contactId = await person("supplier-contact@example.test", "Private contact name");
+    const supplier = await createSupplier.call({ name: `${TOKEN} supplier %_`, currency: "CAD", contactId }, OWNER);
+    const agreement = await issueContract.call({ contactId, subjectType: "contact", title: `${TOKEN} agreement %_`, body: "Private agreement body fixture" }, OWNER);
+    const hits = await querySearch.call({ q: TOKEN }, OWNER);
+    expect(hits.find(hit => hit.kind === "supplier")).toMatchObject({ id: supplier.id, href: `/admin/procurement#supplier-${supplier.id}`, snippet: null });
+    expect(hits.find(hit => hit.kind === "agreement")).toMatchObject({ id: agreement.id, href: `/admin/agreements/${agreement.id}`, snippet: null });
+    expect(JSON.stringify(hits)).not.toContain("Private contact name");
+    expect(JSON.stringify(hits)).not.toContain("Private agreement body fixture");
+    expect(JSON.stringify(hits)).not.toContain("signToken");
+    const viewer: Actor = { ...STAFF, grants: [{ module: "search", access: "view" }, { module: "contracts", access: "view" }] };
+    expect((await querySearch.call({ q: TOKEN }, viewer)).map(hit => hit.kind)).toEqual(["agreement"]);
+    const key: Actor = { kind: "agent", keyName: "supplier-reader", scopes: ["search.query", "catalog.listSuppliers", "contracts.get"] };
+    expect((await querySearch.call({ q: TOKEN }, key)).map(hit => hit.kind)).toEqual(["supplier"]);
+    expect(await querySearch.call({ q: TOKEN }, { ...key, scopes: ["search.query", "catalog.createSupplier", "contracts.issue"] })).toEqual([]);
+    expect((await querySearch.call({ q: "%_" }, OWNER)).map(hit => hit.kind).sort()).toEqual(["agreement", "supplier"]);
+    expect(await querySearch.call({ q: "Private agreement body fixture" }, OWNER)).toEqual([]);
+  });
+
+  it("finds price lists, channel orders and privacy references with exact read authority", async () => {
+    const contactId = await person("workflow-search@example.test", "Private workflow customer");
+    const [price] = await db().insert(priceLists).values({ name: `${TOKEN} prices %_`, currency: "CAD", kind: "contract", contactId }).returning();
+    const [channel] = await db().insert(marketplaceChannels).values({ name: "Search channel", provider: "shopify" }).returning();
+    const [order] = await db().insert(marketplaceOrders).values({ channelId: channel!.id, contactId, invoiceId: randomUUID(), externalRef: `${TOKEN} order %_`, description: "Imported print", amountMinor: 100, currency: "CAD" }).returning();
+    const request = await createDataRequest.call({ contactId, request: { kind: "access", note: "Sensitive privacy request fixture" } }, OWNER);
+    const key: Actor = { kind: "agent", keyName: "workflow-reader", scopes: ["search.query", "catalog.listPriceLists", "marketplace.listOrders", "contacts.getDataRequest"] };
+    const hits = await querySearch.call({ q: TOKEN }, key);
+    expect(hits.find(hit => hit.kind === "priceList")).toMatchObject({ id: price!.id, href: `/admin/price-lists#price-list-${price!.id}`, snippet: null });
+    expect(hits.find(hit => hit.kind === "marketplaceOrder")).toMatchObject({ id: order!.id, href: `/admin/marketplace#order-${order!.id}`, snippet: null });
+    expect((await querySearch.call({ q: request.id }, key)).map(hit => hit.kind)).toEqual(["privacyRequest"]);
+    expect(await querySearch.call({ q: "Sensitive privacy request fixture" }, OWNER)).toEqual([]);
+    expect(JSON.stringify(hits)).not.toContain("Private workflow customer");
+    expect((await querySearch.call({ q: "%_" }, key)).map(hit => hit.kind).sort()).toEqual(["marketplaceOrder", "priceList"]);
+    const writeOnly: Actor = { ...key, scopes: ["search.query", "catalog.createPriceList", "marketplace.sync", "contacts.createDataRequest"] };
+    expect(await querySearch.call({ q: TOKEN }, writeOnly)).toEqual([]);
+    expect(await querySearch.call({ q: request.id }, writeOnly)).toEqual([]);
+    const reader: Actor = { ...STAFF, grants: [{ module: "search", access: "view" }, { module: "marketplace", access: "view" }] };
+    expect((await querySearch.call({ q: TOKEN }, reader)).map(hit => hit.kind)).toEqual(["marketplaceOrder"]);
+    expect(await querySearch.call({ q: request.id }, reader)).toEqual([]);
+  });
 
   it("returns mixed kinds from one query", async () => {
     const id = await person("rae@example.test", `Rae ${TOKEN}`);

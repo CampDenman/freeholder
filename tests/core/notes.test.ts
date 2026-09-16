@@ -22,7 +22,7 @@ import { notes, noteRevisions } from "@/core/notes/schema";
 import { timelineEvents } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
-import { getService } from "@/core/service";
+import { getService, type Actor } from "@/core/service";
 import {
   editNote,
   listNotes,
@@ -137,6 +137,31 @@ describe.runIf(hasDatabase)("notes", { timeout: 90_000 }, () => {
     const refused = await failure(editNote.call({ id: mine.id, body: "Theirs." }, STAFF));
     // Not found rather than forbidden: confirming it exists is itself a leak.
     expect(refused.message).toContain("not here");
+  });
+
+  it("refuses private-note pinning without disclosing or changing the note", async () => {
+    const person = await contactId();
+    const mine = await noteOn(person, { visibility: "private", body: "Private pin fixture" });
+    await expect(pinNote.call({ id: mine.id, pinned: true }, STAFF)).rejects.toMatchObject({ code: "not_found" });
+    const [stored] = await db().select().from(notes).where(eq(notes.id, mine.id));
+    expect(stored?.pinned).toBe(false);
+    expect(stored?.pinnedAt).toBeNull();
+    expect((await pinNote.call({ id: mine.id, pinned: true }, OWNER)).pinned).toBe(true);
+  });
+
+  it("applies list visibility to API-key history reads", async () => {
+    const person = await contactId();
+    const key: Actor = { kind: "agent", keyName: "note-reader", scopes: ["notes.history", "notes.list"] };
+    for (const visibility of ["private", "team", "shared"] as const) {
+      const written = await noteOn(person, { visibility, body: `${visibility} original` });
+      await editNote.call({ id: written.id, body: `${visibility} edited` }, OWNER);
+      if (visibility === "shared") {
+        expect((await noteHistory.call({ id: written.id }, key))[0]?.body).toBe("shared original");
+      } else {
+        await expect(noteHistory.call({ id: written.id }, key)).rejects.toMatchObject({ code: "not_found" });
+      }
+    }
+    expect((await listNotes.call({}, key)).map(note => note.visibility)).toEqual(["shared"]);
   });
 
   // The claim the whole design rests on.
