@@ -7,6 +7,7 @@ import { registerSearchSource, matchesIlike } from "@/core/search/registry";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { env } from "@/core/env";
 import { isUniqueViolation } from "@/core/db";
+import { invoices } from "@/modules/invoicing/schema";
 import { attachPluginContactColumn } from "@/core/plugins/spine";
 import {
   defineOrchestratedService,
@@ -16,7 +17,7 @@ import {
   type ServiceContext,
 } from "@/core/service";
 import { marketplaceProvider } from "./adapter";
-import { marketplaceChannels, marketplaceOrders } from "./schema";
+import { marketplaceChannels, marketplaceOrders, marketplaceRefunds } from "./schema";
 
 attachPluginContactColumn({
   table: "marketplace_orders",
@@ -32,6 +33,10 @@ const SYNC_LEASE_MS = 10 * 60 * 1000;
 
 function invoiceIdentity(channelId: string, externalRef: string): string {
   return `marketplace:${channelId}:${externalRef}`;
+}
+
+function refundIdentity(channelId: string, externalRef: string): string {
+  return `marketplace-refund:${channelId}:${externalRef}`;
 }
 
 const channelRow = row({
@@ -55,6 +60,19 @@ const orderRow = row({
   description: z.string(),
   amountMinor: z.number().int(),
   currency: z.string(),
+});
+
+const refundRow = row({
+  id: uuid,
+  channelId: uuid,
+  orderExternalRef: z.string(),
+  externalRef: z.string(),
+  invoiceId: uuid.nullable(),
+  creditNoteId: uuid.nullable(),
+  amountMinor: z.number().int(),
+  currency: z.string(),
+  status: z.string(),
+  lastError: z.string().nullable(),
 });
 
 const insertPending = defineService({
@@ -376,18 +394,21 @@ const importProviderOrder = defineService({
 
 export const syncMarketplaceChannel = defineOrchestratedService({
   name: "marketplace.sync",
-  summary: "Page marketplace orders onto invoices.",
+  summary: "Page marketplace orders onto invoices, then reconcile their refunds.",
   kind: "mutation",
   permission: "scoped",
   writeClass: "money",
   input: z.object({ channelId: z.string().uuid() }),
-  output: row({ imported: z.number().int(), lastError: z.string().nullable() }),
+  output: row({ imported: z.number().int(), refundsReconciled: z.number().int(), lastError: z.string().nullable() }),
   handler: async (input) => {
     const claimed = await claimSync.call(input, { kind: "system" });
     let cursor = claimed.cursor;
     let imported = 0;
+    let refundsReconciled = 0;
     let pages = 0;
     try {
+      // Orders first: every page checkpoints the cursor, and a refund is only
+      // reconciled after its order exists here, so re-syncs converge.
       for (;;) {
         pages += 1;
         if (pages > MAX_SYNC_PAGES) {
@@ -404,22 +425,139 @@ export const syncMarketplaceChannel = defineOrchestratedService({
         }
         const nextCursor = page.nextCursor;
         if (nextCursor && nextCursor === cursor) throw new Error("The marketplace repeated its sync cursor.");
-        const completed = !nextCursor;
         await applySync.call(
-          { channelId: claimed.channelId, leaseToken: claimed.leaseToken, cursor: nextCursor, completed },
+          { channelId: claimed.channelId, leaseToken: claimed.leaseToken, cursor: nextCursor, completed: false },
           { kind: "system" },
         );
-        if (completed) break;
+        if (!nextCursor) break;
         cursor = nextCursor;
       }
-      return { imported, lastError: null };
+      // Refunds ride the same lease. The pass starts from the beginning each
+      // sync and skips already-reconciled rows, so a crash simply re-runs it.
+      let refundCursor: string | null = null;
+      let refundPages = 0;
+      for (;;) {
+        refundPages += 1;
+        if (refundPages > MAX_SYNC_PAGES) {
+          throw new Error("The marketplace returned too many refund pages.");
+        }
+        const page = await marketplaceProvider().listRefunds({
+          provider: claimed.provider,
+          externalRef: claimed.externalRef,
+          cursor: refundCursor,
+          limit: SYNC_PAGE_SIZE,
+        });
+        for (const refund of page.refunds) {
+          if (await reconcileRefund.call({ channelId: claimed.channelId, leaseToken: claimed.leaseToken, refund }, { kind: "system" })) refundsReconciled += 1;
+        }
+        const nextCursor = page.nextCursor;
+        if (nextCursor && nextCursor === refundCursor) throw new Error("The marketplace repeated its refund cursor.");
+        if (!nextCursor) break;
+        refundCursor = nextCursor;
+      }
+      await applySync.call(
+        { channelId: claimed.channelId, leaseToken: claimed.leaseToken, cursor: null, completed: true },
+        { kind: "system" },
+      );
+      return { imported, refundsReconciled, lastError: null };
     } catch (error) {
       const message = error instanceof Error ? error.message : "The marketplace could not list orders.";
       await applySync.call(
         { channelId: claimed.channelId, leaseToken: claimed.leaseToken, lastError: message.slice(0, 500) },
         { kind: "system" },
       );
-      return { imported, lastError: message.slice(0, 500) };
+      return { imported, refundsReconciled, lastError: message.slice(0, 500) };
+    }
+  },
+});
+
+const refundInput = z.object({
+  channelId: z.string().uuid(),
+  leaseToken: z.string().uuid(),
+  refund: z.object({
+    externalRef: z.string().min(1).max(200),
+    orderExternalRef: z.string().min(1).max(200),
+    amountMinor: z.number().int().positive(),
+    currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
+  }),
+});
+
+export const reconcileRefund = defineService({
+  name: "marketplace.reconcileRefund",
+  summary: "Reflect one provider refund as an idempotent issued credit note on the imported invoice.",
+  kind: "mutation",
+  permission: "system",
+  writeClass: "money",
+  input: refundInput,
+  output: z.boolean(),
+  handler: async ({ channelId, leaseToken, refund }, ctx) => {
+    await requireSyncLease({ channelId, leaseToken }, ctx);
+    const identity = refundIdentity(channelId, refund.externalRef);
+    // Keyed on the provider refund id: re-syncs return the same row and never
+    // double-create the credit note.
+    let [record] = await ctx.tx.insert(marketplaceRefunds).values({
+      channelId,
+      orderExternalRef: refund.orderExternalRef,
+      externalRef: refund.externalRef,
+      amountMinor: refund.amountMinor,
+      currency: refund.currency,
+    }).onConflictDoNothing().returning();
+    if (!record) {
+      [record] = await ctx.tx.select().from(marketplaceRefunds)
+        .where(and(eq(marketplaceRefunds.channelId, channelId), eq(marketplaceRefunds.externalRef, refund.externalRef)))
+        .limit(1).for("update");
+    }
+    if (!record) throw new ServiceError("not_found", "That refund is not here.");
+    if (record.status === "reconciled") return false;
+    const [order] = await ctx.tx.select().from(marketplaceOrders)
+      .where(and(eq(marketplaceOrders.channelId, channelId), eq(marketplaceOrders.externalRef, refund.orderExternalRef)))
+      .limit(1);
+    if (!order) {
+      // The order import runs earlier in the same sync; a refund still ahead
+      // of its order waits here and retries on the next sync.
+      if (record.status !== "pending_order" || record.lastError) {
+        await ctx.tx.update(marketplaceRefunds).set({ status: "pending_order", lastError: null }).where(eq(marketplaceRefunds.id, record.id));
+      }
+      return false;
+    }
+    const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, order.invoiceId)).limit(1);
+    if (!invoice) {
+      await ctx.tx.update(marketplaceRefunds).set({ status: "pending_order", lastError: "The imported order has no invoice." }).where(eq(marketplaceRefunds.id, record.id));
+      return false;
+    }
+    if (invoice.status === "draft" || invoice.status === "void") {
+      // Imported invoices are reviewable drafts. The refund stays visible and
+      // reconciles once the owner issues the invoice.
+      if (record.status !== "pending_invoice" || record.invoiceId !== invoice.id) {
+        await ctx.tx.update(marketplaceRefunds).set({ status: "pending_invoice", invoiceId: invoice.id, lastError: null }).where(eq(marketplaceRefunds.id, record.id));
+      }
+      return false;
+    }
+    if (record.creditNoteId) {
+      // The credit note exists but the row update was lost; acknowledge it.
+      await ctx.tx.update(marketplaceRefunds).set({ status: "reconciled", invoiceId: invoice.id, lastError: null }).where(eq(marketplaceRefunds.id, record.id));
+      ctx.queueEvent("marketplace.refundReconciled", { id: record.id, channelId, invoiceId: invoice.id, creditNoteId: record.creditNoteId });
+      return true;
+    }
+    const reason = `Shopify refund ${refund.externalRef.split("/").pop() ?? refund.externalRef}`;
+    try {
+      const note = (await ctx.callAsSystem(getService("invoicing.createCreditNote"), {
+        invoiceId: invoice.id,
+        idempotencyKey: identity,
+        reason,
+        lines: [{ description: reason, quantityMicros: 1_000_000, subtotalMinor: refund.amountMinor, taxMinor: 0 }],
+      })) as { id: string };
+      const issued = (await ctx.callAsSystem(getService("invoicing.issueCreditNote"), { id: note.id })) as { id: string };
+      await ctx.tx.update(marketplaceRefunds).set({ status: "reconciled", invoiceId: invoice.id, creditNoteId: issued.id, lastError: null }).where(eq(marketplaceRefunds.id, record.id));
+      ctx.queueEvent("marketplace.refundReconciled", { id: record.id, channelId, invoiceId: invoice.id, creditNoteId: issued.id });
+      ctx.setSubject("marketplace_refund", record.id);
+      return true;
+    } catch (error) {
+      // A bounds conflict (credit notes exceeding the invoice) or a lost
+      // race stays on the row for the next sync instead of failing silently.
+      const message = error instanceof Error ? error.message : "The refund could not be reconciled.";
+      await ctx.tx.update(marketplaceRefunds).set({ status: "pending_invoice", invoiceId: invoice.id, lastError: message.slice(0, 500) }).where(eq(marketplaceRefunds.id, record.id));
+      return false;
     }
   },
 });
@@ -460,6 +598,21 @@ export const listMarketplaceOrders = defineService({
       .orderBy(desc(marketplaceOrders.createdAt)),
 });
 
+export const listMarketplaceRefunds = defineService({
+  name: "marketplace.listRefunds",
+  summary: "Provider refunds staged for, or completed in, reconciliation.",
+  kind: "query",
+  permission: "scoped",
+  input: z.object({ channelId: z.string().uuid().optional() }),
+  output: listed(refundRow),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select()
+      .from(marketplaceRefunds)
+      .where(input.channelId ? eq(marketplaceRefunds.channelId, input.channelId) : undefined)
+      .orderBy(desc(marketplaceRefunds.createdAt)),
+});
+
 export default [
   insertPending,
   applyConnect,
@@ -470,9 +623,11 @@ export default [
   recordImported,
   importProviderOrder,
   syncMarketplaceChannel,
+  reconcileRefund,
   marketplaceConfiguration,
   listMarketplaceChannels,
   listMarketplaceOrders,
+  listMarketplaceRefunds,
 ];
 
 registerSearchSource({

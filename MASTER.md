@@ -4246,8 +4246,8 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   HTTP and database integration cover room/token/recording flows; missed calls
   close the provider room before writing the timeline. Admin setup, invitations
   and recording recovery are localized in en/fr/es. Changeset
-  `daily-private-rooms.md`. Live call/device acceptance and owner storage
-  import remain incomplete; no C3.13 completion is claimed by mocked
+  `daily-private-rooms.md`. Live call/device acceptance
+  remains incomplete; no C3.13 completion is claimed by mocked
   provider checks. Provider erasure implementation follows below.
   Provider erasure follow-up: verified local erasure commits Daily cleanup
   jobs before removing room/artifact rows. Workers verify the original domain,
@@ -4255,19 +4255,45 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   Failures remain pending with durable retry; the final worker completes the
   privacy receipt. Recording retention holds preserve their parent room.
   `provider-recording-erasure.md` records this bounded implementation; live
-  provider acceptance and owner-storage import remain open. The provider and
+  provider acceptance remains open and owner-storage import follows below. The provider and
   privacy regression suites, transactional queue tests and eight live-database
   SDK checks pass. Production-build Chromium verifies the pending request,
   removal of unsafe fulfillment controls, platform-access filtering and axe in
   both themes. Dead-letter recovery preserves the original receipt task ID;
   active room leases delay cleanup. See `deploy/provider-recording-erasure.md`.
+  Owner-storage import follow-up: a verified capture now copies the recording
+  and its transcript into the owner's configured storage automatically, through
+  the same storage adapter convention as media (content-addressed keys,
+  content type, SHA-256 checksum). Retries converge on the same objects instead
+  of duplicating them; a failed copy stays visible on the recording and retries
+  in place from the admin screen or the scheduled job. `0011_owner_storage_refunds.sql`
+  tracks import state, storage keys and timestamps on the artifact row.
+  Contact erasure queues a second durable worker that deletes the imported
+  owner-storage copies and acknowledges the same privacy receipt; recording
+  retention holds protect them like the provider originals. Recordings above
+  512 MiB are not imported and report the failure on the row.
+  `tests/core/daily-import.test.ts` covers the automatic copy, retry
+  idempotency, provider-outage recovery, erasure of the owner copies and
+  retention protection; `tests/core/daily-adapter.test.ts` covers the bounded,
+  credential-free recording download. `voiceVideo.eraseImportedCopies` and the
+  updated runbook name what remains un-erased (provider telemetry, backups,
+  expired room metadata, copies exported outside Freeholder).
   Shopify implementation in progress: an own-store client exchanges expiring
   credentials, verifies shop identity on every page and imports paid orders as
   reviewable draft invoices. `tests/core/shopify-adapter.test.ts` covers token
   renewal, destination bounds, pagination, protected email refusal and currency
   precision; `tests/core/shopify-sync.test.ts` proves invoice/contact idempotency
-  and fenced connection retries. Live merchant acceptance, refund reconciliation
-  and other provider journeys remain open. Still [ ] while those requirements remain.)
+  and fenced connection retries. Refund reconciliation follow-up: the same sync
+  now pages refunded and partially-refunded orders and records each provider
+  refund once, keyed by refund id. On an issued imported invoice the refund
+  becomes an issued credit note through the invoicing module, bounded by the
+  invoice total like any other credit note; multiple refunds produce separate
+  notes. A refund ahead of its order import or invoice issue stays listed as
+  pending and reconciles on a later sync. `tests/core/shopify-refunds.test.ts`
+  proves full, partial and repeated refunds, pending ordering, lease fencing
+  and re-sync idempotency; `marketplace_refunds` lands in
+  `0011_owner_storage_refunds.sql`. Live merchant acceptance and other provider
+  journeys remain open. Still [ ] while those requirements remain.)
 
 #### Packages, installation, export, and target parity
 

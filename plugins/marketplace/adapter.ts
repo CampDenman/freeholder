@@ -25,6 +25,18 @@ export interface MarketplaceOrderPage {
   nextCursor: string | null;
 }
 
+export interface MarketplaceRefund {
+  externalRef: string;
+  orderExternalRef: string;
+  amountMinor: number;
+  currency: string;
+}
+
+export interface MarketplaceRefundPage {
+  refunds: MarketplaceRefund[];
+  nextCursor: string | null;
+}
+
 export interface MarketplaceProvider {
   connect(input: MarketplaceConnectInput): Promise<{ externalRef: string }>;
   listOrders(input: {
@@ -33,6 +45,12 @@ export interface MarketplaceProvider {
     cursor?: string | null;
     limit?: number;
   }): Promise<MarketplaceOrderPage>;
+  listRefunds(input: {
+    provider: string;
+    externalRef: string;
+    cursor?: string | null;
+    limit?: number;
+  }): Promise<MarketplaceRefundPage>;
 }
 
 /**
@@ -42,12 +60,18 @@ export interface MarketplaceProvider {
 export const FIXTURE_PAGE_SIZE = 1;
 
 const stagedByProvider = new Map<string, MarketplaceOrder[]>();
+const stagedRefundsByProvider = new Map<string, MarketplaceRefund[]>();
 let listCalls = 0;
 let failAfterPages: number | null = null;
 
 export function stageMarketplaceOrders(provider: string, orders: MarketplaceOrder[]): void {
   const current = stagedByProvider.get(provider) ?? [];
   stagedByProvider.set(provider, [...current, ...orders]);
+}
+
+export function stageMarketplaceRefunds(provider: string, refunds: MarketplaceRefund[]): void {
+  const current = stagedRefundsByProvider.get(provider) ?? [];
+  stagedRefundsByProvider.set(provider, [...current, ...refunds]);
 }
 
 export function marketplaceListOrderCalls(): number {
@@ -61,6 +85,7 @@ export function failMarketplaceListAfterPages(count: number | null): void {
 
 export function resetStagedMarketplaceOrders(): void {
   stagedByProvider.clear();
+  stagedRefundsByProvider.clear();
   listCalls = 0;
   failAfterPages = null;
 }
@@ -97,6 +122,23 @@ export const fixtureMarketplaceProvider: MarketplaceProvider = {
     const next = start + orders.length;
     return {
       orders,
+      nextCursor: next < staged.length ? String(next) : null,
+    };
+  },
+  async listRefunds(input) {
+    const staged = stagedRefundsByProvider.get(input.provider) ?? [];
+    if (
+      input.externalRef.startsWith("fail-") ||
+      staged.some((refund) => refund.orderExternalRef.startsWith("fail-"))
+    ) {
+      throw new Error("The marketplace could not list refunds.");
+    }
+    const start = pageStart(input.cursor);
+    const size = Math.min(Math.max(input.limit ?? FIXTURE_PAGE_SIZE, 1), FIXTURE_PAGE_SIZE);
+    const refunds = staged.slice(start, start + size);
+    const next = start + refunds.length;
+    return {
+      refunds,
       nextCursor: next < staged.length ? String(next) : null,
     };
   },

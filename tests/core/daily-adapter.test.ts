@@ -118,6 +118,21 @@ describe("Daily live client", () => {
   await expect(client(fetcher).recordingAccess(recordingId)).rejects.toThrow("valid recording download");
  });
 
+ it("downloads finished recordings through a bounded credential-free storage request", async () => {
+  const access = { download_link: "https://storage.example.test/recording?signature=private", expires: Math.floor(now / 1000) + 60 };
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(access));
+  const download = vi.fn<typeof getPinnedBytes>().mockResolvedValue({ status: 200, contentType: "video/mp4", bytes: new Uint8Array([1, 2, 3]) });
+  const provider = createDailyClient(config, fetcher, () => now, download);
+  await expect(provider.downloadRecording(recordingId)).resolves.toEqual({ bytes: new Uint8Array([1, 2, 3]), contentType: "video/mp4" });
+  expect(download).toHaveBeenCalledWith("https://storage.example.test/recording?signature=private", { maxBytes: 512 * 1024 * 1024, timeoutMs: 60000 });
+  const failing = vi.fn<typeof getPinnedBytes>().mockResolvedValue({ status: 503, contentType: undefined, bytes: new Uint8Array() });
+  const denied = createDailyClient(config, vi.fn<typeof fetch>().mockResolvedValue(Response.json(access)), () => now, failing);
+  await expect(denied.downloadRecording(recordingId)).rejects.toThrow("could not be downloaded safely");
+  const nofetch = vi.fn<typeof fetch>();
+  await expect(createDailyClient(config, nofetch, () => now, download).downloadRecording("not-a-uuid")).rejects.toThrow("valid provider identity");
+  expect(nofetch).not.toHaveBeenCalled();
+ });
+
  it("erases verified recordings and transcripts and verifies the resulting inventory", async () => {
   const empty = { total_count: 0, data: [] };
   const transcript = { transcriptId: sessionId, roomId: providerId, status: "t_finished" };

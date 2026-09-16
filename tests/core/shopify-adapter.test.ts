@@ -76,6 +76,41 @@ describe("Shopify live provider", () => {
   expect((await createShopifyProvider(configuration, fetcher).listOrders(listing)).orders.map(row => row.amountMinor)).toEqual([123, 12345]);
  });
 
+ it("pages refunded orders with their refund amounts", async () => {
+  const refundPage = (nodes: unknown[], hasNextPage = false, endCursor: string | null = null) =>
+   Response.json({ data: { shop: identity, orders: { nodes, pageInfo: { hasNextPage, endCursor } } } });
+  const refunded = { id: "gid://shopify/Order/500", name: "#1002", refunds: { nodes: [
+    { id: "gid://shopify/Refund/901", createdAt: "2026-09-15T00:00:00Z", totalRefundedSet: { shopMoney: { amount: "123.00", currencyCode: "JPY" } } },
+    { id: "gid://shopify/Refund/902", createdAt: "2026-09-15T01:00:00Z", totalRefundedSet: { shopMoney: { amount: "12.3450", currencyCode: "KWD" } } },
+  ], pageInfo: { hasNextPage: false } } };
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(token()).mockResolvedValueOnce(refundPage([refunded], true, "refund-page"));
+  const result = await createShopifyProvider(configuration, fetcher).listRefunds({ ...listing, cursor: "previous-refund-page", limit: 10 });
+  expect(result).toEqual({ refunds: [
+    { externalRef: "gid://shopify/Refund/901", orderExternalRef: refunded.id, amountMinor: 123, currency: "JPY" },
+    { externalRef: "gid://shopify/Refund/902", orderExternalRef: refunded.id, amountMinor: 12345, currency: "KWD" },
+  ], nextCursor: "refund-page" });
+  expect(JSON.parse(fetcher.mock.calls[1]![1]!.body as string)).toMatchObject({ variables: { first: 10, after: "previous-refund-page" } });
+ });
+
+ it("refuses another shop's refund page, repeated cursors and truncated refund lists", async () => {
+  const refundPage = (nodes: unknown[], pageInfo: { hasNextPage: boolean; endCursor: string | null } = { hasNextPage: false, endCursor: null }, shopOverride = identity) =>
+   Response.json({ data: { shop: shopOverride, orders: { nodes, pageInfo } } });
+  const refunded = { id: "gid://shopify/Order/500", name: "#1002", refunds: { nodes: [], pageInfo: { hasNextPage: false } } };
+  await expect(createShopifyProvider(configuration, vi.fn<typeof fetch>().mockResolvedValueOnce(token()).mockResolvedValueOnce(
+   refundPage([refunded], { hasNextPage: true, endCursor: "same" }, { ...identity, id: "gid://shopify/Shop/999" })),
+  ).listRefunds({ ...listing, cursor: "same" })).rejects.toThrow("different Shopify shop");
+  const repeated = vi.fn<typeof fetch>().mockResolvedValueOnce(token()).mockResolvedValueOnce(refundPage([refunded], { hasNextPage: true, endCursor: "same" }));
+  await expect(createShopifyProvider(configuration, repeated).listRefunds({ ...listing, cursor: "same" })).rejects.toThrow("invalid pagination cursor");
+  const truncated = { ...refunded, refunds: { nodes: [{ id: "gid://shopify/Refund/901", createdAt: "2026-09-15T00:00:00Z",
+    totalRefundedSet: { shopMoney: { amount: "1.00", currencyCode: "USD" } } }], pageInfo: { hasNextPage: true } } };
+  const tooMany = vi.fn<typeof fetch>().mockResolvedValueOnce(token()).mockResolvedValueOnce(refundPage([truncated]));
+  await expect(createShopifyProvider(configuration, tooMany).listRefunds(listing)).rejects.toThrow("more refunds than one bounded page");
+  const malformed = { ...refunded, refunds: { nodes: [{ id: "gid://shopify/Refund/not-a-number", createdAt: "2026-09-15T00:00:00Z",
+    totalRefundedSet: { shopMoney: { amount: "1.00", currencyCode: "USD" } } }], pageInfo: { hasNextPage: false } } };
+  const badShape = vi.fn<typeof fetch>().mockResolvedValueOnce(token()).mockResolvedValueOnce(refundPage([malformed]));
+  await expect(createShopifyProvider(configuration, badShape).listRefunds(listing)).rejects.toThrow("incomplete refund data");
+ });
+
  it("refuses a repeated page cursor and incomplete permission grants", async () => {
   const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(token()).mockResolvedValueOnce(page([order], true, "same"));
   await expect(createShopifyProvider(configuration, fetcher).listOrders({ ...listing, cursor: "same" })).rejects.toThrow("invalid pagination cursor");

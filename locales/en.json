@@ -6309,7 +6309,7 @@
   "marketplace.configuration": "Shopify configuration",
   "marketplace.configured": "Configured for {shop}. Connect the channel to verify access.",
   "marketplace.configure": "Set SHOPIFY_SHOP, SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET in your deployment environment, then restart Freeholder.",
-  "marketplace.importScope": "Paid, non-test Shopify orders become draft invoices for review. Sync imports accessible history and does not update earlier imports for later refunds or edits.",
+  "marketplace.importScope": "Paid, non-test Shopify orders become draft invoices for review. Sync imports accessible history and reconciles refunds on imported orders as issued credit notes once the invoice is issued.",
   "marketplace.setupGuide": "Shopify setup guide",
   "marketplace.reviewInvoice": "Review draft invoice",
   "voiceVideo.setup": "Daily setup",
@@ -6356,5 +6356,14 @@
   "records.trash.failed": "That record could not be changed. Refresh the trash view and try again.",
   "records.trash.invalidConfirmation": "Type PURGE to confirm permanent deletion.",
   "records.trash.blocked": "That record cannot be purged. It may be unavailable or protected by a retention hold.",
-  "records.trash.denied": "You do not have permission to change this record."
+  "records.trash.denied": "You do not have permission to change this record.",
+  "voiceVideo.importPending": "Import pending",
+  "voiceVideo.imported": "Copied to your storage",
+  "voiceVideo.importFailed": "Storage copy failed",
+  "voiceVideo.importRetry": "Copy to storage",
+  "marketplace.refunds": "Refunds",
+  "marketplace.refunds.empty": "No refunds to reconcile.",
+  "marketplace.refund.status.pending_order": "Waiting for its order",
+  "marketplace.refund.status.pending_invoice": "Waiting for invoice issue",
+  "marketplace.refund.status.reconciled": "Reconciled"
 }
