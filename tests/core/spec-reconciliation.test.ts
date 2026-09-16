@@ -35,13 +35,16 @@ describe("C11.16 spec reconciliation", () => {
       "C11.08",
       "C11.10",
       "C11.11",
-      "C11.14",
       "C11.15",
       "C11.17",
     ]) {
       expect(items.get(id)).toBe(false);
       expect(recon).toContain(id);
     }
+    // C11.14 is checked with its five proofs; the reconciliation table must
+    // still record where its evidence lives.
+    expect(items.get("C11.14")).toBe(true);
+    expect(recon).toContain("C11.14");
   });
 
   it("does not claim DONE and leaves the owner signature blank", () => {

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Product-wide search over live user-owned rows (C11.14). Does not close the
-// item: undelete-every-row remains a named leftover.
+// Product-wide search over live user-owned rows (C11.14). C11.14 is now
+// checked; these tests keep the search and participation guarantees honest.
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -36,14 +36,14 @@ import { closeDb, failure, hasDatabase, OWNER, STAFF, truncateSpine } from "../h
 const TOKEN = "zxqvsearchmix";
 
 describe("C11.14 search leftovers", () => {
-  it("keeps C11.14 open and names the leftovers this PR did not close", () => {
+  it("keeps C11.14 checked and names the worklist it closed", () => {
     const master = readFileSync("MASTER.md", "utf8");
-    expect(master).toMatch(/- \[ \] \*\*C11\.14\*\*/);
+    expect(master).toMatch(/- \[x\] \*\*C11\.14\*\*/);
     expect(readFileSync("src/core/search/service.ts", "utf8")).toContain(
       'name: "search.query"',
     );
     expect(master).toContain(
-      "Per-record restore includes note/task trash, media/product restoration, contact-merge undo and the ownership-drill instance restore; other entities still lack undelete.",
+      "Per-record restore includes note/task trash, media/product restoration, contact-merge undo, the ownership-drill instance restore and trash/restore/purge for pages, forms, popups, segments and saved views; money ledgers, append-only evidence, credentials, join rows and never-deleted families are named not-applicable in deploy/record-trash.md.",
     );
     expect(master).toContain(
       "Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.",

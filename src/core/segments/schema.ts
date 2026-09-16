@@ -43,6 +43,9 @@ export const segments = pgTable(
   "segments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Set = in trash (C11.14). The definition returns on restore; captured
+     * membership rows stay with it until purge. */
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
     name: text("name").notNull(),
     /** Stable, so a price list or a campaign can name a segment in a config. */
     slug: text("slug").notNull(),
@@ -71,6 +74,7 @@ export const segments = pgTable(
   (t) => [
     uniqueIndex("segments_slug_idx").on(t.slug),
     index("segments_kind_idx").on(t.kind),
+    index("segments_trash_idx").on(t.trashedAt).where(sql`${t.trashedAt} is not null`),
     check("segments_name", sql`char_length(${t.name}) between 1 and 120`),
     check("segments_slug_shape", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
     // A static segment is only static once it has been captured; before that it

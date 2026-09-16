@@ -58,6 +58,8 @@ export const popups = pgTable(
   "popups",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Set = in trash (C11.14). The row and its event history stay until purge. */
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
     /** Stable handle, so a test or a config can name a popup. */
     slug: text("slug").notNull(),
     /** What the owner calls it in the admin list. */
@@ -128,6 +130,7 @@ export const popups = pgTable(
   (t) => [
     uniqueIndex("popups_slug_idx").on(t.slug),
     index("popups_status_idx").on(t.status, t.priority),
+    index("popups_trash_idx").on(t.trashedAt).where(sql`${t.trashedAt} is not null`),
     check("popups_slug_shape", sql`${t.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
     check("popups_slug_bounded", sql`char_length(${t.slug}) <= 180`),
     check("popups_name_bounded", sql`char_length(${t.name}) between 1 and 120`),

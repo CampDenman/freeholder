@@ -16,7 +16,7 @@ import { ready } from "@/core/runtime";
 import { listServices } from "@/core/service";
 
 export const C11_14_REMAINING = [
-  "Per-record restore includes note/task trash, media/product restoration, contact-merge undo and the ownership-drill instance restore; other entities still lack undelete.",
+  "Per-record restore includes note/task trash, media/product restoration, contact-merge undo, the ownership-drill instance restore and trash/restore/purge for pages, forms, popups, segments and saved views; money ledgers, append-only evidence, credentials, join rows and never-deleted families are named not-applicable in deploy/record-trash.md.",
   "Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.",
 ] as const;
 
@@ -111,9 +111,9 @@ describe("user-owned record participation (C11.14)", () => {
     expect(source).toContain("auditLog");
   });
 
-  it("names the remaining product-wide gaps instead of checking C11.14 early", () => {
+  it("names the closed worklist on the checked C11.14 item", () => {
     const master = readFileSync("MASTER.md", "utf8");
-    expect(master).toMatch(/- \[ \] \*\*C11\.14\*\*/);
+    expect(master).toMatch(/- \[x\] \*\*C11\.14\*\*/);
     for (const gap of C11_14_REMAINING) {
       expect(master, gap).toContain(gap);
     }

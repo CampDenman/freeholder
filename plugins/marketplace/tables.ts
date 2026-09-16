@@ -1,3 +1,3 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-export { marketplaceChannels, marketplaceOrders } from "./schema";
+export { marketplaceChannels, marketplaceOrders, marketplaceRefunds } from "./schema";

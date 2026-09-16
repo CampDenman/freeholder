@@ -22,6 +22,7 @@ import {
   jsonb,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -32,6 +33,8 @@ export const savedViews = pgTable(
   "saved_views",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Set = in trash (C11.14). Only the owner can see or recover it. */
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
     /** Which list. A key from the view registry, not a table name. */
     entity: text("entity").notNull(),
     name: text("name").notNull(),
@@ -66,6 +69,7 @@ export const savedViews = pgTable(
   (t) => [
     index("saved_views_entity_idx").on(t.entity, t.ownerUserId),
     index("saved_views_shared_idx").on(t.entity, t.shared),
+    index("saved_views_trash_idx").on(t.trashedAt).where(sql`${t.trashedAt} is not null`),
     // One default per person per list. Without this a second "make default"
     // leaves two, and which one opens becomes whichever the planner returned
     // first — a bug that looks like the software forgetting.

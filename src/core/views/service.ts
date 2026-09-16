@@ -27,9 +27,10 @@
 // was renamed still opens; it simply filters by less. Refusing to load it would
 // punish somebody for a change they did not make.
 import { z } from "zod";
-import { and, asc, eq, or, sql } from "drizzle-orm";
-import { listed, row, uuid } from "@/core/contract";
+import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Actor, type Tx } from "@/core/service";
+import { makeTrashServices } from "@/core/trash";
 // Imported for its side effect: core's own lists are registered the moment
 // anything touches this service.
 import "./entities";
@@ -67,6 +68,7 @@ function knownEntity(key: string) {
 
 const viewRow = row({
   id: uuid,
+  trashedAt: timestamp.nullable(),
   entity: z.string(),
   name: z.string(),
   filters: z.record(z.string(), z.string()),
@@ -77,6 +79,30 @@ const viewRow = row({
   shared: z.boolean(),
   isDefault: z.boolean(),
 });
+
+/**
+ * Reversible removal (C11.14). A saved view is personal configuration — it
+ * names no contact, so no contact-scoped retention hold can apply to it and
+ * the purge carries no hold guard. Ownership is the grant: only the owner
+ * can remove, restore or purge their own row, the sweep reclaims every
+ * owner's expired trash, and a colleague never sees a shared view somebody
+ * else has trashed.
+ */
+const trash = makeTrashServices({
+  family: "views",
+  table: savedViews,
+  rowSchema: viewRow,
+  subjectKind: "savedView",
+  gone: "That view is not here.",
+  permission: "authenticated",
+  ownerColumn: savedViews.ownerUserId,
+});
+export const {
+  remove: removeView,
+  restore: restoreView,
+  purge: purgeView,
+  purgeExpired: purgeExpiredViews,
+} = trash;
 
 export const saveView = defineService({
   name: "views.save",
@@ -117,7 +143,7 @@ export const saveView = defineService({
       const [existing] = await ctx.tx
         .select({ ownerUserId: savedViews.ownerUserId })
         .from(savedViews)
-        .where(eq(savedViews.id, input.id))
+        .where(and(eq(savedViews.id, input.id), isNull(savedViews.trashedAt)))
         .limit(1);
       if (!existing) throw new ServiceError("not_found", "That view is not here.");
       if (existing.ownerUserId !== userId) {
@@ -167,7 +193,11 @@ export const listViews = defineService({
   summary: "The views for one list: this person's, and what colleagues shared.",
   kind: "query",
   permission: "authenticated",
-  input: z.object({ entity: z.string().trim().min(1).max(60) }),
+  input: z.object({
+    entity: z.string().trim().min(1).max(60).optional(),
+    /** The recovery view: this person's trashed views, across lists (C11.14). */
+    trashedOnly: z.boolean().default(false),
+  }),
   output: listed(viewRow.extend({ mine: z.boolean() })),
   handler: async (input, ctx) => {
     const userId = ctx.actor.kind === "user" ? ctx.actor.userId : null;
@@ -176,41 +206,23 @@ export const listViews = defineService({
       .from(savedViews)
       .where(
         and(
-          eq(savedViews.entity, input.entity),
+          input.entity ? eq(savedViews.entity, input.entity) : undefined,
           // Theirs, or anything a colleague deliberately shared. A private view
           // is filtered in the query so it cannot surface anywhere else.
-          userId
-            ? or(eq(savedViews.ownerUserId, userId), eq(savedViews.shared, true))
-            : eq(savedViews.shared, true),
+          // Trash is personal: a colleague's trashed view is nobody's view.
+          input.trashedOnly
+            ? userId
+              ? eq(savedViews.ownerUserId, userId)
+              : undefined
+            : userId
+              ? or(eq(savedViews.ownerUserId, userId), eq(savedViews.shared, true))
+              : eq(savedViews.shared, true),
+          input.trashedOnly ? isNotNull(savedViews.trashedAt) : isNull(savedViews.trashedAt),
         ),
       )
       .orderBy(asc(savedViews.name))
       .limit(100);
     return rows.map((view) => ({ ...view, mine: view.ownerUserId === userId }));
-  },
-});
-
-export const removeView = defineService({
-  name: "views.remove",
-  summary: "Forget a saved view.",
-  kind: "mutation",
-  // Anybody signed in, because the real gate is per list: `mayUseEntity` below
-  // refuses a view of a list this person cannot open. A separate "views" module
-  // grant would mean an owner had to hand out a permission for a feature that
-  // is really just a bookmark.
-  permission: "authenticated",
-  writeClass: "destructive",
-  input: z.object({ id }),
-  output: row({ id: uuid }),
-  handler: async (input, ctx) => {
-    const userId = requireUser(ctx.actor);
-    const [removed] = await ctx.tx
-      .delete(savedViews)
-      .where(and(eq(savedViews.id, input.id), eq(savedViews.ownerUserId, userId)))
-      .returning({ id: savedViews.id });
-    if (!removed) throw new ServiceError("not_found", "That view is not here.");
-    ctx.setSubject("savedView", removed.id);
-    return removed;
   },
 });
 
@@ -240,6 +252,7 @@ export const defaultView = defineService({
           eq(savedViews.entity, input.entity),
           eq(savedViews.ownerUserId, userId),
           eq(savedViews.isDefault, true),
+          isNull(savedViews.trashedAt),
         ),
       )
       .limit(1);
@@ -268,7 +281,7 @@ export const setDefaultView = defineService({
     const [view] = await ctx.tx
       .select({ id: savedViews.id, ownerUserId: savedViews.ownerUserId, shared: savedViews.shared })
       .from(savedViews)
-      .where(eq(savedViews.id, input.id))
+      .where(and(eq(savedViews.id, input.id), isNull(savedViews.trashedAt)))
       .limit(1);
     if (!view || (view.ownerUserId !== userId && !view.shared)) {
       throw new ServiceError("not_found", "That view is not here.");
@@ -280,7 +293,7 @@ export const setDefaultView = defineService({
       const [source] = await ctx.tx
         .select()
         .from(savedViews)
-        .where(eq(savedViews.id, input.id))
+        .where(and(eq(savedViews.id, input.id), isNull(savedViews.trashedAt)))
         .limit(1);
       const [copied] = await ctx.tx
         .insert(savedViews)
@@ -365,6 +378,9 @@ export default [
   saveView,
   listViews,
   removeView,
+  restoreView,
+  purgeView,
+  purgeExpiredViews,
   defaultView,
   setDefaultView,
   listViewEntities,

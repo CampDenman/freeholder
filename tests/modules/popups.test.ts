@@ -45,8 +45,10 @@ import {
   getPopup,
   listPopups,
   popupPerformance,
+  purgePopup,
   recordPopupEvent,
   removePopup,
+  restorePopup,
   savePopup,
   savePopupBlocks,
   setPopupStatus,
@@ -718,15 +720,24 @@ describe.runIf(hasDatabase)("popups against the spine", () => {
     expect(clash.code).toBe("conflict");
 
     await recordPopupEvent.call({ popupId: popup.id, kind: "shown" }, ANONYMOUS);
-    const unconfirmed = await failure(
-      removePopup.call({ id: popup.id, confirm: false }, OWNER),
-    );
-    expect(unconfirmed.code).toBe("validation");
-    await removePopup.call({ id: popup.id, confirm: true }, OWNER);
+    // Removal is trash: the popup leaves every live surface at once, its
+    // event history stays readable, and only the typed, step-up purge
+    // hard-deletes the popup and its events.
+    await removePopup.call({ id: popup.id }, OWNER);
     expect(await listPopups.call({}, OWNER)).toEqual([]);
+    expect((await listPopups.call({ trashedOnly: true }, OWNER))[0]?.id).toBe(popup.id);
+    await expect(restorePopup.call({ id: popup.id }, OWNER)).resolves.toMatchObject({ id: popup.id });
+    await removePopup.call({ id: popup.id }, OWNER);
     expect(
       await db().select().from(popupEvents).where(eq(popupEvents.popupId, popup.id)),
-    ).toEqual([]);
+    ).toHaveLength(1);
+    await purgePopup.call({ id: popup.id, confirmation: "PURGE" }, OWNER);
+    expect(await db().select().from(popupEvents).where(eq(popupEvents.popupId, popup.id))).toEqual(
+      [],
+    );
+    await expect(restorePopup.call({ id: popup.id }, OWNER)).rejects.toMatchObject({
+      code: "not_found",
+    });
   });
 });
 

@@ -30,6 +30,7 @@ import {
   listViewEntities,
   listViews,
   meaningfulParams,
+  purgeView,
   removeView,
   saveView,
   setDefaultView,
@@ -238,9 +239,13 @@ describe.runIf(hasDatabase)("saved views", { timeout: 90_000 }, () => {
     expect(changed).toMatchObject({ name: "Ontario leads", filters: { stage: "lead" }, shared: true });
   });
 
-  it("forgets a view its owner asks it to", async () => {
+  it("forgets a view its owner asks it to, after trash and explicit purge", async () => {
     const kept = await view();
     await removeView.call({ id: kept.id }, OWNER);
+    // Removal is trash first: the row survives, hidden from ordinary views.
+    expect(await listViews.call({ entity: "contacts" }, OWNER)).toHaveLength(0);
+    expect(await db().select().from(savedViews)).toHaveLength(1);
+    await purgeView.call({ id: kept.id, confirmation: "PURGE" }, OWNER);
     expect(await db().select().from(savedViews)).toHaveLength(0);
   });
 

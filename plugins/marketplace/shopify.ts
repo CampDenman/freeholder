@@ -27,6 +27,13 @@ const ORDERS_QUERY = `query FreeholderOrders($first: Int!, $after: String) {
     pageInfo { hasNextPage endCursor }
   }
 }`;
+const REFUNDS_QUERY = `query FreeholderRefunds($first: Int!, $after: String) {
+  shop { id myshopifyDomain }
+  orders(first: $first, after: $after, sortKey: UPDATED_AT, query: "financial_status:refunded OR financial_status:partially_refunded") {
+    nodes { id name refunds(first: 50) { nodes { id createdAt totalRefundedSet { shopMoney { amount currencyCode } } } pageInfo { hasNextPage } } }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
 
 export function createShopifyProvider(configuration: ShopifyConfiguration, fetcher: typeof fetch = fetch, now = Date.now): MarketplaceProvider {
   const shop = configuration.shop.trim().toLowerCase();
@@ -86,6 +93,20 @@ export function createShopifyProvider(configuration: ShopifyConfiguration, fetch
       throw new ShopifyError("This channel belongs to a different Shopify shop. Restore its original configuration.");
     }
   }
+  function shopMoneyToMinor(money: { amount: string; currencyCode: string }): number {
+    let amountMinor: number;
+    try {
+      if (!/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(money.amount)) throw new Error("Invalid amount");
+      const [whole, fraction] = money.amount.split(".");
+      const decimals = fraction?.replace(/0+$/, "");
+      const normalized = money.amount.split(".").length > 2 ? money.amount : `${whole}${decimals ? `.${decimals}` : ""}`;
+      amountMinor = decimalToMinor(normalized, money.currencyCode);
+    } catch {
+      throw new ShopifyError("A Shopify monetary amount is invalid.");
+    }
+    if (amountMinor < 0 || amountMinor > 2_147_483_647) throw new ShopifyError("A Shopify amount exceeds the supported import range.");
+    return amountMinor;
+  }
   function requireProvider(provider: string) {
     if (provider !== "shopify") throw new ShopifyError("Only the Shopify live marketplace provider is configured on this instance.");
   }
@@ -115,19 +136,39 @@ export function createShopifyProvider(configuration: ShopifyConfiguration, fetch
       const orders = page.nodes.filter(order => !order.test && !order.cancelledAt && order.displayFinancialStatus === "PAID").map(order => {
         if (!z.email().safeParse(order.email).success) throw new ShopifyError("A Shopify order has no accessible customer email. Check customer-data permissions before retrying.");
         const money = order.currentTotalPriceSet.shopMoney;
-        let amountMinor: number;
-        try {
-          if (!/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(money.amount)) throw new Error("Invalid amount");
-          const [whole, fraction] = money.amount.split(".");
-          const decimals = fraction?.replace(/0+$/, "");
-          const normalized = money.amount.split(".").length > 2 ? money.amount : `${whole}${decimals ? `.${decimals}` : ""}`;
-          amountMinor = decimalToMinor(normalized, money.currencyCode); }
-        catch { throw new ShopifyError("A Shopify order has an invalid monetary amount."); }
-        if (amountMinor < 0 || amountMinor > 2_147_483_647) throw new ShopifyError("A Shopify order amount exceeds the supported import range.");
+        const amountMinor = shopMoneyToMinor(money);
         return { externalRef: order.id, description: `Shopify ${order.name}`, amountMinor, currency: money.currencyCode,
           buyerEmail: order.email!, buyerName: (order.customer?.displayName?.trim() || order.email!).slice(0, 200) };
       });
       return { orders, nextCursor: page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null };
+    },
+    async listRefunds(input) {
+      requireProvider(input.provider);
+      if (!/^gid:\/\/shopify\/Shop\/[0-9]+$/.test(input.externalRef) || (input.cursor && input.cursor.length > 500)) {
+        throw new ShopifyError("Reconnect this Shopify channel before syncing its refunds.");
+      }
+      const first = Math.min(50, Math.max(1, Math.floor(input.limit ?? 50)));
+      const refundNode = z.object({ id: z.string().regex(/^gid:\/\/shopify\/Refund\/[0-9]+$/), createdAt: z.string(),
+        totalRefundedSet: z.object({ shopMoney: z.object({ amount: z.string(), currencyCode: z.string().regex(/^[A-Z]{3}$/) }) }) });
+      const data = z.object({ shop: shopIdentity, orders: z.object({ nodes: z.array(z.object({
+        id: z.string().regex(/^gid:\/\/shopify\/Order\/[0-9]+$/),
+        refunds: z.object({ nodes: z.array(refundNode).max(50), pageInfo: z.object({ hasNextPage: z.boolean() }) }),
+      })).max(50), pageInfo: z.object({ hasNextPage: z.boolean(), endCursor: z.string().max(500).nullable() }) }) }).safeParse(await graphql(REFUNDS_QUERY, { first, after: input.cursor ?? null }));
+      if (!data.success) throw new ShopifyError("Shopify returned incomplete refund data. Check API access and rate limits before retrying.");
+      verifyShop(data.data.shop, input.externalRef);
+      const page = data.data.orders;
+      if (page.pageInfo.hasNextPage && (!page.pageInfo.endCursor || page.pageInfo.endCursor === input.cursor)) {
+        throw new ShopifyError("Shopify returned an invalid pagination cursor.");
+      }
+      const refunds = page.nodes.flatMap(order => {
+        if (order.refunds.pageInfo.hasNextPage) throw new ShopifyError("A Shopify order has more refunds than one bounded page. Reconcile it by hand before retrying.");
+        return order.refunds.nodes.map(refund => {
+          const money = refund.totalRefundedSet.shopMoney;
+          return { externalRef: refund.id, orderExternalRef: order.id,
+            amountMinor: shopMoneyToMinor(money), currency: money.currencyCode };
+        });
+      });
+      return { refunds, nextCursor: page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null };
     },
   };
 }

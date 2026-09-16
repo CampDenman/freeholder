@@ -3985,18 +3985,18 @@ v2.
 
 ## C11.14 — Verify every user-owned record participates correctly in
 
-- **F01** — `tests/core/record-participation.test.ts` — every user-owned table registers its contact FK and privacy hooks.
+- **F01** — `tests/core/record-participation.test.ts` — every user-owned table registers its contact FK and privacy hooks; `db/migrations/0011_record_trash.sql` adds the shared `trashed_at` columns for the seven restored families.
 - **F02** — `tests/core/c11-14-search.test.ts` — `search.query` is one grant-filtered read over registered scoped services (the audit-repaired scope escalation).
 - **F03** — `tests/core/merge-completeness.test.ts` + `tests/core/record-participation.test.ts` — contact FKs are merge-repointed.
-- **F04** — N/A — a verification item, not a screen.
-- **F05** — `tests/core/c11-14-search.test.ts` — search exposes only the registered scoped read services.
-- **F06** — N/A — no human surface.
-- **F07** — `tests/core/contact-privacy-rights.test.ts` — export/erasure registered and enforced.
-- **F08** — `tests/core/record-participation.test.ts` + `tests/core/c11-14-search.test.ts` + `tests/core/c11-14-retention.test.ts` + `tests/core/ownership-export.test.ts`.
-- **F09** — `tests/core/c11-14-retention.test.ts` — per-kind TTL retention policies and apply job; `scripts/ownership-drill.mjs` is the restore pair matrix.
-- **F10** — N/A — no setup or demo surface of its own.
-- **F11** — `MASTER.md` §43 annotation this row transcribes. — `deploy/spec-reconciliation.md` (§-mapping).
-- **F12** — Open — the item stays open while remaining record families' undelete and per-list search opt-outs land (`tests/core/record-participation.test.ts` is the participation baseline).
+- **F04** — `app/(admin)/admin/trash/page.tsx` — a tab per family with view/manage-aware controls (/admin/search, /admin/retention from the earlier partial); `deploy/record-trash.md` is the runbook.
+- **F05** — `cms.removePage`/`restorePage`/`purgePage`, `forms.*`, `popups.*`, `segments.*` and `views.*` pairs at /api/v1/*, OpenAPI and the regenerated SDK (`packages/sdk/src/generated.ts`); MCP included.
+- **F06** — Host catalog gates `tests/core/i18n-gate.test.ts` + `tests/core/locale-quality.test.ts`; no per-item scan claimed.
+- **F07** — `tests/core/record-trash-families.test.ts` — visibility, search exclusion, slug reservation, submissions-stay-live, hold protection manual and swept, step-up and typed confirmation, fail-closed consumers, personal trash and erasure non-resurrection.
+- **F08** — `tests/core/record-trash-families.test.ts` + `tests/core/record-participation.test.ts` + `tests/core/c11-14-search.test.ts` + `tests/core/c11-14-retention.test.ts` + `tests/core/ownership-export.test.ts`.
+- **F09** — `tests/core/record-trash-families.test.ts` + `src/core/jobs/core-jobs.ts` — `core.purgeExpiredWorkRecords` purges a bounded batch of every family's expired trash while preserving holds; `deploy/record-trash.md` documents operations and exclusions.
+- **F10** — N/A — a verification item with no setup or demo surface of its own.
+- **F11** — `deploy/record-trash.md` + `MASTER.md` §43 annotation this row transcribes.
+- **F12** — `tests/core/record-trash-families.test.ts` — cross-family composition; `tests/browser/record-trash.spec.ts` drives the popup trash/restore journey in Chromium.
 
 ## C11.15 — Remove every scaffold, placeholder, false-positive build
 
