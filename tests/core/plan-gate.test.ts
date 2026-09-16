@@ -1,9 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Proof that the single-source planning gate fails for the drift it names.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   checklistItems,
+  DEFERRED,
   proofsNamed,
   readTrackedPaths,
   readWorkspaceFiles,
@@ -101,6 +103,51 @@ describe("plan consistency", () => {
       "This is the current session handoff for the next sprint.",
     );
     expect(codes(files)).toContain("stale-handoff");
+  });
+});
+
+describe("owner-approved v2 deferral (§43.18, decision 2026-09-15)", () => {
+  it("refuses a deferred ID re-entering the live sequence as a checkbox", () => {
+    // The seven mobile items are quoted in §43.18, never re-listed as work.
+    // A checkbox for one of them would silently resurrect v1 scope the owner
+    // moved to v2; reversal is an owner decision recorded there, not a line
+    // someone re-adds on the way past.
+    const value = master("- [ ] **C10.17** Resurrected mobile work");
+    expect(codes(workspace(value))).toContain("deferred-reentry");
+  });
+
+  it("computes C10 contiguity across the deferred holes", () => {
+    // C10.01–C10.24 minus the deferred 17 and 18 is contiguous: the §43.18
+    // holes are sanctioned, so id-gap must stay silent.
+    const c10 = Array.from(
+      { length: 23 },
+      (_, index) => `- [ ] **C10.${String(index + 2).padStart(2, "0")}** Item ${index + 2}`,
+    ).filter((_, index) => index !== 15 && index !== 16);
+    expect(codes(workspace(master(c10.join("\n"))))).not.toContain("id-gap");
+  });
+
+  it("still refuses a gap no owner decision covers", () => {
+    // The deferral tolerates exactly its seven IDs; it does not loosen the
+    // sequence rule for anyone else.
+    const value = master("- [ ] **C10.03** Missing 02 is not deferred");
+    expect(codes(workspace(value))).toContain("id-gap");
+  });
+
+  it("resolves references to deferred IDs", () => {
+    // Code and evidence prose legitimately name C10 IDs; the gate resolves
+    // them through §43.18's quotes instead of reporting dangling work.
+    const files = workspace();
+    files.set("src/mobile/notes.ts", "// capture contract deferred with C10.18");
+    expect(codes(files)).not.toContain("unknown-reference");
+  });
+
+  it("the real repository keeps deferred IDs out of the live sequence", () => {
+    // The full self-test above proves the gate passes; this pins the deferral
+    // half of that contract directly.
+    const items = checklistItems(readFileSync("MASTER.md", "utf8"));
+    for (const id of DEFERRED) {
+      expect(items.some((item) => item.id === id)).toBe(false);
+    }
   });
 });
 

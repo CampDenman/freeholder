@@ -639,6 +639,20 @@ export const applyRetentionPoliciesJob = defineJob({
   },
 });
 
+/** Notes and tasks retain their original rows during a thirty-day trash window. */
+export const purgeExpiredWorkRecords = defineJob({
+  name: "core.purgeExpiredWorkRecords",
+  summary: "Purge expired note and task trash while preserving retention holds.",
+  schedule: "17 5 * * *", concurrency: 1,
+  handler: async () => {
+    const { purgeExpiredNotes } = await import("@/core/notes/service");
+    const { purgeExpiredTasks } = await import("@/core/tasks/service");
+    const notes = await purgeExpiredNotes.call({}, { kind: "system" });
+    const tasks = await purgeExpiredTasks.call({}, { kind: "system" });
+    return { notes: notes.purged, tasks: tasks.purged };
+  },
+});
+
 /** Trash is reversible for thirty days, then storage is reclaimed in batches. */
 export const purgeExpiredMediaAssets = defineJob({
   name: "core.purgeExpiredMedia",
@@ -935,6 +949,7 @@ export default [
   runManagedAgents,
   applyRetentionPoliciesJob,
   purgeExpiredMediaAssets,
+  purgeExpiredWorkRecords,
   backfillMediaWatermarks,
   deliverNotifications,
   deliverNotificationDigests,

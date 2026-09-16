@@ -20,6 +20,7 @@ import { assets } from "@/core/media/schema";
 import { contacts } from "@/core/contacts/schema";
 import { projectFiles, projectLinks, projects } from "@/modules/projects/schema";
 import { db } from "@/core/db";
+import { restoreTask } from "@/core/tasks/service";
 import { ready } from "@/core/runtime";
 import { getService } from "@/core/service";
 import {
@@ -181,6 +182,11 @@ describe.runIf(hasDatabase)("projects", { timeout: 90_000 }, () => {
     await removeTask.call({ id: second.id }, OWNER);
     const full = await getProject.call({ id: created.id }, OWNER);
     expect(full?.tasks).toHaveLength(1);
+    expect((await listProjects.call({}, OWNER)).find(project => project.id === created.id)?.openTasks).toBe(1);
+    await restoreTask.call({ id: second.id }, OWNER);
+    const restored = await getProject.call({ id: created.id }, OWNER);
+    expect(restored?.tasks.map(task => task.id)).toEqual([first.id, second.id]);
+    expect((await listProjects.call({}, OWNER)).find(project => project.id === created.id)?.openTasks).toBe(2);
   });
 
   it("counts what is still open on each job", async () => {
