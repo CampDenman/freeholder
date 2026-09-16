@@ -118,4 +118,53 @@ describe("Daily live client", () => {
   await expect(client(fetcher).recordingAccess(recordingId)).rejects.toThrow("valid recording download");
  });
 
+ it("erases verified recordings and transcripts and verifies the resulting inventory", async () => {
+  const empty = { total_count: 0, data: [] };
+  const transcript = { transcriptId: sessionId, roomId: providerId, status: "t_finished" };
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(missing())
+   .mockResolvedValueOnce(Response.json({ total_count: 1, data: [{ id: recordingId }] }))
+   .mockResolvedValueOnce(Response.json({ id: recordingId, room_name: name, status: "finished" }))
+   .mockResolvedValueOnce(Response.json({ id: recordingId, deleted: true }))
+   .mockResolvedValueOnce(Response.json(empty))
+   .mockResolvedValueOnce(Response.json({ total_count: 1, data: [transcript] }))
+   .mockResolvedValueOnce(Response.json({ ...transcript, status: "t_deleted" }))
+   .mockResolvedValueOnce(Response.json({ total_count: 1, data: [{ ...transcript, status: "t_deleted" }] }));
+  await client(fetcher).eraseRoomRecordings({ externalRef: reference, providerRoomId: providerId });
+  expect(fetcher.mock.calls.filter(([, init]) => init?.method === "DELETE").map(([url]) => url)).toEqual([
+   `https://api.daily.co/v1/recordings/${recordingId}`, `https://api.daily.co/v1/transcript/${sessionId}`,
+  ]);
+ });
+ it("refuses to erase another room's recording or confirm incomplete deletion", async () => {
+  const wrong = vi.fn<typeof fetch>().mockResolvedValueOnce(missing())
+   .mockResolvedValueOnce(Response.json({ total_count: 1, data: [{ id: recordingId }] }))
+   .mockResolvedValueOnce(Response.json({ id: recordingId, room_name: "other-room", status: "finished" }));
+  await expect(client(wrong).eraseRoomRecordings({ externalRef: reference, providerRoomId: providerId })).rejects.toThrow("for erasure from this room");
+  expect(wrong.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  const remains = vi.fn<typeof fetch>().mockResolvedValueOnce(missing())
+   .mockResolvedValueOnce(Response.json({ total_count: 0, data: [] }))
+   .mockResolvedValueOnce(Response.json({ total_count: 1, data: [{ id: recordingId }] }));
+  await expect(client(remains).eraseRoomRecordings({ externalRef: reference, providerRoomId: providerId })).rejects.toThrow("remains pending");
+ });
+ it("recovers a lost delete response from absent records and refuses an unknown room identity", async () => {
+  const empty = { total_count: 0, data: [] };
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(missing())
+   .mockResolvedValueOnce(Response.json({ total_count: 1, data: [{ id: recordingId }] }))
+   .mockResolvedValueOnce(missing()).mockImplementation(async () => Response.json(empty));
+  await client(fetcher).eraseRoomRecordings({ externalRef: reference, providerRoomId: providerId });
+  await expect(client(vi.fn<typeof fetch>().mockResolvedValue(missing())).eraseRoomRecordings({ externalRef: reference, providerRoomId: null })).rejects.toThrow("original room identity");
+ });
+ it("walks transcript pages including deleted entries and rejects repeated pagination", async () => {
+  const empty = { total_count: 0, data: [] };
+  const first = { total_count: 2, data: [{ transcriptId: recordingId, roomId: providerId, status: "t_deleted" }] };
+  const second = { total_count: 2, data: [{ transcriptId: sessionId, roomId: providerId, status: "t_deleted" }] };
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(missing()).mockResolvedValueOnce(Response.json(empty))
+   .mockResolvedValueOnce(Response.json(empty)).mockResolvedValueOnce(Response.json(first)).mockResolvedValueOnce(Response.json(second))
+   .mockResolvedValueOnce(Response.json(first)).mockResolvedValueOnce(Response.json(second));
+  await client(fetcher).eraseRoomRecordings({ externalRef: reference, providerRoomId: providerId });
+  expect(fetcher.mock.calls[4]?.[0]).toContain(`starting_after=${recordingId}`);
+  const repeated = vi.fn<typeof fetch>().mockResolvedValueOnce(missing()).mockResolvedValueOnce(Response.json(empty))
+   .mockResolvedValueOnce(Response.json(empty)).mockImplementation(async () => Response.json(first));
+  await expect(client(repeated).eraseRoomRecordings({ externalRef: reference, providerRoomId: providerId })).rejects.toThrow("repeated transcript");
+ });
+
 });

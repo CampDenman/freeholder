@@ -6330,5 +6330,13 @@
   "subscriptions.detail.status": "Statut",
   "subscriptions.detail.period": "Période de facturation actuelle",
   "subscriptions.detail.billing": "Facturation",
-  "subscriptions.detail.manage": "Gérer les abonnements"
+  "subscriptions.detail.manage": "Gérer les abonnements",
+  "privacy.erasure.pending.title": "Effacement chez le fournisseur en attente",
+  "privacy.erasure.pending.hint": "L’effacement local a commencé. Les enregistrements et transcriptions du fournisseur doivent être supprimés avant de terminer cette demande. Les opérations échouées peuvent être relancées.",
+  "privacy.erasure.pending.jobs": "Consulter les tâches en arrière-plan",
+  "admin.search.kind.supplier": "Fournisseurs",
+  "admin.search.kind.agreement": "Accords",
+  "search.kind.priceList": "Liste de prix",
+  "search.kind.marketplaceOrder": "Commande de place de marché",
+  "search.kind.privacyRequest": "Demande de confidentialité"
 }

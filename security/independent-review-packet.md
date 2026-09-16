@@ -275,7 +275,10 @@ local state alone is not accepted as that evidence. Expiring leases reject
 stale provider results, with provider I/O outside database transactions.
 
 **Residuals.** Review actual Daily token/recording behavior and access-link
-handling against a live domain. Recording bytes remain at Daily; local contact
-erasure does not yet delete provider recordings or expired room metadata.
-Owner-storage import and provider-side erasure remain C3.13 requirements.
+handling against a live domain. Recording bytes remain at Daily until durable
+erasure workers delete recordings/transcripts and confirm inventory; pending
+requests cannot claim completion. Expired provider room metadata remains.
+Review [provider erasure and recovery](../deploy/provider-recording-erasure.md),
+including original-domain verification and failed-job recovery. Owner-storage
+import and live provider erasure acceptance remain C3.13 requirements.
 This implementation and its mocked HTTP tests are not an independent review.

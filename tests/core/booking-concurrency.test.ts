@@ -18,6 +18,7 @@
 // A test that only exercised the first would leave the second — the
 // check-then-act one, and therefore the easier one to get wrong — unproven.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { bookingTime } from "../helpers/booking-time";
 import { eq, sql } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { bookings } from "@/core/scheduling/schema";
@@ -28,8 +29,8 @@ import { createCalendar } from "@/core/scheduling/service";
 import { createBooking, rescheduleBooking } from "@/core/scheduling/bookings";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
-const NINE = "2026-09-14T09:00:00.000Z";
-const TEN = "2026-09-14T10:00:00.000Z";
+const NINE = bookingTime(9, 0);
+const TEN = bookingTime(10, 0);
 
 /** How many of a set of concurrent attempts came back with a booking. */
 function settled(results: PromiseSettledResult<unknown>[]) {
@@ -96,11 +97,11 @@ describe.runIf(hasDatabase)("nobody gets double-booked", { timeout: 120_000 }, (
     const results = await Promise.allSettled([
       attempt(studio.id, 1, NINE, TEN),
       // Starts halfway through the first.
-      attempt(studio.id, 2, "2026-09-14T09:30:00.000Z", "2026-09-14T10:30:00.000Z"),
+      attempt(studio.id, 2, bookingTime(9, 30), bookingTime(10, 30)),
       // Wholly contains it.
-      attempt(studio.id, 3, "2026-09-14T08:00:00.000Z", "2026-09-14T11:00:00.000Z"),
+      attempt(studio.id, 3, bookingTime(8, 0), bookingTime(11, 0)),
       // Wholly inside it.
-      attempt(studio.id, 4, "2026-09-14T09:15:00.000Z", "2026-09-14T09:45:00.000Z"),
+      attempt(studio.id, 4, bookingTime(9, 15), bookingTime(9, 45)),
     ]);
     expect(settled(results).won).toBe(1);
     expect(await db().select().from(bookings)).toHaveLength(1);
@@ -233,8 +234,8 @@ describe.runIf(hasDatabase)("nobody gets double-booked", { timeout: 120_000 }, (
 
   it("will not let two appointments be moved onto the same slot at once", async () => {
     const studio = await calendar(1);
-    const morning = await attempt(studio.id, 1, "2026-09-14T08:00:00.000Z", "2026-09-14T08:30:00.000Z");
-    const afternoon = await attempt(studio.id, 2, "2026-09-14T14:00:00.000Z", "2026-09-14T14:30:00.000Z");
+    const morning = await attempt(studio.id, 1, bookingTime(8, 0), bookingTime(8, 30));
+    const afternoon = await attempt(studio.id, 2, bookingTime(14, 0), bookingTime(14, 30));
 
     const results = await Promise.allSettled([
       rescheduleBooking.call({ id: morning.id, startsAt: NINE, endsAt: TEN }, OWNER),

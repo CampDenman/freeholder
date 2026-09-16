@@ -90,6 +90,20 @@ rerun subsequently passed all 339 files: 3,541 tests passed and 17 inapplicable
 recipe cases skipped. Hosted CI and the protected merge queue passed, including
 Docker recipe, public surface and upgrade gates. PR #361 merged without bypass.
 
+## Additional note authorization findings — 2026-09-14
+
+Two regressions reproduced private-note disclosure. `notes.pin` accepted another
+staff member's private-note ID and returned its body after updating the pin.
+`notes.history` checked authorship only for user actors, so an API key with the
+history scope could read revisions hidden by `notes.list`.
+
+Pinning now includes note visibility in the update predicate. History uses the
+same visibility filter as the list in both its initial lookup and revision
+query, including API-key callers. Edit/remove lock the note before authorizing
+and mutating it so a concurrent visibility change cannot invalidate the check.
+The previously failing regressions pass; all 51 note, search and contact-privacy
+tests pass. Author pinning and shared-note API history remain covered. This is
+an implementation repair, not an independent review or completion sign-off.
 ## Hidden location read boundary
 
 A regression reproduced anonymous access to hidden location addresses through
