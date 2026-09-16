@@ -8633,6 +8633,16 @@ schema they inherit reads as a designed thing rather than an excavation.
   not a backlog/throughput test.
   `deploy/performance-measurements.md` explains the command and limitations;
   requested auxiliary measurements no longer disappear on the large fixture.
+  Measurement follow-up (2026-09-16): the four remaining families are
+  implemented and fail closed without their capability — real-browser Core Web
+  Vitals plus whole-page HTTP timing (`PERF_MEASURE_BROWSER=1`), editor
+  first-paint and keystroke-to-preview clocks (`PERF_MEASURE_EDITOR=1`),
+  full-chain migration apply on a fresh database (`PERF_MEASURE_MIGRATION=1`)
+  and cold-boot-to-serving (`PERF_MEASURE_BOOT=1`) — wired through
+  `tests/helpers/performance-browser.ts`, `tests/helpers/performance-migration.ts`,
+  `tests/helpers/performance-boot.ts` and
+  `tests/core/performance-measurement-families.test.ts`, documented in
+  `deploy/performance-measurements.md` (changeset `perf-measurement-families.md`).
   The local machine is not the §15.1 1-vCPU/1GB reference target.)*
 - [x] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.

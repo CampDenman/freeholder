@@ -19,6 +19,7 @@ export function parsePerformanceBudgets(master: string): Array<{
 
 export function requiredSurfaces(options: {
   measureBrowser?: boolean;
+  measureEditor?: boolean;
   measureJobs?: boolean;
   measureMigration?: boolean;
   measureBoot?: boolean;
@@ -30,6 +31,7 @@ export function evaluateMeasurements(input: {
   capable?: boolean;
   incapableReason?: string;
   measureBrowser?: boolean;
+  measureEditor?: boolean;
   measureJobs?: boolean;
   measureMigration?: boolean;
   measureBoot?: boolean;
@@ -42,7 +44,10 @@ export function evaluateMeasurements(input: {
 export function datasetFromEnv(env?: NodeJS.ProcessEnv): "small" | "medium" | "large";
 export function measurementFlags(env?: NodeJS.ProcessEnv): {
   measureBrowser: boolean;
+  measureEditor: boolean;
   measureJobs: boolean;
   measureMigration: boolean;
   measureBoot: boolean;
 };
+
+export function runHeader(env?: NodeJS.ProcessEnv): string;
