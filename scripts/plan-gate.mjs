@@ -18,6 +18,27 @@ const RETIRED_REFERENCE_ALLOW = new Set([
   "scripts/plan-gate.mjs",
   "tests/core/plan-gate.test.ts",
 ]);
+
+/**
+ * Owner-approved bounded deferral to v2 (§43.18, decision 2026-09-15):
+ * the seven remaining mobile-app acceptance items. DONE for v1 excludes
+ * exactly these and nothing else; §35 remains their v2 specification.
+ *
+ * This set is the point, not an escape hatch. Entries leave only by shipping
+ * in v2 or by an explicit owner reversal — never by silent deletion. The
+ * gate keeps their IDs resolvable for existing references and computes
+ * sequence contiguity around them, but fails any change that re-enters one
+ * of them into the live checklist as a checkbox.
+ */
+export const DEFERRED = new Set([
+  "C10.17",
+  "C10.18",
+  "C10.25",
+  "C10.26",
+  "C10.27",
+  "C10.28",
+  "C10.30",
+]);
 const REFERENCE_ALLOW = new Set(["tests/core/plan-gate.test.ts"]);
 const REQUIRED_WORKSTREAMS = Array.from({ length: 12 }, (_, i) => `C${i}`);
 const TEXT_FILE = /(?:\.md|\.json|\.ts|\.tsx|\.js|\.mjs|\.mts|\.yml|\.yaml|\.txt)$/i;
@@ -264,16 +285,45 @@ function sequenceIssues(items) {
   }
 
   for (const [group, values] of groups) {
-    const ordered = [...new Set(values)].sort((a, b) => a - b);
+    // Contiguity is computed over the live IDs: a §43.18-deferred number is a
+    // sanctioned hole, not a gap. Any other missing number still fails.
+    const deferredNumber = (n) =>
+      DEFERRED.has(`${group}.${String(n).padStart(2, "0")}`);
+    const ordered = [...new Set(values)]
+      .filter((n) => !deferredNumber(n))
+      .sort((a, b) => a - b);
     const expected = Array.from(
-      { length: ordered.at(-1) ?? 0 },
+      { length: Math.max(...values) },
       (_, index) => index + 1,
-    );
+    ).filter((n) => !deferredNumber(n));
     if (ordered.join(",") !== expected.join(",")) {
       problems.push(
         issue(
           "id-gap",
           `${group} must be contiguous from 01; found ${ordered.map((n) => String(n).padStart(2, "0")).join(", ")}`,
+        ),
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * A deferred item must not re-enter the live sequence as a checkbox.
+ *
+ * §43.18 quotes these items verbatim with their IDs as plain bold text; a
+ * `- [ ]` line for one of them would silently resurrect v1 work the owner
+ * moved to v2. Reversal is an owner decision recorded in §43.18, not a
+ * checkbox someone checks on the way past.
+ */
+function deferredReentryIssues(items) {
+  const problems = [];
+  for (const { id } of items) {
+    if (DEFERRED.has(id)) {
+      problems.push(
+        issue(
+          "deferred-reentry",
+          `${id} is deferred to v2 (§43.18, owner decision 2026-09-15) and must not appear as a live checklist line; reverse the deferral in §43.18 instead`,
         ),
       );
     }
@@ -342,8 +392,12 @@ export function validatePlan(files, today = new Date().toISOString().slice(0, 10
     }
   }
   problems.push(...sequenceIssues(items));
+  problems.push(...deferredReentryIssues(items));
 
+  // References to deferred IDs stay resolvable: §43.18 quotes the items and
+  // the workspace (code comments, evidence prose) legitimately names them.
   const defined = new Set(items.map(({ id }) => id));
+  for (const id of DEFERRED) defined.add(id);
   for (const workstream of REQUIRED_WORKSTREAMS) {
     if (![...defined].some((id) => id.startsWith(`${workstream}.`))) {
       problems.push(
