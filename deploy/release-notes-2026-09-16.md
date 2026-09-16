@@ -59,9 +59,34 @@ unchanged.
   annotations carried a "covers permission, refusal and recovery" stamp
   their cited file does not prove (narrowed per-cell in the matrix with
   `tests/core/api.test.ts` named for the scoped-permission half; annotation
-  rewrites queued on C11.15); C11.12/C1.17 cells cited catalog gates as
+  rewrites landed with C11.15 below); C11.12/C1.17 cells cited catalog gates as
   service-boundary proof (curated to the true evidence). No capability
   claim proved false; no unrelated checkbox moved.
 - **Full-suite verification** is recorded in the matrix header — the whole
   `pnpm test` suite ran green on a fresh disposable database with every
   cited test file part of the run.
+
+## Doc-claim mapping — C11.15 closed (docs/doc-claim-mapping)
+
+- **Every §§1–42 claim now carries evidence or a same-change strike.**
+  `deploy/doc-claim-mapping.md` inventories 118 claim rows across all 42
+  sections: 108 map to a passing suite, gate or generated artifact, and 10
+  are Struck/Narrowed in MASTER.md itself — §12's mail-adapter id literal,
+  §21b's `scripts/backup.sh` path (the script ships at
+  `deploy/digitalocean-droplet/infra/backup.sh`), §25's "MIT plugin-kit"
+  (every package is Apache-2.0), §27's hosted canonical-registry/catalog
+  claims, §28's hosted docs site with executable guides, §31's "pgvector"
+  (retrieval ranks a `real[]` column by cosine on stock Postgres), §4.8's
+  instance-release-notes scope (platform upgrades auto-draft today; wider
+  auto-draft and the agent-note mandate remain work), §37's "every accepted
+  change writes a ReleaseNote", §38's unqualified release-notes bullet, and
+  §34's changelog share target. The item text's two judgement calls stand as
+  documented behaviour: §35 branded placeholder screenshots and adapter
+  "not implemented" fail-closed refusals.
+- **The map is a gate, not a promise.** `tests/core/doc-claim-mapping.test.ts`
+  (in `pnpm gates` via `scripts/fast-gates.mjs`) fails on any unmapped
+  section, any evidence path that does not resolve, any claim row citing no
+  test or gate, and any strike whose old wording still parses in MASTER.md
+  or whose new wording is missing. C11.15 is checked with F04/F05 N/A,
+  F07 = the fail-closed mapping gate, F09 = the mapping doc + gate, F12 =
+  alignment with `deploy/spec-reconciliation.md`.

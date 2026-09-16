@@ -703,7 +703,7 @@ Funnel = `AnalyticsEvent` joined through `contact_id` to money tables. Visit →
 | `ApiKey` | Programmatic access. | name, hashed_key, scopes[], last_used_at |
 | `Webhook` | Outbound events. | url, events[], secret, delivery log |
 | `AuditLog` | Every admin/agent mutation. | actor, action, subject, diff (jsonb), at |
-| `ReleaseNote` | The instance's own changelog — every functional change to *this site*, auto-drafted, owner-publishable. | kind (platform_upgrade/module_toggled/plugin_installed/plugin_updated/plugin_removed/setting_changed/custom), title, body, actor (owner/staff/agent/system), source_ref (version, plugin@version, audit ids), visibility (internal/public), occurred_at |
+| `ReleaseNote` | The instance's own changelog — platform upgrades auto-draft entries today; wider event coverage remains work. | kind (platform_upgrade/module_toggled/plugin_installed/plugin_updated/plugin_removed/setting_changed/custom), title, body, actor (owner/staff/agent/system), source_ref (version, plugin@version, audit ids), visibility (internal/public), occurred_at |
 | `ModuleSetting` | Toggles + per-module config. | module, enabled, config (jsonb) |
 | `GuidanceFlow` | Versioned, role/capability-scoped onboarding assembled from core, modules and plugins. | key, version, audience_roles[], required_capabilities[], steps, status |
 | `GuidanceProgress` | Per-user progress that can be resumed, dismissed or reset as roles/features change. | user_id, flow_key, flow_version, completed_steps[], state, started_at, completed_at |
@@ -716,7 +716,19 @@ Funnel = `AnalyticsEvent` joined through `contact_id` to money tables. Visit →
 
 The MCP server authenticates as a scoped `ApiKey`, calls the same service layer, and every mutation lands in `AuditLog` with `actor = agent:<key-name>`. The owner can read a plain-English log of everything their AI did.
 
-**Instance release notes (mandated best practice):** every Freeholder keeps its *own* changelog. Whenever functionality on the site is CRUD'd — the platform upgrades, a module is toggled, a plugin is installed/updated/removed, a consequential setting changes — a `ReleaseNote` is auto-drafted from the triggering event (platform upgrades pull the relevant entries straight from the core changelog; plugin changes pull from the plugin's changelog). Agents making functional changes via MCP must write the note as part of the change — the service layer won't complete a functionality-mutating call from an agent without one. Admin `/admin/updates` is the "What Changed" timeline. A dedicated public `/changelog` route is not in this plan; an owner who wants selected notes public writes a CMS page. The discipline that keeps the platform honest at the repo level (§15.6) is thereby inherited by every deployed site: no functionality ever changes silently, anywhere in the ecosystem.
+**Instance release notes (mandated best practice):** every Freeholder keeps its
+*own* changelog, and platform upgrades already write it: applying a release
+auto-drafts `ReleaseNote` rows from the applied version (`src/core/update/apply.ts`),
+and the update service lists them. Auto-drafting for module toggles, plugin
+installs and setting changes — and the rule that an agent's
+functionality-mutating call must carry a note — are not yet built; until they
+are, the repo-level changelog gate (§15.6) is the inherited discipline, and
+`/admin/updates` remains the update surface rather than a full "What Changed"
+timeline. A dedicated public `/changelog` route is not in this plan; an owner
+who wants selected notes public writes a CMS page. The discipline that keeps
+the platform honest at the repo level (§15.6) is thereby inherited by every
+deployed site as far as the built mechanism reaches: no platform upgrade ever
+changes an instance silently.
 
 ### 4.9 Internationalization (core/i18n)
 
@@ -1574,7 +1586,7 @@ obligation they did not choose.
 ```ts
 // src/adapters/mail/types.ts
 export interface MailAdapter {
-  readonly id: "gmail" | "outlook" | "resend" | "smtp";
+  readonly id: MailProvider; // smtp · console · gmail · outlook · resend · postmark · ses · none
   readonly kind: "transactional" | "bulk" | "both";
   send(msg: OutboundEmail): Promise<{ providerRef: string }>;
   // gmail/outlook implement OAuth connect + refresh; owner's own address = deliverability + replies land in their inbox
@@ -1890,7 +1902,7 @@ production path.
 
 **Who it's for:** maximum ownership per dollar; the "I want it all on one box I control" crowd — philosophically the purest Freeholder deployment.
 
-**Infra artifact:** `infra/compose.yml` — app + postgres + Caddy (automatic TLS) on a single $12–24/mo droplet, with **media mandated to DO Spaces** (storage mandate, §18) — the droplet holds compute and the database, never the media archive. MinIO appears only in the local-dev compose profile. `infra/cloud-init.yml` for one-command droplet bootstrap. Backup story documented and scripted from day one: nightly `pg_dump` shipped to a versioned Spaces bucket (media is already there) via `scripts/backup.sh`, restore rehearsal included in verify.md — a self-host recipe without a tested restore path is a liability, so the recipe treats backups as part of "working," not an appendix. Net effect: a destroyed droplet is a 20-minute cloud-init rebuild, not a data-loss event.
+**Infra artifact:** `infra/compose.yml` — app + postgres + Caddy (automatic TLS) on a single $12–24/mo droplet, with **media mandated to DO Spaces** (storage mandate, §18) — the droplet holds compute and the database, never the media archive. MinIO appears only in the local-dev compose profile. `infra/cloud-init.yml` for one-command droplet bootstrap. Backup story documented and scripted from day one: nightly `pg_dump` shipped to a versioned Spaces bucket (media is already there) via `deploy/digitalocean-droplet/infra/backup.sh` (installed on the droplet as `/opt/freeholder/backup.sh`), restore rehearsal included in verify.md — a self-host recipe without a tested restore path is a liability, so the recipe treats backups as part of "working," not an appendix. Net effect: a destroyed droplet is a 20-minute cloud-init rebuild, not a data-loss event.
 
 ---
 
@@ -2025,7 +2037,7 @@ npm test                                  # runs against the same seeded instanc
 npm run share                             # validates → publishes to npm as freeholder-plugin-gift-registry
 ```
 
-The bar: **zero-config from idea to installable in under an hour.** The dev harness (part of MIT `plugin-kit`) is the make-or-break piece — nobody should need to set up a whole Freeholder to write a widget. `npm run dev` gives them Aurora Coast Photography with their plugin live inside it.
+The bar: **zero-config from idea to installable in under an hour.** The dev harness (part of Apache-2.0 `plugin-kit`, like every package in this repository — §22's license policy) is the make-or-break piece — nobody should need to set up a whole Freeholder to write a widget. `npm run dev` gives them Aurora Coast Photography with their plugin live inside it.
 
 **Installing (owner side):**
 - Admin → Plugins → browse/search → one-click install (npm fetch, integrity-pinned) → permission consent screen → enable
@@ -2069,8 +2081,8 @@ A plugin registry is **just a signed JSON index** — deliberately boring so tha
 ```
 
 - The admin Plugins page ships pointed at the canonical registry, and **owners can add registry URLs** — an agency's private library, a vertical marketplace ("Freeholder for Photographers"), a company-internal registry. Third-party plugin businesses are a feature, not a threat: they grow the reason to choose Freeholder.
-- The canonical registry is itself generated (npm scan for the prefix + GitHub topic `freeholder-plugin`), so listing requires no gatekeeper for Community tier — publish and appear.
-- `plugins.freeholder.ai` doubles as the browsable web catalog — server-rendered, RIBA-structured, one page per plugin. The plugin catalog is itself an SEO asset that markets the platform.
+- The canonical registry URL ships as a seeded Verified entry; building the hosted index itself (npm scan for the prefix + GitHub topic `freeholder-plugin`) is hub infrastructure outside the instance tree. C3.11 ships what instances run: the signed index format, caching, federation and owner-added registries.
+- A hosted browsable catalog at `plugins.freeholder.ai` — server-rendered, RIBA-structured, one page per plugin — is hub infrastructure, not an instance capability; instances browse the cached catalogue in `/admin/plugins` (C3.11). The catalog-as-SEO-asset claim belongs to the hub, not the product tree.
 
 ---
 
@@ -2097,7 +2109,7 @@ Inter-instance contribution uses that same RPC: a spoke POSTs `/api/v1/contribut
 2. **SDK (`@freeholder/sdk`, Apache-2.0)** — generated from the live service registry through the same JSON Schema projection OpenAPI uses; typed, tree-shakable, with hand-written ergonomic wrappers only for flows (pagination, auth) — wrappers are tested against the generated layer so they break loudly if the contract moves. Published automatically on every release by CI (changesets); SDK version === platform version, always.
 3. **MCP** — already runtime-generated (§11): tools are derived from the enabled services of *that instance*, so an instance with the gift-registry plugin automatically exposes gift-registry tools to agents, with descriptions from the plugin's own schema annotations. New feature merged → new MCP tool exists. No release lag at all.
 4. **Per-instance introspection** — every Freeholder serves its own live contract: `/api/openapi.json` (reflecting its version + enabled modules + plugins), `/api/mcp` manifest, and `/llms.txt`. An agent or developer never reasons from generic docs about what *this* instance can do — they ask it.
-5. **Docs site** (`docs.freeholder.ai`) — reference sections are built from the generated artifacts in CI on every release; prose guides live beside code and are **executable**: doc snippets are extracted and run against the seeded demo instance in CI, so a guide with stale code fails the build. Docs ship `llms-full.txt` so AI assistants helping developers always have current ground truth.
+5. **Reference docs** — the human reference and `llms.txt`/`llms-full.txt` contract sections are generated from the same schemas in CI on every release (C3.06), and the drift gate fails a PR whose committed projections differ. A hosted docs site (`docs.freeholder.ai`) with executable prose guides is not part of the v1 tree — the generated artifacts are the ground truth an assistant reads.
 6. **The drift gate** — CI fails any PR where committed generated artifacts differ from freshly regenerated ones. Contract updates are not a chore anyone can forget; they are a build step no one can skip.
 
 **The API's shape, decided 2026-08-06.** §11 and this section both say "REST
@@ -2259,7 +2271,7 @@ An optional module (`growth/assistant`), **off by default, enabled by a setting 
 - **Guardrails as settings, not prompts:** topics to refuse, escalation rule ("if asked about X, offer the contact form"), tone presets, and a hard rule set the module enforces outside the model: the assistant never invents prices or availability — it quotes the catalog and calendar through service calls or says it doesn't know.
 - **Every conversation lands on the spine:** transcripts attach to the Contact (created on email capture), emit TimelineEvents, and unanswered questions queue in admin as "knowledge gaps" — the owner turns yesterday's failed answer into today's KnowledgeEntry in one click. The assistant measurably gets smarter weekly, and the owner can see why.
 
-Embeddings for retrieval use pgvector — inside the one sacred database (principle 12, §2), not a bolt-on vector store.
+Embeddings for retrieval live in the one sacred database (principle 12, §2), not a bolt-on vector store: a deterministic local embedder (`src/modules/assistant/embed.ts`) writes a `real[]` column and the service ranks by cosine on stock Postgres — no vector extension, no external store.
 
 ---
 
@@ -2296,7 +2308,7 @@ Upgrades the `growth/social` module into the media traffic-controller: **one pla
 
 Sharing isn't a buttons plugin; it's a property of every entity with a public face.
 
-- **Everything shareable has a `ShareTarget`:** canonical URL + auto-generated OG image + per-channel share intents (native Web Share API on mobile, channel links on desktop, copy-with-attribution). Pages, posts, products, galleries (and individual gallery images where the owner allows), newsletter issues, events, reviews, the changelog — one system, present by default, removable per entity.
+- **Everything shareable has a `ShareTarget`:** canonical URL + auto-generated OG image + per-channel share intents (native Web Share API on mobile, channel links on desktop, copy-with-attribution). Pages, posts, products, galleries (and individual gallery images where the owner allows), newsletter issues, events, reviews — one system, present by default, removable per entity.
 - **Tracked, first-party:** share links carry a short `ref` token → `SharedLink` rows (entity, sharer contact if known, channel) → clicks land as analytics events attributed to the share. The owner sees "this gallery was shared 12 times and drove 3 bookings" — sharing becomes a measured channel, not a hopeful button.
 - **Client-side sharing where it counts:** a client can share their proofing gallery with a partner (scoped guest access, owner-permitted), share a quote internally before accepting ("send to my business partner" issues a view-only link), and gift-card/registry-style sharing on products.
 - **Referral & advocacy rails (spec'd — `growth/affiliates`, §3, §4.3):** every Contact can hold referral codes; referred conversions attribute automatically on the spine. Admins define commission rules for **any** conversion type — signups, subscriptions, orders, bookings, custom events — and codes are dual-sided: the visitor gets the discount, the referrer earns the commission (a creator sends visitors with code IROCK → the subscriber gets 10% off, the creator earns 10% commission). Attribution is first-party (`?ref` token → `AffiliateCode` → `CommissionEvent`), the ledger runs pending → approved → paid with automatic reversal on refund, and referrers see their own earnings in the customer portal — an affiliate is just a Contact with a code, not a separate system. The loyalty engine (§4.13) extends these same rails with points, tiers and rewards rather than inventing its own tracking — a referral may pay the referrer in commission, in points, or in both, because the reward is configuration on one ledger rather than two systems reconciling.
@@ -2481,7 +2493,7 @@ The builder proposes; the owner disposes. Structure changes render as a **previe
 
 Where a change is a matter of taste rather than correctness, the builder can ship it as a **variant with a traffic split** (§32) instead of a decision: the proposal goes live to a slice, conversions and revenue report to first-party analytics, and the winner is settled by evidence rather than argument. *The agent proposes, the split decides, revenue arbitrates.*
 
-Every accepted change writes its `ReleaseNote` (§4.8) — already mandatory for agent-made functional changes. The owner's "What Changed" timeline becomes, literally, the history of the site building itself.
+Every accepted change is already audited with `actor = agent:<name>` (§4.8), and `ReleaseNote` auto-drafting today covers platform upgrades (§4.8) — extending it to builder-made changes is the remaining work. The owner's "What Changed" timeline becomes, literally, the history of the site building itself.
 
 ### The builder adapter
 
@@ -2635,7 +2647,8 @@ rather than in a backlog.
   grounding corpus for the front-site assistant (§31) and as SEO surface.
 - **Waivers and documents**: e-signable templates attached to bookings and
   projects, with the same audit trail as contracts (§4.3).
-- **Release notes on the owner's own instance** (§4.8), so nothing about their
+- **Release notes on the owner's own instance** (§4.8 — platform upgrades
+  auto-draft them today), so nothing about their
   site ever changes silently.
 - **An instance that keeps itself patched** (§39): security releases applied
   automatically in a night window, in the business's timezone, after a signature
@@ -3344,12 +3357,12 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C11.15 doc-claim mapping (carrying the F-audit annotation-rewrite worklist), C3.13 software remainder (owner-side live acceptance pending); C11.17 remains unsigned |
+| Current focus | C3.13 live adapter acceptance (owner-side pending), C11.16 spec reconciliation; C11.17 remains unsigned |
 | Completion rule | Every unchecked item in C0–C11, except the seven items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements and browser vitals. C11.15 remaining spec tests and the F-audit annotation-rewrite worklist. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements and browser vitals. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3647,7 +3660,7 @@ reading chat logs.
   revoke-all, suspicious-login notices, and secure session metadata retention.
   (`0020_session-device-management.sql`;
   `tests/core/session-management.test.ts`; changeset
-  `session-device-management.md` **F04** `/security` session/device revoke-one/revoke-all. **F05** `auth.listSessions`/`revokeSession`/`revokeOtherSessions`/`recentLoginSecurity` at `/api/v1/auth.*` and OpenAPI/SDK; MCP excludes `auth`. **F07** `tests/core/session-management.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/session-management.test.ts` is the composition proof.)
+  `session-device-management.md` **F04** `/security` session/device revoke-one/revoke-all. **F05** `auth.listSessions`/`revokeSession`/`revokeOtherSessions`/`recentLoginSecurity` at `/api/v1/auth.*` and OpenAPI/SDK; MCP excludes `auth`. **F07** `tests/core/session-management.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/session-management.test.ts` is the composition proof.)
 - [x] **C1.05** Add customer magic links and portal account linking without
   creating a second contact identity. (`0021_customer-magic-links.sql`;
   `tests/core/customer-magic-links.test.ts`; changeset
@@ -3754,7 +3767,7 @@ reading chat logs.
 - [x] **C1.17** Complete and continuously verify English, French and Spanish
   catalogs; add pseudo-locale, RTL layout tests and locale-specific fixtures.
   (`tests/core/i18n-gate.test.ts`; `tests/core/locale-quality.test.ts`;
-  `tests/fixtures/locales.ts`; changeset `catalog-quality-rtl.md` **F04** N/A as a screen — `tests/core/i18n-gate.test.ts` is the human-surface gate. **F05** N/A — not an agent capability. **F07** `tests/core/i18n-gate.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/i18n-gate.test.ts` is the composition proof.)
+  `tests/fixtures/locales.ts`; changeset `catalog-quality-rtl.md` **F04** N/A as a screen — `tests/core/i18n-gate.test.ts` is the human-surface gate. **F05** N/A — not an agent capability. **F07** N/A — a catalog-completeness gate with no customer-data surface; it refuses missing keys and unexecutable catalogs (`tests/core/i18n-gate.test.ts`). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/i18n-gate.test.ts` is the composition proof.)
 - [x] **C1.18** Add analytics consent policy, configurable retention/pruning,
   bot correction, Core Web Vitals, campaign attribution and anonymized export.
   (`0036_milky_radioactive_man.sql`; privacy-first/opt-in/disabled policy with
@@ -3778,7 +3791,7 @@ reading chat logs.
   `0037_tidy_thunderbolts.sql`; `tests/core/csp.test.ts`;
   `tests/core/csp-reports.test.ts`; `tests/core/csp-migration.test.ts`;
   1,058-test full suite; changeset `content-security-policy.md`; operator guide
-  `deploy/content-security-policy.md` **F04** N/A — Content-Security-Policy headers, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/csp.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/content-security-policy.md`. **F12** `tests/core/csp.test.ts` is the composition proof.)
+  `deploy/content-security-policy.md` **F04** N/A — Content-Security-Policy headers, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/csp.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/content-security-policy.md`. **F12** `tests/core/csp.test.ts` is the composition proof.)
 - [x] **C1.20** Patch all actionable dependency advisories and keep a zero
   known-high/critical policy with documented exceptions for lower severities.
   (PostCSS `8.5.26` and parent-scoped drizzle-kit esbuild `0.25.12` floors fix
@@ -3829,7 +3842,7 @@ reading chat logs.
   1,070-test Vitest suite plus the five-surface accessibility and ten-area
   product journey matrices in production Chromium;
   operator/developer guide `deploy/browser-journeys.md`; changeset
-  `browser-journeys.md` **F04** N/A as a new screen — Playwright journeys over existing setup/auth/edit. **F05** N/A as a new capability — the journey already mints an API key and calls `POST /api/mcp` `contacts_list`; no extra agent route. **F07** `tests/browser/journeys.spec.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/browser-journeys.md`. **F12** `tests/browser/journeys.spec.ts` is the composition proof.)
+  `browser-journeys.md` **F04** N/A as a new screen — Playwright journeys over existing setup/auth/edit. **F05** N/A as a new capability — the journey already mints an API key and calls `POST /api/mcp` `contacts_list`; no extra agent route. **F07** `tests/browser/journeys.spec.ts` proves refusal and recovery through the real browser; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/browser-journeys.md`. **F12** `tests/browser/journeys.spec.ts` is the composition proof.)
 - [x] **C1.23** Add database backup/restore drills, complete export, media
   manifest, configuration/credential-key handling, retention and erasure proof.
   (two deliberately separate ownership artifacts: complete custom-format
@@ -3850,7 +3863,7 @@ reading chat logs.
   ownership:export`; `pnpm ownership:drill`; `scripts/ownership-export.mjs`;
   `scripts/ownership-drill.mjs`; `tests/core/ownership-export.test.ts`;
   operator guide `deploy/ownership-recovery.md`; changeset
-  `ownership-recovery.md` **F04** N/A — backup/restore drill, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/ownership-export.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/ownership-recovery.md`. **F12** `tests/core/ownership-export.test.ts` is the composition proof.)
+  `ownership-recovery.md` **F04** N/A — backup/restore drill, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/ownership-export.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/ownership-recovery.md`. **F12** `tests/core/ownership-export.test.ts` is the composition proof.)
 - [x] **C1.24** Make a fresh development/demo install serve a complete seeded
   home at `/`, with no route depending on manually repaired database content.
   (pristine development databases now install Aurora Coast automatically while
@@ -3877,7 +3890,7 @@ reading chat logs.
   durable-progress coverage in `tests/core/guidance*.test.ts`; owner/staff/
   customer isolation, forbidden-control and axe coverage in the four-test
   real-browser gate; 91-file/1,098-test Vitest suite; production build;
-  operator guide `deploy/role-guidance.md`; changeset `role-guidance.md` **F04** `/admin/guidance` resumable onboarding. **F05** `guidance.list`/`start`/`dismiss`/`reset`/`contexts` at `/api/v1/guidance.*`, MCP `guidance_*`. **F07** `tests/core/guidance*.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/role-guidance.md`. **F12** `tests/core/guidance*.test.ts` is the composition proof.)
+  operator guide `deploy/role-guidance.md`; changeset `role-guidance.md` **F04** `/admin/guidance` resumable onboarding. **F05** `guidance.list`/`start`/`dismiss`/`reset`/`contexts` at `/api/v1/guidance.*`, MCP `guidance_*`. **F07** `tests/core/guidance-definitions.test.ts`, `tests/core/guidance-ui.test.ts`, `tests/core/guidance.test.ts` cover validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/role-guidance.md`. **F12** `tests/core/guidance*.test.ts` is the composition proof.)
 - [x] **C1.26** Build the normalized, versioned `DemoScenario` definition/run/
   provenance model and typed public manifest contract through which core,
   modules and plugins contribute fixtures, guidance steps, locale variants,
@@ -4052,26 +4065,26 @@ project without silent telemetry, and ready to carry money.
   changeset `cms-collab-presence-comments.md` **F04** `/admin/pages/[id]` comments and review requests. **F05** `cms.addComment`/`listComments`/`resolveThread`/`requestReview`/`decideReview` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-lifecycle.test.ts` is the composition proof.)
 - [x] **C2.05** Specify and implement constrained typed rich-text inline nodes
   for emphasis, links, code and lists—never stored HTML soup.
-  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md` **F04** `/admin/pages/[id]` PageEditor rich text. **F05** N/A as a distinct tool — typed inline nodes persist through `cms.updatePage` at `/api/v1/cms.updatePage` / MCP `cms_updatePage`. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)
+  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md` **F04** `/admin/pages/[id]` PageEditor rich text. **F05** N/A as a distinct tool — typed inline nodes persist through `cms.updatePage` at `/api/v1/cms.updatePage` / MCP `cms_updatePage`. **F07** `tests/core/cms-rich.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)
 - [x] **C2.06** Add slash-command insertion, keyboard block movement, undo/
   redo, duplicate/copy/paste, multi-select and reliable nested drag semantics.
-  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md` **F04** `/admin/pages/[id]` slash-command and keyboard movement. **F05** N/A as a distinct tool — slash-command/keyboard/undo are editor chrome; the page is still `cms.updatePage`. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)
+  (`tests/core/cms-rich.test.ts`; changeset `cms-rich-editor-foundations.md` **F04** `/admin/pages/[id]` slash-command and keyboard movement. **F05** N/A as a distinct tool — slash-command/keyboard/undo are editor chrome; the page is still `cms.updatePage`. **F07** `tests/core/cms-rich.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)
 
 #### Complete block and design vocabulary
 - [x] **C2.07** Finish foundational blocks: rich text, heading, image, video,
   button, columns/container, divider/spacer and admin-only custom HTML.
   *(Custom HTML is parsed and rebuilt from an element, attribute and URL-scheme
   allowlist in `src/modules/cms/blocks/html.ts`; encoded-scheme and executable
-  markup coverage lives in `tests/core/cms-rich.test.ts`. **F04** `/admin/pages/[id]` foundational blocks. **F05** foundational blocks persist through `cms.updatePage`; the custom-HTML sanitizer is not an MCP tool. **F07** `tests/core/cms-rich.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)*
+  markup coverage lives in `tests/core/cms-rich.test.ts`. **F04** `/admin/pages/[id]` foundational blocks. **F05** foundational blocks persist through `cms.updatePage`; the custom-HTML sanitizer is not an MCP tool. **F07** `tests/core/cms-rich.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-rich.test.ts` is the composition proof.)*
 - [x] **C2.08** Finish trust/content blocks: FAQ with schema, testimonial/
   review, gallery, map/location, social embed, share and knowledge-base blocks.
-  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` FAQ/testimonial blocks. **F05** FAQ/testimonial/gallery/map/share blocks persist through `cms.updatePage` at `/api/v1/cms.updatePage`, MCP `cms_updatePage`. **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` FAQ/testimonial blocks. **F05** FAQ/testimonial/gallery/map/share blocks persist through `cms.updatePage` at `/api/v1/cms.updatePage`, MCP `cms_updatePage`. **F07** `tests/core/cms-blocks.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
 - [x] **C2.09** Finish conversion blocks: live product/service card, booking,
   form, quote request, newsletter signup, tip/support and site-chat assistant.
-  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` conversion blocks. **F05** conversion blocks persist through `cms.updatePage`; public submit paths are `cms.submitQuoteRequest`/`cms.submitSiteChat`/`cms.submitTipIntent`. **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` conversion blocks. **F05** conversion blocks persist through `cms.updatePage`; public submit paths are `cms.submitQuoteRequest`/`cms.submitSiteChat`/`cms.submitTipIntent`. **F07** `tests/core/cms-blocks.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
 - [x] **C2.10** Finish controlled-access/revenue blocks: paywall gate and ad
   slot with server-side content exclusion and layout-shift-safe sizing.
-  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` paywall/ad blocks. **F05** paywall/ad blocks persist through `cms.updatePage`; evaluation is `paywalls.evaluate` / `ads.slotByCode` (C9.15/C9.17). **F07** `tests/core/cms-blocks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
+  (`tests/core/cms-blocks.test.ts`; changeset `cms-surface-blocks.md` **F04** `/admin/pages/[id]` paywall/ad blocks. **F05** paywall/ad blocks persist through `cms.updatePage`; evaluation is `paywalls.evaluate` / `ads.slotByCode` (C9.15/C9.17). **F07** `tests/core/cms-blocks.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-blocks.test.ts` is the composition proof.)
 - [x] **C2.11** Make headers, footers, navigation, announcement bars and menus
   first-class synced Sections with accessible responsive behavior.
   (`tests/core/cms-sections.test.ts`; changeset `cms-chrome-sections.md` **F04** `/admin/sections` header/footer/nav/announcement. **F05** `cms.createSection`/`listSections`/`updateSection`/`getSection` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-sections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-sections.test.ts` is the composition proof.)
@@ -4092,7 +4105,7 @@ project without silent telemetry, and ready to carry money.
   (`content_layouts`; `cms.attachLayout` / `detachLayout` / `rejoinLayout`;
   product/event/location public pages follow the template until detached;
   editing a page auto-detaches; `tests/core/cms-layouts.test.ts`;
-  changeset `cms-entity-layouts.md` **F04** `/admin/pages/[id]` layout detach/rejoin. **F05** `cms.attachLayout`/`detachLayout`/`rejoinLayout`/`getLayout` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-layouts.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-layouts.test.ts` is the composition proof.)
+  changeset `cms-entity-layouts.md` **F04** `/admin/pages/[id]` layout detach/rejoin. **F05** `cms.attachLayout`/`detachLayout`/`rejoinLayout`/`getLayout` at `/api/v1/cms.*`, MCP `cms_*`. **F07** `tests/core/cms-layouts.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-layouts.test.ts` is the composition proof.)
 - [x] **C2.15** Build visual design controls over semantic tokens: colors,
   typography, spacing, radius, borders, shadows, responsive layout, logo and
   motion—preserving light/dark and WCAG invariants.
@@ -4113,7 +4126,7 @@ project without silent telemetry, and ready to carry money.
   (`experiment` / `variant` blocks; hash of visitor id + key; crawlers get
   control; `experimentCacheKey` for the cache Vary surface; editor preview
   shows every variant; `tests/core/cms-experiments.test.ts`; changeset
-  `cms-experiments.md` **F04** `/admin/experiments` variants. **F05** experiment/variant blocks persist through `cms.updatePage`; sticky assignment is server-side, not a separate MCP family. **F07** `tests/core/cms-experiments.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-experiments.test.ts` is the composition proof.)
+  `cms-experiments.md` **F04** `/admin/experiments` variants. **F05** experiment/variant blocks persist through `cms.updatePage`; sticky assignment is server-side, not a separate MCP family. **F07** `tests/core/cms-experiments.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-experiments.test.ts` is the composition proof.)
 - [x] **C2.18** Record experiment impressions/conversions and join outcomes to
   contacts, bookings, invoices and revenue with statistically honest reporting.
   (`analytics.recordExperimentImpressions` / `recordExperimentConversion` /
@@ -4125,7 +4138,7 @@ project without silent telemetry, and ready to carry money.
   palette, table rendering, variable slots, inbox preview and test-send.
   (`email` block context; `variable` slots; `renderEmailHtml` / `renderEmailText`;
   `cms.previewEmail` / `testSendEmail`; inbox preview on email templates;
-  `tests/core/cms-email.test.ts`; changeset `cms-email-editor.md` **F04** `/admin/pages` empty/error/recovery. **F05** `cms.previewEmail`/`testSendEmail` at `/api/v1/cms.previewEmail` and `/api/v1/cms.testSendEmail`, MCP `cms_previewEmail`/`cms_testSendEmail`. **F07** `tests/core/cms-email.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-email.test.ts` is the composition proof.)
+  `tests/core/cms-email.test.ts`; changeset `cms-email-editor.md` **F04** `/admin/pages` empty/error/recovery. **F05** `cms.previewEmail`/`testSendEmail` at `/api/v1/cms.previewEmail` and `/api/v1/cms.testSendEmail`, MCP `cms_previewEmail`/`cms_testSendEmail`. **F07** `tests/core/cms-email.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-email.test.ts` is the composition proof.)
 - [x] **C2.20** Enforce one H1, heading order, semantic landmarks, required alt
   decisions, link meaning, responsive images and per-page accessibility hints.
   (`analyzeAccessibility`; `cms.pageAccessibilityReport`; publish refuses 0 or
@@ -4142,7 +4155,7 @@ project without silent telemetry, and ready to carry money.
   script-breakout-safe JSON-LD serialization),
   `tests/core/seo-public-entities.test.ts`,
   `tests/core/catalog-public-pages.test.ts`, `tests/core/events.test.ts` and
-  `tests/core/newsletters.test.ts`; changeset `events-newsletters-seo.md`. **F04** `/admin/builder` prompt-to-proposal. **F05** public `/og`, `/feeds/[kind]`, `/indexnow-key` plus `seo.submitIndexNow` at `/api/v1/seo.submitIndexNow`, MCP `seo_submitIndexNow`. **F07** `tests/core/seo-surface.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/seo-surface.test.ts` is the composition proof.)*
+  `tests/core/newsletters.test.ts`; changeset `events-newsletters-seo.md`. **F04** `/admin/builder` prompt-to-proposal. **F05** public `/og`, `/feeds/[kind]`, `/indexnow-key` plus `seo.submitIndexNow` at `/api/v1/seo.submitIndexNow`, MCP `seo_submitIndexNow`. **F07** `tests/core/seo-surface.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/seo-surface.test.ts` is the composition proof.)*
 - [x] **C2.22** Add draft/published cache invalidation, image and page budgets,
   zero client-side layout swap, and performance regression tests.
   (`invalidationPlan` — draft saves skip the public slug; publish busts it;
@@ -4153,7 +4166,7 @@ project without silent telemetry, and ready to carry money.
   migration, sitemap source and seed block with zero core-editor changes.
   (`proof` module: `notice` block, `proof_notices` + `0073_plain_lilandra.sql`,
   `proof.publishedPaths` / `seedNotice`, seed block helper; editor unchanged;
-  `tests/core/cms-plugin-proof.test.ts`; changeset `cms-plugin-proof.md` **F04** N/A — editor performance budgets, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/cms-plugin-proof.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-plugin-proof.test.ts` is the composition proof.)
+  `tests/core/cms-plugin-proof.test.ts`; changeset `cms-plugin-proof.md` **F04** N/A — editor performance budgets, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/cms-plugin-proof.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-plugin-proof.test.ts` is the composition proof.)
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
@@ -4171,7 +4184,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   (`buildOpenApi`: 200 from output schemas, 4xx/500 from `ServiceError`,
   public ops `security: []`, `FreeholderEvent` webhook component,
   `info.x-freeholder` platform/webhook/MCP versions. Coverage in
-  `tests/core/contract-projections.test.ts`. **F04** HTTP `/api/v1` OpenAPI, not a new admin screen. **F05** this item *is* `GET /api/openapi.json` documenting every `/api/v1/{service}` path. **F07** `tests/core/contract-projections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-projections.test.ts` is the composition proof.)
+  `tests/core/contract-projections.test.ts`. **F04** HTTP `/api/v1` OpenAPI, not a new admin screen. **F05** this item *is* `GET /api/openapi.json` documenting every `/api/v1/{service}` path. **F07** `tests/core/contract-projections.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-projections.test.ts` is the composition proof.)
 - [x] **C3.03** Generate and test `@freeholder/sdk` types/client from the live
   service registry; remove every package scaffold/no-op build.
   (`generateSdkCatalog` in `src/core/contract/sdk.ts` walks
@@ -4196,7 +4209,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   (`contractProjections` / `humanReference` / `llmsContractSection`;
   `/llms-full.txt`; OpenAPI paths === external registry projection, while
   system services remain internal. Coverage in
-  `tests/core/contract-projections.test.ts`. **F04** `/admin/settings` webhooks create/pause/test. **F05** `GET /llms.txt` and `GET /llms-full.txt` are the human/LLM projection of the same registry. **F07** `tests/core/contract-projections.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-projections.test.ts` is the composition proof.)
+  `tests/core/contract-projections.test.ts`. **F04** `/admin/settings` webhooks create/pause/test. **F05** `GET /llms.txt` and `GET /llms-full.txt` are the human/LLM projection of the same registry. **F07** `tests/core/contract-projections.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contract-projections.test.ts` is the composition proof.)
 - [x] **C3.07** Add webhook subscriptions, delivery inspection/replay, schema
   versioning, endpoint rotation and explicit sensitive-field redaction.
   (`webhooks.inspectDelivery` redacts; `webhooks.replay`;
@@ -4210,7 +4223,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   SPDX license, `permissions`, `migrations`, `capabilities`;
   `assertPluginFitsInstance` at boot; proof module uses the contract.
   Coverage in `tests/core/plugin-contract.test.ts`; changeset
-  `plugin-contract.md`. **F04** N/A — plugin contract, not a screen. **F05** N/A as an instance agent tool — `@freeholder/plugin-kit` `definePlugin` contract; plugin services join `/api/v1` and MCP only after install (C3.09). **F07** `tests/core/plugin-contract.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-contract.test.ts` is the composition proof.)
+  `plugin-contract.md`. **F04** N/A — plugin contract, not a screen. **F05** N/A as an instance agent tool — `@freeholder/plugin-kit` `definePlugin` contract; plugin services join `/api/v1` and MCP only after install (C3.09). **F07** `tests/core/plugin-contract.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-contract.test.ts` is the composition proof.)
 - [x] **C3.09** Implement install, enable, disable, update and uninstall with
   signature/integrity verification, rollback, data-retention choice and doctor.
   (`plugins.install|enable|disable|update|rollback|uninstall`; directory
@@ -4230,7 +4243,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C3.12** Ship plugin scaffolding, dev harness, fixture instance, contract
   tests and examples for a block, service, adapter, automation verb and route.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
-  Coverage in `tests/core/plugin-scaffold.test.ts`. **F04** `/admin/imports` start/preview/commit. **F05** N/A — `packages/plugin-kit` scaffold/dev harness and `tests/fixtures/sample-plugin`, not an HTTP/MCP route. **F07** `tests/core/plugin-scaffold.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-scaffold.test.ts` is the composition proof.)
+  Coverage in `tests/core/plugin-scaffold.test.ts`. **F04** `/admin/imports` start/preview/commit. **F05** N/A — `packages/plugin-kit` scaffold/dev harness and `tests/fixtures/sample-plugin`, not an HTTP/MCP route. **F07** `tests/core/plugin-scaffold.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-scaffold.test.ts` is the composition proof.)
 - [ ] **C3.13** Ship first-party plugins for gift options/registries, print-on-
   demand, advanced communities, voice and video artifacts, and marketplace
   channel sync seams, as assigned by §§4.14 and 36.
@@ -4385,7 +4398,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   PostgreSQL, private S3-compatible storage, health checks and secret inputs;
   `scripts/recipe-matrix.sh` boots the built image for all six target contracts
   against PostgreSQL/MinIO and runs the authenticated canonical Doctor in CI.
-  Parsed/current-IaC coverage in `tests/core/recipes.test.ts`. **F04** `packages/cli` doctor/migrate, not a new admin screen. **F05** N/A — IaC recipes (`replit.nix`, `render.yaml`, compose, DO/Railway); operator CLI is C10.21. **F07** `tests/core/recipes.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recipes.test.ts` is the composition proof.)
+  Parsed/current-IaC coverage in `tests/core/recipes.test.ts`. **F04** `packages/cli` doctor/migrate, not a new admin screen. **F05** N/A — IaC recipes (`replit.nix`, `render.yaml`, compose, DO/Railway); operator CLI is C10.21. **F07** `tests/core/recipes.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recipes.test.ts` is the composition proof.)
 - [x] **C3.17** Give every Tier-1 recipe install, verify, backup, restore,
   migrate-in, migrate-out, update and rollback steps; continuously test matrix.
   (Every parsed `recipe.yaml` carries executable `install`, `verify`, `backup`,
@@ -4393,11 +4406,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   target READMEs and `deploy/migration-runbook.md` specify execution, cutover,
   failure recovery and all 30 directed pairs. `scripts/recipe-matrix.sh` is a
   CI runtime gate, not a filename assertion. Coverage in
-  `tests/core/recipes.test.ts`. **F04** N/A — versioned platform contract, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/recipes.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/migration-runbook.md`. **F12** `tests/core/recipes.test.ts` is the composition proof.)
+  `tests/core/recipes.test.ts`. **F04** N/A — versioned platform contract, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/recipes.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/migration-runbook.md`. **F12** `tests/core/recipes.test.ts` is the composition proof.)
 - [x] **C3.18** Build one-command full export of normalized data, media manifest,
   human-readable archive, configuration and checksums without exporting secrets.
   (`pnpm ownership:export`; `platform.export`; `EXPORT_FORMAT`. Coverage in
-  `tests/core/ownership-export.test.ts` and `tests/core/portability.test.ts`. **F04** `/admin/health` Doctor checks. **F05** `platform.export` at `/api/v1/platform.export`, MCP `platform_export`, plus `pnpm ownership:export` CLI. **F07** `tests/core/ownership-export.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/ownership-export.test.ts` is the composition proof.)
+  `tests/core/ownership-export.test.ts` and `tests/core/portability.test.ts`. **F04** `/admin/health` Doctor checks. **F05** `platform.export` at `/api/v1/platform.export`, MCP `platform_export`, plus `pnpm ownership:export` CLI. **F07** `tests/core/ownership-export.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/ownership-export.test.ts` is the composition proof.)
 - [x] **C3.19** Prove round-trip migration between every Tier-1 pair while
   preserving IDs, money, timestamps, media, locales and public URLs.
   (`pnpm ownership:drill` dumps a source PostgreSQL database once, restores it
@@ -4406,7 +4419,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   inventory. `pnpm media:transfer` then copies every manifest object between S3
   and Replit storage and verifies target byte length plus SHA-256. Both are
   exercised in CI; contracts in `tests/core/portability.test.ts` and transfer
-  behavior in `tests/core/media-transfer.test.ts`. **F04** N/A — adapter conformance tests, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/portability.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portability.test.ts` is the composition proof.)
+  behavior in `tests/core/media-transfer.test.ts`. **F04** N/A — adapter conformance tests, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/portability.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/portability.test.ts` is the composition proof.)
 - [x] **C3.20** Add semantic platform/plugin/API versions, compatibility
   reporting and a truthful instance version in health, admin, CLI and contract.
   (Platform and packages are `0.1.0`; SDK `PLATFORM_VERSION` is stamped from
@@ -4424,14 +4437,14 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   transforms into core service inputs, provenance, fixtures and hostile/
   partial-source conformance; core retains jobs, preview, commit and rollback.
   (`defineImporter`; `assertPublicHttpUrl`; robots/limits. Coverage in
-  `tests/core/importers.test.ts`. **F04** `/admin/imports` map/review-conflicts. **F05** N/A as a new HTTP family — `defineImporter` in plugin-kit; owner runs go through `imports.*` (C3.23). **F07** `tests/core/importers.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
+  `tests/core/importers.test.ts`. **F04** `/admin/imports` map/review-conflicts. **F05** N/A as a new HTTP family — `defineImporter` in plugin-kit; owner runs go through `imports.*` (C3.23). **F07** `tests/core/importers.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
 - [x] **C3.22** Ship complete first-party WordPress REST/WXR and generic-site
   sitemap/RSS/Atom/semantic-HTML importers plus static archive/common hosted-
   site paths; preserve content/media/SEO/URL intent and generate redirects
   while enforcing SSRF, origin, robots, rate, page, byte and depth limits.
   (`parseWordpressRest` / `parseWordpressWxr` / `parseSitemap` /
   `parseRssOrAtom` / `parseSemanticHtml` / `discoverFromPublicOrigin`.
-  Coverage in `tests/core/importers.test.ts`. **F04** N/A — first-party plugin seam, not a new screen. **F05** parsers sit behind `imports.start`/`previewFromSource` at `/api/v1/imports.*`, MCP `imports_*`; no extra importer family. **F07** `tests/core/importers.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
+  Coverage in `tests/core/importers.test.ts`. **F04** N/A — first-party plugin seam, not a new screen. **F05** parsers sit behind `imports.start`/`previewFromSource` at `/api/v1/imports.*`, MCP `imports_*`; no extra importer family. **F07** `tests/core/importers.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/importers.test.ts` is the composition proof.)
 - [x] **C3.23** Build the owner import studio and resumable run ledger:
   discover → map → staged preview/diff → conflict review → commit → reconcile
   counts/links/SEO/accessibility → reversible batch → approved publish/cutover,
@@ -4736,7 +4749,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   Coverage in `tests/core/briefing-contributors.test.ts`, plus a registry
   assertion that every declared contributor resolves to a service that
   actually exists — a section that silently never appears is the failure mode
-  this design would otherwise have. **F04** N/A — agent isolation, not a screen. **F05** core contributors feed `briefing.assemble`; no extra HTTP family beyond C4.15 `briefing_*`. **F07** `tests/core/briefing-contributors.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/briefing-contributors.test.ts` is the composition proof.)
+  this design would otherwise have. **F04** N/A — agent isolation, not a screen. **F05** core contributors feed `briefing.assemble`; no extra HTTP family beyond C4.15 `briefing_*`. **F07** `tests/core/briefing-contributors.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/briefing-contributors.test.ts` is the composition proof.)
 - [x] **C4.17** Add playbook/module contributions plus email, SMS and push
   delivery through notification preferences.
   (§42 calls "report into my briefing" the mechanism behind an owner adding
@@ -4823,7 +4836,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   here. Budget is the same visible monthly ceiling the structure lane spends,
   reserved under the same advisory lock so two tabs cannot both spend the last
   of it. `0088_builder_code_lane.sql`. Coverage in
-  `tests/core/builder-code-lane.test.ts`. **F04** N/A — injection hardening, not a screen. **F05** `builder.proposeCode`/`deliverCode`/`rejectCode`/`listCodeProposals`/`getCodeProposal`/`codeStatus` at `/api/v1/builder.*`, MCP `builder_*`. **F07** `tests/core/builder-code-lane.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/builder-code-lane.test.ts` is the composition proof.)
+  `tests/core/builder-code-lane.test.ts`. **F04** N/A — injection hardening, not a screen. **F05** `builder.proposeCode`/`deliverCode`/`rejectCode`/`listCodeProposals`/`getCodeProposal`/`codeStatus` at `/api/v1/builder.*`, MCP `builder_*`. **F07** `tests/core/builder-code-lane.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/builder-code-lane.test.ts` is the composition proof.)
 - [x] **C4.21** Keep `builder.*` separately granted from workforce scopes and
   prove content/customer input can never instruct either builder lane.
   (Both halves were already structurally true; this item is the proof, which is
@@ -4931,7 +4944,7 @@ owner operations, never substitute for them.
   interlocks; currency-separated calendar/rolling threshold reports through
   the generated `invoicing.*` API/MCP services; arithmetic, database and
   location coverage in `tests/core/money-arithmetic.test.ts` and
-  `tests/core/invoicing.test.ts`; operator guide `deploy/commerce-money.md`. **F04** `/admin/invoices` tax evidence. **F05** `invoicing.addTaxRate` and tax-zone services at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/money-arithmetic.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/commerce-money.md`. **F12** `tests/core/money-arithmetic.test.ts` is the composition proof.)*
+  `tests/core/invoicing.test.ts`; operator guide `deploy/commerce-money.md`. **F04** `/admin/invoices` tax evidence. **F05** `invoicing.addTaxRate` and tax-zone services at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/money-arithmetic.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/commerce-money.md`. **F12** `tests/core/money-arithmetic.test.ts` is the composition proof.)*
 - [x] **C5.03** Implement exemptions, reverse charge, shipping tax, rounding,
   immutable `TaxLine` snapshots and owner-visible calculation explanations.
   *(Evidence: validated/unexpired exemption enforcement in services and
@@ -4955,7 +4968,7 @@ owner operations, never substitute for them.
   `createTaxZone` still accepts an owner-defined country the catalog does not
   cover, without that interlock. Coverage in
   `tests/core/money-arithmetic.test.ts`, `tests/core/invoicing.test.ts` and
-  `tests/core/tax-templates.test.ts`; changeset `commerce-tax-templates.md`. **F04** `/admin/invoices` credits. **F05** N/A as a new route — CA/EU/UK/US/AU/NZ templates seed `invoicing.addTaxRate`; not a separate MCP family. **F07** `tests/core/money-arithmetic.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/money-arithmetic.test.ts` is the composition proof.)*
+  `tests/core/tax-templates.test.ts`; changeset `commerce-tax-templates.md`. **F04** `/admin/invoices` credits. **F05** N/A as a new route — CA/EU/UK/US/AU/NZ templates seed `invoicing.addTaxRate`; not a separate MCP family. **F07** `tests/core/money-arithmetic.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/money-arithmetic.test.ts` is the composition proof.)*
 - [x] **C5.05** Implement invoice/line/payment/refund/credit-note state machines,
   integer-money invariants, numbering, receipts, reconciliation and audit.
   *(Evidence: one normalized 14-table `invoicing` module; integer minor units
@@ -4969,7 +4982,7 @@ owner operations, never substitute for them.
   lifecycle/database coverage in `tests/core/invoicing.test.ts`; migrations
   `0043_worried_shaman.sql` through `0045_peaceful_puck.sql`; operator guide
   and full local gates; `/admin/invoices` now lists, creates, issues, voids
-  and credits through these services. **F04** `/portal` customer invoice view. **F05** `invoicing.createDraft`/`issue`/`void`/`issueCreditNote`/`listPayments` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/invoicing.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/invoicing.test.ts` is the composition proof.)*
+  and credits through these services. **F04** `/portal` customer invoice view. **F05** `invoicing.createDraft`/`issue`/`void`/`issueCreditNote`/`listPayments` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/invoicing.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/invoicing.test.ts` is the composition proof.)*
 - [x] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
   signed/idempotent webhooks, saved methods, disputes and refunds. *(Evidence:
   one capability-discovered adapter contract for owner-attested offline money,
@@ -5017,7 +5030,7 @@ owner operations, never substitute for them.
   `tests/core/advanced-money.test.ts`, provider service and adapter suites;
   production build and real Chromium payment/refund/WCAG journey;
   `deploy/commerce-money.md`, `deploy/commerce-payments.md` and changeset
-  `commerce-advanced-money.md`. **F04** `/admin/invoices/[id]` payment plan/late fee; `/admin/invoices/new` deposit/balance; `/admin/payments` payouts (C11.09 F04). **F05** `invoicing.createDepositAndBalance`/`createPaymentPlan`/`assessLateFee`/`adjustCustomerBalance`/`recordProviderPayout` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/advanced-money.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/commerce-money.md`. **F12** `tests/core/advanced-money.test.ts` is the composition proof.)*
+  `commerce-advanced-money.md`. **F04** `/admin/invoices/[id]` payment plan/late fee; `/admin/invoices/new` deposit/balance; `/admin/payments` payouts (C11.09 F04). **F05** `invoicing.createDepositAndBalance`/`createPaymentPlan`/`assessLateFee`/`adjustCustomerBalance`/`recordProviderPayout` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/advanced-money.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** operator runbook `deploy/commerce-money.md`. **F12** `tests/core/advanced-money.test.ts` is the composition proof.)*
 
 #### Catalog and pricing
 - [x] **C5.09** Build product lifecycle for physical, digital, service,
@@ -5078,7 +5091,7 @@ owner operations, never substitute for them.
   `src/modules/catalog/price-breaks.ts`; `catalog.resolvePrice` applies
   variant-specific then list-wide bands and explains the result;
   `tests/core/price-breaks.test.ts` plus database coverage in
-  `tests/core/catalog-pricing.test.ts`. **F04** `/admin/carts` saved carts. **F05** `catalog.resolvePrice` plus price-break services at `/api/v1/catalog.resolvePrice`, MCP `catalog_resolvePrice`. **F07** `tests/core/price-breaks.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/price-breaks.test.ts` is the composition proof.)*
+  `tests/core/catalog-pricing.test.ts`. **F04** `/admin/carts` saved carts. **F05** `catalog.resolvePrice` plus price-break services at `/api/v1/catalog.resolvePrice`, MCP `catalog_resolvePrice`. **F07** `tests/core/price-breaks.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/price-breaks.test.ts` is the composition proof.)*
 - [x] **C5.15** Complete service offerings, deposits, policies, forms, waivers,
   calendars, capacity and price-rule configuration over the shared catalog.
   *(Evidence: `cancellation_policies`, `service_offerings` and `price_rules`
@@ -5129,7 +5142,7 @@ owner operations, never substitute for them.
   dimensional weight uses the 5000 divisor; smallest fitting box; calculated
   carrier methods skipped until an adapter exists; translated
   `/admin/shipping`; `tests/core/shipping-quote.test.ts`; changeset
-  `commerce-shipping-rates.md`. **F04** `/admin/promotions` coupons. **F05** `catalog.createShippingZone`/`quoteShipping`/`listShippingCatalog`/`addShippingRateBand` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/shipping-quote.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/shipping-quote.test.ts` is the composition proof.)*
+  `commerce-shipping-rates.md`. **F04** `/admin/promotions` coupons. **F05** `catalog.createShippingZone`/`quoteShipping`/`listShippingCatalog`/`addShippingRateBand` at `/api/v1/catalog.*`, MCP `catalog_*`. **F07** `tests/core/shipping-quote.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/shipping-quote.test.ts` is the composition proof.)*
 - [x] **C5.19** Implement shipments, split fulfillment, tracking, digital
   delivery, returns/RMA, restock/refund convergence and customer notices, with
   admin fulfillment, return and exception workspaces.
@@ -5198,7 +5211,7 @@ owner operations, never substitute for them.
   sends one coupon + contact notice via `catalog.recoverAbandonedCarts`;
   translated `/admin/promotions`; `tests/core/promo-quote.test.ts` and
   `tests/core/catalog-promotions.test.ts`; changeset
-  `commerce-promotions.md`. **F04** customer gift-card/balance portal, not a new admin screen. **F05** `catalog.applyCouponToCart`/`applyGiftCardToInvoice` plus promotion services at `/api/v1/catalog.*`, MCP `catalog_*`; customer gift-card portal is HTTP, not a new MCP family. **F07** `tests/core/promo-quote.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/promo-quote.test.ts` is the composition proof.)*
+  `commerce-promotions.md`. **F04** customer gift-card/balance portal, not a new admin screen. **F05** `catalog.applyCouponToCart`/`applyGiftCardToInvoice` plus promotion services at `/api/v1/catalog.*`, MCP `catalog_*`; customer gift-card portal is HTTP, not a new MCP family. **F07** `tests/core/promo-quote.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/promo-quote.test.ts` is the composition proof.)*
 - [x] **C5.24** Add in-person payment through capable adapters, including
   Stripe Terminal/tap-to-pay representation, receipts and reconciliation.
   *(Evidence: POS family now has `manual` cash and `stripe` Terminal/tap-to-pay
@@ -5207,7 +5220,7 @@ owner operations, never substitute for them.
   PaymentIntent and waits on the reader/webhook); receipts reuse
   `invoicing.receipt`; `reconcileInPersonPayments` lists unsettled Terminal
   takes; translated `/admin/pos`; `tests/core/pos-adapters.test.ts` and
-  `tests/core/invoicing-pos.test.ts`; changeset `commerce-pos.md`. **F04** N/A — money convergence tests, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/pos-adapters.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/pos-adapters.test.ts` is the composition proof.)*
+  `tests/core/invoicing-pos.test.ts`; changeset `commerce-pos.md`. **F04** N/A — money convergence tests, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/pos-adapters.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/pos-adapters.test.ts` is the composition proof.)*
 - [x] **C5.25** Let a customer pay an issued invoice: a `/portal/invoices/[id]`
   page for the signed-in customer and a token link for the invoice email, both
   rendering one component that shows the invoice, starts the configured
@@ -5591,7 +5604,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   full and promote on cancel, check-in, Event JSON-LD, `/ics/events/{slug}`,
   public `/events` pages and `/admin/events`. Merge and privacy cover
   `event_registrations`. Migration `0059_concerned_sumo.sql`;
-  `tests/core/events.test.ts`. **F04** `/admin/events` list/create. **F05** `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at `/api/v1/events.*`, MCP `events_*`. **F07** `tests/core/events.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/events.test.ts` is the composition proof.)*
+  `tests/core/events.test.ts`. **F04** `/admin/events` list/create. **F05** `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at `/api/v1/events.*`, MCP `events_*`. **F07** `tests/core/events.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/events.test.ts` is the composition proof.)*
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/
@@ -6912,7 +6925,7 @@ customer has one secure, comprehensible home for the relationship.
   the admin screen prints them under the chart. A number an owner cannot
   interrogate is a number they are entitled to disbelieve.
   Admin at `/admin/traffic/funnel`, linked from traffic. No migration — every
-  stage reads tables that already exist. `tests/modules/funnel.test.ts`. **F04** `/admin/traffic/funnel`. **F05** `analytics.funnel`/`funnelDefinitions`/`identify` at `/api/v1/analytics.*`, MCP `analytics_*`. **F07** `tests/modules/funnel.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/funnel.test.ts` is the composition proof.)
+  stage reads tables that already exist. `tests/modules/funnel.test.ts`. **F04** `/admin/traffic/funnel`. **F05** `analytics.funnel`/`funnelDefinitions`/`identify` at `/api/v1/analytics.*`, MCP `analytics_*`. **F07** `tests/modules/funnel.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/funnel.test.ts` is the composition proof.)
 - [x] **C9.08** Build reporting saved views and the revenue/service/product/
   location/cohort/funnel report set.
   (Split under §43.17.1: the original item carried a module's worth of work in
@@ -7344,7 +7357,7 @@ customer has one secure, comprehensible home for the relationship.
   delivered amount. Video viewability (two seconds) is named and unused,
   matching the C9.18 gap.
   Admin on `/admin/ads`. Migration `0145_ad_stats.sql`;
-  `tests/modules/ads-measurement.test.ts`. Changeset `ad-measurement.md`. **F04** `/admin/ads` measurement. **F05** `ads.recordBeacon`/`recordClick`/`rollUpStats`/`campaignReport` at `/api/v1/ads.*`, MCP `ads_*`; public `/api/ads/view`. **F07** `tests/modules/ads-measurement.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads-measurement.test.ts` is the composition proof.)
+  `tests/modules/ads-measurement.test.ts`. Changeset `ad-measurement.md`. **F04** `/admin/ads` measurement. **F05** `ads.recordBeacon`/`recordClick`/`rollUpStats`/`campaignReport` at `/api/v1/ads.*`, MCP `ads_*`; public `/api/ads/view`. **F07** `tests/modules/ads-measurement.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/ads-measurement.test.ts` is the composition proof.)
 - [x] **C9.20** Support consent-gated third-party tags off by default and
   generate accurate `ads.txt`/`app-ads.txt`.
   (`html_tag` and `provider` on `ad_creatives`; `ad_txt_entries` is the
@@ -7389,7 +7402,7 @@ customer has one secure, comprehensible home for the relationship.
   locale and the prompt may quote only from them. Migration
   `0148_assistant_grounding.sql`. Tests in
   `tests/modules/assistant-grounding.test.ts`. Changeset
-  `assistant-grounding.md`. **F04** `/admin/assistant` grounding. **F05** `assistant.knowledgeList`/`saveKnowledge`/`reindex`/`setScope`/`scopes` at `/api/v1/assistant.*`, MCP `assistant_*`. **F07** `tests/modules/assistant-grounding.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/assistant-grounding.test.ts` is the composition proof.)
+  `assistant-grounding.md`. **F04** `/admin/assistant` grounding. **F05** `assistant.knowledgeList`/`saveKnowledge`/`reindex`/`setScope`/`scopes` at `/api/v1/assistant.*`, MCP `assistant_*`. **F07** `tests/modules/assistant-grounding.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/assistant-grounding.test.ts` is the composition proof.)
 - [x] **C9.23** Prevent invented price/availability, enforce refusals and
   escalation, attach consented transcripts to contacts, surface knowledge gaps
   and prove prompt-injection resistance.
@@ -7463,7 +7476,7 @@ customer has one secure, comprehensible home for the relationship.
   success on another.
   `social.publicationCalendar` is the one calendar. Migration
   `0152_social_composer.sql`. Tests in
-  `tests/modules/social-composer.test.ts`. Changeset `social-composer.md`. **F04** `/admin/social` composer. **F05** `social.composePackage`/`createVariants`/`schedulePublications`/`publicationCalendar` at `/api/v1/social.*`, MCP `social_*`. **F07** `tests/modules/social-composer.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-composer.test.ts` is the composition proof.)
+  `tests/modules/social-composer.test.ts`. Changeset `social-composer.md`. **F04** `/admin/social` composer. **F05** `social.composePackage`/`createVariants`/`schedulePublications`/`publicationCalendar` at `/api/v1/social.*`, MCP `social_*`. **F07** `tests/modules/social-composer.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-composer.test.ts` is the composition proof.)
 - [x] **C9.27** Sync Google Business Profile posts/hours/reviews and attribute
   outbound social links to visits, contacts and revenue.
   (`social.syncGbp` queues a durable per-profile workflow that pulls owned GBP
@@ -7474,7 +7487,7 @@ customer has one secure, comprehensible home for the relationship.
   canonical URL on every publication. `social.attributionReport` joins
   those visits to identified contacts and paid invoices. Migration
   `0153_social_gbp.sql`. Tests in `tests/modules/social-gbp.test.ts`.
-  Changeset `social-gbp.md`. **F04** `/admin/social` GBP. **F05** `social.syncGbp`/`attributionReport` plus `reviews.ingestExternal` at `/api/v1/social.*` and `/api/v1/reviews.ingestExternal`, MCP `social_*`/`reviews_*`. **F07** `tests/modules/social-gbp.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-gbp.test.ts` is the composition proof.)
+  Changeset `social-gbp.md`. **F04** `/admin/social` GBP. **F05** `social.syncGbp`/`attributionReport` plus `reviews.ingestExternal` at `/api/v1/social.*` and `/api/v1/reviews.ingestExternal`, MCP `social_*`/`reviews_*`. **F07** `tests/modules/social-gbp.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-gbp.test.ts` is the composition proof.)
 - [x] **C9.28** Build universal `ShareTarget`, native/channel intents, generated
   OG assets, tracked short links and entity-level controls.
   (New `share` module, migration `0155_share_targets.sql`, admin at
@@ -7587,7 +7600,7 @@ customer has one secure, comprehensible home for the relationship.
   prospect opening it. Merge repoints both contact columns; erasure of
   either person deletes the link. Eight tests in
   `tests/core/quote-partner-share.test.ts`. Migration
-  `0160_quote_partner_links.sql`. Changeset `quote-partner-share.md`. **F04** quote internal share, not a new admin screen. **F05** `quotes.invitePartner`/`revokePartner`/`byPartnerToken` at `/api/v1/quotes.*`; `quotes.byPartnerToken` is MCP-excluded. **F07** `tests/core/quote-partner-share.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/quote-partner-share.test.ts` is the composition proof.)
+  `0160_quote_partner_links.sql`. Changeset `quote-partner-share.md`. **F04** quote internal share, not a new admin screen. **F05** `quotes.invitePartner`/`revokePartner`/`byPartnerToken` at `/api/v1/quotes.*`; `quotes.byPartnerToken` is MCP-excluded. **F07** `tests/core/quote-partner-share.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/quote-partner-share.test.ts` is the composition proof.)
 - [x] **C9.35** Build gift-card/registry-style sharing on products.
   (Split from C9.29 under §43.17.1. §34's product half.
   A wishlist is the registry: `catalog.shareWishlist` mints a hashed token
@@ -7608,7 +7621,7 @@ customer has one secure, comprehensible home for the relationship.
   the link is the SEO. Gallery embeds use the lock-screen facts, never
   the files. `share.embedSnippet` builds the HTML with escaped names.
   Tests in `tests/core/embeds.test.ts` and `tests/core/csp.test.ts`.
-  Changeset `embeds-with-backlinks.md`. **F04** copy-paste embeds `/embed/*`. **F05** `share.embedSnippet` at `/api/v1/share.embedSnippet`, MCP `share_embedSnippet`; public `/embed/*`. **F07** `tests/core/embeds.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/embeds.test.ts` is the composition proof.)
+  Changeset `embeds-with-backlinks.md`. **F04** copy-paste embeds `/embed/*`. **F05** `share.embedSnippet` at `/api/v1/share.embedSnippet`, MCP `share_embedSnippet`; public `/embed/*`. **F07** `tests/core/embeds.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/embeds.test.ts` is the composition proof.)
 - [x] **C9.30** Build frequency-capped popups, announcement/exit-intent surfaces,
   targeting, consent-aware capture and accessibility-safe dismissal.
   (New `popups` module, migration `0157_popups.sql`. §36 names the four
@@ -7720,7 +7733,7 @@ customer has one secure, comprehensible home for the relationship.
   the profile table do not mention it. Tests in
   `tests/modules/social-onboarding.test.ts` and
   `tests/adapters/social-conformance.test.ts`. Changeset
-  `social-onboarding.md`. **F04** `/admin/social` onboarding. **F05** `social.beginOAuth` plus onboarding `social.networks` at `/api/v1/social.*`, MCP `social_*` (same OAuth as C9.24, onboarding entry). **F07** `tests/modules/social-onboarding.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-onboarding.test.ts` is the composition proof.)
+  `social-onboarding.md`. **F04** `/admin/social` onboarding. **F05** `social.beginOAuth` plus onboarding `social.networks` at `/api/v1/social.*`, MCP `social_*` (same OAuth as C9.24, onboarding entry). **F07** `tests/modules/social-onboarding.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/social-onboarding.test.ts` is the composition proof.)
 
 **C9 exit:** audience, access, attribution and recurring revenue compound on
 the spine without surveillance, shadow ledgers or channel-specific silos.
@@ -8776,7 +8789,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   **Remaining named worklist:**
   Per-record restore includes note/task trash, media/product restoration, contact-merge undo, the ownership-drill instance restore and trash/restore/purge for pages, forms, popups, segments and saved views; money ledgers, append-only evidence, credentials, join rows and never-deleted families are named not-applicable in deploy/record-trash.md.
   Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.)*
-- [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
+- [x] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a
   passing acceptance test.
   (**Worklist, 2026-09-09.** The tree has zero TODO/FIXME markers and no
@@ -8827,19 +8840,45 @@ schema they inherit reads as a designed thing rather than an excavation.
   `tests/core/upgrade-gate.test.ts` verifies the nonzero result before database
   operations. No actual image upgrade is claimed by this local CLI test.)*
   *(F-matrix follow-up, 2026-09-16, from the C0.11 audit: 45 §43 annotations
-  carry a stock "covers permission, refusal and recovery" (or typed-service
+  carried a stock "covers permission, refusal and recovery" (or typed-service
   equivalent) claim whose cited file proves validation and failure-mode
   refusal but does not dispatch the service layer or assert permission
   behaviour. Each is narrowed in `deploy/f-criteria-matrix.md`, naming
-  `tests/core/api.test.ts` for the scoped-permission half; the annotation
-  texts still carry the stamp. Affected items: C1.04, C1.19, C1.22, C1.23,
-  C1.25, C2.05–C2.10, C2.14, C2.17, C2.19, C2.21, C2.23, C3.02, C3.06,
-  C3.08, C3.12, C3.16–C3.19, C3.21, C3.22, C4.16, C4.20, C5.02, C5.04,
-  C5.05, C5.08, C5.14, C5.18, C5.23, C5.24, C6.11, C9.07, C9.19, C9.22,
-  C9.26, C9.27, C9.31, C9.34 and C9.36 (plus C1.17, curated to an explicit
-  N/A in the matrix). Rewriting those sentences to name both halves closes
-  this entry; no capability claim is affected — the features stand, the
-  coverage wording was ahead of the cited file.)*
+  `tests/core/api.test.ts` for the scoped-permission half. Affected items:
+  C1.04, C1.19, C1.22, C1.23, C1.25, C2.05–C2.10, C2.14, C2.17, C2.19,
+  C2.21, C2.23, C3.02, C3.06, C3.08, C3.12, C3.16–C3.19, C3.21, C3.22, C4.16,
+  C4.20, C5.02, C5.04, C5.05, C5.08, C5.14, C5.18, C5.23, C5.24, C6.11, C9.07,
+  C9.19, C9.22, C9.26, C9.27, C9.31, C9.34 and C9.36 (plus C1.17, curated to
+  an explicit N/A in the matrix). **Closed in this change:** every listed
+  annotation now names validation and failure-mode refusal in its own file
+  and scoped-permission dispatch in `tests/core/api.test.ts` (C1.17 an
+  explicit N/A) — no capability claim was affected, the coverage wording now
+  matches the cited files.)*
+  *(2026-09-16 doc-claim mapping — closed. `deploy/doc-claim-mapping.md`
+  inventories every affirmative, testable claim in §§1–42 (all 42 sections
+  considered, no skips) and maps each row to a passing suite or generated
+  artifact, or strikes the over-claim in the same change. The map is
+  machine-checked by `tests/core/doc-claim-mapping.test.ts`, which refuses
+  unmapped claims, unresolved evidence paths, and any Struck/Narrowed row whose
+  old wording still parses in this document; the gate runs in `pnpm gates`
+  (`scripts/fast-gates.mjs`). 108 rows carry test/gate evidence; 10 rows
+  are Struck/Narrowed (S1–S10): §12 mail-adapter id literal, §21b `backup.sh`
+  path, §25 "MIT plugin-kit", §27 hosted canonical registry/catalog,
+  §28 hosted docs site with executable guides, §31 "pgvector" retrieval,
+  §4.8 instance-release-notes scope, §37 agent-note mandate, §38
+  release-notes bullet, §34 changelog share target. Two judgment calls stand
+  as documented behaviour, not scaffolds: §35's branded placeholder
+  screenshots are the store-gate stand-in (`apps/mobile/store/metadata.json`,
+  `scripts/mobile-store-gate.mjs`), and adapter "not implemented" strings are
+  F07 fail-closed refusals (`src/adapters/payments/provider-helpers.ts`,
+  `tests/core/payment-adapters.test.ts`). **F04** N/A — documentation mapping,
+  not a screen. **F05** N/A — not an agent capability. **F07** the mapping
+  gate itself refuses unmapped claims, unresolved paths and stale strike text
+  — honesty enforced fail-closed is the safety property. **F09**
+  `deploy/doc-claim-mapping.md` plus this gate in `pnpm gates`.
+  **F12** aligns with `deploy/spec-reconciliation.md` and
+  `tests/core/spec-reconciliation.test.ts`. Changeset `doc-claim-mapping.md`;
+  release note in `deploy/release-notes-2026-09-16.md`.)*
 - [ ] **C11.16** Reconcile §§1–42 against implemented schema/services/UI and
   prove there is no affirmative feature without a completed checklist item.
   Reopened by the audit: a table of sections and named open work does not
