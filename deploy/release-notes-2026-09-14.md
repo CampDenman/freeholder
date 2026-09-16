@@ -5,45 +5,82 @@ SPDX-License-Identifier: Apache-2.0
 
 # Release notes — session digest 2026-09-14
 
-**Not a version bump.** Product version is still `0.1.0` (active development,
-not a release candidate). The canonical owner-facing list is `CHANGELOG.md`,
-generated from `.changeset/`. This page is a digest of what reached `main`
-in the 2026-09-13/14 merge train (`#357` through `#359`).
+Product version remains **0.1.0**, in active development. This is a session
+digest, not a release-candidate announcement or a claim of deployment.
+`CHANGELOG.md`, generated from `.changeset/`, is the canonical owner-facing
+change list. This snapshot includes main through `55d65fc` (#372); refresh
+GitHub before treating the pending changes below as shipped.
 
-HEAD at write time: `c496198`.
+## Available on main
 
-## For the owner
+- **Broader, permission-aware search.** Orders, subscriptions, gift registries,
+  suppliers, agreements, price lists, marketplace orders and privacy request
+  IDs join the existing search sources. Results use the corresponding read
+  permissions and open the relevant record. Privacy request bodies and
+  signing credentials are excluded. Labels ship in English, French and Spanish
+  (#366, #369, #371).
+- **Access-control repairs.** Private order reads and stock operations enforce
+  their permissions. Cart capabilities, private wishlists and hidden location
+  addresses are protected. Private-note pinning and revision history enforce
+  the same visibility rules as ordinary reads (#365, #367, #368, #372).
+- **Provider implementations.** Paid catalog lines can use the Printify adapter;
+  Shopify sync verifies and imports paid orders; Daily supports private rooms
+  and verified recording access (#362–#364). These are implemented provider
+  paths with automated contract tests, not completed live-account acceptance.
+- **Honest provider erasure.** A privacy erasure request remains in progress
+  while durable Daily recording/transcript cleanup jobs are outstanding.
+  Retries retain the original job identity; completion follows successful
+  cleanup acknowledgment. The admin screen shows pending cleanup (#370).
+- **Audit and verification repairs.** The audit corrected authorization,
+  provider-state and completion-evidence gaps, verified performance fixture
+  counts, repaired tied-row pagination and expanded browser coverage. Booking
+  tests now use future dates for live-clock workflows (#361, #369).
 
-- **Search.** Admin → Search runs one query over contacts, conversations,
-  notes, tasks, invoices, pages, media, products, quotes, projects and
-  galleries you can already open (`search.query`).
-- **Retention.** Admin → Retention sets a per-kind TTL. Apply now or wait
-  for the nightly job. Privacy holds still win. This is not undelete.
-- **Customer app.** `npx freeholder-app init` pulls branding into the app
-  config. Store privacy manifests and CI export gates are in. Physical
-  store binaries still need EAS credentials.
-- **Community, voice/video, print-on-demand, marketplace.** First-party
-  plugins with real tables and admin screens. Printify and marketplace
-  channel APIs are still fixtures.
-- **Accessibility.** Ten more admin list screens go through the same axe
-  check as Overview. There is still no Arabic catalog.
+The earlier search, per-kind retention, first-party plugin screens and customer
+app work remains available. Retention holds still protect eligible records.
+Native store binaries and physical-device acceptance are not claimed.
 
-## For operators
+## Implemented in open PRs — not yet on main at this snapshot
 
-- CI MinIO is `quay.io/minio/minio` (same digest as before). Docker Hub
-  `minio/minio` no longer pulls.
-- Schema baseline is `db/migrations/0000_reviewed-baseline.sql`. Later
-  files are `0001`–`0005` (community, voice-video, POD, marketplace,
-  retention). Do not add another `0168_*`.
-- Merge path: GitHub merge queue on `main`, then main-push CI, then
-  **Publish image** to GHCR. There is no droplet deploy from the session
-  that wrote this file.
+- **[#381](https://github.com/CampDenman/freeholder/pull/381): note/task recovery.**
+  Move records to trash, restore their original IDs/history/links, or explicitly
+  confirm permanent deletion with recent identity verification. Privacy holds
+  protect manual and scheduled purge; privacy erasure remains irreversible.
+  Project checklists/counts exclude trash. Task navigation and saved views use
+  task permissions. Includes localized, paginated UI and migration `0010`.
+- **[#382](https://github.com/CampDenman/freeholder/pull/382): queue measurements.**
+  Twenty real worker dispatches provide database enqueue-to-start samples and
+  p95. Missing or failed work fails the harness. Local small/medium runs passed
+  with p95 of 1,985/1,982 ms; these are diagnostic results, not reference-host
+  acceptance. Requested missing auxiliary clocks also fail on the large fixture.
 
-## Still not in this digest
+Both PRs require fresh green checks and the protected merge queue. Current
+blockers and tested commit references are recorded in `SESSION_HANDOFF.md`.
 
-Live Stripe/PayPal, independent security review, a second live restore,
-medium/large performance budgets on the droplet, physical-device proof,
-and the owner signature in `MASTER.md` §43.1. Those are open C-items.
+## Operator notes
 
-Full notes: `CHANGELOG.md` under `## 0.1.0`. Plan status: `MASTER.md` §43.
-Session snapshot: `SESSION_HANDOFF.md`.
+- Main currently has migrations `0000_reviewed-baseline.sql` through `0009`.
+  Note/task trash adds `0010` only when #381 lands. Inspect the journal before
+  allocating another number.
+- Daily cleanup operations are documented in
+  [`provider-recording-erasure.md`](provider-recording-erasure.md). Owner-storage
+  recording import and complete live-provider acceptance remain unfinished.
+- The pending recovery runbook documents rollback compatibility: old app builds
+  do not filter trash timestamps; use the matching pre-upgrade database backup
+  when rolling back to a version predating that behavior.
+- `doctl` 1.168.0 and Android platform tools 37.0.1 are installed on the local
+  workstation. DigitalOcean authentication and Replit SSH setup await the
+  owner's connection steps. Neither test device has been detected or wiped.
+- No live hosting deployment, payment settlement, device acceptance, image
+  publication or independent security-review completion is claimed by this update.
+
+## Completion status
+
+`MASTER.md` §43 remains authoritative: **255 of 273 C-items checked, 18 open**.
+The full gate counts F/B criteria too: **297 IDs, 267 checked, 30 open**.
+Provider coverage, whole-product verification, reference-host performance,
+second-target restore, physical-device evidence, independent security review
+and the clean-room/owner completion record remain outstanding.
+
+For reproducible commands, PR state and account/device setup, read
+[`SESSION_HANDOFF.md`](../SESSION_HANDOFF.md).
