@@ -5,6 +5,7 @@
 // layout reflow, keyboard focus, media preferences and the accessibility tree.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Frame, type Page } from "@playwright/test";
+import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { API_BASE } from "@/core/api/dispatch";
 import { contacts } from "@/core/contacts/schema";
@@ -16,6 +17,9 @@ import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { pages } from "@/modules/cms/schema";
 import { t } from "@/core/i18n";
 import { businessProfile } from "@/core/settings/schema";
+import { bookings, calendars } from "@/core/scheduling/schema";
+import { invoices } from "@/modules/invoicing/schema";
+import { products } from "@/modules/catalog/schema";
 import {
   closeDb,
   CUSTOMER,
@@ -368,7 +372,7 @@ async function installFixtures() {
     email: "customer-a11y@example.test",
     role: "customer",
   });
-  await db().insert(contacts).values({
+  const [a11yContact] = await db().insert(contacts).values({
     userId: CUSTOMER.userId,
     name: "Morgan Accessibility",
     email: "customer-a11y@example.test",
@@ -376,10 +380,65 @@ async function installFixtures() {
     preferredLocale: "en",
     timezone: "America/Vancouver",
     country: "CA",
-  });
+  }).returning({ id: contacts.id });
   const customerSession = await db().transaction((tx) =>
     createSession(tx, CUSTOMER.userId),
   );
+
+  // C11.12 populated detail forms: real rows behind the highest-traffic
+  // admin record routes, so axe, the keyboard loop and the 320px reflow all
+  // exercise the forms a person actually operates. The invoice shape mirrors
+  // tests/browser/journeys.spec.ts's money console fixture; the demo install
+  // only seeds pages, so the product and the sitting are created here.
+  const invoiceId = randomUUID();
+  await db().insert(invoices).values({
+    id: invoiceId,
+    contactId: a11yContact!.id,
+    number: "INV-A11Y-1",
+    idempotencyKey: "a11y-detail-invoice",
+    requestHash: createHash("sha256")
+      .update("a11y-detail-invoice")
+      .digest("hex"),
+    status: "sent",
+    currency: "CAD",
+    subtotalMinor: 5_000,
+    discountMinor: 0,
+    shippingMinor: 0,
+    taxMinor: 0,
+    totalMinor: 5_000,
+    paidMinor: 0,
+    refundedMinor: 0,
+    issuedAt: new Date(),
+  });
+  const [product] = await db()
+    .insert(products)
+    .values({
+      name: "Accessibility Harbour Print",
+      slug: "accessibility-harbour-print",
+      kind: "physical",
+    })
+    .returning({ id: products.id });
+  const [calendar] = await db()
+    .insert(calendars)
+    .values({
+      kind: "resource",
+      name: "Accessibility studio",
+      slug: "accessibility-studio",
+      timezone: "America/Vancouver",
+    })
+    .returning({ id: calendars.id });
+  const startsAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+  const [booking] = await db()
+    .insert(bookings)
+    .values({
+      contactId: a11yContact!.id,
+      calendarId: calendar!.id,
+      startsAt,
+      endsAt: new Date(startsAt.getTime() + 60 * 60 * 1000),
+      timezoneAtBooking: "America/Vancouver",
+      status: "confirmed",
+    })
+    .returning({ id: bookings.id });
   const [home] = await db()
     .select({ id: pages.id })
     .from(pages)
@@ -388,9 +447,13 @@ async function installFixtures() {
   if (!home) throw new Error("The demo fixture did not create its home page.");
 
   return {
+    bookingId: booking!.id,
+    contactId: a11yContact!.id,
     customerToken: customerSession.token,
     homePageId: home.id,
+    invoiceId,
     ownerToken: ownerSession.token,
+    productId: product!.id,
   };
 }
 
@@ -419,6 +482,29 @@ async function assertHeadingAxeAndSkip(
   await expect(
     page.getByRole("link", { name: t(locale, "a11y.skipToContent") }),
   ).toBeFocused();
+}
+
+/**
+ * C11.12 populated record surfaces: a real database row behind the route, so
+ * the axe pass, the 12-stop keyboard loop and the 320px reflow all exercise
+ * the form a person actually operates — not an empty-state list scan.
+ */
+async function assertRecordSurface(
+  page: Page,
+  surface: string,
+  path: string,
+  heading: RegExp | string,
+) {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  for (const theme of ["light", "dark"] as const) {
+    await page.context().addCookies([{ name: THEME_COOKIE, value: theme, url: BASE_URL }]);
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    await assertAxe(page, surface, theme);
+  }
+  await assertKeyboardAndFocus(page, surface);
+  await assertReflow(page, surface);
 }
 
 test.describe("real-browser accessibility", () => {
@@ -508,9 +594,52 @@ test.describe("real-browser accessibility", () => {
         ["/admin/reviews", t("en", "reviews.title")],
         ["/admin/social", t("en", "social.title")],
         ["/admin/subscriptions", t("en", "subscriptions.title")],
+        // C11.12 remaining unrouted owner screens: the list scan above left
+        // these admin pages unproved, so they join the same heading + both
+        // themes + axe + bypass-link pass.
+        ["/admin/ads", t("en", "ads.title")],
+        ["/admin/calendars", t("en", "calendars.title")],
+        ["/admin/design", t("en", "design.title")],
+        ["/admin/pos", t("en", "pos.title")],
+        ["/admin/loyalty", t("en", "loyalty.title")],
+        ["/admin/marketplace", t("en", "marketplace.title")],
+        ["/admin/gifts", t("en", "gifts.title")],
+        ["/admin/assistant", t("en", "assistant.title")],
+        ["/admin/shipping", t("en", "catalog.shipping.title")],
+        ["/admin/traffic", t("en", "analytics.title")],
       ] as const) {
         await assertHeadingAxeAndSkip(page, path, heading);
       }
+    });
+
+    // C11.12 populated detail forms: highest-traffic admin record routes with
+    // a real row behind them. axe runs in both asserted themes, then the full
+    // keyboard loop and the 320px reflow run against the populated form.
+    await test.step("admin detail forms with real records", async () => {
+      await assertRecordSurface(
+        page,
+        "admin-contact-detail",
+        `/admin/contacts/${fixture.contactId}`,
+        "Morgan Accessibility",
+      );
+      await assertRecordSurface(
+        page,
+        "admin-invoice-detail",
+        `/admin/invoices/${fixture.invoiceId}`,
+        /INV-A11Y-1/,
+      );
+      await assertRecordSurface(
+        page,
+        "admin-product-detail",
+        `/admin/products/${fixture.productId}`,
+        "Accessibility Harbour Print",
+      );
+      await assertRecordSurface(
+        page,
+        "admin-appointment-detail",
+        `/admin/appointments/${fixture.bookingId}`,
+        /\d/,
+      );
     });
 
     await test.step("editor", async () => {
@@ -524,7 +653,7 @@ test.describe("real-browser accessibility", () => {
       await assertSurface(page, "storefront");
     });
 
-    await test.step("French, Spanish and RTL", async () => {
+    await test.step("French, Spanish and catalog-driven Arabic RTL", async () => {
       await publishLocales("fr", ["en", "fr", "es"]);
       await page.goto("/admin");
       await expect(page.locator("html")).toHaveAttribute("lang", "fr");
@@ -538,23 +667,98 @@ test.describe("real-browser accessibility", () => {
       await page.goto("/fr");
       await expect(page.locator("html")).toHaveAttribute("lang", "fr");
       await assertAxe(page, "storefront-fr", "light");
+      // The 320px reflow contract applies to every shipped locale, not just
+      // the default one: French and Spanish storefronts join it here, and the
+      // Arabic catalog pass below proves it for RTL.
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      let problems = await reflowProblems(page.mainFrame());
+      expect(problems.documentOverflow, "storefront-fr does not reflow at 320 CSS px").toBeUndefined();
+      expect(problems.nested, "storefront-fr creates nested horizontal scrolling").toEqual([]);
 
       await publishLocales("es", ["en", "fr", "es"]);
       await page.goto("/es");
       await expect(page.locator("html")).toHaveAttribute("lang", "es");
       await assertAxe(page, "storefront-es", "light");
-
-      await publishLocales("en", ["en", "fr", "es"]);
-      await page.goto("/admin");
-      await page.evaluate(() => document.documentElement.setAttribute("dir", "rtl"));
-      await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
       await page.setViewportSize({ width: 320, height: 800 });
-      const rtlProblems = await reflowProblems(page.mainFrame());
-      expect(rtlProblems.documentOverflow, "admin RTL does not reflow at 320 CSS px").toBeUndefined();
-      expect(rtlProblems.nested, "admin RTL creates nested horizontal scrolling").toEqual([]);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      problems = await reflowProblems(page.mainFrame());
+      expect(problems.documentOverflow, "storefront-es does not reflow at 320 CSS px").toBeUndefined();
+      expect(problems.nested, "storefront-es creates nested horizontal scrolling").toEqual([]);
       await page.setViewportSize({ width: 1280, height: 800 });
+
+      // C11.12 RTL is proved by the shipped Arabic catalog, not an injected
+      // dir attribute: enabling ar makes the root layout render lang="ar"
+      // dir="rtl" from the locale's script, and the same axe, keyboard and
+      // reflow assertions that cover English now run against the RTL admin,
+      // storefront and portal. Covered matrix: locale (en/fr/es/ar) × theme
+      // (axe asserted in light and dark on admin and detail surfaces; RTL
+      // admin in both themes) × viewport (1280 keyboard loop, 320 reflow).
+      await publishLocales("ar", ["en", "fr", "es", "ar"]);
+      await context.addCookies([
+        { name: SESSION_COOKIE, value: fixture.ownerToken, url: BASE_URL },
+      ]);
+      await page.goto("/admin");
+      await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+      await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+      await expect(
+        page.getByRole("heading", { level: 1, name: t("ar", "admin.overview.title") }),
+      ).toBeVisible();
+      for (const theme of ["light", "dark"] as const) {
+        await page.context().addCookies([{ name: THEME_COOKIE, value: theme, url: BASE_URL }]);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await assertAxe(page, "admin-ar", theme);
+      }
+      await assertKeyboardAndFocus(page, "admin-ar", "ar");
+      await assertReflow(page, "admin-ar");
+
+      await page.context().addCookies([{ name: THEME_COOKIE, value: "light", url: BASE_URL }]);
+      await page.goto("/ar");
+      await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+      await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+      await assertAxe(page, "storefront-ar", "light");
+      await assertKeyboardAndFocus(page, "storefront-ar", "ar");
+      await assertReflow(page, "storefront-ar");
+
+      // Portal RTL follows the signed-in contact's preferred locale, resolved
+      // against the enabled set — the same path a real Arabic-speaking
+      // customer takes.
+      await db()
+        .update(contacts)
+        .set({ preferredLocale: "ar" })
+        .where(eq(contacts.id, fixture.contactId));
+      await context.addCookies([
+        { name: SESSION_COOKIE, value: fixture.customerToken, url: BASE_URL },
+      ]);
+      await page.goto("/portal");
+      await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+      await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+      await expect(
+        page.getByRole("heading", {
+          level: 1,
+          name: t("ar", "portal.greeting", { name: "Morgan Accessibility" }),
+        }),
+      ).toBeVisible();
+      await assertAxe(page, "portal-ar", "light");
       await page.keyboard.press("Tab");
-      await expect(page.getByRole("link", { name: t("en", "a11y.skipToContent") })).toBeFocused();
+      await expect(
+        page.getByRole("link", { name: t("ar", "a11y.skipToContent") }),
+      ).toBeFocused();
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      problems = await reflowProblems(page.mainFrame());
+      expect(problems.documentOverflow, "portal-ar does not reflow at 320 CSS px").toBeUndefined();
+      expect(problems.nested, "portal-ar creates nested horizontal scrolling").toEqual([]);
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      // Restore the English-default policy and fixture contact for the
+      // portal steps below.
+      await db()
+        .update(contacts)
+        .set({ preferredLocale: "en" })
+        .where(eq(contacts.id, fixture.contactId));
+      await publishLocales("en", ["en", "fr", "es"]);
     });
 
     await context.addCookies([
