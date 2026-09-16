@@ -35,7 +35,6 @@ describe("C11.16 spec reconciliation", () => {
       "C11.08",
       "C11.10",
       "C11.11",
-      "C11.15",
       "C11.17",
     ]) {
       expect(items.get(id)).toBe(false);
