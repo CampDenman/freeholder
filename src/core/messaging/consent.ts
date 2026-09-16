@@ -26,12 +26,12 @@ export type SmsComplianceIntent = (typeof SMS_COMPLIANCE_INTENTS)[number];
 
 interface KeywordMatch {
   intent: SmsComplianceIntent;
-  locale: "en" | "es" | "fr";
+  locale: "en" | "es" | "fr" | "ar";
   keyword: string;
 }
 
 /**
- * The three production UI locales all carry the non-configurable compliance
+ * The four production UI locales all carry the non-configurable compliance
  * vocabulary. Owners may add ordinary KeywordRules later; they may never edit
  * or shadow these words.
  */
@@ -50,6 +50,11 @@ export const SMS_COMPLIANCE_KEYWORDS = {
     stop: ["ARRET", "DESABONNER", "ANNULER", "FIN"],
     start: ["COMMENCER", "REPRENDRE", "OUI"],
     help: ["AIDE", "INFORMATION"],
+  },
+  ar: {
+    stop: ["توقف", "ايقاف", "إيقاف", "وقف", "الغاء", "إلغاء"],
+    start: ["ابدأ", "ابدء", "بدء", "تشغيل", "نعم"],
+    help: ["مساعدة", "مساعده", "معلومات"],
   },
 } as const;
 
@@ -71,6 +76,11 @@ const COMPLIANCE_REPLIES: Record<
     stop: "Vous ne recevrez plus de messages marketing sur aucun canal. Répondez COMMENCER pour recevoir de nouveau les textos.",
     start: "Vous recevrez de nouveau les textos marketing. Répondez ARRÊT à tout moment pour vous désabonner.",
     help: "Répondez ARRÊT pour refuser les messages marketing ou COMMENCER pour recevoir de nouveau les textos.",
+  },
+  ar: {
+    stop: "أُلغي اشتراكك في رسائل التسويق على كل القنوات. رد بـ «ابدأ» للعودة إلى تلقي الرسائل النصية.",
+    start: "ستعود إلى تلقي الرسائل النصية التسويقية. رد بـ «توقف» في أي وقت للإلغاء.",
+    help: "رد بـ «توقف» لإيقاف رسائل التسويق أو بـ «ابدأ» للعودة إلى تلقي الرسائل النصية.",
   },
 };
 
@@ -102,7 +112,7 @@ export function classifySmsComplianceKeyword(value: string): KeywordMatch | null
 
 function supportedReplyLocale(preferred: string | null, detected: KeywordMatch["locale"]): KeywordMatch["locale"] {
   const language = preferred?.toLocaleLowerCase("en").split("-")[0];
-  return language === "en" || language === "es" || language === "fr"
+  return language === "en" || language === "es" || language === "fr" || language === "ar"
     ? language
     : detected;
 }
@@ -112,7 +122,8 @@ export function smsComplianceReply(
   locale: string,
 ): string {
   const language = locale.toLocaleLowerCase("en").split("-")[0];
-  const supported = language === "es" || language === "fr" ? language : "en";
+  const supported =
+    language === "es" || language === "fr" || language === "ar" ? language : "en";
   return COMPLIANCE_REPLIES[supported][intent];
 }
 

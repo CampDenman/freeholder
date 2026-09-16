@@ -13,3 +13,15 @@ updates:
       timezone: "America/Vancouver"
     open-pull-requests-limit: 10
     versioning-strategy: "increase-if-necessary"
+    groups:
+      # react and react-dom release in lockstep and hard-fail server rendering
+      # when their versions diverge ("Incompatible React versions"), so they
+      # must land in one PR. Dependabot's implicit "updated together" linking
+      # grouped react with @types/react but left react-dom behind (PR #376).
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "react-is"
+          - "@types/react"
+          - "@types/react-dom"

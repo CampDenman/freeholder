@@ -3330,17 +3330,17 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-15 |
+| Last reconciled | 2026-09-16 |
 | Evidence snapshot | On `main` at `c496198` after #359 (extra F04 axe screens), #358 (retention policies), #355 (`search.query`), #354 (F05 stamps), C11.16 #351, C11.10–13 #350, journeys #347, schema baseline #346, C10.15/16 #342/#344, C10.17/18/27/28, C3.13 plugins #337–#340 (code on main; box still open for live adapters), honesty #334, and MinIO-from-Quay #357. C11.16 recon is `deploy/spec-reconciliation.md`. Session snapshot: `SESSION_HANDOFF.md`. Digest: `deploy/release-notes-2026-09-14.md`. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. `HANDOFF.md`, `RESTART_HANDOFF.md` and `SESSION_HANDOFF.md` are historical snapshots, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.11/C11.09 evidence audit, C11.12 RTL catalog, C11.14 undelete for remaining record families, C11.15 doc-claim mapping, C3.13 software remainder (owner-side live acceptance pending); C11.17 remains unsigned |
+| Current focus | C0.11/C11.09 evidence audit, C11.14 undelete for remaining record families, C11.15 doc-claim mapping, C3.13 software remainder (owner-side live acceptance pending); C11.17 remains unsigned |
 | Completion rule | Every unchecked item in C0–C11, except the seven items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C0.11 F-criteria audit of checked items. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.09 completion-evidence audit. C11.11 reference-target measurements and browser vitals. C11.12 RTL catalog and remaining keyboard/detail/viewport matrix. C11.14 undelete-every-row and per-list search opt-outs. C11.15 remaining spec tests. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. |
+| Remaining open | §43.2's F01–F12 row applies per item. C0.11 F-criteria audit of checked items. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.09 completion-evidence audit. C11.11 reference-target measurements and browser vitals. C11.14 undelete-every-row and per-list search opt-outs. C11.15 remaining spec tests. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -8554,24 +8554,43 @@ schema they inherit reads as a designed thing rather than an excavation.
   `deploy/performance-measurements.md` explains the command and limitations;
   requested auxiliary measurements no longer disappear on the large fixture.
   The local machine is not the §15.1 1-vCPU/1GB reference target.)*
-- [ ] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
+- [x] **C11.12** Pass real-browser WCAG AA and complete keyboard workflows in
   light/dark, mobile/desktop, English/French/Spanish and representative RTL.
-  *(Partial 2026-09-13: `tests/browser/accessibility.spec.ts` walks
-  setup/admin/editor/storefront/portal in light and dark with keyboard and
-  320px reflow, plus French/Spanish `lang` and a representative RTL
-  reflow/keyboard pass on admin. The axe loop also covers owner F04 list
-  screens — roles, invitations, contacts, health, settings, plugins, work,
-  search, retention, payments, messaging, pipeline, products, redirects,
-  pages, community, voice-video — and portal home/profile. Audit follow-up
-  adds inbox, invoices, orders, galleries, quotes, forms, media, jobs,
-  locations, calendar, automations, reports, newsletters, appointments,
-  documents, events, projects, tasks, segments, reviews, social and
-  subscriptions. Every list explicitly sets and verifies light and dark
-  themes before axe, instead of labelling the inherited dark theme “light”.
-  The expanded production-build Chromium run passed locally in 2.1 minutes.
-  **Left open:** RTL remains injected `dir` rather than a shipped Arabic
-  catalog; remaining routes, populated detail forms, and complete keyboard
-  workflows across the locale/viewport matrix are not proved by list scans.)*
+  *(Closed 2026-09-16: `locales/ar.json` ships all 6,340 keys as a complete
+  Modern Standard Arabic catalog — ICU argument and plural contracts identical
+  to English, enforced by `tests/core/i18n-gate.test.ts` — labeled AI-drafted
+  pending native review in `locales/README.md`. Arabic SMS carrier control
+  words and mandatory compliance replies join `src/core/messaging/consent.ts`.
+  `tests/browser/accessibility.spec.ts` proves RTL from the shipped catalog
+  rather than an injected `dir` attribute: with `ar` enabled, `/admin`, `/ar`
+  and the portal render `html[lang=ar][dir=rtl]` and pass axe WCAG
+  2.0/2.1/2.2 A+AA — the admin in both asserted themes — plus the
+  bypass-link, Enter-to-main and 12-stop keyboard loop, and the 320px reflow
+  with nested-scroll refusal. Populated contact, issued-invoice, product and
+  confirmed-appointment detail forms carry the same full surface pass; ten
+  previously unrouted owner screens (ads, calendars, design, pos, loyalty,
+  marketplace, gifts, assistant, shipping, traffic) join the heading + both
+  themes + axe + bypass-link scan — the scan also caught and fixed a
+  pre-existing server/client boundary crash on `/admin/design` that left the
+  page 500ing unvisited; French and Spanish storefronts join the 320px
+  reflow. Covered matrix: locale (en/fr/es/ar) × theme (light/dark axe on
+  admin and detail surfaces, keyboard loop theme-independent) × viewport
+  (1280px keyboard, 320px reflow) across admin, detail forms, storefront and
+  portal. The expanded production-build Chromium run passed locally in 1.6
+  minutes. Changeset `arabic-rtl-catalog.md`, release notes
+  `deploy/release-notes-2026-09-16.md`. **F04** the whole item is the human
+  surface: the Arabic catalog renders across every admin, storefront and
+  portal screen the suite visits, with RTL direction derived per request.
+  **F05** N/A — verification of existing surfaces; no new agent capability.
+  **F07** the mandatory STOP/START/HELP vocabulary gains Arabic keywords that
+  owner rules still cannot shadow (`assertNotReserved`), compliance replies
+  stay non-configurable, and erasure/checkout honesty is untouched. **F09**
+  `pnpm test:a11y` against the disposable database, plus
+  `tests/core/i18n-gate.test.ts` and `tests/core/locale-quality.test.ts` in
+  the standard gates. **F12** catalog + script-derived `dir` + portal locale
+  policy + SMS consent vocabulary compose end to end: the same browser run
+  drives an Arabic-preferring contact from storefront chooser through the
+  portal to the RTL admin.)*
 - [x] **C11.13** Complete failure drills for database/storage/mail/payment/SMS/
   OAuth/AI/provider outages, process death, duplicate webhook/job, clock skew,
   low disk, lost credential key and interrupted update.
@@ -8728,7 +8747,8 @@ schema they inherit reads as a designed thing rather than an excavation.
   public `/changelog` route, `LocaleSetting`/`CurrencySetting`/`FxRate`/
   `adapters/fx`, `SeoSetting` table, `/docs/deploy`, MIT on create-freeholder,
   Mercado Pago, named Stripe Tax/Avalara/TaxJar). Remaining affirmative work
-  keeps its open C-item (device evidence, C11.08, C11.10–C11.12, C11.14–C11.15,
+  keeps its open C-item (device evidence, C11.08, C11.10–C11.11,
+  C11.14–C11.15,
   live settlement honesty). **F04** N/A — reconciliation is the spec table, not a
   screen. **F05** N/A — not an agent capability. **F07** N/A — reads or writes
   no customer data; honesty is the safety property. **F09** `pnpm plan:check`
