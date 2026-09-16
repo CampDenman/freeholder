@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
+import { registerSearchSource, matchesIlike } from "@/core/search/registry";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { env } from "@/core/env";
 import { isUniqueViolation } from "@/core/db";
@@ -473,3 +474,14 @@ export default [
   listMarketplaceChannels,
   listMarketplaceOrders,
 ];
+
+registerSearchSource({
+  kind: "marketplaceOrder", module: "marketplace", readService: "marketplace.listOrders", tables: ["marketplace_orders"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: marketplaceOrders.id, externalRef: marketplaceOrders.externalRef, contactId: marketplaceOrders.contactId })
+      .from(marketplaceOrders).where(or(matchesIlike(marketplaceOrders.externalRef, pattern), matchesIlike(marketplaceOrders.description, pattern)))
+      .orderBy(desc(marketplaceOrders.createdAt), desc(marketplaceOrders.id)).limit(limit);
+    return rows.map(item => ({ kind: "marketplaceOrder", id: item.id, title: item.externalRef,
+      href: `/admin/marketplace#order-${item.id}`, snippet: null, contactId: item.contactId, module: "marketplace" }));
+  },
+});

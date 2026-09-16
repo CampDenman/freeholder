@@ -7,6 +7,7 @@
 // careful service-layer checking survives two processes". So one of these
 // runs two real transactions at once and expects exactly one to win.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { bookingTime } from "../helpers/booking-time";
 import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { contacts, timelineEvents } from "@/core/contacts/schema";
@@ -29,9 +30,9 @@ import {
 } from "@/core/scheduling/bookings";
 import { closeDb, failure, hasDatabase, OWNER, CUSTOMER, truncateSpine } from "../helpers/spine";
 
-const NINE = "2026-09-14T09:00:00.000Z";
-const TEN = "2026-09-14T10:00:00.000Z";
-const ELEVEN = "2026-09-14T11:00:00.000Z";
+const NINE = bookingTime(9, 0);
+const TEN = bookingTime(10, 0);
+const ELEVEN = bookingTime(11, 0);
 
 describe.runIf(hasDatabase)("bookings", { timeout: 60_000 }, () => {
   beforeEach(async () => {
@@ -224,10 +225,10 @@ describe.runIf(hasDatabase)("bookings", { timeout: 60_000 }, () => {
     // The old row is released before the new one is written, or the exclusion
     // constraint would refuse an overlap with the very booking being moved.
     const moved = await rescheduleBooking.call(
-      { id: booking.id, startsAt: "2026-09-14T09:30:00.000Z", endsAt: "2026-09-14T10:30:00.000Z" },
+      { id: booking.id, startsAt: bookingTime(9, 30), endsAt: bookingTime(10, 30) },
       OWNER,
     );
-    expect(moved.startsAt.toISOString()).toBe("2026-09-14T09:30:00.000Z");
+    expect(moved.startsAt.toISOString()).toBe(bookingTime(9, 30));
   });
 
   it("shares a class calendar between customers up to its capacity", async () => {
@@ -297,8 +298,8 @@ describe.runIf(hasDatabase)("bookings", { timeout: 60_000 }, () => {
         {
           calendarId: studio.id,
           contact: { email: "sam@example.test" },
-          startsAt: "2026-09-14T09:30:00.000Z",
-          endsAt: "2026-09-14T10:30:00.000Z",
+          startsAt: bookingTime(9, 30),
+          endsAt: bookingTime(10, 30),
         },
         OWNER,
       ),
@@ -320,8 +321,8 @@ describe.runIf(hasDatabase)("bookings", { timeout: 60_000 }, () => {
     const overlapping = await failure(
       book(studio.id, {
         contact: { email: "sam@example.test" },
-        startsAt: "2026-09-14T09:45:00.000Z",
-        endsAt: "2026-09-14T10:45:00.000Z",
+        startsAt: bookingTime(9, 45),
+        endsAt: bookingTime(10, 45),
       }),
     );
     expect(overlapping.code).toBe("conflict");
