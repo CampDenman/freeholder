@@ -18,6 +18,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
@@ -591,3 +592,17 @@ export default [
   getContract,
   voidContract,
 ];
+
+registerSearchSource({
+  kind: "agreement", module: "contracts", readService: "contracts.get", tables: ["contract_documents"],
+  search: async ({ tx, actor, pattern, limit }) => {
+    // Match contracts.get's additional human-session requirement. Even an API
+    // key with that scope cannot use search to bypass requirePerson.
+    if (actor.kind !== "user") return [];
+    const rows = await tx.select({ id: contractDocuments.id, title: contractDocuments.title, contactId: contractDocuments.contactId })
+      .from(contractDocuments).where(matchesIlike(contractDocuments.title, pattern))
+      .orderBy(desc(contractDocuments.issuedAt), desc(contractDocuments.id)).limit(limit);
+    return rows.map(item => ({ kind: "agreement", id: item.id, title: item.title,
+      href: `/admin/agreements/${item.id}`, snippet: null, contactId: item.contactId, module: "contracts" }));
+  },
+});
