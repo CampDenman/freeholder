@@ -8,6 +8,7 @@
 
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import { matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
@@ -675,3 +676,14 @@ export default [
   cancelPurchaseOrder,
   subscribeBackInStock,
 ];
+
+registerSearchSource({
+  kind: "supplier", module: "catalog", readService: "catalog.listSuppliers", tables: ["suppliers"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: suppliers.id, name: suppliers.name, contactId: suppliers.contactId })
+      .from(suppliers).where(matchesIlike(suppliers.name, pattern))
+      .orderBy(asc(suppliers.name), asc(suppliers.id)).limit(limit);
+    return rows.map(item => ({ kind: "supplier", id: item.id, title: item.name,
+      href: `/admin/procurement#supplier-${item.id}`, snippet: null, contactId: item.contactId, module: "catalog" }));
+  },
+});
