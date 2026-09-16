@@ -43,7 +43,7 @@ describe("C11.14 search leftovers", () => {
       'name: "search.query"',
     );
     expect(master).toContain(
-      "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
+      "Per-record restore includes note/task trash, media/product restoration, contact-merge undo and the ownership-drill instance restore; other entities still lack undelete.",
     );
     expect(master).toContain(
       "Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.",

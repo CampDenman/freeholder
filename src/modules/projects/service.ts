@@ -17,7 +17,7 @@
 // `contact_id`, resolved through the spine like everything else, and
 // `clientDisplayName` is what to *call* them publicly rather than who they are.
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
@@ -653,6 +653,7 @@ export const listProjects = defineService({
         .from(coreTasks)
         .where(
           and(
+            isNull(coreTasks.trashedAt),
             eq(coreTasks.subjectType, "project"),
             inArray(coreTasks.subjectId, rows.map((r) => r.project.id)),
             // Cancelled counts as off the list: it is not outstanding work.
@@ -706,7 +707,7 @@ export const getProject = defineService({
       ctx.tx
         .select()
         .from(coreTasks)
-        .where(and(eq(coreTasks.subjectType, "project"), eq(coreTasks.subjectId, input.id)))
+        .where(and(isNull(coreTasks.trashedAt), eq(coreTasks.subjectType, "project"), eq(coreTasks.subjectId, input.id)))
         .orderBy(asc(coreTasks.position)),
       ctx.tx
         .select()
