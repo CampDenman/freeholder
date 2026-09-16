@@ -858,6 +858,7 @@ export const SERVICE_NAMES = [
   "marketplace.connect",
   "marketplace.list",
   "marketplace.listOrders",
+  "marketplace.listRefunds",
   "marketplace.sync",
   "media.abortUpload",
   "media.acceptAltTextSuggestion",
@@ -1287,6 +1288,7 @@ export const SERVICE_NAMES = [
   "views.save",
   "views.setDefault",
   "voiceVideo.configuration",
+  "voiceVideo.importRecording",
   "voiceVideo.joinRoom",
   "voiceVideo.list",
   "voiceVideo.listJoins",
@@ -4736,9 +4738,13 @@ export interface ServiceCatalog {
     input: { channelId?: string };
     output: { id: string; channelId: string; contactId: string; invoiceId: string; externalRef: string; description: string; amountMinor: number; currency: string; [key: string]: unknown }[];
   };
+  "marketplace.listRefunds": {
+    input: { channelId?: string };
+    output: { id: string; channelId: string; orderExternalRef: string; externalRef: string; invoiceId: string | null; creditNoteId: string | null; amountMinor: number; currency: string; status: string; lastError: string | null; [key: string]: unknown }[];
+  };
   "marketplace.sync": {
     input: { channelId: string };
-    output: { imported: number; lastError: string | null; [key: string]: unknown };
+    output: { imported: number; refundsReconciled: number; lastError: string | null; [key: string]: unknown };
   };
   "media.abortUpload": {
     input: { id: string };
@@ -6452,13 +6458,17 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { configured: boolean; domain: string | null };
   };
+  "voiceVideo.importRecording": {
+    input: { artifactId: string };
+    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; providerLeaseExpiresAt: string | null; importStatus: string | null; storageKey: string | null; storageContentType: string | null; storageChecksumSha256: string | null; transcriptStorageKey: string | null; importedAt: string | null; importError: string | null; [key: string]: unknown };
+  };
   "voiceVideo.joinRoom": {
     input: { roomId: string; contactId: string };
     output: { id: string; roomId: string; contactId: string; conversationId: string | null; status: string; [key: string]: unknown };
   };
   "voiceVideo.list": {
     input: Record<string, never>;
-    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown }[];
+    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; providerLeaseExpiresAt: string | null; importStatus: string | null; storageKey: string | null; storageContentType: string | null; storageChecksumSha256: string | null; transcriptStorageKey: string | null; importedAt: string | null; importError: string | null; [key: string]: unknown }[];
   };
   "voiceVideo.listJoins": {
     input: { roomId: string };
@@ -6478,7 +6488,7 @@ export interface ServiceCatalog {
   };
   "voiceVideo.record": {
     input: { contactId: string; kind: "voice" | "video"; provider: string; title: string; artifactId?: string; roomId?: string; refresh?: boolean };
-    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown };
+    output: { id: string; contactId: string; roomId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; conversationId: string | null; transcript: string | null; durationSeconds: number | null; lastError: string | null; providerLeaseExpiresAt: string | null; importStatus: string | null; storageKey: string | null; storageContentType: string | null; storageChecksumSha256: string | null; transcriptStorageKey: string | null; importedAt: string | null; importError: string | null; [key: string]: unknown };
   };
   "voiceVideo.recordingAccess": {
     input: { artifactId: string };
@@ -7516,6 +7526,7 @@ export interface FreeholderApi {
     connect: (input: ServiceCatalog["marketplace.connect"]["input"]) => Promise<ServiceCatalog["marketplace.connect"]["output"]>;
     list: (input?: ServiceCatalog["marketplace.list"]["input"]) => Promise<ServiceCatalog["marketplace.list"]["output"]>;
     listOrders: (input?: ServiceCatalog["marketplace.listOrders"]["input"]) => Promise<ServiceCatalog["marketplace.listOrders"]["output"]>;
+    listRefunds: (input?: ServiceCatalog["marketplace.listRefunds"]["input"]) => Promise<ServiceCatalog["marketplace.listRefunds"]["output"]>;
     sync: (input: ServiceCatalog["marketplace.sync"]["input"]) => Promise<ServiceCatalog["marketplace.sync"]["output"]>;
   };
   media: {
@@ -8021,6 +8032,7 @@ export interface FreeholderApi {
   };
   voiceVideo: {
     configuration: (input?: ServiceCatalog["voiceVideo.configuration"]["input"]) => Promise<ServiceCatalog["voiceVideo.configuration"]["output"]>;
+    importRecording: (input: ServiceCatalog["voiceVideo.importRecording"]["input"]) => Promise<ServiceCatalog["voiceVideo.importRecording"]["output"]>;
     joinRoom: (input: ServiceCatalog["voiceVideo.joinRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.joinRoom"]["output"]>;
     list: (input?: ServiceCatalog["voiceVideo.list"]["input"]) => Promise<ServiceCatalog["voiceVideo.list"]["output"]>;
     listJoins: (input: ServiceCatalog["voiceVideo.listJoins"]["input"]) => Promise<ServiceCatalog["voiceVideo.listJoins"]["output"]>;
