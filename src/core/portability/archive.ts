@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Logical archive used for Tier-1 pair round-trips (C3.18, C3.19).
-import { createHash } from "node:crypto";
-import { EXPORT_FORMAT } from "../../../scripts/ownership-export.mjs";
+// Provider-neutral migration contract used by the real database drill and
+// every Tier-1 deployment recipe (C3.18, C3.19).
+import { EXPORT_FORMAT } from "./ownership-export.mjs";
 
 export const TIER1_TARGETS = [
   "replit",
@@ -15,21 +15,28 @@ export const TIER1_TARGETS = [
 
 export type Tier1Target = (typeof TIER1_TARGETS)[number];
 
-export type LogicalBusiness = {
-  ids: Record<string, string>;
-  money: Array<{ invoiceId: string; amountCents: number; currency: string }>;
-  timestamps: Record<string, string>;
-  media: Array<{ id: string; key: string; sha256: string }>;
-  locales: string[];
-  urls: string[];
-};
+export const MIGRATION_INVARIANTS = [
+  "ids",
+  "money",
+  "timestamps",
+  "media",
+  "locales",
+  "public-urls",
+] as const;
 
-export type LogicalArchive = {
-  format: string;
-  from?: Tier1Target;
-  to?: Tier1Target;
-  checksum: string;
-  business: LogicalBusiness;
+export const MIGRATION_ARTIFACTS = {
+  database: "postgres-custom-v1",
+  logical: EXPORT_FORMAT,
+  media: "freeholder-media-manifest/v1",
+  configuration: "freeholder-config/v1",
+} as const;
+
+export type MigrationContract = {
+  id: `${Tier1Target}->${Tier1Target}`;
+  from: Tier1Target;
+  to: Tier1Target;
+  artifacts: typeof MIGRATION_ARTIFACTS;
+  invariants: typeof MIGRATION_INVARIANTS;
 };
 
 export function tier1Pairs(): Array<[Tier1Target, Tier1Target]> {
@@ -42,57 +49,23 @@ export function tier1Pairs(): Array<[Tier1Target, Tier1Target]> {
   return pairs;
 }
 
-export function checksumBusiness(business: LogicalBusiness): string {
-  return `sha256:${createHash("sha256").update(JSON.stringify(business)).digest("hex")}`;
-}
-
-export function buildLogicalArchive(
-  business: LogicalBusiness,
-  pair?: { from: Tier1Target; to: Tier1Target },
-): LogicalArchive {
+export function migrationContract(
+  from: Tier1Target,
+  to: Tier1Target,
+): MigrationContract {
+  if (from === to) {
+    throw new Error("A Tier-1 migration must name two different targets.");
+  }
   return {
-    format: EXPORT_FORMAT,
-    from: pair?.from,
-    to: pair?.to,
-    checksum: checksumBusiness(business),
-    business: structuredClone(business),
+    id: `${from}->${to}`,
+    from,
+    to,
+    artifacts: MIGRATION_ARTIFACTS,
+    invariants: MIGRATION_INVARIANTS,
   };
 }
 
-export function applyLogicalArchive(archive: LogicalArchive): LogicalBusiness {
-  if (archive.format !== EXPORT_FORMAT) {
-    throw new Error(`Unknown export format ${archive.format}.`);
-  }
-  if (archive.checksum !== checksumBusiness(archive.business)) {
-    throw new Error("That archive checksum does not match its contents.");
-  }
-  return structuredClone(archive.business);
-}
-
-export function archivePreserves(before: LogicalBusiness, after: LogicalBusiness): string[] {
-  const problems: string[] = [];
-  if (JSON.stringify(before.ids) !== JSON.stringify(after.ids)) {
-    problems.push("IDs changed");
-  }
-  if (JSON.stringify(before.money) !== JSON.stringify(after.money)) {
-    problems.push("money changed");
-  }
-  if (JSON.stringify(before.timestamps) !== JSON.stringify(after.timestamps)) {
-    problems.push("timestamps changed");
-  }
-  if (JSON.stringify(before.media) !== JSON.stringify(after.media)) {
-    problems.push("media changed");
-  }
-  if (JSON.stringify(before.locales) !== JSON.stringify(after.locales)) {
-    problems.push("locales changed");
-  }
-  if (JSON.stringify(before.urls) !== JSON.stringify(after.urls)) {
-    problems.push("public URLs changed");
-  }
-  return problems;
-}
-
-export const RECIPE_STEPS = [
+export const RECIPE_OPERATIONS = [
   "install",
   "verify",
   "backup",

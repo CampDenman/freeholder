@@ -15,7 +15,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { handleMcp, PROTOCOL_VERSION } from "@/mcp/server";
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
-import { listServices, type Actor } from "@/core/service";
+import { listExternalServices, listServices, type Actor } from "@/core/service";
 import { ready } from "@/core/runtime";
 import { createApiKey } from "@/core/apikeys/service";
 import { users } from "@/core/auth/schema";
@@ -134,6 +134,7 @@ describe.runIf(hasDatabase)("the handshake", { timeout: 30_000 }, () => {
     const parsed = JSON.parse(text) as { services: { name: string; mcp: boolean }[] };
     expect(parsed.services.some((service) => service.name === "contacts.create")).toBe(true);
     expect(parsed.services.find((service) => service.name === "auth.login")?.mcp).toBe(false);
+    expect(parsed.services.some((service) => service.name === "briefing.assemble")).toBe(false);
   });
 
   it("offers prompts that only name tools already on the list", async () => {
@@ -210,6 +211,19 @@ describe.runIf(hasDatabase)("what an agent is offered", () => {
       .filter((service) => !hiddenFromMcp(service))
       .map((service) => toolName(service.def.name));
     expect(offered).toEqual(new Set(expected));
+  });
+
+  it("keeps system orchestration out even for a wildcard key", () => {
+    const wildcard = agent(["*"]);
+    const names = new Set(toolsFor(wildcard).map((tool) => tool.name));
+    for (const service of listServices().values()) {
+      if (service.def.permission !== "system") continue;
+      expect(names.has(toolName(service.def.name))).toBe(false);
+      expect(listExternalServices().has(service.def.name)).toBe(false);
+      expect(
+        serviceForTool(wildcard, toolName(service.def.name)),
+      ).toBeUndefined();
+    }
   });
 
   it("keeps credential services out entirely", async () => {

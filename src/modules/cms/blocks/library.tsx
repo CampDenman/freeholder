@@ -796,14 +796,62 @@ export const productDetail = defineBlock({
   starter: () => ({ productId: "00000000-0000-4000-8000-000000000000", slug: "product" }),
   resolve: async (props) => {
     const { resolveVisibleProduct } = await import("@/modules/catalog/service");
-    return resolveVisibleProduct.call({ slug: props.slug }, { kind: "anonymous" });
+    const product = await resolveVisibleProduct.call(
+      { slug: props.slug },
+      { kind: "anonymous" },
+    );
+    if (!product) return null;
+    // Projects owns the relation. Catalog remains unaware of portfolio data;
+    // this public block asks the registry only when the optional module is
+    // installed, so disabling projects does not disable service pages.
+    let projects: Array<{
+      id: string;
+      title: string;
+      summary: string | null;
+      href: string;
+    }> = [];
+    if (product.kind === "service") {
+      try {
+        const { publicProjectsForService } = await import("@/modules/projects/publishing-service");
+        projects = await publicProjectsForService.call(
+          { productId: product.id, limit: 12 },
+          { kind: "anonymous" },
+        );
+      } catch {
+        // An optional proof module must never make the service itself 500.
+        projects = [];
+      }
+    }
+    return { product, projects };
   },
-  render: ({ resolved }) => {
+  render: ({ resolved, ctx }) => {
     if (!resolved) return null;
     return (
-      <div className="grid gap-3">
-        {resolved.subtitle ? <p className="text-lg text-ink-muted">{resolved.subtitle}</p> : null}
-        {resolved.brand ? <p className="text-sm text-ink-muted">{resolved.brand}</p> : null}
+      <div className="grid gap-6">
+        <div className="grid gap-3">
+          {resolved.product.subtitle ? <p className="text-lg text-ink-muted">{resolved.product.subtitle}</p> : null}
+          {resolved.product.brand ? <p className="text-sm text-ink-muted">{resolved.product.brand}</p> : null}
+        </div>
+        {resolved.projects.length ? (
+          <section className="grid gap-3" aria-labelledby={`service-${resolved.product.id}-projects`}>
+            <h2 id={`service-${resolved.product.id}-projects`} className="text-lg font-bold tracking-tight text-ink">
+              {ctx.t("projects.public.relatedWork")}
+            </h2>
+            <ul className="grid list-none gap-3 p-0 sm:grid-cols-2">
+              {resolved.projects.map((project) => (
+                <li key={project.id} className="rounded-lg border border-rule p-4">
+                  <a
+                    href={ctx.localizeHref?.(project.href) ?? project.href}
+                    className="font-semibold text-ink"
+                  >
+                    {project.title}
+                  </a>
+                  {project.summary ? <p className="mt-1 text-sm text-ink-muted">{project.summary}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </div>
     );
   },

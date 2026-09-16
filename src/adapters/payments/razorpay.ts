@@ -10,6 +10,8 @@ import {
   deterministicProviderRef,
   parseProviderJson,
   providerTime,
+  refuseOffSessionCharge,
+  refuseRecurringSchedule,
   unsupportedSavedMethod,
   verifyProviderHmac,
 } from "./provider-helpers";
@@ -20,6 +22,7 @@ const capabilities: PaymentAdapterCapabilities = {
   partialRefunds: true,
   savedMethods: false,
   subscriptions: false,
+  offSessionCharges: false,
   disputes: true,
   payouts: false,
   inPerson: false,
@@ -223,6 +226,10 @@ export function createRazorpayPayments(options: RazorpayPaymentOptions = {}): Pa
       return { providerRef, status: value.status === "processed" ? "succeeded" : value.status === "failed" ? "failed" : "pending" };
     },
     async revokeSavedMethod() { unsupportedSavedMethod("Razorpay"); },
+    chargeSavedMethod: refuseOffSessionCharge("razorpay"),
+    createRecurringSchedule: refuseRecurringSchedule("razorpay"),
+    updateRecurringSchedule: refuseRecurringSchedule("razorpay"),
+    cancelRecurringSchedule: refuseRecurringSchedule("razorpay"),
     async verifyWebhook(request) {
       if (webhookSecrets.length === 0) throw new AdapterError("payments", "razorpay", "unavailable", "Razorpay webhook verification is not configured.");
       verifyProviderHmac({

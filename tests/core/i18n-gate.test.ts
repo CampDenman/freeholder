@@ -46,7 +46,39 @@ import {
   PRODUCT_VISIBILITIES,
 } from "@/modules/catalog/contract";
 import { IMPORT_STATUSES, PLUGIN_STATUSES } from "@/core/plugins/schema";
+import {
+  ASSISTANT_PROVIDERS,
+  ASSISTANT_SPEND_PERIODS,
+  ASSISTANT_TONES,
+  ASSISTANT_TURN_OUTCOMES,
+  GAP_REASONS,
+  KNOWLEDGE_KINDS,
+} from "@/modules/assistant/contract";
+import { SOCIAL_EXTRAS } from "@/modules/social/capabilities";
+import {
+  SOCIAL_APPROVAL_POLICIES,
+  SOCIAL_ASSIGNMENTS,
+  SOCIAL_HEALTH,
+  SOCIAL_PROFILE_STATUSES,
+  SOCIAL_SOURCE_KINDS,
+  SOCIAL_VARIANT_STATUSES,
+  SOCIAL_PUBLICATION_STATUSES,
+} from "@/modules/social/contract";
+import { ASSISTANT_ACTION_IDS } from "@/modules/assistant/actions";
+import { SHARE_CHANNELS } from "@/modules/share/intents";
+import {
+  POPUP_AUDIENCES,
+  POPUP_CAPTURES,
+  POPUP_STATUSES,
+  POPUP_SURFACES,
+  POPUP_TRIGGERS,
+} from "@/modules/popups/schema";
 import { BOARD_COLUMNS, TASK_STATUSES } from "@/core/agents/service";
+import {
+  REVIEW_SOURCES,
+  REVIEW_STATES,
+  REVIEW_SUBJECTS,
+} from "@/modules/reviews/schema";
 import { WRITE_KINDS } from "@/core/agents/previews";
 import en from "../../locales/en.json";
 import es from "../../locales/es.json";
@@ -238,6 +270,34 @@ describe("the families built from a template key", () => {
     ["work.column", BOARD_COLUMNS],
     ["work.approval.kind", WRITE_KINDS],
     ["plugins.status", PLUGIN_STATUSES],
+    ["assistant.provider", ASSISTANT_PROVIDERS],
+    ["assistant.period", ASSISTANT_SPEND_PERIODS],
+    ["assistant.outcome", ASSISTANT_TURN_OUTCOMES],
+    ["assistant.scope", ASSISTANT_ACTION_IDS],
+    ["assistant.scopeHint", ASSISTANT_ACTION_IDS],
+    ["assistant.knowledgeKind", KNOWLEDGE_KINDS],
+    ["assistant.tone", ASSISTANT_TONES],
+    ["assistant.gapReason", GAP_REASONS],
+    ["social.capability", ["read", "respond", "publish"]],
+    ["social.extra", SOCIAL_EXTRAS],
+    ["social.status", SOCIAL_PROFILE_STATUSES],
+    ["social.health", SOCIAL_HEALTH],
+    ["social.assignment", SOCIAL_ASSIGNMENTS],
+    ["social.approval", SOCIAL_APPROVAL_POLICIES],
+    ["social.sourceKind", SOCIAL_SOURCE_KINDS],
+    ["social.variantStatus", SOCIAL_VARIANT_STATUSES],
+    ["social.publicationStatus", SOCIAL_PUBLICATION_STATUSES],
+    // C9.28: the share bar renders one button per channel, so a channel added
+    // without its label would ship a raw dotted key onto every public page.
+    ["share.channel", SHARE_CHANNELS],
+    // The popup screens name every one of these from a template key (C9.30),
+    // so adding a surface or a trigger without its copy fails here.
+    ["popups.status", POPUP_STATUSES],
+    ["popups.setStatus", POPUP_STATUSES],
+    ["popups.surface", POPUP_SURFACES],
+    ["popups.trigger", POPUP_TRIGGERS],
+    ["popups.audienceSummary", POPUP_AUDIENCES],
+    ["popups.captureMode", POPUP_CAPTURES],
     [
       "imports.status",
       IMPORT_STATUSES,
@@ -254,6 +314,9 @@ describe("the families built from a template key", () => {
         "archive",
       ],
     ],
+    ["reviews.status", REVIEW_STATES],
+    ["reviews.source", REVIEW_SOURCES],
+    ["reviews.subject", REVIEW_SUBJECTS],
   ])("names every member of %s", (prefix, values) => {
     const missing = values
       .map((value) => `${prefix}.${value}`)

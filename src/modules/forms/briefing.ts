@@ -16,9 +16,7 @@ export const enquiriesSinceYesterday = defineService({
   name: "forms.briefingEnquiries",
   summary: "Enquiries that arrived since yesterday morning.",
   kind: "query",
-  permission: "public",
-  mcpExclude: true,
-  agentCallable: false,
+  permission: "system",
   input: z.object({
     userId: z.uuid(),
     onDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

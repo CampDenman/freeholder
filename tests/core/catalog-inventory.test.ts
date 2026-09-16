@@ -124,6 +124,15 @@ describe.runIf(hasDatabase)("catalog inventory", { timeout: 30_000 }, () => {
     ).toMatch(/not enough stock on hand/);
   });
 
+  it("refuses anonymous raw stock holds even with a known variant and location", async () => {
+    const { variant, studio } = await setup("private-hold");
+    const item = await enableInventory.call({ variantId: variant.id, locationId: studio.id }, OWNER);
+    await recordStockMovement.call({ itemId: item.id, delta: 4, reason: "receipt" }, OWNER);
+    await expect(reserveStock.call({ variantId: variant.id, locationId: studio.id, quantity: 4,
+      holderType: "cart", holderId: "00000000-0000-4000-8000-000000000111", expiresAt: new Date(Date.now() + 86_400_000) }, ANONYMOUS)).rejects.toMatchObject({ code: "permission" });
+    expect((await listInventory.call({ variantId: variant.id }, OWNER))[0]!.reserved).toBe(0);
+  });
+
   it("holds reserved units without changing on-hand, then sale or expiry", async () => {
     const { variant, studio } = await setup("hold");
     const item = await enableInventory.call(
@@ -140,7 +149,7 @@ describe.runIf(hasDatabase)("catalog inventory", { timeout: 30_000 }, () => {
         holderId: "00000000-0000-4000-8000-000000000111",
         expiresAt: new Date(Date.now() + 60_000),
       },
-      ANONYMOUS,
+      OWNER,
     );
     expect(hold.tracked).toBe(true);
     expect(hold.balance).toMatchObject({ onHand: 4, reserved: 3, available: 1 });
@@ -155,7 +164,7 @@ describe.runIf(hasDatabase)("catalog inventory", { timeout: 30_000 }, () => {
             holderId: "00000000-0000-4000-8000-000000000112",
             expiresAt: new Date(Date.now() + 60_000),
           },
-          ANONYMOUS,
+          OWNER,
         ),
       )).message,
     ).toMatch(/not enough available stock/);
@@ -173,7 +182,7 @@ describe.runIf(hasDatabase)("catalog inventory", { timeout: 30_000 }, () => {
         holderId: "00000000-0000-4000-8000-000000000114",
         expiresAt: new Date(Date.now() + 60_000),
       },
-      ANONYMOUS,
+      OWNER,
     );
     await db()
       .update(stockReservations)
@@ -182,7 +191,7 @@ describe.runIf(hasDatabase)("catalog inventory", { timeout: 30_000 }, () => {
     expect(await expireReservations.call({}, OWNER)).toEqual({ expired: 1 });
     const afterExpiry = await availability.call(
       { variantId: variant.id, locationId: studio.id, quantity: 3 },
-      ANONYMOUS,
+      OWNER,
     );
     expect(afterExpiry).toMatchObject({ tracked: true, available: true, canPromise: 3 });
   });

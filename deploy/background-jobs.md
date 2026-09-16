@@ -5,8 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 Freeholder runs background work through pg-boss in the same Postgres database
 as the application. It does not require Redis or a hosted queue. pg-boss owns
-its execution tables in the `pgboss` schema; Freeholder owns only the bounded
-`job_idempotency_keys` table in `public`.
+its execution tables in the `pgboss` schema. Freeholder owns the bounded
+`job_idempotency_keys` and payload-free `job_runtime_heartbeats` tables in
+`public`.
 
 ## The transaction boundary
 
@@ -24,6 +25,15 @@ Outbound webhook fan-out is the first production caller of this contract. Its
 delivery rows and immediate `core.deliverWebhooks` nudge are atomic. If queue
 storage is unavailable, the listener fails and the transactional outbox keeps
 the source event for retry.
+
+Any workflow that can wait on DNS, TLS, an object store, or a third-party API
+uses the same boundary. The request service validates the actor and inserts a
+job in its transaction; the worker reads a short service-layer snapshot,
+performs provider I/O with no database transaction open, and calls a narrow
+system mutation to apply the result. Catalogue refresh and social ingest,
+health, GBP and publication delivery are executable examples. The source gate
+in `tests/core/long-running-service-boundary.test.ts` prevents those provider
+calls from drifting back into their service handlers.
 
 ## Queue policy
 
@@ -135,18 +145,75 @@ for a single Replit or Droplet deployment.
 `FREEHOLDER_JOBS=off` prevents that process from executing handlers. It still
 starts the producer half, because web requests must enqueue transactionally
 for a dedicated worker. A separate process must run the same image with
-`FREEHOLDER_JOBS=on`; `pnpm doctor` warns when the current process has
-workers disabled.
+`FREEHOLDER_JOBS=on`. Readiness and Doctor inspect durable heartbeats across
+all processes, so a web process with workers disabled is healthy only while a
+current-version worker is actually alive.
 
 During `next build`, neither producer nor worker starts. In tests, workers are
 off unless explicitly forced on, preventing maintenance schedules from racing
 database fixtures.
 
+## Graceful shutdown
+
+The production process owns `SIGINT` and `SIGTERM` through Next's documented
+`NEXT_MANUAL_SIG_HANDLE=true` contract. `pnpm start` sets the variable before
+loading the Next CLI, and the standalone container sets it before starting
+`server.js`. Do not remove either setting or add a second signal handler: two
+independent shutdown paths can race and return an active job to the queue while
+its original handler is still running.
+
+On either signal Freeholder stops startup retries, marks the queue runtime as
+stopping, asks pg-boss to drain active leases for up to 30 seconds, records the
+stopped heartbeat, and then exits with the signal's conventional status. The
+process-wide deadline is 35 seconds so the final heartbeat has time to commit.
+If draining fails or exceeds that deadline, Freeholder logs only the stable
+phase message and exits unsuccessfully; the expired lease is then recovered by
+pg-boss rather than being silently abandoned.
+
+Give the process at least 40 seconds of termination grace in Docker, a platform
+service definition, or a systemd unit. A shorter supervisor timeout can send
+`SIGKILL` before the queue lease is released. Development uses Next's normal
+signal handling; the manual contract is installed only by the production
+entrypoints.
+
+## Runtime health and alerts
+
+Every queue runtime writes one complete heartbeat every 15 seconds. A row
+identifies only the runtime role and platform version plus aggregate queue
+counts; it never stores a queue name, job ID, payload or error message. Rows
+older than seven days are removed during heartbeat maintenance.
+
+`GET /api/health/live` proves only that the web process can answer. Use it for
+liveness, where a dependency outage must not cause a restart loop.
+`GET /api/health` is readiness: it boots the request graph and then requires a
+healthy heartbeat from a worker running the exact platform version. A
+heartbeat is stale after 45 seconds. During a rolling deploy, the new web
+version therefore stays out of service until its matching worker is live.
+
+Startup migration, module synchronization, demo seed and worker mounting are
+retried in-process with bounded exponential backoff. A database outage keeps
+liveness available and readiness unavailable; recovery does not require a
+manual process restart. Startup logs name only the failed phase and never the
+caught database/provider message.
+
+The readiness body exposes only aggregate evidence: producer and worker
+counts, heartbeat age, queued/ready/active/failed counts, dead-letter count and
+the oldest runnable queue lag. Deferred work is not lag. A runnable job older
+than five minutes marks the worker degraded and makes readiness fail. Dead
+letters mark the report degraded but do not make a capable worker unavailable;
+they require human recovery rather than a restart.
+
+Runtime errors are logged as a bounded phase and stable code. Raw errors are
+not logged because database and provider messages can contain customer data.
+Queue-lag and dead-letter alerts likewise contain counts only and log on state
+transitions rather than every heartbeat.
+
 ## Failure and recovery checklist
 
-1. Run `pnpm doctor` and verify the job registry is populated.
-2. Confirm the worker process has database connectivity and is not configured
-   with `FREEHOLDER_JOBS=off`.
+1. Run `pnpm doctor` and inspect the live worker heartbeat, queue lag and
+   dead-letter count.
+2. Confirm at least one current-version worker has database connectivity and
+   is not configured with `FREEHOLDER_JOBS=off`.
 3. Preserve both the `public` and `pgboss` schemas in database backups. A
    backup that excludes pg-boss can lose committed pending work.
 4. Restart the worker. Active jobs whose leases lapse retry automatically;

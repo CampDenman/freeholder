@@ -688,7 +688,16 @@ export default async function ProductPage({
                 <LifecycleReasonForm productId={product.id} version={product.version} intent="archive" label={t("catalog.archive")} reasonLabel={t("catalog.archiveReason")} />
               </div>
             ) : product.status === "active" ? (
-              <LifecycleReasonForm productId={product.id} version={product.version} intent="archive" label={t("catalog.archive")} reasonLabel={t("catalog.archiveReason")} />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <form action={productAction} className="grid content-start gap-3">
+                  <input type="hidden" name="intent" value="publish" />
+                  <input type="hidden" name="id" value={product.id} />
+                  <input type="hidden" name="expectedVersion" value={product.version} />
+                  <p className="text-sm text-ink-muted">{t("catalog.publishHint")}</p>
+                  <div><Button type="submit">{t("catalog.publish")}</Button></div>
+                </form>
+                <LifecycleReasonForm productId={product.id} version={product.version} intent="archive" label={t("catalog.archive")} reasonLabel={t("catalog.archiveReason")} />
+              </div>
             ) : (
               <LifecycleReasonForm productId={product.id} version={product.version} intent="restore" label={t("catalog.restore")} reasonLabel={t("catalog.restoreReason")} />
             )}

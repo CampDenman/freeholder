@@ -5,6 +5,7 @@
 // Six numbers and two lists, because that is what is true. A dashboard that
 // invents precision an owner cannot act on teaches them to stop opening it —
 // the same argument the overview screen makes about fake figures.
+import Link from "next/link";
 import { ChartLine } from "@phosphor-icons/react/dist/ssr";
 import {
   dailyViews,
@@ -69,6 +70,13 @@ export default async function TrafficPage() {
         <h1 className="text-xl font-bold tracking-tight">{t("analytics.title")}</h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">
           {t("analytics.intro")}
+        </p>
+        {/* The other half of the same subject: this page counts visits, that
+            one follows them through to money (§4.7, C9.07). */}
+        <p className="mt-2 text-sm">
+          <Link href="/admin/traffic/funnel" className="underline">
+            {t("funnel.title")}
+          </Link>
         </p>
       </div>
 

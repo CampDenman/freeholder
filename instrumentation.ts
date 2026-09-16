@@ -18,42 +18,6 @@
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   if (process.env.NEXT_PHASE === "phase-production-build") return;
-
-  // Before boot, and before the first request: a fresh deploy otherwise starts
-  // against an empty database and answers 500 on every page (§14 promises one
-  // command, not one command and a schema migration nobody mentioned).
-  const { migrateToLatest } = await import("@/core/migrate");
-  const result = await migrateToLatest();
-  console.log(
-    result.ran
-      ? "[freeholder] schema is up to date"
-      : `[freeholder] migrations skipped: ${result.reason}`,
-  );
-
-  const { bootOnce } = await import("@/core/boot");
-  const { default: manifests } = await import("@/modules");
-  await bootOnce(manifests);
-
-  // Persist immutable manifest definitions after every module/plugin has
-  // registered its contribution. This makes newly installed guidance and
-  // demo scenarios visible without a bespoke seed script or first user action.
-  const { db } = await import("@/core/db");
-  const { syncOnboardingDefinitions } = await import("@/core/demo/service");
-  await db().transaction((tx) => syncOnboardingDefinitions(tx));
-
-  // After boot, because installing the demo calls services that boot has to
-  // have registered, and because a manifest's own services load lazily.
-  const { seedDemoIfRequested } = await import("@/modules/seed/boot");
-  await seedDemoIfRequested();
-
-  // The worker last: every job is registered by boot, and starting before
-  // that would mount an empty queue. Failure is logged rather than fatal —
-  // an instance that cannot run background work should still serve pages,
-  // and the outbox is durable while it waits.
-  try {
-    const { startJobs } = await import("@/core/jobs");
-    await startJobs();
-  } catch (error) {
-    console.error("[jobs] worker did not start; the site is still serving", error);
-  }
+  const { startNodeRuntime } = await import("./instrumentation.node");
+  startNodeRuntime();
 }

@@ -9,6 +9,8 @@ import {
   Copy,
   CreditCard,
   Gauge,
+  Hourglass,
+  MagnifyingGlass,
   Sun,
   Image as ImageIcon,
   Layout,
@@ -22,6 +24,8 @@ import {
   ClipboardText,
   AirplaneTakeoff,
   ArrowUUpLeft,
+  ArrowBendUpRight,
+  ArrowsClockwise,
   Ticket,
   DeviceMobile,
   Receipt,
@@ -30,6 +34,7 @@ import {
   Flask,
   MapPin,
   ChartLine,
+  ChartBar,
   Shuffle,
   Envelope,
   Stethoscope,
@@ -40,16 +45,30 @@ import {
   UsersThree,
   CalendarBlank,
   Newspaper,
+  Megaphone,
+  ShareNetwork,
   ChatCircleText,
+  ChatCircleDots,
   PuzzlePiece,
   DownloadSimple,
   Kanban,
+  Key,
+  Lock,
+  Robot,
+  Gift,
+  Printer,
+  VideoCamera,
+  Storefront,
+  Star,
+  Bell,
+  BookOpen,
 } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
 export interface AdminNavLabels {
   region: string;
   overview: string;
+  search: string;
   briefing: string;
   pages: string;
   sections: string;
@@ -63,8 +82,11 @@ export interface AdminNavLabels {
   traffic: string;
   experiments: string;
   health: string;
+  updates: string;
   jobs: string;
   settings: string;
+  retention: string;
+  redirects: string;
   roles: string;
   invitations: string;
   builder: string;
@@ -89,26 +111,51 @@ export interface AdminNavLabels {
   tasks: string;
   segments: string;
   scoring: string;
+  referrals: string;
+  ads: string;
+  assistant: string;
+  social: string;
+  sharing: string;
+  popups: string;
+  automations: string;
+  documents: string;
+  loyalty: string;
   inbox: string;
   messaging: string;
   projects: string;
+  galleries: string;
   time: string;
   quotes: string;
   agreements: string;
   hire: string;
   events: string;
   newsletters: string;
+  reports: string;
+  subscriptions: string;
+  access: string;
+  paywalls: string;
   contribute: string;
   plugins: string;
   imports: string;
   work: string;
+  gifts: string;
+  printOnDemand: string;
+  community: string;
+  voiceVideo: string;
+  marketplace: string;
+  reviews: string;
+  guidance: string;
+  notifications: string;
 }
 
 // Only what exists. A nav advertising screens that are not built is a promise
 // the interface cannot keep; entries arrive with their modules.
 const LINKS = [
   { href: "/admin", key: "overview", module: "admin", Icon: Gauge },
+  { href: "/admin/search", key: "search", module: "search", Icon: MagnifyingGlass },
   { href: "/admin/briefing", key: "briefing", module: "admin", Icon: Sun },
+  { href: "/admin/guidance", key: "guidance", module: "admin", Icon: BookOpen },
+  { href: "/admin/notifications", key: "notifications", module: "admin", Icon: Bell },
   { href: "/admin/pages", key: "pages", module: "cms", Icon: FileText },
   { href: "/admin/sections", key: "sections", module: "cms", Icon: Layout },
   { href: "/admin/templates", key: "templates", module: "cms", Icon: Copy },
@@ -139,26 +186,54 @@ const LINKS = [
   { href: "/admin/tasks", key: "tasks", module: "crm", Icon: ClipboardText },
   { href: "/admin/segments", key: "segments", module: "crm", Icon: UsersThree },
   { href: "/admin/scoring", key: "scoring", module: "crm", Icon: Gauge },
+  { href: "/admin/automations", key: "automations", module: "automations", Icon: Shuffle },
   { href: "/admin/projects", key: "projects", module: "projects", Icon: Kanban },
+  { href: "/admin/galleries", key: "galleries", module: "galleries", Icon: ImageIcon },
+  { href: "/admin/reviews", key: "reviews", module: "reviews", Icon: Star },
+  { href: "/admin/documents", key: "documents", module: "documents", Icon: FileText },
   { href: "/admin/time", key: "time", module: "time", Icon: Clock },
   { href: "/admin/quotes", key: "quotes", module: "quotes", Icon: Receipt },
   { href: "/admin/agreements", key: "agreements", module: "contracts", Icon: Signature },
   { href: "/admin/hire", key: "hire", module: "rentals", Icon: Package },
   { href: "/admin/events", key: "events", module: "events", Icon: CalendarBlank },
   { href: "/admin/newsletters", key: "newsletters", module: "newsletters", Icon: Newspaper },
+  { href: "/admin/referrals", key: "referrals", module: "referrals", Icon: UserPlus },
+  { href: "/admin/ads", key: "ads", module: "ads", Icon: Megaphone },
+  { href: "/admin/assistant", key: "assistant", module: "assistant", Icon: Robot },
+  { href: "/admin/social", key: "social", module: "social", Icon: ShareNetwork },
+  { href: "/admin/sharing", key: "sharing", module: "share", Icon: ShareNetwork },
+  { href: "/admin/popups", key: "popups", module: "popups", Icon: ChatCircleDots },
+  { href: "/admin/loyalty", key: "loyalty", module: "loyalty", Icon: Ticket },
+  { href: "/admin/gifts", key: "gifts", module: "giftRegistry", Icon: Gift },
+  { href: "/admin/print-on-demand", key: "printOnDemand", module: "printOnDemand", Icon: Printer },
+  { href: "/admin/community", key: "community", module: "community", Icon: UsersThree },
+  { href: "/admin/voice-video", key: "voiceVideo", module: "voiceVideo", Icon: VideoCamera },
+  { href: "/admin/marketplace", key: "marketplace", module: "marketplace", Icon: Storefront },
+  {
+    href: "/admin/subscriptions",
+    key: "subscriptions",
+    module: "subscriptions",
+    Icon: ArrowsClockwise,
+  },
+  { href: "/admin/access", key: "access", module: "entitlements", Icon: Key },
+  { href: "/admin/paywalls", key: "paywalls", module: "paywalls", Icon: Lock },
   { href: "/admin/contacts", key: "contacts", module: "contacts", Icon: UsersThree },
   { href: "/admin/locations", key: "locations", module: "locations", Icon: MapPin },
   { href: "/admin/translations", key: "translations", module: "i18n", Icon: TranslateIcon },
   { href: "/admin/traffic", key: "traffic", module: "analytics", Icon: ChartLine },
+  { href: "/admin/reports", key: "reports", module: "reporting", Icon: ChartBar },
   { href: "/admin/experiments", key: "experiments", module: "analytics", Icon: Shuffle },
   { href: "/admin/roles", key: "roles", module: "roles", Icon: ShieldCheck },
   { href: "/admin/invitations", key: "invitations", module: "invitations", Icon: UserPlus },
   { href: "/admin/settings", key: "settings", module: "settings", Icon: SlidersHorizontal },
+  { href: "/admin/retention", key: "retention", module: "retention", Icon: Hourglass },
+  { href: "/admin/redirects", key: "redirects", module: "seo", Icon: ArrowBendUpRight },
   { href: "/admin/work", key: "work", module: "agents", Icon: Kanban },
   { href: "/admin/contribute", key: "contribute", module: "contribute", Icon: ChatCircleText },
   { href: "/admin/plugins", key: "plugins", module: "platform", Icon: PuzzlePiece },
   { href: "/admin/imports", key: "imports", module: "platform", Icon: DownloadSimple },
   { href: "/admin/health", key: "health", module: "platform", Icon: Stethoscope },
+  { href: "/admin/updates", key: "updates", module: "platform", Icon: ArrowsClockwise },
   { href: "/admin/jobs", key: "jobs", module: "platform", Icon: ListChecks },
 ] as const;
 

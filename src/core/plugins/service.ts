@@ -42,7 +42,14 @@ const pluginRow = row({
 });
 
 async function readManifest(dir: string): Promise<PluginContractInput> {
-  const raw = JSON.parse(await readFile(join(dir, "plugin.json"), "utf8")) as PluginContractInput;
+  // The directory is owner-supplied at runtime. Tracing it at build time makes
+  // Turbopack conservatively copy the entire repository into standalone.
+  const raw = JSON.parse(
+    await readFile(
+      join(/* turbopackIgnore: true */ dir, "plugin.json"),
+      "utf8",
+    ),
+  ) as PluginContractInput;
   validatePluginContract(raw);
   return raw;
 }

@@ -101,6 +101,7 @@ describe("robots and sitemaps", () => {
       "/login",
       "/preview",
       "/portal",
+      "/g/",
       "/api/",
       "/checkout",
       "/cart",

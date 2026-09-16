@@ -1,0 +1,15 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+run = "pnpm start:replit"
+entrypoint = "package.json"
+modules = ["nodejs-22", "postgresql-16"]
+
+[nix]
+channel = "stable-25_05"
+
+[deployment]
+build = ["sh", "-c", "corepack enable && pnpm install --frozen-lockfile && pnpm build"]
+run = ["sh", "-c", "pnpm start"]
+[[ports]]
+localPort = 3000
+externalPort = 80

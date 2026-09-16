@@ -12,6 +12,7 @@ import { sortModules, type ModuleManifest } from "@/core/module";
 import { isolatePlugins, bootableManifests, isolatePluginLoad } from "@/core/plugins/isolate";
 import { isPluginManifest } from "@/core/plugin";
 import { registerService, type Service } from "@/core/service";
+import { registerDeclaredEvents } from "@/core/events/catalogue";
 import {
   registerOnboardingModule,
   resetOnboardingRegistryForTests,
@@ -100,6 +101,11 @@ async function wireManifest(
       report.services.push(service.def.name);
     }
   }
+
+  // What this module says it emits, so an automation trigger can be chosen
+  // from a real menu rather than typed (§4.17, C9.01). Recorded even for a
+  // module with no listeners: emitting and listening are independent.
+  registerDeclaredEvents(manifest.name, manifest.events?.emits ?? []);
 
   for (const [event, handlerName] of Object.entries(
     manifest.events?.listens ?? {},

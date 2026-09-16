@@ -50,9 +50,9 @@ Every recipe pulls the same image from
 
 | Tag | What it is |
 |---|---|
-| `edge` | current `main` |
+| `edge` | current `main` (what CI publishes today) |
 | `sha-<short>` | one exact commit |
-| `X.Y.Z`, `X.Y`, `latest` | a release tag |
+| `X.Y.Z`, `X.Y`, `latest` | when a `vX.Y.Z` tag is pushed; the same tag publishes npm packages |
 
 Publishing is the *only* thing CI does for your deploy. Running Freeholder
 needs no GitHub account, no runner and no fork — `docker compose pull` is the
@@ -64,12 +64,40 @@ whole story, which is the point.
 
 ## Operational runbooks
 
+- [`customization-seams.md`](customization-seams.md) — which owner data survives
+  an image swap, and why editing core files on a live server is unsupported.
+- [`release-channels.md`](release-channels.md) — stable, security and edge, and
+  the metadata a release must declare instead of inferring from a version.
+- [`release-feed.md`](release-feed.md) — signed `releases.json`, the embedded
+  public key, and how rotation keeps the previous key until every image ships
+  the successor.
+- [`update-checks.md`](update-checks.md) — the daily GET of that feed, jitter,
+  the off path, and the guarantee that nothing identifying the instance is sent.
+- [`update-preflight.md`](update-preflight.md) — signatures, plugins, drift,
+  environment, shadow-schema migration and the downtime estimate before apply.
+- [`update-apply.md`](update-apply.md) — snapshot, smoke, cutover, auto-drafted
+  release notes and automatic rollback. Target-specific image swap is C10.10.
+- [`n1-schema.md`](n1-schema.md) — schema-compatibility plus the upgrade gate
+  that boots the previous image, migrates, and rolls back.
+- [`update-policy.md`](update-policy.md) — security-auto defaults, business-
+  timezone windows, snapshot retention and feature-update approval.
+- [`recipe-verification.md`](recipe-verification.md) — install, Doctor,
+  database/media restore, update and rollback acceptance for every Tier-1
+  target.
+- [`migration-runbook.md`](migration-runbook.md) — the 30 directed Tier-1
+  moves, downtime/cutover/rollback rules and ID, money, timestamp, media,
+  locale and public-URL verification.
 - [`ownership-recovery.md`](ownership-recovery.md) — database backup and
   scratch restore, complete logical export, media inventory, configuration and
   credential-key recovery, rotation, retention and erasure evidence.
 - [`privacy-rights.md`](privacy-rights.md) — consent evidence, access/export,
   correction, erasure, legal-retention exceptions, artifact retention, backup
   guidance, module registration, and the threat model.
+- [`app-store-privacy.md`](app-store-privacy.md) — Apple privacy nutrition
+  label, required-reason APIs and review notes for the customer app. Review
+  outcomes remain Apple's.
+- [`play-data-safety.md`](play-data-safety.md) — Play Data safety answers for
+  the same binary. Review outcomes remain Google's.
 - [`background-jobs.md`](background-jobs.md) — transactional enqueue,
   idempotency, retry/backoff, global concurrency, leases, cancellation,
   owner history, retained dead letters, redrive controls, process layouts,
@@ -99,7 +127,4 @@ whole story, which is the point.
 
 - arm64 images. `linux/amd64` covers the current DigitalOcean recipe; ARM wants
   native runners rather than QEMU emulation.
-- Replit and the other target recipes remain completion work (`MASTER.md`
-  C3.16).
-- Per-target migration and the validation matrix remain C3.17–C3.19.
 - Target-specific update/rollback remains C10.10.

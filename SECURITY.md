@@ -50,6 +50,12 @@ except a high/critical finding. Renewing an exception is a fresh security
 review in a pull request, not a date-only edit. The ledger is currently empty:
 there are no accepted dependency advisories.
 
+CI writes a dependency-audit attestation containing the exact SHA-256 digests
+of `pnpm-lock.yaml` and the exception ledger. Release publication accepts only
+evidence from the same successful main-branch run and no older than seven days.
+The weekly security workflow always performs a fresh registry query and emits
+new evidence.
+
 Dependabot checks the pnpm workspace weekly. When an advisory appears, use
 `pnpm why <package> -r` to enumerate paths, prefer the smallest compatible
 direct update, and use a parent-scoped override only when that keeps unrelated
@@ -63,6 +69,20 @@ pnpm build
 
 Remove a security override once every parent naturally requires a patched
 release; the audit gate proves the lockfile remains safe without it.
+
+## Repository and workflow scanning
+
+GitHub secret scanning, push protection, non-provider pattern scanning, validity
+checks, and Dependabot security updates are enabled for the repository. CI also
+runs TruffleHog against the relevant history, dependency review on pull
+requests, and CodeQL analysis. These layers are complementary: a passing local
+scan does not replace the repository controls.
+
+Every external GitHub Action is pinned to a full commit SHA. Run
+`pnpm workflow:check` after changing `.github` workflows or composite actions;
+the gate rejects floating action references, floating action-managed tool
+versions, and `pull_request_target`. The complete release boundary and response
+time objective are documented in `deploy/ci-release-gate.md`.
 
 ## Account recovery and two-factor keys
 

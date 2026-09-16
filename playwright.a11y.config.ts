@@ -59,6 +59,10 @@ Object.assign(process.env, {
   CREDENTIAL_KEY: credentialKey,
   DATABASE_URL: databaseUrl,
   FREEHOLDER_JOBS: "off",
+  // Playwright's global setup owns this disposable database migration. The
+  // server starts before global setup, so allowing both paths to migrate would
+  // manufacture a schema race that no browser behaviour depends on.
+  FREEHOLDER_SKIP_MIGRATE: "1",
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: "1",
   LOCAL_STORAGE_ROOT: "test-results/browser-media",
   SESSION_SECRET: sessionSecret,
@@ -90,7 +94,9 @@ export default defineConfig({
   },
   webServer: {
     command: "node scripts/start-browser-server.mjs",
-    url: `${baseURL}/api/health`,
+    // This test process deliberately disables workers so fixtures cannot race
+    // scheduled maintenance. Production readiness still requires a worker.
+    url: `${baseURL}/api/health/live`,
     timeout: 120_000,
     reuseExistingServer: false,
   },

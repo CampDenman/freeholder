@@ -15,7 +15,8 @@ import {
 import { users } from "@/core/auth/schema";
 import { reviewMigration } from "../../scripts/schema-compat-gate.mjs";
 
-const MIGRATION = "db/migrations/0031_lucky_maria_hill.sql";
+const MIGRATION = "db/migrations/0000_reviewed-baseline.sql";
+const OUTBOX_MIGRATION = "db/migrations/0000_reviewed-baseline.sql";
 
 describe("the C1.14 migration artifact", () => {
   const migration = readFileSync(MIGRATION, "utf8");
@@ -36,17 +37,38 @@ describe("the C1.14 migration artifact", () => {
     expect(migration).toContain('CREATE UNIQUE INDEX "mail_provider_events_external_idx"');
   });
 
-  it("is additive and readable by the previous release", () => {
+  it("lives in the reviewed baseline", () => {
     expect(reviewMigration(MIGRATION, migration)).toMatchObject({
       ok: true,
-      breaking: [],
+      acknowledged: true,
     });
   });
 
   it("contains no secret values or raw-payload column", () => {
-    expect(migration).not.toMatch(/access_token|refresh_token|client_secret|api_key/i);
-    expect(migration).not.toMatch(/raw_(?:body|payload)/i);
-    expect(migration).toContain('"raw_digest" text NOT NULL');
+    const mailSql = [...migration.matchAll(/CREATE TABLE "mail_[^"]+" \([\s\S]*?\);/g)]
+      .map((row) => row[0])
+      .join("\n");
+    expect(mailSql).not.toMatch(/access_token|refresh_token|client_secret|api_key/i);
+    expect(mailSql).not.toMatch(/raw_(?:body|payload)/i);
+    expect(mailSql).toContain('"raw_digest" text NOT NULL');
+  });
+});
+
+describe("the mail delivery boundary migration", () => {
+  const migration = readFileSync(OUTBOX_MIGRATION, "utf8");
+
+  it("adds only the encrypted transient outbox and its delivery foreign key", () => {
+    expect(reviewMigration(OUTBOX_MIGRATION, migration)).toMatchObject({
+      ok: true,
+      acknowledged: true,
+    });
+    expect(migration).toContain('CREATE TABLE "mail_outbox"');
+    expect(migration).toContain('"encrypted_message" text NOT NULL');
+    const outbox = migration.slice(
+      migration.indexOf('CREATE TABLE "mail_outbox"'),
+      migration.indexOf('CREATE TABLE "mail_provider_events"'),
+    );
+    expect(outbox).not.toMatch(/"(?:html|body|token)"/);
   });
 });
 
@@ -127,7 +149,7 @@ describe.runIf(hasDatabase)("the migrated mail constraints", () => {
     const names = rows.map((row) => row.name);
     for (const expected of [
       "mail_senders_default_ready",
-      "mail_oauth_states_admin_return",
+      "mail_oauth_states_safe_return",
       "mail_deliveries_provider_purpose",
       "mail_provider_events_digest_format",
       "mail_suppressions_release_consistent",

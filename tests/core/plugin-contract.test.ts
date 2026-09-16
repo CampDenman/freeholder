@@ -70,6 +70,19 @@ describe("definePlugin", () => {
     expect(plugin.migrations).toEqual(["0100_gift_registry.sql"]);
   });
 
+  it("accepts social as an adapter family a plugin may contribute", () => {
+    const plugin = definePlugin({
+      name: "social-fixture",
+      version: "0.1.0",
+      freeholder: ">=0.0.0",
+      license: "Apache-2.0",
+      permissions: ["social:view", "network:external"],
+      requires: ["core", "social"],
+      capabilities: { adapters: ["social"] },
+    });
+    expect(plugin.capabilities.adapters).toEqual(["social"]);
+  });
+
   it("refuses a broken name, version, range, license or migration", () => {
     const base = {
       name: "gift-registry",
@@ -101,7 +114,7 @@ describe("instance fit", () => {
       installed: manifests.map((row) => row.name),
       migrationsDir: "db/migrations",
     });
-    expect(existsSync("db/migrations/0073_plain_lilandra.sql")).toBe(true);
+    expect(existsSync("db/migrations/0000_reviewed-baseline.sql")).toBe(true);
   });
 
   it("names the plugin when the platform is outside its range", () => {

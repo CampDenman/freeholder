@@ -3,13 +3,18 @@
 // Transaction-safe invoice, payment, refund, and credit-note state machines.
 
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   registerContactReference,
 } from "@/core/contacts/service";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import {
   actorString,
   defineService,
@@ -241,6 +246,35 @@ registerPointer(
   (tx, from, to) => tx.update(paymentMethods).set({ contactId: to }).where(eq(paymentMethods.contactId, from)),
 );
 
+registerSearchSource({
+  kind: "invoice",
+  readService: "invoicing.list",
+  module: "invoicing",
+  tables: ["invoices"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: invoices.id,
+        number: invoices.number,
+        memo: invoices.memo,
+        contactId: invoices.contactId,
+      })
+      .from(invoices)
+      .where(or(matchesIlike(invoices.number, pattern), matchesIlike(invoices.memo, pattern)))
+      .orderBy(desc(invoices.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "invoice",
+      id: row.id,
+      title: row.number ?? clipSnippet(row.memo) ?? "Invoice",
+      href: `/admin/invoices/${row.id}`,
+      snippet: clipSnippet(row.memo),
+      contactId: row.contactId,
+      module: "invoicing",
+    }));
+  },
+});
+
 registerContactPrivacySource({
   scope: "commerce.money",
   tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods"],
@@ -291,6 +325,11 @@ export const listInvoices = defineService({
   summary: "List invoices by contact or lifecycle state.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({
     contactId: z.string().uuid().optional(),
     status: z.enum(["draft", "sent", "viewed", "partially_paid", "paid", "overdue", "void", "refunded"]).optional(),
@@ -481,7 +520,7 @@ export const reconcileMoney = defineService({
 const createDraftInput = z.object({
   contactId: z.string().uuid(),
   currency,
-  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock"]).default("manual"),
+  sourceType: z.enum(["order", "quote", "booking", "subscription", "manual", "deposit", "balance", "tip", "pay_what_you_want", "late_fee", "unlock", "ad_campaign"]).default("manual"),
   sourceId: z.string().trim().max(240).optional(),
   idempotencyKey,
   lines: z.array(lineInput).min(1).max(1_000),
@@ -738,9 +777,18 @@ export const issueInvoice = defineService({
       eventType: zero ? "invoice.paid" : "invoice.sent",
       subjectType: "invoice",
       subjectId: updated.id,
-      payload: { number, currency: updated.currency, totalMinor: updated.totalMinor },
+      payload: { number, currency: updated.currency, totalMinor: updated.totalMinor, sourceType: updated.sourceType },
     });
     ctx.queueEvent(zero ? "invoice.paid" : "invoice.sent", { invoiceId: updated.id, contactId: updated.contactId, number });
+    if (zero && updated.sourceType === "unlock") {
+      const { issueUnlock } = await import("@/core/entitlements/service");
+      await ctx.callAsSystem(issueUnlock, {
+        contactId: updated.contactId,
+        invoiceId: updated.id,
+        name: number,
+        resource: { kind: "content", selector: updated.sourceId ?? updated.id },
+      });
+    }
     ctx.setSubject("invoice", updated.id);
     return invoiceBundle(ctx.tx, updated.id);
   },
@@ -758,9 +806,11 @@ export const markInvoiceViewed = defineService({
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That invoice is not here.");
     if (invoice.status === "viewed" || invoice.viewedAt) return invoice;
-    if (invoice.status !== "sent") throw new ServiceError("conflict", "Only a sent invoice can be marked viewed.");
-    const [updated] = await ctx.tx.update(invoices).set({ status: "viewed", viewedAt: new Date() }).where(eq(invoices.id, invoice.id)).returning();
-    await stateEvent(ctx, "invoice", invoice.id, "sent", "viewed");
+    if (!["sent", "overdue", "partially_paid"].includes(invoice.status)) throw new ServiceError("conflict", "Only an open invoice can be marked viewed.");
+    const status = invoice.status === "sent" ? "viewed" : invoice.status;
+    const [updated] = await ctx.tx.update(invoices).set({ status, viewedAt: new Date() }).where(eq(invoices.id, invoice.id)).returning();
+    if (status !== invoice.status) await stateEvent(ctx, "invoice", invoice.id, invoice.status, status);
+    await ctx.emitTimeline({ contactId: invoice.contactId, eventType: "invoice.viewed", subjectType: "invoice", subjectId: invoice.id, payload: { number: invoice.number } });
     ctx.queueEvent("invoice.viewed", { invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("invoice", invoice.id);
     return updated!;
@@ -1015,10 +1065,25 @@ export const settlePayment = defineService({
       eventType: invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid",
       subjectType: "invoice",
       subjectId: invoice.id,
-      payload: { paymentId: payment.id, amountMinor: payment.amountMinor, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency },
+      // `sourceType` rides along so a listener can tell what was actually
+      // bought without reading this module's tables. §4.3 makes the invoice
+      // "the single money object", which means every listener that cares
+      // about money resolves to an invoice and would otherwise have to guess
+      // whether it settled an order, a booking or a subscription — and
+      // guessing wrong misfiles somebody's commission (C9.10).
+      payload: { paymentId: payment.id, amountMinor: payment.amountMinor, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency, sourceType: invoice.sourceType },
     });
     ctx.queueEvent("payment.succeeded", { paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: payment.amountMinor });
     ctx.queueEvent(invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid", { invoiceId: invoice.id, contactId: invoice.contactId, paidMinor });
+    if (invoiceStatus === "paid" && invoice.sourceType === "unlock") {
+      const { issueUnlock } = await import("@/core/entitlements/service");
+      await ctx.callAsSystem(issueUnlock, {
+        contactId: invoice.contactId,
+        invoiceId: invoice.id,
+        name: invoice.number ?? "Unlock",
+        resource: { kind: "content", selector: invoice.sourceId ?? invoice.id },
+      });
+    }
     ctx.setSubject("payment", payment.id);
     return updatedPayment!;
   },

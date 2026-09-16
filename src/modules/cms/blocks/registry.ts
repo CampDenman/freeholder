@@ -37,10 +37,8 @@ import {
   video,
 } from "./library";
 import {
-  adSlot,
   booking,
   gallery,
-  knowledge,
   map,
   paywall,
   productCard,
@@ -51,6 +49,7 @@ import {
   testimonial,
   tip,
 } from "./surfaces";
+import { helpFeedback, knowledge } from "./help";
 
 const definitions: BlockDefinition<z.ZodType, never>[] = [
   heading,
@@ -83,13 +82,13 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   social,
   share,
   knowledge,
+  helpFeedback,
   productCard,
   booking,
   quoteRequest,
   tip,
   siteChat,
   paywall,
-  adSlot,
 ] as unknown as BlockDefinition<z.ZodType, never>[];
 
 const byType = new Map(definitions.map((d) => [d.type, d]));

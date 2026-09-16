@@ -44,13 +44,11 @@ trap cleanup EXIT
 
 psql_db() { psql -h "$PGHOST" -U "$PGUSER" -d "$DB" -tA -c "$1"; }
 
-# A released image to upgrade *from* is the whole premise. On the very first
-# run of a fresh repository there is none, and failing then would mean a red
-# tick nobody can fix. Skipped loudly rather than passed quietly — a gate that
-# silently does nothing is worse than no gate.
+# C11.15: a missing image, denied credentials and a network outage all fail
+# docker pull. None proves a first release, and none verifies an upgrade.
 if ! docker pull "$PREVIOUS_IMAGE" >/dev/null 2>&1; then
-  echo "::warning title=Upgrade gate skipped::No previously published image at ${PREVIOUS_IMAGE}. Nothing to upgrade from; §39.9 is not being checked on this run."
-  exit 0
+  echo "::error title=Upgrade gate blocked::Could not pull ${PREVIOUS_IMAGE}. Check the image reference, registry access and network, then rerun. No upgrade or rollback was verified."
+  exit 1
 fi
 
 previous_digest=$(docker image inspect "$PREVIOUS_IMAGE" --format '{{index .RepoDigests 0}}' 2>/dev/null || echo "$PREVIOUS_IMAGE")
@@ -90,6 +88,11 @@ boot() {
     docker logs fh-upgrade
     exit 1
   }
+  if [[ "$health" != *'"version"'* ]] || [[ "$health" == *'"version":"0.0.0"'* ]]; then
+    echo "::error title=Upgrade gate::${name} health version is missing or 0.0.0: ${health}"
+    docker logs fh-upgrade
+    exit 1
+  fi
 }
 
 echo "1. the previous release boots and migrates an empty database"
@@ -125,5 +128,7 @@ echo "5. the previous release still runs against the new schema (rollback)"
 boot "$PREVIOUS_IMAGE" "previous release, new schema" 1
 rolled_back=$(psql_db "select count(*) from contacts where email = '${MARKER}'")
 [ "$rolled_back" = "1" ] || { echo "::error title=Upgrade gate::data unreadable after rollback"; exit 1; }
+home_rollback=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PORT}/" || true)
+[ "$home_rollback" = "200" ] || { echo "::error title=Upgrade gate::home page answered ${home_rollback} after rollback"; docker logs fh-upgrade; exit 1; }
 
-echo "Upgrade gate: upgrade and rollback both clean."
+echo "Upgrade gate: upgrade and rollback both clean. N-1 schema is readable."

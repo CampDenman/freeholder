@@ -7,17 +7,23 @@
 // safe: an agent rearranging a page goes through the same validation,
 // permission check, audit row and revision history a human does.
 import { z } from "zod";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { isUniqueViolation } from "@/core/db";
+import { businessLocations } from "@/core/locations/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { getTranslation, translatedIds } from "@/core/i18n/service";
 import { recordRedirect } from "@/core/seo/service";
 import { queueIndexNow } from "@/core/seo/indexnow";
 import { kindFromSlug, priorityFromSlug, PUBLIC_ENTITY_KINDS } from "@/core/seo/classify";
 import { resolveAuthors, writeRevision } from "./history";
-import { contentRevisions, pages, sections } from "./schema";
+import { contentLayouts, contentRevisions, pages, sections } from "./schema";
 import {
   applyDueSchedules,
   compareRevisions,
@@ -100,6 +106,33 @@ export { draftPageTranslation, pageTranslationReport } from "./translation-workf
 import { draftPageTranslation, pageTranslationReport } from "./translation-workflow";
 export { previewEmail, testSendEmail } from "./email-service";
 import { previewEmail, testSendEmail } from "./email-service";
+export { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
+// The help centre (C8.12). Sibling file, one module: an article is a page,
+// so these services sit beside the page services rather than in a module of
+// their own (§4.6).
+export {
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  helpArticleAt,
+  searchHelp,
+} from "./help-service";
+import { previewSms, sendSmsTemplate, testSendSms } from "./sms-template-service";
+import {
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleAt,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  searchHelp,
+} from "./help-service";
 import { analyzeAccessibility, publishA11yMessage } from "./a11y-hints";
 import { budgetMessage } from "./budgets";
 import { BlockValidationError, blockTreeSchema, parseBlockTree } from "./blocks/registry";
@@ -268,6 +301,19 @@ const restoreResult = z.discriminatedUnion("subjectType", [
  * because "unlisted" is not a permission model. The admin preview path reads
  * through `cms.getPage`, which is staff-only and can see drafts.
  */
+// Location pages snapshot addresses in SEO. Enforce visibility at read time,
+// before the asynchronous location listener has unpublished the stored page.
+const visibleLocationPage = sql`not exists (
+  select 1 from ${contentLayouts}
+  where ${contentLayouts.pageId} = ${pages.id}
+    and ${contentLayouts.entityType} = 'location'
+    and not exists (
+      select 1 from ${businessLocations}
+      where ${businessLocations.id} = ${contentLayouts.entityId}
+        and ${businessLocations.status} = 'visible'
+    )
+)`;
+
 export const resolvePage = defineService({
   name: "cms.resolvePage",
   summary: "The published page at a path, or null.",
@@ -288,7 +334,7 @@ export const resolvePage = defineService({
       })
       .from(pages)
       .leftJoin(businessProfile, sql`true`)
-      .where(and(eq(pages.slug, input.slug), eq(pages.status, "published")))
+      .where(and(eq(pages.slug, input.slug), eq(pages.status, "published"), visibleLocationPage))
       .limit(1);
 
     const page = source?.page;
@@ -376,7 +422,7 @@ export const publishedPaths = defineService({
         updatedAt: pages.updatedAt,
       })
       .from(pages)
-      .where(eq(pages.status, "published"))
+      .where(and(eq(pages.status, "published"), visibleLocationPage))
       .orderBy(pages.slug);
 
     const [business] = await ctx.tx
@@ -539,6 +585,18 @@ const DEMO_PAGE = {
   },
 } as const;
 
+function cmsDemoContribution(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? { key: "cms.current-modules", version: 1 }
+    : { key: "cms.demo-page", version: 1 };
+}
+
+function cmsDemoOutcome(scenarioKey: string) {
+  return scenarioKey === "seed.current-modules"
+    ? "cms.current-modules.visible"
+    : "cms.demo-page.visible";
+}
+
 export const loadDemoCms = defineService({
   name: "cms.loadDemoFixture",
   summary: "Load the CMS contribution for a tracked demo run.",
@@ -547,12 +605,7 @@ export const loadDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoLoadResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "load",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "load");
     const copy = DEMO_PAGE[input.locale as keyof typeof DEMO_PAGE];
     if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
     const page = await ctx.callAsSystem(createPage, {
@@ -594,12 +647,7 @@ export const purgeDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoPurgeResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "purge",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "purge");
     const purged: Array<{ subjectType: string; subjectId: string }> = [];
     for (const record of input.records) {
       if (record.fixtureKey !== "project-page" || record.subjectType !== "page") {
@@ -628,12 +676,7 @@ export const verifyDemoCms = defineService({
   input: demoHandlerInputSchema,
   output: demoVerifyResultSchema,
   handler: async (input, ctx) => {
-    await requireDemoHandlerRun(
-      ctx.tx,
-      input,
-      { key: "cms.current-modules", version: 1 },
-      "verify",
-    );
+    await requireDemoHandlerRun(ctx.tx, input, cmsDemoContribution(input.scenarioKey), "verify");
     const ids = input.records
       .filter((record) => record.subjectType === "page")
       .map((record) => record.subjectId);
@@ -647,7 +690,7 @@ export const verifyDemoCms = defineService({
     return demoVerifyResultSchema.parse({
       outcomes: [
         {
-          key: "cms.current-modules.visible",
+          key: cmsDemoOutcome(input.scenarioKey),
           achieved:
             page?.slug === "freeholder-demo-project" &&
             page.title.startsWith("[Demo]"),
@@ -1437,6 +1480,41 @@ export async function onSetupCompleted(): Promise<void> {
   await ensureDefaults.call({}, { kind: "system" });
 }
 
+registerSearchSource({
+  kind: "page",
+  readService: "cms.listPages",
+  module: "cms",
+  tables: ["pages"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: pages.id,
+        title: pages.title,
+        slug: pages.slug,
+        workingTitle: pages.workingTitle,
+      })
+      .from(pages)
+      .where(
+        or(
+          matchesIlike(pages.title, pattern),
+          matchesIlike(pages.slug, pattern),
+          matchesIlike(pages.workingTitle, pattern),
+        ),
+      )
+      .orderBy(desc(pages.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "page",
+      id: row.id,
+      title: row.workingTitle?.trim() || row.title,
+      href: `/admin/pages/${row.id}`,
+      snippet: clipSnippet(row.slug || row.title),
+      contactId: null,
+      module: "cms",
+    }));
+  },
+});
+
 export default [
   resolvePage,
   getPage,
@@ -1474,6 +1552,18 @@ export default [
   pageTranslationReport,
   previewEmail,
   testSendEmail,
+  previewSms,
+  sendSmsTemplate,
+  testSendSms,
+  deleteHelpCategory,
+  fileHelpArticle,
+  helpArticleAt,
+  helpArticleFeedback,
+  helpArticles,
+  helpCategoryList,
+  rateHelpArticle,
+  saveHelpCategory,
+  searchHelp,
   listRevisions,
   pageAuthorSummary,
   restoreRevision,

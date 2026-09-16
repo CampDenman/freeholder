@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { env } from "@/core/env";
 import { signPayload } from "@/core/webhooks/sign";
+import { postWebhook } from "@/core/webhooks/transport";
 import { contributions } from "./schema";
 
 export const DEFAULT_HUB_URL = "https://freeholder.ai";
@@ -122,6 +123,35 @@ export interface DeliveryResult {
   hubReceiptId?: string;
 }
 
+async function postOutside(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+  fetchImpl?: typeof fetch,
+): Promise<{ status: number; body: string }> {
+  if (!fetchImpl) {
+    return postWebhook(url, body, headers, {
+      allowLocal: false,
+      timeoutMs: DELIVER_TIMEOUT_MS,
+      maxResponseBytes: 2_000,
+    });
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DELIVER_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(url, {
+      method: "POST",
+      headers,
+      body,
+      redirect: "manual",
+      signal: controller.signal,
+    });
+    return { status: response.status, body: await response.text() };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function deliverQueuedContribution(
   contributionId: string,
   options: {
@@ -164,32 +194,26 @@ export async function deliverQueuedContribution(
     headers["freeholder-delivery"] = row.id;
   }
 
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DELIVER_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetchImpl(ingestUrl(options.hubUrl), {
-      method: "POST",
-      headers,
-      body: payload,
-      redirect: "manual",
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  const response = await postOutside(
+    ingestUrl(options.hubUrl),
+    payload,
+    headers,
+    options.fetchImpl,
+  );
 
   if (response.status >= 500 || response.status === 429) {
     throw new Error(`Hub ingest returned ${response.status}`);
   }
-  if (!response.ok) {
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(`Hub ingest refused the report (${response.status}).`);
   }
 
-  const json = (await response.json().catch(() => null)) as
-    | { id?: string }
-    | null;
+  let json: { id?: string } | null = null;
+  try {
+    json = JSON.parse(response.body) as { id?: string };
+  } catch {
+    // A receipt id is optional; delivery success is the 2xx boundary.
+  }
   const hubReceiptId = json?.id;
   await db()
     .update(contributions)
@@ -234,28 +258,16 @@ export async function deliverStatusReply(
     hubId: row.id,
   };
   const body = JSON.stringify(payload);
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DELIVER_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetchImpl(row.replyUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-      },
-      body,
-      redirect: "manual",
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  const response = await postOutside(
+    row.replyUrl,
+    body,
+    { "content-type": "application/json", accept: "application/json" },
+    options.fetchImpl,
+  );
   if (response.status >= 500 || response.status === 429) {
     throw new Error(`Spoke status reply returned ${response.status}`);
   }
-  if (!response.ok) {
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(`Spoke refused the status reply (${response.status}).`);
   }
   return { sent: true };

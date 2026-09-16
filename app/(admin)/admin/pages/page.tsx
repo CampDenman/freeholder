@@ -3,23 +3,34 @@
 // Every page on the site (MASTER.md §32).
 import { FileText, Plus } from "@phosphor-icons/react/dist/ssr";
 import { formatDateTime } from "@/core/i18n";
-import { listPages } from "@/modules/cms/service";
-import { Card, Pill } from "@/ui/primitives";
+import { helpCategoryList, listPages } from "@/modules/cms/service";
+import { Button, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { SeedSiteButton } from "./SeedSiteButton";
 import { currentBusiness } from "@/core/settings/read";
 import { hasModuleAccess } from "@/core/service";
+import { domainOrNull } from "../../read-helpers";
+import {
+  deleteHelpCategoryAction,
+  saveHelpCategoryAction,
+} from "../../cms-actions";
 
 export const dynamic = "force-dynamic";
 
 
-export default async function PagesPage() {
+export default async function PagesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string; error?: string }>;
+}) {
   const actor = await requireStaffActor("cms");
-  const [pages, business, t] = await Promise.all([
+  const query = await searchParams;
+  const [pages, business, t, categories] = await Promise.all([
     listPages.call({}, actor),
     currentBusiness(),
     getT(),
+    domainOrNull(helpCategoryList.call({ locale: "en" }, actor)),
   ]);
 
   const timezone = business?.timezone ?? "UTC";
@@ -45,6 +56,17 @@ export default async function PagesPage() {
           </a>
         ) : null}
       </div>
+
+      {query.saved === "help" ? (
+        <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+          {t("help.admin.saved")}
+        </p>
+      ) : null}
+      {query.error ? (
+        <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
+          {query.error.includes(" ") ? query.error : t("help.admin.failed")}
+        </p>
+      ) : null}
 
       <Card>
         {pages.length === 0 ? (
@@ -88,6 +110,59 @@ export default async function PagesPage() {
             ))}
           </ul>
         )}
+      </Card>
+
+      <Card>
+        <CardHeader title={t("help.admin.categories")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("help.admin.intro")}</p>
+          {categories === null ? (
+            <p className="text-sm text-danger">{t("help.admin.failed")}</p>
+          ) : categories.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("help.admin.categoriesEmpty")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-2 p-0">
+              {categories.map((category) => (
+                <li key={category.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                  <span className="font-medium">{category.name}</span>
+                  <span className="font-mono text-xs text-ink-muted">{category.slug}</span>
+                  <span className="text-ink-muted">
+                    {t("help.admin.articleCount", { count: category.articleCount })}
+                  </span>
+                  {canManage ? (
+                    <form action={deleteHelpCategoryAction} className="ms-auto flex flex-wrap items-center gap-2">
+                      <input type="hidden" name="id" value={category.id} />
+                      <label className="flex items-center gap-2 text-xs text-ink-muted">
+                        <input type="checkbox" name="confirm" value="yes" required />
+                        {t("help.admin.deleteCategoryConfirm")}
+                      </label>
+                      <Button type="submit" variant="danger">
+                        {t("help.admin.deleteCategory")}
+                      </Button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canManage ? (
+            <form action={saveHelpCategoryAction} className="mt-4 grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="locale" value={business?.defaultLocale ?? "en"} />
+              <Field label={t("help.admin.categoryName")} htmlFor="help-name">
+                <Input id="help-name" name="name" required maxLength={120} />
+              </Field>
+              <Field label={t("help.admin.categorySlug")} htmlFor="help-slug">
+                <Input id="help-slug" name="slug" required maxLength={80} />
+              </Field>
+              <Field label={t("help.admin.categoryDescription")} htmlFor="help-description">
+                <Input id="help-description" name="description" maxLength={400} />
+              </Field>
+              <div className="self-end">
+                <Button type="submit">{t("help.admin.addCategory")}</Button>
+              </div>
+            </form>
+          ) : null}
+        </CardBody>
       </Card>
     </div>
   );

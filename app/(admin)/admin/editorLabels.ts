@@ -138,6 +138,8 @@ export function editorLabels(t: Translate): EditorLabels {
       htmlImage: t("cms.a11y.htmlImage"),
       htmlLandmarks: t("cms.a11y.htmlLandmarks"),
       videoMissing: t("cms.a11y.videoMissing"),
+      popupH1: t("cms.a11y.popupH1"),
+      popupRawHtml: t("cms.a11y.popupRawHtml"),
     },
   };
 }

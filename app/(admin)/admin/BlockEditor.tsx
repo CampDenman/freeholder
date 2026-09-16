@@ -122,6 +122,8 @@ export interface EditorLabels {
     htmlImage: string;
     htmlLandmarks: string;
     videoMissing: string;
+    popupH1: string;
+    popupRawHtml: string;
   };
 }
 

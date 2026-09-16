@@ -23,6 +23,10 @@ import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
 import { PLATFORM_VERSION } from "@/core/platform";
+import { updateCheckEnabled, updateFeedUrl } from "@/core/update/check";
+import { activeReleaseKeys } from "@/core/update/keys";
+import { THIS_RELEASE } from "@/core/update/this-release";
+import { STRATEGIES, TARGET_STRATEGY, configuredTarget } from "@/core/update/targets";
 
 export type Verdict = "ok" | "warn" | "fail";
 
@@ -498,30 +502,47 @@ async function checkPayments(): Promise<Check> {
 }
 
 async function checkJobs(): Promise<Check> {
-  const { listJobs } = await import("@/core/jobs");
-  const jobs = [...listJobs().values()];
-  const scheduled = jobs.filter((job) => job.schedule).length;
+  const { getJobRuntimeEvidence } = await import("@/core/jobs/health");
+  const evidence = await getJobRuntimeEvidence();
 
-  if (env().FREEHOLDER_JOBS === "off") {
+  if (evidence.state === "disabled") {
     return warn(
       "jobs.worker",
       "Background work",
-      "Jobs are switched off in this process. Nothing sweeps expired sessions, and events a crash stranded are never redelivered.",
-      "Make sure another process runs the worker, or unset FREEHOLDER_JOBS.",
+      "No database is configured, so durable background work is unavailable.",
+      "Configure DATABASE_URL, apply migrations and start Freeholder again.",
     );
   }
-  if (jobs.length === 0) {
+  if (!evidence.ready) {
+    const details: Record<typeof evidence.reason, string> = {
+      database_unconfigured: "No database is configured for durable background work.",
+      no_live_producer: "No producer or worker has published a fresh heartbeat.",
+      no_live_worker: "A producer is alive, but no worker is consuming required background work.",
+      worker_version_mismatch: "Workers are alive, but none runs this Freeholder version.",
+      worker_starting: "The current worker is still mounting its job handlers.",
+      worker_degraded: "The current worker reports a degraded runtime.",
+      ready: "The worker reported an inconsistent readiness result.",
+    };
     return fail(
       "jobs.worker",
       "Background work",
-      "No jobs are registered, which should be impossible — core ships several.",
-      "The platform did not finish booting. Check the log for an error at startup.",
+      details[evidence.reason],
+      "Check the payload-free [jobs] startup and health codes, make sure one current-version process runs with FREEHOLDER_JOBS enabled, then wait for a fresh heartbeat.",
+    );
+  }
+  const detail = `${evidence.currentVersionWorkers} current worker(s); heartbeat ${evidence.heartbeatAgeSeconds ?? 0}s ago; ${evidence.readyJobs} ready job(s); ${evidence.queueLagSeconds}s queue lag; ${evidence.deadLetters} dead letter(s).`;
+  if (evidence.state === "degraded") {
+    return warn(
+      "jobs.worker",
+      "Background work",
+      detail,
+      "Inspect the background-work admin view and payload-free [jobs] alert codes; redrive or resolve dead letters after fixing their cause.",
     );
   }
   return ok(
     "jobs.worker",
     "Background work",
-    `${jobs.length} jobs registered, ${scheduled} on a schedule.`,
+    detail,
   );
 }
 
@@ -816,11 +837,272 @@ async function checkPlugins(): Promise<Check[]> {
 }
 
 function checkPlatformVersion(): Check {
+  if (!PLATFORM_VERSION || PLATFORM_VERSION === "0.0.0") {
+    return fail(
+      "platform.version",
+      "Freeholder version",
+      `This instance reports ${PLATFORM_VERSION || "no version"}, the unset placeholder from before C3.20.`,
+      "Redeploy from a build whose package.json version is the real semver, then confirm GET /api/health returns that version.",
+    );
+  }
   return ok(
     "platform.version",
     "Freeholder version",
     `This instance is ${PLATFORM_VERSION}.`,
   );
+}
+
+function checkUpdateRelease(): Check[] {
+  const checks: Check[] = [];
+  if (THIS_RELEASE.version !== PLATFORM_VERSION) {
+    checks.push(
+      fail(
+        "update.release",
+        "Release metadata",
+        `Declared release version ${THIS_RELEASE.version} does not match this instance (${PLATFORM_VERSION}).`,
+        "Keep src/core/update/this-release.ts on the same version as package.json.",
+      ),
+    );
+  } else {
+    const schema =
+      THIS_RELEASE.schemaRisk === "compatible"
+        ? "schema compatible with the previous release"
+        : "schema-breaking, declared as such";
+    const cvss =
+      THIS_RELEASE.cvss === null
+        ? "no CVSS score"
+        : `CVSS ${THIS_RELEASE.cvss} (${THIS_RELEASE.severity})`;
+    const steps =
+      THIS_RELEASE.manualSteps.length === 0
+        ? "no manual steps"
+        : `${THIS_RELEASE.manualSteps.length} manual step${THIS_RELEASE.manualSteps.length === 1 ? "" : "s"}`;
+    checks.push(
+      ok(
+        "update.release",
+        "Release metadata",
+        `${schema}; ${cvss}; ${steps}; can apply from ${THIS_RELEASE.minFromVersion}.`,
+      ),
+    );
+  }
+  checks.push(
+    ok(
+      "update.channel",
+      "Update channel",
+      THIS_RELEASE.channel === "stable"
+        ? "This instance follows the stable channel (patch and minor releases)."
+        : THIS_RELEASE.channel === "security"
+          ? "This instance follows the security channel (security-only patches)."
+          : "This instance follows the edge channel (main).",
+    ),
+  );
+  return checks;
+}
+
+async function checkUpdatePreflight(): Promise<Check> {
+  const { runPreflight } = await import("@/core/update/preflight");
+  try {
+    const report = await runPreflight({});
+    const failed = report.steps.filter((item) => item.verdict === "fail");
+    if (failed.length) {
+      return fail(
+        "update.preflight",
+        "Update preflight",
+        failed.map((item) => `${item.id}: ${item.detail}`).join(" "),
+        "Fix the named preflight step before applying an update.",
+      );
+    }
+    return ok(
+      "update.preflight",
+      "Update preflight",
+      `Preflight passed. Estimated downtime ${report.estimatedDowntimeMs} ms.`,
+    );
+  } catch (error) {
+    return fail(
+      "update.preflight",
+      "Update preflight",
+      `Preflight could not run: ${reason(error)}`,
+      "Check the database connection and try platform.preflightUpdate.",
+    );
+  }
+}
+
+function checkUpdatePolicy(): Check {
+  return ok(
+    "update.policy",
+    "Update policy",
+    "Security updates apply automatically in a night window in the business timezone. Feature updates wait for approval.",
+  );
+}
+
+function checkUpdateTarget(): Check {
+  const target = configuredTarget();
+  if (!target) {
+    return warn(
+      "update.target",
+      "Update target",
+      "No deploy recipe is declared, so an update will migrate and smoke but swap nothing. It will look like it worked.",
+      "Set FREEHOLDER_RECIPE_TARGET to the Tier-1 recipe this instance runs on.",
+    );
+  }
+  const strategy = TARGET_STRATEGY[target];
+  const definition = STRATEGIES[strategy];
+  return ok(
+    "update.target",
+    "Update target",
+    `${target}: ${definition.means} Rollback needs ${definition.rollbackArtifact}, and cutover takes ${definition.cutoverCost}.`,
+  );
+}
+
+function checkForkLane(): Check {
+  const e = env();
+  const configured = Boolean(e.FREEHOLDER_UPSTREAM_REMOTE || e.BUILDER_CODE_REPOSITORY);
+  if (!configured) {
+    return ok(
+      "update.fork",
+      "Fork lane",
+      "This instance updates by image swap. The fork lane is for owners who have modified core and merge upstream instead.",
+    );
+  }
+  if (!e.BUILDER_CODE_REPOSITORY || !e.BUILDER_CODE_TOKEN) {
+    return warn(
+      "update.fork",
+      "Fork lane",
+      "An upstream remote is configured but no repository is connected, so a fork update has nowhere to open a pull request.",
+      "Set BUILDER_CODE_REPOSITORY and BUILDER_CODE_TOKEN, or unset FREEHOLDER_UPSTREAM_REMOTE and update by image.",
+    );
+  }
+  return ok(
+    "update.fork",
+    "Fork lane",
+    `Upstream merges open a pull request in ${e.BUILDER_CODE_REPOSITORY}. The merge is proved in a throwaway worktree and never touches the running tree.`,
+  );
+}
+
+function checkSchemaN1(): Check {
+  return THIS_RELEASE.schemaRisk === "compatible"
+    ? ok(
+        "update.n1",
+        "Schema N-1",
+        "This release declares schemaRisk compatible, so rollback is an image swap.",
+      )
+    : warn(
+        "update.n1",
+        "Schema N-1",
+        "This release declares schemaRisk breaking. Rollback is a restore, not an image swap.",
+        "Expand then contract, or keep schemaRisk: \"breaking\" and do not apply unattended.",
+      );
+}
+
+function checkUpdateCheck(): Check {
+  if (!updateCheckEnabled()) {
+    return ok(
+      "update.check",
+      "Update checks",
+      "Update checks are off. This instance will not learn about security releases unless you watch a mailing list.",
+    );
+  }
+  return ok(
+    "update.check",
+    "Update checks",
+    `Daily update checks are on. They GET ${updateFeedUrl()} and send no instance identifier.`,
+  );
+}
+
+function checkUpdateFeedKey(): Check {
+  const active = activeReleaseKeys();
+  if (active.length === 0) {
+    return fail(
+      "update.feed.key",
+      "Release public key",
+      "This instance has no active release public key, so it cannot verify an update feed.",
+      "Embed a trusted Ed25519 public key in src/core/update/keys.ts.",
+    );
+  }
+  const ids = active.map((key) => key.id).join(", ");
+  return ok(
+    "update.feed.key",
+    "Release public key",
+    `This instance trusts release key ${ids}. A feed not signed by a trusted key is refused.`,
+  );
+}
+
+async function checkUpdateSeams(): Promise<Check[]> {
+  const e = env();
+  const { inspectCoreFiles } = await import("@/core/update/integrity");
+  const instanceConfig = (await import("../../../freeholder.config")).default;
+  const checks: Check[] = [];
+  checks.push(
+    ok(
+      "update.seams.configuration",
+      "Configuration seam",
+      "Instance configuration is loaded separately from replaceable core.",
+    ),
+  );
+  const storage = e.FREEHOLDER_STORAGE ?? instanceConfig.adapters.storage;
+  if (storage === "local" && e.NODE_ENV === "production" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE !== "1") {
+    checks.push(
+      fail(
+        "update.seams.uploads",
+        "Uploads seam",
+        "Uploads are on this machine's disk, which does not survive a rebuild.",
+        "Set adapters.storage to s3 or replit, or only use local disk in development.",
+      ),
+    );
+  } else if (storage === "local" && e.FREEHOLDER_UNSAFE_LOCAL_STORAGE === "1") {
+    checks.push(
+      warn(
+        "update.seams.uploads",
+        "Uploads seam",
+        "Uploads are on this machine's disk because FREEHOLDER_UNSAFE_LOCAL_STORAGE=1.",
+        "Move media to object storage before relying on updates to replace this instance.",
+      ),
+    );
+  } else {
+    checks.push(
+      ok(
+        "update.seams.uploads",
+        "Uploads seam",
+        storage === "local"
+          ? "Local disk storage is for development. Production must use object storage."
+          : `Uploads use ${storage} object storage, not instance disk.`,
+      ),
+    );
+  }
+  const core = await inspectCoreFiles({
+    root: process.cwd(),
+    expectedDigest: e.FREEHOLDER_CORE_DIGEST ?? null,
+    hash: Boolean(e.FREEHOLDER_CORE_DIGEST),
+  });
+  if (core.matches === false) {
+    checks.push(
+      fail(
+        "update.coreFiles",
+        "Core files",
+        "Replaceable core does not match the release digest. Live edits of core files are not supported.",
+        "Move the behaviour into a plugin or configuration, or treat this instance as a fork.",
+      ),
+    );
+  } else if (core.modified.length > 0) {
+    checks.push(
+      warn(
+        "update.coreFiles",
+        "Core files",
+        `${core.modified.length} core file${core.modified.length === 1 ? " was" : "s were"} edited on this instance. Updates will not overwrite them safely.`,
+        "Use a plugin, a configuration change, or the fork lane. Editing core files on a live server is not supported.",
+      ),
+    );
+  } else {
+    checks.push(
+      ok(
+        "update.coreFiles",
+        "Core files",
+        core.expected
+          ? "Replaceable core matches the release digest."
+          : "No live core-file edits detected.",
+      ),
+    );
+  }
+  return checks;
 }
 
 /**
@@ -846,6 +1128,15 @@ export async function runDoctor(): Promise<DoctorReport> {
     ...(await checkPlugins()),
     ...(await checkManagedAgentConnections()),
     checkPlatformVersion(),
+    ...checkUpdateRelease(),
+    checkUpdateFeedKey(),
+    checkUpdatePolicy(),
+    checkUpdateTarget(),
+    checkForkLane(),
+    checkSchemaN1(),
+    checkUpdateCheck(),
+    await checkUpdatePreflight(),
+    ...(await checkUpdateSeams()),
   ];
 
   const verdict: Verdict = checks.some((check) => check.verdict === "fail")

@@ -683,7 +683,7 @@ export const reserveStock = defineService({
   name: "catalog.reserveStock",
   summary: "Hold tracked stock for a cart, order or booking until it expires.",
   kind: "mutation",
-  permission: "public",
+  permission: "scoped",
   input: z.object({
     variantId: id,
     locationId: id,

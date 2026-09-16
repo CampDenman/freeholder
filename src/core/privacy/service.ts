@@ -13,6 +13,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
+import { registerSearchSource, matchesIlike } from "@/core/search/registry";
 import { roleGrants, sessions, users } from "@/core/auth/schema";
 import {
   contactMergeOperations,
@@ -129,12 +130,14 @@ export interface ContactPrivacySource {
   scope: string;
   /** Physical tables this source covers; enforced by the completeness test. */
   tables: readonly string[];
+  /** Parent stores inherit holds for children they would cascade-delete. */
+  retentionScopes?: readonly string[];
   exportData: (tx: Tx, contactId: string) => Promise<unknown>;
   erase: (
     tx: Tx,
     contactId: string,
     context: { requestId: string },
-  ) => Promise<{ affected: number }>;
+  ) => Promise<{ affected: number; pendingJobs?: string[] }>;
 }
 
 const privacySourceRegistry: ContactPrivacySource[] = [];
@@ -275,6 +278,8 @@ const recordConsentInput = z
     method: consentMethod,
     termsVersion: z.string().trim().max(100).nullable().optional(),
     sourceUrl: z.string().trim().max(2_048).nullable().optional(),
+    /** Original request address preserved by trusted, deferred workflows. */
+    sourceIp: z.string().trim().max(64).nullable().optional(),
     evidence: boundedEvidence.default({}),
     occurredAt: z.string().datetime().optional(),
     expiresAt: z.string().datetime().nullable().optional(),
@@ -314,7 +319,7 @@ async function insertConsent(
       method: input.method,
       termsVersion: input.termsVersion ?? null,
       sourceUrl: input.sourceUrl ?? null,
-      ip: actor.request?.ip ?? null,
+      ip: input.sourceIp ?? actor.request?.ip ?? null,
       evidence: input.evidence,
       actor: actorString(actor),
       occurredAt: input.occurredAt ? new Date(input.occurredAt) : new Date(),
@@ -431,6 +436,9 @@ export const recordConsent = defineService({
   input: recordConsentInput,
   output: consentRow,
   handler: async (input, ctx) => {
+    if (input.sourceIp !== undefined && ctx.actor.kind !== "system") {
+      throw new ServiceError("permission", "Only a trusted workflow may preserve a source address.");
+    }
     const record = await insertConsent(ctx.tx, input, ctx.actor);
     ctx.setSubject("consent", record.id);
     await ctx.emitTimeline({
@@ -900,6 +908,7 @@ export const addRetentionException = defineService({
     ),
   output: retentionExceptionRow,
   handler: async (input, ctx) => {
+    await refusePendingErasure(ctx.tx, input.dataRequestId);
     const [request] = await ctx.tx
       .select()
       .from(dataRequests)
@@ -953,6 +962,8 @@ export const removeRetentionException = defineService({
   input: z.object({ id: z.string().uuid() }),
   output: okResult,
   handler: async (input, ctx) => {
+    const [existing] = await ctx.tx.select().from(privacyRetentionExceptions).where(eq(privacyRetentionExceptions.id, input.id)).limit(1);
+    if (existing) await refusePendingErasure(ctx.tx, existing.dataRequestId);
     const [exception] = await ctx.tx
       .delete(privacyRetentionExceptions)
       .where(eq(privacyRetentionExceptions.id, input.id))
@@ -974,6 +985,10 @@ export const cancelMyDataRequest = defineService({
   output: dataRequestRow,
   handler: async (input, ctx) => {
     const contact = await personalContact(ctx.tx, ctx.actor);
+    const [owned] = await ctx.tx.select({ id: dataRequests.id }).from(dataRequests)
+      .where(and(eq(dataRequests.id, input.id), eq(dataRequests.contactId, contact.id))).limit(1);
+    if (!owned) throw new ServiceError("conflict", "That request can no longer be cancelled.");
+    await refusePendingErasure(ctx.tx, input.id);
     const [request] = await ctx.tx
       .update(dataRequests)
       .set({ status: "cancelled", resolution: "Cancelled by the requester." })
@@ -1426,7 +1441,7 @@ async function eraseContact(
   const byScope = new Map(exceptions.map((item) => [item.scope, item]));
   const outcomes: Array<Record<string, unknown>> = [];
   for (const source of privacySourceRegistry) {
-    const exception = byScope.get(source.scope);
+    const exception = [source.scope, ...(source.retentionScopes ?? [])].map(scope => byScope.get(scope)).find(Boolean);
     if (exception) {
       outcomes.push({
         scope: source.scope,
@@ -1442,8 +1457,9 @@ async function eraseContact(
     });
     outcomes.push({
       scope: source.scope,
-      outcome: "erased",
+      outcome: result.pendingJobs?.length ? "pending" : "erased",
       affected: result.affected,
+      ...(result.pendingJobs?.length ? { pendingJobs: z.array(z.uuid()).parse(result.pendingJobs) } : {}),
     });
   }
   const [contact] = await tx
@@ -1478,8 +1494,59 @@ async function eraseContact(
       occurredAt: now,
     })),
   );
-  return { contact, outcomes, partiallyCompleted: exceptions.length > 0 };
+  return { contact, outcomes, pending: outcomes.some(item => item.outcome === "pending"), partiallyCompleted: exceptions.length > 0 };
 }
+
+const erasureReceipt = z.object({
+  format: z.literal("freeholder.erasure-receipt"),
+  outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(),
+    pendingJobs: z.array(z.uuid()).optional() }).passthrough()),
+}).passthrough();
+
+function pendingErasureReceipt(body: unknown): boolean {
+  const receipt = erasureReceipt.safeParse(body);
+  return receipt.success && receipt.data.outcomes.some(item => item.outcome === "pending");
+}
+
+async function refusePendingErasure(tx: Tx, requestId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${requestId}`}))`);
+  const [artifact] = await tx.select({ body: dataRequestArtifacts.body }).from(dataRequestArtifacts)
+    .where(eq(dataRequestArtifacts.dataRequestId, requestId)).limit(1);
+  if (artifact && pendingErasureReceipt(artifact.body)) {
+    throw new ServiceError("conflict", "Erasure has started and its provider jobs must finish or be repaired.");
+  }
+}
+
+/** Provider workers acknowledge only their own durable task, never a whole request. */
+export const completeErasureJob = defineService({
+  name: "privacy.completeErasureJob", summary: "Acknowledge one completed provider erasure job.",
+  kind: "mutation", permission: "system", external: false,
+  input: z.object({ requestId: z.uuid(), scope: z.string(), jobId: z.uuid() }), output: okResult,
+  handler: async (input, ctx) => {
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
+    const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).limit(1);
+    const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).limit(1);
+    if (!request || request.kind !== "erasure" || !artifact) throw new ServiceError("not_found", "No pending erasure receipt exists.");
+    const receipt = erasureReceipt.parse(artifact.body);
+    const outcome = receipt.outcomes.find(item => item.scope === input.scope);
+    if (!outcome || !outcome.pendingJobs?.includes(input.jobId)) return { ok: true };
+    if (request.status !== "in_progress") throw new ServiceError("conflict", "This erasure request is no longer in progress.");
+    outcome.pendingJobs = outcome.pendingJobs.filter(id => id !== input.jobId);
+    if (!outcome.pendingJobs.length) { outcome.outcome = "erased"; delete outcome.pendingJobs; }
+    const pending = receipt.outcomes.some(item => item.outcome === "pending");
+    const status = pending ? "in_progress" : receipt.outcomes.some(item => item.outcome === "retained") ? "partially_completed" : "completed";
+    await saveArtifact(ctx.tx, request, { ...receipt, status, generatedAt: new Date().toISOString(),
+      note: pending ? "Registered provider erasure work remains pending." : "Registered erasure work completed; any documented retention exceptions remain listed." });
+    if (!pending) {
+      await ctx.tx.update(dataRequests).set({ status, fulfilledAt: new Date(),
+        resolution: status === "partially_completed" ? "Completed with documented legal-retention exceptions." : "Request completed." }).where(eq(dataRequests.id, request.id));
+      await ctx.emitTimeline({ contactId: request.contactId, eventType: "contact.dataRequestCompleted", subjectType: "dataRequest", subjectId: request.id, payload: { kind: request.kind, status } });
+      ctx.queueEvent("contact.dataRequestCompleted", { contactId: request.contactId, dataRequestId: request.id, kind: request.kind, status });
+    }
+    ctx.setSubject("dataRequest", request.id);
+    return { ok: true };
+  },
+});
 
 export const fulfillDataRequest = defineService({
   name: "contacts.fulfillDataRequest",
@@ -1513,7 +1580,7 @@ export const fulfillDataRequest = defineService({
     }
     const contact = await requireContact(ctx.tx, request.contactId);
     let artifactBody: unknown;
-    let status: "completed" | "partially_completed" = "completed";
+    let status: "completed" | "partially_completed" | "in_progress" = "completed";
     let eventPayload: Record<string, unknown> = { kind: request.kind };
     if (request.kind === "access" || request.kind === "export") {
       artifactBody = await portableExport(ctx.tx, request, contact);
@@ -1546,8 +1613,13 @@ export const fulfillDataRequest = defineService({
           'Type "ERASE" to confirm this irreversible privacy operation.',
         );
       }
+      const [existingArtifact] = await ctx.tx.select().from(dataRequestArtifacts)
+        .where(eq(dataRequestArtifacts.dataRequestId, request.id)).limit(1);
+      if (existingArtifact && pendingErasureReceipt(existingArtifact.body)) {
+        return { request, artifact: existingArtifact };
+      }
       const result = await eraseContact(ctx.tx, request);
-      status = result.partiallyCompleted ? "partially_completed" : "completed";
+      status = result.pending ? "in_progress" : result.partiallyCompleted ? "partially_completed" : "completed";
       artifactBody = {
         format: "freeholder.erasure-receipt",
         version: 1,
@@ -1557,7 +1629,9 @@ export const fulfillDataRequest = defineService({
         status,
         outcomes: result.outcomes,
         note:
-          status === "partially_completed"
+          status === "in_progress"
+            ? "Local erasure is applied; registered provider jobs must confirm their remaining work."
+            : status === "partially_completed"
             ? "Named data scopes were retained only for the documented legal reasons shown above."
             : "Personal fields and registered module data were erased or anonymized.",
       };
@@ -1577,12 +1651,14 @@ export const fulfillDataRequest = defineService({
     }
     const artifact = await saveArtifact(ctx.tx, request, artifactBody);
     const resolution =
-      status === "partially_completed"
+      status === "in_progress"
+        ? "Waiting for registered provider erasure jobs."
+        : status === "partially_completed"
         ? "Completed with documented legal-retention exceptions."
         : "Request completed.";
     const [completed] = await ctx.tx
       .update(dataRequests)
-      .set({ status, resolution, fulfilledAt: new Date() })
+      .set({ status, resolution, fulfilledAt: status === "in_progress" ? null : new Date() })
       .where(
         and(
           eq(dataRequests.id, request.id),
@@ -1596,12 +1672,12 @@ export const fulfillDataRequest = defineService({
     ctx.setSubject("dataRequest", completed.id);
     await ctx.emitTimeline({
       contactId: completed.contactId,
-      eventType: "contact.dataRequestCompleted",
+      eventType: status === "in_progress" ? "contact.dataRequestErasurePending" : "contact.dataRequestCompleted",
       subjectType: "dataRequest",
       subjectId: completed.id,
       payload: eventPayload,
     });
-    ctx.queueEvent("contact.dataRequestCompleted", {
+    ctx.queueEvent(status === "in_progress" ? "contact.dataRequestErasurePending" : "contact.dataRequestCompleted", {
       contactId: completed.contactId,
       dataRequestId: completed.id,
       kind: completed.kind,
@@ -1622,6 +1698,7 @@ export const denyDataRequest = defineService({
   }),
   output: dataRequestRow,
   handler: async (input, ctx) => {
+    await refusePendingErasure(ctx.tx, input.id);
     const [request] = await ctx.tx
       .update(dataRequests)
       .set({
@@ -1727,7 +1804,7 @@ export const downloadMyDataRequestArtifact = defineService({
 export async function pruneExpiredPrivacyArtifacts(): Promise<number> {
   const rows = await db()
     .delete(dataRequestArtifacts)
-    .where(lt(dataRequestArtifacts.expiresAt, new Date()))
+    .where(and(lt(dataRequestArtifacts.expiresAt, new Date()), sql`not exists (select 1 from ${dataRequests} where ${dataRequests.id} = ${dataRequestArtifacts.dataRequestId} and ${dataRequests.kind} = 'erasure' and ${dataRequests.status} = 'in_progress')`))
     .returning({ id: dataRequestArtifacts.id });
   return rows.length;
 }
@@ -1839,7 +1916,20 @@ export default [
   removeRetentionException,
   cancelMyDataRequest,
   fulfillDataRequest,
+  completeErasureJob,
   denyDataRequest,
   downloadDataRequestArtifact,
   downloadMyDataRequestArtifact,
 ];
+
+registerSearchSource({
+  kind: "privacyRequest", module: "contacts", readService: "contacts.getDataRequest", tables: ["data_requests"],
+  search: async ({ tx, pattern, limit }) => {
+    // Search by the request reference, never the sensitive correction/erasure body.
+    const rows = await tx.select({ id: dataRequests.id, contactId: dataRequests.contactId })
+      .from(dataRequests).where(matchesIlike(sql`${dataRequests.id}::text`, pattern))
+      .orderBy(asc(dataRequests.responseDueAt), asc(dataRequests.id)).limit(limit);
+    return rows.map(item => ({ kind: "privacyRequest", id: item.id, title: item.id,
+      href: `/admin/contacts/privacy/${item.id}`, snippet: null, contactId: item.contactId, module: "contacts" }));
+  },
+});

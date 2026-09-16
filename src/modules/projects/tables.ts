@@ -5,5 +5,8 @@ export {
   projectLinks,
   projectOutcomes,
   projectFiles,
+  projectTestimonials,
+  projectCollections,
+  projectCollectionItems,
 } from "./schema";
 export { timeEntries, timeRates } from "./time-schema";

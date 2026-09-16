@@ -7,9 +7,11 @@ import { env } from "@/core/env";
 import { decimalToMinor, minorToDecimal } from "./currency";
 import { object, paymentFetch, providerJson, text } from "./http";
 import type {
+  OffSessionChargeResult,
   PaymentAdapter,
   PaymentAdapterCapabilities,
   PaymentProviderEvent,
+  RecurringScheduleResult,
   SavedPaymentMethodEvidence,
 } from "./types";
 
@@ -17,7 +19,8 @@ const capabilities: PaymentAdapterCapabilities = {
   refunds: true,
   partialRefunds: true,
   savedMethods: true,
-  subscriptions: false,
+  subscriptions: true,
+  offSessionCharges: true,
   disputes: true,
   payouts: false,
   inPerson: false,
@@ -178,6 +181,43 @@ function paypalEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
       occurredAt,
     }];
   }
+
+  if (
+    type === "PAYMENT.SALE.COMPLETED" ||
+    type === "BILLING.SUBSCRIPTION.PAYMENT.FAILED" ||
+    type === "BILLING.SUBSCRIPTION.CANCELLED" ||
+    type === "BILLING.SUBSCRIPTION.EXPIRED"
+  ) {
+    if (type === "PAYMENT.SALE.COMPLETED") {
+      const providerRef = text(value.billing_agreement_id);
+      if (!providerRef) return [];
+      return [{
+        id,
+        kind: "subscription_period_paid",
+        providerRef,
+        occurredAt,
+        ...amount,
+        invoiceProviderRef: text(value.id),
+      }];
+    }
+    const providerRef = text(value.id);
+    if (!providerRef) return [];
+    if (type === "BILLING.SUBSCRIPTION.PAYMENT.FAILED") {
+      return [{
+        id,
+        kind: "subscription_period_failed",
+        providerRef: text(value.id) ?? providerRef,
+        occurredAt,
+        ...amount,
+      }];
+    }
+    return [{
+      id,
+      kind: "subscription_cancelled",
+      providerRef: text(value.id) ?? providerRef,
+      occurredAt,
+    }];
+  }
   return [];
 }
 
@@ -300,6 +340,155 @@ export function createPayPalPayments(options: PayPalPaymentOptions = {}): Paymen
       await api(`/v3/vault/payment-tokens/${encodeURIComponent(request.providerRef)}`, {
         method: "DELETE",
         headers: { "paypal-request-id": request.idempotencyKey },
+      });
+    },
+    async chargeSavedMethod(request): Promise<OffSessionChargeResult> {
+      const value = await api("/v2/checkout/orders", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "paypal-request-id": request.idempotencyKey,
+          prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          intent: "CAPTURE",
+          payment_source: {
+            token: { id: request.methodRef, type: "PAYMENT_METHOD_TOKEN" },
+          },
+          purchase_units: [{
+            reference_id: request.invoiceId,
+            custom_id: request.invoiceId,
+            description: request.description.slice(0, 127),
+            amount: {
+              currency_code: request.currency,
+              value: minorToDecimal(request.amountMinor, request.currency),
+            },
+          }],
+        }),
+      });
+      const units = Array.isArray(value.purchase_units) ? value.purchase_units : [];
+      const payments = object(object(units[0])?.payments);
+      const captures = Array.isArray(payments?.captures) ? payments.captures : [];
+      const capture = object(captures[0]);
+      const providerRef = text(capture?.id) ?? text(value.id);
+      if (!providerRef) {
+        throw new AdapterError("payments", "paypal", "provider_failure", "PayPal did not return a payment reference.");
+      }
+      const captured = paypalAmount(capture?.amount);
+      const status =
+        capture?.status === "COMPLETED" || value.status === "COMPLETED"
+          ? "succeeded"
+          : capture?.status === "DECLINED" || capture?.status === "DENIED"
+            ? "failed"
+            : "pending";
+      return {
+        providerRef,
+        status,
+        ...captured,
+        occurredAt: optionalEventTime(capture?.update_time ?? value.update_time),
+      };
+    },
+    async createRecurringSchedule(request): Promise<RecurringScheduleResult> {
+      const product = await api("/v1/catalogs/products", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "paypal-request-id": `${request.idempotencyKey}:product`,
+        },
+        body: JSON.stringify({
+          name: request.description.slice(0, 127),
+          type: "SERVICE",
+        }),
+      });
+      const productId = text(product.id);
+      if (!productId) {
+        throw new AdapterError("payments", "paypal", "provider_failure", "PayPal did not return a catalog product.");
+      }
+      const intervalUnit =
+        request.interval === "day"
+          ? "DAY"
+          : request.interval === "week"
+            ? "WEEK"
+            : request.interval === "year"
+              ? "YEAR"
+              : "MONTH";
+      const plan = await api("/v1/billing/plans", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "paypal-request-id": `${request.idempotencyKey}:plan`,
+        },
+        body: JSON.stringify({
+          product_id: productId,
+          name: request.description.slice(0, 127),
+          billing_cycles: [{
+            frequency: { interval_unit: intervalUnit, interval_count: request.intervalCount },
+            tenure_type: "REGULAR",
+            sequence: 1,
+            total_cycles: 0,
+            pricing_scheme: {
+              fixed_price: {
+                value: minorToDecimal(request.amountMinor, request.currency),
+                currency_code: request.currency,
+              },
+            },
+          }],
+          payment_preferences: { auto_bill_outstanding: true },
+        }),
+      });
+      const planId = text(plan.id);
+      if (!planId) {
+        throw new AdapterError("payments", "paypal", "provider_failure", "PayPal did not return a billing plan.");
+      }
+      const subscription = await api("/v1/billing/subscriptions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "paypal-request-id": request.idempotencyKey,
+        },
+        body: JSON.stringify({
+          plan_id: planId,
+          custom_id: request.metadata.subscriptionId,
+          payment_source: { token: { id: request.methodRef, type: "PAYMENT_METHOD_TOKEN" } },
+        }),
+      });
+      const providerRef = text(subscription.id);
+      if (!providerRef) {
+        throw new AdapterError("payments", "paypal", "provider_failure", "PayPal did not return a subscription reference.");
+      }
+      return { providerRef, customerRef: request.customerRef };
+    },
+    async updateRecurringSchedule(request): Promise<RecurringScheduleResult> {
+      await api(`/v1/billing/subscriptions/${encodeURIComponent(request.providerRef)}/revise`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "paypal-request-id": request.idempotencyKey,
+        },
+        body: JSON.stringify({
+          plan: {
+            billing_cycles: [{
+              sequence: 1,
+              pricing_scheme: {
+                fixed_price: {
+                  value: minorToDecimal(request.amountMinor, request.currency),
+                  currency_code: request.currency,
+                },
+              },
+            }],
+          },
+        }),
+      });
+      return { providerRef: request.providerRef };
+    },
+    async cancelRecurringSchedule(request) {
+      await api(`/v1/billing/subscriptions/${encodeURIComponent(request.providerRef)}/cancel`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "paypal-request-id": request.idempotencyKey,
+        },
+        body: JSON.stringify({ reason: "Cancelled from Freeholder" }),
       });
     },
     async verifyWebhook(request) {

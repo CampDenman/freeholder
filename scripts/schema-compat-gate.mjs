@@ -17,6 +17,7 @@
 // Usage: node scripts/schema-compat-gate.mjs [<base-ref>]
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Statements that a previous release cannot survive.
@@ -100,6 +101,34 @@ export function findBreakingStatements(sql) {
   return [...found.values()];
 }
 
+/** The schemaRisk this build declared. Never inferred from the version number. */
+export function declaredSchemaRisk(source) {
+  const match = /schemaRisk:\s*"(compatible|breaking)"/.exec(source);
+  return match ? match[1] : null;
+}
+
+/**
+ * An acknowledged breaking migration is only honest if this build's release
+ * metadata says the same thing. Otherwise the updater will treat a contract
+ * break as an image-swap rollback.
+ */
+export function assertSchemaRisk(declared, reviews) {
+  const acknowledged = (reviews ?? []).filter((review) => review.acknowledged);
+  if (acknowledged.length === 0) return { ok: true, acknowledged };
+  if (declared !== "breaking") {
+    return {
+      ok: false,
+      acknowledged,
+      message:
+        `Schema-compatibility gate: ${acknowledged.map((review) => review.path).join(", ")} ` +
+        `is declared schema-breaking, but this build's schemaRisk is ` +
+        `${declared ?? "missing"}. Set schemaRisk: "breaking" in ` +
+        `src/core/update/this-release.ts so the updater will not treat rollback as an image swap.`,
+    };
+  }
+  return { ok: true, acknowledged };
+}
+
 /** What the author said about it, if anything. */
 export function acknowledgement(sql) {
   const match = ACKNOWLEDGEMENT.exec(sql);
@@ -110,8 +139,17 @@ export function acknowledgement(sql) {
 /** The gate's verdict for one migration file. */
 export function reviewMigration(path, sql) {
   const breaking = findBreakingStatements(sql);
-  if (breaking.length === 0) return { path, ok: true, breaking };
   const ack = acknowledgement(sql);
+  // A collapse of the chain is schema-breaking even when the replacement SQL
+  // is all CREATE TABLE: the previous journal cannot apply, and N-1 image-swap
+  // loses its anchor. An acknowledgement with a reason is therefore a break
+  // even when the regexes are quiet.
+  if (breaking.length === 0) {
+    if (ack?.reason) {
+      return { path, ok: true, breaking, reason: ack.reason, acknowledged: true };
+    }
+    return { path, ok: true, breaking };
+  }
   if (!ack) return { path, ok: false, breaking, reason: null };
   if (!ack.reason) {
     return { path, ok: false, breaking, reason: "", empty: true };
@@ -119,7 +157,35 @@ export function reviewMigration(path, sql) {
   return { path, ok: true, breaking, reason: ack.reason, acknowledged: true };
 }
 
-function changedMigrations(base) {
+/**
+ * The ref to compare against, or the default branch when it has gone.
+ *
+ * CI passes the pull request's base branch, and a stacked pull request's base
+ * is frequently deleted the moment it merges — at which point `git diff`
+ * against a ref that no longer exists throws, and this gate fails a pull
+ * request for a reason that has nothing to do with schema compatibility. A
+ * tidied-up branch is not a breaking migration, so it must not read like one.
+ */
+function resolveBase(base) {
+  try {
+    execFileSync("git", ["rev-parse", "--verify", "--quiet", `${base}^{commit}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return base;
+  } catch {
+    const fallback = "origin/main";
+    if (base === fallback) throw new Error(`Schema gate: neither ${base} nor a fallback exists.`);
+    console.warn(
+      `Schema-compatibility gate: "${base}" is gone (a merged base branch, usually), ` +
+        `so comparing against ${fallback} instead.`,
+    );
+    return fallback;
+  }
+}
+
+function changedMigrations(requested) {
+  const base = resolveBase(requested);
   const out = execFileSync(
     "git",
     ["diff", "--name-only", "--diff-filter=AM", `${base}...HEAD`],
@@ -175,6 +241,15 @@ function main() {
         "and publish the release with schema_breaking so it is never applied " +
         "unattended.",
     );
+    process.exit(1);
+  }
+
+  const declared = declaredSchemaRisk(
+    readFileSync(join(process.cwd(), "src/core/update/this-release.ts"), "utf8"),
+  );
+  const risk = assertSchemaRisk(declared, reviews);
+  if (!risk.ok) {
+    console.error(`\n${risk.message}\n`);
     process.exit(1);
   }
 

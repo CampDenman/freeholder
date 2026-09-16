@@ -61,22 +61,27 @@ test.describe("deterministic demo scenario journey", () => {
     await expect(page.getByText("Current-module foundation")).toBeVisible();
     await expect(page.getByText(/tied to exact run provenance/i)).toBeVisible();
 
-    await page.getByRole("button", { name: "Load scenario" }).click();
+    const foundation = () =>
+      page
+        .locator("div.overflow-hidden")
+        .filter({ has: page.locator('input[name="key"][value="seed.current-modules"]') });
+
+    await foundation().getByRole("button", { name: "Load scenario" }).click();
     await expect(page.getByText(/scenario is loaded/i)).toBeVisible();
-    await expect(page.getByText("Active", { exact: true })).toBeVisible();
-    await expect(page.getByText(/generation 1/i)).toBeVisible();
-    await expect(page.getByRole("link", { name: /example page appears/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /enquiry form appears/i })).toBeVisible();
+    await expect(foundation().getByText("Active", { exact: true })).toBeVisible();
+    await expect(foundation().getByText(/generation 1/i)).toBeVisible();
+    await expect(foundation().getByRole("link", { name: /example page appears/i })).toBeVisible();
+    await expect(foundation().getByRole("link", { name: /enquiry form appears/i })).toBeVisible();
 
-    await page.getByRole("button", { name: "Reload" }).click();
+    await foundation().getByRole("button", { name: "Reload" }).click();
     await expect(page.getByText(/new verified generation/i)).toBeVisible();
-    await expect(page.getByText(/generation 2/i)).toBeVisible();
+    await expect(foundation().getByText(/generation 2/i)).toBeVisible();
 
-    await page.getByLabel("Fixture language").selectOption("fr");
-    await page.getByRole("button", { name: "Reset fresh" }).click();
+    await foundation().getByLabel("Fixture language").selectOption("fr");
+    await foundation().getByRole("button", { name: "Reset fresh" }).click();
     await expect(page.getByText(/fresh verified demo run/i)).toBeVisible();
-    await expect(page.getByText(/Français, generation 1/i)).toBeVisible();
-    await page.getByRole("link", { name: /example page appears/i }).click();
+    await expect(foundation().getByText(/Français, generation 1/i)).toBeVisible();
+    await foundation().getByRole("link", { name: /example page appears/i }).click();
     await expect(page.getByText("[Demo] Un premier projet clair")).toBeVisible();
 
     await db().insert(pages).values({
@@ -91,9 +96,10 @@ test.describe("deterministic demo scenario journey", () => {
     });
 
     await page.goto("/admin/demos");
-    await page.getByRole("button", { name: "Purge demo" }).click();
+    await foundation().getByRole("button", { name: "Purge demo" }).click();
     await expect(page.getByText(/tracked demo records were purged/i)).toBeVisible();
-    await expect(page.getByText("Ready", { exact: true })).toBeVisible();
+    await expect(page.getByText("Active", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Ready", { exact: true })).toHaveCount(5);
 
     expect(
       await db().select().from(pages).where(eq(pages.slug, "real-browser-page")),

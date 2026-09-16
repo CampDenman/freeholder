@@ -80,6 +80,13 @@ export const contacts = pgTable(
     name: text("name").notNull(),
     email: text("email"),
     phone: text("phone"),
+    /** Carrier-observed reachability for the current `phone` value. */
+    phoneStatus: text("phone_status", { enum: ["unknown", "valid", "invalid"] })
+      .notNull()
+      .default("unknown"),
+    phoneInvalidAt: timestamp("phone_invalid_at", { withTimezone: true }),
+    phoneInvalidReason: text("phone_invalid_reason"),
+    phoneInvalidProviderCode: text("phone_invalid_provider_code"),
     orgId: uuid("org_id").references(() => organizations.id, {
       onDelete: "set null",
     }),
@@ -110,6 +117,8 @@ export const contacts = pgTable(
     // email (walk-ins, phone-only leads) are unaffected. Addresses are
     // lowercased by the service layer before they ever reach this column.
     uniqueIndex("contacts_email_idx").on(t.email),
+    // C11.11: newest-first paging, including contacts imported in one batch.
+    index("contacts_created_id_idx").on(t.createdAt, t.id),
     index("contacts_lifecycle_stage_idx").on(t.lifecycleStage),
     index("contacts_tags_idx").using("gin", t.tags),
     index("contacts_name_search_idx").using("gin", t.name.op("gin_trgm_ops")),
@@ -127,6 +136,16 @@ export const contacts = pgTable(
         else regexp_replace(${t.phone}, '[^0-9]', '', 'g')
       end)`,
     ),
+    check(
+      "contacts_phone_state_consistent",
+      sql`(${t.phoneStatus} = 'invalid' and ${t.phoneInvalidAt} is not null)
+        or (${t.phoneStatus} <> 'invalid' and ${t.phoneInvalidAt} is null
+          and ${t.phoneInvalidReason} is null and ${t.phoneInvalidProviderCode} is null)`,
+    ),
+    check(
+      "contacts_phone_status_allowed",
+      sql`${t.phoneStatus} in ('unknown', 'valid', 'invalid')`,
+    ),
   ],
 );
 
@@ -142,7 +161,7 @@ export const contactRelationships = pgTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     kind: text("kind", {
-      enum: ["household", "employer", "referred_by", "partner", "guardian"],
+      enum: ["household", "employer", "referred_by", "partner", "guardian", "contact_book"],
     }).notNull(),
     since: date("since", { mode: "string" }),
     notes: text("notes"),

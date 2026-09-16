@@ -26,7 +26,9 @@ export interface SitemapEntry {
     | "event"
     | "newsletter"
     | "article"
-    | "service";
+    | "service"
+    | "project"
+    | "collection";
   /** 0–1. Browse pages outrank leaves when set. */
   priority?: number;
 }
@@ -168,6 +170,7 @@ export function renderRobots(origin: string): string {
     "Disallow: /login",
     "Disallow: /preview",
     "Disallow: /portal",
+    "Disallow: /g/",
     "Disallow: /api/",
     "Disallow: /checkout",
     "Disallow: /cart",

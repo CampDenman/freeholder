@@ -29,6 +29,7 @@ import {
   resetGuidance,
   startGuidance,
 } from "@/core/guidance/service";
+import { getSignupContactImportOffer } from "@/core/import/signup-contact-service";
 
 export interface MagicLinkState {
   sent?: boolean;
@@ -132,6 +133,28 @@ export async function confirmMagicLinkAction(
     secure,
     maxAge: 0,
   });
+  if (result.linked) {
+    try {
+      const offer = await getSignupContactImportOffer.call(
+        {},
+        {
+          kind: "user",
+          userId: result.userId,
+          role: "customer",
+          grants: [],
+          sessionId: result.sessionId,
+        },
+      );
+      if (offer.enabled && offer.decision === null) {
+        redirect(localizeCustomerHref("/portal/contact-import", result.locale, result));
+      }
+    } catch (error) {
+      // Account creation is already complete. An optional offer being
+      // unavailable must never turn a successful signup into a failed one.
+      if (typeof error === "object" && error !== null && "digest" in error) throw error;
+      console.error("post-signup contact import offer could not be read", error);
+    }
+  }
   redirect(localizeCustomerHref("/portal/login", result.locale, result));
 }
 
@@ -263,4 +286,33 @@ export async function portalSignOutAction(): Promise<void> {
       ? localizeCustomerHref("/portal/login", locale, business)
       : "/portal/login",
   );
+}
+
+/** Correct your own name or phone from the portal (C8.10). */
+export async function updatePortalProfileAction(form: FormData): Promise<void> {
+  const path = "/portal/profile";
+  try {
+    const { updateMyProfile } = await import("@/core/portal/service");
+    await updateMyProfile.call(
+      { name: field(form, "name"), phone: field(form, "phone") || null },
+      await currentPortalActor(),
+    );
+  } catch {
+    redirect(`${path}?error=1`);
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
+}
+
+/** Sign one other device out. The current session is ended by signing out. */
+export async function revokePortalSessionAction(form: FormData): Promise<void> {
+  const path = "/portal/profile";
+  try {
+    const { revokeSession } = await import("@/core/auth/session-management/service");
+    await revokeSession.call({ id: field(form, "id") }, await currentPortalActor());
+  } catch {
+    redirect(`${path}?error=1`);
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=1`);
 }

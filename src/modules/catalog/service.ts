@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Transactional product lifecycle shared by admin, HTTP and MCP (C5.09).
 
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
@@ -12,6 +12,11 @@ import {
   ServiceError,
   type ServiceContext,
 } from "@/core/service";
+import {
+  clipSnippet,
+  matchesIlike,
+  registerSearchSource,
+} from "@/core/search/registry";
 import { recordRedirect } from "@/core/seo/service";
 import { blockTreeSchema } from "@/modules/cms/blocks/registry";
 import { taxCategoryRow } from "@/modules/invoicing/contract";
@@ -25,6 +30,7 @@ import {
 } from "./contract";
 import { productLifecycleEvents, products } from "./schema";
 import { syncProductPublicPage } from "./public-pages";
+import demoServices from "./demo";
 import merchandisingServices, {
   attachProductMedia,
   compareProducts,
@@ -130,6 +136,9 @@ import cartServices, {
   listSavedCarts,
   listSellableVariants,
   listWishlist,
+  revokeWishlistShare,
+  shareWishlist,
+  wishlistByShareToken,
   removeCartItem,
   removeWishlistItem,
   saveCart,
@@ -160,11 +169,17 @@ import fulfillmentServices, {
   requestReturn,
   shipFulfillment,
 } from "./fulfillment";
+// Registers this module as the thing that can turn a redeemed reward into a
+// real coupon (§4.13's convergence rule). Imported for its side effect: the
+// registry lives in core precisely so loyalty and catalog never import each
+// other, and something has to make the claim at load time.
+import "./reward-issuer";
 import promotionServices, {
   applyCouponToCart,
   applyGiftCardToInvoice,
   createCoupon,
   createOfferRule,
+  giftCardByShareToken,
   issueGiftCard,
   listCartOffers,
   listCoupons,
@@ -172,7 +187,16 @@ import promotionServices, {
   listOfferRules,
   quoteCartPromotions,
   recoverAbandonedCarts,
+  sendGiftCard,
 } from "./promotions";
+// Claims this module's room in the customer portal (C8.11). Imported for
+// its side effect: core owns the registry so it never imports a module,
+// and something has to make the claim at load time.
+import "./portal";
+// What the money was for (§4.7, C9.08).
+import "./reporting";
+// The funnel stages this module answers for (§4.7, C9.07).
+import "./funnel";
 
 export {
   abandonStaleCarts,
@@ -189,6 +213,9 @@ export {
   listSavedCarts,
   listSellableVariants,
   listWishlist,
+  revokeWishlistShare,
+  shareWishlist,
+  wishlistByShareToken,
   payOrder,
   createFulfillment,
   decideReturn,
@@ -210,10 +237,12 @@ export {
   applyGiftCardToInvoice,
   createCoupon,
   createOfferRule,
+  giftCardByShareToken,
   issueGiftCard,
   listCartOffers,
   listCoupons,
   listGiftCards,
+  sendGiftCard,
   listOfferRules,
   quoteCartPromotions,
   recoverAbandonedCarts,
@@ -539,7 +568,24 @@ export const resolveVisibleProduct = defineService({
       .where(eq(products.slug, input.slug))
       .limit(1);
     if (!product || product.status !== "active") return null;
-    if (product.visibility === "member_only" && ctx.actor.kind === "anonymous") return null;
+    if (product.visibility === "member_only") {
+      const { contactHasAccess } = await import("@/core/entitlements/access");
+      const { contacts } = await import("@/core/contacts/schema");
+      let contactId: string | null = null;
+      if (ctx.actor.kind === "user") {
+        const [person] = await ctx.tx
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(eq(contacts.userId, ctx.actor.userId))
+          .limit(1);
+        contactId = person?.id ?? null;
+      }
+      const allowed = await contactHasAccess(ctx.tx, contactId, {
+        kind: "catalog",
+        selector: product.id,
+      });
+      if (!allowed) return null;
+    }
     return publicProduct(product);
   },
 });
@@ -891,7 +937,36 @@ export const restoreProduct = defineService({
   },
 });
 
+registerSearchSource({
+  kind: "product",
+  readService: "catalog.listProducts",
+  module: "catalog",
+  tables: ["products"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx
+      .select({
+        id: products.id,
+        name: products.name,
+        slug: products.slug,
+      })
+      .from(products)
+      .where(or(matchesIlike(products.name, pattern), matchesIlike(products.slug, pattern)))
+      .orderBy(desc(products.updatedAt))
+      .limit(limit);
+    return rows.map((row) => ({
+      kind: "product",
+      id: row.id,
+      title: row.name,
+      href: `/admin/products/${row.id}`,
+      snippet: clipSnippet(row.slug),
+      contactId: null,
+      module: "catalog",
+    }));
+  },
+});
+
 export default [
+  ...demoServices,
   listProducts,
   getProduct,
   listProductTaxCategories,

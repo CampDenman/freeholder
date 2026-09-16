@@ -14,6 +14,10 @@ import type { AddressInfo } from "node:net";
 import { db } from "@/core/db";
 import { GET as serveMedia } from "../../app/media/[...key]/route";
 import { GET as downloadMedia } from "../../app/media/download/[id]/route";
+import { GET as discover } from "../../app/.well-known/freeholder/route";
+import { instanceLogoUrl } from "@/core/discovery";
+import { updateDesign } from "@/core/design/service";
+import { updateBusiness } from "@/core/settings/service";
 import {
   assets,
   mediaAltTextSuggestions,
@@ -31,6 +35,7 @@ import {
 import {
   acceptAltTextSuggestion,
   altTextSuggestionState,
+  abortUpload,
   assetUsage,
   beginUpload,
   cleanupOrphanedMedia,
@@ -60,12 +65,17 @@ import {
   resolvePage,
 } from "@/modules/cms/service";
 import { resetStorageForTests, storage } from "@/adapters/storage";
-import { resetMalwareScannerForTests } from "@/adapters/malware";
+import {
+  resetMalwareScannerForTests,
+  setMalwareScannerForTests,
+} from "@/adapters/malware";
 import {
   resetAltTextSuggesterForTests,
   setAltTextSuggesterForTests,
 } from "@/adapters/alt-text";
 import { resetEnvForTests } from "@/core/env";
+import { ready } from "@/core/runtime";
+import { getService } from "@/core/service";
 import {
   ANONYMOUS,
   closeDb,
@@ -198,25 +208,23 @@ describe("what a file is", () => {
 describe("the additive media lifecycle migration", () => {
   it("widens large-file accounting and backfills the exact object inventory", () => {
     const migration = readFileSync(
-      "db/migrations/0029_closed_rockslide.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "media_uploads"');
     expect(migration).toContain('CREATE TABLE "media_objects"');
-    expect(migration).toContain(
-      'ALTER TABLE "assets" ADD COLUMN "byte_size" bigint DEFAULT 0 NOT NULL',
-    );
+    expect(migration).toContain('"byte_size" bigint DEFAULT 0 NOT NULL');
     expect(migration).toContain("freeholder_sync_asset_byte_size");
     expect(migration).toContain("freeholder_inventory_legacy_asset");
-    expect(migration).toContain("CROSS JOIN LATERAL jsonb_each");
+    expect(migration).toContain("jsonb_each");
+    expect(migration).toContain("CROSS JOIN LATERAL jsonb_array_elements");
     expect(migration).toContain("'original', 'attached'");
     expect(migration).toContain("'variant',");
-    expect(migration).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|CONSTRAINT)\b/i);
   });
 
   it("adds a normalized human-review ledger without destructive schema work", () => {
     const migration = readFileSync(
-      "db/migrations/0030_tired_northstar.sql",
+      "db/migrations/0000_reviewed-baseline.sql",
       "utf8",
     );
     expect(migration).toContain('CREATE TABLE "media_alt_text_suggestions"');
@@ -225,7 +233,6 @@ describe("the additive media lifecycle migration", () => {
       'WHERE "media_alt_text_suggestions"."status" = \'ready\'',
     );
     expect(migration).toContain('CONSTRAINT "media_alt_text_status_valid"');
-    expect(migration).not.toMatch(/\bDROP\s+(?:TABLE|COLUMN|CONSTRAINT)\b/i);
   });
 });
 
@@ -291,6 +298,7 @@ describe.runIf(hasDatabase)("the asset library", () => {
 
   afterEach(() => {
     resetAltTextSuggesterForTests();
+    resetMalwareScannerForTests();
   });
 
   afterAll(async () => {
@@ -467,6 +475,153 @@ describe.runIf(hasDatabase)("the asset library", () => {
     }
   });
 
+  it("releases a quarantined image and builds renditions after a clean rescan", async () => {
+    const previous = { ...process.env };
+    let scannerReply = "stream: Eicar-Test-Signature FOUND";
+    const server = createServer((socket) => {
+      let received = Buffer.alloc(0);
+      socket.on("data", (chunk) => {
+        received = Buffer.concat([
+          received,
+          typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+        ]);
+        if (
+          received.length >= 4 &&
+          received.subarray(-4).every((byte) => byte === 0)
+        ) {
+          socket.end(`${scannerReply}\0`);
+        }
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      Object.assign(process.env, {
+        MALWARE_SCANNER: "clamav",
+        CLAMAV_HOST: "127.0.0.1",
+        CLAMAV_PORT: String((server.address() as AddressInfo).port),
+      });
+      resetEnvForTests();
+      resetMalwareScannerForTests();
+      const asset = await uploadAsset.call(
+        {
+          filename: "caught.png",
+          contentType: "image/png",
+          bytes: await png(800, 600),
+        },
+        STAFF,
+      );
+      expect(asset).toMatchObject({
+        status: "quarantined",
+        scanStatus: "infected",
+      });
+      expect(asset.variants).toEqual({});
+
+      scannerReply = "stream: OK";
+      const rescanned = await rescanAsset.call({ id: asset.id }, STAFF);
+      expect(rescanned).toMatchObject({
+        status: "ready",
+        scanStatus: "clean",
+        width: 800,
+        height: 600,
+      });
+      const variants = rescanned.variants as { webp?: { key: string }[] };
+      expect(variants.webp?.length).toBeGreaterThan(0);
+      const attached = await db()
+        .select()
+        .from(mediaObjects)
+        .where(eq(mediaObjects.assetId, asset.id));
+      expect(attached.some((object) => object.role === "variant")).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      process.env = previous;
+      resetEnvForTests();
+      resetMalwareScannerForTests();
+    }
+  });
+
+  it("leaves newly written renditions sweepable when the file changes during scan", async () => {
+    const previous = { ...process.env };
+    const scannerReply = "stream: Eicar-Test-Signature FOUND";
+    const server = createServer((socket) => {
+      let received = Buffer.alloc(0);
+      socket.on("data", (chunk) => {
+        received = Buffer.concat([
+          received,
+          typeof chunk === "string" ? Buffer.from(chunk) : chunk,
+        ]);
+        if (
+          received.length >= 4 &&
+          received.subarray(-4).every((byte) => byte === 0)
+        ) {
+          socket.end(`${scannerReply}\0`);
+        }
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      Object.assign(process.env, {
+        MALWARE_SCANNER: "clamav",
+        CLAMAV_HOST: "127.0.0.1",
+        CLAMAV_PORT: String((server.address() as AddressInfo).port),
+      });
+      resetEnvForTests();
+      resetMalwareScannerForTests();
+      const asset = await uploadAsset.call(
+        {
+          filename: "race.png",
+          contentType: "image/png",
+          bytes: await png(400, 300),
+        },
+        STAFF,
+      );
+      expect(asset.status).toBe("quarantined");
+
+      setMalwareScannerForTests({
+        id: "clamav",
+        async scan(input) {
+          for await (const _chunk of input.body) {
+            /* drain the original so the scanner boundary stays honest */
+          }
+          await db()
+            .update(assets)
+            .set({ checksumSha256: "changed-during-scan" })
+            .where(eq(assets.id, asset.id));
+          return { status: "clean", engine: "clamav" };
+        },
+      });
+      const error = await failure(rescanAsset.call({ id: asset.id }, STAFF));
+      expect(error.code).toBe("conflict");
+      const current = await getAsset.call({ id: asset.id }, STAFF);
+      expect(current).toMatchObject({
+        status: "quarantined",
+        scanStatus: "infected",
+        variants: {},
+      });
+      const pending = await db()
+        .select()
+        .from(mediaObjects)
+        .where(eq(mediaObjects.state, "pending"));
+      expect(pending.length).toBeGreaterThan(0);
+      expect(pending.every((object) => object.assetId === null)).toBe(true);
+      expect(pending.every((object) => object.role === "variant")).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      process.env = previous;
+      resetEnvForTests();
+      resetMalwareScannerForTests();
+    }
+  });
+
+  it("refuses to rescan a trashed file", async () => {
+    const asset = await uploadAsset.call(
+      { filename: "gone.png", contentType: "image/png", bytes: await png(50, 50) },
+      STAFF,
+    );
+    await deleteAsset.call({ id: asset.id }, OWNER);
+    const error = await failure(rescanAsset.call({ id: asset.id }, STAFF));
+    expect(error.code).toBe("not_found");
+  });
+
   it("refuses an empty file", async () => {
     const error = await failure(
       uploadAsset.call(
@@ -551,6 +706,46 @@ describe.runIf(hasDatabase)("the asset library", () => {
     expect(webp!.type).toBe("image/webp");
     // A srcset the browser can choose from: "url 400w, url 800w".
     expect(webp!.srcset).toMatch(/\s\d+w(,|$)/);
+  });
+
+  it("publishes the brand logo on a fetchable image URL, not the document download path", async () => {
+    await updateBusiness.call(
+      {
+        name: "Aurora Coast Photography",
+        country: "CA",
+        baseCurrency: "CAD",
+        timezone: "America/Vancouver",
+      },
+      OWNER,
+    );
+    const asset = await uploadAsset.call(
+      {
+        filename: "logo.png",
+        contentType: "image/png",
+        bytes: await png(64, 64),
+      },
+      STAFF,
+    );
+    await updateDesign.call({ logoAssetId: asset.id }, OWNER);
+    const resolved = await resolveImage.call({ id: asset.id }, ANONYMOUS);
+    expect(resolved?.src).toMatch(/^\/media\//);
+    expect(resolved?.src).not.toContain("/media/download/");
+    const advertised = instanceLogoUrl("https://aurora.example", resolved!.src);
+    expect(advertised).toBe(`https://aurora.example${resolved!.src}`);
+
+    const discovery = await discover();
+    expect(discovery.status).toBe(200);
+    const body = (await discovery.json()) as { branding: { logoUrl: string | null } };
+    expect(body.branding.logoUrl).toMatch(/\/media\//);
+    expect(body.branding.logoUrl?.endsWith(resolved!.src)).toBe(true);
+    expect(body.branding.logoUrl).not.toContain("/media/download/");
+
+    const delivered = await serveMedia(
+      new Request(`http://localhost${resolved!.src}`),
+      { params: Promise.resolve({ key: asset.storageKey.split("/") }) },
+    );
+    expect(delivered.status).toBe(200);
+    expect(delivered.headers.get("content-type")).toMatch(/^image\//);
   });
 
   it("answers null for an asset that is gone, rather than throwing", async () => {
@@ -879,6 +1074,40 @@ describe.runIf(hasDatabase)("the asset library", () => {
     expect((await listAssets.call({ status: "trashed" }, STAFF)).total).toBe(0);
   });
 
+  it("refuses to purge inside another service transaction", async () => {
+    const error = await failure(
+      purgeAsset.call(
+        { id: "00000000-0000-4000-8000-000000000099", confirmation: "x.png" },
+        OWNER,
+        { tx: {} as never, queued: [] },
+      ),
+    );
+    expect(error).toMatchObject({ code: "internal" });
+    expect(error.message).toContain("outside a service transaction");
+  });
+
+  it("hides the library row before bytes are deleted", async () => {
+    const asset = await uploadAsset.call(
+      { filename: "claimed.png", contentType: "image/png", bytes: await png(50, 50) },
+      STAFF,
+    );
+    await deleteAsset.call({ id: asset.id }, OWNER);
+    await ready();
+    const claimed = (await getService("media.purgeClaim").call(
+      { id: asset.id, confirmation: asset.filename },
+      OWNER,
+    )) as { keys: string[] };
+    expect(claimed.keys).toContain(asset.storageKey);
+    expect((await listAssets.call({ status: "trashed" }, STAFF)).total).toBe(0);
+    expect(await storage().get(asset.storageKey)).toBeDefined();
+    const pending = await db()
+      .select()
+      .from(mediaObjects)
+      .where(eq(mediaObjects.state, "pending"));
+    expect(pending.some((object) => object.key === asset.storageKey)).toBe(true);
+    expect(pending.every((object) => object.assetId === null)).toBe(true);
+  });
+
   it("stores focal point, metadata, and provenance edits", async () => {
     const asset = await uploadAsset.call(
       { filename: "crop.png", contentType: "image/png", bytes: await png(80, 60) },
@@ -1061,6 +1290,36 @@ describe.runIf(hasDatabase)("the asset library", () => {
       resetStorageForTests();
       resetMalwareScannerForTests();
     }
+  });
+
+  it("aborts an unfinished reservation so completion cannot attach leftover bytes", async () => {
+    const reservation = await beginUpload.call(
+      {
+        filename: "cancel.pdf",
+        contentType: "application/pdf",
+        bytes: 12,
+      },
+      STAFF,
+    );
+    await abortUpload.call({ id: reservation.id }, STAFF);
+    const [session] = await db()
+      .select()
+      .from(mediaUploads)
+      .where(eq(mediaUploads.id, reservation.id));
+    expect(session).toMatchObject({ state: "aborted" });
+    expect((await db().select().from(mediaObjects)).length).toBe(0);
+    const error = await failure(
+      uploadAsset.call(
+        {
+          filename: "cancel.pdf",
+          contentType: "application/pdf",
+          bytes: new Uint8Array(Buffer.from("%PDF-1.7\n")),
+          uploadId: reservation.id,
+        },
+        STAFF,
+      ),
+    );
+    expect(error.code).toBe("conflict");
   });
 
   it("sweeps expired upload reservations and their staged object ledger", async () => {

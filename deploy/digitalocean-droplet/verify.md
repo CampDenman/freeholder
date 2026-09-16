@@ -1,5 +1,7 @@
 # Verify: DigitalOcean droplet
 
+Also complete the shared [Tier-1 verification](../recipe-verification.md).
+
 What `doctor` cannot check for you. Work through it after the first deploy, and
 again after anything that touches infrastructure.
 

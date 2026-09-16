@@ -10,6 +10,7 @@ export default defineModule({
   tables: () => import("./tables"),
   services: () => import("./service"),
   jobs: () => import("./jobs"),
+  onboarding: () => import("./onboarding"),
   events: {
     emits: [
       "catalog.productCreated",
@@ -52,6 +53,8 @@ export default defineModule({
       "catalog.returnRefunded",
       "catalog.couponCreated",
       "catalog.giftCardIssued",
+      "catalog.giftCardSent",
+      "catalog.wishlistShared",
     ],
   },
 });

@@ -15,7 +15,19 @@ import { createCalendar, setServiceCalendars, updateCalendar } from "@/core/sche
 import { setAvailability, addAvailabilityException } from "@/core/scheduling/availability-service";
 import { createBooking } from "@/core/scheduling/bookings";
 import { resolveSlots } from "@/core/scheduling/resolver";
-import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { availableSlots } from "@/core/scheduling/resolver-service";
+import { createAudience, setAudienceServices } from "@/core/scheduling/audiences";
+import {
+  createProduct,
+  upsertServiceOffering,
+} from "@/modules/catalog/service";
+import {
+  ANONYMOUS,
+  closeDb,
+  hasDatabase,
+  OWNER,
+  truncateSpine,
+} from "../helpers/spine";
 
 const SERVICE = "00000000-0000-4000-8000-0000000000e0";
 // 2026-09-14 is a Monday.
@@ -91,6 +103,67 @@ describe.runIf(hasDatabase)("the availability resolver", { timeout: 60_000 }, ()
     expect(times(await slots())).toEqual([
       "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00",
     ]);
+  });
+
+  it("composes the public slot service through the catalog and business spine", async () => {
+    // Use a future UTC day so this remains a real public-service test instead
+    // of depending on the fixed historical clock used by the resolver units.
+    const day = new Date();
+    day.setUTCDate(day.getUTCDate() + 14);
+    const date = day.toISOString().slice(0, 10);
+    const calendar = await createCalendar.call(
+      { kind: "resource", name: "Public chair", timezone: "UTC" },
+      OWNER,
+    );
+    await setAvailability.call(
+      {
+        calendarId: calendar.id,
+        rules: [
+          {
+            weekday: day.getUTCDay(),
+            starts: "09:00",
+            ends: "11:00",
+            kind: "bookable",
+          },
+        ],
+      },
+      OWNER,
+    );
+    const product = await createProduct.call(
+      { name: "Public consultation", slug: "public-consultation", kind: "service" },
+      OWNER,
+    );
+    const offering = await upsertServiceOffering.call(
+      { productId: product.id, durationMin: 60, locationType: "in_person" },
+      OWNER,
+    );
+    await setServiceCalendars.call(
+      {
+        serviceOfferingId: offering.id,
+        members: [{ calendarId: calendar.id, role: "primary", priority: 0 }],
+      },
+      OWNER,
+    );
+    const audience = await createAudience.call(
+      { name: "Public", who: "public", hours: "calendar" },
+      OWNER,
+    );
+    await setAudienceServices.call(
+      { id: audience.id, serviceOfferingIds: [offering.id] },
+      OWNER,
+    );
+
+    const found = await availableSlots.call(
+      {
+        serviceOfferingId: offering.id,
+        productId: product.id,
+        from: date,
+        to: date,
+        granularityMin: 60,
+      },
+      ANONYMOUS,
+    );
+    expect(times(found)).toEqual(["09:00", "10:00"]);
   });
 
   it("offers nothing on a day the calendar is closed", async () => {

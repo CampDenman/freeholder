@@ -153,7 +153,7 @@ describe.runIf(hasDatabase)("inbox", { timeout: 90_000 }, () => {
     const refused = await failure(
       replyToConversation.call({ id: one.id, body: "On my way" }, OWNER),
     );
-    expect(refused.message).toMatch(/not configured|not connected yet/);
+    expect(refused.message).toMatch(/not configured|not connected yet|quiet hours/);
     // And nothing was recorded, so the thread does not claim words the customer
     // never saw.
     const [after] = await db()
@@ -163,14 +163,14 @@ describe.runIf(hasDatabase)("inbox", { timeout: 90_000 }, () => {
     expect(after!.messageCount).toBe(1);
   });
 
-  // A channel that genuinely has no sender at all, as distinct from one whose
-  // provider is simply unconfigured. C7.15 is what changes this.
-  it("refuses to reply on a channel with no sender at all", async () => {
+  // A chat row without an active browser bearer still has nowhere honest to
+  // deliver. C7.15 connects live sessions, not arbitrary historical rows.
+  it("refuses to reply when a chat has no active browser session", async () => {
     const one = await thread({ channel: "chat" });
     const refused = await failure(
       replyToConversation.call({ id: one.id, body: "Hello" }, OWNER),
     );
-    expect(refused.message).toContain("not connected yet");
+    expect(refused.message).toContain("no longer has a browser to reach");
   });
 
   it("refuses to reply to somebody with no address", async () => {

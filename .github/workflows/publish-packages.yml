@@ -1,0 +1,43 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# Publish the four distributable packages at the tagged platform version (C3.20).
+name: Publish packages
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish aligned packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - name: Verify the tag matches the platform version
+        run: node scripts/release-packages.mjs --check-tag
+      - name: Build and pack
+        run: pnpm packages:build
+      - name: Publish packed tarballs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN is required to publish packages." >&2
+            exit 1
+          fi
+          mkdir -p /tmp/freeholder-release
+          pnpm --filter create-freeholder --filter @freeholder/plugin-kit --filter @freeholder/sdk --filter @freeholder/templates pack --pack-destination /tmp/freeholder-release
+          for tarball in /tmp/freeholder-release/*.tgz; do
+            corepack npm publish "$tarball" --access public --provenance
+          done

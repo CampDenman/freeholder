@@ -18,13 +18,16 @@ import {
   createFromTemplate,
   createPage,
   createSectionLocale,
+  deleteHelpCategory,
   deleteSection,
   detachLayout,
   detachSection,
   ensureDefaults,
+  fileHelpArticle,
   rejoinLayout,
   resetTemplate,
   saveAsSection,
+  saveHelpCategory,
   mergePage,
   publishPage,
   restoreRevision,
@@ -512,4 +515,58 @@ export async function nameRevisionAction(form: FormData): Promise<void> {
 export async function ensureDefaultsAction(): Promise<void> {
   await ensureDefaults.call({}, await currentActor());
   revalidatePath("/", "layout");
+}
+
+function helpRefused(error: unknown, fallback: string, path: string): never {
+  const message = error instanceof ServiceError ? error.message : fallback;
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
+}
+
+export async function saveHelpCategoryAction(form: FormData): Promise<void> {
+  try {
+    await saveHelpCategory.call(
+      {
+        ...(text(form, "id") ? { id: text(form, "id") } : {}),
+        slug: text(form, "slug"),
+        name: text(form, "name"),
+        description: text(form, "description") || null,
+        locale: text(form, "locale") || "en",
+        position: Number(text(form, "position") || "0"),
+      },
+      await currentActor(),
+    );
+  } catch (error) {
+    helpRefused(error, "That help category could not be saved.", "/admin/pages");
+  }
+  revalidatePath("/admin/pages");
+  redirect("/admin/pages?saved=help");
+}
+
+export async function deleteHelpCategoryAction(form: FormData): Promise<void> {
+  if (text(form, "confirm") !== "yes") {
+    redirect("/admin/pages?error=" + encodeURIComponent("Confirm that this category should be removed."));
+  }
+  try {
+    await deleteHelpCategory.call({ id: text(form, "id") }, await currentActor());
+  } catch (error) {
+    helpRefused(error, "That help category could not be removed.", "/admin/pages");
+  }
+  revalidatePath("/admin/pages");
+  redirect("/admin/pages?saved=help");
+}
+
+export async function fileHelpArticleAction(form: FormData): Promise<void> {
+  const pageId = text(form, "pageId");
+  const category = text(form, "categoryId");
+  try {
+    await fileHelpArticle.call(
+      { pageId, categoryId: category === "" ? null : category },
+      await currentActor(),
+    );
+  } catch (error) {
+    helpRefused(error, "That page could not be filed in the help centre.", `/admin/pages/${pageId}`);
+  }
+  revalidatePath(`/admin/pages/${pageId}`);
+  revalidatePath("/admin/pages");
+  redirect(`/admin/pages/${pageId}?saved=help`);
 }

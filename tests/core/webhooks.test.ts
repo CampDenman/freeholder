@@ -38,6 +38,13 @@ import {
   signPayload,
   verifySignature,
 } from "@/core/webhooks/sign";
+import { isPublicIpAddress } from "@/core/webhooks/address";
+import {
+  pinnedRequestOptions,
+  postWebhook,
+  resolveWebhookTarget,
+  type WebhookLookup,
+} from "@/core/webhooks/transport";
 import {
   backoffSeconds,
   deliverDue,
@@ -189,6 +196,104 @@ describe("where a delivery may be sent", () => {
 
   it("refuses something that is not a URL at all", () => {
     expect(() => assertDeliverableUrl("not a url", strict)).toThrow(/valid web address/);
+  });
+
+  it("refuses ambiguous URL user-info", () => {
+    const ambiguous = new URL("https://example.test/hook");
+    ambiguous.username = "fixture-user";
+    ambiguous.password = "fixture-password";
+    expect(() => assertDeliverableUrl(ambiguous.href, strict)).toThrow(/user-info/);
+  });
+});
+
+describe("address-pinned webhook transport", () => {
+  const answer = (...addresses: string[]): WebhookLookup => async () =>
+    addresses.map((address) => {
+      const family: 4 | 6 = address.includes(":") ? 6 : 4;
+      return { address, family };
+    });
+
+  it("recognizes globally routable addresses and rejects special-use space", () => {
+    for (const address of [
+      "0.0.0.0",
+      "100.64.0.1",
+      "127.0.0.1",
+      "169.254.169.254",
+      "192.0.2.1",
+      "198.18.0.1",
+      "203.0.113.1",
+      "::1",
+      "::ffff:127.0.0.1",
+      "fc00::1",
+      "fe80::1",
+      "2001:db8::1",
+      "2002:0a00:0001::",
+    ]) {
+      expect({ address, public: isPublicIpAddress(address) }).toEqual({
+        address,
+        public: false,
+      });
+    }
+    expect(isPublicIpAddress("93.184.216.34")).toBe(true);
+    expect(isPublicIpAddress("2606:4700:4700::1111")).toBe(true);
+  });
+
+  it("refuses private and mixed DNS answers", async () => {
+    await expect(
+      resolveWebhookTarget("https://hooks.example/event", {
+        allowLocal: false,
+        lookup: answer("10.0.0.4"),
+      }),
+    ).rejects.toThrow(/prohibited network/);
+    await expect(
+      resolveWebhookTarget("https://hooks.example/event", {
+        allowLocal: false,
+        lookup: answer("93.184.216.34", "127.0.0.1"),
+      }),
+    ).rejects.toThrow(/prohibited network/);
+  });
+
+  it("bounds DNS resolution and the complete response lifetime", async () => {
+    const neverResolves: WebhookLookup = () => new Promise(() => undefined);
+    await expect(
+      resolveWebhookTarget("https://hooks.example/event", {
+        allowLocal: false,
+        lookup: neverResolves,
+        dnsTimeoutMs: 10,
+      }),
+    ).rejects.toThrow(/could not be resolved/);
+
+    const server = createServer(() => undefined);
+    const url = await new Promise<string>((resolve) => {
+      server.listen(0, "127.0.0.1", () => {
+        const { port } = server.address() as AddressInfo;
+        resolve(`http://127.0.0.1:${port}/hook`);
+      });
+    });
+    try {
+      await expect(
+        postWebhook(url, "{}", {}, { allowLocal: true, timeoutMs: 25 }),
+      ).rejects.toThrow(/No answer within/);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("pins the socket address while preserving TLS identity and Host", async () => {
+    const target = await resolveWebhookTarget("https://hooks.example:8443/a?b=1", {
+      allowLocal: false,
+      lookup: answer("93.184.216.34"),
+    });
+    const options = pinnedRequestOptions(target, { "content-type": "application/json" });
+    expect(options).toMatchObject({
+      hostname: "93.184.216.34",
+      family: 4,
+      port: "8443",
+      path: "/a?b=1",
+      servername: "hooks.example",
+      agent: false,
+    });
+    expect(options.headers).toMatchObject({ host: "hooks.example:8443" });
   });
 });
 

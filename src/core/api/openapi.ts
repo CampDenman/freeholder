@@ -16,9 +16,9 @@
 // Responses come from `ServiceDef.output` when the service has one (C3.01).
 // A service still missing an output schema is described as a generic object
 // rather than a guessed shape. The completeness gate refuses that gap.
-import { z } from "zod";
 import { CONTRACT, PLATFORM_VERSION, WEBHOOK_SCHEMA_VERSION } from "@/core/platform";
-import { listServices, type Service } from "@/core/service";
+import { toContractJsonSchema } from "@/core/contract/json-schema";
+import { listExternalServices, type Service } from "@/core/service";
 import { API_BASE } from "@/core/api/dispatch";
 
 export interface OpenApiOptions {
@@ -90,64 +90,24 @@ const WEBHOOK_ENVELOPE = {
   },
 } as const;
 
-/**
- * A service's input as JSON Schema.
- *
- * `io: "input"` is the load-bearing option: a schema with `.default()` or
- * `.transform()` has a different shape going in than coming out, and it is the
- * *input* shape a caller has to satisfy. Asking for the output shape would
- * document defaults as required fields.
- */
-function jsonSchema(schema: z.ZodType, io: "input" | "output"): unknown {
-  try {
-    const json = z.toJSONSchema(schema, {
-      io,
-      unrepresentable: "any",
-      override: (ctx) => {
-        const def = (ctx.zodSchema as { def?: { type?: string } }).def;
-        if (def?.type === "date") {
-          ctx.jsonSchema.type = "string";
-          ctx.jsonSchema.format = "date-time";
-        }
-      },
-    });
-    const { $schema: _ignored, ...rest } = json as Record<string, unknown>;
-    return rest;
-  } catch (error) {
-    console.warn(`[openapi] could not describe a ${io} schema`, error);
-    return { type: "object" };
-  }
-}
-
 function inputSchema(service: Service): unknown {
-  try {
-    return jsonSchema(service.def.input, "input");
-  } catch (error) {
-    // A schema JSON Schema cannot express should not take the whole document
-    // down — the rest of the contract is still true, and an empty object says
-    // "this accepts an object" without claiming to know which fields.
-    console.warn(
-      `[openapi] could not describe the input of ${service.def.name}`,
-      error,
-    );
-    return { type: "object" };
-  }
+  return toContractJsonSchema(service.def.input, "input");
 }
 
 function outputSchema(service: Service): unknown {
   if (!service.def.output) return { type: "object" };
-  return jsonSchema(service.def.output, "output");
+  return toContractJsonSchema(service.def.output, "output");
 }
 
 /**
- * Everything this instance can do, as OpenAPI 3.1.
+ * Everything an external caller may ask this instance to do, as OpenAPI 3.1.
  *
  * Built from the registry at request time rather than at build time, because
  * §28's point is that *this* instance's contract reflects *its* enabled
  * modules and plugins — including one installed an hour ago.
  */
 export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
-  const services = [...listServices().values()].sort((a, b) =>
+  const services = [...listExternalServices().values()].sort((a, b) =>
     a.def.name.localeCompare(b.def.name),
   );
 
@@ -270,7 +230,7 @@ export function buildOpenApi(options: OpenApiOptions): Record<string, unknown> {
         bearerAuth: {
           type: "http",
           scheme: "bearer",
-          description: "An API key from Settings → API keys.",
+          description: "An API key from Settings → API keys, or a user session token from the auth services. Bearer clients omit cookies; requests carrying a session cookie also require CSRF.",
         },
       },
       schemas: {

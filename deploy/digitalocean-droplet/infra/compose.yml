@@ -35,7 +35,7 @@ services:
     # to /opt/.env and silently start the app with no configuration.
     env_file: [.env]
     environment:
-      DATABASE_URL: postgres://freeholder:${POSTGRES_PASSWORD}@db:5432/freeholder
+      DATABASE_URL: postgres://freeholder:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/freeholder
     depends_on:
       db: { condition: service_healthy }
     # Not published to the host: Caddy is the only way in.
@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: freeholder
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: freeholder
     volumes:
       - db-data:/var/lib/postgresql/data

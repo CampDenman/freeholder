@@ -92,7 +92,9 @@ describe.runIf(hasDatabase)("catalog product lifecycle", { timeout: 30_000 }, ()
     expect((await resolveVisibleProduct.call({ slug: unlisted.slug }, ANONYMOUS))?.id).toBe(unlisted.id);
     const members = created.find((product) => product.visibility === "member_only")!;
     expect(await resolveVisibleProduct.call({ slug: members.slug }, ANONYMOUS)).toBeNull();
-    expect((await resolveVisibleProduct.call({ slug: members.slug }, CUSTOMER))?.id).toBe(members.id);
+    // Signed in is not membership. C9.14 computes access from grants, so a
+    // customer holding no grant sees the same nothing an anonymous visitor does.
+    expect(await resolveVisibleProduct.call({ slug: members.slug }, CUSTOMER)).toBeNull();
 
     const bundle = await getProduct.call({ id: created[0]!.id }, OWNER);
     expect(bundle.history.map((event) => event.toStatus)).toEqual(["active", "draft"]);

@@ -11,6 +11,7 @@
 // owner has to find: the home page describes the site and the business, every
 // other page carries a breadcrumb trail, and blocks contribute their own
 // (an FAQ block emits FAQPage — see the block registry).
+import { serializeInlineJson } from "@/core/http/inline-json";
 
 export interface BusinessFacts {
   name: string;
@@ -23,6 +24,11 @@ export interface BusinessFacts {
 export type JsonLd = Record<string, unknown>;
 
 const CONTEXT = "https://schema.org";
+
+/** Serialize structured data without letting content close its script tag. */
+export function serializeJsonLd(value: JsonLd): string {
+  return serializeInlineJson(value);
+}
 
 /** The site itself. Home page only — it describes the whole domain. */
 export function websiteJsonLd(origin: string, business: BusinessFacts): JsonLd {
@@ -222,5 +228,56 @@ export function articleJsonLd(input: {
     ...(input.authorName
       ? { author: { "@type": "Person", name: input.authorName } }
       : {}),
+  };
+}
+
+export function creativeWorkJsonLd(input: {
+  name: string;
+  url: string;
+  description?: string | null;
+  dateCreated?: string | null;
+  images?: Array<{ url: string; caption?: string | null }>;
+  services?: Array<{ name: string; url: string }>;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "CreativeWork",
+    name: input.name,
+    url: input.url,
+    mainEntityOfPage: input.url,
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.dateCreated ? { dateCreated: input.dateCreated } : {}),
+    ...(input.images?.length
+      ? {
+          image: input.images.map((image) => ({
+            "@type": "ImageObject",
+            contentUrl: image.url,
+            ...(image.caption ? { caption: image.caption } : {}),
+          })),
+        }
+      : {}),
+    ...(input.services?.length
+      ? {
+          about: input.services.map((service) => ({
+            "@type": "Service",
+            name: service.name,
+            url: service.url,
+          })),
+        }
+      : {}),
+  };
+}
+
+export function collectionPageJsonLd(input: {
+  name: string;
+  url: string;
+  description?: string | null;
+}): JsonLd {
+  return {
+    "@context": CONTEXT,
+    "@type": "CollectionPage",
+    name: input.name,
+    url: input.url,
+    ...(input.description ? { description: input.description } : {}),
   };
 }

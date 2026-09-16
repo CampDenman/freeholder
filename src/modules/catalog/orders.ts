@@ -6,8 +6,9 @@
 // settlement stays on the invoicing module; paying the order consumes stock
 // holds. Fulfillment shipments are C5.19.
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { clipSnippet, matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -24,7 +25,8 @@ import { ORDER_STATUSES } from "./contract";
 import { releaseReservation, reserveStock } from "./inventory";
 import { attachCartToContact, getCart, requireContactAuthority } from "./cart";
 import { quoteShipping } from "./shipping";
-import { carts, orderItems, orders, stockReservations } from "./schema";
+import { issuePass } from "@/core/entitlements/service";
+import { carts, orderItems, orders, products, productVariants, stockReservations } from "./schema";
 
 const id = z.string().uuid();
 
@@ -156,10 +158,10 @@ export const checkoutCart = defineService({
     // storefront checkout (when it lands) verifies the shopper's email first
     // and composes through ctx.callAsSystem.
     requireContactAuthority(ctx, "catalog.checkoutCart");
-    let basket = await ctx.call(getCart, { cartId: input.cartId });
+    let basket = await ctx.callAsSystem(getCart, { cartId: input.cartId });
     if (basket.cart.status === "converted") {
       const [existing] = await ctx.tx.select().from(orders).where(eq(orders.cartId, basket.cart.id)).limit(1);
-      if (existing) return ctx.call(getOrder, { id: existing.id });
+      if (existing) return ctx.callAsSystem(getOrder, { id: existing.id });
       throw new ServiceError("conflict", "That cart was already converted.");
     }
     if (basket.cart.status !== "open" || basket.cart.kind !== "cart") {
@@ -169,7 +171,8 @@ export const checkoutCart = defineService({
       throw new ServiceError("conflict", "That cart belongs to a different contact.");
     }
     if (!basket.cart.contactId) {
-      basket = await ctx.call(attachCartToContact, {
+      if (!basket.cart.token) throw new ServiceError("conflict", "The checked-out cart has no private token.");
+      basket = await ctx.callAsSystem(attachCartToContact, {
         token: basket.cart.token,
         contactId: input.contactId,
       });
@@ -222,7 +225,7 @@ export const checkoutCart = defineService({
 
     const { quoteCartPromotions } = await import("./promotions");
     const { allocateDiscount } = await import("./promo-quote");
-    const promo = await ctx.call(quoteCartPromotions, {
+    const promo = await ctx.callAsSystem(quoteCartPromotions, {
       cartId: basket.cart.id,
       couponCode: input.couponCode,
       subtotalMinor: basket.subtotalMinor,
@@ -260,6 +263,11 @@ export const checkoutCart = defineService({
         unitAmountMinor: line.unitAmountMinor!,
         lineTotalMinor: line.lineTotalMinor!,
         snapshot: { sku: line.sku, productName: line.productName, requiresShipping: line.requiresShipping },
+        // Provenance survives checkout, or it was never provenance: the
+        // owner has to know which gallery and which frame an order line is
+        // for long after the cart is gone.
+        galleryId: line.galleryId ?? null,
+        assetId: line.assetId ?? null,
       });
     }
 
@@ -403,7 +411,7 @@ export const checkoutCart = defineService({
         currency: basket.cart.currency,
       },
     });
-    return ctx.call(getOrder, { id: order!.id });
+    return ctx.callAsSystem(getOrder, { id: order!.id });
   },
 });
 
@@ -447,6 +455,31 @@ export const payOrder = defineService({
     await ctx.tx.update(orders).set({ status: "paid", updatedAt: new Date() }).where(eq(orders.id, order.id));
     const { grantDigitalFulfillment } = await import("./fulfillment");
     await ctx.call(grantDigitalFulfillment, { orderId: order.id });
+    const lines = await ctx.tx
+      .select({
+        quantity: orderItems.quantity,
+        productId: products.id,
+        productName: products.name,
+        kind: products.kind,
+      })
+      .from(orderItems)
+      .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+      .innerJoin(products, eq(products.id, productVariants.productId))
+      .where(eq(orderItems.orderId, order.id));
+    for (const line of lines) {
+      if (line.kind !== "pass") continue;
+      const punches =
+        line.quantity >= QUANTITY_SCALE
+          ? Math.max(1, Math.floor(line.quantity / QUANTITY_SCALE))
+          : Math.max(1, line.quantity);
+      await ctx.callAsSystem(issuePass, {
+        contactId: order.contactId,
+        productId: line.productId,
+        productName: line.productName,
+        quantity: punches,
+        sourceOrderId: order.id,
+      });
+    }
     ctx.setSubject("order", order.id);
     ctx.queueEvent("catalog.orderPaid", { orderId: order.id });
     await ctx.emitTimeline({
@@ -456,7 +489,7 @@ export const payOrder = defineService({
       subjectId: order.id,
       payload: { invoiceId: order.invoiceId, totalMinor: order.totalMinor, currency: order.currency },
     });
-    return ctx.call(getOrder, { id: order.id });
+    return ctx.callAsSystem(getOrder, { id: order.id });
   },
 });
 
@@ -508,15 +541,15 @@ export const cancelOrder = defineService({
       subjectId: order.id,
       payload: { invoiceId: order.invoiceId },
     });
-    return ctx.call(getOrder, { id: order.id });
+    return ctx.callAsSystem(getOrder, { id: order.id });
   },
 });
 
 export const getOrder = defineService({
   name: "catalog.getOrder",
-  summary: "One order and its lines.",
+  summary: "One order and its lines for an authorized catalog reader.",
   kind: "query",
-  permission: "public",
+  permission: "scoped",
   input: z.object({ id }),
   output: orderDetail,
   handler: async (input, ctx) => {
@@ -532,6 +565,11 @@ export const listOrders = defineService({
   summary: "Orders for the owner workspace or one contact.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({ contactId: id.optional() }),
   output: listed(orderRow),
   handler: (input, ctx) =>
@@ -541,6 +579,20 @@ export const listOrders = defineService({
       .where(input.contactId ? eq(orders.contactId, input.contactId) : undefined)
       .orderBy(desc(orders.createdAt))
       .limit(200),
+});
+
+registerSearchSource({
+  kind: "order", module: "catalog", readService: "catalog.getOrder", tables: ["orders", "order_items"],
+  search: async ({ tx, pattern, limit }) => {
+    const rows = await tx.select({ id: orders.id, contactId: orders.contactId,
+      product: sql<string | null>`(select oi.snapshot->>'productName' from order_items oi where oi.order_id = ${orders.id} order by oi.id limit 1)` })
+      .from(orders).where(or(matchesIlike(sql`${orders.id}::text`, pattern), matchesIlike(sql`${orders.contactId}::text`, pattern),
+        sql`exists (select 1 from order_items oi where oi.order_id = ${orders.id} and
+          ((oi.snapshot->>'productName') ilike ${pattern} escape ${"\\"} or (oi.snapshot->>'sku') ilike ${pattern} escape ${"\\"}))`))
+      .orderBy(desc(orders.createdAt), desc(orders.id)).limit(limit);
+    return rows.map(item => ({ kind: "order", id: item.id, title: item.id.slice(0, 8), href: `/admin/orders/${item.id}`,
+      snippet: clipSnippet(item.product), contactId: item.contactId, module: "catalog" }));
+  },
 });
 
 export default [checkoutCart, payOrder, cancelOrder, getOrder, listOrders];

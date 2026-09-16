@@ -10,4 +10,5 @@ export {
   contentComments,
   contentTemplates,
   contentLayouts,
+  helpCategories,
 } from "./schema";

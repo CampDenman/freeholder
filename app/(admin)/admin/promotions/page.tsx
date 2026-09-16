@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Coupons, gift cards and cart offers (C5.23).
 
+import { cookies } from "next/headers";
 import { Ticket, WarningCircle } from "@phosphor-icons/react/dist/ssr";
+import { GIFT_CARD_SHARE_COOKIE } from "@/modules/catalog/cookies";
 import { listContacts } from "@/core/contacts/service";
 import { currentBusiness } from "@/core/settings/read";
 import { hasModuleAccess } from "@/core/service";
@@ -28,7 +30,7 @@ export default async function PromotionsPage({
 }) {
   const actor = await requireStaffActor("catalog");
   const query = await searchParams;
-  const [codes, cards, offers, variants, contacts, business, t] = await Promise.all([
+  const [codes, cards, offers, variants, contacts, business, t, jar] = await Promise.all([
     listCoupons.call({}, actor),
     listGiftCards.call({}, actor),
     listOfferRules.call({}, actor),
@@ -36,6 +38,7 @@ export default async function PromotionsPage({
     listContacts.call({ limit: 80 }, actor).catch(() => ({ rows: [] as Array<{ id: string; name: string }> })),
     currentBusiness(),
     getT(),
+    cookies(),
   ]);
   const canManage = hasModuleAccess(actor, "catalog", "manage");
   const currency = business?.baseCurrency ?? "CAD";
@@ -126,6 +129,32 @@ export default async function PromotionsPage({
                 </Select>
               </Field>
               <div><Button type="submit">{t("catalog.promo.issueGift")}</Button></div>
+            </form>
+          ) : null}
+          {query.saved === "sendGiftCard" && jar.get(GIFT_CARD_SHARE_COOKIE)?.value ? (
+            <label className="mt-4 grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("catalog.gift.link")}</span>
+              <input
+                readOnly
+                value={jar.get(GIFT_CARD_SHARE_COOKIE)?.value}
+                className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+              />
+            </label>
+          ) : null}
+          {canManage && cards.length > 0 ? (
+            <form action={productAction} className="mt-4 grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="intent" value="sendGiftCard" />
+              <Field label={t("catalog.promo.giftCards")} htmlFor="send-gift-id">
+                <Select id="send-gift-id" name="id" required>
+                  {cards.map((row) => (
+                    <option key={row.id} value={row.id}>{row.code}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t("catalog.promo.email")} htmlFor="send-gift-email">
+                <Input id="send-gift-email" name="email" type="email" required />
+              </Field>
+              <div><Button type="submit">{t("catalog.promo.sendGift")}</Button></div>
             </form>
           ) : null}
         </CardBody>

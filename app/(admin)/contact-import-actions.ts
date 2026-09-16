@@ -18,6 +18,13 @@ import {
   mapContactImport,
   revertContactImport,
 } from "@/core/import/contacts-service";
+import {
+  setSignupContactImportPolicy,
+} from "@/core/import/signup-contact-service";
+import {
+  SIGNUP_CONTACT_IMPORT_FIELDS,
+  SIGNUP_CONTACT_IMPORT_SOURCES,
+} from "@/core/import/contacts-schema";
 import { ownerFacing } from "./action-helpers";
 
 const IMPORTS = "/admin/imports/contacts";
@@ -114,4 +121,38 @@ export async function revertContactImportAction(form: FormData): Promise<void> {
   revalidatePath(path);
   revalidatePath("/admin/contacts");
   redirect(`${path}?saved=reverted`);
+}
+
+export async function setSignupContactImportPolicyAction(form: FormData): Promise<void> {
+  try {
+    const allowedSources = form
+      .getAll("allowedSource")
+      .filter((value): value is string => typeof value === "string")
+      .filter((value) => (SIGNUP_CONTACT_IMPORT_SOURCES as readonly string[]).includes(value)) as
+      Array<(typeof SIGNUP_CONTACT_IMPORT_SOURCES)[number]>;
+    const allowedFields = [
+      "email" as const,
+      ...form
+        .getAll("allowedField")
+        .filter((value): value is string => typeof value === "string")
+        .filter(
+          (value) =>
+            value !== "email" &&
+            (SIGNUP_CONTACT_IMPORT_FIELDS as readonly string[]).includes(value),
+        ),
+    ] as Array<(typeof SIGNUP_CONTACT_IMPORT_FIELDS)[number]>;
+    await setSignupContactImportPolicy.call(
+      {
+        enabled: form.get("enabled") === "on",
+        allowedSources,
+        allowedFields,
+        maxContacts: Number(text(form, "maxContacts")),
+      },
+      await actor(),
+    );
+  } catch (error) {
+    refused(error, IMPORTS, "Those signup import rules could not be saved.");
+  }
+  revalidatePath(IMPORTS);
+  redirect(`${IMPORTS}?saved=signup-policy`);
 }

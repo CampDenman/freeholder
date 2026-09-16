@@ -10,6 +10,13 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  /** C3.13: Daily private room and recording provider. */
+  DAILY_API_KEY: z.string().optional(),
+  DAILY_DOMAIN: z.string().optional(),
+  /** C3.13: own-store Shopify app credentials; never exposed by channel reads. */
+  SHOPIFY_SHOP: z.string().optional(),
+  SHOPIFY_CLIENT_ID: z.string().optional(),
+  SHOPIFY_CLIENT_SECRET: z.string().optional(),
   /** Postgres connection string. Required at runtime, not at build time. */
   DATABASE_URL: z.string().url().optional(),
   /**
@@ -49,6 +56,8 @@ const envSchema = z.object({
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY_ID: z.string().optional(),
   S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /** Use virtual for providers such as Railway that reject path-style URLs. */
+  S3_ADDRESSING_STYLE: z.enum(["path", "virtual"]).optional(),
   /** Serve from a CDN or custom domain instead of the bucket host. */
   S3_PUBLIC_BASE_URL: z.string().url().optional(),
   /** "true" only if the bucket really is world-readable. Default: private. */
@@ -83,6 +92,22 @@ const envSchema = z.object({
   MICROSOFT_OAUTH_CLIENT_SECRET: z.string().optional(),
   MICROSOFT_OAUTH_TENANT: z.string().default("common"),
 
+  /**
+   * Social OAuth apps (C9.24). YouTube and Google Business Profile reuse the
+   * Google client above; Instagram and Facebook share the Meta client. A
+   * missing pair just means that network's Connect button stays off.
+   */
+  META_OAUTH_CLIENT_ID: z.string().optional(),
+  META_OAUTH_CLIENT_SECRET: z.string().optional(),
+  TIKTOK_OAUTH_CLIENT_ID: z.string().optional(),
+  TIKTOK_OAUTH_CLIENT_SECRET: z.string().optional(),
+  LINKEDIN_OAUTH_CLIENT_ID: z.string().optional(),
+  LINKEDIN_OAUTH_CLIENT_SECRET: z.string().optional(),
+  X_OAUTH_CLIENT_ID: z.string().optional(),
+  X_OAUTH_CLIENT_SECRET: z.string().optional(),
+  PINTEREST_OAUTH_CLIENT_ID: z.string().optional(),
+  PINTEREST_OAUTH_CLIENT_SECRET: z.string().optional(),
+
   /** Bulk mail is separate so personal Gmail/Outlook can never broadcast. */
   MAIL_BULK_ADAPTER: z
     .enum(["resend", "postmark", "ses", "none"])
@@ -113,6 +138,9 @@ const envSchema = z.object({
   TWILIO_FROM_NUMBER: z.string().optional(),
   TWILIO_WEBHOOK_URL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
+  /** C3.13: the print fulfillment plugin's merchant account. */
+  PRINTIFY_API_TOKEN: z.string().optional(),
+  PRINTIFY_SHOP_ID: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   /** Kept only during Stripe endpoint-secret rotation. */
   STRIPE_WEBHOOK_SECRET_PREVIOUS: z.string().optional(),
@@ -215,6 +243,71 @@ const envSchema = z.object({
    * with an owner's uploads on a disk that a rebuild throws away.
    */
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: z.enum(["1"]).optional(),
+  /**
+   * SHA-256 digest of replaceable core files (`sha256:…`). When set, doctor
+   * and `platform.inspectSeams` fail if the running tree does not match —
+   * live edits of core files are not a supported customization.
+   */
+  FREEHOLDER_CORE_DIGEST: z
+    .string()
+    .trim()
+    .regex(/^sha256:[a-f0-9]{64}$/)
+    .optional(),
+
+  /**
+   * Daily signed-feed check (C10.04). On unless set to `off`. Reporting does
+   * not exist; this is a GET of a static file, never an instance identifier.
+   */
+  FREEHOLDER_UPDATE_CHECK: z.enum(["on", "off"]).optional(),
+  /** Override the signed `releases.json` URL. Must be a public http(s) origin. */
+  FREEHOLDER_UPDATE_FEED_URL: z.string().url().optional(),
+
+  /**
+   * Upstream, for the fork lane (§39.7, C10.09).
+   *
+   * Only forks read these. An instance updating by image swap never fetches a
+   * git remote at all, which is why neither is required and neither has a
+   * credential: the fork lane clones what is already public and opens a pull
+   * request with the repository token it already has.
+   */
+  FREEHOLDER_UPSTREAM_REMOTE: z
+    .string()
+    .url()
+    .refine((value) => value.startsWith("https://"), "must be an https URL")
+    .optional(),
+  /**
+   * Where to send a customer whose app binary is too old (§35.1, C10.12).
+   *
+   * Absent is the normal state: most owners never publish an app, and a
+   * discovery document that invents a store link would send someone to a
+   * listing that does not exist.
+   */
+  MOBILE_APP_STORE_URL: z.string().url().optional(),
+  MOBILE_PLAY_STORE_URL: z.string().url().optional(),
+
+  /**
+   * Which Tier-1 recipe this instance is deployed with (§39.8, C10.10).
+   *
+   * Absent means the updater migrates and smokes but swaps nothing: guessing a
+   * deploy strategy from the environment and then running a container command
+   * against it is how an update takes down a host nobody meant to touch.
+   */
+  FREEHOLDER_RECIPE_TARGET: z
+    .enum([
+      "replit",
+      "digitalocean-app",
+      "digitalocean-droplet",
+      "railway",
+      "render",
+      "docker-selfhost",
+    ])
+    .optional(),
+  /** The upstream branch a fork merges from. Defaults to `main`. */
+  FREEHOLDER_UPSTREAM_REF: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9._\-/]{1,200}$/)
+    .optional(),
 
   /**
    * Control Aurora Coast demo installation at boot.
@@ -227,37 +320,6 @@ const envSchema = z.object({
    * instance.
    */
   FREEHOLDER_SEED_DEMO: z.enum(["0", "1"]).optional(),
-
-  /**
-   * Which seed pack `demo.install` writes when seeding is on.
-   *
-   * Unset keeps Aurora Coast Photography, which the SEO gate and contributor
-   * first-run still prove. WeVibeSites Industry Edition packs use placeholder
-   * identity, no live-client brand, and no New Vibe City fiction.
-   */
-  FREEHOLDER_EDITION: z.enum([
-    "law-firm",
-    "fishing-charter",
-    "talent",
-    "med-spa",
-    "plastic-surgery",
-    "dental",
-    "hvac",
-    "plumber",
-    "electrical",
-    "restaurant",
-    "florist",
-    "hotel",
-    "roofing",
-    "mortgage",
-    "wealth-management",
-    "grocery-market",
-    "news-media",
-    "newspaper",
-    "venture-capital",
-    "real-estate",
-    "general-business",
-  ]).optional(),
 
   /**
    * Whether this process runs background jobs.

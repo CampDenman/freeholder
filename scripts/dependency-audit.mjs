@@ -7,12 +7,17 @@
 // expiring exception. The checked-in empty ledger is meaningful evidence that
 // the current lockfile has no accepted dependency risk.
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const EXCEPTIONS_PATH = fileURLToPath(
   new URL("../security/dependency-audit-exceptions.json", import.meta.url),
 );
+const LOCKFILE_PATH = fileURLToPath(new URL("../pnpm-lock.yaml", import.meta.url));
+export const DEPENDENCY_AUDIT_ATTESTATION_SCHEMA =
+  "freeholder/dependency-audit-attestation/v1";
 const LOWER_SEVERITIES = new Set(["info", "low", "moderate"]);
 const NEVER_EXEMPT = new Set(["high", "critical"]);
 const MAX_EXCEPTION_DAYS = 90;
@@ -94,10 +99,11 @@ export function evaluateDependencyAudit(report, ledger, now = new Date()) {
   const advisoriesRecord = record(reportRecord?.advisories);
   const ledgerRecord = record(ledger);
   if (!reportRecord || !advisoriesRecord) {
+    const keys = reportRecord ? Object.keys(reportRecord).join(", ") : "null";
     return {
       ok: false,
       advisories: 0,
-      errors: ["pnpm audit did not return a valid advisory report"],
+      errors: [`pnpm audit did not return a valid advisory report (keys: ${keys || "(none)"})`],
       warnings,
     };
   }
@@ -192,17 +198,97 @@ function runPnpmAudit() {
   }
 }
 
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isUnusableAudit(result) {
+  return result.errors.some((error) =>
+    error.startsWith("pnpm audit did not return a valid advisory report"),
+  );
+}
+
+function sha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function attestationPath() {
+  const argument = process.argv.find((value) =>
+    value.startsWith("--write-attestation="),
+  );
+  if (!argument) return null;
+  const path = argument.slice("--write-attestation=".length).trim();
+  if (!path) throw new Error("--write-attestation requires a path");
+  return resolve(path);
+}
+
+function writeAttestation(path, result, auditedAt = new Date()) {
+  const document = {
+    schema: DEPENDENCY_AUDIT_ATTESTATION_SCHEMA,
+    auditedAt: auditedAt.toISOString(),
+    lockfile: { algorithm: "sha256", digest: sha256(LOCKFILE_PATH) },
+    exceptionLedger: {
+      algorithm: "sha256",
+      digest: sha256(EXCEPTIONS_PATH),
+    },
+    policy: {
+      neverExempt: [...NEVER_EXEMPT].sort(),
+      maximumExceptionDays: MAX_EXCEPTION_DAYS,
+    },
+    result: {
+      advisories: result.advisories,
+      acceptedExceptions: result.warnings.length,
+    },
+  };
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(document, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  renameSync(temporary, path);
+}
+
 function main() {
-  let report;
   let ledger;
   try {
-    report = runPnpmAudit();
     ledger = JSON.parse(readFileSync(EXCEPTIONS_PATH, "utf8"));
   } catch (error) {
     console.error(`Dependency audit could not run: ${error instanceof Error ? error.message : error}`);
     process.exit(1);
   }
-  const result = evaluateDependencyAudit(report, ledger);
+
+  // The registry sometimes answers JSON without an advisories map. That is
+  // not a finding; retry before treating the lockfile as dirty.
+  const attempts = 5;
+  let result;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    let report;
+    try {
+      report = runPnpmAudit();
+    } catch (error) {
+      if (attempt < attempts) {
+        console.warn(
+          `Dependency audit: attempt ${attempt}/${attempts} did not return JSON; retrying.`,
+        );
+        pause(8_000);
+        continue;
+      }
+      console.error(`Dependency audit could not run: ${error instanceof Error ? error.message : error}`);
+      process.exit(1);
+    }
+    result = evaluateDependencyAudit(report, ledger);
+    if (result.ok || !isUnusableAudit(result) || attempt === attempts) {
+      if (!result.ok && isUnusableAudit(result)) {
+        const preview = JSON.stringify(report)?.slice(0, 500) ?? "undefined";
+        console.error(`Dependency audit: unusable payload: ${preview}`);
+      }
+      break;
+    }
+    console.warn(`Dependency audit: attempt ${attempt}/${attempts} unusable; retrying.`);
+    pause(8_000);
+  }
+
   for (const warning of result.warnings) console.warn(`Dependency audit exception: ${warning}`);
   if (!result.ok) {
     console.error(
@@ -217,6 +303,11 @@ function main() {
       ? "Dependency audit: no known advisories."
       : `Dependency audit: ${result.advisories} documented lower-severity exception(s).`,
   );
+  const output = attestationPath();
+  if (output) {
+    writeAttestation(output, result);
+    console.log(`Dependency audit attestation: ${output}`);
+  }
 }
 
 if (process.argv[1] && process.argv[1].endsWith("dependency-audit.mjs")) {

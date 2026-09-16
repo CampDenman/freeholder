@@ -8,8 +8,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   actorString,
+  defineOrchestratedService,
   defineService,
+  getExternalService,
   getService,
+  listExternalServices,
   listServices,
   permits,
   redact,
@@ -88,6 +91,21 @@ describe("permits() — the authorization matrix", () => {
   it("lets system through anything — it is the platform itself", () => {
     expect(permits(SYSTEM, "scoped", "x.y")).toBe(true);
     expect(permits(SYSTEM, "public", "x.y")).toBe(true);
+    expect(permits(SYSTEM, "system", "x.y")).toBe(true);
+  });
+
+  it("reserves system services for the platform even from wildcard keys", () => {
+    expect(permits(ANON, "system", "briefing.assemble")).toBe(false);
+    expect(
+      permits(
+        user("owner", [{ module: "*", access: "manage" }]),
+        "system",
+        "briefing.assemble",
+      ),
+    ).toBe(false);
+    expect(
+      permits(agent(["*", "briefing.*"]), "system", "briefing.assemble"),
+    ).toBe(false);
   });
 
   it("admits anonymous callers only to public services", () => {
@@ -195,6 +213,54 @@ describe("rejection happens before the handler", () => {
   });
 });
 
+describe("orchestrated services", () => {
+  let runs = 0;
+  const workflow = defineOrchestratedService({
+    name: "probe.workflow",
+    summary: "Cross a slow boundary between short service calls.",
+    kind: "mutation",
+    permission: "scoped",
+    input: z.object({ n: z.number().int() }),
+    output: z.object({ n: z.number().int() }),
+    handler: async (input) => {
+      runs += 1;
+      return input;
+    },
+  });
+
+  beforeEach(() => {
+    runs = 0;
+  });
+
+  it("shares the ordinary authorization and validation gate", async () => {
+    expect((await failure(workflow.call({ n: 1 }, ANON))).code).toBe("permission");
+    expect(
+      (
+        await failure(
+          workflow.call(
+            { n: "wrong" },
+            user("owner", [{ module: "*", access: "manage" }]),
+          ),
+        )
+      ).code,
+    ).toBe("validation");
+    expect(runs).toBe(0);
+  });
+
+  it("refuses composition inside another service transaction", async () => {
+    const error = await failure(
+      workflow.call(
+        { n: 1 },
+        user("owner", [{ module: "*", access: "manage" }]),
+        { tx: {} as never },
+      ),
+    );
+    expect(error).toMatchObject({ code: "internal" });
+    expect(error.message).toContain("outside a service transaction");
+    expect(runs).toBe(0);
+  });
+});
+
 describe("redact()", () => {
   it("removes secrets at any depth, by key name", () => {
     expect(
@@ -244,6 +310,23 @@ describe("the registry", () => {
     input: z.object({}),
     handler: async () => null,
   });
+  const internal = defineService({
+    name: "registry.internal",
+    summary: "Trusted composition only.",
+    kind: "mutation",
+    permission: "system",
+    input: z.object({}),
+    handler: async () => null,
+  });
+  const humanInternal = defineService({
+    name: "registry.humanInternal",
+    summary: "An authorized phase behind a public orchestrator.",
+    kind: "mutation",
+    permission: "scoped",
+    external: false,
+    input: z.object({}),
+    handler: async () => null,
+  });
 
   beforeEach(() => {
     resetRegistryForTests();
@@ -253,6 +336,29 @@ describe("the registry", () => {
     registerService(one);
     expect(getService("registry.one")).toBe(one);
     expect(listServices().size).toBe(1);
+  });
+
+  it("keeps system services registered for composition but off external projections", () => {
+    registerService(one);
+    registerService(internal);
+    expect(getService("registry.internal")).toBe(internal);
+    expect(listServices().size).toBe(2);
+    expect([...listExternalServices().keys()]).toEqual(["registry.one"]);
+    let refusal: unknown;
+    try {
+      getExternalService("registry.internal");
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toMatchObject({ code: "not_found" });
+  });
+
+  it("keeps caller-authorized orchestration phases off external projections", () => {
+    registerService(one);
+    registerService(humanInternal);
+    expect(getService("registry.humanInternal")).toBe(humanInternal);
+    expect([...listExternalServices().keys()]).toEqual(["registry.one"]);
+    expect(() => getExternalService("registry.humanInternal")).toThrow(ServiceError);
   });
 
   it("accepts the same service twice, because boot is a precondition", () => {

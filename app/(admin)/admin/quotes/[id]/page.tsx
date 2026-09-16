@@ -23,6 +23,8 @@ import {
   sendQuoteAction,
   setQuoteItemsAction,
 } from "../../../quote-actions";
+import { hasModuleAccess } from "@/core/service";
+import { ConvertQuoteForm } from "./ConvertQuoteForm";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -100,7 +102,7 @@ export default async function QuotePage({
 
       {query.saved ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
-          {t("quotes.saved")}
+          {query.saved === "converted" ? t("quotes.converted") : t("quotes.saved")}
         </p>
       ) : null}
       {query.error ? (
@@ -157,6 +159,30 @@ export default async function QuotePage({
             <p className="max-w-prose text-sm text-ink-muted">
               {isDraft ? t("quotes.linesHint") : t("quotes.reviseHint")}
             </p>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {quote.status === "accepted" ? (
+        <Card>
+          <CardHeader title={t("quotes.convert")} />
+          <CardBody>
+            {quote.convertedAt ? (
+              <p className="max-w-prose text-sm text-ink-muted">
+                {t("quotes.alreadyConverted")}
+              </p>
+            ) : hasModuleAccess(actor, "quotes", "manage") ? (
+              <>
+                <ConvertQuoteForm
+                  id={quote.id}
+                  label={t("quotes.action.convert")}
+                  confirm={t("quotes.convertConfirm")}
+                />
+                <p className="max-w-prose text-sm text-ink-muted">{t("quotes.convertHint")}</p>
+              </>
+            ) : (
+              <p className="max-w-prose text-sm text-ink-muted">{t("quotes.convertHint")}</p>
+            )}
           </CardBody>
         </Card>
       ) : null}

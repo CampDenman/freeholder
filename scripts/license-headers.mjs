@@ -8,7 +8,7 @@
 // Usage: node scripts/license-headers.mjs [--fix]
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const COPYRIGHT = "Copyright (C) 2026 Tony Aly";
 const LICENSE_ID = "Apache-2.0";
@@ -68,7 +68,11 @@ const untracked = execFileSync(
 );
 
 const repositoryFiles = [...tracked.split("\n"), ...untracked.split("\n")]
-  .filter(Boolean);
+  .filter(Boolean)
+  // `git ls-files` includes tracked paths deleted in the working tree. A gate
+  // run before staging must inspect the tree that will remain, not try to read
+  // files whose deletion is the change being verified.
+  .filter((file) => existsSync(file));
 
 const files = repositoryFiles
   .filter((f) => !EXEMPT.some((rx) => rx.test(f)))

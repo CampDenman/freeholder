@@ -92,6 +92,8 @@ export interface SmsProviderEvent {
   body?: string;
   /** Media the carrier holds, as URLs core will fetch into `core/media`. */
   mediaUrls?: readonly string[];
+  /** Authenticated bytes added by the HTTP boundary before core ingest. */
+  media?: readonly SmsInboundMedia[];
   /** The provider's own code and words, kept verbatim for support. */
   errorCode?: string;
   errorText?: string;
@@ -99,6 +101,13 @@ export interface SmsProviderEvent {
   costMinor?: number;
   costCurrency?: string;
   occurredAt: string;
+}
+
+export interface SmsInboundMedia {
+  sourceUrl: string;
+  filename: string;
+  contentType: string;
+  bytes: Uint8Array<ArrayBuffer>;
 }
 
 /** What a message to be sent carries beyond the notification contract. */
@@ -114,6 +123,8 @@ export interface SmsAdapter extends NotificationChannelAdapter {
   readonly status: NotificationChannelAdapter["status"] & AdapterStatus;
   send(message: OutboundSms): Promise<SmsSendResult>;
   verifyWebhook(request: RawProviderRequest): Promise<readonly SmsProviderEvent[]>;
+  /** Fetch one provider-owned inbound attachment with provider credentials. */
+  downloadMedia?(url: string): Promise<SmsInboundMedia>;
   /**
    * The numbers this account holds.
    *

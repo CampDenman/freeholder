@@ -14,7 +14,7 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
-import { requestWithTimeout } from "@/adapters/mail/http";
+import { getPinnedBytes } from "@/core/http/pinned-download";
 import { uuid } from "@/core/contract";
 import { parseIcs, renderCalendar } from "@/core/ics";
 import { contacts } from "@/core/contacts/schema";
@@ -31,6 +31,7 @@ const PROD_ID = "-//Freeholder//Scheduling//EN";
 /** A feed carries a season either side of today, not a lifetime of history. */
 const FEED_DAYS_BACK = 30;
 const FEED_DAYS_FORWARD = 180;
+const MAX_ICS_IMPORT_BYTES = 2 * 1024 * 1024;
 
 function requirePerson(actor: Actor): void {
   if (actor.kind !== "user") {
@@ -286,12 +287,16 @@ export async function importIcsFeeds(): Promise<{
   for (const calendar of due) {
     try {
       const url = calendar.url!.replace(/^webcal:\/\//i, "https://");
-      const response = await requestWithTimeout(globalThis.fetch, url, {
-        method: "GET",
+      const response = await getPinnedBytes(url, {
+        maxBytes: MAX_ICS_IMPORT_BYTES,
+        timeoutMs: 20_000,
+        allowLocal: false,
         headers: { accept: "text/calendar, text/plain" },
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const events = parseIcs(await response.text());
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const events = parseIcs(new TextDecoder().decode(response.bytes));
 
       await db().transaction(async (tx) => {
         const seen: string[] = [];

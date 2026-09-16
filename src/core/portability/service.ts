@@ -10,10 +10,11 @@ import { defineService, ServiceError } from "@/core/service";
 import { CONTRACT, PLATFORM_VERSION } from "@/core/platform";
 import { pluginFitsPlatform } from "@freeholder/plugin-kit";
 import { installedPlugins } from "@/core/plugins/schema";
+import instanceConfig from "../../../freeholder.config";
 import {
   createOwnershipExport,
   EXPORT_FORMAT,
-} from "../../../scripts/ownership-export.mjs";
+} from "./ownership-export.mjs";
 import { TIER1_TARGETS } from "./archive";
 
 export const platformVersion = defineService({
@@ -98,6 +99,10 @@ export const exportOwnership = defineService({
     const result = (await createOwnershipExport({
       databaseUrl,
       outputDirectory: directory,
+      configuration: {
+        filename: "freeholder.config.json",
+        contents: `${JSON.stringify(instanceConfig, null, 2)}\n`,
+      },
     })) as unknown as {
       manifest: { files?: Array<{ sha256: string }>; tableCount: number };
     };

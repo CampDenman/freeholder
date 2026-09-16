@@ -43,6 +43,7 @@ import {
   STAFF,
   truncateSpine,
 } from "../helpers/spine";
+import { flushQueuedMail } from "../helpers/mail";
 
 const SYSTEM = { kind: "system" } as const;
 
@@ -242,6 +243,7 @@ describe.runIf(hasDatabase)("notifications", () => {
         occurrenceCount: 2,
       });
     expect((await deliverDueNotifications()).attempted).toBe(1);
+    await flushQueuedMail();
     expect(logs.join("\n")).toContain("Cette notification s’est répétée 2 fois.");
     expect(logs.join("\n")).toContain("Ouvrir :");
     expect(logs.join("\n")).toContain("/fr/portal/privacy");

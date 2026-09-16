@@ -15,6 +15,7 @@
 // CI asserts this is non-zero after starting the image, and scripts/doctor.ts
 // (§17) will read it once it exists.
 import { PLATFORM_VERSION } from "@/core/platform";
+import { getJobRuntimeEvidence } from "@/core/jobs/health";
 import { ready } from "@/core/runtime";
 
 export const dynamic = "force-dynamic";
@@ -22,15 +23,22 @@ export const dynamic = "force-dynamic";
 export async function GET(): Promise<Response> {
   try {
     const report = await ready();
-    return Response.json({
-      ok: true,
-      version: PLATFORM_VERSION,
-      modules: report.modules.length,
-      services: report.services.length,
-      listeners: report.listeners.length,
-    });
-  } catch (error) {
-    console.error("[freeholder] boot failed", error);
+    const jobs = await getJobRuntimeEvidence();
+    return Response.json(
+      {
+        ok: jobs.ready,
+        version: PLATFORM_VERSION,
+        modules: report.modules.length,
+        services: report.services.length,
+        listeners: report.listeners.length,
+        jobs,
+      },
+      { status: jobs.ready ? 200 : 503 },
+    );
+  } catch {
+    // Database errors may contain query values. Public readiness needs only a
+    // red result, and detailed diagnosis belongs behind the Doctor permission.
+    console.error("[freeholder] readiness failed");
     return Response.json({ ok: false }, { status: 503 });
   }
 }

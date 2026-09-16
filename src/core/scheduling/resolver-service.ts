@@ -19,8 +19,13 @@ import { uuid } from "@/core/contract";
 import { calendars } from "@/core/scheduling/schema";
 import { resolveSlots } from "@/core/scheduling/resolver";
 import { audienceFor, audienceMayBook } from "@/core/scheduling/audiences";
-import { currentBusiness } from "@/core/settings/read";
-import { defineService, getService, ServiceError } from "@/core/service";
+import { getBusiness } from "@/core/settings/service";
+import {
+  defineService,
+  getService,
+  ServiceError,
+  type ServiceContext,
+} from "@/core/service";
 
 /** A fortnight at a time. A year of fifteen-minute slots is not a page. */
 const MAX_RANGE_DAYS = 62;
@@ -45,12 +50,15 @@ interface OfferingShape {
  * A missing catalog is a refusal rather than a guess: offering slots of an
  * invented length would be worse than saying the service cannot be read.
  */
-async function offeringShape(productId: string): Promise<OfferingShape> {
+async function offeringShape(
+  ctx: ServiceContext,
+  productId: string,
+): Promise<OfferingShape> {
   let offering: unknown;
   try {
-    offering = await getService("catalog.getServiceOffering").call(
+    offering = await ctx.callAsSystem(
+      getService("catalog.getServiceOffering"),
       { productId },
-      { kind: "system" },
     );
   } catch {
     throw new ServiceError(
@@ -133,8 +141,8 @@ export const availableSlots = defineService({
       if (!preferred) throw new ServiceError("not_found", "No such calendar.");
     }
 
-    const shape = await offeringShape(input.productId);
-    const business = await currentBusiness().catch(() => null);
+    const shape = await offeringShape(ctx, input.productId);
+    const business = await ctx.call(getBusiness, {}).catch(() => null);
 
     // §41: bookability is a property of the audience, not of the calendar.
     // The same calendar answers differently for a customer and for a friend,

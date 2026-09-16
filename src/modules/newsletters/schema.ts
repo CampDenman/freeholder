@@ -98,6 +98,14 @@ export const newsletterSubscriptions = pgTable(
     unsubscribeToken: text("unsubscribe_token").notNull(),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
+    /** Evidence captured before the confirmation link proves address control. */
+    consentTermsVersion: text("consent_terms_version"),
+    consentSourceUrl: text("consent_source_url"),
+    consentIp: text("consent_ip"),
+    consentEvidence: jsonb("consent_evidence")
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default({}),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -109,6 +117,18 @@ export const newsletterSubscriptions = pgTable(
     check(
       "newsletter_subscriptions_status_valid",
       sql`${t.status} in ('pending','confirmed','unsubscribed')`,
+    ),
+    check(
+      "newsletter_subscriptions_consent_terms_bounded",
+      sql`${t.consentTermsVersion} is null or char_length(${t.consentTermsVersion}) <= 100`,
+    ),
+    check(
+      "newsletter_subscriptions_consent_source_bounded",
+      sql`${t.consentSourceUrl} is null or char_length(${t.consentSourceUrl}) <= 2048`,
+    ),
+    check(
+      "newsletter_subscriptions_consent_ip_bounded",
+      sql`${t.consentIp} is null or char_length(${t.consentIp}) <= 64`,
     ),
   ],
 );

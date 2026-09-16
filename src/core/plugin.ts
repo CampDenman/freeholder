@@ -59,7 +59,7 @@ export function assertPluginFitsInstance(
   const dir = options.migrationsDir;
   if (!dir) return;
   for (const file of plugin.migrations) {
-    if (!existsSync(join(dir, file))) {
+    if (!existsSync(join(/* turbopackIgnore: true */ dir, file))) {
       throw new PluginContractError(
         `Plugin "${plugin.name}" declares migration "${file}", which is not in ${dir}.`,
       );

@@ -54,6 +54,50 @@ export const deliverSecurityNotices = defineJob({
   handler: () => deliverPendingSecurityNotices(),
 });
 
+/** Deliver one encrypted mail-outbox row after its business transaction commits. */
+export const deliverMail = defineJob({
+  name: "core.deliverMail",
+  summary: "Submit one transactionally queued message to its mail provider.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 4,
+  leaseSeconds: 5 * 60,
+  handler: async (data) => {
+    if (typeof data.deliveryId !== "string") {
+      throw new Error("core.deliverMail requires a delivery id");
+    }
+    const { deliverQueuedMail } = await import("@/core/mail/service");
+    return deliverQueuedMail(data.deliveryId);
+  },
+});
+
+/** Ciphertext is transient operational state, never a second mailbox. */
+export const pruneMailOutbox = defineJob({
+  name: "core.pruneMailOutbox",
+  summary: "Remove encrypted mail bodies stranded beyond the retry horizon.",
+  schedule: "13 4 * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { pruneExpiredMailOutbox } = await import("@/core/mail/service");
+    return { deleted: await pruneExpiredMailOutbox() };
+  },
+});
+
+/** Check provider identity ownership only after the settings transaction commits. */
+export const verifyMailSender = defineJob({
+  name: "core.verifyMailSender",
+  summary: "Check one bulk sender identity with its mail provider.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 2,
+  leaseSeconds: 2 * 60,
+  handler: async (data) => {
+    if (typeof data.senderId !== "string" || typeof data.requestId !== "string") {
+      throw new Error("core.verifyMailSender requires sender and request ids");
+    }
+    const { runMailSenderVerification } = await import("@/core/mail/service");
+    return runMailSenderVerification(data.senderId, data.requestId);
+  },
+});
+
 /** Coarse login history has a hard 90-day retention boundary. */
 export const sweepLoginSecurityEvents = defineJob({
   name: "core.sweepLoginSecurityEvents",
@@ -582,6 +626,19 @@ export const expireAgentApprovals = defineJob({
   },
 });
 
+/** Per-kind TTL for registered user-owned stores, honouring privacy holds. */
+export const applyRetentionPoliciesJob = defineJob({
+  name: "core.applyRetention",
+  summary: "Purge registered user-owned rows older than their retention policy.",
+  schedule: "23 5 * * *",
+  concurrency: 1,
+  leaseSeconds: 60 * 60,
+  handler: async () => {
+    const { applyRetentionPolicies } = await import("@/core/retention/apply");
+    return applyRetentionPolicies();
+  },
+});
+
 /** Trash is reversible for thirty days, then storage is reclaimed in batches. */
 export const purgeExpiredMediaAssets = defineJob({
   name: "core.purgeExpiredMedia",
@@ -591,6 +648,22 @@ export const purgeExpiredMediaAssets = defineJob({
   handler: async () => {
     const { purgeExpiredMedia } = await import("@/core/media/service");
     return { purged: await purgeExpiredMedia() };
+  },
+});
+
+/**
+ * Marks for the images that predate watermarking (C8.04). A batch at a time,
+ * off-peak: a library of thousands converges over a few nights rather than
+ * pinning a CPU the first time an owner enables the feature.
+ */
+export const backfillMediaWatermarks = defineJob({
+  name: "core.backfillMediaWatermarks",
+  summary: "Add missing watermarked renditions to images already in the library.",
+  schedule: "41 4 * * *",
+  concurrency: 1,
+  handler: async () => {
+    const { backfillWatermarks } = await import("@/core/media/service");
+    return backfillWatermarks.call({ limit: 50 }, { kind: "system" });
   },
 });
 
@@ -704,9 +777,140 @@ export const pruneOldNotifications = defineJob({
   },
 });
 
+/**
+ * Acknowledge STOP/START/HELP only after the consent transaction commits.
+ * Provider downtime may delay these words, but it can never roll back the
+ * opt-out itself. The queue and provider delivery key both deduplicate retries.
+ */
+export const sendSmsComplianceReply = defineJob({
+  name: "core.sendSmsComplianceReply",
+  summary: "Send the mandatory acknowledgement for an SMS compliance word.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 4,
+  handler: async (data) => {
+    if (
+      typeof data.contactId !== "string" ||
+      typeof data.to !== "string" ||
+      typeof data.body !== "string" ||
+      typeof data.idempotencyKey !== "string" ||
+      !data.policyException ||
+      typeof data.policyException !== "object"
+    ) {
+      throw new Error("core.sendSmsComplianceReply received incomplete message data");
+    }
+    const { sendSms } = await import("@/core/messaging/sms");
+    return sendSms.call(
+      {
+        contactId: data.contactId,
+        to: data.to,
+        body: data.body,
+        purpose: "support",
+        idempotencyKey: data.idempotencyKey,
+        policyException: data.policyException as {
+          kind: "customer_requested_reply";
+          referenceId: string;
+        },
+      },
+      { kind: "system" },
+    );
+  },
+});
+
+/** Owner keyword replies are durable and happen only after inbound commit. */
+export const sendSmsKeywordReply = defineJob({
+  name: "core.sendSmsKeywordReply",
+  summary: "Send the configured response for an applied inbound SMS keyword.",
+  retry: { limit: 8, delaySeconds: 15, backoff: true, maxDelaySeconds: 3_600 },
+  concurrency: 4,
+  handler: async (data) => {
+    if (
+      typeof data.contactId !== "string" ||
+      typeof data.to !== "string" ||
+      typeof data.body !== "string" ||
+      typeof data.idempotencyKey !== "string" ||
+      typeof data.referenceId !== "string"
+    ) {
+      throw new Error("core.sendSmsKeywordReply received incomplete message data");
+    }
+    const { sendSms } = await import("@/core/messaging/sms");
+    return sendSms.call(
+      {
+        contactId: data.contactId,
+        to: data.to,
+        body: data.body,
+        purpose: "support",
+        idempotencyKey: data.idempotencyKey,
+        policyException: {
+          kind: "customer_requested_reply",
+          referenceId: data.referenceId,
+        },
+      },
+      { kind: "system" },
+    );
+  },
+});
+
+/** Fetch outside a service transaction, then apply through a short mutation. */
+export const refreshCatalogue = defineJob({
+  name: "core.refreshCatalogue",
+  summary: "Fetch and atomically cache one followed catalogue.",
+  retry: { limit: 3, delaySeconds: 30, backoff: true, maxDelaySeconds: 15 * 60 },
+  concurrency: 2,
+  leaseSeconds: 2 * 60,
+  handler: async (data, context) => {
+    if (typeof data.sourceId !== "string") {
+      throw new Error("core.refreshCatalogue requires a source id");
+    }
+    const { runCatalogueRefresh } = await import("@/core/catalogue/service");
+    return runCatalogueRefresh(data.sourceId, context);
+  },
+});
+
+/**
+ * Private daily update check (C10.04). A GET of a static signed file.
+ * Jitter is a deterministic 15-minute UTC slot so a fleet does not stampede.
+ * Off is FREEHOLDER_UPDATE_CHECK=off. Nothing identifying this instance is sent.
+ */
+export const checkUpdates = defineJob({
+  name: "core.checkUpdates",
+  summary: "Fetch the signed update feed. No instance identifier is sent.",
+  schedule: "*/15 * * * *",
+  concurrency: 1,
+  leaseSeconds: 2 * 60,
+  handler: async () => {
+    const { runScheduledUpdateCheck } = await import("@/core/update/check");
+    return runScheduledUpdateCheck();
+  },
+});
+
+/**
+ * Escalate a security release this instance has been running without for
+ * longer than its severity allows (§39.10, C10.22).
+ *
+ * Every other update surface waits to be looked at. This one goes and finds
+ * the owner, because the failure mode of an updater is not a wrong answer —
+ * it is nobody asking the question for three months.
+ */
+export const escalateSecurityUpdates = defineJob({
+  name: "core.escalateSecurityUpdates",
+  summary: "Notify owners about a security release that has been outstanding too long.",
+  schedule: "41 * * * *",
+  concurrency: 1,
+  leaseSeconds: 2 * 60,
+  handler: async () => {
+    const { escalateOutstandingSecurityUpdates } = await import(
+      "@/core/update/escalate-job"
+    );
+    return escalateOutstandingSecurityUpdates();
+  },
+});
+
 export default [
   sweepSessions,
   deliverSecurityNotices,
+  deliverMail,
+  pruneMailOutbox,
+  verifyMailSender,
   sweepLoginSecurityEvents,
   sweepRateLimits,
   sweepPasswordResets,
@@ -729,7 +933,9 @@ export default [
   runPlaybooks,
   assembleBriefings,
   runManagedAgents,
+  applyRetentionPoliciesJob,
   purgeExpiredMediaAssets,
+  backfillMediaWatermarks,
   deliverNotifications,
   deliverNotificationDigests,
   escalateNotifications,
@@ -747,4 +953,9 @@ export default [
   submitIndexNow,
   deliverContributions,
   replyContributions,
+  sendSmsComplianceReply,
+  sendSmsKeywordReply,
+  refreshCatalogue,
+  checkUpdates,
+  escalateSecurityUpdates,
 ];

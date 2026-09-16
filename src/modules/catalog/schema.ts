@@ -1108,13 +1108,36 @@ export const cartItems = pgTable(
     }),
     quantity: integer("quantity").notNull(),
     reservationId: uuid("reservation_id"),
+    /**
+     * Where this line came from, when it came from a gallery (§4.5, C8.08).
+     *
+     * Null for ordinary shopping. Present together or not at all: a print
+     * of nothing is not a line anybody can fulfil.
+     */
+    galleryId: uuid("gallery_id"),
+    assetId: uuid("asset_id"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
-    uniqueIndex("cart_items_unique_idx").on(t.cartId, t.variantId),
+    // Ordinary shopping keeps one line per variant, so adding the same
+    // thing twice still increases a quantity.
+    uniqueIndex("cart_items_unique_idx")
+      .on(t.cartId, t.variantId)
+      .where(sql`${t.assetId} is null`),
+    // A gallery sale is one line per photograph. Without this, two frames
+    // ordered as the same 8x10 would merge into a single line of two and
+    // the lab would have no idea which images to print.
+    uniqueIndex("cart_items_gallery_unique_idx")
+      .on(t.cartId, t.variantId, t.assetId)
+      .where(sql`${t.assetId} is not null`),
     index("cart_items_variant_idx").on(t.variantId),
+    index("cart_items_gallery_idx").on(t.galleryId),
     check("cart_items_qty", sql`${t.quantity} > 0`),
+    check(
+      "cart_items_provenance",
+      sql`(${t.galleryId} is null and ${t.assetId} is null) or (${t.galleryId} is not null and ${t.assetId} is not null)`,
+    ),
   ],
 );
 
@@ -1126,11 +1149,19 @@ export const wishlists = pgTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     name: text("name").notNull().default("Wishlist"),
+    /**
+     * HMAC of the public registry token (C9.35). Null until the owner of
+     * this list shares it; rotating mints a new hash and the old link dies.
+     */
+    shareTokenHash: text("share_token_hash"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("wishlists_contact_idx").on(t.contactId),
+    uniqueIndex("wishlists_share_token_idx")
+      .on(t.shareTokenHash)
+      .where(sql`${t.shareTokenHash} is not null`),
     check("wishlists_name_valid", sql`char_length(${t.name}) between 1 and 80`),
   ],
 );
@@ -1201,10 +1232,22 @@ export const orderItems = pgTable(
     unitAmountMinor: bigint("unit_amount_minor", { mode: "number" }).notNull(),
     lineTotalMinor: bigint("line_total_minor", { mode: "number" }).notNull(),
     snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull().default({}),
+    /**
+     * Carried from the cart line, as columns rather than inside `snapshot`
+     * (§4.5, C8.08). "Which orders came from this gallery" is a question the
+     * owner asks, and a jsonb blob cannot answer it with an index.
+     */
+    galleryId: uuid("gallery_id"),
+    assetId: uuid("asset_id"),
     createdAt: createdAtColumn(),
   },
   (t) => [
     index("order_items_order_idx").on(t.orderId),
+    index("order_items_gallery_idx").on(t.galleryId),
+    check(
+      "order_items_provenance",
+      sql`(${t.galleryId} is null and ${t.assetId} is null) or (${t.galleryId} is not null and ${t.assetId} is not null)`,
+    ),
     check("order_items_qty", sql`${t.quantity} > 0`),
     check("order_items_amounts", sql`${t.unitAmountMinor} >= 0 and ${t.lineTotalMinor} >= 0`),
   ],
@@ -1418,11 +1461,19 @@ export const giftCards = pgTable(
     status: text("status", { enum: GIFT_CARD_STATUSES }).notNull().default("active"),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     note: text("note"),
+    /**
+     * HMAC of the claim link (C9.35). The code stays off the public URL;
+     * holding this token is how a recipient opens the card.
+     */
+    shareTokenHash: text("share_token_hash"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     uniqueIndex("gift_cards_code_idx").on(t.code),
+    uniqueIndex("gift_cards_share_token_idx")
+      .on(t.shareTokenHash)
+      .where(sql`${t.shareTokenHash} is not null`),
     index("gift_cards_contact_idx").on(t.contactId, t.status),
     check("gift_cards_code_valid", sql`${t.code} ~ '^[A-Z0-9][A-Z0-9-]{7,31}$'`),
     check("gift_cards_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),

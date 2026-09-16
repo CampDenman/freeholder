@@ -9,6 +9,7 @@ const capabilities: PaymentAdapterCapabilities = {
   partialRefunds: false,
   savedMethods: false,
   subscriptions: false,
+  offSessionCharges: false,
   disputes: false,
   payouts: false,
   inPerson: false,
@@ -28,6 +29,10 @@ export function createNoPayments(): PaymentAdapter {
     captureCheckout: failure,
     refund: failure,
     revokeSavedMethod: failure,
+    chargeSavedMethod: failure,
+    createRecurringSchedule: failure,
+    updateRecurringSchedule: failure,
+    cancelRecurringSchedule: failure,
     verifyWebhook: failure,
   };
 }

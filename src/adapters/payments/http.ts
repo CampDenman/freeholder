@@ -3,6 +3,7 @@
 // Bounded, credential-safe HTTP helpers shared by payment providers.
 
 import { AdapterError } from "../types";
+import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
 
 const MAX_RESPONSE_BYTES = 1_048_576;
 
@@ -10,9 +11,14 @@ export async function providerJson(
   adapterId: string,
   response: Response,
 ): Promise<Record<string, unknown>> {
-  const body = await response.text();
-  if (body.length > MAX_RESPONSE_BYTES) {
-    throw new AdapterError("payments", adapterId, "provider_failure", "The payment provider returned an oversized response.", true);
+  let body: string;
+  try {
+    body = new TextDecoder().decode(await readBoundedBytes(response, MAX_RESPONSE_BYTES));
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      throw new AdapterError("payments", adapterId, "provider_failure", "The payment provider returned an oversized response.", true);
+    }
+    throw error;
   }
   let parsed: unknown;
   try {
@@ -53,6 +59,7 @@ export async function providerJson(
 export function paymentFetch(fetcher: typeof fetch, input: string, init: RequestInit): Promise<Response> {
   return fetcher(input, {
     ...init,
+    redirect: init.redirect ?? "error",
     signal: init.signal ?? AbortSignal.timeout(20_000),
   }).catch((error: unknown) => {
     if (error instanceof AdapterError) throw error;

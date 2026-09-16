@@ -21,6 +21,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { listed, timestamp, uuid } from "@/core/contract";
+import { PLATFORM_VERSION } from "@/core/platform";
 import { defineService, getService, ServiceError } from "@/core/service";
 import { builderCodeProposals, builderProposals } from "@/modules/builder/schema";
 
@@ -153,7 +154,7 @@ export const sourceProvenance = defineService({
       .slice(0, input.changeLimit);
 
     return {
-      version: process.env.npm_package_version ?? "0.0.0",
+      version: PLATFORM_VERSION,
       license: "Apache-2.0",
       licenseText: input.includeLicenceText ? await licenceText() : null,
       // Third-party material keeps its own licence and notice (LICENSING.md).

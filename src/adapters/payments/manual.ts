@@ -10,6 +10,7 @@ const capabilities: PaymentAdapterCapabilities = {
   partialRefunds: true,
   savedMethods: false,
   subscriptions: false,
+  offSessionCharges: false,
   disputes: false,
   payouts: false,
   inPerson: true,
@@ -49,6 +50,10 @@ export function createManualPayments(): PaymentAdapter {
     captureCheckout: unsupported,
     refund: unsupported,
     revokeSavedMethod: unsupported,
+    chargeSavedMethod: unsupported,
+    createRecurringSchedule: unsupported,
+    updateRecurringSchedule: unsupported,
+    cancelRecurringSchedule: unsupported,
     verifyWebhook: unsupported,
   };
 }

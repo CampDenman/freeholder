@@ -6,15 +6,16 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Frame, type Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
+import { API_BASE } from "@/core/api/dispatch";
 import { contacts } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { users, totpFactors } from "@/core/auth/schema";
 import { createSession, SESSION_COOKIE } from "@/core/auth/sessions";
 import { THEME_COOKIE } from "@/core/design/theme";
+import { CSRF_COOKIE, CSRF_HEADER, issueCsrfToken } from "@/core/http/csrf";
 import { pages } from "@/modules/cms/schema";
-import { registerBlock } from "@/modules/cms/blocks/registry";
-import { formBlock } from "@/modules/forms/block";
-import { installDemo } from "@/modules/seed/service";
+import { t } from "@/core/i18n";
+import { businessProfile } from "@/core/settings/schema";
 import {
   closeDb,
   CUSTOMER,
@@ -22,7 +23,7 @@ import {
 } from "../helpers/spine";
 import { resetBrowserDatabase } from "./database";
 
-type Surface = "setup" | "admin" | "editor" | "storefront" | "portal";
+type Surface = "setup" | "admin" | "updates" | "editor" | "storefront" | "portal";
 
 const BASE_URL = process.env.APP_URL ?? "http://localhost:3100";
 const WCAG_TAGS = [
@@ -46,7 +47,7 @@ function axeSummary(
     .join("\n");
 }
 
-async function assertAxe(page: Page, surface: Surface, theme: "light" | "dark") {
+async function assertAxe(page: Page, surface: string, theme: "light" | "dark") {
   const builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
   // Chromium/axe on Linux can report content inside a positioned iframe as
   // overlapped by the iframe itself, which turns a real colour pair into an
@@ -95,12 +96,12 @@ async function assertAxe(page: Page, surface: Surface, theme: "light" | "dark") 
   }
 }
 
-async function assertKeyboardAndFocus(page: Page, surface: Surface) {
+async function assertKeyboardAndFocus(page: Page, surface: string, locale = "en") {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(page.url().split("#", 1)[0]!, { waitUntil: "domcontentloaded" });
 
   await page.keyboard.press("Tab");
-  const skip = page.getByRole("link", { name: "Skip to content" });
+  const skip = page.getByRole("link", { name: t(locale, "a11y.skipToContent") });
   await expect(skip, `${surface} must make its bypass link the first keyboard stop`).toBeFocused();
   await expect(skip).toBeVisible();
   await page.keyboard.press("Enter");
@@ -186,7 +187,7 @@ async function reflowProblems(frame: Frame) {
   });
 }
 
-async function assertReflow(page: Page, surface: Surface) {
+async function assertReflow(page: Page, surface: string) {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.reload({ waitUntil: "domcontentloaded" });
   for (const frame of page.frames()) {
@@ -218,6 +219,18 @@ async function assertScreenReaderTree(page: Page, surface: Surface) {
     await expect(page.getByRole("progressbar", { name: /tasks complete/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "Guided help" })).toBeVisible();
     expect(tree).toContain("Admin sections");
+  } else if (surface === "updates") {
+    // The update surface (C10.20). Asserted on its own terms rather than the
+    // overview's: it is a different page, and reusing the overview's checks
+    // here would have tested that Updates looks like the dashboard.
+    await expect(page.getByRole("heading", { level: 1, name: "Updates" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Admin sections" })).toBeVisible();
+    // The policy form is the part a keyboard user has to operate, so its
+    // grouping and labelling are what matter most on this screen.
+    await expect(page.getByRole("group", { name: "Nights an update may land" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Release channel" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check for updates now" })).toBeVisible();
+    expect(tree).toContain("Updates");
   } else if (surface === "editor") {
     await expect(page.getByRole("heading", { level: 1, name: "Aurora Coast Photography" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Add a block" }).first()).toBeVisible();
@@ -312,16 +325,33 @@ async function assertReducedMotion(page: Page) {
   await page.emulateMedia({ reducedMotion: "no-preference" });
 }
 
+async function installDemoThroughApp(sessionToken: string): Promise<void> {
+  // `demo.install` is an orchestrator, so `.call()` always awaits `ready()`.
+  // Playwright cannot boot: manifests load services through dynamic `@/`
+  // imports, and this runner only rewrites static ones. The standalone
+  // server already booted, which is also the path an owner uses.
+  const csrf = issueCsrfToken();
+  const response = await fetch(`${BASE_URL}${API_BASE}/demo.install`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie: `${SESSION_COOKIE}=${encodeURIComponent(sessionToken)}; ${CSRF_COOKIE}=${encodeURIComponent(csrf)}`,
+      [CSRF_HEADER]: csrf,
+    },
+    body: JSON.stringify({ publish: true }),
+  });
+  if (response.ok) return;
+  throw new Error(
+    `The running app refused demo.install (${response.status}): ${await response.text()}`,
+  );
+}
+
 async function installFixtures() {
-  registerBlock(formBlock as unknown as Parameters<typeof registerBlock>[0]);
   await db().insert(users).values({
     id: OWNER.userId,
     email: "owner-a11y@example.test",
     role: "owner",
   });
-  await db().transaction((tx) =>
-    installDemo.call({ publish: true }, OWNER, { tx, queued: [] }),
-  );
   await db().insert(totpFactors).values({
     userId: OWNER.userId,
     // Session validation only needs proof that a factor exists. No code is
@@ -331,6 +361,7 @@ async function installFixtures() {
   const ownerSession = await db().transaction((tx) =>
     createSession(tx, OWNER.userId, { twoFactorVerified: true }),
   );
+  await installDemoThroughApp(ownerSession.token);
 
   await db().insert(users).values({
     id: CUSTOMER.userId,
@@ -363,6 +394,33 @@ async function installFixtures() {
   };
 }
 
+async function publishLocales(defaultLocale: string, enabled: string[]) {
+  await db()
+    .update(businessProfile)
+    .set({ defaultLocale, enabledLocales: enabled })
+    .where(eq(businessProfile.id, 1));
+}
+
+async function assertHeadingAxeAndSkip(
+  page: Page,
+  path: string,
+  heading: string,
+  locale = "en",
+) {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  for (const theme of ["light", "dark"] as const) {
+    await page.context().addCookies([{ name: THEME_COOKIE, value: theme, url: BASE_URL }]);
+    await page.goto(path, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    await assertAxe(page, path, theme);
+  }
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("link", { name: t(locale, "a11y.skipToContent") }),
+  ).toBeFocused();
+}
+
 test.describe("real-browser accessibility", () => {
   test.beforeAll(resetBrowserDatabase);
   test.afterAll(async () => {
@@ -374,7 +432,7 @@ test.describe("real-browser accessibility", () => {
   });
 
   test("covers setup, admin, editor, storefront and portal", async ({ page, context }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(540_000);
 
     await test.step("setup", async () => {
       await page.goto("/setup");
@@ -391,6 +449,70 @@ test.describe("real-browser accessibility", () => {
       await assertSurface(page, "admin");
     });
 
+    // The update surface (C10.20) carries the one status line an owner acts
+    // on, plus the policy form. It is checked in a real browser rather than
+    // assumed, because a screen nobody can operate by keyboard is a screen
+    // that quietly stops being the way updates get applied.
+    await test.step("admin updates", async () => {
+      await page.goto("/admin/updates");
+      await assertSurface(page, "updates");
+    });
+
+    await test.step("admin F04 screens", async () => {
+      for (const [path, heading] of [
+        ["/admin/roles", t("en", "roles.title")],
+        ["/admin/invitations", t("en", "invitations.title")],
+        ["/admin/contacts", t("en", "contacts.title")],
+        ["/admin/health", t("en", "doctor.title")],
+        ["/admin/settings", t("en", "admin.settings.title")],
+        ["/admin/plugins", t("en", "plugins.title")],
+        ["/admin/work", t("en", "work.title")],
+      ] as const) {
+        await assertHeadingAxeAndSkip(page, path, heading);
+      }
+    });
+
+    // C11.12 owner lists: both themes, heading + axe + skip, not the full surface
+    // pass. Record-id detail pages stay out unless a fixture already exists.
+    await test.step("admin F04 leftover list screens", async () => {
+      for (const [path, heading] of [
+        ["/admin/search", t("en", "admin.search.title")],
+        ["/admin/retention", t("en", "admin.retention.title")],
+        ["/admin/payments", t("en", "payments.title")],
+        ["/admin/messaging", t("en", "messaging.title")],
+        ["/admin/pipeline", t("en", "pipeline.title")],
+        ["/admin/products", t("en", "catalog.title")],
+        ["/admin/redirects", t("en", "seo.redirects.title")],
+        ["/admin/pages", t("en", "cms.pages.title")],
+        ["/admin/community", t("en", "community.title")],
+        ["/admin/voice-video", t("en", "voiceVideo.title")],
+        ["/admin/inbox", t("en", "inbox.title")],
+        ["/admin/invoices", t("en", "invoices.title")],
+        ["/admin/orders", t("en", "catalog.orders.title")],
+        ["/admin/galleries", t("en", "galleries.title")],
+        ["/admin/quotes", t("en", "quotes.title")],
+        ["/admin/forms", t("en", "forms.title")],
+        ["/admin/media", t("en", "media.title")],
+        ["/admin/jobs", t("en", "jobs.title")],
+        ["/admin/locations", t("en", "admin.locations.title")],
+        ["/admin/calendar", t("en", "calendar.title")],
+        ["/admin/automations", t("en", "automations.title")],
+        ["/admin/reports", t("en", "reports.title")],
+        ["/admin/newsletters", t("en", "newsletters.title")],
+        ["/admin/appointments", t("en", "appointments.title")],
+        ["/admin/documents", t("en", "documents.title")],
+        ["/admin/events", t("en", "events.title")],
+        ["/admin/projects", t("en", "projects.title")],
+        ["/admin/tasks", t("en", "tasks.title")],
+        ["/admin/segments", t("en", "segments.title")],
+        ["/admin/reviews", t("en", "reviews.title")],
+        ["/admin/social", t("en", "social.title")],
+        ["/admin/subscriptions", t("en", "subscriptions.title")],
+      ] as const) {
+        await assertHeadingAxeAndSkip(page, path, heading);
+      }
+    });
+
     await test.step("editor", async () => {
       await page.goto(`/admin/pages/${fixture.homePageId}`);
       await assertSurface(page, "editor");
@@ -400,6 +522,39 @@ test.describe("real-browser accessibility", () => {
     await test.step("storefront", async () => {
       await page.goto("/");
       await assertSurface(page, "storefront");
+    });
+
+    await test.step("French, Spanish and RTL", async () => {
+      await publishLocales("fr", ["en", "fr", "es"]);
+      await page.goto("/admin");
+      await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+      await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+      await expect(
+        page.getByRole("heading", { level: 1, name: t("fr", "admin.overview.title") }),
+      ).toBeVisible();
+      await assertAxe(page, "admin-fr", "light");
+      await assertKeyboardAndFocus(page, "admin-fr", "fr");
+
+      await page.goto("/fr");
+      await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+      await assertAxe(page, "storefront-fr", "light");
+
+      await publishLocales("es", ["en", "fr", "es"]);
+      await page.goto("/es");
+      await expect(page.locator("html")).toHaveAttribute("lang", "es");
+      await assertAxe(page, "storefront-es", "light");
+
+      await publishLocales("en", ["en", "fr", "es"]);
+      await page.goto("/admin");
+      await page.evaluate(() => document.documentElement.setAttribute("dir", "rtl"));
+      await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+      await page.setViewportSize({ width: 320, height: 800 });
+      const rtlProblems = await reflowProblems(page.mainFrame());
+      expect(rtlProblems.documentOverflow, "admin RTL does not reflow at 320 CSS px").toBeUndefined();
+      expect(rtlProblems.nested, "admin RTL creates nested horizontal scrolling").toEqual([]);
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("link", { name: t("en", "a11y.skipToContent") })).toBeFocused();
     });
 
     await context.addCookies([
@@ -420,6 +575,15 @@ test.describe("real-browser accessibility", () => {
         "2 of 2 tasks complete",
       );
       await expect(guide.locator("header").getByText("Completed")).toBeVisible();
+    });
+
+    await test.step("portal rooms", async () => {
+      await assertHeadingAxeAndSkip(
+        page,
+        "/portal",
+        t("en", "portal.greeting", { name: "Morgan Accessibility" }),
+      );
+      await assertHeadingAxeAndSkip(page, "/portal/profile", t("en", "portal.nav.profile"));
     });
   });
 });

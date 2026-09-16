@@ -16,7 +16,12 @@ export type A11yCode =
   | "emptyHref"
   | "htmlImage"
   | "htmlLandmarks"
-  | "videoMissing";
+  | "videoMissing"
+  // Popup-only (C9.30). Errors rather than warnings, because a popup is the
+  // one surface a visitor did not ask for and `popups.setStatus` refuses to
+  // make one live while either of them stands.
+  | "popupH1"
+  | "popupRawHtml";
 
 export type A11ySeverity = "error" | "warning";
 
@@ -26,7 +31,17 @@ export interface A11yHint {
   blockId?: string;
 }
 
-export type A11yContext = "page" | "chrome" | "email";
+/**
+ * Which rules apply to a tree.
+ *
+ * `popup` is the fourth (C9.30). It is an *analysis* context rather than a
+ * storage one: a popup's blocks are validated and stored as `chrome`, because
+ * chrome is already the answer to "content that is not the page" and adding a
+ * fourth storage context would mean editing forty block definitions to state a
+ * fact chrome already states. What a popup needs that chrome does not is a
+ * different set of rules, and that is exactly what this type selects.
+ */
+export type A11yContext = "page" | "chrome" | "email" | "popup";
 
 const VAGUE = new Set([
   "click here",
@@ -144,6 +159,16 @@ export function analyzeAccessibility(
       }
     }
 
+    if (node.type === "html" && context === "popup") {
+      // Refused outright inside a popup, and only inside a popup. A modal
+      // dialog's promise is that the close control is reachable, focus stays
+      // inside it and Escape works — and none of that can be promised about
+      // markup the platform did not author. On a page, raw HTML is the
+      // owner's own risk on their own surface; in a dialog it is a risk taken
+      // on a visitor who did not ask for the dialog.
+      hints.push({ code: "popupRawHtml", severity: "error", blockId: node.id });
+    }
+
     if (node.type === "html") {
       const markup = asString(node.props.markup);
       if (/<img\b/i.test(markup) && !/\bsrcset\s*=/i.test(markup)) {
@@ -185,6 +210,31 @@ export function analyzeAccessibility(
     }
   }
 
+  if (context === "popup") {
+    // A popup renders inside the document that is already showing a page, so
+    // an H1 in it is a second H1 on that page — the exact failure the page
+    // rule above exists to prevent, arriving from the one surface the page's
+    // own editor never sees. The popup carries its own title as a column, and
+    // the surface renders it as the dialog's H2.
+    for (const heading of headings.filter((row) => row.level === 1)) {
+      hints.unshift({ code: "popupH1", severity: "error", blockId: heading.id });
+    }
+
+    // The outline starts at the dialog's own H2, so a body opening with an H4
+    // is a skip even though nothing above it is in this tree.
+    let previous = 2;
+    for (const heading of headings) {
+      if (heading.level > previous + 1) {
+        hints.push({
+          code: "headingOrder",
+          severity: "warning",
+          blockId: heading.id,
+        });
+      }
+      previous = heading.level;
+    }
+  }
+
   return hints;
 }
 
@@ -197,6 +247,12 @@ export function publishA11yMessage(hints: A11yHint[]): string | null {
   if (!first) return null;
   if (first.code === "missingH1") {
     return "This page needs exactly one H1 before it can be published.";
+  }
+  if (first.code === "popupH1") {
+    return "A popup appears on a page that already has its H1. Use a heading level 2 or lower inside it.";
+  }
+  if (first.code === "popupRawHtml") {
+    return "Custom HTML cannot go in a popup: nothing can promise the close button stays reachable inside markup the platform did not author.";
   }
   return "This page has more than one H1. Keep a single title heading.";
 }

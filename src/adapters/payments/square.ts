@@ -9,6 +9,8 @@ import {
   deterministicProviderRef,
   parseProviderJson,
   providerTime,
+  refuseOffSessionCharge,
+  refuseRecurringSchedule,
   unsupportedSavedMethod,
   verifyProviderHmac,
 } from "./provider-helpers";
@@ -24,6 +26,7 @@ const capabilities: PaymentAdapterCapabilities = {
   partialRefunds: true,
   savedMethods: false,
   subscriptions: false,
+  offSessionCharges: false,
   disputes: false,
   payouts: false,
   inPerson: false,
@@ -228,6 +231,10 @@ export function createSquarePayments(options: SquarePaymentOptions = {}): Paymen
       };
     },
     async revokeSavedMethod() { unsupportedSavedMethod("Square"); },
+    chargeSavedMethod: refuseOffSessionCharge("square"),
+    createRecurringSchedule: refuseRecurringSchedule("square"),
+    updateRecurringSchedule: refuseRecurringSchedule("square"),
+    cancelRecurringSchedule: refuseRecurringSchedule("square"),
     async verifyWebhook(request) {
       if (signatureKeys.length === 0) throw new AdapterError("payments", "square", "unavailable", "Square webhook verification is not configured.");
       verifyProviderHmac({

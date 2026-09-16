@@ -11,9 +11,11 @@ import { ServiceError } from "@/core/service";
 import { ownerFacing } from "./action-helpers";
 import {
   commitImport,
+  mapImport,
   previewImport,
   publishImport,
   reconcileImport,
+  reviewImportConflicts,
   rollbackImport,
   startImport,
 } from "@/core/import/service";
@@ -54,6 +56,48 @@ export async function startImportAction(
       error: error instanceof ServiceError ? ownerFacing(error.message) : "That import could not start.",
     };
   }
+}
+
+export async function mapImportAction(form: FormData): Promise<void> {
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const id = text(form, "id");
+  await mapImport.call(
+    {
+      id,
+      mapping: [
+        {
+          url: text(form, "url"),
+          slug: text(form, "slug"),
+          title: text(form, "title"),
+          kind: text(form, "kind") === "post" ? "post" : "page",
+        },
+      ],
+    },
+    actor,
+  );
+  revalidatePath(`/admin/imports/${id}`);
+}
+
+export async function reviewImportConflictsAction(form: FormData): Promise<void> {
+  const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const id = text(form, "id");
+  const renamed = text(form, "renamedSlug");
+  await reviewImportConflicts.call(
+    {
+      id,
+      conflicts: [
+        {
+          slug: text(form, "slug"),
+          resolution: (["keep-existing", "replace", "rename"].includes(text(form, "resolution"))
+            ? text(form, "resolution")
+            : "keep-existing") as "keep-existing" | "replace" | "rename",
+          ...(renamed ? { renamedSlug: renamed } : {}),
+        },
+      ],
+    },
+    actor,
+  );
+  revalidatePath(`/admin/imports/${id}`);
 }
 
 export async function previewImportAction(form: FormData): Promise<void> {

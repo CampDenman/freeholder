@@ -73,10 +73,18 @@ export async function truncateSpine(): Promise<void> {
       if (is(value, PgTable)) names.push(`"${getTableConfig(value).name}"`);
     }
   }
-  await db().execute(
-    sql.raw(`truncate table ${names.join(", ")} restart identity cascade`),
-  );
   await db().transaction(async (tx) => {
+    // The database must abandon a blocked reset before Vitest abandons the
+    // hook. Otherwise the uncancelled query can complete later and race the
+    // next test's setup, turning one infrastructure stall into misleading
+    // duplicate-key failures. Keep the reset and its required defaults atomic
+    // so another connection can observe either the old fixture or the new one,
+    // never the empty interval between them.
+    await tx.execute(sql.raw("set local lock_timeout = '10s'"));
+    await tx.execute(sql.raw("set local statement_timeout = '25s'"));
+    await tx.execute(
+      sql.raw(`truncate table ${names.join(", ")} restart identity cascade`),
+    );
     await seedDefaultRoles(tx);
     await seedCoreGuidanceFlows(tx);
   });

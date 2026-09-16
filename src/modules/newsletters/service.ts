@@ -9,7 +9,7 @@ import { isUniqueViolation } from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
-import { registerContactPrivacySource } from "@/core/privacy/service";
+import { recordConsent, registerContactPrivacySource } from "@/core/privacy/service";
 import { sendMail } from "@/core/mail/service";
 import { siteOrigin } from "@/core/seo/origin";
 import {
@@ -28,6 +28,14 @@ const slug = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .max(180);
 const expectedVersion = z.number().int().positive();
+const subscriptionConsent = z.object({
+  termsVersion: z.string().trim().min(1).max(100),
+  sourceUrl: z.string().trim().max(2_048).nullable(),
+  evidence: z.object({
+    popup: z.string().trim().min(1).max(180),
+    statement: z.string().trim().min(1).max(500),
+  }),
+});
 
 const newsletterRow = row({
   id: uuid,
@@ -455,6 +463,7 @@ export const subscribeToNewsletter = defineService({
     newsletterId: id,
     email: z.string().trim().email().toLowerCase(),
     name: z.string().trim().min(1).max(200).optional(),
+    consent: subscriptionConsent.optional(),
   }),
   output: z.object({
     status: z.enum(["confirmed", "pending"]),
@@ -497,6 +506,11 @@ export const subscribeToNewsletter = defineService({
             confirmToken,
             unsubscribeToken,
             unsubscribedAt: null,
+            consentTermsVersion: input.consent?.termsVersion ?? null,
+            consentSourceUrl: input.consent?.sourceUrl ?? null,
+            consentIp: ctx.actor.request?.ip ?? null,
+            consentEvidence: input.consent?.evidence ?? {},
+            updatedAt: new Date(),
           })
           .where(eq(newsletterSubscriptions.id, existing.id))
           .returning()
@@ -508,6 +522,10 @@ export const subscribeToNewsletter = defineService({
             status: "pending",
             confirmToken,
             unsubscribeToken,
+            consentTermsVersion: input.consent?.termsVersion ?? null,
+            consentSourceUrl: input.consent?.sourceUrl ?? null,
+            consentIp: ctx.actor.request?.ip ?? null,
+            consentEvidence: input.consent?.evidence ?? {},
           })
           .returning();
     const origin = siteOrigin();
@@ -557,6 +575,31 @@ export const confirmSubscription = defineService({
       })
       .where(eq(newsletterSubscriptions.id, row.id))
       .returning();
+    // The double opt-in *is* the consent evidence.
+    //
+    // §2096: subscriptions carry "double-opt-in records ... consent timestamps
+    // retained for compliance (CASL, GDPR, CAN-SPAM)". Until C9.06 there was
+    // nothing that read them, and the confirmation wrote a subscription row
+    // and nothing else — so `contacts.canContact("marketing", "email")` said
+    // "denied" for every confirmed subscriber on the platform, because absence
+    // of evidence is denial there and no email path ever produced evidence.
+    //
+    // Recorded here rather than in the campaign sender because this is the
+    // moment somebody actually consented, and because consent belongs to the
+    // contact spine rather than to whichever module happens to send next.
+    // `callAsSystem`: the person clicking a confirmation link is anonymous.
+    await ctx.callAsSystem(recordConsent, {
+      contactId: row.contactId,
+      purpose: "marketing" as const,
+      channel: "email" as const,
+      state: "granted" as const,
+      method: "double_opt_in" as const,
+      termsVersion: row.consentTermsVersion,
+      sourceUrl: row.consentSourceUrl,
+      sourceIp: row.consentIp,
+      evidence: row.consentEvidence,
+    });
+
     ctx.setSubject("newsletterSubscription", row.id);
     ctx.queueEvent("newsletters.confirmed", {
       subscriptionId: row.id,
@@ -590,6 +633,17 @@ export const unsubscribeFromNewsletter = defineService({
       })
       .where(eq(newsletterSubscriptions.id, row.id))
       .returning();
+    // The other half of the same record. An unsubscribe that left the consent
+    // ledger saying "granted" would let a campaign built on a segment mail
+    // somebody who had just asked not to be mailed.
+    await ctx.callAsSystem(recordConsent, {
+      contactId: row.contactId,
+      purpose: "marketing" as const,
+      channel: "email" as const,
+      state: "withdrawn" as const,
+      method: "preference_center" as const,
+    });
+
     ctx.setSubject("newsletterSubscription", row.id);
     ctx.queueEvent("newsletters.unsubscribed", {
       subscriptionId: row.id,
@@ -608,6 +662,36 @@ export function rfc8058UnsubscribeHeaders(origin: string, unsubscribeToken: stri
   };
 }
 
+// Templates (C9.05). Re-exported because the manifest names one services
+// module, and separate because authoring a template and sending an issue are
+// not the same subject.
+export {
+  saveTemplate,
+  resetTemplate,
+  listTemplates,
+  getTemplate,
+  renderTemplate,
+  templateSlots,
+} from "./template-service";
+import templateServices from "./template-service";
+// Broadcasts (C9.06): a template, an audience and a moment.
+export {
+  saveBroadcast,
+  testSend,
+  startBroadcast,
+  sendNext,
+  tick,
+  pauseBroadcast,
+  resumeBroadcast,
+  listBroadcasts,
+  broadcastStats,
+  broadcastRecipientList,
+  // The provider-feedback listener. Named in the manifest's `listens`, which
+  // resolves handlers from this module.
+  onMailDeliveryUpdated,
+} from "./broadcast-service";
+import broadcastServices from "./broadcast-service";
+
 export default [
   listNewsletters,
   listPublicNewsletters,
@@ -622,5 +706,7 @@ export default [
   subscribeToNewsletter,
   confirmSubscription,
   unsubscribeFromNewsletter,
+  ...templateServices,
+  ...broadcastServices,
 ];
 

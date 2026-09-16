@@ -7,14 +7,25 @@ import advancedMoneyServices from "./advanced-money-service";
 import paymentProviderServices from "./payment-provider-service";
 import posServices from "./pos-service";
 import taxServices from "./tax-service";
+import customerServices from "./customer-service";
 
 export { quoteTax } from "./tax-service";
 
 import briefingContributors from "@/modules/invoicing/briefing";
 
 import recurringServices from "./recurring-service";
+import demoServices from "./demo";
+// Claims this module's room in the customer portal (C8.11). Imported for
+// its side effect: core owns the registry so it never imports a module,
+// and something has to make the claim at load time.
+import "./portal";
+// Revenue by place (§4.7, C9.08).
+import "./reporting";
+// The funnel stages this module answers for (§4.7, C9.07).
+import "./funnel";
 
 export default [
+  ...demoServices,
   ...recurringServices,
   ...briefingContributors,
   ...taxServices,
@@ -22,4 +33,5 @@ export default [
   ...advancedMoneyServices,
   ...paymentProviderServices,
   ...posServices,
+  ...customerServices,
 ];

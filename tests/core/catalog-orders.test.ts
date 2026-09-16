@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { createContact } from "@/core/contacts/service";
 import { createLocationService } from "@/core/locations/service";
-import { productVariants } from "@/modules/catalog/schema";
+import { orders, productVariants } from "@/modules/catalog/schema";
 import {
   addCartItem,
   applyVariantMatrix,
@@ -29,6 +29,8 @@ import {
 import { createPayment, getInvoice, settlePayment } from "@/modules/invoicing/invoice-service";
 import {
   ANONYMOUS,
+  CUSTOMER,
+  STAFF,
   closeDb,
   failure,
   hasDatabase,
@@ -39,6 +41,19 @@ import {
 describe.runIf(hasDatabase)("catalog orders", { timeout: 30_000 }, () => {
   beforeEach(truncateSpine);
   afterAll(closeDb);
+
+  it("requires catalog read authority for private order details even when the caller knows the ID", async () => {
+    const contact = await createContact.call({ name: "Private Buyer", email: "private-order@example.test" }, OWNER);
+    const [order] = await db().insert(orders).values({ contactId: contact.id, currency: "CAD", shippingAddress: { street: "Private street" } }).returning();
+    const input = { id: order!.id };
+    await expect(getOrder.call(input, ANONYMOUS)).rejects.toMatchObject({ code: "permission" });
+    await expect(getOrder.call(input, CUSTOMER)).rejects.toMatchObject({ code: "permission" });
+    await expect(getOrder.call(input, { ...STAFF, grants: [{ module: "contacts", access: "view" }] })).rejects.toMatchObject({ code: "permission" });
+    const key = { kind: "agent" as const, keyName: "order-reader", scopes: ["catalog.createProduct"] };
+    await expect(getOrder.call(input, key)).rejects.toMatchObject({ code: "permission" });
+    expect((await getOrder.call(input, { ...key, scopes: ["catalog.getOrder"] })).order.shippingAddress).toEqual({ street: "Private street" });
+    expect((await getOrder.call(input, { ...STAFF, grants: [{ module: "catalog", access: "view" }] })).order.id).toBe(order!.id);
+  });
 
   async function sellable(slug: string, ship = false) {
     const product = await createProduct.call(

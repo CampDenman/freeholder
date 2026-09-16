@@ -1,0 +1,244 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// Internal orchestration is registered for composition, never projected as an
+// HTTP/API-key/OpenAPI/LLM/MCP capability.
+import { beforeAll, describe, expect, it } from "vitest";
+import { buildOpenApi } from "@/core/api/openapi";
+import { contractProjections } from "@/core/contract/projections";
+import { ready } from "@/core/runtime";
+import {
+  getExternalService,
+  getService,
+  listExternalServices,
+  listServices,
+  type Actor,
+} from "@/core/service";
+import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
+
+const INTERNAL = [
+  "ads.rollUpStats",
+  "agents.runDuePlaybooks",
+  "agents.startEventPlaybooks",
+  // The wake sweep (C9.02). System rather than scoped because a sleeping run
+  // is woken by a job on nobody's behalf, and it needs a real ServiceContext:
+  // advancing a run dispatches verbs through `ctx.callAsSystem` and queues
+  // events, neither of which a plain function can do.
+  "automations.wake",
+  "briefing.agentAttention",
+  "briefing.appointments",
+  "briefing.assemble",
+  "briefing.playbookSection",
+  "briefing.reconnects",
+  "briefing.tasks",
+  "briefing.update",
+  "briefing.webhookFailures",
+  // Sending a campaign (C9.06). Starting one is scoped — an owner presses
+  // send — but carrying it forward is not: `sendNext` and `tick` run from
+  // `newsletters.tickBroadcasts` a batch at a time, on nobody's behalf, long
+  // after the request that started it has ended.
+  "broadcasts.sendNext",
+  "broadcasts.tick",
+  // Provider work is split around short system-only snapshot/apply services.
+  // These names are implementation seams for workers, never public verbs.
+  "catalogue.applyRefresh",
+  "catalogue.refreshSource",
+  "entitlements.issuePass",
+  "entitlements.issueUnlock",
+  "entitlements.syncSubscription",
+  "entitlements.syncTier",
+  "forms.briefingEnquiries",
+  "galleries.buildArchive",
+  "galleries.expireSessions",
+  "invoicing.briefingOverdue",
+  "mail.applySenderVerification",
+  "mail.recordProviderEvent",
+  "media.applyWatermarkBackfill",
+  "media.backfillWatermarks",
+  "media.listWatermarkBackfill",
+  "media.purgeExpired",
+  "media.purgeExpiredClaim",
+  "media.registerStoredOriginal",
+  "media.stageCompletedUpload",
+  "marketplace.importProviderOrder",
+  "printOnDemand.workBatch",
+  "voiceVideo.roomAccessSource",
+  "privacy.completeErasureJob",
+  "messaging.applySmsEvents",
+  "messaging.applySmsEventsApply",
+  "notifications.create",
+  "referrals.claimTouches",
+  "social.applyGbpReviews",
+  "social.applyIngestedProfilePost",
+  "social.applyProfileHealth",
+  "social.gbpHoursSource",
+  "social.gbpProfileIds",
+  "social.gbpProfileSource",
+  "social.healthProfileSource",
+  "social.healthProfiles",
+  "social.ingestProfileIds",
+  "social.ingestProfileSource",
+  "social.ingestedPost",
+  "social.publicationSource",
+  "social.recordGbpHours",
+  "social.recordProfileIngest",
+  "social.recordPublicationResult",
+  // The renewal sweep (C9.13). System because a period ending is not
+  // something anybody did: a job finds what is due and raises the invoice on
+  // nobody's behalf, long after the person who subscribed has gone.
+  "subscriptions.renewDue",
+  // The dunning sweep (C9.16). System because a retry offset expiring is not
+  // something anybody did: a job finds who is past due and sends the notice
+  // or takes the final action on nobody's behalf.
+  "subscriptions.advanceDunning",
+  // Platform charges against a stored method (C9.33). The period ending is
+  // not something anybody did; a job raises the invoice and charges on
+  // nobody's behalf.
+  "subscriptions.chargePlatformDue",
+  // Provider schedules are the truth (C9.33). A verified webhook applies the
+  // period on nobody's behalf.
+  "subscriptions.reconcileProviderPeriod",
+  "subscriptions.recoverDunning",
+  // Provider submission happens outside service transactions; this applies
+  // the durable mail ledger's outcome afterwards on nobody's behalf.
+  "reports.settleExportRun",
+] as const;
+
+const CALLER_AUTHORIZED_PHASES = [
+  "privacy.completeErasureJob",
+  "invoicing.claimCustomerCheckout",
+  "invoicing.applyCustomerCheckout",
+  "invoicing.customerPaymentSource",
+  "invoicing.applyCustomerPayment",
+  "demo.installApply",
+  "demo.installGuard",
+  "connections.applyCalendarOAuthCompletion",
+  "connections.applyMailReadOAuthCompletion",
+  "connections.claimCalendarOAuthCompletion",
+  "connections.claimMailReadOAuthCompletion",
+  "connections.peekCalendarOAuthReturn",
+  "connections.peekMailReadOAuthReturn",
+  "mail.applyOAuthCompletion",
+  "mail.claimOAuthCompletion",
+  "media.abortUploadApply",
+  "media.abortUploadClaim",
+  "media.altTextSuggestionSource",
+  "media.applyAltTextSuggestion",
+  "media.applyCaptureComplete",
+  "media.applyRescan",
+  "media.applyStoredOriginal",
+  "media.beginUploadApply",
+  "media.claimProxyUpload",
+  "media.completeUploadSource",
+  "media.confirmCaptureApply",
+  "media.confirmCaptureSource",
+  "media.failDirectUpload",
+  "media.purgeApply",
+  "media.purgeClaim",
+  "media.rescanSource",
+  "media.signUploadClaim",
+  "media.uploadStatusSource",
+  "signupContactImports.applyOAuthCompletion",
+  "signupContactImports.applyProviderContacts",
+  "signupContactImports.claimOAuthCompletion",
+  "signupContactImports.providerSource",
+  "social.applyOAuthCompletion",
+  "social.claimOAuthCompletion",
+  "social.createVariantsApply",
+  "social.createVariantsSource",
+  "giftRegistry.applyItemInvoice",
+  "giftRegistry.claimItemInvoice",
+  "marketplace.applyConnect",
+  "marketplace.applySync",
+  "marketplace.claimConnect",
+  "marketplace.claimSync",
+  "marketplace.findImported",
+  "marketplace.recordImported",
+  "printOnDemand.applySubmit",
+  "printOnDemand.applyRefresh",
+  "printOnDemand.claimRefresh",
+  "printOnDemand.claimSubmit",
+  "voiceVideo.applyCapture",
+  "voiceVideo.applyMiss",
+  "voiceVideo.applyStart",
+  "voiceVideo.applyStop",
+  "voiceVideo.claimCapture",
+  "voiceVideo.claimStart",
+  "voiceVideo.claimStop",
+] as const;
+
+const PRIVATE = [...INTERNAL, ...CALLER_AUTHORIZED_PHASES] as const;
+
+const wildcard: Actor = {
+  kind: "agent",
+  keyName: "boundary-test",
+  scopes: [
+    "*",
+    "agents.*",
+    "briefing.*",
+    "forms.*",
+    "invoicing.*",
+    "mail.*",
+    "media.*",
+    "messaging.*",
+    "notifications.*",
+  ],
+};
+
+describe("the system-service boundary", () => {
+  beforeAll(async () => {
+    await ready();
+  }, 120_000);
+
+  it("keeps an explicit reviewed inventory", () => {
+    const actual = [...listServices().values()]
+      .filter((service) => service.def.permission === "system")
+      .map((service) => service.def.name)
+      .sort();
+    expect(actual).toEqual([...INTERNAL].sort());
+  });
+
+  it("keeps an explicit reviewed inventory of caller-authorized phases", () => {
+    const actual = [...listServices().values()]
+      .filter((service) => service.def.external === false)
+      .map((service) => service.def.name)
+      .sort();
+    expect(actual).toEqual([...CALLER_AUTHORIZED_PHASES].sort());
+  });
+
+  it("keeps every internal service out of every generated projection", () => {
+    const openapi = buildOpenApi({
+      origin: "https://example.test",
+      version: "0.1.0",
+      title: "Boundary test",
+    });
+    const paths = openapi.paths as Record<string, unknown>;
+    const projections = contractProjections();
+    const tools = new Set(toolsFor(wildcard).map((tool) => tool.name));
+
+    for (const name of PRIVATE) {
+      const service = getService(name);
+      expect(
+        service.def.permission === "system" || service.def.external === false,
+      ).toBe(true);
+      expect(hiddenFromMcp(service)).toBe(true);
+      expect(listExternalServices().has(name)).toBe(false);
+      expect(paths).not.toHaveProperty(`/api/v1/${name}`);
+      expect(projections.names).not.toContain(name);
+      expect(projections.openapiPaths).not.toContain(`/api/v1/${name}`);
+      expect(tools.has(toolName(name))).toBe(false);
+      expect(serviceForTool(wildcard, toolName(name))).toBeUndefined();
+    }
+  });
+
+  it("answers an external name probe exactly like an unknown service", () => {
+    for (const name of PRIVATE) {
+      let refusal: unknown;
+      try {
+        getExternalService(name);
+      } catch (error) {
+        refusal = error;
+      }
+      expect(refusal).toMatchObject({ code: "not_found" });
+    }
+  });
+});

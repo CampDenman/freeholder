@@ -11,6 +11,8 @@ import {
   parseProviderJson,
   providerIdentifier,
   providerTime,
+  refuseOffSessionCharge,
+  refuseRecurringSchedule,
   unsupportedSavedMethod,
   verifyProviderHmac,
 } from "./provider-helpers";
@@ -21,6 +23,7 @@ const capabilities: PaymentAdapterCapabilities = {
   partialRefunds: true,
   savedMethods: false,
   subscriptions: false,
+  offSessionCharges: false,
   disputes: false,
   payouts: false,
   inPerson: false,
@@ -183,6 +186,10 @@ export function createPaystackPayments(options: PaystackPaymentOptions = {}): Pa
       return { providerRef, status: data.status === "processed" ? "succeeded" : data.status === "failed" || data.status === "needs-attention" ? "failed" : "pending" };
     },
     async revokeSavedMethod() { unsupportedSavedMethod("Paystack"); },
+    chargeSavedMethod: refuseOffSessionCharge("paystack"),
+    createRecurringSchedule: refuseRecurringSchedule("paystack"),
+    updateRecurringSchedule: refuseRecurringSchedule("paystack"),
+    cancelRecurringSchedule: refuseRecurringSchedule("paystack"),
     async verifyWebhook(request) {
       if (!secretKey) throw new AdapterError("payments", "paystack", "unavailable", "Paystack webhook verification is not configured.");
       verifyProviderHmac({

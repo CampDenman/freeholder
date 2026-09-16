@@ -1,0 +1,381 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+"use server";
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
+import { ServiceError } from "@/core/service";
+import {
+  addGiftRegistryItem,
+  createGiftRegistry,
+  invoiceGiftRegistryItem,
+} from "../../plugins/gift-registry/service";
+import { mapPodSku, queuePodJob, refreshPodJob, submitPodJob } from "../../plugins/print-on-demand/service";
+import {
+  createCommunityRoom,
+  createCommunitySpace,
+  hideCommunityPost,
+  joinCommunity,
+  removeCommunityPost,
+} from "../../plugins/community/service";
+import {
+  createVoiceVideoMeetingLink,
+  voiceVideoRecordingAccess,
+  joinVoiceVideoRoom,
+  missVoiceVideoRoom,
+  recordVoiceVideoArtifact,
+  startVoiceVideoRoom,
+  stopVoiceVideoRoom,
+} from "../../plugins/voice-video/service";
+import {
+  connectMarketplaceChannel,
+  syncMarketplaceChannel,
+} from "../../plugins/marketplace/service";
+
+async function actor() {
+  return actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+}
+
+function text(form: FormData, name: string): string {
+  const value = form.get(name);
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function done(path: string, error?: unknown): never {
+  if (error instanceof ServiceError) {
+    redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error.message)}`);
+  }
+  if (error instanceof Error) throw error;
+  if (error !== undefined) throw new Error("plugin action failed");
+  redirect(`${path}${path.includes("?") ? "&" : "?"}saved=1`);
+}
+
+export async function createGiftRegistryAction(form: FormData): Promise<void> {
+  const path = "/admin/gifts";
+  try {
+    await createGiftRegistry.call(
+      {
+        contactId: text(form, "contactId"),
+        title: text(form, "title"),
+        slug: text(form, "slug"),
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function addGiftRegistryItemAction(form: FormData): Promise<void> {
+  const path = "/admin/gifts";
+  try {
+    await addGiftRegistryItem.call(
+      {
+        registryId: text(form, "registryId"),
+        title: text(form, "title"),
+        url: text(form, "url") || undefined,
+        amountCents: Number.parseInt(text(form, "amountCents") || "0", 10) || 0,
+        currency: text(form, "currency") || "USD",
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function invoiceGiftRegistryItemAction(form: FormData): Promise<void> {
+  const path = "/admin/gifts";
+  try {
+    await invoiceGiftRegistryItem.call({ itemId: text(form, "itemId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function mapPodSkuAction(form: FormData): Promise<void> {
+  const path = "/admin/print-on-demand";
+  try {
+    await mapPodSku.call(
+      {
+        sku: text(form, "sku"),
+        provider: text(form, "provider") || "printify",
+        providerProductId: text(form, "providerProductId"),
+        providerVariantId: text(form, "providerVariantId") ? Number(text(form, "providerVariantId")) : undefined,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function queuePodJobAction(form: FormData): Promise<void> {
+  const path = "/admin/print-on-demand";
+  try {
+    const queued = await queuePodJob.call(
+      {
+        sku: text(form, "sku"),
+        provider: text(form, "provider") || "printify",
+      },
+      await actor(),
+    );
+    await submitPodJob.call({ jobId: queued.id }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function retryPodJobAction(form: FormData): Promise<void> {
+  const path = "/admin/print-on-demand";
+  try {
+    await submitPodJob.call({ jobId: text(form, "jobId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function refreshPodJobAction(form: FormData): Promise<void> {
+  const path = "/admin/print-on-demand";
+  try {
+    await refreshPodJob.call({ jobId: text(form, "jobId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function createCommunitySpaceAction(form: FormData): Promise<void> {
+  const path = "/admin/community";
+  try {
+    await createCommunitySpace.call(
+      {
+        slug: text(form, "slug"),
+        title: text(form, "title"),
+        access: text(form, "access") === "gated" ? "gated" : "open",
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function joinCommunityAction(form: FormData): Promise<void> {
+  const spaceId = text(form, "spaceId");
+  const path = `/admin/community?space=${encodeURIComponent(spaceId)}`;
+  try {
+    await joinCommunity.call(
+      {
+        spaceId,
+        contactId: text(form, "contactId"),
+        role: text(form, "role") === "moderator" ? "moderator" : "member",
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath("/admin/community");
+  done(path);
+}
+
+export async function createCommunityRoomAction(form: FormData): Promise<void> {
+  const spaceId = text(form, "spaceId");
+  const path = `/admin/community?space=${encodeURIComponent(spaceId)}`;
+  try {
+    await createCommunityRoom.call(
+      {
+        spaceId,
+        slug: text(form, "slug"),
+        title: text(form, "title"),
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath("/admin/community");
+  done(path);
+}
+
+export async function hideCommunityPostAction(form: FormData): Promise<void> {
+  const spaceId = text(form, "spaceId");
+  const path = `/admin/community?space=${encodeURIComponent(spaceId)}`;
+  try {
+    await hideCommunityPost.call({ postId: text(form, "postId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath("/admin/community");
+  done(path);
+}
+
+export async function removeCommunityPostAction(form: FormData): Promise<void> {
+  const spaceId = text(form, "spaceId");
+  const path = `/admin/community?space=${encodeURIComponent(spaceId)}`;
+  try {
+    await removeCommunityPost.call({ postId: text(form, "postId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath("/admin/community");
+  done(path);
+}
+
+export async function startVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await startVoiceVideoRoom.call(
+      {
+        contactId: text(form, "contactId"),
+        kind: text(form, "kind") === "video" ? "video" : "voice",
+        provider: text(form, "provider") || "daily",
+        title: text(form, "title"),
+        roomId: text(form, "roomId") || undefined,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function joinVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await joinVoiceVideoRoom.call(
+      {
+        roomId: text(form, "roomId"),
+        contactId: text(form, "contactId"),
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function stopVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await stopVoiceVideoRoom.call({ roomId: text(form, "roomId"), capture: false }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function missVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await missVoiceVideoRoom.call({ roomId: text(form, "roomId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function recordVoiceVideoAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await recordVoiceVideoArtifact.call(
+      {
+        contactId: text(form, "contactId"),
+        kind: text(form, "kind") === "video" ? "video" : "voice",
+        provider: text(form, "provider") || "daily",
+        title: text(form, "title"),
+        artifactId: text(form, "artifactId") || undefined,
+        refresh: text(form, "refresh") === "true",
+        roomId: text(form, "roomId") || undefined,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function connectMarketplaceAction(form: FormData): Promise<void> {
+  const path = "/admin/marketplace";
+  try {
+    await connectMarketplaceChannel.call(
+      {
+        name: text(form, "name"),
+        provider: text(form, "provider") as "shopify" | "etsy" | "amazon" | "ebay",
+        channelId: text(form, "channelId") || undefined,
+      },
+      await actor(),
+    );
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function syncMarketplaceAction(form: FormData): Promise<void> {
+  const path = "/admin/marketplace";
+  try {
+    const result = await syncMarketplaceChannel.call(
+      { channelId: text(form, "channelId") },
+      await actor(),
+    );
+    if (result.lastError) {
+      done(path, new ServiceError("conflict", result.lastError));
+    }
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function voiceVideoHostAction(form: FormData): Promise<void> {
+  const result = await createVoiceVideoMeetingLink.call({ roomId: text(form, "roomId"), audience: "host", hostName: text(form, "hostName") || "Host" }, await actor());
+  const url = new URL(result.roomUrl);
+  url.searchParams.set("t", result.meetingToken);
+  redirect(url.toString());
+}
+
+export async function voiceVideoInviteAction(_previous: { inviteTokenUrl?: string; error?: string }, form: FormData): Promise<{ inviteTokenUrl?: string; error?: string }> {
+  try {
+    const result = await createVoiceVideoMeetingLink.call({ roomId: text(form, "roomId"), audience: "guest" }, await actor());
+    const url = new URL(result.roomUrl);
+    url.searchParams.set("t", result.meetingToken);
+    return { inviteTokenUrl: url.toString() };
+  } catch (error) {
+    if (error instanceof ServiceError) return { error: error.message };
+    throw error;
+  }
+}
+
+export async function voiceVideoDownloadAction(form: FormData): Promise<void> {
+  const result = await voiceVideoRecordingAccess.call({ artifactId: text(form, "artifactId") }, await actor());
+  redirect(result.downloadTokenUrl);
+}

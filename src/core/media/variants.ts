@@ -34,7 +34,56 @@ export interface Rendition {
   key: string;
 }
 
-export type VariantSet = Partial<Record<VariantFormat, Rendition[]>>;
+/**
+ * What is stored on `Asset.variants` (§4.5: "thumbs, web, watermarked").
+ *
+ * The format keys are the public ladder. `watermarked` is deliberately not
+ * one of them: a marked rendition must never reach a `<picture>` on a public
+ * page, so it lives under its own key and every reader states which of the
+ * two it wants. Iterating the raw object is what would leak it.
+ */
+export interface VariantSet extends Partial<Record<VariantFormat, Rendition[]>> {
+  watermarked?: Partial<Record<VariantFormat, Rendition[]>>;
+}
+
+/** The public ladder only — never the marked renditions. */
+export function publicRenditions(
+  set: VariantSet,
+): Array<[VariantFormat, Rendition[]]> {
+  return FORMATS.flatMap((format) => {
+    const renditions = set[format];
+    return renditions?.length ? [[format, renditions] as [VariantFormat, Rendition[]]] : [];
+  });
+}
+
+/** The marked ladder only — what a proof gallery is allowed to serve. */
+export function watermarkedRenditions(set: VariantSet): Rendition[] {
+  const marked = set.watermarked ?? {};
+  return FORMATS.flatMap((format) => marked[format] ?? []);
+}
+
+/**
+ * Every stored object this asset owns, marked or not. Purge reads through
+ * here so a deleted asset does not leave its watermarks behind.
+ */
+export function allRenditionKeys(set: VariantSet): string[] {
+  return [
+    ...publicRenditions(set).flatMap(([, renditions]) => renditions),
+    ...watermarkedRenditions(set),
+  ].map((rendition) => rendition.key);
+}
+
+/**
+ * The smallest rendition at least `minWidth` wide, or the largest there is.
+ * The same rule the alt-text preview already uses, named once.
+ */
+export function pickRendition(
+  renditions: Rendition[],
+  minWidth: number,
+): Rendition | undefined {
+  const ordered = [...renditions].sort((a, b) => a.width - b.width);
+  return ordered.find((candidate) => candidate.width >= minWidth) ?? ordered.at(-1);
+}
 
 export interface ImageFacts {
   width: number;
@@ -130,9 +179,8 @@ export async function buildRenditions(
   return built;
 }
 
-/** Group built renditions into the shape stored on the asset row. */
-export function toVariantSet(built: BuiltRendition[]): VariantSet {
-  const set: VariantSet = {};
+function group(built: BuiltRendition[]): Partial<Record<VariantFormat, Rendition[]>> {
+  const set: Partial<Record<VariantFormat, Rendition[]>> = {};
   for (const rendition of built) {
     (set[rendition.format] ??= []).push({
       width: rendition.width,
@@ -143,4 +191,18 @@ export function toVariantSet(built: BuiltRendition[]): VariantSet {
   }
   for (const list of Object.values(set)) list.sort((a, b) => a.width - b.width);
   return set;
+}
+
+/** Group built renditions into the shape stored on the asset row. */
+export function toVariantSet(built: BuiltRendition[]): VariantSet {
+  return group(built);
+}
+
+/** Fold watermarked renditions in under their own key. */
+export function withWatermarked(
+  set: VariantSet,
+  built: BuiltRendition[],
+): VariantSet {
+  if (!built.length) return set;
+  return { ...set, watermarked: group(built) };
 }

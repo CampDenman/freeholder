@@ -3,7 +3,7 @@
 // Dev harness checks for a plugin folder (C3.12).
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { validatePluginContract } from "./contract";
+import { validatePluginContract } from "./contract.ts";
 
 export const EXAMPLE_KINDS = ["block", "service", "adapter", "automation", "route"] as const;
 

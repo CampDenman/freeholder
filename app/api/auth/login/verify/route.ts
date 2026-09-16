@@ -16,6 +16,7 @@ import {
 import { csrfCookie, issueCsrfToken } from "@/core/http/csrf";
 import { errorResponse, json } from "@/core/http/respond";
 import { ServiceError, type Actor } from "@/core/service";
+import { readBoundedText, RequestBodyError } from "@/core/http/body";
 
 const ANONYMOUS: Actor = { kind: "anonymous" };
 
@@ -29,8 +30,9 @@ export async function POST(request: Request): Promise<Response> {
   }
   let body: Record<string, unknown> = {};
   try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
+    body = JSON.parse(await readBoundedText(request, 64 * 1_024)) as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof RequestBodyError) return errorResponse(error, ANONYMOUS);
     // The service validator supplies the ordinary validation response.
   }
   try {

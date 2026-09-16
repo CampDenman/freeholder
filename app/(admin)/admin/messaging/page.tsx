@@ -19,13 +19,19 @@ import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
 import { currentBusiness } from "@/core/settings/read";
 import { listMessagingNumbers, numberRegistrations } from "@/core/messaging/sms";
+import { KEYWORD_ACTIONS, KEYWORD_MATCH_KINDS, listKeywordRules } from "@/core/messaging/keywords";
+import { listMessagingWindows } from "@/core/messaging/policy";
+import { listSmsComplianceEvents } from "@/core/messaging/consent";
 import { formatDateTime } from "@/core/i18n";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
 import {
   checkNumbersAction,
+  createKeywordRuleAction,
+  deleteKeywordRuleAction,
   importNumbersAction,
+  setMessagingWindowAction,
   setRegistrationAction,
   updateNumberAction,
 } from "../../messaging-actions";
@@ -41,12 +47,15 @@ export default async function MessagingPage({
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
   const actor = await requireStaffActor("crm", "manage");
-  const [t, business, numbers, registrations, query] = await Promise.all([
+  const [t, business, numbers, registrations, query, keywords, windows, compliance] = await Promise.all([
     getT(),
     currentBusiness(),
     domainOrNull(listMessagingNumbers.call({}, actor)),
     domainOrNull(numberRegistrations.call({}, actor)),
     searchParams,
+    domainOrNull(listKeywordRules.call({ includeInactive: true }, actor)),
+    domainOrNull(listMessagingWindows.call({}, actor)),
+    domainOrNull(listSmsComplianceEvents.call({}, actor)),
   ]);
 
   const locale = business?.defaultLocale ?? "en";
@@ -283,6 +292,133 @@ export default async function MessagingPage({
           </div>
           {/* Imported, never bought. */}
           <p className="max-w-prose text-sm text-ink-muted">{t("messaging.importHint")}</p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("messaging.keywords.title")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("messaging.keywords.intro")}</p>
+          {keywords === null ? (
+            <p className="text-sm text-danger">{t("messaging.unavailable")}</p>
+          ) : keywords.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("messaging.keywords.empty")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-2 p-0">
+              {keywords.map((rule) => (
+                <li key={rule.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                  <span className="font-mono font-medium">{rule.keyword}</span>
+                  <Pill tone="neutral">{t(`messaging.keywords.match.${rule.match}`)}</Pill>
+                  <span>{t(`messaging.keywords.action.${rule.action}`)}</span>
+                  <form action={deleteKeywordRuleAction} className="ms-auto">
+                    <input type="hidden" name="id" value={rule.id} />
+                    <Button type="submit" variant="danger">{t("messaging.keywords.delete")}</Button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form action={createKeywordRuleAction} className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("messaging.keywords.keyword")}</span>
+              <input name="keyword" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("messaging.keywords.match")}</span>
+              <select name="match" defaultValue="exact" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                {KEYWORD_MATCH_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>{t(`messaging.keywords.match.${kind}`)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("messaging.keywords.action")}</span>
+              <select name="action" defaultValue="auto_reply" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                {KEYWORD_ACTIONS.map((kind) => (
+                  <option key={kind} value={kind}>{t(`messaging.keywords.action.${kind}`)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("messaging.keywords.reply")}</span>
+              <input name="replyBody" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <div>
+              <Button type="submit">{t("messaging.keywords.add")}</Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("messaging.windows.title")} />
+        <CardBody>
+          <p className="max-w-prose text-sm text-ink-muted">{t("messaging.windows.intro")}</p>
+          {windows === null ? (
+            <p className="text-sm text-danger">{t("messaging.unavailable")}</p>
+          ) : windows.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">{t("messaging.windows.empty")}</p>
+          ) : (
+            <ul className="mt-3 grid list-none gap-2 p-0">
+              {windows.map((window) => (
+                <li key={window.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                  <span className="font-medium">{window.name}</span>
+                  {window.quietFrom && window.quietTo ? (
+                    <span className="font-mono text-ink-muted">
+                      {window.quietFrom}–{window.quietTo}
+                    </span>
+                  ) : null}
+                  {window.maxPerDay ? (
+                    <span className="text-ink-muted">{t("messaging.windows.maxPerDay")}: {window.maxPerDay}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          <form action={setMessagingWindowAction} className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("messaging.windows.name")}</span>
+              <input name="name" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("messaging.windows.quietFrom")}</span>
+              <input name="quietFrom" type="time" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("messaging.windows.quietTo")}</span>
+              <input name="quietTo" type="time" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("messaging.windows.maxPerDay")}</span>
+              <input name="maxPerDay" inputMode="numeric" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <div>
+              <Button type="submit">{t("messaging.windows.add")}</Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title={t("messaging.compliance.title")} />
+        <CardBody>
+          {compliance === null ? (
+            <p className="text-sm text-danger">{t("messaging.unavailable")}</p>
+          ) : compliance.length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("messaging.compliance.empty")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {compliance.slice(0, 20).map((event) => (
+                <li key={event.id} className="flex flex-wrap items-center gap-3 text-sm">
+                  <Pill tone="neutral">{t(`messaging.compliance.intent.${event.intent}`)}</Pill>
+                  <span className="font-mono">{event.keyword}</span>
+                  <span className="text-ink-muted">
+                    {formatDateTime(event.occurredAt, timezone, locale)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardBody>
       </Card>
     </div>

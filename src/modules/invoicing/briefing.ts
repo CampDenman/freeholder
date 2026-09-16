@@ -9,7 +9,7 @@ import { and, asc, eq, lt, sql } from "drizzle-orm";
 import { contacts } from "@/core/contacts/schema";
 import { invoices } from "@/modules/invoicing/schema";
 import { formatMoney } from "@/core/i18n";
-import { currentBusiness } from "@/core/settings/read";
+import { getBusiness } from "@/core/settings/service";
 import { defineService } from "@/core/service";
 import { briefingContribution } from "@/core/briefing/registry";
 
@@ -17,9 +17,7 @@ export const overdueInvoices = defineService({
   name: "invoicing.briefingOverdue",
   summary: "Invoices that are past their due date and still unpaid.",
   kind: "query",
-  permission: "public",
-  mcpExclude: true,
-  agentCallable: false,
+  permission: "system",
   input: z.object({
     userId: z.uuid(),
     onDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -51,7 +49,7 @@ export const overdueInvoices = defineService({
       .limit(15);
     if (rows.length === 0) return null;
 
-    const business = await currentBusiness().catch(() => null);
+    const business = await ctx.call(getBusiness, {}).catch(() => null);
     const locale = business?.defaultLocale ?? "en";
     const days = (dueAt: Date): number =>
       Math.max(0, Math.floor((Date.now() - dueAt.getTime()) / 86_400_000));

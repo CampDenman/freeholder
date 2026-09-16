@@ -19,6 +19,7 @@ export const RELATIONSHIP_KINDS = [
   "referred_by",
   "partner",
   "guardian",
+  "contact_book",
 ] as const;
 export type RelationshipKind = (typeof RELATIONSHIP_KINDS)[number];
 const relationshipKind = z.enum(RELATIONSHIP_KINDS);

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Importer authoring contract (C3.21). Core keeps preview, commit and rollback.
-import { PluginContractError } from "./contract";
+import { PluginContractError } from "./contract.ts";
 
 export type ImporterSourceKind =
   | "wordpress-rest"

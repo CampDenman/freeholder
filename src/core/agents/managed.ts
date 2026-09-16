@@ -21,7 +21,8 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { redact, ServiceError, type Actor } from "@/core/service";
 import { apiKeys } from "@/core/apikeys/schema";
-import { agentConnections, agentRuns, agents } from "@/core/agents/schema";
+import { agentConnections, agents } from "@/core/agents/schema";
+import { runs } from "@/core/runs/schema";
 import { claimTask, completeTask, reportStep } from "@/core/agents/execution";
 import { proposeWrite } from "@/core/agents/writes";
 import {
@@ -143,9 +144,9 @@ function affordableOutputTokens(
  */
 async function stillRunning(runId: string): Promise<boolean> {
   const [run] = await db()
-    .select({ status: agentRuns.status })
-    .from(agentRuns)
-    .where(eq(agentRuns.id, runId))
+    .select({ status: runs.status })
+    .from(runs)
+    .where(eq(runs.id, runId))
     .limit(1);
   return run?.status === "running";
 }

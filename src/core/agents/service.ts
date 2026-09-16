@@ -14,14 +14,8 @@
 import { z } from "zod";
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import {
-  agentConnections,
-  agentRuns,
-  agents,
-  agentSpend,
-  agentSteps,
-  agentTasks,
-} from "@/core/agents/schema";
+import { agentConnections, agents, agentTasks } from "@/core/agents/schema";
+import { runSpend, runSteps, runs } from "@/core/runs/schema";
 import { createApiKey } from "@/core/apikeys/service";
 import { violates } from "@/core/db/errors";
 import { WORKFORCE_ADAPTER_IDS } from "@/adapters/agent/workforce-types";
@@ -113,10 +107,26 @@ const taskRow = row({
   updatedAt: timestamp,
 });
 
+/** Project a stored run into the shape this layer's contracts promise. */
+function agentRunView<T extends { subjectId: string }>(
+  run: T,
+): Omit<T, "subjectId"> & { taskId: string } {
+  const { subjectId, ...rest } = run;
+  return { ...rest, taskId: subjectId };
+}
+
+/**
+ * A run as the agent layer names it.
+ *
+ * `core/runs` stores the owner as `subjectId` because a run can belong to an
+ * automation (§4.17). Here it is always a task, so the contract says `taskId`
+ * and `agentRunView` does the projection — core's polymorphism is core's, and
+ * an API that only ever sees agent runs should not have to know about it.
+ */
 const runRow = row({
   id: uuid,
   taskId: uuid,
-  agentId: uuid,
+  agentId: uuid.nullable(),
   attempt: z.number().int(),
   status: z.enum(["running", "done", "failed", "cancelled"]),
   startedAt: timestamp,
@@ -161,7 +171,7 @@ function redactStep<T extends { input: unknown; output: unknown }>(step: T): T {
 async function revokeRuns(tx: Tx, taskIds: string[], reason: string): Promise<number> {
   if (taskIds.length === 0) return 0;
   const ended = await tx
-    .update(agentRuns)
+    .update(runs)
     .set({
       status: "cancelled",
       stopReason: "cancelled",
@@ -169,8 +179,8 @@ async function revokeRuns(tx: Tx, taskIds: string[], reason: string): Promise<nu
       leaseExpiresAt: null,
       error: reason,
     })
-    .where(and(inArray(agentRuns.taskId, taskIds), eq(agentRuns.status, "running")))
-    .returning({ id: agentRuns.id });
+    .where(and(inArray(runs.subjectId, taskIds), eq(runs.status, "running")))
+    .returning({ id: runs.id });
   return ended.length;
 }
 
@@ -514,13 +524,13 @@ async function revokeRunningLeases(
 ): Promise<number> {
   if (agentIds.length === 0) return 0;
   const running = await ctx.tx
-    .select({ id: agentRuns.id, taskId: agentRuns.taskId })
-    .from(agentRuns)
-    .where(and(inArray(agentRuns.agentId, agentIds), eq(agentRuns.status, "running")));
+    .select({ id: runs.id, taskId: runs.subjectId })
+    .from(runs)
+    .where(and(inArray(runs.agentId, agentIds), eq(runs.status, "running")));
   if (running.length === 0) return 0;
 
   await ctx.tx
-    .update(agentRuns)
+    .update(runs)
     .set({
       status: "cancelled",
       stopReason: "cancelled",
@@ -530,7 +540,7 @@ async function revokeRunningLeases(
     })
     .where(
       inArray(
-        agentRuns.id,
+        runs.id,
         running.map((run) => run.id),
       ),
     );
@@ -889,23 +899,23 @@ export const getTask = defineService({
       .limit(1);
     if (!task) return null;
 
-    const runs = await ctx.tx
+    const runRows = await ctx.tx
       .select()
-      .from(agentRuns)
-      .where(eq(agentRuns.taskId, task.id))
-      .orderBy(asc(agentRuns.attempt));
+      .from(runs)
+      .where(eq(runs.subjectId, task.id))
+      .orderBy(asc(runs.attempt));
 
-    const steps = runs.length
+    const steps = runRows.length
       ? await ctx.tx
           .select()
-          .from(agentSteps)
+          .from(runSteps)
           .where(
             inArray(
-              agentSteps.runId,
-              runs.map((run) => run.id),
+              runSteps.runId,
+              runRows.map((run) => run.id),
             ),
           )
-          .orderBy(asc(agentSteps.seq))
+          .orderBy(asc(runSteps.seq))
       : [];
 
     const children = await ctx.tx
@@ -914,7 +924,12 @@ export const getTask = defineService({
       .where(eq(agentTasks.parentId, task.id))
       .orderBy(asc(agentTasks.createdAt));
 
-    return { ...task, runs, steps: steps.map(redactStep), children };
+    return {
+      ...task,
+      runs: runRows.map(agentRunView),
+      steps: steps.map(redactStep),
+      children,
+    };
   },
 });
 
@@ -932,16 +947,16 @@ export const inspectRun = defineService({
   handler: async (input, ctx) => {
     const [run] = await ctx.tx
       .select()
-      .from(agentRuns)
-      .where(eq(agentRuns.id, input.runId))
+      .from(runs)
+      .where(eq(runs.id, input.runId))
       .limit(1);
     if (!run) return null;
     const steps = await ctx.tx
       .select()
-      .from(agentSteps)
-      .where(eq(agentSteps.runId, run.id))
-      .orderBy(asc(agentSteps.seq));
-    return { ...run, steps: steps.map(redactStep) };
+      .from(runSteps)
+      .where(eq(runSteps.runId, run.id))
+      .orderBy(asc(runSteps.seq));
+    return { ...agentRunView(run), steps: steps.map(redactStep) };
   },
 });
 
@@ -963,19 +978,19 @@ export const tailRun = defineService({
   handler: async (input, ctx) => {
     const [run] = await ctx.tx
       .select()
-      .from(agentRuns)
-      .where(eq(agentRuns.id, input.runId))
+      .from(runs)
+      .where(eq(runs.id, input.runId))
       .limit(1);
     if (!run) return null;
     const steps = await ctx.tx
       .select()
-      .from(agentSteps)
+      .from(runSteps)
       .where(
-        and(eq(agentSteps.runId, run.id), sql`${agentSteps.seq} > ${input.afterSeq}`),
+        and(eq(runSteps.runId, run.id), sql`${runSteps.seq} > ${input.afterSeq}`),
       )
-      .orderBy(asc(agentSteps.seq));
+      .orderBy(asc(runSteps.seq));
     return {
-      ...run,
+      ...agentRunView(run),
       live: run.status === "running",
       steps: steps.map(redactStep),
     };
@@ -996,8 +1011,8 @@ export const stopRun = defineService({
     refuseAgents(ctx.actor, "stop a run");
     const [run] = await ctx.tx
       .select()
-      .from(agentRuns)
-      .where(eq(agentRuns.id, input.runId))
+      .from(runs)
+      .where(eq(runs.id, input.runId))
       .limit(1);
     if (!run) throw new ServiceError("not_found", "No such run.");
     if (run.status !== "running") {
@@ -1005,7 +1020,7 @@ export const stopRun = defineService({
     }
     const reason = input.reason ?? "Stopped by the owner.";
     const [ended] = await ctx.tx
-      .update(agentRuns)
+      .update(runs)
       .set({
         status: "cancelled",
         stopReason: "cancelled",
@@ -1013,12 +1028,12 @@ export const stopRun = defineService({
         leaseExpiresAt: null,
         error: reason,
       })
-      .where(eq(agentRuns.id, run.id))
+      .where(eq(runs.id, run.id))
       .returning();
     const [task] = await ctx.tx
       .select({ attempts: agentTasks.attempts })
       .from(agentTasks)
-      .where(eq(agentTasks.id, run.taskId))
+      .where(eq(agentTasks.id, run.subjectId))
       .limit(1);
     const taskStatus =
       (task?.attempts ?? 0) >= MAX_TASK_ATTEMPTS
@@ -1027,10 +1042,10 @@ export const stopRun = defineService({
     await ctx.tx
       .update(agentTasks)
       .set({ status: taskStatus, failureReason: reason })
-      .where(eq(agentTasks.id, run.taskId));
-    ctx.setSubject("agent_task", run.taskId);
-    ctx.queueEvent("agentRun.stopped", { runId: run.id, taskId: run.taskId });
-    return { ...ended!, taskStatus };
+      .where(eq(agentTasks.id, run.subjectId));
+    ctx.setSubject("agent_task", run.subjectId);
+    ctx.queueEvent("agentRun.stopped", { runId: run.id, taskId: run.subjectId });
+    return { ...agentRunView(ended!), taskStatus };
   },
 });
 
@@ -1056,9 +1071,9 @@ export const retryTask = defineService({
       throw new ServiceError("conflict", "Finished work cannot be retried.");
     }
     const [live] = await ctx.tx
-      .select({ id: agentRuns.id })
-      .from(agentRuns)
-      .where(and(eq(agentRuns.taskId, before.id), eq(agentRuns.status, "running")))
+      .select({ id: runs.id })
+      .from(runs)
+      .where(and(eq(runs.subjectId, before.id), eq(runs.status, "running")))
       .limit(1);
     if (live) {
       throw new ServiceError("conflict", "Stop the run before retrying this task.");
@@ -1290,20 +1305,20 @@ export const agentSpendReport = defineService({
         model: agentConnections.model,
         inputCentsPerMillion: agentConnections.inputCentsPerMillion,
         outputCentsPerMillion: agentConnections.outputCentsPerMillion,
-        spentCents: sql<number>`coalesce(sum(${agentSpend.costCents}), 0)::int`,
-        tokensIn: sql<number>`coalesce(sum(${agentSpend.tokensIn}), 0)::int`,
-        tokensOut: sql<number>`coalesce(sum(${agentSpend.tokensOut}), 0)::int`,
-        runs: sql<number>`count(${agentSpend.id})::int`,
+        spentCents: sql<number>`coalesce(sum(${runSpend.costCents}), 0)::int`,
+        tokensIn: sql<number>`coalesce(sum(${runSpend.tokensIn}), 0)::int`,
+        tokensOut: sql<number>`coalesce(sum(${runSpend.tokensOut}), 0)::int`,
+        runs: sql<number>`count(${runSpend.id})::int`,
       })
       .from(agents)
       .innerJoin(agentConnections, eq(agentConnections.id, agents.connectionId))
       .leftJoin(
-        agentSpend,
+        runSpend,
         and(
-          eq(agentSpend.agentId, agents.id),
+          eq(runSpend.agentId, agents.id),
           // The current window only: a budget is per period, so a total across
           // all time would be a different and much less useful number.
-          sql`${agentSpend.periodStart} >= date_trunc(${agents.budgetPeriod}, now())`,
+          sql`${runSpend.periodStart} >= date_trunc(${agents.budgetPeriod}, now())`,
         ),
       )
       .groupBy(

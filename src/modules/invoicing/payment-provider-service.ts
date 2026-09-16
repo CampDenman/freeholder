@@ -110,6 +110,17 @@ const savedMethodEvent = z.object({
   method: methodEvidence,
   occurredAt: z.string().datetime(),
 });
+const subscriptionBillingEvent = z.object({
+  id: z.string().trim().min(1).max(500),
+  kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
+  providerRef: z.string().trim().min(1).max(500),
+  occurredAt: z.string().datetime(),
+  amountMinor: positiveMinor.optional(),
+  currency: currency.optional(),
+  periodStart: z.string().datetime().optional(),
+  periodEnd: z.string().datetime().optional(),
+  invoiceProviderRef: z.string().trim().min(1).max(500).optional(),
+});
 const payoutEvent = z.object({
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["payout_pending", "payout_in_transit", "payout_paid", "payout_failed", "payout_cancelled"]),
@@ -121,7 +132,7 @@ const payoutEvent = z.object({
   statementRef: z.string().trim().min(1).max(500).optional(),
   failureReason: z.string().trim().min(1).max(1_000).optional(),
 });
-const providerEvent = z.union([paymentEvent, refundEvent, disputeEvent, savedMethodEvent, payoutEvent]);
+const providerEvent = z.union([paymentEvent, refundEvent, disputeEvent, savedMethodEvent, payoutEvent, subscriptionBillingEvent]);
 
 function adapterFailure(error: unknown): never {
   if (error instanceof ServiceError) throw error;
@@ -413,6 +424,20 @@ async function applyEvent(providerId: string, event: PaymentProviderEvent, ctx: 
   if (event.kind.startsWith("refund_")) return processRefundEvent(providerId, event as z.infer<typeof refundEvent>, ctx);
   if (event.kind.startsWith("dispute_")) return processDisputeEvent(providerId, event as z.infer<typeof disputeEvent>, ctx);
   if (event.kind.startsWith("payout_")) return processPayoutEvent(providerId, event as z.infer<typeof payoutEvent>, ctx);
+  if (event.kind.startsWith("subscription_")) {
+    const billing = event as z.infer<typeof subscriptionBillingEvent>;
+    const { reconcileProviderPeriod } = await import("@/modules/subscriptions/billing");
+    const result = await ctx.callAsSystem(reconcileProviderPeriod, {
+      provider: providerId,
+      providerRef: billing.providerRef,
+      kind: billing.kind,
+      amountMinor: billing.amountMinor,
+      currency: billing.currency,
+      periodStart: billing.periodStart,
+      periodEnd: billing.periodEnd,
+    });
+    return result.applied ? billing.kind : "subscription_event_ignored";
+  }
   return processMethodEvent(providerId, event as z.infer<typeof savedMethodEvent>, ctx);
 }
 
@@ -476,6 +501,7 @@ export const listPaymentProviders = defineService({
         partialRefunds: z.boolean(),
         savedMethods: z.boolean(),
         subscriptions: z.boolean(),
+        offSessionCharges: z.boolean(),
         disputes: z.boolean(),
         payouts: z.boolean(),
         inPerson: z.boolean(),

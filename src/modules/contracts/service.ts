@@ -18,12 +18,17 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { defineService, ServiceError, type Actor } from "@/core/service";
 import { contractDocuments, CONTRACT_KINDS, CONTRACT_STATUSES } from "./schema";
+// Claims this module's room in the customer portal (C8.11). Imported for
+// its side effect: core owns the registry so it never imports a module,
+// and something has to make the claim at load time.
+import "./portal";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -388,6 +393,11 @@ export const listContracts = defineService({
   summary: "Agreements issued, signed and outstanding.",
   kind: "query",
   permission: "scoped",
+  // C8.11: the customer this asks about may ask it themselves. The
+  // contract layer verifies the field is present and is their own contact
+  // before the handler runs, so this widens what a customer can *see*
+  // about themselves and nothing else.
+  selfService: { contactField: "contactId" },
   input: z.object({
     contactId: z.uuid().optional(),
     subjectType: z.string().trim().max(50).optional(),
@@ -582,3 +592,17 @@ export default [
   getContract,
   voidContract,
 ];
+
+registerSearchSource({
+  kind: "agreement", module: "contracts", readService: "contracts.get", tables: ["contract_documents"],
+  search: async ({ tx, actor, pattern, limit }) => {
+    // Match contracts.get's additional human-session requirement. Even an API
+    // key with that scope cannot use search to bypass requirePerson.
+    if (actor.kind !== "user") return [];
+    const rows = await tx.select({ id: contractDocuments.id, title: contractDocuments.title, contactId: contractDocuments.contactId })
+      .from(contractDocuments).where(matchesIlike(contractDocuments.title, pattern))
+      .orderBy(desc(contractDocuments.issuedAt), desc(contractDocuments.id)).limit(limit);
+    return rows.map(item => ({ kind: "agreement", id: item.id, title: item.title,
+      href: `/admin/agreements/${item.id}`, snippet: null, contactId: item.contactId, module: "contracts" }));
+  },
+});

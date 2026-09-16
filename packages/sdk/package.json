@@ -1,7 +1,7 @@
 {
   "name": "@freeholder/sdk",
-  "version": "0.0.0",
-  "description": "Client SDK for Freeholder sites — typed access to the API and MCP surface",
+  "version": "0.1.0",
+  "description": "Typed HTTP client for a Freeholder instance, generated from the live service registry",
   "license": "Apache-2.0",
   "author": "Tony Aly <tony@paradisemodern.com> (https://tonyaly.com)",
   "repository": {
@@ -10,6 +10,9 @@
     "directory": "packages/sdk"
   },
   "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -18,10 +21,11 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "LICENSE"],
+  "publishConfig": { "access": "public" },
+  "files": ["dist", "LICENSE", "README.md"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test"
+    "test": "node --test test/*.test.mjs"
   }
 }

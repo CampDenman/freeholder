@@ -19,6 +19,7 @@ import {
   unsubscribeFromNewsletter,
 } from "@/modules/newsletters/service";
 import { newsletterSubscriptions } from "@/modules/newsletters/schema";
+import { canContact } from "@/core/privacy/service";
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
@@ -79,8 +80,27 @@ describe.runIf(hasDatabase)("newsletters module", { timeout: 30_000 }, () => {
     expect(headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
     expect(headers["List-Unsubscribe"]).toContain("/unsubscribe?token=");
 
+    // The confirmation is the consent evidence (§2096), not merely a status.
+    // Nothing else on the platform records marketing-email consent, and
+    // `contacts.canContact` treats absence of evidence as refusal — so without
+    // this a campaign (C9.06) would lawfully refuse to mail every confirmed
+    // subscriber the business has.
+    expect(
+      await canContact.call(
+        { contactId: row!.contactId, purpose: "marketing", channel: "email" },
+        OWNER,
+      ),
+    ).toMatchObject({ allowed: true, reason: "granted" });
+
     const left = await unsubscribeFromNewsletter.call({ token: row!.unsubscribeToken }, ANONYMOUS);
     expect(left.status).toBe("unsubscribed");
+    // And leaving withdraws it, so a segment cannot mail them anyway.
+    expect(
+      await canContact.call(
+        { contactId: row!.contactId, purpose: "marketing", channel: "email" },
+        OWNER,
+      ),
+    ).toMatchObject({ allowed: false, reason: "withdrawn" });
   });
 
   it("merges two subscription rows for the same newsletter into the survivor", async () => {

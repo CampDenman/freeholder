@@ -7,6 +7,11 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { attachCaptureUpload, createUploadLink } from "@/core/media/capture";
+import {
+  readBoundedFormData,
+  RequestBodyError,
+} from "@/core/http/body";
+import { PROXY_UPLOAD_LIMIT } from "@/core/media/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +19,16 @@ export async function POST(request: Request) {
   const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
   const url = new URL(request.url);
   const token = url.searchParams.get("token");
-  const form = await request.formData();
+  let form: FormData;
+  try {
+    form = await readBoundedFormData(
+      request,
+      PROXY_UPLOAD_LIMIT + 1024 * 1024,
+    );
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return NextResponse.json({ error: "upload body could not be read" }, { status });
+  }
   const files = form.getAll("media").concat(form.getAll("file")).filter((value) => value instanceof File);
   if (files.length === 0) {
     return NextResponse.json({ error: "missing file" }, { status: 400 });

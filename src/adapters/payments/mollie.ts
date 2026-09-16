@@ -9,6 +9,8 @@ import { object, paymentFetch, providerJson, text } from "./http";
 import {
   parseProviderJson,
   providerTime,
+  refuseOffSessionCharge,
+  refuseRecurringSchedule,
   unsupportedSavedMethod,
   verifyProviderHmac,
 } from "./provider-helpers";
@@ -24,6 +26,7 @@ const capabilities: PaymentAdapterCapabilities = {
   partialRefunds: true,
   savedMethods: false,
   subscriptions: false,
+  offSessionCharges: false,
   disputes: false,
   payouts: false,
   inPerson: false,
@@ -199,6 +202,10 @@ export function createMolliePayments(options: MolliePaymentOptions = {}): Paymen
       };
     },
     async revokeSavedMethod() { unsupportedSavedMethod("Mollie"); },
+    chargeSavedMethod: refuseOffSessionCharge("mollie"),
+    createRecurringSchedule: refuseRecurringSchedule("mollie"),
+    updateRecurringSchedule: refuseRecurringSchedule("mollie"),
+    cancelRecurringSchedule: refuseRecurringSchedule("mollie"),
     async verifyWebhook(request) {
       const signature = request.headers["x-mollie-signature"];
       let paymentId: string | undefined;

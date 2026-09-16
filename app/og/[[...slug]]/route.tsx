@@ -8,6 +8,7 @@ import { ogImageResponse } from "../og-template";
 import { siteOrigin } from "@/core/seo/origin";
 import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
+import { targetFor } from "@/modules/share/service";
 import { getLocale } from "../../i18n";
 
 export const dynamic = "force-dynamic";
@@ -32,12 +33,21 @@ export async function GET(
   }
 
   const seo = (page.seo ?? {}) as { title?: string; ogImage?: string };
-  if (seo.ogImage) {
-    return Response.redirect(new URL(seo.ogImage, siteOrigin()).toString(), 302);
+
+  // §34: the share target is where an entity's *social* face is written down,
+  // and it outranks the SEO title here for the same reason it does in the page
+  // metadata — the card is read by somebody who was not already looking.
+  const share = await targetFor
+    .call({ path: page.slug, locale }, { kind: "anonymous" })
+    .catch(() => null);
+
+  const supplied = share?.imageUrl ?? seo.ogImage;
+  if (supplied) {
+    return Response.redirect(new URL(supplied, siteOrigin()).toString(), 302);
   }
 
   return ogImageResponse({
-    title: seo.title ?? page.title,
+    title: share?.socialTitle ?? seo.title ?? page.title,
     siteName: business?.name ?? page.title,
     tagline: page.slug === "" ? business?.tagline : null,
   });

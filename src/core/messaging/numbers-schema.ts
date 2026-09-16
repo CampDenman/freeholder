@@ -33,6 +33,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { MESSAGE_PURPOSES } from "./purpose";
 
 export const NUMBER_KINDS = ["long_code", "toll_free", "short_code", "alphanumeric"] as const;
 
@@ -44,7 +45,7 @@ export const NUMBER_KINDS = ["long_code", "toll_free", "short_code", "alphanumer
  * them on different numbers is how a business protects the number its customers
  * actually reply to from the one that gets complaints.
  */
-export const NUMBER_PURPOSES = ["transactional", "marketing", "support"] as const;
+export const NUMBER_PURPOSES = MESSAGE_PURPOSES;
 
 export const messagingNumbers = pgTable(
   "messaging_numbers",

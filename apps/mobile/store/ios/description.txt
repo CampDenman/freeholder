@@ -1,0 +1,5 @@
+Freeholder is the customer app for this business.
+
+Client app
+
+Book, view galleries, and pay invoices from your phone — the same records as the website, never a second copy.

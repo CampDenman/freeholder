@@ -16,7 +16,7 @@
 //   - A path with no published page is a real 404, not a soft one — §5 wants
 //     "clean structural 404s", and a 200 saying "not found" is neither.
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { setupState } from "@/core/settings/service";
@@ -27,10 +27,13 @@ import { resolveRedirect } from "@/core/seo/service";
 import {
   articleJsonLd,
   breadcrumbJsonLd,
+  collectionPageJsonLd,
+  creativeWorkJsonLd,
   eventJsonLd,
   humanizeSegment,
   organizationJsonLd,
   productJsonLd,
+  serializeJsonLd,
   serviceJsonLd,
   websiteJsonLd,
 } from "@/core/seo/jsonld";
@@ -52,9 +55,17 @@ import { currentBusiness } from "@/core/settings/read";
 import { publishedPage } from "@/modules/cms/read";
 import { assignmentsFor } from "@/modules/cms/experiments";
 import { ANON_HEADER, SESSION_HEADER } from "@/modules/analytics/visitor";
+import { SESSION_COOKIE } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
 import { recordExperimentImpressions } from "@/modules/analytics/service";
 import { localizeCustomerHref } from "@/core/i18n/customer";
-import { CSP_NONCE_HEADER } from "@/core/http/csp";
+import {
+  CSP_NONCE_HEADER,
+  THIRD_PARTY_CREATIVE_CONSENT_COOKIE,
+  parseThirdPartyCreativeConsent,
+} from "@/core/http/csp";
+import { targetFor } from "@/modules/share/service";
+import { ShareBar } from "../ShareBar";
 
 export const dynamic = "force-dynamic";
 
@@ -151,7 +162,20 @@ export async function generateMetadata({
       : (business?.defaultLocale ?? locale);
 
   const canonical = canonicalFor(origin, page.slug, servedLocale, business);
-  const ogImage = seo.ogImage ?? `${origin}${ogImagePath(page.slug)}`;
+
+  // §34: the `ShareTarget` is "canonical URL + auto-generated OG image", so
+  // the social card is the share target's when the owner has written one. It
+  // deliberately does not touch `title` or the meta description: a search
+  // result is read by somebody already looking and a shared card by somebody
+  // who was not, and collapsing the two would make improving one quietly
+  // worsen the other.
+  const share = await targetFor
+    .call({ path: page.slug, locale: servedLocale }, ANONYMOUS)
+    .catch(() => null);
+  const socialTitle = share?.socialTitle ?? title;
+  const socialDescription = share?.socialDescription ?? description;
+  const ogImage =
+    share?.imageUrl ?? seo.ogImage ?? `${origin}${ogImagePath(page.slug)}`;
   const filtered = isFilterQuery(query);
 
   return {
@@ -163,17 +187,17 @@ export async function generateMetadata({
       ...(alternates ? { languages: alternates } : {}),
     },
     openGraph: {
-      title,
-      description,
+      title: socialTitle,
+      description: socialDescription,
       type: "website",
       url: canonical,
       siteName: siteName ?? undefined,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+      images: [{ url: ogImage, width: 1200, height: 630, alt: socialTitle }],
     },
     twitter: {
       card: "summary_large_image",
-      title,
-      description,
+      title: socialTitle,
+      description: socialDescription,
       images: [ogImage],
     },
   };
@@ -254,6 +278,8 @@ export default async function PublicPage({
       ANONYMOUS,
     ).catch(() => undefined);
   }
+  const cookieJar = await cookies();
+  const actor = await actorFromToken(cookieJar.get(SESSION_COOKIE)?.value);
   const rendered = await renderBlocks(blocks, {
     locale,
     t,
@@ -265,7 +291,12 @@ export default async function PublicPage({
         } : null,
     path: path === "" ? "/" : `/${path}`,
     visitorId,
+    actor,
     experimentAssignments,
+    thirdPartyConsent: parseThirdPartyCreativeConsent(
+      cookieJar.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
+    ),
+    cspNonce: nonce,
     localizeHref: business
       ? (href: string) => localizeCustomerHref(href, locale, business)
       : undefined,
@@ -342,10 +373,23 @@ export default async function PublicPage({
           key={i}
           nonce={nonce}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(entry) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(entry) }}
         />
       ))}
       <article className="grid gap-8">{rendered}</article>
+      {/*
+        §34: sharing is "a property of every entity with a public face", so it
+        is rendered by the one public route rather than added per page. The
+        component returns nothing for an entity whose sharing the owner has
+        switched off.
+      */}
+      <ShareBar
+        path={path}
+        locale={locale}
+        title={page.title}
+        siteName={business?.name ?? null}
+        sharedRef={typeof query.shared === "string" ? query.shared : undefined}
+      />
     </>
   );
 }
@@ -420,6 +464,32 @@ async function entityJsonLd(input: {
         remainingAttendeeCapacity: first?.remaining,
       }),
     ];
+  }
+  if (kind === "project" && leaf) {
+    const { resolvePublicProject } = await import("@/modules/projects/portfolio-service");
+    const result = await resolvePublicProject.call({ slug: leaf }, ANONYMOUS);
+    if (!result) return [];
+    const absolute = (value: string) =>
+      value.startsWith("/") ? `${input.origin}${value}` : value;
+    return [
+      creativeWorkJsonLd({
+        name: result.project.title,
+        url,
+        description: result.project.summary ?? input.description,
+        dateCreated: result.project.occurredOn,
+        images: result.images.map((image) => ({
+          url: absolute(image.src),
+          caption: image.altText,
+        })),
+        services: result.services.map((service) => ({
+          name: service.name,
+          url: `${input.origin}/products/${service.slug}`,
+        })),
+      }),
+    ];
+  }
+  if (kind === "collection") {
+    return [collectionPageJsonLd({ name: input.title, url, description: input.description })];
   }
   return [];
 }

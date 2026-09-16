@@ -28,11 +28,14 @@ describe("the Content Security Policy contract", () => {
       .toEqual(["https://ads.example", "https://media.example"]);
     expect(parseCspOrigins("http://localhost:3001")).toEqual(["http://localhost:3001"]);
 
+    const credentialedOrigin = new URL("https://ads.example");
+    credentialedOrigin.username = "fixture-user";
+    credentialedOrigin.password = "fixture-password";
     for (const unsafe of [
       "http://ads.example",
       "https://*.example",
       "https://ads.example/path",
-      "https://user:secret@ads.example",
+      credentialedOrigin.href,
     ]) {
       expect(() => parseCspOrigins(unsafe)).toThrow(/exact HTTPS origin/);
     }
@@ -67,6 +70,21 @@ describe("the Content Security Policy contract", () => {
     });
     expect(preview).toContain("frame-ancestors 'self'");
     expect(nested).toContain("frame-ancestors 'self'");
+  });
+
+  it("lets other sites frame only the copy-paste embed widgets", () => {
+    const widget = contentSecurityPolicy({
+      nonce: "embed",
+      path: "/embed/reviews",
+      production: true,
+    });
+    const home = contentSecurityPolicy({
+      nonce: "embed",
+      path: "/",
+      production: true,
+    });
+    expect(widget).toContain("frame-ancestors *");
+    expect(home).toContain("frame-ancestors 'none'");
   });
 
   it("opens uploads only in admin and creatives only after separate consent", () => {

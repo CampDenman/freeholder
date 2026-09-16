@@ -13,6 +13,7 @@ import { actorFromRequest } from "@/core/http/actor";
 import { requireCsrf } from "@/core/http/csrf";
 import { errorResponse, json, type ResponseParts } from "@/core/http/respond";
 import type { Service } from "@/core/service";
+import { DEFAULT_JSON_BODY_LIMIT, readBoundedText } from "@/core/http/body";
 
 export interface Presented extends ResponseParts {
   status?: number;
@@ -35,7 +36,7 @@ export interface ServiceRouteOptions<Out> {
 }
 
 async function readJsonBody(request: Request): Promise<unknown> {
-  const text = await request.text();
+  const text = await readBoundedText(request, DEFAULT_JSON_BODY_LIMIT);
   if (!text) return {};
   try {
     return JSON.parse(text);

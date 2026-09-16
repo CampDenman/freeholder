@@ -4,6 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { unsubscribeFromNewsletter } from "@/modules/newsletters/service";
+import { readBoundedText, RequestBodyError } from "@/core/http/body";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,13 @@ export async function POST(request: Request) {
   let bodyToken: string | null = null;
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("application/x-www-form-urlencoded")) {
-    const body = await request.text();
+    let body: string;
+    try {
+      body = await readBoundedText(request, 4_096);
+    } catch (error) {
+      const status = error instanceof RequestBodyError ? error.status : 400;
+      return NextResponse.json({ error: "request body could not be read" }, { status });
+    }
     const params = new URLSearchParams(body);
     if (params.get("List-Unsubscribe") !== "One-Click" && params.get("List-Unsubscribe") !== "one-click") {
       return NextResponse.json({ error: "expected List-Unsubscribe=One-Click" }, { status: 400 });

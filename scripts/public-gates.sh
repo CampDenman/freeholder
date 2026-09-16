@@ -63,6 +63,15 @@ if [ "$code" != "200" ]; then
   exit 1
 fi
 
+# C11.15: a 200 that still reports 0.0.0 is the droplet that was never
+# redeployed after C3.20. Capture without a pipe; see the SIGPIPE note below.
+health_json=$(curl -s "${BASE}/api/health")
+if [[ "$health_json" != *'"version"'* ]] || [[ "$health_json" == *'"version":"0.0.0"'* ]]; then
+  echo "::error title=Public gates::health version is missing or 0.0.0: ${health_json}"
+  docker logs fh-demo
+  exit 1
+fi
+
 # The demo has to have actually installed. Without this the gates would run
 # against a bare instance and pass by having nothing to look at — the exact
 # failure mode a crawl gate is prone to.
@@ -74,7 +83,12 @@ fi
 # install" directly above a log line saying it had.
 installed=""
 for _ in $(seq 1 60); do
-  if docker logs fh-demo 2>&1 | grep -q "demo installed"; then
+  # Capture and match without a pipe. `docker logs … | grep -q` looks
+  # equivalent and is a SIGPIPE trap under `set -o pipefail`: grep exits at
+  # the first match while docker is still writing, docker dies on the closed
+  # pipe, and the pipeline reports 141 — an intermittent red build with no
+  # failing assertion anywhere in the log.
+  if [[ "$(docker logs fh-demo 2>&1)" == *"demo installed"* ]]; then
     installed="yes"
     break
   fi
@@ -85,7 +99,7 @@ if [ -z "$installed" ]; then
   docker logs fh-demo
   exit 1
 fi
-docker logs fh-demo 2>&1 | grep "demo installed"
+docker logs fh-demo 2>&1 | grep "demo installed" || true
 
 # C1.24, at the actual route boundary and before CI creates or repairs any
 # owner data: a database created above in this script must render the complete

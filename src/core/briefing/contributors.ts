@@ -49,9 +49,7 @@ function contributor(
     kind: "query" as const,
     // Assembly runs as system on everybody's behalf; a contributor is never
     // reachable from outside, which is why it may read across the business.
-    permission: "public" as const,
-    mcpExclude: true,
-    agentCallable: false,
+    permission: "system" as const,
     input: request,
     output: briefingContribution,
     handler: (input, ctx) => produce(ctx.tx, input),

@@ -18,16 +18,22 @@ export {
 } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
 export {
+  updateSettings,
+  updateSnapshots,
+  updateRuns,
+  releaseNotes,
+  availableReleases,
+} from "@/core/update/schema";
+export {
   agentConnections,
   agents,
   agentTasks,
-  agentRuns,
-  agentSteps,
-  agentApprovals,
-  agentSpend,
   agentPlaybooks,
   agentPlaybookVersions,
 } from "@/core/agents/schema";
+// The runtime four (§4.17, C9.02). Agents and automations both run work, so
+// runs belong to neither of them.
+export { runs, runSteps, runApprovals, runSpend } from "@/core/runs/schema";
 export {
   calendars,
   calendarMemberships,
@@ -64,12 +70,14 @@ export {
 } from "@/core/connections/schema";
 export {
   mailDeliveries,
+  mailOutbox,
   mailOauthStates,
   mailProviderEvents,
   mailSenders,
   mailSuppressions,
 } from "@/core/mail/schema";
 export {
+  deviceTokens,
   notificationDeliveries,
   notificationDigests,
   notificationPreferences,
@@ -95,10 +103,31 @@ export { tasks } from "@/core/tasks/schema";
 export { notes, noteRevisions } from "@/core/notes/schema";
 export { segments, segmentMembers } from "@/core/segments/schema";
 export { scoringRules, contactScoreAwards } from "@/core/scoring/schema";
+export {
+  entitlements,
+  entitlementGrants,
+  passBalances,
+  contentUnlocks,
+} from "@/core/entitlements/schema";
+export { paywalls, meterCounters } from "@/core/paywalls/schema";
 export { savedViews } from "@/core/views/schema";
-export { contactImports, contactImportRows } from "@/core/import/contacts-schema";
-export { conversations, messages, messageDeliveries } from "@/core/messaging/schema";
+export {
+  contactImports,
+  contactImportRows,
+  signupContactImportChoices,
+  signupContactImportPolicies,
+} from "@/core/import/contacts-schema";
+export {
+  conversations,
+  keywordRuleEvents,
+  keywordRules,
+  messages,
+  messageDeliveries,
+  siteChatSessions,
+  smsComplianceEvents,
+} from "@/core/messaging/schema";
 export { messagingNumbers } from "@/core/messaging/numbers-schema";
+export { messagingWindows } from "@/core/messaging/policy-schema";
 export { auditLog } from "@/core/events/schema";
 export {
   assets,
@@ -116,7 +145,7 @@ export { designSettings } from "@/core/design/schema";
 export { entityTranslations } from "@/core/i18n/schema";
 export { passwordResets } from "@/core/auth/schema";
 export { outboxEventDeliveries, outboxEvents } from "@/core/events/schema";
-export { jobIdempotencyKeys } from "@/core/jobs/schema";
+export { jobIdempotencyKeys, jobRuntimeHeartbeats } from "@/core/jobs/schema";
 export { guidanceFlows, guidanceProgress } from "@/core/guidance/schema";
 export {
   demoScenarios,
@@ -146,3 +175,4 @@ export {
   pluginRetentions,
   importRuns,
 } from "@/core/plugins/schema";
+export { retentionPolicies } from "@/core/retention/schema";

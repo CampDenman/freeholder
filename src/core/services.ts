@@ -9,6 +9,10 @@ import twoFactorServices from "@/core/auth/two-factor";
 import sessionManagementServices from "@/core/auth/session-management/service";
 import magicLinkServices from "@/core/auth/magic-links/service";
 import resetServices from "@/core/auth/reset";
+// What a merge and an erasure mean for a run. Imported for the side effect:
+// `core/runs` owns the table, so it owns the obligations that come with a
+// `contact_id`, and something loaded at boot has to make the registration.
+import "@/core/runs/spine";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
 import agentWrites from "@/core/agents/writes";
@@ -32,6 +36,7 @@ import duplicateServices from "@/core/contacts/duplicates";
 import organizationServices from "@/core/contacts/organizations";
 import relationshipServices from "@/core/contacts/relationships";
 import privacyServices from "@/core/privacy/service";
+import portalServices from "@/core/portal/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
 import outboxServices from "@/core/events/outbox-service";
@@ -39,6 +44,7 @@ import i18nServices from "@/core/i18n/service";
 import jobServices from "@/core/jobs/service";
 import guidanceServices from "@/core/guidance/service";
 import demoServices from "@/core/demo/service";
+import demoFixtureServices from "@/core/demo/fixtures";
 import invitationServices from "@/core/invitations/service";
 import locationServices from "@/core/locations/service";
 import mailServices from "@/core/mail/service";
@@ -49,11 +55,17 @@ import taskServices from "@/core/tasks/service";
 import noteServices from "@/core/notes/service";
 import segmentServices from "@/core/segments/service";
 import scoringServices from "@/core/scoring/service";
+import searchServices from "@/core/search/service";
+import retentionServices from "@/core/retention/service";
+import entitlementServices from "@/core/entitlements/service";
+import paywallServices from "@/core/paywalls/service";
 import viewServices from "@/core/views/service";
 import contactImportServices from "@/core/import/contacts-service";
+import signupContactImportServices from "@/core/import/signup-contact-service";
 import messagingServices from "@/core/messaging/service";
 import inboxServices from "@/core/messaging/inbox";
 import smsServices from "@/core/messaging/sms";
+import chatServices from "@/core/messaging/chat";
 import schedulingServices from "@/core/scheduling/service";
 import availabilityServices from "@/core/scheduling/availability-service";
 import bookingServices from "@/core/scheduling/bookings";
@@ -74,6 +86,7 @@ import pluginServices from "@/core/plugins/service";
 import importServices from "@/core/import/service";
 import portabilityServices from "@/core/portability/service";
 import provenanceServices from "@/core/provenance/service";
+import updateSeamServices from "@/core/update/service";
 import catalogueServices from "@/core/catalogue/service";
 import type { Service } from "@/core/service";
 import type { EventDeliveryContext } from "@/core/events";
@@ -102,11 +115,17 @@ const services: Service[] = [
   ...noteServices,
   ...segmentServices,
   ...scoringServices,
+  ...searchServices,
+  ...retentionServices,
+  ...entitlementServices,
+  ...paywallServices,
   ...viewServices,
   ...contactImportServices,
+  ...signupContactImportServices,
   ...messagingServices,
   ...inboxServices,
   ...smsServices,
+  ...chatServices,
   ...briefingServices,
   ...briefingContributorServices,
   ...briefingPlaybookSection,
@@ -116,6 +135,7 @@ const services: Service[] = [
   ...organizationServices,
   ...relationshipServices,
   ...privacyServices,
+  ...portalServices,
   ...doctorServices,
   ...eventServices,
   ...outboxServices,
@@ -123,6 +143,7 @@ const services: Service[] = [
   ...jobServices,
   ...guidanceServices,
   ...demoServices,
+  ...demoFixtureServices,
   ...invitationServices,
   ...locationServices,
   ...mailServices,
@@ -149,6 +170,7 @@ const services: Service[] = [
   ...importServices,
   ...portabilityServices,
   ...provenanceServices,
+  ...updateSeamServices,
   ...catalogueServices,
 ];
 

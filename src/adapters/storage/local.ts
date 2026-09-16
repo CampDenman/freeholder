@@ -66,7 +66,10 @@ export function createLocalStorage(config: LocalConfig): StorageAdapter {
    * containing `../` writes anywhere the process can reach.
    */
   const pathFor = (key: string): string => {
-    const target = resolve(join(root, key));
+    // Both components are runtime values. Without the trace annotation,
+    // Turbopack treats local media reads as permission to package the whole
+    // repository into the production standalone output.
+    const target = resolve(join(/* turbopackIgnore: true */ root, key));
     if (target !== root && !target.startsWith(root + sep)) {
       throw new Error(`storage: key escapes the storage root: ${key}`);
     }
@@ -86,7 +89,9 @@ export function createLocalStorage(config: LocalConfig): StorageAdapter {
 
     async get(key): Promise<Uint8Array<ArrayBuffer> | undefined> {
       try {
-        return new Uint8Array(await readFile(pathFor(key)));
+        return new Uint8Array(
+          await readFile(/* turbopackIgnore: true */ pathFor(key)),
+        );
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
         throw error;
@@ -95,7 +100,7 @@ export function createLocalStorage(config: LocalConfig): StorageAdapter {
 
     async head(key) {
       try {
-        const facts = await stat(pathFor(key));
+        const facts = await stat(/* turbopackIgnore: true */ pathFor(key));
         return {
           key,
           bytes: facts.size,
@@ -111,7 +116,10 @@ export function createLocalStorage(config: LocalConfig): StorageAdapter {
 
     async readRange(key, start, endInclusive) {
       try {
-        const handle = await open(pathFor(key), "r");
+        const handle = await open(
+          /* turbopackIgnore: true */ pathFor(key),
+          "r",
+        );
         try {
           const length = Math.max(0, endInclusive - start + 1);
           const buffer = Buffer.alloc(length);
@@ -128,12 +136,14 @@ export function createLocalStorage(config: LocalConfig): StorageAdapter {
 
     async stream(key) {
       try {
-        await stat(pathFor(key));
+        await stat(/* turbopackIgnore: true */ pathFor(key));
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
         throw error;
       }
-      const source = createReadStream(pathFor(key));
+      const source = createReadStream(
+        /* turbopackIgnore: true */ pathFor(key),
+      );
       return (async function* () {
         for await (const chunk of source) {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);

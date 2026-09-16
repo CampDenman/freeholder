@@ -80,7 +80,7 @@ const LOCALE_PREFIX = /^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(\/.*)?$/;
 const UNCOUNTED = /^\/(admin|login|setup|preview|portal|api|media|og|feeds)(\/|$)|\.(xml|txt|ico|png|jpg|svg|webp|avif)$/;
 
 /** Owner/internal routes may look like locale-prefixed public paths, but are not. */
-const NEVER_LOCALIZED = /^\/(admin|login|setup|preview|api|media)(\/|$)/;
+const NEVER_LOCALIZED = /^\/(admin|login|setup|preview|api|media|embed)(\/|$)/;
 
 export function proxy(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);

@@ -74,7 +74,27 @@ const COLOR_GATE = [
     message:
       "Arbitrary colour values bypass the design tokens (CLAUDE.md). Define the value once in src/core/design/tokens.ts and use its utility.",
   },
+  {
+    selector:
+      'JSXAttribute[name.name="style"] Literal[value=/(#[0-9a-fA-F]{3,8}\\b|rgba?\\(|hsla?\\(|oklch\\()/]',
+    message:
+      "Inline style colour literals bypass the design tokens (CLAUDE.md). Use a semantic token from src/core/design/tokens.ts.",
+  },
 ];
+
+const CONTACT_CREATE_IMPORT = {
+  name: "@/core/contacts/service",
+  importNames: ["createContact"],
+  message:
+    "Automated paths call contacts.resolve, never contacts.create (CLAUDE.md). Human entry lives in app/(admin) only.",
+};
+
+const CONTACT_CREATE_CALL = {
+  selector:
+    "CallExpression[callee.property.name='callAsSystem'][arguments.0.name='createContact']",
+  message:
+    "ctx.callAsSystem(createContact) is forbidden outside app/(admin). Use contacts.resolve.",
+};
 
 const I18N_GATE = [
   {
@@ -94,7 +114,11 @@ const I18N_GATE = [
 
 export default tseslint.config(
   {
-    ignores: [".next/**", "node_modules/**", "packages/**", "db/**"],
+    // `apps/**` is the Expo customer app (C10.23). It sits outside the root
+    // pnpm workspace with its own tsconfig, dependencies and CI job, so
+    // type-aware linting here would resolve its imports against the wrong
+    // project and report every one of them as missing.
+    ignores: [".next/**", "node_modules/**", "packages/**", "db/**", "apps/**"],
   },
   // Type-aware from here down. Several gates in §15 are statements about
   // values, not syntax, and cannot be written without the type checker.
@@ -119,7 +143,11 @@ export default tseslint.config(
     // own builds — and is the documented residual hole.)
     files: ["plugins/**/*.ts", "plugins/**/*.tsx"],
     rules: {
-      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE],
+      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE, CONTACT_CREATE_CALL],
+      "no-restricted-imports": [
+        "error",
+        { paths: [CONTACT_CREATE_IMPORT] },
+      ],
     },
   },
   {
@@ -131,6 +159,7 @@ export default tseslint.config(
       "no-restricted-imports": [
         "error",
         {
+          paths: [CONTACT_CREATE_IMPORT],
           patterns: [
             {
               group: ["next", "next/*"],
@@ -140,7 +169,7 @@ export default tseslint.config(
           ],
         },
       ],
-      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE],
+      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE, CONTACT_CREATE_CALL],
     },
   },
   {
@@ -185,7 +214,13 @@ export default tseslint.config(
     // app/ does, so it carries the i18n gate like app/ does.
     files: ["app/**/*.tsx", "src/ui/**/*.tsx", "src/modules/**/*.tsx"],
     rules: {
-      "no-restricted-syntax": ["error", ...MONEY_GATE, ...COLOR_GATE, ...I18N_GATE],
+      "no-restricted-syntax": [
+        "error",
+        ...MONEY_GATE,
+        ...COLOR_GATE,
+        ...I18N_GATE,
+        CONTACT_CREATE_CALL,
+      ],
     },
   },
   {

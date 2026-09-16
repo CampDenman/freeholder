@@ -30,7 +30,7 @@ import {
   assertSchedule,
   assertTimezone,
   nextOccurrence,
-  scheduleZone,
+  scheduleZoneIn,
 } from "@/core/agents/cron";
 import {
   defineService,
@@ -92,7 +92,7 @@ export const setPlaybookSchedule = defineService({
     if (!playbook) throw new ServiceError("not_found", "No such playbook.");
 
     if (input.timezone) assertTimezone(input.timezone);
-    const timezone = input.timezone ?? (await scheduleZone(playbook));
+    const timezone = input.timezone ?? (await scheduleZoneIn(ctx, playbook));
     assertSchedule(input.cron, timezone);
 
     const [updated] = await ctx.tx
@@ -150,7 +150,7 @@ async function tick(
   playbook: typeof agentPlaybooks.$inferSelect,
   now: Date,
 ): Promise<PlaybookTick> {
-  const timezone = await scheduleZone(playbook);
+  const timezone = await scheduleZoneIn(ctx, playbook);
   const due = playbook.nextRunAt ?? now;
   let outcome: PlaybookTick["outcome"] = "started";
   let detail: string | undefined;
@@ -226,9 +226,7 @@ export const runDuePlaybooks = defineService({
   name: "agents.runDuePlaybooks",
   summary: "Start the scheduled playbooks whose time has come.",
   kind: "mutation",
-  permission: "public",
-  mcpExclude: true,
-  agentCallable: false,
+  permission: "system",
   input: z.object({}),
   output: z.object({
     started: z.number().int(),

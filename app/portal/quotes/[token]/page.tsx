@@ -16,13 +16,17 @@ import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primit
 import { SkipLink } from "@/ui/SkipLink";
 import { formatMoney } from "@/core/i18n";
 import { currentBusiness } from "@/core/settings/read";
+import { cookies } from "next/headers";
 import { markQuoteViewed, quoteByToken } from "@/modules/quotes/service";
+import { QUOTE_PARTNER_INVITE_COOKIE } from "@/modules/quotes/cookies";
 import { getT } from "../../../i18n";
 import {
   acceptQuoteAction,
+  askAboutQuoteAction,
   chooseOptionsAction,
   declineQuoteAction,
-  askAboutQuoteAction,
+  inviteQuotePartnerAction,
+  revokeQuotePartnerAction,
 } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -50,14 +54,15 @@ export default async function QuotePage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; invited?: string }>;
 }) {
   const { token } = await params;
-  const [t, business, quote, query] = await Promise.all([
+  const [t, business, quote, query, jar] = await Promise.all([
     getT(),
     currentBusiness(),
     quoteByToken.call({ token }, { kind: "anonymous" }),
     searchParams,
+    cookies(),
   ]);
   if (!quote) notFound();
 
@@ -106,6 +111,64 @@ export default async function QuotePage({
           <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
             {query.error.includes(" ") ? query.error : t("quote.failed")}
           </p>
+        ) : null}
+        {query.invited && jar.get(QUOTE_PARTNER_INVITE_COOKIE)?.value ? (
+          <div className="grid gap-2 rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
+            <p>{t("quote.partner.invited")}</p>
+            <label className="grid gap-1">
+              <span>{t("quote.partner.link")}</span>
+              <input
+                readOnly
+                value={jar.get(QUOTE_PARTNER_INVITE_COOKIE)?.value}
+                className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+              />
+            </label>
+          </div>
+        ) : null}
+        {quote.canInvitePartner || quote.invitedPartners.length > 0 ? (
+          <section className="grid gap-3 rounded-md border border-rule bg-surface p-4">
+            <h2 className="text-lg font-semibold">{t("quote.partner.share")}</h2>
+            {quote.canInvitePartner ? (
+              <>
+                <p className="text-sm text-ink-muted">{t("quote.partner.intro")}</p>
+                <form action={inviteQuotePartnerAction} className="flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="token" value={token} />
+                  <label className="grid gap-1 text-sm">
+                    <span className="text-ink-muted">{t("quote.field.email")}</span>
+                    <input
+                      type="email"
+                      name="email"
+                      required
+                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    />
+                  </label>
+                  <Button type="submit">{t("quote.partner.invite")}</Button>
+                </form>
+              </>
+            ) : null}
+            {quote.invitedPartners.length > 0 ? (
+              <div className="grid gap-2">
+                <h3 className="text-sm font-medium">{t("quote.partner.list")}</h3>
+                <ul className="grid list-none gap-2 p-0">
+                  {quote.invitedPartners.map((partner) => (
+                    <li
+                      key={partner.id}
+                      className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm"
+                    >
+                      <span>{partner.contactName ?? partner.contactEmail}</span>
+                      <form action={revokeQuotePartnerAction}>
+                        <input type="hidden" name="token" value={token} />
+                        <input type="hidden" name="id" value={partner.id} />
+                        <Button type="submit" variant="quiet">
+                          {t("quote.partner.revoke")}
+                        </Button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
         ) : null}
 
         <Card>

@@ -23,9 +23,11 @@ import type {
   SmsAdapter,
   SmsNumber,
   SmsNumberHealth,
+  SmsInboundMedia,
   SmsProviderEvent,
   SmsSendResult,
 } from "./types";
+import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
 
 const ID = "twilio";
 const MAX_RESPONSE_BYTES = 1_048_576;
@@ -47,14 +49,24 @@ export interface TwilioSmsOptions {
   webhookUrl?: string;
 }
 
-function fail(code: AdapterErrorCode, message: string, retryable = false): never {
-  throw new AdapterError("sms", ID, code, message, retryable);
+function fail(
+  code: AdapterErrorCode,
+  message: string,
+  retryable = false,
+  providerCode?: string,
+): never {
+  throw new AdapterError("sms", ID, code, message, retryable, providerCode);
 }
 
 async function twilioJson(response: Response): Promise<Record<string, unknown>> {
-  const body = await response.text();
-  if (body.length > MAX_RESPONSE_BYTES) {
-    fail("provider_failure", "Twilio returned an oversized response.", true);
+  let body: string;
+  try {
+    body = new TextDecoder().decode(await readBoundedBytes(response, MAX_RESPONSE_BYTES));
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      fail("provider_failure", "Twilio returned an oversized response.", true);
+    }
+    throw error;
   }
   let parsed: unknown;
   try {
@@ -81,6 +93,7 @@ async function twilioJson(response: Response): Promise<Record<string, unknown>> 
             : "invalid_request",
       `Twilio refused the request (${code})${detail ? `: ${detail}` : ""}.`,
       response.status === 429 || response.status >= 500,
+      code,
     );
   }
   return record;
@@ -113,6 +126,7 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
   const authToken = options.authToken?.trim();
   const doFetch = options.fetch ?? fetch;
   const apiBase = options.apiBase ?? "https://api.twilio.com/2010-04-01";
+  const apiOrigin = new URL(apiBase).origin;
   const available = Boolean(accountSid && authToken);
   const message = available
     ? "Sending and receiving text messages through Twilio."
@@ -245,6 +259,7 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
             : status === "failed"
               ? "failed"
               : "sent";
+      const segments = Number(params.get("NumSegments"));
       return [
         {
           id: `${sid}:${status}`,
@@ -252,9 +267,79 @@ export function createTwilioSms(options: TwilioSmsOptions = {}): SmsAdapter {
           providerRef: sid,
           errorCode: params.get("ErrorCode") ?? undefined,
           errorText: params.get("ErrorMessage") ?? undefined,
+          segments: Number.isFinite(segments) && segments > 0 ? segments : undefined,
+          costMinor: priceToMinor(params.get("Price")),
+          costCurrency: params.get("PriceUnit")?.toUpperCase() || undefined,
           occurredAt,
         },
       ];
+    },
+
+    async downloadMedia(url: string): Promise<SmsInboundMedia> {
+      requireReady();
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return fail("invalid_request", "Twilio sent an invalid media URL.");
+      }
+      if (parsed.protocol !== "https:" || parsed.origin !== apiOrigin) {
+        return fail("invalid_request", "Twilio media must come from the configured Twilio API origin.");
+      }
+      const response = await doFetch(parsed, {
+        headers: { authorization: auth() },
+        redirect: "error",
+      });
+      if (!response.ok) {
+        return fail(
+          response.status === 401 || response.status === 403
+            ? "authentication"
+            : response.status >= 500
+              ? "provider_failure"
+              : "invalid_request",
+          `Twilio media download failed with HTTP ${response.status}.`,
+          response.status >= 500,
+        );
+      }
+      const maxMediaBytes = 10 * 1024 * 1024;
+      let bytes: Uint8Array<ArrayBuffer>;
+      try {
+        bytes = await readBoundedBytes(response, maxMediaBytes);
+      } catch (error) {
+        if (error instanceof RequestBodyError) {
+          return fail("invalid_request", "Twilio sent a media file larger than 10 MB.");
+        }
+        throw error;
+      }
+      if (bytes.byteLength === 0) {
+        return fail("invalid_request", "Twilio sent an empty or oversized media file.");
+      }
+      const contentType = (response.headers.get("content-type") ?? "application/octet-stream")
+        .split(";", 1)[0]!
+        .trim()
+        .toLowerCase();
+      const extensionByType: Record<string, string> = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "audio/mpeg": ".mp3",
+        "audio/mp4": ".m4a",
+        "video/mp4": ".mp4",
+      };
+      const pathName = decodeURIComponent(parsed.pathname.split("/").pop() ?? "media")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .slice(-180);
+      const extension = extensionByType[contentType] ?? "";
+      const filename = /\.[a-z0-9]{1,8}$/i.test(pathName)
+        ? pathName
+        : `${pathName || "media"}${extension}`;
+      return {
+        sourceUrl: parsed.toString(),
+        filename,
+        contentType,
+        bytes,
+      };
     },
 
     async listNumbers(): Promise<readonly SmsNumber[]> {
