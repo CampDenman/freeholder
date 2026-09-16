@@ -42,7 +42,7 @@ describe("C11.14 retention leftovers", () => {
     expect(master).toContain("core.applyRetention");
     const remaining = readFileSync("tests/core/record-participation.test.ts", "utf8");
     expect(remaining).toContain(
-      "Per-record restore is contact-merge undo plus the ownership-drill instance restore; there is no undelete for every entity.",
+      "Per-record restore includes note/task trash, media/product restoration, contact-merge undo and the ownership-drill instance restore; other entities still lack undelete.",
     );
     expect(remaining).not.toContain(
       "Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.",

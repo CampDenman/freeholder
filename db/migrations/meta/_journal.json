@@ -71,6 +71,13 @@
       "when": 1792166400012,
       "tag": "0009_daily_voice_video",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792166400013,
+      "tag": "0010_note_task_trash",
+      "breakpoints": true
     }
   ]
 }
