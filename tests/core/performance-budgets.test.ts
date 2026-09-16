@@ -17,6 +17,7 @@ import {
 } from "../../scripts/performance-budgets.mjs";
 import { measureServerSurfaces, seedPerformanceDataset } from "../helpers/performance";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { measureQueueLatency } from "../helpers/queue-performance";
 import { contacts } from "@/core/contacts/schema";
 import { db } from "@/core/db";
 import { revenueReport } from "@/modules/reporting/service";
@@ -178,9 +179,6 @@ describe.runIf(hasDatabase)("seeded dataset measurements", { timeout: 180_000 },
     if (flags.measureBrowser && process.env.PERF_HAS_PLAYWRIGHT !== "1") {
       throw new Error("PERF_MEASURE_BROWSER=1 without Playwright is fail-closed.");
     }
-    if (flags.measureJobs) {
-      throw new Error("PERF_MEASURE_JOBS=1 is fail-closed until the worker harness is wired.");
-    }
     if (flags.measureMigration) {
       throw new Error("PERF_MEASURE_MIGRATION=1 is fail-closed until a medium migrate clock is wired.");
     }
@@ -200,6 +198,7 @@ describe.runIf(hasDatabase)("seeded dataset measurements", { timeout: 180_000 },
       expect(new Set([...page.rows, ...second.rows, ...last.rows].map((row) => row.id)).size).toBe(75);
       const verdict = evaluateMeasurements({
         dataset: "large",
+        ...flags,
         bounded: { paginated: page.rows.length === 25 && page.total === DATASET_SIZES.large.contacts },
       });
       expect(verdict.failures).toEqual([]);
@@ -213,6 +212,12 @@ describe.runIf(hasDatabase)("seeded dataset measurements", { timeout: 180_000 },
     expect(report.totals).toEqual([{ currency: "CAD", amountMinor: DATASET_SIZES[size].orders * 2500 }]);
     expect(report.months.reduce((sum, row) => sum + row.invoices, 0)).toBe(DATASET_SIZES[size].orders);
     const measurements = await measureServerSurfaces(seed);
+    if (flags.measureJobs) {
+      const queue = await measureQueueLatency();
+      expect(queue.samples).toHaveLength(20);
+      expect(queue.completed).toBe(20);
+      measurements.push(queue);
+    }
     console.info(JSON.stringify({ dataset: size, counts: DATASET_SIZES[size], measurements }));
     const verdict = evaluateMeasurements({
       dataset: size,
