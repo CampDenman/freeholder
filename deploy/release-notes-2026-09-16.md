@@ -38,3 +38,30 @@ GitHub before treating the pending change below as shipped.
 Native review of the Arabic catalog remains the follow-up, as it does for
 French and Spanish. Live provider acceptance and the other open C-items are
 unchanged.
+
+## F-criteria evidence matrix — closes C0.11 and C11.09 (docs(plan) PR)
+
+- **Every completion claim now faces all twelve F-criteria.**
+  `deploy/f-criteria-matrix.md` audits F01–F12 across 286 rows: every live
+  §43 checklist item (the row set computed from `scripts/plan-gate.mjs`, so
+  it cannot drift from the plan), the seven mobile items deferred to v2,
+  all seven workspace packages and all six first-party plugins. Every cell
+  is a repository citation that resolves or a specific `N/A — reason`.
+- **The matrix is gate-enforced, not a one-time document.**
+  `scripts/f-matrix.mjs` + `tests/core/f-matrix.test.ts` fail on row-set
+  drift, empty cells, unresolvable citations, cited test files outside the
+  suite, and lazy N/A — and run inside `pnpm gates`.
+- **The C0.11 audit sampled for truth, not presence.** Every item the
+  2026-09-13 audit reopened or repaired was re-read assertion-by-assertion
+  (all confirmed true), plus a deterministic 15% sample of the rest. Three
+  finding classes are corrected in the change: C4.08's annotation claimed
+  the calendar screen as its F04 (now `/admin/work/playbooks`); 45
+  annotations carried a "covers permission, refusal and recovery" stamp
+  their cited file does not prove (narrowed per-cell in the matrix with
+  `tests/core/api.test.ts` named for the scoped-permission half; annotation
+  rewrites queued on C11.15); C11.12/C1.17 cells cited catalog gates as
+  service-boundary proof (curated to the true evidence). No capability
+  claim proved false; no unrelated checkbox moved.
+- **Full-suite verification** is recorded in the matrix header — the whole
+  `pnpm test` suite ran green on a fresh disposable database with every
+  cited test file part of the run.
