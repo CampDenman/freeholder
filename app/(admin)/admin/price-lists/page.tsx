@@ -74,7 +74,7 @@ export default async function PriceListsPage({
           {lists.length === 0 ? <p className="mb-4 text-sm text-ink-muted">{t("catalog.prices.listsEmpty")}</p> : (
             <ul className="mb-4 grid list-none gap-3 p-0">
               {lists.map((list) => (
-                <li key={list.id} className="rounded-md border border-rule p-3 text-sm">
+                <li key={list.id} id={`price-list-${list.id}`} className="rounded-md border border-rule p-3 text-sm">
                   <div className="flex flex-wrap gap-2">
                     <span className="font-semibold">{list.name}</span>
                     <Pill>{list.currency}</Pill>
