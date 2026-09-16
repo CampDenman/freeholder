@@ -90,3 +90,25 @@ unchanged.
   or whose new wording is missing. C11.15 is checked with F04/F05 N/A,
   F07 = the fail-closed mapping gate, F09 = the mapping doc + gate, F12 =
   alignment with `deploy/spec-reconciliation.md`.
+
+## Session wrap — completion push
+
+- **Everything closable by software is closed.** Since the 2026-09-15
+  snapshot, #381–#397 landed: note/task trash, real queue-dispatch
+  measurement, the dependabot react-group fix, the §43.18 mobile→v2
+  deferral, the Arabic RTL catalog (C11.12), C3.13's software remainder,
+  trash for pages/forms/popups/segments/saved views (C11.14), the F01–F12
+  evidence matrix (C0.11, C11.09) and the §§1–42 claim mapping (C11.15).
+  Dependabot #373–#380 and #83 merged; #109 (TypeScript major) closed as a
+  deliberate manual upgrade.
+- **Plan state: 290 IDs, 272 checked, 18 open.** The 18 are §43.2's twelve
+  F-template rows plus six C-items, each blocked on the owner: C3.13 (live
+  Printify/Shopify/Daily accounts), C11.08 (Replit/DO second target), C11.10
+  (named reviewer), C11.11 (doctl auth + droplet), C11.16 (auto-unblocks
+  after C3.13), C11.17 (owner signature). No closable-by-software work
+  remains; mobile devices are v2 scope, so no v1 wipe or setup is pending.
+- **Handoff and evidence refreshed.** `SESSION_HANDOFF.md` now carries the
+  owner action list with prepared commands; §43.1's evidence snapshot cites
+  this digest, the matrix and the claim mapping. Full-suite verification:
+  3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing funnel
+  isolation flake (documented in both mapping headers).
