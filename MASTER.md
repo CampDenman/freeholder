@@ -2161,27 +2161,36 @@ last. These are core entities, not a plugin.
 | `Deal` | A live opportunity worth tracking through stages. Created by hand, by a form, or by a quote being sent. | contact_id, pipeline_id, stage_id, title, value_cents, currency, probability, expected_close_on, source, owner_user_id, quote_id, status (open/won/lost), lost_reason, closed_at |
 | `Task` | Something a human has to do, attached to anything. | subject_type + subject_id, contact_id, title, due_at, remind_at, assignee_user_id, priority, status, completed_at, completed_by, trashed_at |
 | `Note` | Free text against a contact, deal, project or booking, with mentions. | subject_type + subject_id, author, body, pinned, mentions[], trashed_at |
-| `Segment` | A saved query over the spine. The unit of "who" for campaigns, price lists, automations and reports. | name, definition (jsonb), kind (dynamic/static), member_count_cached, last_evaluated_at |
+| `Segment` | A saved query over the spine. The unit of "who" for campaigns, price lists, automations and reports. | name, definition (jsonb), kind (dynamic/static), member_count_cached, last_evaluated_at, trashed_at |
 | `ScoringRule` | Transparent, inspectable lead scoring. | name, event_match (jsonb), points, decay_days, active |
 | `ConsentRecord` | What this contact agreed to, when, and how. | contact_id, purpose (marketing_email/sms/analytics/data_processing), state, method, source_url, ip, at, expires_at, withdrawn_at |
 | `DataRequest` | GDPR/CCPA/CASL access, export, correction and erasure requests. | contact_id, kind, status, requested_at, fulfilled_at, artifact_asset_id, actor |
 | `Relationship` | How two contacts relate: household, employer, referred_by, partner, guardian. | from_contact_id, to_contact_id, kind, since, notes |
 | `InboxThread` / `InboxMessage` | One conversation with a person, whatever channel it arrived on. | thread: contact_id, channel (email/form/chat/sms/social), subject, status (open/snoozed/closed), assignee, last_message_at · message: thread_id, direction, body, attachments[], provider_ref, at |
-| `SavedView` | A filter someone actually uses, kept. Per user, shareable. | name, entity, filters (jsonb), columns[], sort, owner_user_id, shared |
+| `SavedView` | A filter someone actually uses, kept. Per user, shareable. | name, entity, filters (jsonb), columns[], sort, owner_user_id, shared, trashed_at |
 | `MergeCandidate` | Suspected duplicates, surfaced rather than merged. | contact_a, contact_b, score, reasons (jsonb), status (open/merged/dismissed) |
 
 **Rules:**
 
-- Notes and tasks keep their original rows in trash for recovery, normally for
-  thirty days. Normal lists, search, task reminders and briefings exclude trash.
-  Restore preserves IDs, revisions and subject links; contact merge and undo
+- Notes, tasks, pages, forms, popups, segments and saved views keep their
+  original rows in trash for recovery, normally for thirty days. Normal lists,
+  public surfaces, search, task reminders and briefings exclude trash; a trashed
+  segment answers nobody, so the popups, price lists, automations and messaging
+  windows wired to it fail closed rather than widen. Trashing a form trashes
+  the definition only — submissions stay live as contact evidence. Restore
+  preserves IDs, revisions, slugs and subject links; contact merge and undo
   repoint both the contact FK and contact-subject pointer, including trash.
-  Permanent purge requires explicit confirmation and recent identity verification,
-  preserves active privacy retention holds, and removes note revisions. A daily
-  bounded sweep purges eligible expired trash. Privacy erasure and configured
-  retention policies still apply, including before thirty days; recovery never
-  recreates erased personal fields. Human trash controls use each record's
-  existing view/manage grants (C7.02/C7.03/C11.14).
+  Permanent purge requires explicit confirmation and recent identity
+  verification, preserves active privacy retention holds (including holds on
+  contact data a purge would cascade into), and removes note revisions and a
+  page's revisions, layouts, preview links, presence, comments and translations.
+  A daily bounded sweep purges eligible expired trash. Privacy erasure and
+  configured retention policies still apply, including before thirty days;
+  recovery never recreates erased personal fields. Human trash controls use
+  each record's existing view/manage grants, and ownership for saved views
+  (C7.02/C7.03/C11.14). Money ledgers, append-only evidence, credentials and
+  families that are never deleted are documented not-applicable in
+  `deploy/record-trash.md`.
 - Provider erasure is durable background work committed with the local erasure.
   Requests remain `in_progress`, without a completion timestamp, until every
   registered provider task acknowledges success. Pending receipts survive
@@ -3335,12 +3344,12 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C0.11/C11.09 evidence audit, C11.14 undelete for remaining record families, C11.15 doc-claim mapping, C3.13 software remainder (owner-side live acceptance pending); C11.17 remains unsigned |
+| Current focus | C0.11/C11.09 evidence audit, C11.15 doc-claim mapping, C3.13 software remainder (owner-side live acceptance pending); C11.17 remains unsigned |
 | Completion rule | Every unchecked item in C0–C11, except the seven items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C0.11 F-criteria audit of checked items. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.09 completion-evidence audit. C11.11 reference-target measurements and browser vitals. C11.14 undelete-every-row and per-list search opt-outs. C11.15 remaining spec tests. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. |
+| Remaining open | §43.2's F01–F12 row applies per item. C0.11 F-criteria audit of checked items. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.09 completion-evidence audit. C11.11 reference-target measurements and browser vitals. C11.15 remaining spec tests. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -8582,7 +8591,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   adapter errors, idempotent duplicates, preserved ciphertext and automatic
   update rollback. **F09** the suite is the operational story. **F12** the
   vitest chain. Live provider accounts are not claimed.)*
-- [ ] **C11.14** Verify every user-owned record participates correctly in
+- [x] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
   *(Partial 2026-09-13: `tests/core/record-participation.test.ts` plus
@@ -8654,8 +8663,34 @@ schema they inherit reads as a designed thing rather than an excavation.
   including keyboard restore/purge, view-only access, and twelve axe/reflow
   combinations (en/fr/es, light/dark, desktop/narrow). These are note/task
   recovery proofs; the remaining record families and full F-matrix stay open.
+  Completion follow-up (2026-09-16): pages, forms, popups, segments and
+  saved views now move to the same reversible trash (#381's shape, one shared
+  factory in `src/core/trash.ts`). Removal keeps the original row — a trashed
+  page holds its slug, a trashed form keeps its submissions live as contact
+  evidence, a trashed segment stops answering so popups, price lists,
+  automations and messaging windows fail closed rather than widen. Restore
+  returns the same id; purge is typed-PURGE plus step-up, honours retention
+  holds on cascaded contact data, and the daily bounded sweep covers all
+  seven families. Erasure still reaches evidence rows inside trash and
+  restore never resurrects erased personal fields.
+  **F04** `/admin/trash` gains a tab per family with view/manage- (or
+  ownership-) aware controls; `deploy/record-trash.md` is the runbook,
+  including the rollback caveat that pre-`0011` code does not filter the new
+  `trashed_at` columns. **F05** `cms.removePage`/`cms.restorePage`/
+  `cms.purgePage`, `forms.*`, `popups.*`, `segments.*` and `views.*` remove/
+  restore/purge pairs at `/api/v1/*`, OpenAPI and the regenerated SDK
+  (`packages/sdk/src/generated.ts`), MCP included. **F07**
+  `tests/core/record-trash-families.test.ts` covers visibility, search
+  exclusion, slug reservation, submissions-stay-live, hold protection manual
+  and swept, step-up and typed confirmation, fail-closed consumers, personal
+  trash and erasure non-resurrection. **F09** `core.purgeExpiredWorkRecords`
+  purges a bounded batch of every family's expired trash while preserving
+  holds; `deploy/record-trash.md` documents operations and exclusions. **F12**
+  `tests/core/record-trash-families.test.ts` is the cross-family composition
+  and `tests/browser/record-trash.spec.ts` drives the popup trash/restore
+  journey in Chromium. Migration `0011_record_trash.sql`.
   **Remaining named worklist:**
-  Per-record restore includes note/task trash, media/product restoration, contact-merge undo and the ownership-drill instance restore; other entities still lack undelete.
+  Per-record restore includes note/task trash, media/product restoration, contact-merge undo, the ownership-drill instance restore and trash/restore/purge for pages, forms, popups, segments and saved views; money ledgers, append-only evidence, credentials, join rows and never-deleted families are named not-applicable in deploy/record-trash.md.
   Remaining SEARCH_TABLE_OPT_OUTS cover operational rows, join tables and workflow records reached through their parent; these are not mixed into search.query.)*
 - [ ] **C11.15** Remove every scaffold, placeholder, false-positive build,
   stale TODO, unimplemented UI action and documentation claim unsupported by a

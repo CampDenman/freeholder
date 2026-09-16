@@ -639,17 +639,41 @@ export const applyRetentionPoliciesJob = defineJob({
   },
 });
 
-/** Notes and tasks retain their original rows during a thirty-day trash window. */
+/**
+ * Work records and owner content retain their original rows during a thirty-day
+ * trash window; storage is reclaimed in bounded batches afterwards.
+ */
 export const purgeExpiredWorkRecords = defineJob({
   name: "core.purgeExpiredWorkRecords",
-  summary: "Purge expired note and task trash while preserving retention holds.",
+  summary: "Purge expired note, task, page, form, popup, segment and saved-view trash.",
   schedule: "17 5 * * *", concurrency: 1,
   handler: async () => {
     const { purgeExpiredNotes } = await import("@/core/notes/service");
     const { purgeExpiredTasks } = await import("@/core/tasks/service");
-    const notes = await purgeExpiredNotes.call({}, { kind: "system" });
-    const tasks = await purgeExpiredTasks.call({}, { kind: "system" });
-    return { notes: notes.purged, tasks: tasks.purged };
+    const { purgeExpiredPages } = await import("@/modules/cms/service");
+    const { purgeExpiredForms } = await import("@/modules/forms/service");
+    const { purgeExpiredPopups } = await import("@/modules/popups/service");
+    const { purgeExpiredSegments } = await import("@/core/segments/service");
+    const { purgeExpiredViews } = await import("@/core/views/service");
+    const system = { kind: "system" } as const;
+    const [notes, tasks, pages, forms, popups, segments, views] = await Promise.all([
+      purgeExpiredNotes.call({}, system),
+      purgeExpiredTasks.call({}, system),
+      purgeExpiredPages.call({}, system),
+      purgeExpiredForms.call({}, system),
+      purgeExpiredPopups.call({}, system),
+      purgeExpiredSegments.call({}, system),
+      purgeExpiredViews.call({}, system),
+    ]);
+    return {
+      notes: notes.purged,
+      tasks: tasks.purged,
+      pages: pages.purged,
+      forms: forms.purged,
+      popups: popups.purged,
+      segments: segments.purged,
+      views: views.purged,
+    };
   },
 });
 

@@ -14,6 +14,7 @@
 // Zod-validated against a registered block type before it is written (see
 // blocks/registry.ts), so this is a typed tree that happens to be stored as
 // JSON, not a bag anyone can put anything in.
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -65,6 +66,12 @@ export const pages = pgTable(
   "pages",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /**
+     * Set = in trash (C11.14). The row stays — slug, revisions, working copy
+     * and all — until an explicit purge or the thirty-day sweep, so removal
+     * is reversible and the slug stays reserved by the trashed row.
+     */
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
     /** "" for home, "about", "services/weddings". No leading slash. */
     slug: text("slug").notNull(),
     /** BCP-47. The default locale is unprefixed in URLs (§4.9). */
@@ -128,6 +135,7 @@ export const pages = pgTable(
     uniqueIndex("pages_slug_locale_idx").on(t.slug, t.locale),
     index("pages_status_idx").on(t.status),
     index("pages_help_category_idx").on(t.helpCategoryId),
+    index("pages_trash_idx").on(t.trashedAt).where(sql`${t.trashedAt} is not null`),
     // Help search is trigram over the title (§4.6): somebody looking for
     // help types a fragment of the problem, not a stemmed keyword.
     index("pages_title_search_idx").using("gin", t.title.op("gin_trgm_ops")),
