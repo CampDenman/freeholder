@@ -433,6 +433,9 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.image.outputs.name }}:candidate-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           platforms: linux/amd64
           provenance: false
           cache-from: type=gha

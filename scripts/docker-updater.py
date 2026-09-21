@@ -127,10 +127,14 @@ class Executor:
 
     def verify_forward_update(self, previous, candidate):
         revisions = []
-        for image in (previous, candidate):
+        for index, image in enumerate((previous, candidate)):
             labels = json.loads(self.run(["docker", "image", "inspect", image,
                                           "--format", "{{json .Config.Labels}}"] ))
             revision = (labels or {}).get("org.opencontainers.image.revision", "")
+            # C10.31: pre-label releases need an operator-verified, exact digest
+            # baseline. This exception never supplies a candidate's identity.
+            if not revision and index == 0 and image == self.config.get("initial_image"):
+                revision = self.config.get("initial_revision", "")
             if not re.fullmatch(r"[a-f0-9]{40}", revision):
                 raise Refused("Both images must identify their exact upstream source revision.")
             revisions.append(revision)

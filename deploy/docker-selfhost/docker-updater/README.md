@@ -38,6 +38,15 @@ python3 /usr/local/lib/freeholder/docker-updater.py apply --digest sha256:...
 python3 /usr/local/lib/freeholder/docker-updater.py status
 ```
 
+Older images did not include a source revision label. For the first upgrade
+from one of those images, verify its exact digest and source commit against
+the original successful main CI artifact/provenance. Add `initial_image`
+(`ghcr.io/campdenman/freeholder@sha256:...`) and `initial_revision` (the full
+40-character commit) to the root-owned configuration. This baseline applies
+only when the running image matches that exact digest. Never guess its commit
+from a mutable tag. New candidate images must carry their own revision label;
+the bootstrap baseline cannot authorize an unlabelled candidate.
+
 Every candidate is signature-checked, restored against a real database backup
 and checked against upstream commit history so a stale channel tag cannot
 downgrade the installation. Missing revision labels, unavailable commit-history

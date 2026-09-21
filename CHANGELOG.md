@@ -282,6 +282,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Docker images now carry their source commit for downgrade protection. The first host upgrade from an older unlabelled image accepts only an operator-verified baseline pinned to that exact image digest (C10.31).
+
 - Owners can connect an agent runtime, hire and edit a worker, and export a playbook from /admin/work. Each action calls the existing agent services.
 - Material an agent reads can no longer pretend to be an instruction from you. The frame around untrusted input is now an unguessable marker rather than a fixed tag — a customer writing the closing tag into a form can no longer break out of the quote — the platform's instruction sits on both sides of the quoted text, and tool results are quoted the same way, because business data is full of words customers wrote. A new gate keeps the exfiltration surface honest: any tool an agent is offered that accepts a URL has to be listed with the reason it is safe, and it immediately caught playbook controls being advertised to API keys that could not use them.
 - Analytics consent reconciliation now recognizes the instance's configured public origin when Freeholder runs behind a loopback reverse proxy. Cross-site origins remain refused, while the browser no longer receives a false 403 on an ordinary page load through nginx or Caddy.
