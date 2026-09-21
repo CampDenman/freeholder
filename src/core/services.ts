@@ -5,6 +5,8 @@
 // it to the array it already lives in; forgetting to register it is not a
 // separate mistake anyone can make.
 import authServices from "@/core/auth/service";
+import { enterPlayground } from "@/core/demo/playground";
+import { getHostUpdateStatus, requestHostUpdate } from "@/core/update/host";
 import twoFactorServices from "@/core/auth/two-factor";
 import sessionManagementServices from "@/core/auth/session-management/service";
 import magicLinkServices from "@/core/auth/magic-links/service";
@@ -92,6 +94,9 @@ import type { Service } from "@/core/service";
 import type { EventDeliveryContext } from "@/core/events";
 
 const services: Service[] = [
+  enterPlayground,
+  getHostUpdateStatus,
+  requestHostUpdate,
   ...authServices,
   ...twoFactorServices,
   ...sessionManagementServices,

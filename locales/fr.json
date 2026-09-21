@@ -6370,5 +6370,22 @@
   "marketplace.refund.status.reconciled": "Rapproché",
   "pages.title": "Pages",
   "views.title": "Vues enregistrées",
-  "records.trash.restoreBlocked": "Cet élément ne peut pas être restauré, car son nom ou son adresse est désormais utilisé par un autre élément."
+  "records.trash.restoreBlocked": "Cet élément ne peut pas être restauré, car son nom ou son adresse est désormais utilisé par un autre élément.",
+  "playground.title": "Découvrez Freeholder",
+  "playground.description": "Modifiez des pages, formulaires, produits et contacts fictifs. Cet espace est partagé : les autres visiteurs peuvent voir et modifier les mêmes données.",
+  "playground.limits": "La démo est réinitialisée chaque heure. Utilisez uniquement des informations fictives. Les téléversements, comptes, envois externes, paiements réels et modifications de l’infrastructure sont indisponibles.",
+  "playground.enter": "Entrer dans la démo",
+  "playground.source": "Obtenir Freeholder sur GitHub",
+  "playground.banner": "Démo publique · Données partagées · Réinitialisation chaque heure · Aucune information personnelle.",
+  "playground.try": "Essayer la démo",
+  "updates.host.title": "Mises à jour Docker",
+  "updates.host.scope": "L’hôte vérifie la signature, restaure une sauvegarde et teste la version avant le basculement. Le schéma et le journal de migration doivent rester identiques. Le calendrier de l’hôte est indépendant de la politique ci-dessous. Actualisez pour suivre la progression.",
+  "updates.host.status": "État : {status}. Canal : {channel}. Vérifications automatiques : {automatic}, chaque jour à {hour}:00 UTC.",
+  "updates.host.on": "activées",
+  "updates.host.off": "désactivées",
+  "updates.host.unavailable": "Service de mise à jour indisponible.",
+  "updates.host.apply": "Vérifier et installer une mise à jour compatible",
+  "updates.host.pending": "Demande en cours…",
+  "updates.host.confirm": "Tester et installer la dernière image compatible ? Une brève maintenance aura lieu si les contrôles réussissent.",
+  "updates.host.queued": "Demande envoyée. Actualisez pour suivre la progression ; la demande ne confirme pas la fin de la mise à jour."
 }

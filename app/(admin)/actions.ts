@@ -699,6 +699,12 @@ export async function updateControlAction(
   try {
     const actor = await currentActor();
     switch (intent) {
+      case "hostApply": {
+        const { requestHostUpdate } = await import("@/core/update/host");
+        await requestHostUpdate.call({}, actor);
+        messageKey = "updates.host.queued";
+        break;
+      }
       case "check": {
         const result = await checkUpdates.call({}, actor);
         messageKey = result.checked

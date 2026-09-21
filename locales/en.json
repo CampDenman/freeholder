@@ -6370,5 +6370,22 @@
   "marketplace.refund.status.reconciled": "Reconciled",
   "pages.title": "Pages",
   "views.title": "Saved views",
-  "records.trash.restoreBlocked": "That record cannot be restored because its name or address is now used by another record."
+  "records.trash.restoreBlocked": "That record cannot be restored because its name or address is now used by another record.",
+  "playground.title": "Explore Freeholder",
+  "playground.description": "Try editing pages, forms, products and sample contacts. This is a shared playground: other visitors can see and change the same sample data.",
+  "playground.limits": "The playground resets every hour. Use fictional information only. Uploads, account administration, external delivery, real payments and infrastructure changes are unavailable.",
+  "playground.enter": "Enter the playground",
+  "playground.source": "Get Freeholder on GitHub",
+  "playground.banner": "Public demo · Shared sample data · Resets every hour · Do not enter personal information.",
+  "playground.try": "Try the live demo",
+  "updates.host.title": "Docker host updates",
+  "updates.host.scope": "The host checks the selected image channel, verifies the publisher signature, restores a backup and tests the candidate before cutover. Only an unchanged database schema and migration journal can pass. The host schedule is configured independently of the release-feed policy below. Refresh to see progress.",
+  "updates.host.status": "Status: {status}. Channel: {channel}. Automatic checks: {automatic}, daily at {hour}:00 UTC.",
+  "updates.host.on": "on",
+  "updates.host.off": "off",
+  "updates.host.unavailable": "Host updater unavailable.",
+  "updates.host.apply": "Check and install compatible update",
+  "updates.host.pending": "Requesting update…",
+  "updates.host.confirm": "Check, rehearse and install the latest compatible image? The site will briefly enter maintenance if an update passes.",
+  "updates.host.queued": "Update requested. Refresh this page to see host progress; a request is not proof of completion."
 }

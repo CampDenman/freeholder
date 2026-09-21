@@ -14,6 +14,8 @@
 // channel and policy, the signed feed, the preflight, the run history, the
 // snapshots, the per-target strategy and the fork lane.
 import type { Metadata } from "next";
+import { getHostUpdateStatus } from "@/core/update/host";
+import { env } from "@/core/env";
 import {
   ArrowsClockwise,
   CheckCircle,
@@ -55,6 +57,8 @@ const WINDOW_DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
 export default async function UpdatesPage() {
   const actor = await requireStaffActor("platform");
+  const hostConfigured = Boolean(env().FREEHOLDER_UPDATE_SOCKET);
+  const host = hostConfigured ? await getHostUpdateStatus.call({}, actor).catch(() => null) : null;
   const [status, releases, policy, history, targets, business, t] = await Promise.all([
     updateStatus.call({}, actor),
     listAvailableReleases.call({}, actor),
@@ -113,9 +117,18 @@ export default async function UpdatesPage() {
       <Callout tone={tone} icon={icon}>
         {status.sentence}
       </Callout>
-      <Callout tone="warning" icon={<WarningCircle size={17} weight="fill" />}>
+      {hostConfigured ? <Card>
+        <CardHeader title={t("updates.host.title")} />
+        <CardBody>
+          <p className="text-sm text-ink-muted">{t("updates.host.scope")}</p>
+          <p className="my-3 text-sm">{host ? t("updates.host.status", { status: host.status, channel: host.channel ?? "stable", hour: host.utcHour ?? 10, automatic: host.automatic ? t("updates.host.on") : t("updates.host.off") }) : t("updates.host.unavailable")}</p>
+          {host?.error ? <p className="mb-3 text-sm text-danger">{host.error}</p> : null}
+          <UpdateActionForm intent="hostApply" submitLabel={t("updates.host.apply")} pendingLabel={t("updates.host.pending")}
+            disabled={!host || !["idle", "completed", "rolled_back", "failed", "unchanged"].includes(host.status)} confirm={t("updates.host.confirm")} />
+        </CardBody>
+      </Card> : <Callout tone="warning" icon={<WarningCircle size={17} weight="fill" />}>
         {t("updates.executionUnavailable")}
-      </Callout>
+      </Callout>}
 
       <Card>
         <CardHeader

@@ -10,6 +10,11 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  /** Only for a separate disposable instance with blocked network egress. */
+  FREEHOLDER_PLAYGROUND: z.enum(["0", "1"]).optional(),
+  /** Public playground link on the main website; absent on ordinary client sites. */
+  FREEHOLDER_PLAYGROUND_URL: z.string().url().optional(),
+  FREEHOLDER_UPDATE_SOCKET: z.string().startsWith("/").optional(),
   /** C3.13: Daily private room and recording provider. */
   DAILY_API_KEY: z.string().optional(),
   DAILY_DOMAIN: z.string().optional(),

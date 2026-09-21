@@ -40,3 +40,6 @@ Thumbs.db
 # typescript / next
 *.tsbuildinfo
 next-env.d.ts
+
+# Python host-tool bytecode
+__pycache__/

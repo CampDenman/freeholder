@@ -56,6 +56,8 @@ async function initializeRuntime(): Promise<void> {
       await db().transaction((tx) => syncOnboardingDefinitions(tx));
 
       phase = "demo seed";
+      const { initializePlayground } = await import("@/core/demo/playground");
+      await initializePlayground();
       const { seedDemoIfRequested } = await import("@/modules/seed/boot");
       await seedDemoIfRequested();
 

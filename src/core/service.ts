@@ -14,6 +14,8 @@
 // multi-table mutation — so composition must not mean a second transaction on
 // a second connection.
 import type { z } from "zod";
+import { env } from "@/core/env";
+import { playgroundAllows } from "@/core/demo/playground-policy";
 import { db, type Database } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
 import { writeTimelineEvent } from "@/core/events";
@@ -393,6 +395,9 @@ function authorizeInput<In extends z.ZodType, Out>(
   rawInput: unknown,
   actor: Actor,
 ): { input: z.output<In>; viaSelfService: boolean } {
+  if (env().FREEHOLDER_PLAYGROUND === "1" && actor.kind !== "system" && !playgroundAllows(def.name, def.kind)) {
+    throw new ServiceError("permission", "This action is unavailable in the public playground.");
+  }
   const viaSelfService =
     def.selfService !== undefined &&
     def.kind === "query" &&
@@ -447,6 +452,10 @@ async function enforceRateLimit<In extends z.ZodType, Out>(
   input: z.output<In>,
   actor: Actor,
 ): Promise<void> {
+  if (env().FREEHOLDER_PLAYGROUND === "1" && actor.kind !== "system" && def.kind === "mutation") {
+    const verdict = await consume("playground:all-mutations", { limit: 300, windowSeconds: 60 });
+    if (!verdict.allowed) throw new ServiceError("rate_limited", "The shared playground is busy. Please try again shortly.", verdict.retryAfterSeconds);
+  }
   if (!def.rateLimit || actor.kind === "system") return;
   const subject = def.rateLimit.subject(input, actor);
   if (subject === undefined) return;

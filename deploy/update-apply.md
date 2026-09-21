@@ -1,6 +1,10 @@
 # Apply and roll back
 
 Automatic `platform.applyUpdate` and `platform.rollbackUpdate` are unavailable.
+The separate opt-in [Docker host executor](docker-selfhost/docker-updater/README.md) (C10.31)
+provides owner-requested and scheduled image updates only when a restored-backup
+rehearsal proves the database schema and migration journal remain unchanged.
+Schema-changing releases and all other recipes still use the manual procedure.
 The previous implementation did not create recoverable backups, execute
 migrations or verify a candidate deployment, and could report a successful
 rollback after rollback failed. It has been removed (C10.06/C10.10/C11.10).

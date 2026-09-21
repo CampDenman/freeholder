@@ -6370,5 +6370,22 @@
   "marketplace.refund.status.reconciled": "Conciliado",
   "pages.title": "Páginas",
   "views.title": "Vistas guardadas",
-  "records.trash.restoreBlocked": "Ese registro no se puede restaurar porque otro registro usa ahora su nombre o dirección."
+  "records.trash.restoreBlocked": "Ese registro no se puede restaurar porque otro registro usa ahora su nombre o dirección.",
+  "playground.title": "Explora Freeholder",
+  "playground.description": "Prueba a editar páginas, formularios, productos y contactos de ejemplo. Este espacio es compartido: otros visitantes pueden ver y modificar los mismos datos.",
+  "playground.limits": "La demo se reinicia cada hora. Usa solo información ficticia. Las cargas, la administración de cuentas, los envíos externos, los pagos reales y los cambios de infraestructura no están disponibles.",
+  "playground.enter": "Entrar en la demo",
+  "playground.source": "Obtener Freeholder en GitHub",
+  "playground.banner": "Demo pública · Datos compartidos · Reinicio cada hora · No introduzcas información personal.",
+  "playground.try": "Probar la demo",
+  "updates.host.title": "Actualizaciones de Docker",
+  "updates.host.scope": "El servidor verifica la firma, restaura una copia y prueba la versión antes del cambio. El esquema y el registro de migraciones deben permanecer iguales. El horario del servidor es independiente de la política inferior. Actualiza la página para ver el progreso.",
+  "updates.host.status": "Estado: {status}. Canal: {channel}. Comprobaciones automáticas: {automatic}, cada día a las {hour}:00 UTC.",
+  "updates.host.on": "activadas",
+  "updates.host.off": "desactivadas",
+  "updates.host.unavailable": "Actualizador no disponible.",
+  "updates.host.apply": "Buscar e instalar una actualización compatible",
+  "updates.host.pending": "Solicitando actualización…",
+  "updates.host.confirm": "¿Probar e instalar la última imagen compatible? Habrá un breve mantenimiento si supera las comprobaciones.",
+  "updates.host.queued": "Solicitud enviada. Actualiza la página para ver el progreso; la solicitud no confirma que haya terminado."
 }
