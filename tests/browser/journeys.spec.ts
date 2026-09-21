@@ -53,6 +53,7 @@ test.describe("real-browser product journeys", () => {
       await page.goto("/setup");
       await page.getByLabel("Email").fill(OWNER_EMAIL);
       await page.getByLabel("Password").fill(OLD_PASSWORD);
+      await page.getByLabel("Setup secret", { exact: true }).fill("browser-test-only-bootstrap-secret-32-characters");
       await page.getByRole("button", { name: "Create owner account" }).click();
       await expect(page).toHaveURL(/\/setup\/business$/);
 

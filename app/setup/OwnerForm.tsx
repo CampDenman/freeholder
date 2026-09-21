@@ -20,6 +20,8 @@ export interface OwnerFormLabels {
   emailPlaceholder: string;
   password: string;
   passwordHint: string;
+  bootstrapSecret: string;
+  bootstrapSecretHint: string;
   submit: string;
   pending: string;
 }
@@ -60,6 +62,11 @@ export function OwnerForm({ labels }: { labels: OwnerFormLabels }) {
           required
         />
       </Field>
+      <div>
+        <Field label={labels.bootstrapSecret} htmlFor="bootstrapSecret" hint={labels.bootstrapSecretHint}>
+          <Input id="bootstrapSecret" name="bootstrapSecret" type="password" autoComplete="off" maxLength={512} />
+        </Field>
+      </div>
       <div>
         <Button type="submit" disabled={pending}>
           {pending ? labels.pending : labels.submit}
