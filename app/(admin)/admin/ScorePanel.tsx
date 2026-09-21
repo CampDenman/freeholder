@@ -9,7 +9,7 @@
 import { Button, Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
 import { formatDateTime } from "@/core/i18n";
 import { explainScore } from "@/core/scoring/service";
-import type { Actor } from "@/core/service";
+import { hasModuleAccess, type Actor } from "@/core/service";
 import { getT } from "../../i18n";
 import { domainOrNull } from "../read-helpers";
 import { awardPointsAction } from "../scoring-actions";
@@ -25,6 +25,8 @@ export async function ScorePanel({
   locale: string;
   timezone: string;
 }) {
+  // C1.38/C7.05: an unavailable module is not a failed read.
+  if (!hasModuleAccess(actor, "scoring")) return null;
   const [t, explained] = await Promise.all([
     getT(),
     domainOrNull(explainScore.call({ contactId }, actor)),

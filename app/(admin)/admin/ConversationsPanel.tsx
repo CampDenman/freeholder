@@ -15,7 +15,7 @@
 import { Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
 import { formatDateTime } from "@/core/i18n";
 import { getConversation, listConversations } from "@/core/messaging/service";
-import type { Actor } from "@/core/service";
+import { hasModuleAccess, type Actor } from "@/core/service";
 import { getT } from "../../i18n";
 import { domainOrNull } from "../read-helpers";
 
@@ -40,6 +40,8 @@ export async function ConversationsPanel({
   locale: string;
   timezone: string;
 }) {
+  // C1.38/C7.08: do not request conversations for a reader without access.
+  if (!hasModuleAccess(actor, "conversations")) return null;
   const [t, threads] = await Promise.all([
     getT(),
     domainOrNull(listConversations.call({ contactId, limit: 10 }, actor)),
