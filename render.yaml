@@ -20,6 +20,8 @@ services:
         value: s3
       - key: APP_URL
         sync: false
+      - key: BOOTSTRAP_SECRET
+        generateValue: true
       - key: SESSION_SECRET
         generateValue: true
       - key: CREDENTIAL_KEY

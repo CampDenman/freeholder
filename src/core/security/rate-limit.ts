@@ -26,6 +26,7 @@
 // matter for password guessing at these limits.
 import { sql } from "drizzle-orm";
 import { db } from "@/core/db";
+import type { Tx } from "@/core/service";
 
 export interface RateLimitPolicy {
   /** Attempts allowed per window, per key. */
@@ -60,7 +61,19 @@ export async function consume(
   key: string,
   policy: RateLimitPolicy,
 ): Promise<RateLimitVerdict> {
-  const rows = await db().execute<{
+  return consumeWith(db(), key, policy);
+}
+
+/** Limit committed form submissions, not failed authentication attempts.
+ * Uses the existing transaction so parallel submissions cannot exhaust the
+ * connection pool while each waits for a second connection (C11.10).
+ */
+export async function consumeAccepted(tx: Tx, key: string, policy: RateLimitPolicy): Promise<RateLimitVerdict> {
+  return consumeWith(tx, key, policy);
+}
+
+async function consumeWith(executor: Pick<Tx, "execute">, key: string, policy: RateLimitPolicy): Promise<RateLimitVerdict> {
+  const rows = await executor.execute<{
     attempts: number;
     seconds_remaining: string | number;
   }>(sql`

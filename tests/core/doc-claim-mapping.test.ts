@@ -8,8 +8,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const doc = readFileSync("deploy/doc-claim-mapping.md", "utf8");
-const master = readFileSync("MASTER.md", "utf8");
+const doc = readFileSync("deploy/doc-claim-mapping.md", "utf8").replaceAll("\r\n", "\n");
+const master = readFileSync("MASTER.md", "utf8").replaceAll("\r\n", "\n");
 
 interface ClaimRow {
   section: string;

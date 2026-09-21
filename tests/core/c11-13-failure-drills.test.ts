@@ -403,10 +403,9 @@ describe.runIf(hasDatabase)("C11.13 recovery drills", { timeout: 90_000 }, () =>
     expect(new URL(again.authorizationUrl).searchParams.get("state")).toBeTruthy();
   });
 
-  it("rolls back an update interrupted at migrate, smoke or cutover", async () => {
+  it("refuses unsupported update execution before any stage", async () => {
     for (const failAt of ["migrate", "smoke", "cutover"] as const) {
-      const result = await runApply({ actor: OWNER, failAt });
-      expect(result.status).toBe("rolled_back");
+      await expect(runApply({ actor: OWNER, failAt })).rejects.toMatchObject({ code: "conflict" });
     }
   });
 

@@ -34,7 +34,7 @@ const SHAPE = {
 
 /** What a rollback on this strategy must name to be a rollback at all. */
 const ROLLBACK_PIN = {
-  "image-swap": /\$PREVIOUS_FREEHOLDER_IMAGE\b/,
+  "image-swap": /\$\{PREVIOUS_FREEHOLDER_IMAGE:\?[^}]+\}/,
   "deploy-hook": /\$PREVIOUS_FREEHOLDER_(APP_SPEC|IMAGE_TAG)\b/,
   "source-pull": /\$PREVIOUS_FREEHOLDER_TAG\b/,
 };

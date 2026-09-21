@@ -555,6 +555,19 @@ export const registerForEvent = defineService({
       .where(and(eq(eventSessions.id, input.sessionId), eq(eventSessions.eventId, event.id)))
       .for("update");
     if (!session) throw new ServiceError("not_found", "That session is not here.");
+    // C6.11: a ticket is an admission rule, not an optional caller assertion.
+    const tickets = await ctx.tx.select().from(eventTickets)
+      .where(eq(eventTickets.eventId, event.id));
+    const ticket = tickets.find((candidate) => candidate.id === input.ticketId);
+    if (input.ticketId && (!ticket || !ticket.active)) {
+      throw new ServiceError("validation", "Choose an active ticket for this event.");
+    }
+    if (!input.ticketId && tickets.length > 0) {
+      throw new ServiceError("validation", "Choose a ticket for this event.");
+    }
+    if (ticket && ticket.priceMinor > 0) {
+      throw new ServiceError("conflict", "Paid event registration is unavailable until payment settlement is connected. No reservation or charge was made.");
+    }
     const taken = await occupied(ctx, session.id);
     const remaining = session.capacity - taken;
     const resolved = await ctx.callAsSystem(resolveContact, {
@@ -595,6 +608,12 @@ export const cancelRegistration = defineService({
   input: z.object({ id }),
   output: eventRegistrationRow,
   handler: async (input, ctx) => {
+    const [reference] = await ctx.tx.select({ sessionId: eventRegistrations.sessionId })
+      .from(eventRegistrations).where(eq(eventRegistrations.id, input.id));
+    if (!reference) throw new ServiceError("not_found", "That registration is not here.");
+    // Serialize capacity changes with enrollment; always lock session first.
+    await ctx.tx.select({ id: eventSessions.id }).from(eventSessions)
+      .where(eq(eventSessions.id, reference.sessionId)).for("update");
     const [existing] = await ctx.tx
       .select()
       .from(eventRegistrations)
@@ -626,6 +645,14 @@ export const cancelRegistration = defineService({
         .orderBy(asc(eventRegistrations.createdAt))
         .limit(1);
       if (next && next.quantity <= remaining) {
+        const tickets = await ctx.tx.select().from(eventTickets)
+          .where(eq(eventTickets.eventId, existing.eventId));
+        const ticket = tickets.find((candidate) => candidate.id === next.ticketId);
+        if ((next.ticketId && (!ticket || !ticket.active || ticket.priceMinor > 0)) ||
+            (!next.ticketId && tickets.length > 0)) {
+          ctx.setSubject("eventRegistration", existing.id);
+          return updated!;
+        }
         await ctx.tx
           .update(eventRegistrations)
           .set({ status: "confirmed" })
@@ -659,6 +686,13 @@ export const checkInRegistration = defineService({
     if (!existing) throw new ServiceError("not_found", "That registration is not here.");
     if (existing.status !== "confirmed" && existing.status !== "checked_in") {
       throw new ServiceError("conflict", "Only a confirmed registration can be checked in.");
+    }
+    const tickets = await ctx.tx.select().from(eventTickets)
+      .where(eq(eventTickets.eventId, existing.eventId));
+    const ticket = tickets.find((candidate) => candidate.id === existing.ticketId);
+    if ((existing.ticketId && (!ticket || !ticket.active || ticket.priceMinor > 0)) ||
+        (!existing.ticketId && tickets.length > 0)) {
+      throw new ServiceError("conflict", "This registration has no verifiable free admission. Reconcile its ticket and payment before check-in.");
     }
     const [updated] = await ctx.tx
       .update(eventRegistrations)

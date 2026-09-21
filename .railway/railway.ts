@@ -33,6 +33,7 @@ export default defineRailway(() => {
       S3_REGION: ref(media, "REGION"),
       S3_ADDRESSING_STYLE: "virtual",
       APP_URL: preserve(),
+      BOOTSTRAP_SECRET: preserve(),
       SESSION_SECRET: preserve(),
       CREDENTIAL_KEY: preserve(),
     },
