@@ -327,7 +327,10 @@ describe.runIf(hasDatabase)("hiring things out", { timeout: 90_000 }, () => {
 
   it("walks a hire from reserved to closed", async () => {
     const { variantId } = await tripod();
-    const hire = await reserve(variantId);
+    // Keep this an early return after the original fixture dates have passed.
+    const from = new Date(Date.now() - 86_400_000).toISOString();
+    const to = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const hire = await reserve(variantId, "rae@example.test", from, to);
 
     const out = await handOver.call(
       { id: hire.id, condition: "Legs fine, plate present." },

@@ -102,6 +102,7 @@ interface CliArguments {
 
 export const REQUIRED_ENV_KEYS = [
   "DATABASE_URL",
+  "BOOTSTRAP_SECRET",
   "SESSION_SECRET",
   "CREDENTIAL_KEY",
   "APP_URL",
@@ -156,6 +157,9 @@ export function missingEnv(
 export function recoverFromMissing(keys: string[]): string[] {
   return keys.map((key) => {
     if (key === "DATABASE_URL") return "Set DATABASE_URL to a Postgres connection string, then run pnpm db:migrate.";
+    if (key === "BOOTSTRAP_SECRET") {
+      return "Set BOOTSTRAP_SECRET to an independent random value of at least 32 characters and enter it at first owner setup.";
+    }
     if (key === "SESSION_SECRET") {
       return 'Set SESSION_SECRET to at least 32 random characters: node -e "console.log(require(\'node:crypto\').randomBytes(32).toString(\'hex\'))"';
     }
@@ -216,7 +220,7 @@ export async function inspectProjectEnv(
   const missing = required.filter((key) => {
     const value = env[key];
     if (!isPresent(value)) return true;
-    if (key === "SESSION_SECRET" && value.trim().length < 32) return true;
+    if ((key === "SESSION_SECRET" || key === "BOOTSTRAP_SECRET") && value.trim().length < 32) return true;
     return false;
   });
   const recovery = [
