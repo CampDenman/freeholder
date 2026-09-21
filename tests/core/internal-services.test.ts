@@ -114,6 +114,11 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C1.38/C10.31: browser-only entry and owner host controls. These do not
+  // belong in API-key, SDK, OpenAPI or MCP projections.
+  "playground.enter",
+  "platform.getHostUpdateStatus",
+  "platform.requestHostUpdate",
   "privacy.completeErasureJob",
   "notes.purgeExpired",
   "tasks.purgeExpired",
