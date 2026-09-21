@@ -16,6 +16,7 @@ import { domainOrNull } from "../../read-helpers";
 import {
   voiceVideoHostAction,
   voiceVideoDownloadAction,
+  voiceVideoImportAction,
   joinVoiceVideoAction,
   missVoiceVideoAction,
   recordVoiceVideoAction,
@@ -250,6 +251,26 @@ export default async function VoiceVideoPage({
                       </form>
                     ) : null}
                     {artifact.status === "recorded" ? <form action={voiceVideoDownloadAction}><input type="hidden" name="artifactId" value={artifact.id} /><Button type="submit" variant="quiet">{t("voiceVideo.download")}</Button></form> : null}
+                    {artifact.importStatus ? (
+                      <Pill
+                        tone={
+                          artifact.importStatus === "imported"
+                            ? "success"
+                            : artifact.importStatus === "failed"
+                              ? "danger"
+                              : "neutral"
+                        }
+                      >
+                        {t(artifact.importStatus === "imported" ? "voiceVideo.imported" : artifact.importStatus === "failed" ? "voiceVideo.importFailed" : "voiceVideo.importPending")}
+                      </Pill>
+                    ) : null}
+                    {artifact.importError ? <span className="text-danger">{artifact.importError}</span> : null}
+                    {artifact.status === "recorded" && artifact.importStatus !== "imported" && (!artifact.providerLeaseExpiresAt || artifact.providerLeaseExpiresAt <= new Date()) ? (
+                      <form action={voiceVideoImportAction}>
+                        <input type="hidden" name="artifactId" value={artifact.id} />
+                        <Button type="submit" variant="quiet">{t("voiceVideo.importRetry")}</Button>
+                      </form>
+                    ) : null}
                   </div>
                   {artifact.transcript ? (
                     <p className="text-ink-muted">

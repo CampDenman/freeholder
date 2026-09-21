@@ -30,6 +30,13 @@ export default defineModule({
   tables: () => import("./tables"),
   services: () => import("./service"),
   events: {
-    emits: ["popups.saved", "popups.statusChanged", "popups.captured"],
+    emits: [
+      "popups.saved",
+      "popups.statusChanged",
+      "popups.captured",
+      "popups.trashed",
+      "popups.restored",
+      "popups.purged",
+    ],
   },
 });

@@ -5,6 +5,7 @@
 // user agent in JSON. Deployment proxies remain responsible for replacing the
 // forwarding headers they expose to the application.
 import { isIP } from "node:net";
+import { env } from "@/core/env";
 import type { RequestMetadata } from "@/core/service";
 
 const IP_HEADERS = [
@@ -37,7 +38,9 @@ export function requestMetadataFromHeaders(headers: Headers): RequestMetadata {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 512);
-  return { ip, userAgent: userAgent || undefined };
+  const trustedHeader = env().TRUSTED_CLIENT_IP_HEADER;
+  const trustedIp = trustedHeader ? cleanIp(headers.get(trustedHeader) ?? "") : undefined;
+  return { ip, userAgent: userAgent || undefined, ...(trustedIp ? { trustedIp } : {}) };
 }
 
 export function requestMetadata(request: Request): RequestMetadata {

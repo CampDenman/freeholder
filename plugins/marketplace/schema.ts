@@ -48,3 +48,28 @@ export const marketplaceOrders = pgTable(
     index("marketplace_orders_contact_idx").on(t.contactId),
   ],
 );
+
+export const marketplaceRefunds = pgTable(
+  "marketplace_refunds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => marketplaceChannels.id, { onDelete: "cascade" }),
+    orderExternalRef: text("order_external_ref").notNull(),
+    externalRef: text("external_ref").notNull(),
+    invoiceId: uuid("invoice_id"),
+    creditNoteId: uuid("credit_note_id"),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    status: text("status").notNull().default("pending_order"),
+    lastError: text("last_error"),
+    createdAt: createdAtColumn(),
+    updatedAt: updatedAtColumn(),
+  },
+  (t) => [
+    uniqueIndex("marketplace_refunds_channel_external_idx").on(t.channelId, t.externalRef),
+    index("marketplace_refunds_channel_idx").on(t.channelId),
+    index("marketplace_refunds_order_idx").on(t.channelId, t.orderExternalRef),
+  ],
+);

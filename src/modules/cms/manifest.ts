@@ -31,6 +31,9 @@ export default defineModule({
     emits: [
       "cms.pageCreated",
       "cms.pageDeleted",
+      "cms.pageTrashed",
+      "cms.pageRestored",
+      "cms.pagePurged",
       "cms.pageUpdated",
       "cms.pagePublished",
       "cms.pageUnpublished",

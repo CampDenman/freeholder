@@ -173,7 +173,7 @@ describe("create-freeholder (C3.14)", () => {
     expect(inspection.envPath).toBeNull();
     expect(inspection.complete).toBe(false);
     expect(inspection.readyToMigrate).toBe(false);
-    expect(inspection.missing).toEqual(["DATABASE_URL", "SESSION_SECRET", "CREDENTIAL_KEY", "APP_URL"]);
+    expect(inspection.missing).toEqual(["DATABASE_URL", "BOOTSTRAP_SECRET", "SESSION_SECRET", "CREDENTIAL_KEY", "APP_URL"]);
     expect(inspection.recovery[0]).toMatch(/Copy \.env\.example/);
     expect(inspection.setupUrl).toBe("http://localhost:3000/setup");
   });
@@ -185,6 +185,7 @@ describe("create-freeholder (C3.14)", () => {
       join(root, ".env"),
       [
         "DATABASE_URL=postgres://postgres:postgres@localhost:5432/freeholder_dev",
+        "BOOTSTRAP_SECRET=fixture-only-bootstrap-secret-of-32-characters",
         "SESSION_SECRET=tooshort",
         "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef",
         "APP_URL=http://localhost:3000",
@@ -205,6 +206,7 @@ describe("create-freeholder (C3.14)", () => {
       join(root, ".env"),
       [
         "DATABASE_URL=postgres://postgres:postgres@localhost:5432/freeholder_dev",
+        "BOOTSTRAP_SECRET=fixture-only-bootstrap-secret-of-32-characters",
         "SESSION_SECRET=deterministic-session-secret-key-32+",
         "CREDENTIAL_KEY=0123456789abcdef0123456789abcdef",
         "APP_URL=https://studio.example",

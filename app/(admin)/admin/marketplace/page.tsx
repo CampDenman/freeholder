@@ -4,7 +4,7 @@
 import type { Metadata } from "next";
 import { hasModuleAccess } from "@/core/service";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
-import { listMarketplaceChannels, listMarketplaceOrders, marketplaceConfiguration } from "../../../../plugins/marketplace/service";
+import { listMarketplaceChannels, listMarketplaceOrders, listMarketplaceRefunds, marketplaceConfiguration } from "../../../../plugins/marketplace/service";
 import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
@@ -22,10 +22,11 @@ export default async function MarketplacePage({
   const canManage = hasModuleAccess(actor, "marketplace", "manage");
   const canReadInvoices = hasModuleAccess(actor, "invoicing");
   const query = await searchParams;
-  const [t, channels, orders, configuration] = await Promise.all([
+  const [t, channels, orders, refunds, configuration] = await Promise.all([
     getT(),
     domainOrNull(listMarketplaceChannels.call({}, actor)),
     domainOrNull(listMarketplaceOrders.call({}, actor)),
+    domainOrNull(listMarketplaceRefunds.call({}, actor)),
     domainOrNull(marketplaceConfiguration.call({}, actor)),
   ]);
 
@@ -125,6 +126,27 @@ export default async function MarketplacePage({
                 <li key={order.id} id={`order-${order.id}`} className="rounded-md border border-rule p-3 text-sm">
                   {order.externalRef} — {order.description}
                   {canReadInvoices ? <a className="ms-3 underline" href={`/admin/invoices/${order.invoiceId}`}>{t("marketplace.reviewInvoice")}</a> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader title={t("marketplace.refunds")} />
+        <CardBody>
+          {(refunds ?? []).length === 0 ? (
+            <p className="text-sm text-ink-muted">{t("marketplace.refunds.empty")}</p>
+          ) : (
+            <ul className="grid list-none gap-2 p-0">
+              {(refunds ?? []).map((refund) => (
+                <li key={refund.id} className="flex flex-wrap items-center gap-3 rounded-md border border-rule p-3 text-sm">
+                  <span>{refund.externalRef}</span>
+                  <Pill tone={refund.status === "reconciled" ? "success" : "neutral"}>
+                    {t(`marketplace.refund.status.${refund.status}`)}
+                  </Pill>
+                  {refund.lastError ? <span className="text-danger">{refund.lastError}</span> : null}
+                  {canReadInvoices && refund.invoiceId ? <a className="underline" href={`/admin/invoices/${refund.invoiceId}`}>{t("marketplace.reviewInvoice")}</a> : null}
                 </li>
               ))}
             </ul>

@@ -1,8 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { eraseProviderRecordings } from "./erasure";
+import { eraseImportedCopies, eraseProviderRecordings } from "./erasure";
 import { defineJob } from "@/core/jobs";
 import {
+  importVoiceVideoRecording,
   listVoiceVideoArtifacts,
   listVoiceVideoRooms,
   recordVoiceVideoArtifact,
@@ -12,7 +13,7 @@ import {
 
 export const retryFailedVoiceVideo = defineJob({
   name: "voiceVideo.retryFailed",
-  summary: "Retry failed rooms and recordings in place.",
+  summary: "Retry failed rooms, recordings and owner-storage imports in place.",
   schedule: "11,41 * * * *",
   handler: async () => {
     const actor = { kind: "system" as const };
@@ -59,7 +60,20 @@ export const retryFailedVoiceVideo = defineJob({
         actor,
       );
     }
+    let importAttempts = 0;
+    for (const artifact of artifacts) {
+      // Failed imports and imports whose claim died mid-copy stay visible on
+      // the row; both retry here once their lease has expired. Content-
+      // addressed keys make the retry converge instead of duplicating.
+      if (artifact.kind === "transcript" || artifact.status !== "recorded" ||
+        !["failed", "pending"].includes(artifact.importStatus ?? "") ||
+        (artifact.providerLeaseExpiresAt && artifact.providerLeaseExpiresAt > new Date())) {
+        continue;
+      }
+      if (importAttempts++ >= 50) break;
+      await importVoiceVideoRecording.call({ artifactId: artifact.id }, actor);
+    }
   },
 });
 
-export default [retryFailedVoiceVideo, eraseProviderRecordings];
+export default [retryFailedVoiceVideo, eraseProviderRecordings, eraseImportedCopies];

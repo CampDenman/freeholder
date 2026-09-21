@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // C11.11 harness for MASTER.md §15.1. Parses the budget table, decides which
 // surfaces must be measured, and fails closed when a required measurement is
-// missing or over budget. Browser vitals, editor, job-queue, migration and
-// large-dataset runs are opt-in; requesting them without the capability is a
-// failure, not a skip.
+// missing or over budget. Browser vitals, editor, job-queue, migration,
+// cold-boot and large-dataset runs are opt-in; requesting them without the
+// capability is a failure, not a skip.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpus, hostname, platform, totalmem } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const DATASET_SIZES = Object.freeze({
@@ -96,6 +97,8 @@ export function requiredSurfaces(options) {
   const names = new Set(SERVER_SURFACES);
   if (options.measureBrowser) {
     for (const name of OPTIONAL_SURFACES.browser) names.add(name);
+  }
+  if (options.measureEditor) {
     for (const name of OPTIONAL_SURFACES.editor) names.add(name);
   }
   if (options.measureJobs) names.add(OPTIONAL_SURFACES.jobs[0]);
@@ -179,10 +182,50 @@ export function datasetFromEnv(env = process.env) {
 export function measurementFlags(env = process.env) {
   return {
     measureBrowser: env.PERF_MEASURE_BROWSER === "1",
+    measureEditor: env.PERF_MEASURE_EDITOR === "1",
     measureJobs: env.PERF_MEASURE_JOBS === "1",
     measureMigration: env.PERF_MEASURE_MIGRATION === "1",
     measureBoot: env.PERF_MEASURE_BOOT === "1",
   };
+}
+
+/** The acceptance contract (deploy/performance-measurements.md): every run
+ * must carry the commit, host configuration, command and complete output, so
+ * a diagnostic local run can never be mistaken for the §15.1 reference-target
+ * acceptance. */
+export function runHeader(env = process.env) {
+  const commit = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {
+    encoding: "utf8",
+  });
+  const flags = measurementFlags(env);
+  const enabled = [
+    "server surfaces (always)",
+    flags.measureBrowser ? "browser Core Web Vitals + whole-page HTTP (PERF_MEASURE_BROWSER=1)" : null,
+    flags.measureEditor ? "editor first paint + keystroke→preview (PERF_MEASURE_EDITOR=1)" : null,
+    flags.measureJobs ? "job queue latency (PERF_MEASURE_JOBS=1)" : null,
+    flags.measureMigration ? "migration chain apply (PERF_MEASURE_MIGRATION=1)" : null,
+    flags.measureBoot ? "cold boot to serving (PERF_MEASURE_BOOT=1)" : null,
+  ].filter(Boolean);
+  const command = [
+    `PERF_DATASET=${env.PERF_DATASET ?? "small"}`,
+    ...Object.entries(flags)
+      .filter(([, on]) => on)
+      .map(([name]) => `PERF_${name.replace(/^measure/, "MEASURE_").toUpperCase()}=1`),
+    "pnpm perf:budgets",
+  ].join(" ");
+  return [
+    "Perf run header — keep this block with the acceptance evidence:",
+    `  commit: ${commit.status === 0 ? commit.stdout.trim() : "unknown (not a git checkout)"}`,
+    `  host: ${hostname()} · ${platform()} · ${cpus().length} CPUs · ${Math.round(totalmem() / 1024 / 1024 / 1024)}GB RAM`,
+    `  command: ${command}`,
+    `  dataset: ${env.PERF_DATASET ?? "small"}`,
+    `  families: ${enabled.join(" | ")}`,
+  ].join("\n");
+}
+
+function failRequested(message) {
+  console.error(message);
+  process.exit(1);
 }
 
 function main() {
@@ -199,17 +242,28 @@ function main() {
     try { process.loadEnvFile(".env"); } catch { /* Optional, like Vitest's config. */ }
   }
   const dataset = datasetFromEnv();
-  console.log(`Measuring ${dataset} dataset.`);
   const flags = measurementFlags();
+  console.log(runHeader());
+  console.log(`Measuring ${dataset} dataset.`);
   if (!process.env.TEST_DATABASE_URL && !(process.env.CI && process.env.DATABASE_URL)) {
     console.error("Performance measurements require TEST_DATABASE_URL (or CI DATABASE_URL) pointing at a disposable database. Use --check-only to validate the budget table without measurements.");
     process.exit(1);
   }
-  if (flags.measureBrowser && process.env.PERF_HAS_PLAYWRIGHT !== "1") {
-    console.error(
-      "PERF_MEASURE_BROWSER=1 requires PERF_HAS_PLAYWRIGHT=1. Refusing to skip Core Web Vitals.",
+  if ((flags.measureBrowser || flags.measureEditor) && process.env.PERF_HAS_PLAYWRIGHT !== "1") {
+    failRequested(
+      "PERF_MEASURE_BROWSER/PERF_MEASURE_EDITOR require PERF_HAS_PLAYWRIGHT=1. Refusing to skip Core Web Vitals or editor clocks.",
     );
-    process.exit(1);
+  }
+  if ((flags.measureBrowser || flags.measureEditor) &&
+      !existsSync(resolve(".next/standalone/server.js"))) {
+    failRequested(
+      "PERF_MEASURE_BROWSER/PERF_MEASURE_EDITOR require the production standalone build (.next/standalone/server.js). Run pnpm build first; refusing to measure a dev server.",
+    );
+  }
+  if (flags.measureBoot && !existsSync(resolve(".next/BUILD_ID"))) {
+    failRequested(
+      "PERF_MEASURE_BOOT=1 requires the production build (.next/BUILD_ID). Run pnpm build first; refusing to cold-boot a dev server.",
+    );
   }
 
   const directory = mkdtempSync(join(tmpdir(), "freeholder-performance-"));

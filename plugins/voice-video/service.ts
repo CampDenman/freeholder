@@ -4,6 +4,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { env } from "@/core/env";
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
+import { storageKey } from "@/adapters/storage/types";
+import { storage } from "@/adapters/storage";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { isUniqueViolation } from "@/core/db";
 import {
@@ -21,7 +23,7 @@ import {
   matchesIlike,
   registerSearchSource,
 } from "@/core/search/registry";
-import { queueRoomErasure } from "./erasure";
+import { queueRoomErasure, queueArtifactStorageErasure } from "./erasure";
 import { voiceVideoProvider } from "./adapter";
 import { voiceVideoArtifacts, voiceVideoJoins, voiceVideoRooms } from "./schema";
 
@@ -45,6 +47,7 @@ attachPluginContactColumn({
   schema: voiceVideoArtifacts,
   label: "A voice or video artifact",
   scope: "plugins.voice-video",
+  beforeErase: queueArtifactStorageErasure,
 });
 
 const PROVIDER_LEASE_MS = 10 * 60 * 1000;
@@ -86,6 +89,13 @@ const artifactRow = row({
   durationSeconds: z.number().int().nullable(),
   lastError: z.string().nullable(),
   providerLeaseExpiresAt: timestamp.nullable(),
+  importStatus: z.string().nullable(),
+  storageKey: z.string().nullable(),
+  storageContentType: z.string().nullable(),
+  storageChecksumSha256: z.string().nullable(),
+  transcriptStorageKey: z.string().nullable(),
+  importedAt: timestamp.nullable(),
+  importError: z.string().nullable(),
 });
 
 const claimStart = defineService({
@@ -430,7 +440,157 @@ export const recordVoiceVideoArtifact = defineOrchestratedService({
       const message = error instanceof Error ? error.message : "The recording could not be verified.";
       await applyCapture.call({ artifactId: claimed.artifactId, leaseToken: claimed.leaseToken, lastError: message.slice(0, 500), ...captured }, { kind: "system" });
     }
+    if (captured?.externalRef) {
+      // Owner-storage import is automatic after a verified capture. Its
+      // failure never fails the recording; the row tracks import state for
+      // the retry job and the admin retry control.
+      await importVoiceVideoRecording.call({ artifactId: claimed.artifactId }, { kind: "system" }).catch(() => undefined);
+    }
     const found = (await listVoiceVideoArtifacts.call({}, { kind: "system" })).find(row => row.id === claimed.artifactId);
+    if (!found) throw new ServiceError("not_found", "No such recording.");
+    return found;
+  },
+});
+
+const RECORDING_EXTENSIONS: Record<string, string> = {
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+  "audio/mp4": "m4a",
+  "audio/m4a": "m4a",
+  "audio/mpeg": "mp3",
+  "audio/webm": "webm",
+  "audio/ogg": "ogg",
+};
+const TRANSCRIPT_CONTENT_TYPE = "text/vtt";
+
+const claimImport = defineService({
+  name: "voiceVideo.claimImport",
+  summary: "Lease one verified recording before copying it into the owner's storage.",
+  kind: "mutation", permission: "scoped", external: false, writeClass: "write",
+  input: z.object({ artifactId: uuid }),
+  output: z.object({
+    artifactId: uuid,
+    skipped: z.boolean(),
+    leaseToken: uuid.nullable(),
+    provider: z.string(),
+    accountDomain: z.string().nullable(),
+    recordingId: z.string().nullable(),
+    recordingNeeded: z.boolean(),
+    transcriptNeeded: z.boolean(),
+    transcript: z.string().nullable(),
+    previousStorageKey: z.string().nullable(),
+    previousTranscriptStorageKey: z.string().nullable(),
+    createdAt: timestamp,
+  }),
+  handler: async (input, ctx) => {
+    const [artifact] = await ctx.tx.select().from(voiceVideoArtifacts).where(eq(voiceVideoArtifacts.id, input.artifactId)).limit(1).for("update");
+    if (!artifact) throw new ServiceError("not_found", "No such recording.");
+    if (artifact.kind === "transcript") throw new ServiceError("conflict", "Transcripts import with their recording.");
+    if (artifact.status !== "recorded") throw new ServiceError("conflict", "Verify the recording before importing it.");
+    const recordingNeeded = artifact.importStatus !== "imported";
+    const transcriptNeeded = Boolean(artifact.transcript) && !artifact.transcriptStorageKey;
+    if (!recordingNeeded && !transcriptNeeded) {
+      return { artifactId: artifact.id, skipped: true, leaseToken: null, provider: artifact.provider, accountDomain: null,
+        recordingId: artifact.externalRef, recordingNeeded: false, transcriptNeeded: false, transcript: artifact.transcript,
+        previousStorageKey: artifact.storageKey, previousTranscriptStorageKey: artifact.transcriptStorageKey, createdAt: artifact.createdAt };
+    }
+    if (artifact.providerLeaseToken && artifact.providerLeaseExpiresAt && artifact.providerLeaseExpiresAt > new Date()) {
+      throw new ServiceError("conflict", "That recording is already being stored.");
+    }
+    if (recordingNeeded && !artifact.externalRef) throw new ServiceError("conflict", "That recording has no verified provider identity.");
+    const leaseToken = randomUUID();
+    await ctx.tx.update(voiceVideoArtifacts).set({ importStatus: "pending", importError: null,
+      providerLeaseToken: leaseToken, providerLeaseExpiresAt: new Date(Date.now() + PROVIDER_LEASE_MS) }).where(eq(voiceVideoArtifacts.id, artifact.id));
+    const room = artifact.roomId ? (await ctx.tx.select().from(voiceVideoRooms).where(eq(voiceVideoRooms.id, artifact.roomId)).limit(1))[0] : undefined;
+    return { artifactId: artifact.id, skipped: false, leaseToken, provider: artifact.provider, accountDomain: room?.providerDomain ?? null,
+      recordingId: artifact.externalRef, recordingNeeded, transcriptNeeded, transcript: artifact.transcript,
+      previousStorageKey: artifact.storageKey, previousTranscriptStorageKey: artifact.transcriptStorageKey, createdAt: artifact.createdAt };
+  },
+});
+
+const applyImport = defineService({
+  name: "voiceVideo.applyImport",
+  summary: "Record the outcome of one owner-storage copy atomically.",
+  kind: "mutation", permission: "scoped", external: false, writeClass: "write",
+  input: z.object({
+    artifactId: uuid,
+    leaseToken: uuid,
+    storageKey: z.string().min(1).max(300).nullish(),
+    storageContentType: z.string().min(1).max(200).nullish(),
+    storageChecksumSha256: z.string().regex(/^[0-9a-f]{64}$/).nullish(),
+    transcriptStorageKey: z.string().min(1).max(300).nullish(),
+    lastError: z.string().max(500).optional(),
+  }),
+  output: okResult,
+  handler: async (input, ctx) => {
+    const [artifact] = await ctx.tx.select().from(voiceVideoArtifacts).where(eq(voiceVideoArtifacts.id, input.artifactId)).limit(1).for("update");
+    if (!artifact || artifact.providerLeaseToken !== input.leaseToken || !artifact.providerLeaseExpiresAt || artifact.providerLeaseExpiresAt <= new Date()) {
+      throw new ServiceError("conflict", "That import no longer owns its lease.");
+    }
+    if (input.lastError) {
+      await ctx.tx.update(voiceVideoArtifacts).set({ importStatus: "failed", importError: input.lastError,
+        providerLeaseToken: null, providerLeaseExpiresAt: null }).where(eq(voiceVideoArtifacts.id, artifact.id));
+      return { ok: true as const };
+    }
+    await ctx.tx.update(voiceVideoArtifacts).set({
+      importStatus: "imported", importError: null, importedAt: new Date(),
+      providerLeaseToken: null, providerLeaseExpiresAt: null,
+      ...(input.storageKey !== undefined ? { storageKey: input.storageKey } : {}),
+      ...(input.storageContentType !== undefined ? { storageContentType: input.storageContentType } : {}),
+      ...(input.storageChecksumSha256 !== undefined ? { storageChecksumSha256: input.storageChecksumSha256 } : {}),
+      ...(input.transcriptStorageKey !== undefined ? { transcriptStorageKey: input.transcriptStorageKey } : {}),
+    }).where(eq(voiceVideoArtifacts.id, artifact.id));
+    ctx.queueEvent("voiceVideo.recordingImported", { id: artifact.id });
+    return { ok: true as const };
+  },
+});
+
+export const importVoiceVideoRecording = defineOrchestratedService({
+  name: "voiceVideo.importRecording",
+  summary: "Copy a verified provider recording and its transcript into the owner's configured storage.",
+  kind: "mutation", permission: "scoped", writeClass: "write",
+  input: z.object({ artifactId: uuid }),
+  output: artifactRow,
+  handler: async (input) => {
+    const claimed = await claimImport.call(input, { kind: "system" });
+    if (!claimed.skipped && claimed.leaseToken) {
+      try {
+        const stored: { storageKey?: string; storageContentType?: string; storageChecksumSha256?: string; transcriptStorageKey?: string | null } = {};
+        if (claimed.recordingNeeded) {
+          const downloaded = await voiceVideoProvider().downloadRecording({ provider: claimed.provider, externalRef: null,
+            providerRoomId: null, accountDomain: claimed.accountDomain, recordingId: claimed.recordingId! });
+          const checksum = createHash("sha256").update(downloaded.bytes).digest("hex");
+          const key = storageKey(`recording-${claimed.artifactId}.${RECORDING_EXTENSIONS[downloaded.contentType] ?? "bin"}`, claimed.createdAt, checksum.slice(0, 16));
+          // Content-addressed keys make retries converge on the same object:
+          // an already-complete put is detected by head and never duplicated.
+          const existing = await storage().head(key);
+          if (!existing || existing.bytes !== downloaded.bytes.byteLength) await storage().put(key, downloaded.bytes, downloaded.contentType);
+          stored.storageKey = key;
+          stored.storageContentType = downloaded.contentType;
+          stored.storageChecksumSha256 = checksum;
+        }
+        if (claimed.transcriptNeeded && claimed.transcript) {
+          const bytes = new TextEncoder().encode(claimed.transcript);
+          const checksum = createHash("sha256").update(bytes).digest("hex");
+          const key = storageKey(`transcript-${claimed.artifactId}.vtt`, claimed.createdAt, checksum.slice(0, 16));
+          const existing = await storage().head(key);
+          if (!existing || existing.bytes !== bytes.byteLength) await storage().put(key, bytes, TRANSCRIPT_CONTENT_TYPE);
+          stored.transcriptStorageKey = key;
+        }
+        await applyImport.call({ artifactId: claimed.artifactId, leaseToken: claimed.leaseToken, ...stored }, { kind: "system" });
+        // A re-import that produced different content-addressed keys retires
+        // the previous objects; the deletes stay outside the apply transaction.
+        for (const previous of [claimed.previousStorageKey, claimed.previousTranscriptStorageKey]) {
+          if (previous && ![stored.storageKey, stored.transcriptStorageKey].includes(previous)) {
+            await storage().delete(previous).catch(() => undefined);
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "The recording could not be copied into owner storage.";
+        await applyImport.call({ artifactId: claimed.artifactId, leaseToken: claimed.leaseToken, lastError: message.slice(0, 500) }, { kind: "system" }).catch(() => undefined);
+      }
+    }
+    const found = (await listVoiceVideoArtifacts.call({}, { kind: "system" })).find(item => item.id === input.artifactId);
     if (!found) throw new ServiceError("not_found", "No such recording.");
     return found;
   },
@@ -651,6 +811,9 @@ export default [
   claimCapture,
   applyCapture,
   recordVoiceVideoArtifact,
+  claimImport,
+  applyImport,
+  importVoiceVideoRecording,
   roomAccessSource,
   createVoiceVideoMeetingLink,
   voiceVideoRecordingAccess,

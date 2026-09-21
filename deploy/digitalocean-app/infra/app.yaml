@@ -37,6 +37,10 @@ services:
       - key: FREEHOLDER_STORAGE
         value: s3
         scope: RUN_TIME
+      - key: BOOTSTRAP_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_BOOTSTRAP_SECRET
       - key: SESSION_SECRET
         value: REPLACE_WITH_32_PLUS_RANDOM_CHARACTERS
         scope: RUN_TIME
