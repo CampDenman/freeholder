@@ -58,8 +58,8 @@ describe.runIf(hasDatabase)("events module", { timeout: 30_000 }, () => {
       },
       OWNER,
     );
-    await addEventTicket.call(
-      { eventId: event.id, name: "General", priceMinor: 5_000, currency: "CAD" },
+    const ticket = await addEventTicket.call(
+      { eventId: event.id, name: "General", priceMinor: 0, currency: "CAD" },
       OWNER,
     );
     const published = await publishEvent.call({ id: event.id, expectedVersion: event.version }, OWNER);
@@ -76,6 +76,7 @@ describe.runIf(hasDatabase)("events module", { timeout: 30_000 }, () => {
       {
         eventId: published.id,
         sessionId: session.id,
+        ticketId: ticket.id,
         email: "ada@example.test",
         name: "Ada",
       },
@@ -86,6 +87,7 @@ describe.runIf(hasDatabase)("events module", { timeout: 30_000 }, () => {
       {
         eventId: published.id,
         sessionId: session.id,
+        ticketId: ticket.id,
         email: "grace@example.test",
         name: "Grace",
       },

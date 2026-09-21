@@ -53,11 +53,13 @@ import { seedDefaultRoles } from "@/core/roles/defaults";
 import { seedCoreGuidanceFlows } from "@/core/guidance/definitions";
 import { createLoginChallenge } from "@/core/auth/two-factor";
 import { recordSuccessfulLogin } from "@/core/auth/session-management/service";
+import { bootstrapAttemptKey, requireBootstrapSecret } from "./bootstrap";
 
 /** Registration is where the password policy lives. */
 const registration = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(12, "use at least 12 characters"),
+  bootstrapSecret: z.string().max(512).optional(),
 });
 
 /**
@@ -79,26 +81,16 @@ export const registerOwner = defineService({
   kind: "mutation",
   permission: "public",
   input: registration,
-  // One global bucket, not one per caller — deliberately, and worth saying
-  // plainly. This endpoint succeeds exactly once in an instance's life, so
-  // there is no account to count against and nothing to take over; what it
-  // protects is the cost of hashing a password on an unauthenticated public
-  // URL. Per-IP counting would be better, but nothing populates `ip` on this
-  // path yet (threading a trusted client address through Server Actions needs
-  // a proxy-trust decision this PR does not make), and a per-IP limit keyed on
-  // a value that is always undefined is a global limit wearing a costume.
-  //
-  // The cost of a shared bucket is that a stranger can delay an owner's first
-  // boot by up to fifteen minutes. The window expires on its own, so it is a
-  // delay and never a lockout.
+  // Unknown setup secrets cannot exhaust the legitimate operator's bucket.
   rateLimit: {
     limit: 20,
     windowSeconds: 15 * 60,
-    subject: () => "first-boot",
+    subject: (input) => bootstrapAttemptKey(input.bootstrapSecret),
     message: "Too many setup attempts. Wait a few minutes and try again.",
   },
   output: row({ userId: uuid }).and(sessionIssued),
   handler: async (input, ctx) => {
+    requireBootstrapSecret(input.bootstrapSecret);
     // Migrations seed these too, but first boot is deliberately self-healing:
     // a test database or a restored pre-role database still gets the same
     // data-backed permission catalogue before the owner row refers to it.

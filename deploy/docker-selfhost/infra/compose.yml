@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 services:
   app:
-    image: ghcr.io/campdenman/freeholder:edge
+    image: ${FREEHOLDER_IMAGE:-ghcr.io/campdenman/freeholder:edge}
     restart: unless-stopped
     ports:
       - "3000:3000"

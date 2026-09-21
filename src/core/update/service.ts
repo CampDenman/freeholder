@@ -385,7 +385,7 @@ export const preflightUpdate = defineOrchestratedService({
 
 export const applyUpdate = defineOrchestratedService({
   name: "platform.applyUpdate",
-  summary: "Snapshot, verify, migrate, smoke, cut over and draft a release note. Failures roll back.",
+  summary: "Automatic apply is unavailable until a verified host executor and recoverable backups are implemented.",
   kind: "mutation",
   permission: "scoped",
   input: z.object({
