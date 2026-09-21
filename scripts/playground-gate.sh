@@ -35,8 +35,13 @@ docker exec "$app" node -e '
     const cookie=entry.headers.getSetCookie().map(v=>v.split(";")[0]).join("; ");
     const admin=await fetch("http://localhost:3000/admin",{headers:{cookie},redirect:"manual"});
     if(admin.status!==200) throw Error("Visitor cannot enter admin: "+admin.status);
+    const pages=await fetch("http://localhost:3000/admin/pages",{headers:{cookie}}).then(r=>r.text());
+    const editPath=pages.match(/href="(\/admin\/pages\/[a-f0-9-]{36})"/)?.[1];
+    if(!editPath) throw Error("No editable sample page");
+    const editor=await fetch("http://localhost:3000"+editPath,{headers:{cookie}});
+    if(!editor.ok || !(await editor.text()).includes("Add a block")) throw Error("Visitor editor did not render");
     try { await fetch("https://example.com",{signal:AbortSignal.timeout(1500)}); throw Error("EGRESS_ALLOWED"); }
     catch(error) { if(error.message==="EGRESS_ALLOWED") throw error; }
-    console.log("Playground boots read-only, signs in a visitor, serves admin and blocks outbound delivery.");
+    console.log("Playground boots read-only, signs in a visitor, renders the page editor and blocks outbound delivery.");
   })().catch(e=>{console.error(e.message);process.exit(1)});
 '
