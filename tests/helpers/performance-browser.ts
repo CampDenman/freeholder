@@ -516,9 +516,14 @@ export interface EditorMeasurement extends MeasurementRow {
  *   warm-up navigation first.
  * - Keystroke → preview: a real keypress in the heading field, then the
  *   preview frame is polled (mutation observation through the same-origin
- *   iframe document) until the stored text renders. The current editor
- *   debounces autosave by 1.2s and renders only stored state, so an honest
- *   sample includes that debounce; the harness reports what it observes.
+ *   iframe document) until the stored text renders, p95 over the requested
+ *   samples. One warm-up keystroke is discarded first: the first type and
+ *   first poll on a fresh page pay one-time costs (CDP key dispatch, predicate
+ *   compilation, poll registration) that steady-state samples do not — the
+ *   same discipline as the discarded warm-up navigation above. Measured
+ *   locally with a zero-latency preview patch, the cold first sample is
+ *   ~10ms slower than steady state (~107ms vs ~97ms); discarding it is what
+ *   keeps the clock honest about the product rather than the harness.
  */
 export async function measureEditorClocks(input: {
   baseUrl: string;
@@ -585,9 +590,8 @@ export async function measureEditorClocks(input: {
       const field = page.locator(`#${input.headingFieldId}`);
       await field.waitFor({ state: "visible", timeout: 15_000 });
       await page.getByTitle("Preview").waitFor();
-      const keystrokes: number[] = [];
-      for (let i = 0; i < input.keystrokeSamples; i += 1) {
-        const token = `perf${i}`;
+
+      const sampleKeystroke = async (token: string): Promise<number> => {
         await field.click();
         const started = await page.evaluate(() => performance.now());
         await page.keyboard.type(` ${token}`, { delay: 15 });
@@ -617,14 +621,39 @@ export async function measureEditorClocks(input: {
         }
         if (painted === null || !Number.isFinite(painted)) {
           throw new Error(
-            `Keystroke sample ${i} never reached the preview frame within 30 seconds.`,
+            `Keystroke sample ${token} never reached the preview frame within 30 seconds.`,
           );
         }
         const latency = painted - started;
         if (!Number.isFinite(latency) || latency < 0) {
-          throw new Error(`Keystroke sample ${i} produced an invalid latency.`);
+          throw new Error(`Keystroke sample ${token} produced an invalid latency.`);
         }
-        keystrokes.push(latency);
+        return latency;
+      };
+
+      // One discarded warm-up keystroke. It warms the type/poll path (the
+      // first type and first poll on a fresh page pay one-time costs that
+      // steady-state samples do not), and it dirties the tree — so its
+      // autosave lands ~1.2s later and reloads the frame. Let that settle
+      // before measuring, or a reload racing a timed sample would attribute
+      // harness churn to the product. The frame's URL carries the save
+      // version, so v >= 1 is the save having completed and the frame having
+      // reloaded.
+      await sampleKeystroke("warmup");
+      await page.waitForFunction(
+        () => {
+          const frame = document.querySelector('iframe[title="Preview"]');
+          return (
+            frame instanceof HTMLIFrameElement && /[?&]v=[1-9]\d*$/.test(frame.src)
+          );
+        },
+        undefined,
+        { polling: 200, timeout: 15_000 },
+      );
+
+      const keystrokes: number[] = [];
+      for (let i = 0; i < input.keystrokeSamples; i += 1) {
+        keystrokes.push(await sampleKeystroke(`perf${i}`));
       }
       const keystrokeP95 = percentile(keystrokes, 95);
       const detail: Record<string, EditorMeasurement> = {
