@@ -192,18 +192,18 @@ describe.runIf(hasDatabase)("C11.03 discovery to loyalty", { timeout: 90_000 }, 
       },
       OWNER,
     );
-    await addEventTicket.call(
-      { eventId: event.id, name: "General", priceMinor: 5_000, currency: "CAD" },
+    const ticket = await addEventTicket.call(
+      { eventId: event.id, name: "General", priceMinor: 0, currency: "CAD" },
       OWNER,
     );
     const published = await publishEvent.call({ id: event.id, expectedVersion: event.version }, OWNER);
     const first = await registerForEvent.call(
-      { eventId: published.id, sessionId: session.id, email: "ada@example.test", name: "Ada" },
+      { eventId: published.id, sessionId: session.id, ticketId: ticket.id, email: "ada@example.test", name: "Ada" },
       ANONYMOUS,
     );
     expect(first.status).toBe("confirmed");
     const waiting = await registerForEvent.call(
-      { eventId: published.id, sessionId: session.id, email: "grace@example.test", name: "Grace" },
+      { eventId: published.id, sessionId: session.id, ticketId: ticket.id, email: "grace@example.test", name: "Grace" },
       ANONYMOUS,
     );
     expect(waiting.status).toBe("waitlisted");
