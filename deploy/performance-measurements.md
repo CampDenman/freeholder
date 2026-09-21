@@ -98,13 +98,19 @@ standalone server). On `/admin/pages/{id}` of the seeded fixture page:
 - **Keystroke → preview** — a real keypress in the heading field, then the
   same-origin preview iframe is polled until the typed token renders in it;
   the clock is keypress to observed preview paint, `PERF_KEYSTROKE_SAMPLES`
-  times (default 5), reported as p95.
+  times (default 5), reported as p95. One warm-up keystroke is discarded
+  first (and its autosave awaited) so one-time type/poll costs and the
+  save-triggered frame reload never land inside a timed sample — the same
+  discipline as the discarded warm-up navigation in the first-paint family.
 
-Honesty note: the editor today debounces autosave by 1.2s and the preview
-frame renders only stored state, so an honest keystroke→preview sample
-includes that debounce plus the save round-trip and frame reload — far above
-the ≤100ms budget row. The harness reports the number the product actually
-produces; making the preview faster is product work, not measurement work.
+The editor overlays its local draft onto the preview frame's typeable
+elements in the same commit as each keystroke (no autosave wait, no server
+round-trip); autosave still debounces at 1.2s and a save still reloads the
+frame from stored state, reconverging anything a text patch cannot express.
+The harness reports the number the product actually produces; on this
+developer host the steady-state clock sits at the measurement floor
+(keypress pacing plus one poll tick), so the row's reference-target evidence
+must come from the acceptance run, not a local run.
 
 ## Migration wall-clock (`PERF_MEASURE_MIGRATION=1`)
 
