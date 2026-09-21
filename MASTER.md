@@ -5597,7 +5597,7 @@ payment, tax, inventory and reporting path, with no floating-point money.
   the policy says, because there is nothing left to inspect. `/admin/hire`,
   ordered overdue-first. `0094_rentals.sql`. Coverage in
   `tests/core/rentals.test.ts`. **F04** `/admin/hire` rentals. **F05** `rentals.quote`/`reserve`/`handOver`/`takeBack`/`setTerms`/`list` at `/api/v1/rentals.*`, MCP `rentals_*`. **F07** `tests/core/rentals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/rentals.test.ts` is the composition proof.)
-- [x] **C6.11** Build events/classes with venue, sessions, seat inventory,
+- [ ] **C6.11** Build events/classes with venue, sessions, seat inventory,
   tickets/passes, waitlists, schema.org Event, ICS and check-in.
   *(Evidence: `events` module — venue fields, sessions with capacity,
   ticket types, contact-spine registrations that waitlist when a session is
@@ -7910,20 +7910,13 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   SPDX. **F10** N/A. **F11** `deploy/update-preflight.md`, changeset
   `update-preflight.md`. **F12** shadow SQL `SELECT 1/0` fails migrations
   without touching `public`. This is not apply — C10.06.)
-- [x] **C10.06** Build snapshot → verify/pull → migrate → health/smoke → cutover
-  → release-note flow with drain, grace period and automatic rollback.
-  (`update_snapshots`, `update_runs`, `release_notes`. `platform.applyUpdate`
-  snapshots a schema fingerprint, runs preflight, pulls/cutover via a target
-  adapter, smokes `ready()` plus a contact read, drafts a `ReleaseNote`, and
-  rolls back on migrate/smoke/cutover failure. Local adapter is in-process;
-  Tier-1 image swap is C10.10. **F01** `update_snapshots`, `update_runs`,
-  `release_notes`. **F02** no `contact_id`. **F03** N/A. **F04** list service,
-  not a new admin screen (C10.11). **F05** `platform.applyUpdate`,
-  `platform.listUpdateRuns`. **F06** N/A — note title is English operational
-  copy. **F07** anonymous refused; failed smoke rolls back and writes no note.
-  **F08** `tests/core/update-apply.test.ts`. **F09** SPDX. **F10** N/A.
-  **F11** `deploy/update-apply.md`, changeset `update-apply.md`. **F12**
-  `failAt: "smoke"` yields `rolled_back`.)
+- [ ] **C10.06** Implement a verified host update executor with recoverable database
+  backups, signed immutable image selection, actual migrations, candidate health
+  checks and independently verified rollback. The 2026-09-21 readiness audit
+  found that the previous implementation recorded fingerprints as backups and
+  could report success without deployment. Apply, snapshot and rollback now
+  refuse execution; no success history or fake backup is created. See
+  `deploy/update-apply.md` and `tests/core/client-readiness-security.test.ts`.
 - [x] **C10.07** Enforce N-1 schema readability in migrations and prove update
   plus rollback from the previous released image in CI.
   (`schema-compat-gate.mjs` `assertSchemaRisk` fails an acknowledged break
@@ -7974,7 +7967,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   three commits ahead and two security releases behind reports
   "2 security releases behind — CVSS 8.1; this fork carries 3 commits of its
   own".)
-- [x] **C10.10** Implement and continuously test target-specific update/
+- [ ] **C10.10** Implement and continuously test target-specific update/
   rollback actions for every Tier-1 recipe.
   (`src/core/update/targets.ts` names §39.8's three strategies — `image-swap`
   for the droplet and self-host recipes, `deploy-hook` for App Platform,
@@ -9222,3 +9215,9 @@ carries only a one-line marker per item.
 >   tests, native/root typechecks, the shared package build, lint after correcting
 >   a test-helper binding, and Android/iOS Hermes exports. PR #333 carries the
 >   implementation; the item remains open for the native-device evidence above.)*
+
+### Client-readiness repair note — 2026-09-21
+
+C1.03/C1.05/C6.08/C9.09/C9.12/C11.10: production first ownership requires an independent BOOTSTRAP_SECRET; public waitlist enrollment returns only an acknowledgement; referral contact attribution requires ownership or scope; redemption locks account and reward rows; magic-link limits use token hashes and forms use validated submitter identities or explicitly trusted proxy addresses.
+
+C6.11 is reopened: free event enrollment validates ticket ownership and availability and serializes capacity changes. Paid enrollment refuses until a canonical invoice/payment settlement flow exists. Existing paid confirmations from before this repair need operator reconciliation. C10.06/C10.10 are reopened: automatic apply/rollback is unavailable; target recipes remain manual operator procedures requiring a tested backup and immutable image pins. Previous updater history does not prove deployment or recoverability.
