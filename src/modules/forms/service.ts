@@ -12,6 +12,8 @@
 // never `contacts.create`, reached through `ctx.callAsSystem` so the elevation
 // is one greppable call rather than a service that quietly trusts its caller.
 import { z } from "zod";
+import { createHash } from "node:crypto";
+import { consumeAccepted } from "@/core/security/rate-limit";
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, getService, ServiceError } from "@/core/service";
@@ -491,16 +493,6 @@ export const submitForm = defineService({
     values: z.record(z.string(), z.unknown()),
     sourceUrl: z.string().max(2000).optional(),
   }),
-  // A public write needs a ceiling that does not depend on anyone being
-  // logged in. Per form rather than per visitor: an anonymous surface has no
-  // trustworthy identity to key on, and threading a client address through a
-  // Server Action is not something Next offers honestly (see the backlog).
-  rateLimit: {
-    limit: 30,
-    windowSeconds: 10 * 60,
-    subject: (input) => `form:${input.slug}`,
-    message: "This form has taken a lot of submissions just now. Try again shortly.",
-  },
   output: z.object({
     ok: z.literal(true),
     submissionId: uuid,
@@ -538,6 +530,18 @@ export const submitForm = defineService({
       );
     }
     const data = parsed.data as Record<string, unknown>;
+    // C11.10: malformed posts and other visitors cannot exhaust the whole form.
+    // Without a trusted proxy, throttle the validated address (or identical
+    // anonymous answers); perimeter flood control remains the host's concern.
+    const identity = ctx.actor.kind === "user" ? `user:${ctx.actor.userId}`
+      : ctx.actor.request?.trustedIp ?? emailFrom(fields, data)?.trim().toLowerCase()
+        ?? JSON.stringify(Object.entries(data).sort(([a], [b]) => a.localeCompare(b)));
+    if (ctx.actor.kind !== "system") {
+      const verdict = await consumeAccepted(ctx.tx, `forms.submit:${form.id}:${createHash("sha256").update(identity).digest("hex")}`, {
+        limit: 30, windowSeconds: 10 * 60,
+      });
+      if (!verdict.allowed) throw new ServiceError("rate_limited", "Too many submissions. Try again shortly.", verdict.retryAfterSeconds);
+    }
 
     // §4.1's identity rule, on an anonymous path. `resolve` rather than
     // `create` because a returning visitor is the same person, and

@@ -33,6 +33,12 @@ describe.runIf(hasDatabase)("what doctor checks", () => {
   it("reports on every subsystem an instance can misconfigure", async () => {
     const report = await runDoctor();
     const ids = report.checks.map((check) => check.id);
+    const preflight = report.checks.find((check) => check.id === "update.preflight");
+    expect(preflight?.verdict).toBe("warn");
+    expect(preflight?.detail).toContain("No signed candidate");
+    const policy = report.checks.find((check) => check.id === "update.policy");
+    expect(policy?.verdict).toBe("warn");
+    expect(policy?.detail).toContain("Automatic updates and rollback are unavailable");
     for (const id of [
       "env.sessionSecret",
       "env.appUrl",

@@ -1827,7 +1827,7 @@ export interface ServiceCatalog {
     output: { recoveryCodes: string[]; [key: string]: unknown };
   };
   "auth.registerOwner": {
-    input: { email: string; password: string };
+    input: { email: string; password: string; bootstrapSecret?: string };
     output: { userId: string; token: string; sessionId: string; expiresAt: string };
   };
   "auth.removeTotpFactor": {
@@ -6512,7 +6512,7 @@ export interface ServiceCatalog {
   };
   "waitlist.join": {
     input: { contact: { email: string; name?: string; phone?: string }; calendarId?: string | null; serviceOfferingId?: string | null; windowStart: string; windowEnd: string; seatCount?: number; notes?: string | null };
-    output: { id: string; contactId: string; serviceOfferingId: string | null; calendarId: string | null; windowStart: string; windowEnd: string; seatCount: number; status: "waiting" | "offered" | "booked" | "expired" | "withdrawn"; position: number; offeredAt: string | null; offerExpiresAt: string | null; offerStartsAt: string | null; offerEndsAt: string | null; bookingId: string | null; notes: string | null; [key: string]: unknown };
+    output: { ok: true };
   };
   "waitlist.list": {
     input: { calendarId?: string; status?: "waiting" | "offered" | "booked" | "expired" | "withdrawn"; limit?: number };

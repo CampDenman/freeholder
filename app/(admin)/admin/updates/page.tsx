@@ -113,6 +113,9 @@ export default async function UpdatesPage() {
       <Callout tone={tone} icon={icon}>
         {status.sentence}
       </Callout>
+      <Callout tone="warning" icon={<WarningCircle size={17} weight="fill" />}>
+        {t("updates.executionUnavailable")}
+      </Callout>
 
       <Card>
         <CardHeader
@@ -200,6 +203,7 @@ export default async function UpdatesPage() {
             <div className="mt-4">
               <UpdateActionForm
                 intent="apply"
+                disabled
                 hidden={{ version: newest.version }}
                 variant={status.urgent ? "danger" : "primary"}
                 confirm={t("updates.applyConfirm", { version: newest.version })}
@@ -221,6 +225,7 @@ export default async function UpdatesPage() {
             <div className="mt-4">
               <UpdateActionForm
                 intent="rollback"
+                disabled
                 variant="danger"
                 confirm={t("updates.rollbackConfirm", { version: status.earliestReachableVersion })}
                 submitLabel={t("updates.action.rollback")}

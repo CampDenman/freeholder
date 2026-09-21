@@ -94,6 +94,7 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
     expect(envs).toContainEqual(expect.objectContaining({ key: "DATABASE_URL", value: "${freeholder-db.DATABASE_PRIVATE_URL}" }));
     expect(envs).toContainEqual(expect.objectContaining({ key: "FREEHOLDER_STORAGE", value: "s3" }));
     const rendered = renderAppSpec(readFileSync(templatePath, "utf8"), {
+      BOOTSTRAP_SECRET: "b".repeat(32),
       SESSION_SECRET: "s".repeat(32),
       CREDENTIAL_KEY: "a".repeat(64),
       S3_BUCKET: "bucket",
@@ -105,6 +106,7 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
     expect(rendered).not.toContain("REPLACE_WITH_");
     expect(parse(rendered)).toMatchObject({ databases: [{ engine: "PG" }] });
     expect(() => renderAppSpec(readFileSync(templatePath, "utf8"), {
+      BOOTSTRAP_SECRET: "b".repeat(32),
       SESSION_SECRET: "short",
       CREDENTIAL_KEY: "invalid",
       S3_BUCKET: "bucket",

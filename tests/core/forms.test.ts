@@ -299,16 +299,15 @@ describe.runIf(hasDatabase)("submitting", () => {
     ).toBe("permission");
   });
 
-  it("caps how often one form can be submitted", async () => {
+  it("caps repeated submissions without locking out unrelated visitors", async () => {
     await contactForm();
-    // The ceiling is per form: an anonymous surface has no trustworthy
-    // identity to key on, so the form itself is the subject.
+    // Without an explicitly trusted proxy, use the validated email identity.
     const attempts = [];
     for (let i = 0; i < 31; i += 1) {
       attempts.push(
         submitForm
           .call(
-            { slug: "contact", values: answers({ email: `p${i}@example.test` }) },
+            { slug: "contact", values: answers({ email: "repeated@example.test" }) },
             ANONYMOUS,
           )
           .then(
@@ -319,6 +318,7 @@ describe.runIf(hasDatabase)("submitting", () => {
     }
     const outcomes = await Promise.all(attempts);
     expect(outcomes.filter((o) => o === "rate_limited").length).toBeGreaterThan(0);
+    await expect(submitForm.call({ slug: "contact", values: answers({ email: "unrelated@example.test" }) }, ANONYMOUS)).resolves.toMatchObject({ ok: true });
   });
 });
 

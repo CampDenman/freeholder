@@ -23,7 +23,8 @@
 import { z } from "zod";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
-import { defineService, ServiceError } from "@/core/service";
+import { defineService, permits, ServiceError } from "@/core/service";
+import { contacts } from "@/core/contacts/schema";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { hashToken, mintToken } from "./tokens";
@@ -258,6 +259,16 @@ export const recordTouch = defineService({
   },
   output: row({ recorded: z.boolean(), codeId: uuidSchema.nullable() }),
   handler: async (input, ctx) => {
+    // C9.09/C11.10: public attribution cannot impersonate a named contact.
+    if (input.contactId && !permits(ctx.actor, "scoped", "referrals.recordTouch", "mutation")) {
+      const [own] = ctx.actor.kind === "user"
+        ? await ctx.tx.select({ id: contacts.id }).from(contacts)
+          .where(eq(contacts.userId, ctx.actor.userId)).limit(1)
+        : [];
+      if (own?.id !== input.contactId) {
+        throw new ServiceError("permission", "You can only attach your own referral activity.");
+      }
+    }
     const [found] = await ctx.tx
       .select()
       .from(affiliateCodes)
@@ -395,6 +406,17 @@ export const acceptInvitation = defineService({
     // other — the same table, so attribution reads one chain (§4.13).
     let contactId: string | null = null;
     if (input.email) {
+      // A targeted invitation authorizes only its recipient, not arbitrary emails.
+      if (input.email !== invitation.inviteeEmail &&
+          !permits(ctx.actor, "scoped", "referrals.acceptInvitation", "mutation")) {
+        const [own] = ctx.actor.kind === "user"
+          ? await ctx.tx.select({ email: contacts.email }).from(contacts)
+            .where(eq(contacts.userId, ctx.actor.userId)).limit(1)
+          : [];
+        if (own?.email !== input.email) {
+          throw new ServiceError("permission", "This invitation cannot attach another person's email.");
+        }
+      }
       // Automated path, so `contacts.resolve` and never `contacts.create`.
       const { contact } = await ctx.callAsSystem(resolveContact, {
         email: input.email,
