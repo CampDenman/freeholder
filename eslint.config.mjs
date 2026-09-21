@@ -118,7 +118,7 @@ export default tseslint.config(
     // pnpm workspace with its own tsconfig, dependencies and CI job, so
     // type-aware linting here would resolve its imports against the wrong
     // project and report every one of them as missing.
-    ignores: [".next/**", "node_modules/**", "packages/**", "db/**", "apps/**"],
+    ignores: [".next/**", ".work/**", "node_modules/**", "packages/**", "db/**", "apps/**"],
   },
   // Type-aware from here down. Several gates in §15 are statements about
   // values, not syntax, and cannot be written without the type checker.
