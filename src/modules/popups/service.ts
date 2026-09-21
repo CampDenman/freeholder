@@ -25,7 +25,7 @@
 // There is no anonymous path that can grant marketing consent to somebody
 // else's existing address.
 import { z } from "zod";
-import { and, asc, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid as uuidSchema } from "@/core/contract";
 import {
   defineService,
@@ -39,6 +39,9 @@ import {
 } from "@/core/service";
 import { registerContactReference, resolveContact } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { withoutHoldCascade } from "@/core/retention/holds";
+import { makeTrashServices } from "@/core/trash";
+import { segmentIsLive } from "@/core/segments/service";
 import { contacts } from "@/core/contacts/schema";
 import { blockTreeSchema } from "@/modules/cms/blocks/registry";
 import {
@@ -135,8 +138,41 @@ const publicPopup = row({
 
 /* ------------------------------------------------------------------ shared */
 
+/**
+ * Reversible removal (C11.14). A trashed popup stops deciding anything the
+ * moment it is trashed: `decide` filters it, events and captures refuse it.
+ * Purging hard-deletes the popup and, by its long-standing cascade, its event
+ * history — gated so a popup whose events include a person under an active
+ * retention exception cannot be purged, because the cascade would reach
+ * their held data.
+ */
+const trash = makeTrashServices({
+  family: "popups",
+  table: popups,
+  rowSchema: popupRow,
+  subjectKind: "popup",
+  gone: "That popup is not here.",
+  holdGuard: withoutHoldCascade(
+    popupEvents,
+    popupEvents.popupId,
+    sql`${popups.id}`,
+    popupEvents.contactId,
+    "contact.popups",
+  ),
+});
+export const {
+  remove: removePopup,
+  restore: restorePopup,
+  purge: purgePopup,
+  purgeExpired: purgeExpiredPopups,
+} = trash;
+
 async function loadPopup(tx: Tx, id: string) {
-  const [found] = await tx.select().from(popups).where(eq(popups.id, id)).limit(1);
+  const [found] = await tx
+    .select()
+    .from(popups)
+    .where(and(eq(popups.id, id), isNull(popups.trashedAt)))
+    .limit(1);
   if (!found) throw new ServiceError("not_found", "That popup is not here.");
   return found;
 }
@@ -247,11 +283,28 @@ async function audienceAllows(
 ): Promise<boolean> {
   if (popup.audience === "everyone") return true;
   if (!popup.segmentId) return false;
+  // Liveness comes before every other shortcut, including the contactless
+  // one: a trashed segment answers nobody, so a popup wired to it does not
+  // show — and a notInSegment popup must not read a dead segment as "every
+  // contact is outside it", which would widen the exact audience the segment
+  // existed to exclude.
+  if (!(await segmentIsLive(ctx.tx, popup.segmentId))) return false;
   if (!contactId) return popup.audience === "notInSegment";
-  const result = (await ctx.callAsSystem(getService("segments.contains"), {
-    id: popup.segmentId,
-    contactId,
-  })) as { member: boolean };
+  let result: { member: boolean };
+  try {
+    result = (await ctx.callAsSystem(getService("segments.contains"), {
+      id: popup.segmentId,
+      contactId,
+    })) as { member: boolean };
+  } catch (error) {
+    if (error instanceof ServiceError && error.code === "not_found") {
+      // The segment went away mid-decision. An audience that cannot be
+      // answered must not be guessed at, so the popup simply does not show
+      // while its audience is unanswerable.
+      return false;
+    }
+    throw error;
+  }
   return popup.audience === "inSegment" ? result.member : !result.member;
 }
 
@@ -262,13 +315,21 @@ export const listPopups = defineService({
   summary: "Every popup this instance has, newest first.",
   kind: "query",
   permission: "scoped",
-  input: z.object({ status: z.enum(POPUP_STATUSES).optional() }),
+  input: z.object({
+    status: z.enum(POPUP_STATUSES).optional(),
+    /** The recovery view: trashed popups only (C11.14). */
+    trashedOnly: z.boolean().default(false),
+  }),
   output: listed(popupRow),
   handler: (input, ctx) =>
     ctx.tx
       .select()
       .from(popups)
-      .where(input.status ? eq(popups.status, input.status) : undefined)
+      .where(
+        input.trashedOnly
+          ? isNotNull(popups.trashedAt)
+          : and(isNull(popups.trashedAt), input.status ? eq(popups.status, input.status) : undefined),
+      )
       .orderBy(desc(popups.priority), desc(popups.createdAt)),
 });
 
@@ -403,7 +464,7 @@ export const savePopup = defineService({
       ? await ctx.tx
           .update(popups)
           .set({ ...values, updatedAt: new Date() })
-          .where(eq(popups.id, input.id))
+          .where(and(eq(popups.id, input.id), isNull(popups.trashedAt)))
           .returning()
       : await ctx.tx.insert(popups).values(values).returning();
     if (!saved) throw new ServiceError("not_found", "That popup is not here.");
@@ -483,7 +544,7 @@ export const setPopupStatus = defineService({
     const [saved] = await ctx.tx
       .update(popups)
       .set({ status: input.status, updatedAt: new Date() })
-      .where(eq(popups.id, popup.id))
+      .where(and(eq(popups.id, popup.id), isNull(popups.trashedAt)))
       .returning();
     ctx.setSubject("popup", popup.id);
     ctx.queueEvent("popups.statusChanged", {
@@ -491,22 +552,6 @@ export const setPopupStatus = defineService({
       status: input.status,
     });
     return saved!;
-  },
-});
-
-export const removePopup = defineService({
-  name: "popups.remove",
-  writeClass: "destructive",
-  summary: "Delete a popup and everything recorded about it.",
-  kind: "mutation",
-  permission: "scoped",
-  input: z.object({ id: uuidSchema, confirm: z.literal(true) }),
-  output: row({ ok: z.literal(true) }),
-  handler: async (input, ctx) => {
-    const popup = await loadPopup(ctx.tx, input.id);
-    await ctx.tx.delete(popups).where(eq(popups.id, popup.id));
-    ctx.setSubject("popup", popup.id);
-    return { ok: true as const };
   },
 });
 
@@ -533,10 +578,11 @@ export const decidePopup = defineService({
 
     // Highest priority first, then oldest: only one popup shows at a time,
     // because a page that stacks two modals has stopped being a page.
+    // Trashed popups are not candidates at all: removal is instant takedown.
     const candidates = await ctx.tx
       .select()
       .from(popups)
-      .where(eq(popups.status, "active"))
+      .where(and(eq(popups.status, "active"), isNull(popups.trashedAt)))
       .orderBy(desc(popups.priority), asc(popups.createdAt));
 
     for (const popup of candidates) {
@@ -892,6 +938,9 @@ export default [
   savePopupBlocks,
   setPopupStatus,
   removePopup,
+  restorePopup,
+  purgePopup,
+  purgeExpiredPopups,
   decidePopup,
   recordPopupEvent,
   capturePopup,

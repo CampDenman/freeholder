@@ -9,6 +9,11 @@ export interface DailyConfiguration { apiKey: string; domain: string }
 export class DailyError extends Error {
   constructor(message: string, readonly status?: number) { super(message); this.name = "DailyError"; }
 }
+// Recordings download whole into memory before storage puts them, so the
+// bound is a hard product limit, not a transport preference. Voice-only
+// rooms stay far below it; a recording above it fails import visibly
+// instead of exhausting the worker.
+export const DAILY_RECORDING_MAX_BYTES = 512 * 1024 * 1024;
 const nameSchema = z.string().regex(/^fh-[0-9a-f-]{36}$/);
 const roomSchema = z.object({ id: z.string().uuid(), name: nameSchema, privacy: z.literal("private"), url: z.string().url(),
   config: z.object({ exp: z.number().int().positive() }) });
@@ -77,6 +82,16 @@ export function createDailyClient(configuration: DailyConfiguration, fetcher: ty
       const url = new URL(result.data.download_link);
       if (url.protocol !== "https:" || url.username || url.password || url.hash) throw new DailyError("Daily returned an unsafe recording download link.");
       return { downloadTokenUrl: url.href, expiresAt: result.data.expires };
+    },
+    async downloadRecording(recordingId: string) {
+      const access = await this.recordingAccess(recordingId);
+      try {
+        // Signed storage URLs are external input. Pin public DNS, refuse
+        // redirects and never forward the Daily API credential to storage.
+        const result = await download(access.downloadTokenUrl, { maxBytes: DAILY_RECORDING_MAX_BYTES, timeoutMs: 60_000 });
+        if (result.status !== 200 || result.bytes.byteLength === 0) throw new Error("Invalid recording response");
+        return { bytes: result.bytes, contentType: result.contentType ?? "application/octet-stream" };
+      } catch { throw new DailyError("The recording could not be downloaded safely within its size limit."); }
     },
     async ensureRoom(input: { roomId: string; kind: "voice" | "video"; expiresAt: number }): Promise<DailyRoom> {
       if (!z.string().uuid().safeParse(input.roomId).success || !Number.isSafeInteger(input.expiresAt) || input.expiresAt <= Math.floor(now() / 1000)) {

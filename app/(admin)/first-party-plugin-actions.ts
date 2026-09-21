@@ -23,6 +23,7 @@ import {
 import {
   createVoiceVideoMeetingLink,
   voiceVideoRecordingAccess,
+  importVoiceVideoRecording,
   joinVoiceVideoRoom,
   missVoiceVideoRoom,
   recordVoiceVideoArtifact,
@@ -378,4 +379,15 @@ export async function voiceVideoInviteAction(_previous: { inviteTokenUrl?: strin
 export async function voiceVideoDownloadAction(form: FormData): Promise<void> {
   const result = await voiceVideoRecordingAccess.call({ artifactId: text(form, "artifactId") }, await actor());
   redirect(result.downloadTokenUrl);
+}
+
+export async function voiceVideoImportAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await importVoiceVideoRecording.call({ artifactId: text(form, "artifactId") }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
 }

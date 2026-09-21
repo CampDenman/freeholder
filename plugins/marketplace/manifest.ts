@@ -9,10 +9,10 @@ export default definePlugin({
   license: "Apache-2.0",
   permissions: ["catalog:write", "network:external"],
   requires: ["core", "invoicing"],
-  migrations: ["0000_reviewed-baseline.sql", "0004_marketplace_channel_sync.sql"],
+  migrations: ["0000_reviewed-baseline.sql", "0004_marketplace_channel_sync.sql", "0012_owner_storage_refunds.sql"],
   capabilities: { adapters: ["payments"] },
   events: {
-    emits: ["marketplace.channelAdded", "marketplace.orderImported"],
+    emits: ["marketplace.channelAdded", "marketplace.orderImported", "marketplace.refundReconciled"],
   },
   tables: () => import("./tables"),
   services: () => import("./service"),

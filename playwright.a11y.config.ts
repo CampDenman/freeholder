@@ -66,6 +66,7 @@ Object.assign(process.env, {
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: "1",
   LOCAL_STORAGE_ROOT: "test-results/browser-media",
   SESSION_SECRET: sessionSecret,
+  BOOTSTRAP_SECRET: "browser-test-only-bootstrap-secret-32-characters",
 });
 
 export default defineConfig({

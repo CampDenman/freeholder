@@ -19,7 +19,7 @@
 // than in core. core/locations knows nothing about pages; it announces that a
 // location exists, and cms — which already depends on core — answers by
 // writing one. Neither imports the other (§11).
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/core/db";
 import { pages } from "./schema";
 import { addNavLink, NAV_SECTION_KEYS } from "./chrome-nav";
@@ -106,7 +106,7 @@ async function pageAt(slug: string, locale: string) {
   const [page] = await db()
     .select({ id: pages.id, slug: pages.slug })
     .from(pages)
-    .where(and(eq(pages.slug, slug), eq(pages.locale, locale)))
+    .where(and(eq(pages.slug, slug), eq(pages.locale, locale), isNull(pages.trashedAt)))
     .limit(1);
   return page ?? null;
 }
@@ -264,7 +264,7 @@ async function pageOwnedBy(locationId: string, locale: string): Promise<string |
   const rows = await db()
     .select({ id: pages.id, blocks: pages.blocks })
     .from(pages)
-    .where(eq(pages.locale, locale));
+    .where(and(eq(pages.locale, locale), isNull(pages.trashedAt)));
   for (const row of rows) {
     const blocks = row.blocks as BlockNode[];
     if (blocks.some((block) => block.type === "nap" && block.props.locationId === locationId)) {

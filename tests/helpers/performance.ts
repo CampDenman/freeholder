@@ -26,7 +26,7 @@ const BATCH = 500;
 
 export async function seedPerformanceDataset(
   size: keyof typeof DATASET_SIZES,
-): Promise<{ contactId: string; slug: string }> {
+): Promise<{ contactId: string; slug: string; pageId: string }> {
   const counts = DATASET_SIZES[size];
   const contactIds: string[] = [];
   for (let offset = 0; offset < counts.contacts; offset += BATCH) {
@@ -138,7 +138,7 @@ export async function seedPerformanceDataset(
     .from(contacts)
     .limit(1);
   if (!first) throw new Error("Performance seed wrote no contacts.");
-  return { contactId: first.id, slug: "perf-home" };
+  return { contactId: first.id, slug: "perf-home", pageId: page.id };
 }
 
 async function batches(total: number, write: (indices: number[]) => Promise<void>) {

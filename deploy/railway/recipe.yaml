@@ -17,6 +17,7 @@ artifacts:
   - .railway/railway.ts
 required_environment:
   - APP_URL
+  - BOOTSTRAP_SECRET
   - SESSION_SECRET
   - CREDENTIAL_KEY
 operations:

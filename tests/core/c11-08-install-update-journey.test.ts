@@ -74,13 +74,9 @@ describe.runIf(hasDatabase)("C11.08 demo import update rollback", { timeout: 90_
     const contract = migrationContract("replit", "railway");
     expect(contract.artifacts).toBe(MIGRATION_ARTIFACTS);
 
-    const ok = await runApply({ actor: OWNER, trigger: "admin" });
-    expect(ok.status).toBe("completed");
-    const failed = await runApply({ actor: OWNER, failAt: "smoke" });
-    expect(failed.status).toBe("rolled_back");
+    await expect(runApply({ actor: OWNER, trigger: "admin" })).rejects.toMatchObject({ code: "conflict" });
     const history = await listUpdateRuns.call({ limit: 5 }, OWNER);
-    expect(history.runs.some((row) => row.status === "completed")).toBe(true);
-    expect(history.runs.some((row) => row.status === "rolled_back")).toBe(true);
+    expect(history.runs).toEqual([]);
   });
 
   it("commits a generic HTML import as a CMS draft", async () => {

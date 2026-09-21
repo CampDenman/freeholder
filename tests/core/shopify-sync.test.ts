@@ -26,16 +26,16 @@ describe.runIf(hasDatabase)("Shopify channel integration", { timeout: 30_000 }, 
   const fetcher = vi.fn<typeof fetch>(async (url, init) => {
    if ((url as string).endsWith("access_token")) return Response.json({ access_token: "test-token", expires_in: 86399, scope: "read_orders,read_customers" });
    const body = JSON.parse(init!.body as string) as { query: string };
-   return body.query.includes("FreeholderShop")
-    ? Response.json({ data: { shop, currentAppInstallation: { accessScopes: [{ handle: "read_orders" }, { handle: "read_customers" }] } } })
-    : Response.json({ data: { shop, orders: { nodes: [order], pageInfo: { hasNextPage: false, endCursor: null } } } });
+   if (body.query.includes("FreeholderShop")) return Response.json({ data: { shop, currentAppInstallation: { accessScopes: [{ handle: "read_orders" }, { handle: "read_customers" }] } } });
+   if (body.query.includes("FreeholderRefunds")) return Response.json({ data: { shop, orders: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } });
+   return Response.json({ data: { shop, orders: { nodes: [order], pageInfo: { hasNextPage: false, endCursor: null } } } });
   });
   vi.spyOn(adapter, "marketplaceProvider").mockReturnValue(createShopifyProvider({ shop: shop.myshopifyDomain, clientId: "client", clientSecret: "secret" }, fetcher));
   const channel = await connectMarketplaceChannel.call({ name: "My Shopify", provider: "shopify" }, OWNER);
   expect(channel.status).toBe("connected");
   expect(channel.externalRef).toBe(shop.id);
-  expect(await syncMarketplaceChannel.call({ channelId: channel.id }, OWNER)).toEqual({ imported: 1, lastError: null });
-  expect(await syncMarketplaceChannel.call({ channelId: channel.id }, OWNER)).toEqual({ imported: 0, lastError: null });
+  expect(await syncMarketplaceChannel.call({ channelId: channel.id }, OWNER)).toEqual({ imported: 1, refundsReconciled: 0, lastError: null });
+  expect(await syncMarketplaceChannel.call({ channelId: channel.id }, OWNER)).toEqual({ imported: 0, refundsReconciled: 0, lastError: null });
   const imported = await listMarketplaceOrders.call({ channelId: channel.id }, OWNER);
   expect(imported).toHaveLength(1);
   const [contact] = await db().select().from(contacts).where(eq(contacts.id, imported[0]!.contactId));

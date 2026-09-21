@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Bounded per-kind retention policies (C11.14). Does not add undelete-every-row
-// and does not check C11.14.
+// Bounded per-kind retention policies (C11.14). C11.14 is now checked; these
+// suites keep the retention guarantees honest.
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, is, sql } from "drizzle-orm";
@@ -35,14 +35,14 @@ import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
 describe("C11.14 retention leftovers", () => {
-  it("keeps C11.14 open and no longer names per-table TTL as the leftover", () => {
+  it("keeps C11.14 checked and names the closed restore worklist", () => {
     const master = readFileSync("MASTER.md", "utf8");
-    expect(master).toMatch(/- \[ \] \*\*C11\.14\*\*/);
+    expect(master).toMatch(/- \[x\] \*\*C11\.14\*\*/);
     expect(master).toContain("retention.listPolicies");
     expect(master).toContain("core.applyRetention");
     const remaining = readFileSync("tests/core/record-participation.test.ts", "utf8");
     expect(remaining).toContain(
-      "Per-record restore includes note/task trash, media/product restoration, contact-merge undo and the ownership-drill instance restore; other entities still lack undelete.",
+      "Per-record restore includes note/task trash, media/product restoration, contact-merge undo, the ownership-drill instance restore and trash/restore/purge for pages, forms, popups, segments and saved views; money ledgers, append-only evidence, credentials, join rows and never-deleted families are named not-applicable in deploy/record-trash.md.",
     );
     expect(remaining).not.toContain(
       "Retention is privacy-rights + artifact TTL, not a per-table TTL for every user-owned store.",

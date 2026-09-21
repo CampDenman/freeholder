@@ -14,7 +14,7 @@
 // the second article, and the platform will have shipped a knowledge base
 // nobody fills in."
 import { z } from "zod";
-import { and, asc, desc, eq, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { listed, row, uuid as uuidSchema } from "@/core/contract";
 import { defineService, ServiceError } from "@/core/service";
 import { helpCategories, pages } from "./schema";
@@ -62,6 +62,7 @@ const publishedArticle = (locale: string) =>
     eq(pages.status, "published"),
     eq(pages.locale, locale),
     isNotNull(pages.helpCategoryId),
+    isNull(pages.trashedAt),
   );
 
 /**

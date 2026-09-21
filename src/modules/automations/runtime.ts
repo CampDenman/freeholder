@@ -184,10 +184,25 @@ export async function startRun(
         reason: "This automation only runs for people in its audience, and this had nobody.",
       };
     }
-    const { member } = (await ctx.call(getService("segments.contains"), {
-      id: version.entrySegmentId,
-      contactId: input.contactId,
-    })) as { member: boolean };
+    let member: boolean;
+    try {
+      ({ member } = (await ctx.call(getService("segments.contains"), {
+        id: version.entrySegmentId,
+        contactId: input.contactId,
+      })) as { member: boolean });
+    } catch (error) {
+      if (error instanceof ServiceError && error.code === "not_found") {
+        // The audience is trashed or gone. Starting for a person the segment
+        // cannot be asked about would be guessing at "who" — the one thing
+        // this call exists not to do — so the run waits until the segment is
+        // restored or the automation is republished without it.
+        return {
+          started: false,
+          reason: "This automation's audience cannot be answered right now.",
+        };
+      }
+      throw error;
+    }
     if (!member) {
       return { started: false, reason: "This person is not in this automation's audience." };
     }

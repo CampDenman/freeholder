@@ -89,19 +89,28 @@ transcript** checks for later transcript text without duplicating the contact
 conversation or transcript artifact. Missing transcripts remain absent.
 **Download recording** obtains a fresh expiring provider link.
 
-Room creation uses a stable room name and recovers a lost creation response by
-reading that same private room. Ten-minute leases fence room and recording
-workers; stale results cannot overwrite recovered work. Scheduled retries run
-twice hourly for recent failures and expired leases. Contact merge repoints
-room, attendance and artifact contact references.
+A verified recording is then copied automatically into the owner's configured
+storage (the same S3-compatible adapter as media). The copy uses content-
+addressed keys and a SHA-256 checksum, so retries never duplicate objects; a
+failed copy stays visible on the recording with **Copy to storage** to retry
+it. Recordings above 512 MiB are not imported; the recording row reports the
+failure instead of exhausting the worker. The recording list shows the copy
+state per recording. Contact erasure deletes imported owner-storage copies
+through the same durable job receipt as provider copies; retention holds keep
+them exactly like the provider originals.
 
-Recordings currently remain in Daily storage; local backup/export includes
-metadata and captured transcript text, not the recording bytes. Contact erasure
-queues durable Daily recording/transcript deletion before removing local rows;
-the privacy request remains in progress until every cleanup job acknowledges.
-See [provider erasure and recovery](provider-recording-erasure.md). Owner storage
-import and live provider erasure acceptance remain unfinished C3.13 work. HTTP
-and database tests do not establish a live call or device compatibility.
+Room creation uses a stable room name and recovers a lost creation response by
+reading that same private room. Ten-minute leases fence room, recording and
+import workers; stale results cannot overwrite recovered work. Scheduled
+retries run twice hourly for recent failures and expired leases. Contact
+merge repoints room, attendance and artifact contact references.
+
+Contact erasure queues durable Daily recording/transcript deletion before
+removing local rows, and a second job deletes the imported owner-storage
+copies; the privacy request remains in progress until every cleanup job
+acknowledges. See [provider erasure and recovery](provider-recording-erasure.md).
+Live provider erasure acceptance remains unfinished C3.13 work. HTTP and
+database tests do not establish a live call or device compatibility.
 See [Daily room configuration](https://docs.daily.co/reference/rest-api/rooms/create-room)
 and [meeting tokens](https://docs.daily.co/reference/rest-api/meeting-tokens/create-meeting-token).
 
@@ -147,8 +156,19 @@ paid, non-test, non-cancelled orders are imported. Each produces a draft
 invoice for the gross shop-currency amount, linked to the resolved contact.
 Review channel tax details before issuing anything; Freeholder does not send
 an invoice, charge the customer, or assert a local settlement during import.
-Later source edits, refunds and cancellations do not update previous imports.
-These limitations are shown in the admin screen and remain under C3.13.
+Later source edits and cancellations do not update previous imports.
+
+After the order pass, the same sync reconciles refunds. Orders with a refunded
+or partially-refunded financial status return their refund list; each refund
+is recorded once, keyed by its provider refund id. When the imported invoice
+has been issued, the refund becomes an issued credit note through the
+invoicing module — never a direct money mutation — bounded by the original
+invoice total like any other credit note. Multiple refunds on one order
+produce separate credit notes. A refund whose order has not imported yet, or
+whose invoice is still a reviewable draft, stays listed as pending and
+reconciles on a later sync; the admin screen shows the state per refund. No
+live store acceptance has been performed; HTTP fixtures and database
+integration tests establish local behavior only.
 
 Connected channels sync twice hourly; active leases are left to their owner.
 Completed scans start from the beginning on the next run; existing imports

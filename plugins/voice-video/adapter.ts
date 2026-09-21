@@ -5,6 +5,7 @@
 // would ever be imported.
 import { env } from "@/core/env";
 import { getPinnedBytes } from "@/core/http/pinned-download";
+import { z } from "zod";
 import { createDailyClient, DailyError, type DailyConfiguration } from "./daily";
 
 export interface VoiceVideoAccessInput {
@@ -41,6 +42,7 @@ export interface VoiceVideoCaptureResult {
 }
 
 export interface VoiceVideoProvider {
+  downloadRecording(input: VoiceVideoAccessInput & { recordingId: string }): Promise<{ bytes: Uint8Array<ArrayBuffer>; contentType: string }>;
   eraseRoomRecordings(input: VoiceVideoAccessInput): Promise<void>;
   endRoom(input: VoiceVideoAccessInput): Promise<void>;
   meetingToken(input: VoiceVideoAccessInput & { userId: string; userName: string; owner: boolean }): Promise<{ roomUrl: string; meetingToken: string; expiresAt: number }>;
@@ -55,6 +57,12 @@ function refused(input: { title: string }): boolean {
 
 /** Fixture provider: start and capture fail when the title asks them to. */
 export const fixtureVoiceVideoProvider: VoiceVideoProvider = {
+  async downloadRecording() {
+    return {
+      bytes: new TextEncoder().encode("fixture recording bytes"),
+      contentType: "video/mp4",
+    };
+  },
   async endRoom() {},
   async eraseRoomRecordings() {},
   async meetingToken() { throw new Error("Fixture rooms have no live meeting token."); },
@@ -96,6 +104,11 @@ export function createDailyVoiceVideoProvider(configuration: DailyConfiguration,
     return { externalRef: input.externalRef, providerRoomId: input.providerRoomId };
   }
   return {
+    async downloadRecording(input) {
+      await verify(input);
+      if (!z.string().uuid().safeParse(input.recordingId).success) throw new DailyError("This recording has no valid provider identity.");
+      return client.downloadRecording(input.recordingId);
+    },
     async eraseRoomRecordings(input) {
       await verify(input);
       if (!input.externalRef) throw new DailyError("This erasure task has no original room reference.");

@@ -5,6 +5,7 @@
 // A form is a *definition* — its fields are rows in jsonb, not code — for the
 // same reason a page's blocks are (§32). An owner adding a "how did you hear
 // about us?" question is a database write, not a deploy.
+import { sql } from "drizzle-orm";
 import {
   index,
   jsonb,
@@ -21,6 +22,11 @@ export const forms = pgTable(
   "forms",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /**
+     * Set = in trash (C11.14). Only the definition goes: submissions stay
+     * live, because they are evidence of what somebody told the business.
+     */
+    trashedAt: timestamp("trashed_at", { withTimezone: true }),
     /** Stable handle a block points at, so renaming a form keeps pages working. */
     slug: text("slug").notNull(),
     name: text("name").notNull(),
@@ -46,7 +52,10 @@ export const forms = pgTable(
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
-  (t) => [uniqueIndex("forms_slug_idx").on(t.slug)],
+  (t) => [
+    uniqueIndex("forms_slug_idx").on(t.slug),
+    index("forms_trash_idx").on(t.trashedAt).where(sql`${t.trashedAt} is not null`),
+  ],
 );
 
 export const formSubmissions = pgTable(

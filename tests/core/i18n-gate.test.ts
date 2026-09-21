@@ -83,11 +83,12 @@ import { WRITE_KINDS } from "@/core/agents/previews";
 import en from "../../locales/en.json";
 import es from "../../locales/es.json";
 import fr from "../../locales/fr.json";
+import ar from "../../locales/ar.json";
 import { LOCALE_FIXTURES } from "../fixtures/locales";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const defaultKeys = new Set(catalogKeys(DEFAULT_LOCALE));
-const catalogData: Record<string, Record<string, string>> = { en, es, fr };
+const catalogData: Record<string, Record<string, string>> = { en, es, fr, ar };
 
 type MessageAst = ReturnType<InstanceType<typeof IntlMessageFormat>["getAst"]>;
 type FormatValues = NonNullable<
@@ -375,7 +376,7 @@ describe("every shipped catalog is executable", () => {
     expect(invalid).toEqual([]);
   });
 
-  it("parses and formats every message in English, French and Spanish", () => {
+  it("parses and formats every message in every shipped catalog", () => {
     const failures: string[] = [];
     for (const [locale, catalog] of Object.entries(catalogData)) {
       for (const [key, message] of Object.entries(catalog)) {
@@ -395,7 +396,9 @@ describe("every shipped catalog is executable", () => {
 
   it("keeps ICU arguments and selector branches identical to English", () => {
     const failures: string[] = [];
-    for (const locale of ["fr", "es"]) {
+    for (const locale of availableLocales().filter(
+      (candidate) => candidate !== DEFAULT_LOCALE,
+    )) {
       for (const [key, source] of Object.entries(en)) {
         const expected = messageContract(source, DEFAULT_LOCALE);
         const translated = catalogData[locale]![key]!;

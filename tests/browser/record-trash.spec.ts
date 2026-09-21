@@ -8,6 +8,7 @@ import { db, closeDb } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
 import { notes } from "@/core/notes/schema";
 import { tasks } from "@/core/tasks/schema";
+import { popups } from "@/modules/popups/schema";
 import { roles, roleGrants, users, totpFactors } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
 import { businessProfile } from "@/core/settings/schema";
@@ -64,6 +65,34 @@ test("owners restore the same notes and tasks and explicitly purge trash", async
     await page.getByRole("button", { name: "Delete permanently", exact: true }).press("Enter");
     await expect(page.getByRole("status")).toContainText("Permanently deleted.");
     expect(await db().select().from(notes).where(eq(notes.id, note!.id))).toHaveLength(0);
+  } finally { await resetBrowserDatabase(); await closeDb(); }
+});
+
+test("owners trash and restore a popup from its admin surface and the trash screen", async ({ page, context }) => {
+  test.setTimeout(120_000);
+  const token = await seedC11Owner("Popup recovery studio");
+  try {
+    // Service calls boot the job graph, which this process cannot wire —
+    // fixtures are inserts, like the rest of the browser suite.
+    const [popup] = await db().insert(popups).values({
+      slug: "browser-recovery-popup",
+      name: "Browser recovery popup",
+      title: "Browser recovery popup",
+    }).returning();
+    await useOwnerSession(context, token);
+    await page.goto("/admin/popups");
+    const row = page.locator("li").filter({ hasText: "Browser recovery popup" });
+    await row.getByRole("button", { name: "Move to trash", exact: true }).press("Enter");
+    await expect(page.locator("li").filter({ hasText: "Browser recovery popup" })).toHaveCount(0);
+    expect((await db().select().from(popups).where(eq(popups.id, popup!.id)))[0]?.trashedAt).not.toBeNull();
+
+    await page.goto("/admin/trash?kind=popups");
+    await expect(page.getByText("Browser recovery popup", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Restore", exact: true }).press("Enter");
+    await expect(page.getByRole("status")).toContainText("Restored.");
+    expect((await db().select().from(popups).where(eq(popups.id, popup!.id)))[0]?.trashedAt).toBeNull();
+    await page.goto("/admin/popups");
+    await expect(page.locator("li").filter({ hasText: "Browser recovery popup" })).toBeVisible();
   } finally { await resetBrowserDatabase(); await closeDb(); }
 });
 

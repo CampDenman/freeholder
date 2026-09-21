@@ -7,9 +7,11 @@
 // safe: an agent rearranging a page goes through the same validation,
 // permission check, audit row and revision history a human does.
 import { z } from "zod";
-import { and, asc, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
+import { makeTrashServices } from "@/core/trash";
+import { entityTranslations } from "@/core/i18n/schema";
 import {
   clipSnippet,
   matchesIlike,
@@ -23,7 +25,15 @@ import { recordRedirect } from "@/core/seo/service";
 import { queueIndexNow } from "@/core/seo/indexnow";
 import { kindFromSlug, priorityFromSlug, PUBLIC_ENTITY_KINDS } from "@/core/seo/classify";
 import { resolveAuthors, writeRevision } from "./history";
-import { contentLayouts, contentRevisions, pages, sections } from "./schema";
+import {
+  contentLayouts,
+  contentRevisions,
+  contentPreviewLinks,
+  contentPresence,
+  contentComments,
+  pages,
+  sections,
+} from "./schema";
 import {
   applyDueSchedules,
   compareRevisions,
@@ -191,6 +201,7 @@ const seo = z
 
 const pageRow = row({
   id: uuid,
+  trashedAt: timestamp.nullable(),
   slug: z.string(),
   locale: z.string(),
   title: z.string(),
@@ -334,7 +345,14 @@ export const resolvePage = defineService({
       })
       .from(pages)
       .leftJoin(businessProfile, sql`true`)
-      .where(and(eq(pages.slug, input.slug), eq(pages.status, "published"), visibleLocationPage))
+      .where(
+        and(
+          eq(pages.slug, input.slug),
+          eq(pages.status, "published"),
+          isNull(pages.trashedAt),
+          visibleLocationPage,
+        ),
+      )
       .limit(1);
 
     const page = source?.page;
@@ -381,7 +399,7 @@ export const getPage = defineService({
     const [page] = await ctx.tx
       .select()
       .from(pages)
-      .where(eq(pages.id, input.id))
+      .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
       .limit(1);
     if (!page) throw new ServiceError("not_found", `no page with id ${input.id}`);
     return page;
@@ -393,10 +411,17 @@ export const listPages = defineService({
   summary: "Every page, newest first.",
   kind: "query",
   permission: "scoped",
-  input: z.object({}),
+  input: z.object({
+    /** The recovery view: trashed pages only (C11.14). */
+    trashedOnly: z.boolean().default(false),
+  }),
   output: listed(pageRow),
-  handler: (_input, ctx) =>
-    ctx.tx.select().from(pages).orderBy(desc(pages.updatedAt)),
+  handler: (input, ctx) =>
+    ctx.tx
+      .select()
+      .from(pages)
+      .where(input.trashedOnly ? isNotNull(pages.trashedAt) : isNull(pages.trashedAt))
+      .orderBy(desc(pages.updatedAt)),
 });
 
 /**
@@ -422,7 +447,7 @@ export const publishedPaths = defineService({
         updatedAt: pages.updatedAt,
       })
       .from(pages)
-      .where(and(eq(pages.status, "published"), visibleLocationPage))
+      .where(and(eq(pages.status, "published"), isNull(pages.trashedAt), visibleLocationPage))
       .orderBy(pages.slug);
 
     const [business] = await ctx.tx
@@ -569,6 +594,84 @@ export const deleteDraftPage = defineService({
     return { id: page.id, slug: page.slug };
   },
 });
+
+/**
+ * Reversible removal for pages, drafts and published alike (C11.14).
+ *
+ * Trashing a page is instant takedown: the public lookup, the sitemap, the
+ * search source and every scheduled job filter `trashed_at`, so a trashed
+ * page is gone from every surface even though its row — slug, revisions,
+ * working copy, schedule and all — stays exactly where it was. Restore puts
+ * the same row back; because trash never released the slug, another page
+ * could not have taken it, and the restore check below refuses the
+ * (normally unreachable) case where one somehow has.
+ *
+ * A page names no contact, so no contact-scoped retention hold can apply to
+ * it and the purge carries no hold guard. Purge is the only hard delete:
+ * the page plus every row that exists only for it — revisions, layouts,
+ * preview links, presence, comments and translations.
+ */
+const trash = makeTrashServices<typeof pages.$inferSelect>({
+  family: "cms",
+  names: {
+    remove: "cms.removePage",
+    restore: "cms.restorePage",
+    purge: "cms.purgePage",
+    purgeExpired: "cms.purgeExpiredPages",
+  },
+  events: {
+    trashed: "cms.pageTrashed",
+    restored: "cms.pageRestored",
+    purged: "cms.pagePurged",
+  },
+  table: pages,
+  rowSchema: pageRow,
+  subjectKind: "page",
+  gone: "That page is not here.",
+  purgeChildren: async (tx, ids) => {
+    await tx
+      .delete(contentRevisions)
+      .where(and(eq(contentRevisions.subjectType, "page"), inArray(contentRevisions.subjectId, ids)));
+    await tx.delete(contentLayouts).where(inArray(contentLayouts.pageId, ids));
+    await tx.delete(contentPreviewLinks).where(inArray(contentPreviewLinks.pageId, ids));
+    await tx.delete(contentPresence).where(inArray(contentPresence.pageId, ids));
+    await tx.delete(contentComments).where(inArray(contentComments.pageId, ids));
+    await tx
+      .delete(entityTranslations)
+      .where(and(eq(entityTranslations.entityType, "page"), inArray(entityTranslations.entityId, ids)));
+  },
+  restoreCheck: async (tx, restored) => {
+    const [clash] = await tx
+      .select({ id: pages.id })
+      .from(pages)
+      .where(
+        and(
+          eq(pages.slug, restored.slug),
+          eq(pages.locale, restored.locale),
+          sql`${pages.id} <> ${restored.id}`,
+        ),
+      )
+      .limit(1);
+    // Trash keeps the original row, so its slug stays reserved and this
+    // cannot fire through the services. It guards the one remaining path —
+    // a hand-repaired database where another row was given the slug — and
+    // refuses rather than silently renaming the page onto a broken address.
+    if (clash) {
+      throw new ServiceError(
+        "conflict",
+        restored.slug === ""
+          ? "Another home page now exists for this language. Remove or rename it before restoring."
+          : `Another page now lives at /${restored.slug}. Remove or rename it before restoring.`,
+      );
+    }
+  },
+});
+export const {
+  remove: removePage,
+  restore: restorePage,
+  purge: purgePage,
+  purgeExpired: purgeExpiredPages,
+} = trash;
 
 const DEMO_PAGE = {
   en: {
@@ -732,7 +835,7 @@ export const updatePage = defineService({
     const [before] = await ctx.tx
       .select()
       .from(pages)
-      .where(eq(pages.id, id))
+      .where(and(eq(pages.id, id), isNull(pages.trashedAt)))
       .limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${id}`);
     if (expectedVersion !== undefined && before.version !== expectedVersion) {
@@ -779,7 +882,7 @@ export const updatePage = defineService({
         workingSeo: nextWorkingSeo,
         version: before.version + 1,
       })
-      .where(eq(pages.id, id))
+      .where(and(eq(pages.id, id), isNull(pages.trashedAt)))
       .returning()
       .catch((error: unknown) => {
         if (changes.slug !== undefined && isUniqueViolation(error, "pages_slug_locale_idx")) {
@@ -874,7 +977,11 @@ export const publishPage = defineService({
   input: z.object({ id: z.string().uuid(), published: z.boolean() }),
   output: pageRow,
   handler: async (input, ctx) => {
-    const [before] = await ctx.tx.select().from(pages).where(eq(pages.id, input.id)).limit(1);
+    const [before] = await ctx.tx
+      .select()
+      .from(pages)
+      .where(and(eq(pages.id, input.id), isNull(pages.trashedAt)))
+      .limit(1);
     if (!before) throw new ServiceError("not_found", `no page with id ${input.id}`);
     if (input.published && before.approvalState === "pending") {
       throw new ServiceError(
@@ -1296,7 +1403,7 @@ export const restoreRevision = defineService({
       const [before] = await ctx.tx
         .select()
         .from(pages)
-        .where(eq(pages.id, revision.subjectId))
+        .where(and(eq(pages.id, revision.subjectId), isNull(pages.trashedAt)))
         .limit(1);
       if (!before) throw new ServiceError("not_found", "that page is gone");
 
@@ -1495,10 +1602,13 @@ registerSearchSource({
       })
       .from(pages)
       .where(
-        or(
-          matchesIlike(pages.title, pattern),
-          matchesIlike(pages.slug, pattern),
-          matchesIlike(pages.workingTitle, pattern),
+        and(
+          isNull(pages.trashedAt),
+          or(
+            matchesIlike(pages.title, pattern),
+            matchesIlike(pages.slug, pattern),
+            matchesIlike(pages.workingTitle, pattern),
+          ),
         ),
       )
       .orderBy(desc(pages.updatedAt))
@@ -1522,6 +1632,10 @@ export default [
   publishedPaths,
   createPage,
   deleteDraftPage,
+  removePage,
+  restorePage,
+  purgePage,
+  purgeExpiredPages,
   loadDemoCms,
   purgeDemoCms,
   verifyDemoCms,

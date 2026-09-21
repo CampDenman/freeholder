@@ -17,6 +17,7 @@ limits:
 artifacts:
   - deploy/digitalocean-app/infra/app.yaml
 required_environment:
+  - BOOTSTRAP_SECRET
   - SESSION_SECRET
   - CREDENTIAL_KEY
   - S3_BUCKET

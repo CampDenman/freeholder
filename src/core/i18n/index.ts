@@ -16,6 +16,7 @@ import {
 import en from "../../../locales/en.json";
 import es from "../../../locales/es.json";
 import fr from "../../../locales/fr.json";
+import ar from "../../../locales/ar.json";
 
 // Statically imported rather than read from disk at runtime: the catalogs must
 // be present in the standalone build output (§14), and a dynamic read would
@@ -23,7 +24,7 @@ import fr from "../../../locales/fr.json";
 // tests/core/i18n-gate.test.ts then requires it to be complete, so a
 // half-finished catalog fails the build rather than falling back to English
 // on the strings nobody got to.
-const catalogs: Record<string, Record<string, string>> = { en, es, fr };
+const catalogs: Record<string, Record<string, string>> = { en, es, fr, ar };
 
 export const DEFAULT_LOCALE = "en";
 /**
