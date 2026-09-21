@@ -14,6 +14,13 @@
 // It is a *view*. Edits flow tree → canvas, never canvas → tree. The moment
 // the DOM becomes the source of truth, typed blocks, migrations and re-theming
 // all stop being true (§32).
+//
+// The frame renders stored state; the editor's local draft is layered onto
+// the typeable elements from the tree side, rAF-throttled, so a keystroke's
+// preview never waits for the debounced autosave or a server round-trip.
+// Everything a text patch cannot express (a new block, a heading level) still
+// reconverges when a save bumps `version` and the frame reloads from stored
+// state.
 import { useEffect, useRef, useState } from "react";
 import { DeviceMobile, Desktop } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
@@ -24,9 +31,18 @@ export interface PreviewLabels {
   mobile: string;
 }
 
+/** A node of the editor's local draft — the same shape it persists. */
+export interface PreviewDraftNode {
+  id: string;
+  type: string;
+  props: Record<string, unknown>;
+  children?: PreviewDraftNode[];
+}
+
 export function PreviewCanvas({
   src,
   version,
+  draft,
   selectedId,
   onSelect,
   onEdit,
@@ -37,10 +53,16 @@ export function PreviewCanvas({
   src: string;
   /**
    * Bumped by the editor after every successful save, which is what reloads
-   * the frame. The canvas shows what is *stored* — so it can never disagree
-   * with the page, and the only lag is the autosave debounce.
+   * the frame from stored state. Between saves, the local draft (below)
+   * keeps the canvas in step keystroke by keystroke.
    */
   version: number;
+  /**
+   * The editor's local draft tree. Broadcast to the frame on the next
+   * animation frame after every change, without waiting for the debounced
+   * autosave — this is what makes keystroke → preview a local hop.
+   */
+  draft?: PreviewDraftNode[];
   selectedId?: string;
   onSelect: (blockId: string | undefined) => void;
   /**
@@ -61,6 +83,25 @@ export function PreviewCanvas({
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  /** Latest draft, readable by the rAF callback and the ready handshake. */
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  const postToFrame = (message: Record<string, unknown>) => {
+    frame.current?.contentWindow?.postMessage(message, window.location.origin);
+  };
+
+  // The draft follows the tree on the next animation frame: one broadcast per
+  // frame at most, no matter how many props a burst of typing changed. The
+  // frame layers it onto its typeable elements; the save/reload cycle stays
+  // the arbiter of everything structural.
+  useEffect(() => {
+    if (!draft) return;
+    const raf = requestAnimationFrame(() => {
+      postToFrame({ source: "freeholder-editor", draft: draftRef.current });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [draft]);
 
   // Clicks in the frame select a block in the editor.
   useEffect(() => {
@@ -69,10 +110,19 @@ export function PreviewCanvas({
       const data = event.data as {
         source?: string;
         blockId?: string | null;
+        ready?: boolean;
         edit?: { blockId?: string; prop?: string; value?: string };
         move?: { blockId?: string; targetId?: string; position?: string };
       };
       if (data?.source !== "freeholder-preview") return;
+      // The frame (re)loaded — a reload may have raced the last broadcast, so
+      // send the current draft again; it is a no-op when already in step.
+      if (data.ready) {
+        if (draftRef.current) {
+          postToFrame({ source: "freeholder-editor", draft: draftRef.current });
+        }
+        return;
+      }
       if (data.edit?.blockId && data.edit.prop !== undefined) {
         onEdit(data.edit.blockId, data.edit.prop, data.edit.value ?? "");
         return;
@@ -89,10 +139,7 @@ export function PreviewCanvas({
 
   // …and selecting in the editor outlines it in the frame.
   useEffect(() => {
-    frame.current?.contentWindow?.postMessage(
-      { source: "freeholder-editor", blockId: selectedId ?? null },
-      window.location.origin,
-    );
+    postToFrame({ source: "freeholder-editor", blockId: selectedId ?? null });
   }, [selectedId, version]);
 
   return (

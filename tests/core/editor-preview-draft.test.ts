@@ -18,7 +18,7 @@
 import { act } from "react";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import {
   BlockEditor,
   type EditorBlockType,
@@ -97,7 +97,7 @@ describe("editor preview draft broadcast", () => {
   let container: HTMLDivElement;
   let root: Root | undefined;
   let postMessage: ReturnType<typeof vi.fn>;
-  let save: ReturnType<typeof vi.fn>;
+  let save: Mock<(blocks: EditorNode[]) => Promise<{ version: number }>>;
 
   beforeEach(() => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -132,7 +132,7 @@ describe("editor preview draft broadcast", () => {
   });
 
   async function renderEditor() {
-    save = vi.fn(async () => ({ version: 2 }));
+    save = vi.fn(async (_blocks: EditorNode[]) => ({ version: 2 }));
     root = createRoot(container);
     await act(async () => {
       root!.render(
@@ -150,12 +150,10 @@ describe("editor preview draft broadcast", () => {
   async function typeHeading(text: string) {
     const input = container.querySelector<HTMLInputElement>("#b1-text");
     if (!input) throw new Error("The heading text field is missing.");
-    const set = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value",
-    )!.set!;
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    if (!descriptor?.set) throw new Error("HTMLInputElement#value is unreachable.");
     await act(async () => {
-      set.call(input, text);
+      descriptor.set!.call(input, text);
       input.dispatchEvent(new Event("input", { bubbles: true }));
       // Flush the rAF-throttled broadcast.
       await new Promise((resolve) => setTimeout(resolve, 5));
@@ -171,12 +169,12 @@ describe("editor preview draft broadcast", () => {
 
     // The preview frame already holds the draft.
     const draftCalls = postMessage.mock.calls
-      .map((call) => call[0] as { source?: string; draft?: { blocks?: EditorNode[] } })
-      .filter((message) => message?.draft?.blocks);
+      .map((call) => call[0] as { source?: string; draft?: EditorNode[] })
+      .filter((message) => Array.isArray(message?.draft));
     expect(draftCalls.length).toBeGreaterThan(0);
     const latest = draftCalls[draftCalls.length - 1]!;
     expect(latest.source).toBe("freeholder-editor");
-    expect(latest.draft!.blocks![0]).toMatchObject({
+    expect(latest.draft![0]).toMatchObject({
       id: "b1",
       type: "heading",
       props: { text: "Hello world" },
@@ -190,8 +188,9 @@ describe("editor preview draft broadcast", () => {
       await new Promise((resolve) => setTimeout(resolve, 1_300));
     });
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith([
-      expect.objectContaining({ props: expect.objectContaining({ text: "Hello world" }) }),
-    ]);
+    const savedTree = save.mock.calls[0]?.[0];
+    expect(savedTree?.[0]).toMatchObject({
+      props: { text: "Hello world" },
+    });
   });
 });

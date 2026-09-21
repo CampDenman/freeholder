@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // One page, rendered for the editor canvas.
 //
-// It reads the *saved* tree — the editor autosaves and then reloads this frame
-// — so what the canvas shows is what is stored, never a client-side guess at
-// what storing it would do. The lag is the autosave debounce, and it buys the
-// guarantee that the preview cannot disagree with the page.
+// It reads the *saved* tree. The editor overlays its local draft onto the
+// typeable elements (see canvas-bridge.ts) the moment a keystroke lands, so
+// the canvas keeps up while typing; every successful save then reloads this
+// frame from stored state, which is what reconverges anything the text patch
+// cannot express and keeps the guarantee that the canvas never disagrees with
+// the page for long.
 //
 // Drafts render here and nowhere else: `cms.getPage` is staff-only and sees
 // them, while the public route asks `cms.resolvePage`, which does not.
