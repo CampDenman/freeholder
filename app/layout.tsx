@@ -22,7 +22,8 @@ import { currentDesign } from "@/core/design/read";
 import { CSP_NONCE_HEADER } from "@/core/http/csp";
 import { themeAttribute } from "@/core/design/theme";
 import { readThemePreference } from "./theme";
-import { getLocale } from "./i18n";
+import { getLocale, getT } from "./i18n";
+import { env } from "@/core/env";
 import { localeDirection } from "@/core/i18n";
 import "./globals.css";
 
@@ -38,6 +39,9 @@ export default async function RootLayout({
     currentDesign(),
   ]);
   const nonce = requestHeaders.get(CSP_NONCE_HEADER) ?? undefined;
+  const t = await getT();
+  const playground = env().FREEHOLDER_PLAYGROUND === "1";
+  const playgroundUrl = env().FREEHOLDER_PLAYGROUND_URL;
 
   return (
     <html lang={locale} dir={localeDirection(locale)} data-theme={theme}>
@@ -50,6 +54,11 @@ export default async function RootLayout({
         />
       </head>
       <body className="bg-paper font-sans text-ink antialiased">
+        {playground ? <aside className="border-b border-rule bg-surface px-6 py-3 text-center text-sm">
+          {t("playground.banner")} {" "}<a className="text-accent underline" href="/playground">{t("playground.enter")}</a>
+        </aside> : playgroundUrl ? <aside className="border-b border-rule bg-surface px-6 py-3 text-center text-sm">
+          <a className="font-semibold text-accent underline" href={playgroundUrl}>{t("playground.try")}</a>
+        </aside> : null}
         {children}
       </body>
     </html>

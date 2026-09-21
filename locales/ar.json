@@ -6370,5 +6370,22 @@
   "marketplace.refunds.empty": "لا توجد مبالغ مستردة لمطابقتها.",
   "marketplace.refund.status.pending_order": "بانتظار طلبها",
   "marketplace.refund.status.pending_invoice": "بانتظار إصدار الفاتورة",
-  "marketplace.refund.status.reconciled": "تمت المطابقة"
+  "marketplace.refund.status.reconciled": "تمت المطابقة",
+  "playground.title": "استكشف Freeholder",
+  "playground.description": "جرّب تعديل الصفحات والنماذج والمنتجات وجهات الاتصال التجريبية. هذه مساحة مشتركة ويمكن للزوار الآخرين رؤية البيانات نفسها وتعديلها.",
+  "playground.limits": "تُعاد تهيئة التجربة كل ساعة. استخدم معلومات وهمية فقط. رفع الملفات وإدارة الحسابات والإرسال الخارجي والمدفوعات الحقيقية وتغييرات البنية التحتية غير متاحة.",
+  "playground.enter": "دخول التجربة",
+  "playground.source": "احصل على Freeholder من GitHub",
+  "playground.banner": "تجربة عامة · بيانات مشتركة · إعادة تهيئة كل ساعة · لا تدخل معلومات شخصية.",
+  "playground.try": "جرّب العرض المباشر",
+  "updates.host.title": "تحديثات Docker",
+  "updates.host.scope": "يتحقق الخادم من التوقيع ويستعيد نسخة احتياطية ويختبر الإصدار قبل التبديل. يجب ألا يتغير مخطط قاعدة البيانات أو سجل الترحيل. جدول الخادم مستقل عن السياسة أدناه. حدّث الصفحة لمتابعة التقدم.",
+  "updates.host.status": "الحالة: {status}. القناة: {channel}. الفحص التلقائي: {automatic}، يومياً عند {hour}:00 بالتوقيت العالمي.",
+  "updates.host.on": "مفعّل",
+  "updates.host.off": "معطّل",
+  "updates.host.unavailable": "خدمة التحديث غير متاحة.",
+  "updates.host.apply": "فحص وتثبيت تحديث متوافق",
+  "updates.host.pending": "جارٍ طلب التحديث…",
+  "updates.host.confirm": "هل تريد اختبار وتثبيت أحدث صورة متوافقة؟ ستحدث صيانة قصيرة إذا نجحت الفحوص.",
+  "updates.host.queued": "تم إرسال الطلب. حدّث الصفحة لمتابعة التقدم؛ إرسال الطلب لا يعني اكتمال التحديث."
 }

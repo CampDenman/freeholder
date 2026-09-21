@@ -6,6 +6,7 @@
 // layout never applies to it — a login page behind an auth check is an
 // infinite redirect.
 import type { Metadata } from "next";
+import { env } from "@/core/env";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Storefront } from "@phosphor-icons/react/dist/ssr";
@@ -29,6 +30,7 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 const ANONYMOUS = { kind: "anonymous" } as const;
 
 export default async function LoginPage() {
+  if (env().FREEHOLDER_PLAYGROUND === "1") redirect("/playground");
   const state = await setupState.call({}, ANONYMOUS);
   // Nothing to sign in to yet.
   if (!state.hasOwner) redirect("/setup");

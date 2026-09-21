@@ -4039,6 +4039,8 @@ reading chat logs.
 is recoverable, accessible, international, observable, able to talk to the
 project without silent telemetry, and ready to carry money.
 
+- [ ] **C1.38** Provide a public, disposable shared playground on a separate database and network: restricted visitor sessions, prominent reset/privacy notice, blocked privileged operations and external delivery, hourly reset, bounded resources, and a live demo entry link. Prove content edits, denied sensitive actions, reset recovery, and separation from the production instance.
+
 ### 43.7 C2 — Universal editor and CMS perfection
 
 #### Safe content lifecycle and collaboration
@@ -7917,6 +7919,15 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   could report success without deployment. Apply, snapshot and rollback now
   refuse execution; no success history or fake backup is created. See
   `deploy/update-apply.md` and `tests/core/client-readiness-security.test.ts`.
+  The initial Docker lane is split into C10.31; migration-changing releases and
+  other hosting targets remain in this broader item.
+- [ ] **C10.31** Provide an opt-in host executor for the standard app/db/caddy
+  Docker recipe with S3 media: exact publisher signature verification, private
+  Unix socket, owner/fresh-factor apply action, restored-backup rehearsal,
+  unchanged schema and journal gate, maintenance cutover, independently checked
+  image rollback preserving database writes, durable interrupted-run refusal,
+  and an operator-configured daily schedule. Prove refusal and recovery paths
+  before enabling unattended operation. No Docker socket in the application.
 - [x] **C10.07** Enforce N-1 schema readability in migrations and prove update
   plus rollback from the previous released image in CI.
   (`schema-compat-gate.mjs` `assertSchemaRisk` fails an acknowledged break

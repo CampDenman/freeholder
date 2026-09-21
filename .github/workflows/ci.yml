@@ -37,6 +37,8 @@ jobs:
       # binaries still need EAS credentials; this job does not start one.
       - name: Validate demo contract, store assets and privacy
         run: node scripts/mobile-store-gate.mjs
+      - name: Host update refusal and recovery drills
+        run: python3 -m unittest discover -s tests/host -v
       # `npm ci` inside apps/mobile, not the workspace install. The app sits
       # outside the root pnpm workspace on purpose: a React Native dependency
       # graph that only this app needs must not be billed to every other job.
@@ -294,6 +296,8 @@ jobs:
       - uses: ./.github/actions/setup-project
       - name: Build the release image
         run: docker build --tag freeholder:ci .
+      - name: Prove the isolated public playground boots and signs in
+        run: sh scripts/playground-gate.sh
       - name: Prove dependency failure separates liveness from readiness
         run: |
           cleanup() { docker rm -f freeholder-outage >/dev/null 2>&1 || true; }

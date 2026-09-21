@@ -1,0 +1,9 @@
+{
+  "directory": "/opt/freeholder",
+  "state_directory": "/var/lib/freeholder-updater",
+  "socket": "/run/freeholder-updater/updater.sock",
+  "app_gid": 1001,
+  "channel": "edge",
+  "automatic": false,
+  "utc_hour": 10
+}
