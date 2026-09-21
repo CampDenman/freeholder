@@ -35,6 +35,7 @@ Thumbs.db
 # local agent/session state (never product source or planning truth)
 .claude/
 .codex/
+.work/
 
 # typescript / next
 *.tsbuildinfo

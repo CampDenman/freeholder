@@ -99,7 +99,7 @@ export const TARGET_OPERATIONS: Record<Tier1Target, Required<RecipeOperations>> 
     update:
       "docker compose -f deploy/digitalocean-droplet/infra/compose.yml pull && docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d",
     rollback:
-      "FREEHOLDER_IMAGE=$PREVIOUS_FREEHOLDER_IMAGE docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d",
+      "FREEHOLDER_IMAGE=${PREVIOUS_FREEHOLDER_IMAGE:?set previous immutable image digest} docker compose -f deploy/digitalocean-droplet/infra/compose.yml up -d",
   },
   railway: {
     update:
@@ -117,7 +117,7 @@ export const TARGET_OPERATIONS: Record<Tier1Target, Required<RecipeOperations>> 
     update:
       "docker compose -f deploy/docker-selfhost/infra/compose.yml pull && docker compose -f deploy/docker-selfhost/infra/compose.yml up -d",
     rollback:
-      "FREEHOLDER_IMAGE=$PREVIOUS_FREEHOLDER_IMAGE docker compose -f deploy/docker-selfhost/infra/compose.yml up -d",
+      "FREEHOLDER_IMAGE=${PREVIOUS_FREEHOLDER_IMAGE:?set previous immutable image digest} docker compose -f deploy/docker-selfhost/infra/compose.yml up -d",
   },
 };
 
@@ -214,11 +214,8 @@ export class TargetActionError extends Error {
 /**
  * An `UpdateTarget` that runs what the recipe declares.
  *
- * `pull` is deliberately a no-op for every strategy: all three recipes fetch
- * and cut over in one command, and splitting a single command into two phases
- * would mean claiming a pull succeeded when nothing has run. The apply flow
- * (C10.06) already treats a failed cutover as a rollback trigger, which is
- * the behaviour this needs.
+ * These are low-level operator commands, not a verified automatic executor.
+ * A requested digest cannot be silently ignored: pull refuses unsupported use.
  */
 export function recipeUpdateTarget(input: {
   target: Tier1Target;
@@ -238,7 +235,9 @@ export function recipeUpdateTarget(input: {
   });
 
   return {
-    async pull() {},
+    async pull() {
+      throw new TargetActionError(input.target, "update", "This recipe cannot stage and verify an immutable candidate. Use the manual operator procedure.");
+    },
     async cutover() {
       const command = input.operations.update;
       if (!command) {
@@ -250,6 +249,10 @@ export function recipeUpdateTarget(input: {
       }
     },
     async rollbackCutover() {
+      if (TARGET_STRATEGY[input.target] === "image-swap" &&
+          !/^ghcr\.io\/campdenman\/freeholder@sha256:[a-f0-9]{64}$/.test(input.previousImage ?? "")) {
+        throw new TargetActionError(input.target, "rollback", "A previous immutable Freeholder image digest is required.");
+      }
       const command = input.operations.rollback;
       if (!command) {
         throw new TargetActionError(
@@ -321,10 +324,8 @@ export function configuredTarget(
 /**
  * The target this instance actually runs on, or the in-process one.
  *
- * An instance that has not declared its recipe gets `localUpdateTarget`, which
- * migrates and smokes but does not swap anything. That is the honest answer:
- * guessing a deploy strategy from the environment and then running a container
- * command against it is how an update takes down a host nobody meant to touch.
+ * An instance without a declared recipe receives a target that refuses all
+ * execution. Automatic orchestration is disabled even for declared recipes.
  */
 export function resolveUpdateTarget(input?: {
   target?: Tier1Target | null;

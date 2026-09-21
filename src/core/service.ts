@@ -39,6 +39,8 @@ export interface ModuleGrant {
 export interface RequestMetadata {
   /** Transient source address reported by the deployment proxy. */
   ip?: string;
+  /** Only populated from the explicitly configured, proxy-overwritten header. */
+  trustedIp?: string;
   /** Sanitized and bounded at the HTTP boundary. */
   userAgent?: string;
 }

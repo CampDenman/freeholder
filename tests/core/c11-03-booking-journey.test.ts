@@ -258,7 +258,7 @@ describe.runIf(hasDatabase)("C11.03 discovery to loyalty", { timeout: 90_000 }, 
       { email: "rae-c11@example.test", name: "Rae Lane" },
       OWNER,
     );
-    const queued = await joinWaitlist.call(
+    await joinWaitlist.call(
       {
         calendarId: studio.id,
         contact: { email: "wait-c11@example.test", name: "Waiter" },
@@ -267,6 +267,8 @@ describe.runIf(hasDatabase)("C11.03 discovery to loyalty", { timeout: 90_000 }, 
       },
       ANONYMOUS,
     );
+    const [queued] = await listWaitlist.call({ calendarId: studio.id }, OWNER);
+    if (!queued) throw new Error("Expected a waitlist entry after enrollment.");
     const offered = await offerWaitlistSlot.call(
       { calendarId: studio.id, startsAt: FOUR, endsAt: FIVE, entryId: queued.id },
       OWNER,
