@@ -370,13 +370,16 @@ export const redeem = defineService({
     const [account] = await ctx.tx
       .select()
       .from(loyaltyAccounts)
-      .where(eq(loyaltyAccounts.id, input.accountId));
+      .where(eq(loyaltyAccounts.id, input.accountId))
+      .for("update");
     if (!account) throw new ServiceError("not_found", "There is no such account.");
     if (account.status !== "active") {
       throw new ServiceError("validation", "That account is not active.");
     }
 
-    const [reward] = await ctx.tx.select().from(rewards).where(eq(rewards.id, input.rewardId));
+    // C9.12: serialize balance reads and stock/limit checks before issuing value.
+    const [reward] = await ctx.tx.select().from(rewards)
+      .where(eq(rewards.id, input.rewardId)).for("update");
     if (!reward || reward.status !== "active") {
       throw new ServiceError("not_found", "That reward is not available.");
     }

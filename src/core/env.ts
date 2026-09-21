@@ -29,6 +29,10 @@ const envSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   /** 32+ char secret for session-token hashing. Required in production. */
   SESSION_SECRET: z.string().min(32).optional(),
+  /** Independent deployment secret required to claim a fresh production instance. */
+  BOOTSTRAP_SECRET: z.string().min(32).optional(),
+  /** Only set behind a proxy that overwrites this header and blocks direct access. */
+  TRUSTED_CLIENT_IP_HEADER: z.enum(["x-freeholder-client-ip", "cf-connecting-ip", "x-real-ip"]).optional(),
   /**
    * Encrypts an owner's third-party credentials at rest (§41's addendum to
    * §17). 32 bytes as hex or base64url. Absent is fine until something is
