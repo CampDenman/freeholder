@@ -20,7 +20,7 @@ importers:
     dependencies:
       '@formatjs/icu-messageformat-parser':
         specifier: ^3.5.15
-        version: 3.5.17
+        version: 3.5.19
       '@freeholder/plugin-kit':
         specifier: workspace:*
         version: link:packages/plugin-kit
