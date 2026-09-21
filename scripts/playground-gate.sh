@@ -8,8 +8,8 @@ export FREEHOLDER_IMAGE="${CI_IMAGE:?Build the CI image first}"
 export PLAYGROUND_DOMAIN=demo.example.test
 export PLAYGROUND_DB_PASSWORD="$(openssl rand -hex 32)"
 export PLAYGROUND_SESSION_SECRET="$(openssl rand -hex 32)"
-compose() { docker compose --project-name freeholder-playground --file deploy/playground/compose.yml "$@"; }
-cleanup() { compose down --timeout 10 >/dev/null 2>&1 || true; docker network rm freeholder-playground-proxy >/dev/null 2>&1 || true; }
+compose() { docker compose --project-name freeholder-playground --file deploy/docker-selfhost/playground/compose.yml "$@"; }
+cleanup() { result=$?; if [ "$result" != 0 ]; then compose logs --tail 100 app; fi; compose down --timeout 10 >/dev/null 2>&1 || true; docker network rm freeholder-playground-proxy >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker network create --internal freeholder-playground-proxy
 compose up -d
@@ -30,7 +30,7 @@ docker exec "$app" node -e '
     const action=html.match(/name="(\$ACTION_ID_[^"]+)"/);
     if(!action) throw Error("Missing entry action");
     const form=new FormData();form.set(action[1], "");
-    const entry=await fetch("http://localhost:3000/playground", {method:"POST", body:form, redirect:"manual", headers:{host:"demo.example.test",origin:"https://demo.example.test"}});
+    const entry=await fetch("http://localhost:3000/playground", {method:"POST", body:form, redirect:"manual", headers:{origin:"http://localhost:3000"}});
     if(entry.status!==303 || !entry.headers.get("location")?.endsWith("/admin")) throw Error("Entry refused: "+entry.status);
     const cookie=entry.headers.getSetCookie().map(v=>v.split(";")[0]).join("; ");
     const admin=await fetch("http://localhost:3000/admin",{headers:{cookie},redirect:"manual"});

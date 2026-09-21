@@ -788,6 +788,21 @@ v2.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — N/A — CI/SBOM policy, not a composed product journey.
 
+## C1.38 — Disposable public playground
+
+- **F01** — Existing users, roles and sessions; no additional tenant schema. `src/core/demo/playground.ts` initializes only a disposable database.
+- **F02** — `src/core/demo/playground.ts` defines the entry contract; `src/core/demo/playground-policy.ts` explicitly lists editing mutations.
+- **F03** — Uses the ordinary unified contact services; no separate demo contact model. `src/core/contacts/service.ts`.
+- **F04** — `app/playground/page.tsx` and the shared root banner; actual container entry is exercised by `scripts/playground-gate.sh`.
+- **F05** — Browser-only entry is deliberately excluded from external API/MCP projections; `tests/core/internal-services.test.ts`.
+- **F06** — Entry/banner strings in all four locale catalogs; shared semantic tokens. `locales/en.json`, `src/core/design/tokens.ts`.
+- **F07** — `tests/core/playground.test.ts` proves edits, privilege refusal and opt-in isolation; the container gate checks blocked egress.
+- **F08** — `tests/core/playground.test.ts`; `scripts/playground-gate.sh` exercises the built artifact.
+- **F09** — Disposable data and files reset hourly; no personal information belongs here. `deploy/docker-selfhost/playground/reset.sh`.
+- **F10** — Existing published sample content is installed at boot, with a persistent shared-data/reset notice. `src/modules/seed/boot.ts`, `app/layout.tsx`.
+- **F11** — `deploy/docker-selfhost/playground/README.md`; full live reset/browser proof remains required before closing the item.
+- **F12** — Entry through a real session and page edit use the ordinary services; `tests/core/playground.test.ts`.
+
 ## C2.01 — Separate working drafts from published revisions for every
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/cms-lifecycle.test.ts`.
@@ -3533,6 +3548,20 @@ v2.
 - **F11** — `deploy/update-apply.md`, changeset `update-apply.md`.
 - **F12** — `failAt: "smoke"` yields `rolled_back`. — `tests/core/update-apply.test.ts`.
 
+## C10.31 — Verified Docker host update lane
+
+- **F01** — Root-private filesystem state and PostgreSQL dumps; no new application schema. `scripts/docker-updater.py`.
+- **F02** — `src/core/update/host.ts` exposes bounded status/apply contracts over a private Unix socket.
+- **F03** — N/A — infrastructure operations do not introduce another customer identity or contact record.
+- **F04** — `app/(admin)/admin/updates/page.tsx` displays independent host status, limitations and an owner apply action.
+- **F05** — Root CLI and systemd timer; browser controls intentionally excluded from API-key/MCP projections in `tests/core/internal-services.test.ts`.
+- **F06** — Host card strings in en/fr/es/ar; operational CLI documentation is English. `locales/en.json`, `deploy/docker-selfhost/docker-updater/README.md`.
+- **F07** — `tests/core/playground.test.ts` checks the fresh-owner-factor boundary. Python host drills prove refusal before cutover and verified recovery, including interrupted-run blocking.
+- **F08** — Host state-machine tests plus a real isolated restored-backup rehearsal; the item stays open until live deployment and recovery evidence are recorded. `tests/host/test_docker_updater.py`, `.github/workflows/ci.yml`.
+- **F09** — Real backups and exact configs retained with root-only access; operator retention policy required. `deploy/docker-selfhost/docker-updater/README.md`.
+- **F10** — N/A — the public playground explicitly cannot operate the host updater; ordinary installations opt in separately.
+- **F11** — `deploy/docker-selfhost/docker-updater/README.md` documents supported shape, scheduling, manual migration boundary and recovery.
+- **F12** — Signature verification, restored-backup boot, unchanged-schema gate, maintenance and health-checked image recovery are composed by the host executor; no Docker socket in the web app. `scripts/docker-updater.py`.
 ## C10.07 — Enforce N-1 schema readability in migrations and prove update
 
 - **F01** — N/A — no tables of its own — the schema state it reads belongs to the host's operational tables.
@@ -4342,3 +4371,4 @@ v2.
 - **F10** — Partial, honestly labelled: rides the host demo (`tests/core/seed-demo.test.ts`); no plugin-specific seed claimed.
 - **F11** — `plugins/voice-video/manifest.ts` + `plugins/voice-video/plugin.json` + `deploy/spec-reconciliation.md`.
 - **F12** — `tests/browser/first-party-plugins.spec.ts` — unconfigured rooms refuse honestly in the real browser.
+

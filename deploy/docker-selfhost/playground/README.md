@@ -25,7 +25,9 @@ hostname), keeping the main site's configuration intact:
 ```caddyfile
 demo.example.com {
   header X-Robots-Tag "noindex, nofollow"
-  request_body { max_size 64KB }
+  request_body {
+    max_size 64KB
+  }
   reverse_proxy playground-app:3000
 }
 ```

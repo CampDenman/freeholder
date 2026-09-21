@@ -38,7 +38,7 @@ const ROW_HEADING = /^## ((?:C\d{1,2}\.\d{2}|packages\/[a-z0-9-]+|plugins\/[a-z0
 const CELL_LINE = /^- \*\*(F\d{2})\*\*[ —:](.*)$/;
 const BACKTICK = /`([^`\n]+)`/g;
 const CITED_PATH =
-  /([A-Za-z0-9_./-]+\.(?:ts|tsx|mjs|mts|sql|md|json|yaml|yml|sh))/;
+  /([A-Za-z0-9_./-]+\.(?:ts|tsx|mjs|mts|sql|md|json|yaml|yml|sh|py))/;
 const TEST_FILE = /^tests\/(?:core|modules|browser|plugins|helpers|adapters)\/[\w./-]*\.(?:test|spec)\.ts$/;
 
 /** Reasons that are a shrug rather than an explanation. */
