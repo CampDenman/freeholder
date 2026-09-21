@@ -9,6 +9,7 @@ export const PLAYGROUND_VIEW = ["admin", "settings", "events", "analytics", "sea
 const MUTATIONS = new Set([
   "playground.enter", "auth.logout",
   "cms.createPage", "cms.updatePage", "cms.mergePage", "cms.publishPage", "cms.deleteDraftPage",
+  "cms.touchEditLease", "cms.releaseEditLease", "cms.heartbeatPresence", "cms.leavePresence",
   "cms.updateSection", "cms.createSectionLocale", "cms.restoreRevision",
   "cms.attachLayout", "cms.detachLayout", "cms.rejoinLayout", "cms.createSection",
   "cms.saveAsSection", "cms.detachSection", "cms.deleteSection", "cms.createFromTemplate",

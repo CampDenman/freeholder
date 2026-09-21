@@ -176,4 +176,26 @@ class UpdaterTests(unittest.TestCase):
         ]), patch.object(updater.urllib.request, "urlopen", return_value=io.BytesIO(json.dumps({"status": "ahead", "merge_base_commit": {"sha": "a" * 40}}).encode())):
             updater.Executor.verify_forward_update(executor, OLD, updater.IMAGE + "@" + NEW)
 
+    def test_exact_operator_baseline_can_identify_an_unlabelled_current_image(self):
+        executor = self.drill()
+        executor.config.update(initial_image=OLD, initial_revision="a" * 40)
+        with patch.object(executor, "run", side_effect=["null", json.dumps({
+            "org.opencontainers.image.revision": "b" * 40,
+        })]), patch.object(updater.urllib.request, "urlopen", return_value=io.BytesIO(json.dumps({
+            "status": "ahead", "merge_base_commit": {"sha": "a" * 40},
+        }).encode())) as compare:
+            updater.Executor.verify_forward_update(executor, OLD, updater.IMAGE + "@" + NEW)
+            self.assertIn("a" * 40 + "..." + "b" * 40, compare.call_args.args[0].full_url)
+
+    def test_bootstrap_baseline_never_authorizes_another_image_or_unlabelled_candidate(self):
+        for initial, labels in [(updater.IMAGE + "@" + NEW, ["null"]),
+                                (OLD, ["null", "null"])]:
+            with self.subTest(initial=initial, labels=labels):
+                executor = self.drill()
+                executor.config.update(initial_image=initial, initial_revision="a" * 40)
+                with patch.object(executor, "run", side_effect=labels), patch.object(updater.urllib.request, "urlopen") as compare:
+                    with self.assertRaisesRegex(updater.Refused, "exact upstream source revision"):
+                        updater.Executor.verify_forward_update(executor, OLD, updater.IMAGE + "@" + NEW)
+                    compare.assert_not_called()
+
 if __name__ == "__main__": unittest.main()

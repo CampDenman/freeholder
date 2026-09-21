@@ -27,12 +27,15 @@ import {
 } from "@/modules/analytics/visitor";
 import { analyticsCollectionAllowed } from "@/modules/analytics/settings";
 import { currentAnalyticsSettings } from "@/modules/analytics/read";
+import { env } from "@/core/env";
 
 export async function recordPageView(
   path: string,
   locale: string,
   query: Record<string, string | string[] | undefined> = {},
 ): Promise<void> {
+  // C1.38: the shared demo must not collect real visitors into its sample data.
+  if (env().FREEHOLDER_PLAYGROUND === "1") return;
   try {
     const [requestHeaders, cookieJar, settings] = await Promise.all([
       headers(),
