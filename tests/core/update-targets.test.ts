@@ -68,7 +68,7 @@ describe("per-target update actions (C10.10)", () => {
   });
 
   describe("what this instance resolves to", () => {
-    it("swaps nothing when no recipe is declared, rather than guessing", async () => {
+    it("refuses execution when no recipe is declared", async () => {
       const calls: string[] = [];
       const target = resolveUpdateTarget({
         target: null,
@@ -77,8 +77,8 @@ describe("per-target update actions (C10.10)", () => {
           return { code: 0, stderr: "" };
         },
       });
-      await target.cutover();
-      await target.rollbackCutover();
+      await expect(target.cutover()).rejects.toMatchObject({ code: "conflict" });
+      await expect(target.rollbackCutover()).rejects.toMatchObject({ code: "conflict" });
       expect(calls).toEqual([]);
     });
 
@@ -160,7 +160,7 @@ describe("per-target update actions (C10.10)", () => {
         run,
         imageTag: "0.2.0",
       });
-      await target.pull("sha256:whatever");
+      await expect(target.pull("sha256:whatever")).rejects.toThrow("cannot stage and verify");
       await target.cutover();
       expect(calls).toHaveLength(1);
       expect(calls[0]!.command).toContain("render deploys create");

@@ -17,6 +17,7 @@ artifacts:
   - render.yaml
 required_environment:
   - APP_URL
+  - BOOTSTRAP_SECRET
   - SESSION_SECRET
   - CREDENTIAL_KEY
   - S3_BUCKET

@@ -38,7 +38,8 @@ describe.runIf(hasDatabase)("update preflight (C10.05)", { timeout: 60_000 }, ()
     );
     expect(report.steps.find((step) => step.id === "migrations")?.verdict).toBe("ok");
     expect(report.estimatedDowntimeMs).toBeGreaterThanOrEqual(0);
-    expect(report.ok).toBe(true);
+    expect(report.ok).toBe(false);
+    expect(report.steps.find((step) => step.id === "signature")?.verdict).toBe("fail");
   });
 
   it("fails the migration step when the shadow SQL cannot run", async () => {

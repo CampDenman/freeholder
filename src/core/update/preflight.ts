@@ -202,7 +202,7 @@ export async function runPreflight(input: {
     }
   } else {
     steps.push(
-      step("signature", "ok", "No feed supplied; preflight is against this build's declared metadata."),
+      step("signature", "fail", "No signed release feed supplied; candidate authenticity has not been verified."),
     );
   }
 

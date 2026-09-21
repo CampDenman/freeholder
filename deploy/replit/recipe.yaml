@@ -21,6 +21,7 @@ artifacts:
 required_environment:
   - DATABASE_URL
   - APP_URL
+  - BOOTSTRAP_SECRET
   - SESSION_SECRET
   - CREDENTIAL_KEY
   - REPLIT_BUCKET_ID

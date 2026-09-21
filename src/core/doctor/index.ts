@@ -902,7 +902,9 @@ async function checkUpdatePreflight(): Promise<Check> {
   const { runPreflight } = await import("@/core/update/preflight");
   try {
     const report = await runPreflight({});
-    const failed = report.steps.filter((item) => item.verdict === "fail");
+    // Doctor has no candidate feed. Keep the unsigned-candidate refusal in
+    // preflight, but report it as an unavailable update rather than a broken site.
+    const failed = report.steps.filter((item) => item.verdict === "fail" && item.id !== "signature");
     if (failed.length) {
       return fail(
         "update.preflight",
@@ -911,10 +913,11 @@ async function checkUpdatePreflight(): Promise<Check> {
         "Fix the named preflight step before applying an update.",
       );
     }
-    return ok(
+    return warn(
       "update.preflight",
       "Update preflight",
-      `Preflight passed. Estimated downtime ${report.estimatedDowntimeMs} ms.`,
+      "No signed candidate was supplied. Update authorization has not been verified; automatic updates are unavailable.",
+      "Use deploy/update-apply.md to verify a signed image and perform a manual update.",
     );
   } catch (error) {
     return fail(
@@ -927,10 +930,11 @@ async function checkUpdatePreflight(): Promise<Check> {
 }
 
 function checkUpdatePolicy(): Check {
-  return ok(
+  return warn(
     "update.policy",
     "Update policy",
-    "Security updates apply automatically in a night window in the business timezone. Feature updates wait for approval.",
+    "Automatic updates and rollback are unavailable until verified host execution and recoverable backups exist.",
+    "Follow deploy/update-apply.md for manual deployment and recovery.",
   );
 }
 
@@ -940,7 +944,7 @@ function checkUpdateTarget(): Check {
     return warn(
       "update.target",
       "Update target",
-      "No deploy recipe is declared, so an update will migrate and smoke but swap nothing. It will look like it worked.",
+      "No deploy recipe is declared. Automatic updates are unavailable; manual deployment needs the correct host recipe.",
       "Set FREEHOLDER_RECIPE_TARGET to the Tier-1 recipe this instance runs on.",
     );
   }
