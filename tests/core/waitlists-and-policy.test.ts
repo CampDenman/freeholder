@@ -318,7 +318,7 @@ describe.runIf(hasDatabase)("groups, waitlists and policy", { timeout: 90_000 },
   });
 
   async function join(email: string, overrides: Record<string, unknown> = {}) {
-    return joinWaitlist.call(
+    const result = await joinWaitlist.call(
       {
         contact: { email, name: email.split("@")[0] },
         windowStart: NINE,
@@ -327,6 +327,10 @@ describe.runIf(hasDatabase)("groups, waitlists and policy", { timeout: 90_000 },
       },
       { kind: "anonymous" },
     );
+    expect(result).toEqual({ ok: true });
+    const [entry] = await db().select({ entry: bookingWaitlist }).from(bookingWaitlist)
+      .innerJoin(contacts, eq(contacts.id, bookingWaitlist.contactId)).where(eq(contacts.email, email));
+    return entry!.entry;
   }
 
   it("keeps somebody's place rather than adding them twice", async () => {

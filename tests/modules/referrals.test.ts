@@ -107,7 +107,7 @@ describe.runIf(hasDatabase)("referrals and attribution", () => {
     const customer = await contact("new@example.test", "New");
 
     for (const kind of ["click", "scan", "manual"] as const) {
-      await recordTouch.call({ code: "IROCK", contactId: customer.id, kind }, ANONYMOUS);
+      await recordTouch.call({ code: "IROCK", contactId: customer.id, kind }, OWNER);
     }
 
     const rows = await db()

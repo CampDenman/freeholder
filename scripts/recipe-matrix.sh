@@ -30,6 +30,7 @@ for target in "${TARGETS[@]}"; do
     -e PORT="$PORT" \
     -e NODE_ENV=production \
     -e APP_URL="$BASE" \
+    -e BOOTSTRAP_SECRET=ci-only-bootstrap-secret-of-at-least-32-characters \
     -e SESSION_SECRET=recipe-gate-session-secret-is-long-enough \
     -e CREDENTIAL_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
     -e DATABASE_URL="postgres://${PGUSER}:${PGPASSWORD}@${PGHOST}:5432/${database}" \
@@ -84,7 +85,7 @@ for target in "${TARGETS[@]}"; do
 
   created=$(curl -sS -o /tmp/freeholder-recipe-owner.json -w '%{http_code}' \
     -H 'content-type: application/json' \
-    -d "{\"email\":\"${OWNER_EMAIL}\",\"password\":\"${OWNER_PASSWORD}\"}" \
+    -d "{\"email\":\"${OWNER_EMAIL}\",\"bootstrapSecret\":\"ci-only-bootstrap-secret-of-at-least-32-characters\",\"password\":\"${OWNER_PASSWORD}\"}" \
     "$BASE/api/setup/owner")
   [ "$created" = "201" ]
 
