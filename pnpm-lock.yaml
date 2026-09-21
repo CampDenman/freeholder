@@ -59,7 +59,7 @@ importers:
         version: 16.3.4(@playwright/test@1.62.1)(@types/node@26.4.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       nodemailer:
         specifier: ^10.0.7
-        version: 10.0.7
+        version: 10.0.10
       parse5:
         specifier: 8.0.1
         version: 8.0.1
@@ -1271,8 +1271,8 @@ packages:
     resolution: {integrity: sha512-HqmEUIGRJ5fSXchkVgR5F7qn48bDBzv0kWj/Kfu5e6uci4UlEeng4331LnBkWffb++Ei3FOVLxo8JJWMFBDMeQ==}
     engines: {node: '>= 10'}
 
-  '@tybys/wasm-util@0.10.3':
-    resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
+  '@tybys/wasm-util@0.10.4':
+    resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
 
   '@types/caseless@0.12.5':
     resolution: {integrity: sha512-hWtVTC2q7hc7xZ/RLbxapMvDMgUnDvKvMOpKal4DrMyfGBUfB1oKaZlIRr6mJL+If3bAP6sV/QneGzF6tJjZDg==}
@@ -2218,8 +2218,8 @@ packages:
       encoding:
         optional: true
 
-  nodemailer@10.0.7:
-    resolution: {integrity: sha512-guf2Y9vYdc0x/2zry8AlOdlBSypNCqFnfetFSoD5QdHU5MrNVt9gzt5u5muJneu6vF4Zs/hrBdnhwdHITrzMhA==}
+  nodemailer@10.0.10:
+    resolution: {integrity: sha512-He9XskOFms62SyAKkLu8CcGcYHAo+BSHSsORI8s4PJH8qZgZY4L4lDfvyN0twvmbpyG+eGrxpyBlskj9d9rJ8A==}
     engines: {node: '>=20.0.0'}
 
   non-error@0.1.0:
@@ -3393,7 +3393,7 @@ snapshots:
     dependencies:
       '@emnapi/core': 1.11.1
       '@emnapi/runtime': 1.11.1
-      '@tybys/wasm-util': 0.10.3
+      '@tybys/wasm-util': 0.10.4
     optional: true
 
   '@next/env@16.3.4': {}
@@ -3701,7 +3701,7 @@ snapshots:
 
   '@tootallnate/once@2.0.1': {}
 
-  '@tybys/wasm-util@0.10.3':
+  '@tybys/wasm-util@0.10.4':
     dependencies:
       tslib: 2.8.1
     optional: true
@@ -4630,7 +4630,7 @@ snapshots:
     dependencies:
       whatwg-url: 5.0.0
 
-  nodemailer@10.0.7: {}
+  nodemailer@10.0.10: {}
 
   non-error@0.1.0: {}
 
