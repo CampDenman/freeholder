@@ -453,6 +453,7 @@ export function BlockEditor({
         <PreviewCanvas
           src={previewSrc}
           version={savedVersion}
+          draft={blocks}
           selectedId={selectedId}
           onSelect={setSelectedId}
           onEdit={applyInlineEdit}
