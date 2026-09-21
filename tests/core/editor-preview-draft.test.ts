@@ -12,9 +12,9 @@
 // round-trip plus a full frame reload (~1.3s total).
 //
 // The contract this test pins: typing into an editor field broadcasts the
-// local draft tree to the preview frame on the next animation frame — without
-// waiting for the 1,200ms autosave debounce or any server round-trip. The
-// autosave itself must still fire on its own debounce.
+// local draft tree to the preview frame in the same commit — without waiting
+// for the 1,200ms autosave debounce or any server round-trip. The autosave
+// itself must still fire on its own debounce.
 import { act } from "react";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -111,15 +111,6 @@ describe("editor preview draft broadcast", () => {
         return { postMessage };
       },
     });
-    // rAF-throttled broadcast: make each scheduled frame flush on a macrotask
-    // so the test can await it deterministically.
-    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb) => {
-      const timer = setTimeout(() => cb(performance.now()), 0);
-      return timer as unknown as number;
-    });
-    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation((id) => {
-      clearTimeout(id as unknown as ReturnType<typeof setTimeout>);
-    });
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -155,7 +146,7 @@ describe("editor preview draft broadcast", () => {
     await act(async () => {
       descriptor.set!.call(input, text);
       input.dispatchEvent(new Event("input", { bubbles: true }));
-      // Flush the rAF-throttled broadcast.
+      // Flush anything scheduled by the commit (autosave debounce bookkeeping).
       await new Promise((resolve) => setTimeout(resolve, 5));
     });
   }
