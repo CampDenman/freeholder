@@ -39,6 +39,11 @@ python3 /usr/local/lib/freeholder/docker-updater.py status
 ```
 
 Every candidate is signature-checked, restored against a real database backup
+and checked against upstream commit history so a stale channel tag cannot
+downgrade the installation. Missing revision labels, unavailable commit-history
+verification, or divergent/older revisions refuse before maintenance. The public
+GitHub comparison endpoint receives only the two public release revisions.
+The restored candidate runs
 on a network with no egress, booted and smoke-tested. A change in database schema
 or migration journal refuses cutover. A passing candidate puts Caddy into
 maintenance, stops the app, takes a final backup, pins the image and verifies

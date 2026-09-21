@@ -4,6 +4,7 @@
 import contextlib
 import importlib.util
 import json
+import io
 from pathlib import Path
 import socketserver
 import tempfile
@@ -40,6 +41,9 @@ class Drill(updater.Executor):
 
     def verify(self, digest):
         self.check("signature")
+
+    def verify_forward_update(self, *_args):
+        self.check("ancestry")
 
     def run(self, *_args, **_kwargs):
         return ""
@@ -87,7 +91,7 @@ class UpdaterTests(unittest.TestCase):
             with self.assertRaises(updater.Refused): updater.validate_digest(value)
 
     def test_signature_backup_or_rehearsal_failure_never_stops_live_app(self):
-        for phase in ["signature", "rehearsal.dump", "rehearsal"]:
+        for phase in ["signature", "ancestry", "rehearsal.dump", "rehearsal"]:
             with self.subTest(phase=phase):
                 executor = self.drill(phase)
                 with self.assertRaises(updater.Refused): executor.apply(NEW)
@@ -153,5 +157,23 @@ class UpdaterTests(unittest.TestCase):
         with updater.Executor.lock(executor):
             with self.assertRaisesRegex(updater.Refused, "already running"):
                 with updater.Executor.lock(executor): pass
+
+    def test_stale_or_divergent_signed_image_cannot_downgrade(self):
+        executor = self.drill()
+        for status in ["behind", "diverged", "identical"]:
+            with self.subTest(status=status), patch.object(executor, "run", side_effect=[
+                json.dumps({"org.opencontainers.image.revision": "a" * 40}),
+                json.dumps({"org.opencontainers.image.revision": "b" * 40}),
+            ]), patch.object(updater.urllib.request, "urlopen", return_value=io.BytesIO(json.dumps({"status": status}).encode())):
+                with self.assertRaisesRegex(updater.Refused, "not a forward update"):
+                    updater.Executor.verify_forward_update(executor, OLD, updater.IMAGE + "@" + NEW)
+
+    def test_forward_commit_must_have_current_revision_as_merge_base(self):
+        executor = self.drill()
+        with patch.object(executor, "run", side_effect=[
+            json.dumps({"org.opencontainers.image.revision": "a" * 40}),
+            json.dumps({"org.opencontainers.image.revision": "b" * 40}),
+        ]), patch.object(updater.urllib.request, "urlopen", return_value=io.BytesIO(json.dumps({"status": "ahead", "merge_base_commit": {"sha": "a" * 40}}).encode())):
+            updater.Executor.verify_forward_update(executor, OLD, updater.IMAGE + "@" + NEW)
 
 if __name__ == "__main__": unittest.main()

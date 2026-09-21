@@ -24,6 +24,7 @@ import subprocess
 import threading
 import time
 import uuid
+import urllib.request
 
 IMAGE = "ghcr.io/campdenman/freeholder"
 DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
@@ -123,6 +124,29 @@ class Executor:
             if ref.startswith(IMAGE + "@"):
                 return validate_digest(ref.split("@", 1)[1])
         raise Refused("Registry did not supply the expected immutable image identity.")
+
+    def verify_forward_update(self, previous, candidate):
+        revisions = []
+        for image in (previous, candidate):
+            labels = json.loads(self.run(["docker", "image", "inspect", image,
+                                          "--format", "{{json .Config.Labels}}"] ))
+            revision = (labels or {}).get("org.opencontainers.image.revision", "")
+            if not re.fullmatch(r"[a-f0-9]{40}", revision):
+                raise Refused("Both images must identify their exact upstream source revision.")
+            revisions.append(revision)
+        if revisions[0] == revisions[1]:
+            return
+        request = urllib.request.Request(
+            "https://api.github.com/repos/CampDenman/freeholder/compare/" + "...".join(revisions) + "?per_page=1",
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "Freeholder-host-updater",
+                     "X-GitHub-Api-Version": "2026-03-10"})
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                evidence = json.loads(response.read(2 * 1024 * 1024))
+        except Exception as error:
+            raise Refused("Cannot verify upstream commit ancestry. No deployment was changed.") from error
+        if evidence.get("status") != "ahead" or evidence.get("merge_base_commit", {}).get("sha") != revisions[0]:
+            raise Refused("Candidate is not a forward update. A stale channel tag must not downgrade this installation.")
 
     def inventory(self):
         config = json.loads(self.compose("config", "--format", "json"))
@@ -288,6 +312,7 @@ class Executor:
                     return self.record
                 self.verify(digest)
                 self.run(["docker", "pull", IMAGE + "@" + digest], timeout=600)
+                self.verify_forward_update(previous, IMAGE + "@" + digest)
                 for filename in (".env", "compose.yml", "Caddyfile"):
                     shutil.copyfile(self.directory / filename, self.release / filename)
                     (self.release / filename).chmod(0o600)
