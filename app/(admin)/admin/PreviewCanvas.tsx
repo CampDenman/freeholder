@@ -16,12 +16,12 @@
 // all stop being true (§32).
 //
 // The frame renders stored state; the editor's local draft is layered onto
-// the typeable elements from the tree side, rAF-throttled, so a keystroke's
-// preview never waits for the debounced autosave or a server round-trip.
-// Everything a text patch cannot express (a new block, a heading level) still
-// reconverges when a save bumps `version` and the frame reloads from stored
-// state.
-import { useEffect, useRef, useState } from "react";
+// the typeable elements from the tree side in the same commit as each change,
+// so a keystroke's preview never waits for the debounced autosave or a server
+// round-trip. Everything a text patch cannot express (a new block, a heading
+// level) still reconverges when a save bumps `version` and the frame reloads
+// from stored state.
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DeviceMobile, Desktop } from "@phosphor-icons/react/dist/ssr";
 import { cx } from "@/ui/primitives";
 
@@ -58,9 +58,9 @@ export function PreviewCanvas({
    */
   version: number;
   /**
-   * The editor's local draft tree. Broadcast to the frame on the next
-   * animation frame after every change, without waiting for the debounced
-   * autosave — this is what makes keystroke → preview a local hop.
+   * The editor's local draft tree. Broadcast to the frame in the same commit
+   * as every change, without waiting for the debounced autosave — this is
+   * what makes keystroke → preview a local hop.
    */
   draft?: PreviewDraftNode[];
   selectedId?: string;
@@ -83,7 +83,7 @@ export function PreviewCanvas({
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
-  /** Latest draft, readable by the rAF callback and the ready handshake. */
+  /** Latest draft, readable by the ready handshake between renders. */
   const draftRef = useRef(draft);
   draftRef.current = draft;
 
@@ -91,16 +91,18 @@ export function PreviewCanvas({
     frame.current?.contentWindow?.postMessage(message, window.location.origin);
   };
 
-  // The draft follows the tree on the next animation frame: one broadcast per
-  // frame at most, no matter how many props a burst of typing changed. The
-  // frame layers it onto its typeable elements; the save/reload cycle stays
-  // the arbiter of everything structural.
-  useEffect(() => {
+  // The draft follows the tree in the same commit that changed it: a layout
+  // effect queues the message before the browser next yields, so the frame
+  // receives it within a task of the keystroke that produced it. Nothing is
+  // deferred to an animation frame — React already coalesces a burst of
+  // changes into one commit (so one broadcast per render, not per echo), and
+  // the frame's textContent writes are plain DOM the browser paints once per
+  // frame regardless. Against the §15.1 harness an rAF deferral here measured
+  // a frame of extra keystroke→preview latency; the layout effect sits at the
+  // same-task floor.
+  useLayoutEffect(() => {
     if (!draft) return;
-    const raf = requestAnimationFrame(() => {
-      postToFrame({ source: "freeholder-editor", draft: draftRef.current });
-    });
-    return () => cancelAnimationFrame(raf);
+    postToFrame({ source: "freeholder-editor", draft: draftRef.current });
   }, [draft]);
 
   // Clicks in the frame select a block in the editor.

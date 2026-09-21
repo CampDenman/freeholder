@@ -8626,6 +8626,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   not a backlog/throughput test.
   `deploy/performance-measurements.md` explains the command and limitations;
   requested auxiliary measurements no longer disappear on the large fixture.
+  Editor follow-up (2026-09-21): the preview now renders from the editor's
+  local draft — broadcast to the frame in the same commit as each keystroke
+  and layered onto its typeable elements (`app/(preview)/canvas-bridge.ts`),
+  autosave unchanged — which cut the measured keystroke→preview from 1,403.4ms
+  p95 to a 99–104ms sample band locally (≤100ms budget; the residual is
+  keypress-pacing jitter, so the reference-target run decides this row).
   Measurement follow-up (2026-09-16): the four remaining families are
   implemented and fail closed without their capability — real-browser Core Web
   Vitals plus whole-page HTTP timing (`PERF_MEASURE_BROWSER=1`), editor
