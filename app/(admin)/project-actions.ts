@@ -169,6 +169,7 @@ export async function projectConsentAction(form: FormData): Promise<void> {
           id,
           method: text(form, "method") as "contract" | "email" | "written" | "verbal" | "other",
           note: text(form, "note") || null,
+          expiresAt: text(form, "expiresAt") ? new Date(text(form, "expiresAt")) : undefined,
         },
         await actor(),
       );
@@ -205,6 +206,8 @@ export async function attachProjectFileAction(form: FormData): Promise<void> {
         assetId: text(form, "assetId"),
         role: text(form, "role") as "hero" | "gallery" | "before" | "after" | "process" | "detail" | "document",
         pairKey: text(form, "pairKey") || null,
+        seriesKey: text(form, "seriesKey") || null,
+        capturedAt: text(form, "capturedAt") ? new Date(text(form, "capturedAt")) : null,
         caption: text(form, "caption") || null,
       },
       await actor(),

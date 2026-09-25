@@ -17,11 +17,12 @@ import {
 import { saveServiceAreaAction, type ActionState } from "../../actions";
 
 export interface ServiceAreaValues {
-  kind: "none" | "radius" | "regions";
+  kind: "none" | "radius" | "regions" | "postal_codes";
   centerLatitude: string;
   centerLongitude: string;
   radiusKm: string;
   regions: string;
+  postalCodes: string;
 }
 
 export interface ServiceAreaFormLabels {
@@ -31,6 +32,9 @@ export interface ServiceAreaFormLabels {
   none: string;
   radius: string;
   regions: string;
+  postalCodes: string;
+  postalCodeList: string;
+  postalCodeHint: string;
   centerLatitude: string;
   centerLongitude: string;
   radiusKm: string;
@@ -88,6 +92,7 @@ export function ServiceAreaForm({
               <option value="none">{labels.none}</option>
               <option value="radius">{labels.radius}</option>
               <option value="regions">{labels.regions}</option>
+              <option value="postal_codes">{labels.postalCodes}</option>
             </Select>
           </Field>
 
@@ -128,6 +133,24 @@ export function ServiceAreaForm({
             hint={labels.regionHint}
           >
             <Input id="regions" name="regions" defaultValue={values.regions} />
+          </Field>
+
+          {/*
+            The only shape a delivery form can actually check. A radius and a
+            region describe coverage to a reader; neither answers "do you come
+            to L4C 2K1?" without a geocoder, and answering it by guessing is
+            the invented coverage §4.18 forbids.
+          */}
+          <Field
+            label={labels.postalCodeList}
+            htmlFor="postalCodes"
+            hint={labels.postalCodeHint}
+          >
+            <Input
+              id="postalCodes"
+              name="postalCodes"
+              defaultValue={values.postalCodes}
+            />
           </Field>
         </CardBody>
         <CardFooter>

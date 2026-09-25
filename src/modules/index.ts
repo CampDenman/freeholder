@@ -44,10 +44,13 @@ import subscriptionsManifest from "@/modules/subscriptions/manifest";
 import assistantManifest from "@/modules/assistant/manifest";
 import socialManifest from "@/modules/social/manifest";
 import giftRegistryManifest from "../../plugins/gift-registry/manifest";
+import assessmentsManifest from "./assessments/manifest";
+import calculatorsManifest from "./calculators/manifest";
 import printOnDemandManifest from "../../plugins/print-on-demand/manifest";
 import communityManifest from "../../plugins/community/manifest";
 import voiceVideoManifest from "../../plugins/voice-video/manifest";
 import marketplaceManifest from "../../plugins/marketplace/manifest";
+import { localPluginManifests } from "./local-plugins";
 import type { ModuleManifest } from "@/core/module";
 
 const manifests: ModuleManifest[] = [
@@ -82,9 +85,12 @@ const manifests: ModuleManifest[] = [
   referralsManifest,
   giftRegistryManifest,
   printOnDemandManifest,
+  assessmentsManifest,
+  calculatorsManifest,
   communityManifest,
   voiceVideoManifest,
   marketplaceManifest,
+  ...localPluginManifests,
 ];
 
 export default manifests;

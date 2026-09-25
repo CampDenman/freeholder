@@ -15,12 +15,14 @@ import {
   Image as ImageIcon,
   Layout,
   ListChecks,
+  Quotes,
   Package,
   Palette,
   Stack,
   Truck,
   Boat,
   ShoppingCart,
+  Calculator,
   ClipboardText,
   AirplaneTakeoff,
   ArrowUUpLeft,
@@ -76,6 +78,9 @@ export interface AdminNavLabels {
   design: string;
   media: string;
   forms: string;
+  assessments: string;
+  facts: string;
+  calculators: string;
   contacts: string;
   locations: string;
   translations: string;
@@ -164,6 +169,9 @@ const LINKS = [
   { href: "/admin/demos", key: "demos", module: "demo", Icon: Flask },
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },
   { href: "/admin/forms", key: "forms", module: "forms", Icon: Envelope },
+  { href: "/admin/assessments", key: "assessments", module: "assessments", Icon: ListChecks },
+  { href: "/admin/facts", key: "facts", module: "core", Icon: Quotes },
+  { href: "/admin/calculators", key: "calculators", module: "calculators", Icon: Calculator },
   { href: "/admin/invoices", key: "invoices", module: "invoicing", Icon: Receipt },
   { href: "/admin/payments", key: "payments", module: "invoicing", Icon: CreditCard },
   { href: "/admin/pos", key: "pos", module: "invoicing", Icon: DeviceMobile },

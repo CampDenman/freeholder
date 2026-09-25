@@ -92,6 +92,41 @@
       "when": 1792166400015,
       "tag": "0012_owner_storage_refunds",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792166400016,
+      "tag": "0013_assessments",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792166400017,
+      "tag": "0014_attestations",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792166400018,
+      "tag": "0015_media_consents",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792166400019,
+      "tag": "0016_calculators",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792166400020,
+      "tag": "0017_postal_service_areas",
+      "breakpoints": true
     }
   ]
 }

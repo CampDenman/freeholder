@@ -125,6 +125,7 @@ Owners can also file a bug, feature request or code submission from their runnin
 10. **SEO is architecture, not garnish.** Public pages are server-rendered HTML, URL structure follows a RIBA-compliant browse hierarchy (Root-Indexed Browse Architecture — every indexable page reachable within shallow hops from root-linked index pages), and every page ships complete meta, JSON-LD, and hreflang. The SEO module doesn't "add SEO"; the routing layer *is* the SEO.
 11. **Vibe-coded by design.** The primary way this codebase — and any deployed instance — gets edited is a coding agent in conversation with its owner. Every design decision is made with that reader in mind: strict TypeScript + Zod make the spec machine-checkable, modules and adapters have contracts narrow enough for an agent to hold one fully in context, conventions are enforced by lint/types/CI rather than tribal knowledge, and seed/demo mode exists so an agent can verify its change end-to-end. Code that is hard for an agent to safely modify is a design defect, not a documentation gap.
 12. **One sacred database (mandate).** Every piece of state lives in the ACID-compliant relational database (PostgreSQL) — religiously normalized (3NF as the default; denormalization only as a measured, documented optimization with the normalized source retained), deliberately abstracted (modules and plugins reach data exclusively through the service layer, never raw tables), and well-indexed as a review requirement (every foreign key indexed; every service-layer query pattern backed by an index; migrations adding queries without indexes fail review). No shadow stores: no state in JSON files, no truth in localStorage, no "we'll just cache it in memory." jsonb is permitted only for genuinely owner-defined schemaless data (custom fields, block content) and hot jsonb paths get generated columns + indexes. Transactions wrap every multi-table mutation — a half-created order must be impossible, not unlikely. The database *is* the business; everything else is a projection of it. Provider I/O never waits inside one of those transactions: a synchronous provider workflow is an explicit orchestrator around short, audited service phases, and cannot be composed beneath another service transaction.
+13. **Owner-authored truth.** Nothing the site states about the business is invented by the software. Every published claim — a rate, a price range, a service area, a wait time, an assessment outcome, a before-and-after — resolves to a fact an owner supplied, stored with its source and the moment it was true. Where a surface produces a judgement (an urgency score, an affordability figure, a candidacy band) it selects from outcomes the owner authored and may not compose new ones: the engine is structurally unable to diagnose, certify, guarantee or recommend, rather than merely disclaiming that it does not. Consent is part of the fact — media of an identifiable person publishes only against a recorded consent, and withdrawal unpublishes it. A correction supersedes without erasing, so what was said yesterday stays readable. This is what makes the regulated trades safe to serve: a clinic, a law firm and a lender all fail the same way, by stating something true-sounding that nobody stood behind, and software that *can* invent eventually will.
 
 ---
 
@@ -147,6 +148,7 @@ freeholder/
 │   ├── connections          # OAuth accounts, external calendars, credential encryption (§41)
 │   ├── briefing             # The daily briefing and its contributors (§42)
 │   ├── contribute           # Opt-in bug/feature/patch channel to a hub (default freeholder.ai)
+│   ├── attestations         # Owner-supplied facts: source, as-of, supersession, withdrawal — the record behind every published claim (§4.18)
 │   └── jobs                 # Background queue, scheduled tasks
 │
 ├── commerce/                # Sell things
@@ -172,6 +174,8 @@ freeholder/
 │   ├── portfolio            # Projects & case studies, collections, before/after, testimonials
 │   ├── galleries            # Public portfolio + private client galleries (proofing, delivery, sales)
 │   ├── forms                # Lead capture, intake questionnaires → contacts + submissions
+│   ├── assessments          # Owner-authored guided questionnaires scoring into owner-named bands; never diagnostic
+│   ├── calculators          # Arithmetic over owner-published inputs, rendered with its assumptions
 │   └── seo                  # RIBA browse hierarchy, sitemaps, schema.org, hreflang, OG images, llms.txt, product & location feeds
 │
 ├── growth/                  # Keep & grow the audience
@@ -1255,6 +1259,63 @@ existing `AgentPlaybook` and waits for it, which is what an owner wants when
 the work is already written down and used elsewhere. Offering only the first
 would orphan every playbook; offering only the second would make "draft this
 one line" a whole second object to maintain.
+
+### 4.18 Owner-authored truth (core/attestations)
+
+Principle 13 needs a row, because "the owner said so" is auditable only if it
+is stored. `core/attestations` is that row, and every surface that publishes a
+claim about the business writes through it. (`core/provenance` is a different
+thing with a confusingly similar name: it reports which *code* this instance is
+running, §37. This is about what the business asserts.)
+
+**Attestation.** One owner-supplied fact. `subject_kind` + `subject_id`
+(recorded untyped, as reviews do in §4.6, so a fact may attach to a product, a
+location, a page, or nothing), `value` (jsonb — this is exactly the
+owner-defined schemaless case principle 12 permits), `source` (where the owner
+got it: a rate sheet, a supplier, a licence register), `as_of` (the moment it
+was true), `valid_until` (optional — past it the fact renders as stale, never
+as current), `recorded_by`, `published_at`, `withdrawn_at`, `supersedes_id`.
+
+**Correction, not edit.** A changed fact is a new attestation whose
+`supersedes_id` points at the one it replaces. The superseded row keeps its
+value and its dates and stays readable. This is the correction ledger the two
+publishing editions ask for, and it is why a rate history exists without
+anybody building one: the ledger *is* the storage model, not a feature beside
+it. Nothing updates an attestation's value in place, and there is no service
+that does — the same discipline documents versions use in §4.5.
+
+**Withdrawal.** `withdrawn_at` unpublishes a fact everywhere that reads it —
+page, feed, sitemap, JSON-LD, export — without deleting it. Consent withdrawal
+sets it, which is how a person removes their photograph from a results wall
+without erasing the record that it was once lawfully published.
+
+**No unattested claim.** A rendering surface asks for a fact. If there is none,
+or it is withdrawn, or `valid_until` has passed, the surface omits the claim.
+It never substitutes a default, an average, a neighbouring value, or an
+inference. "Areas they named. No invented coverage" is this rule, and it is
+enforced by there being no code path that returns a fact nobody attested.
+
+**The five surfaces built on it:**
+
+- **Assessments** (`content/assessments`) — the owner authors the questions, the
+  answer options and the outcome bands. A response resolves to exactly one
+  authored band; the engine has no text generator, so an unauthored outcome is
+  unreachable rather than discouraged. Escalation rules map defined answers
+  (gas, shock, fire, bleeding) to an immediate authored instruction that
+  outranks the score.
+- **Calculators** (`content/calculators`) — arithmetic over attested inputs. The
+  result renders with its assumptions and the `as_of` of its oldest input, and
+  refuses to produce a figure when a required input is unset or stale.
+- **Published facts and status** — rates, metrics, opening status, bylines:
+  attestations rendered with source and date, never without.
+- **Consent-gated media** — before/after pairs and progress series whose
+  publication is an attestation carrying a consent record naming the person and
+  the scope.
+- **Service areas** (`core/locations`) — the attested coverage set. An address
+  outside it is refused cleanly; coverage is never inferred for an area the
+  owner did not name.
+
+---
 
 ---
 
@@ -5269,6 +5330,15 @@ owner operations, never substitute for them.
   replay and settlement tests use adapter doubles; this evidence does not
   claim a live provider charge or completion of C10.26.)*
 
+- [ ] **C5.26** Build owner-configured calculators that compute only from inputs
+  the owner published as attestations (§4.18) — affordability, cost ranges,
+  rebate eligibility, value estimates — rendering every assumption and the
+  as-of date of the oldest input beside the result, and refusing to emit a
+  figure when a required input is unset or past `valid_until`. Prove a
+  configured calculator computes, a stale input refuses rather than
+  estimating, assumptions and dates render in all four locales, and no result
+  is presented as a quote, an approval or a guarantee.
+
 **C5 exit:** every form of value converges through one explainable invoice,
 payment, tax, inventory and reporting path, with no floating-point money.
 
@@ -5826,6 +5896,13 @@ payment, tax, inventory and reporting path, with no floating-point money.
   nudging what is unpaid are one thought. `/admin/invoices/recurring` and the
   chasing panel on each invoice. `0100_recurring_invoices.sql`. Coverage in
   `tests/core/recurring-invoices.test.ts`. **F04** `/admin/invoices/[id]` chase reminders. **F05** `invoicing.createDraft`/`createPaymentPlan`/`createSchedule`/`scheduleReminders`/`markOverdueSweep` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/recurring-invoices.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recurring-invoices.test.ts` is the composition proof.)
+
+- [ ] **C6.18** Extend `core/locations` service areas into an enforced coverage
+  check: validate an address or postal code against the areas the owner named,
+  both when a visitor asks and again at submission, and refuse cleanly outside
+  them. Prove an in-area address, an out-of-area address, a boundary case, a
+  delivery window attached to an area, and that coverage is never inferred for
+  an area the owner did not name.
 
 **C6 exit:** the same availability and money engines can sell time, spaces,
 equipment, classes and expertise without double-booking or duplicated records.
@@ -6748,6 +6825,28 @@ permitted conversation on the same contact timeline.
   erasure with its person removed, as an attribution touch does.
   Portal room registered through C8.11's registry, so no page changed.
   Tests: `tests/modules/documents.test.ts`. **F04** `/admin/documents` share with contacts. **F05** `documents.save`/`share`/`open`/`list`/`export`/`revokeShare` at `/api/v1/documents.*`, MCP `documents_*`. **F07** `tests/modules/documents.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/documents.test.ts` is the composition proof.)
+
+- [ ] **C8.14** Build owner-authored guided assessments: the owner writes the
+  questions, the answer options and the outcome bands; a response resolves to
+  exactly one authored band, and escalation rules route defined answers to an
+  immediate authored instruction that outranks the score. Prove an authored
+  assessment scores into its bands, an escalation answer overrides the score,
+  an unauthored outcome is unreachable rather than merely discouraged,
+  responses reach the contact spine, and no surface states a diagnosis,
+  candidacy, certification or recommendation.
+- [ ] **C8.15** Build as-of dated published facts with a correction ledger on
+  `core/attestations` (§4.18): every published rate, metric, status or byline
+  carries its source and the moment it was true, a correction supersedes rather
+  than edits, and superseded values stay readable with their dates. Prove
+  publication with source and as-of, supersession, a visible correction
+  history, staleness once `valid_until` passes, and that no fact renders
+  without its date.
+- [ ] **C8.16** Build consent-gated progress and comparison media: before/after
+  pairs and time-series publish only against a recorded consent naming the
+  person and the scope; withdrawal unpublishes from page, gallery, feed,
+  sitemap and structured data; capture provenance stays attached. Prove
+  publication blocked without consent, publication on consent, withdrawal
+  removing it everywhere, and provenance surviving export.
 
 **C8 exit:** the business can prove, deliver and support its work while each
 customer has one secure, comprehensible home for the relationship.

@@ -21,6 +21,7 @@ import {
   serviceAreas,
 } from "@/core/locations/schema";
 import { violates } from "@/core/db/errors";
+import { normalisePostalCode } from "./coverage";
 import { requireSetupOwner } from "@/core/settings/setup";
 import {
   defineService,
@@ -508,6 +509,19 @@ export const setServiceArea = defineService({
           kind: z.literal("regions"),
           regions: z.array(z.string().min(1).max(120)).min(1).max(50),
         }),
+        z.object({
+          /**
+           * The one shape a machine can check against an address (C6.18).
+           * Stored normalised, so an owner who typed "L4C 2K1" also covers
+           * somebody who types "l4c2k1".
+           */
+          kind: z.literal("postal_codes"),
+          postalCodes: z
+            .array(z.string().min(1).max(20))
+            .min(1)
+            .max(500)
+            .transform((codes) => codes.map(normalisePostalCode)),
+        }),
       ])
       .nullable(),
   }),
@@ -534,7 +548,9 @@ export const setServiceArea = defineService({
               centerLongitude: input.area.centerLongitude,
               radiusKm: input.area.radiusKm,
             }
-          : { kind: "regions" as const, regions: input.area.regions };
+          : input.area.kind === "regions"
+            ? { kind: "regions" as const, regions: input.area.regions }
+            : { kind: "postal_codes" as const, postalCodes: input.area.postalCodes };
       [row] = await ctx.tx
         .insert(serviceAreas)
         .values({ locationId: input.locationId, ...values })

@@ -38,6 +38,9 @@ import {
 } from "./library";
 import {
   booking,
+  calculator,
+  coverageCheck,
+  fact,
   gallery,
   map,
   paywall,
@@ -85,6 +88,9 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   helpFeedback,
   productCard,
   booking,
+  calculator,
+  coverageCheck,
+  fact,
   quoteRequest,
   tip,
   siteChat,

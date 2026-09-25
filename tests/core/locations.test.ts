@@ -277,6 +277,7 @@ describe("LocalBusiness structured data", () => {
       id: "x",
       locationId: "y",
       kind: "radius",
+      postalCodes: [],
       centerLatitude: "49.687000",
       centerLongitude: "-124.993000",
       radiusKm: "75.00",
@@ -564,6 +565,7 @@ describe.runIf(hasDatabase)("service areas", () => {
         locationId,
         area: {
           kind: "radius",
+      postalCodes: [],
           centerLatitude: 49.687,
           centerLongitude: -124.993,
           radiusKm: 75,

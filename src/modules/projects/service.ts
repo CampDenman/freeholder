@@ -113,9 +113,6 @@ const projectRow = row({
   publicationStatus: z.enum(PROJECT_PUBLICATION_STATUSES),
   publishedAt: timestamp.nullable(),
   publicPageId: uuid.nullable(),
-  clientConsentGivenAt: timestamp.nullable(),
-  clientConsentMethod: z.enum(PROJECT_CONSENT_METHODS).nullable(),
-  clientConsentNote: z.string().nullable(),
   version: z.number().int(),
 });
 
@@ -182,6 +179,8 @@ const fileRow = row({
   assetId: uuid,
   role: z.enum(PROJECT_FILE_ROLES),
   pairKey: z.string().nullable(),
+  seriesKey: z.string().nullable(),
+  capturedAt: timestamp.nullable(),
   caption: z.string().nullable(),
   position: z.number().int(),
 });
@@ -548,6 +547,16 @@ export const attachFile = defineService({
     role: z.enum(PROJECT_FILE_ROLES).default("gallery"),
     /** Ties a `before` to its `after` (§4.7: a pairing, not two uploads). */
     pairKey: z.string().trim().max(80).nullish(),
+    /** Ties one step to the rest of its progress series (C8.16). */
+    seriesKey: z.string().trim().max(80).nullish(),
+    /**
+     * When the picture was taken, not when it was uploaded.
+     *
+     * A recovery timeline ordered by upload time is a timeline of when
+     * somebody got round to the filing, which is not the thing anybody is
+     * being shown.
+     */
+    capturedAt: z.coerce.date().nullish(),
     caption: z.string().trim().max(500).nullish(),
   }),
   output: fileRow,
@@ -562,6 +571,22 @@ export const attachFile = defineService({
     }
     if (!pairing && input.pairKey) {
       throw new ServiceError("validation", "Only a before or after is paired.");
+    }
+    const inSeries = input.role === "series";
+    if (inSeries && !input.seriesKey) {
+      throw new ServiceError(
+        "validation",
+        "A progress step needs a series name, so the steps can be shown in order.",
+      );
+    }
+    if (!inSeries && input.seriesKey) {
+      throw new ServiceError("validation", "Only a progress step belongs to a series.");
+    }
+    if (inSeries && !input.capturedAt) {
+      throw new ServiceError(
+        "validation",
+        "A progress step needs the date it was taken. Ordering by upload time would show when the filing was done, not how the work went.",
+      );
     }
 
     const [last] = await ctx.tx
@@ -579,6 +604,8 @@ export const attachFile = defineService({
           assetId: input.assetId,
           role: input.role,
           pairKey: input.pairKey ?? null,
+          seriesKey: input.seriesKey ?? null,
+          capturedAt: input.capturedAt ?? null,
           caption: input.caption ?? null,
           position: (last?.position ?? -1) + 1,
         })
@@ -586,6 +613,8 @@ export const attachFile = defineService({
           target: [projectFiles.projectId, projectFiles.assetId, projectFiles.role],
           set: {
             pairKey: input.pairKey ?? null,
+            seriesKey: input.seriesKey ?? null,
+            capturedAt: input.capturedAt ?? null,
             caption: input.caption ?? null,
             updatedAt: sql`now()`,
           },
@@ -883,9 +912,10 @@ registerContactPrivacySource({
         // as surely as their contact record is.
         clientDisplayName: null,
         notes: null,
-        clientConsentGivenAt: null,
-        clientConsentMethod: null,
-        clientConsentNote: null,
+        // The consent ledger is not cleared here, for the reason
+        // `consent_records` is on the retention opt-out list: it is immutable
+        // evidence under a legal/audit hold. The work goes offline, which is
+        // what erasure actually requires.
         publicationStatus: "draft",
         publishedAt: null,
         updatedAt: sql`now()`,
