@@ -16,9 +16,10 @@ import { db } from "@/core/db";
 import { THEME_COOKIE } from "@/core/design/theme";
 import { businessLocations, serviceAreas } from "@/core/locations/schema";
 import { pages } from "@/modules/cms/schema";
-import { recordFact, withdrawFact } from "@/core/attestations/service";
-import { createCalculator, publishCalculator } from "@/modules/calculators/service";
-import { OWNER, closeDb } from "../helpers/spine";
+import { attestations } from "@/core/attestations/schema";
+import { calculators } from "@/modules/calculators/schema";
+import { eq } from "drizzle-orm";
+import { closeDb } from "../helpers/spine";
 import { C11_BASE_URL, seedC11Owner, useOwnerSession } from "./owner-session";
 
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
@@ -47,45 +48,53 @@ test("a figure arrives with its assumptions, and stops when its rate does", asyn
   const token = await seedC11Owner("Fieldnote Home Loans");
   await useOwnerSession(context, token);
 
-  const fact = await recordFact.call(
-    {
+  // Seeded with inserts, not service calls: `owner-session.ts` says why —
+  // `service.call` boots the job graph in a way Playwright's test process
+  // cannot wire, and every other browser spec seeds the same way.
+  const [fact] = await db()
+    .insert(attestations)
+    .values({
       key: RATE_KEY,
       value: 6,
       source: "Lender rate sheet, 12 September",
       asOf: new Date("2026-09-12T09:00:00.000Z"),
-    },
-    OWNER,
-  );
+      publishedAt: new Date("2026-09-12T09:00:00.000Z"),
+    })
+    .returning();
 
-  const made = await createCalculator.call(
-    {
+  const [made] = await db()
+    .insert(calculators)
+    .values({
       slug: "monthly-interest",
       name: "Monthly interest",
       intro: "A rough monthly interest figure.",
-      inputs: [{ key: "amount", label: "How much are you borrowing?", min: 1000, max: 2_000_000 }],
+      inputs: [
+        { key: "amount", label: "How much are you borrowing?", min: 1000, max: 2000000 },
+      ],
       steps: [
         {
           key: "yearly",
           label: "Interest for a year",
           op: "percentOf",
-          left: { kind: "input", key: "amount" },
-          right: { kind: "fact", factKey: RATE_KEY },
+          first: { kind: "input", key: "amount" },
+          second: { kind: "fact", factKey: RATE_KEY },
         },
         {
           key: "monthly",
           label: "Interest for a month",
           op: "divide",
-          left: { kind: "step", key: "yearly" },
-          right: { kind: "literal", value: 12 },
+          first: { kind: "step", key: "yearly" },
+          second: { kind: "literal", value: 12 },
         },
       ],
       resultLabel: "Interest each month",
       resultUnit: "$",
-      assumptions: "Interest only, before fees and insurance. Not a quote and not an offer of credit.",
-    },
-    OWNER,
-  );
-  await publishCalculator.call({ id: made.id }, OWNER);
+      assumptions:
+        "Interest only, before fees and insurance. Not a quote and not an offer of credit.",
+      status: "active",
+    })
+    .returning();
+  if (!made || !fact) throw new Error("The calculator fixtures were not created.");
 
   // A location that has listed its postcodes, so coverage is checkable.
   const [shop] = await db()
@@ -141,7 +150,10 @@ test("a figure arrives with its assumptions, and stops when its rate does", asyn
 
     // Now take the rate away. The page must stop answering rather than carry
     // on with the number it used a moment ago.
-    await withdrawFact.call({ id: fact.id, reason: "Rate sheet withdrawn." }, OWNER);
+    await db()
+      .update(attestations)
+      .set({ withdrawnAt: new Date() })
+      .where(eq(attestations.id, fact.id));
 
     await visitorPage.goto(
       "/tools?calc=monthly-interest&c_amount=400000",

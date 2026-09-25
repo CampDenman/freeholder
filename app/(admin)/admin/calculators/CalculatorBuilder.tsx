@@ -63,8 +63,8 @@ export interface CalculatorBuilderLabels {
   step: string;
   stepLabel: string;
   operation: string;
-  left: string;
-  right: string;
+  first: string;
+  second: string;
   termKind: string;
   termLiteral: string;
   termInput: string;
@@ -522,22 +522,22 @@ export function CalculatorBuilder({
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <TermFields
-                  id={`${formId}-s${index}-left`}
-                  label={labels.left}
-                  term={step.left}
+                  id={`${formId}-s${index}-first`}
+                  label={labels.first}
+                  term={step.first}
                   inputs={inputs}
                   earlier={steps.slice(0, index)}
                   labels={labels}
-                  onChange={(left) => patchStep(index, { left })}
+                  onChange={(term) => patchStep(index, { first: term })}
                 />
                 <TermFields
-                  id={`${formId}-s${index}-right`}
-                  label={labels.right}
-                  term={step.right}
+                  id={`${formId}-s${index}-second`}
+                  label={labels.second}
+                  term={step.second}
                   inputs={inputs}
                   earlier={steps.slice(0, index)}
                   labels={labels}
-                  onChange={(right) => patchStep(index, { right })}
+                  onChange={(term) => patchStep(index, { second: term })}
                 />
               </div>
             </fieldset>
@@ -554,8 +554,8 @@ export function CalculatorBuilder({
                   key: `step_${current.length + 1}`,
                   label: "A step",
                   op: "multiply",
-                  left: blankTerm(),
-                  right: blankTerm(),
+                  first: blankTerm(),
+                  second: blankTerm(),
                 },
               ])
             }

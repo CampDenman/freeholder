@@ -76,11 +76,14 @@ WHERE "contact_id" IS NOT NULL
   AND "client_consent_given_at" IS NOT NULL
   AND "client_consent_method" IS NOT NULL;
 --> statement-breakpoint
-ALTER TABLE "projects" DROP COLUMN "client_consent_given_at";
---> statement-breakpoint
-ALTER TABLE "projects" DROP COLUMN "client_consent_method";
---> statement-breakpoint
-ALTER TABLE "projects" DROP COLUMN "client_consent_note";
+-- The three old columns are deliberately NOT dropped here.
+--
+-- `schema-compat-gate` rejects a dropped column because the previous release
+-- still reads it, and it is right to: an instance briefly running release N
+-- against release N+1's schema would fall over. This is the expand half of
+-- expand/contract. The data has moved to the ledger above and nothing writes
+-- these columns any more; a later release drops them once no supported version
+-- reads them.
 --> statement-breakpoint
 -- A progress series: orthodontic tracking and a recovery timeline are ordered
 -- over time, which a before/after pair cannot express. `captured_at` is when

@@ -49,8 +49,8 @@ export const stepSchema = z.object({
   key,
   label: z.string().min(1).max(160),
   op: z.enum(OPERATIONS),
-  left: termSchema,
-  right: termSchema,
+  first: termSchema,
+  second: termSchema,
 });
 
 export const inputSchema = z.object({
@@ -80,7 +80,7 @@ export type CalculatorTerm = z.output<typeof termSchema>;
 export function factKeys(steps: CalculatorStep[]): string[] {
   const keys = new Set<string>();
   for (const step of steps) {
-    for (const term of [step.left, step.right]) {
+    for (const term of [step.first, step.second]) {
       if (term.kind === "fact") keys.add(term.factKey);
     }
   }
@@ -112,7 +112,7 @@ export function configurationProblems(
     if (seen.has(step.key)) {
       problems.push(`Two steps are both called "${step.key}".`);
     }
-    for (const term of [step.left, step.right]) {
+    for (const term of [step.first, step.second]) {
       if (term.kind === "input" && !inputKeys.has(term.key)) {
         problems.push(`"${step.label}" uses an answer nobody is asked for: ${term.key}.`);
       }
@@ -138,24 +138,24 @@ export type Evaluation =
   | { ok: true; value: number; steps: Array<{ key: string; label: string; value: number }> }
   | { ok: false; reason: string };
 
-function apply(op: Operation, left: number, right: number): number | null {
+function apply(op: Operation, first: number, second: number): number | null {
   switch (op) {
     case "add":
-      return left + right;
+      return first + second;
     case "subtract":
-      return left - right;
+      return first - second;
     case "multiply":
-      return left * right;
+      return first * second;
     case "divide":
       // Refused rather than returned as Infinity: a figure of Infinity on a
       // page is worse than no figure, and NaN is worse than both.
-      return right === 0 ? null : left / right;
+      return second === 0 ? null : first / second;
     case "percentOf":
-      return (left * right) / 100;
+      return (first * second) / 100;
     case "min":
-      return Math.min(left, right);
+      return Math.min(first, second);
     case "max":
-      return Math.max(left, right);
+      return Math.max(first, second);
   }
 }
 
@@ -178,12 +178,12 @@ export function evaluate(steps: CalculatorStep[], resolved: Resolved): Evaluatio
   }
 
   for (const step of steps) {
-    const left = read(step.left);
-    const right = read(step.right);
-    if (left === null || right === null) {
+    const first = read(step.first);
+    const second = read(step.second);
+    if (first === null || second === null) {
       return { ok: false, reason: `"${step.label}" is missing a number it needs.` };
     }
-    const value = apply(step.op, left, right);
+    const value = apply(step.op, first, second);
     if (value === null || !Number.isFinite(value)) {
       return { ok: false, reason: `"${step.label}" does not produce a usable number.` };
     }

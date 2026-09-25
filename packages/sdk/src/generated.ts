@@ -764,8 +764,6 @@ export const SERVICE_NAMES = [
   "imports.reviewConflicts",
   "imports.rollback",
   "imports.start",
-  "industry.open",
-  "industry.run",
   "invitations.accept",
   "invitations.create",
   "invitations.inspect",
@@ -2290,7 +2288,7 @@ export interface ServiceCatalog {
     output: { ok: boolean; refusal: string | null; value: number | null; resultLabel: string; resultUnit: string | null; assumptions: string; basedOn: { key: string; value: number; source: string; asOf: string }[]; oldestAsOf: string | null };
   };
   "calculators.create": {
-    input: { slug: string; name: string; intro?: string; inputs?: { key: string; label: string; help?: string; min?: number; max?: number; unit?: string }[]; steps: { key: string; label: string; op: "add" | "subtract" | "multiply" | "divide" | "percentOf" | "min" | "max"; left: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string }; right: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string } }[]; resultLabel: string; resultUnit?: string; assumptions: string };
+    input: { slug: string; name: string; intro?: string; inputs?: { key: string; label: string; help?: string; min?: number; max?: number; unit?: string }[]; steps: { key: string; label: string; op: "add" | "subtract" | "multiply" | "divide" | "percentOf" | "min" | "max"; first: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string }; second: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string } }[]; resultLabel: string; resultUnit?: string; assumptions: string };
     output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "calculators.get": {
@@ -2322,7 +2320,7 @@ export interface ServiceCatalog {
     output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "calculators.update": {
-    input: { id: string; name: string; intro?: string; inputs?: { key: string; label: string; help?: string; min?: number; max?: number; unit?: string }[]; steps: { key: string; label: string; op: "add" | "subtract" | "multiply" | "divide" | "percentOf" | "min" | "max"; left: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string }; right: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string } }[]; resultLabel: string; resultUnit?: string; assumptions: string };
+    input: { id: string; name: string; intro?: string; inputs?: { key: string; label: string; help?: string; min?: number; max?: number; unit?: string }[]; steps: { key: string; label: string; op: "add" | "subtract" | "multiply" | "divide" | "percentOf" | "min" | "max"; first: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string }; second: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string } }[]; resultLabel: string; resultUnit?: string; assumptions: string };
     output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "calendars.archive": {
@@ -4404,14 +4402,6 @@ export interface ServiceCatalog {
   "imports.start": {
     input: { origin: string; kind: "wordpress-rest" | "wordpress-wxr" | "sitemap" | "rss" | "atom" | "html" | "archive" };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
-  };
-  "industry.open": {
-    input: { editionId: "law-firm" | "talent" | "med-spa" | "dental" | "plastic-surgery" | "hvac" | "plumber" | "electrical" | "restaurant" | "florist" | "hotel" | "roofing" | "mortgage" | "wealth-management" | "grocery-market" | "news-media" | "newspaper" | "venture-capital" | "real-estate" | "fishing-charter" | "general-business" };
-    output: { id: string; editionId: "law-firm" | "talent" | "med-spa" | "dental" | "plastic-surgery" | "hvac" | "plumber" | "electrical" | "restaurant" | "florist" | "hotel" | "roofing" | "mortgage" | "wealth-management" | "grocery-market" | "news-media" | "newspaper" | "venture-capital" | "real-estate" | "fishing-charter" | "general-business"; alreadyOpen: boolean; pages: string[]; forms: string[] };
-  };
-  "industry.run": {
-    input: { siteId: string; type: string; idempotencyKey: string; role?: "visitor" | "owner" | "buyer" | "seller" | "other"; fields?: { [key: string]: string } };
-    output: { ok: boolean; code?: string; message?: string; [key: string]: unknown };
   };
   "invitations.accept": {
     input: { token: string; password: string };
@@ -7641,10 +7631,6 @@ export interface FreeholderApi {
     reviewConflicts: (input: ServiceCatalog["imports.reviewConflicts"]["input"]) => Promise<ServiceCatalog["imports.reviewConflicts"]["output"]>;
     rollback: (input: ServiceCatalog["imports.rollback"]["input"]) => Promise<ServiceCatalog["imports.rollback"]["output"]>;
     start: (input: ServiceCatalog["imports.start"]["input"]) => Promise<ServiceCatalog["imports.start"]["output"]>;
-  };
-  industry: {
-    open: (input: ServiceCatalog["industry.open"]["input"]) => Promise<ServiceCatalog["industry.open"]["output"]>;
-    run: (input: ServiceCatalog["industry.run"]["input"]) => Promise<ServiceCatalog["industry.run"]["output"]>;
   };
   invitations: {
     accept: (input: ServiceCatalog["invitations.accept"]["input"]) => Promise<ServiceCatalog["invitations.accept"]["output"]>;
