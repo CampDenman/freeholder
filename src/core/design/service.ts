@@ -78,6 +78,12 @@ const colorPatch = z
     warningSoft: HEX_COLOR.optional(),
     danger: HEX_COLOR.optional(),
     dangerSoft: HEX_COLOR.optional(),
+    // Checked by refuseIfUnsafe as `onDanger on danger`, so it has to be
+    // settable. It was not: a site sending a light palette for the dark slot
+    // was refused over a role it had never been allowed to send, and the
+    // message named that role. Reported by a third party who hit exactly
+    // that and could not act on the error.
+    onDanger: HEX_COLOR.optional(),
     focus: HEX_COLOR.optional(),
   })
   .strict();

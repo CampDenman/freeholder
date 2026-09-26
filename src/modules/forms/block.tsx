@@ -174,8 +174,13 @@ function Field({
 }) {
   const id = `${slug}-${field.key}`;
   const describedBy = field.help ? `${id}-help` : undefined;
+  // 16px, not 14px. iOS Safari zooms the whole page when a control under 16px
+  // takes focus, so every phone visitor's first tap on the enquiry form shifted
+  // the page under them — on the form that exists to collect enquiries.
+  // Reported by a third party. The label stays at 14px; only the control has
+  // to clear the threshold.
   const control =
-    "w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink";
+    "w-full rounded-md border border-rule bg-field px-3 py-2 text-base text-ink";
 
   return (
     <div className="grid gap-1.5">

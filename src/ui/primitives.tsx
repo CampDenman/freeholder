@@ -173,8 +173,14 @@ export function Field({
   );
 }
 
+// 16px on the control itself. iOS Safari zooms the whole page when a control
+// under 16px takes focus, so every phone tap into a field shifted the page.
+// Reported against the public enquiry form by a third party, but this constant
+// is every text control in the admin and the portal too, so it is fixed here
+// rather than one form at a time. Labels and help text stay at 14px; only what
+// the browser focuses has to clear the threshold.
 const CONTROL =
-  "w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink " +
+  "w-full rounded-md border border-rule bg-field px-3 py-2 text-base text-ink " +
   "placeholder:text-ink-muted focus-visible:border-accent";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
