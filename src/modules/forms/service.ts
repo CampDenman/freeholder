@@ -219,17 +219,56 @@ export const listForms = defineService({
   },
 });
 
-/** The definition a public page renders from. Public, and deliberately thin. */
+/**
+ * The definition a public page renders from. Public, and thin by construction.
+ *
+ * It said "deliberately thin" while selecting the whole row, so it answered any
+ * anonymous caller with `notify` — the addresses submissions are e-mailed to.
+ * An owner who keeps their address off their site had it published by the API
+ * anyway, and `contact` is the obvious slug to guess. Reported by a third party
+ * building on Freeholder.
+ *
+ * So the projection is named, in both the schema and the query, rather than
+ * being whatever the table happens to hold. `select()` plus a shared row schema
+ * is what turned one added column into a disclosure, and a named projection is
+ * what stops the next added column from doing it again.
+ */
+const publicFormRow = row({
+  id: uuid,
+  slug: z.string(),
+  name: z.string(),
+  fields: z.unknown(),
+  submitLabel: z.string().nullable(),
+  successMessage: z.string().nullable(),
+  // Kept because a visitor may see it and it tells them nothing they could not
+  // infer from the form itself; `notify` is the column that had to go.
+  destination: z.enum(["contact", "none"]),
+  status: z.enum(["active", "closed"]),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+
 export const getForm = defineService({
   name: "forms.get",
   summary: "One form's definition, for rendering it.",
   kind: "query",
   permission: "public",
   input: z.object({ slug }),
-  output: formRow.nullable(),
+  output: publicFormRow.nullable(),
   handler: async (input, ctx) => {
     const [form] = await ctx.tx
-      .select()
+      .select({
+        id: forms.id,
+        slug: forms.slug,
+        name: forms.name,
+        fields: forms.fields,
+        submitLabel: forms.submitLabel,
+        successMessage: forms.successMessage,
+        destination: forms.destination,
+        status: forms.status,
+        createdAt: forms.createdAt,
+        updatedAt: forms.updatedAt,
+      })
       .from(forms)
       .where(and(eq(forms.slug, input.slug), isNull(forms.trashedAt)))
       .limit(1);
