@@ -102,7 +102,7 @@ export default async function PrivacyDeskPage({
                   </Field>
                 </div>
                 <Field label={t("privacy.note")} htmlFor="privacy-request-note" hint={t("privacy.request.correctionHint")}>
-                  <textarea id="privacy-request-note" name="note" rows={3} className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm" />
+                  <textarea id="privacy-request-note" name="note" rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
                 </Field>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={t("contacts.field.name")} htmlFor="privacy-correction-name">
@@ -185,7 +185,7 @@ export default async function PrivacyDeskPage({
                   </Field>
                 </div>
                 <Field label={t("privacy.consent.evidence")} htmlFor="privacy-consent-evidence">
-                  <textarea id="privacy-consent-evidence" name="evidenceNote" rows={2} className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm" />
+                  <textarea id="privacy-consent-evidence" name="evidenceNote" rows={2} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
                 </Field>
               </PrivacyActionForm>
             </CardBody>

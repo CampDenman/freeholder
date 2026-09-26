@@ -122,7 +122,7 @@ export default async function ContactImportPage({
                           name="mapping"
                           defaultValue={batch.mapping[index] ?? "ignore"}
                           disabled={batch.status === "committed" || batch.status === "reverted"}
-                          className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                          className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                         >
                           {IMPORTABLE_FIELDS.map((field) => (
                             <option key={field} value={field}>
@@ -143,7 +143,7 @@ export default async function ContactImportPage({
                   <input
                     name="source"
                     defaultValue={batch.source}
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 <Button type="submit">{t("contactImports.action.check")}</Button>

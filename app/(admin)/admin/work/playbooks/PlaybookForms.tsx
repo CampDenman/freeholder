@@ -68,7 +68,7 @@ export function PlaybookForms({ labels }: { labels: PlaybookFormLabels }) {
                 required
                 rows={4}
                 maxLength={50000}
-                className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
               />
             </Field>
             <Field htmlFor="params" label={labels.params} hint={labels.paramsHint}>
@@ -76,7 +76,7 @@ export function PlaybookForms({ labels }: { labels: PlaybookFormLabels }) {
                 id="params"
                 name="params"
                 rows={3}
-                className="w-full rounded-md border border-rule bg-field px-3 py-2 font-mono text-sm text-ink"
+                className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 font-mono text-sm text-ink"
               />
             </Field>
             <Field htmlFor="trigger" label={labels.trigger}>
@@ -124,7 +124,7 @@ export function PlaybookForms({ labels }: { labels: PlaybookFormLabels }) {
                 name="document"
                 required
                 rows={5}
-                className="w-full rounded-md border border-rule bg-field px-3 py-2 font-mono text-sm text-ink"
+                className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 font-mono text-sm text-ink"
               />
             </Field>
             <Field htmlFor="importName" label={labels.importName}>

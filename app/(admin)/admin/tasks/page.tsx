@@ -143,7 +143,7 @@ export default async function TasksPage({
                     id={`assignee-${task.id}`}
                     name="assigneeUserId"
                     defaultValue={task.assigneeUserId ?? ""}
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   >
                     <option value="">{t("tasks.unassigned")}</option>
                     {(staff ?? []).map((person) => (
@@ -238,7 +238,7 @@ export default async function TasksPage({
               <input
                 name="title"
                 required
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -246,7 +246,7 @@ export default async function TasksPage({
               <input
                 type="date"
                 name="dueOn"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -254,7 +254,7 @@ export default async function TasksPage({
               <input
                 type="date"
                 name="remindOn"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -262,7 +262,7 @@ export default async function TasksPage({
               <select
                 name="priority"
                 defaultValue="normal"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {TASK_PRIORITIES.map((priority) => (
                   <option key={priority} value={priority}>
@@ -276,7 +276,7 @@ export default async function TasksPage({
               <select
                 name="cadence"
                 defaultValue=""
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="">{t("tasks.cadence.never")}</option>
                 {CADENCES.map((cadence) => (
@@ -291,7 +291,7 @@ export default async function TasksPage({
               <select
                 name="assigneeUserId"
                 defaultValue=""
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="">{t("tasks.unassigned")}</option>
                 {(staff ?? []).map((person) => (

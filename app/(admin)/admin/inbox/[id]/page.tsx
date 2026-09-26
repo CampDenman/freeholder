@@ -110,7 +110,7 @@ export default async function ThreadPage({
             <select
               name="userId"
               defaultValue={thread.assigneeUserId ?? ""}
-              className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+              className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
             >
               <option value="">{t("inbox.nobody")}</option>
               {(staff ?? []).map((person) => (
@@ -132,7 +132,7 @@ export default async function ThreadPage({
             <input
               type="date"
               name="until"
-              className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+              className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
             />
           </label>
           <Button type="submit" variant="quiet">
@@ -212,7 +212,7 @@ export default async function ThreadPage({
                 name="body"
                 rows={5}
                 required
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <div className="flex flex-wrap items-center gap-3">

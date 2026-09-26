@@ -137,7 +137,7 @@ export default async function AudiencesPage({
                       <select
                         name="hours"
                         defaultValue={audience.hours}
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       >
                         <option value="calendar">{t("audiences.hours.calendar")}</option>
                         <option value="any">{t("audiences.hours.any")}</option>
@@ -153,12 +153,12 @@ export default async function AudiencesPage({
                           <input
                             type="time"
                             name={`open-${weekday}`}
-                            className="w-24 rounded-md border border-rule bg-field px-1 py-1 text-xs tabular-nums"
+                            className="w-24 rounded-md border border-rule-strong bg-field px-1 py-1 text-xs tabular-nums"
                           />
                           <input
                             type="time"
                             name={`close-${weekday}`}
-                            className="w-24 rounded-md border border-rule bg-field px-1 py-1 text-xs tabular-nums"
+                            className="w-24 rounded-md border border-rule-strong bg-field px-1 py-1 text-xs tabular-nums"
                           />
                         </span>
                       </label>
@@ -191,7 +191,7 @@ export default async function AudiencesPage({
                 name="name"
                 required
                 placeholder={t("audiences.namePlaceholder")}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -199,7 +199,7 @@ export default async function AudiencesPage({
               <select
                 name="who"
                 defaultValue="public"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="public">{t("audiences.who.public")}</option>
                 <option value="token">{t("audiences.who.token")}</option>
@@ -212,7 +212,7 @@ export default async function AudiencesPage({
               <input
                 name="contactTag"
                 placeholder={t("audiences.tagPlaceholder")}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -220,7 +220,7 @@ export default async function AudiencesPage({
               <select
                 name="hours"
                 defaultValue="calendar"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="calendar">{t("audiences.hours.calendar")}</option>
                 <option value="any">{t("audiences.hours.any")}</option>
@@ -233,7 +233,7 @@ export default async function AudiencesPage({
                 name="minNoticeMin"
                 type="number"
                 min={0}
-                className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -243,7 +243,7 @@ export default async function AudiencesPage({
                 type="number"
                 min={0}
                 defaultValue={0}
-                className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <Button type="submit">{t("audiences.create")}</Button>

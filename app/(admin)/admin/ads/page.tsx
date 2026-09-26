@@ -659,7 +659,7 @@ export default async function AdsPage({
                                         id={`th-${item.id}`}
                                         name="tagHtml"
                                         rows={3}
-                                        className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                                        className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm"
                                       />
                                     </Field>
                                     <Field
@@ -747,7 +747,7 @@ export default async function AdsPage({
                             multiple
                             required
                             size={3}
-                            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm"
                           >
                             {(positions ?? []).map((slot) => (
                               <option key={slot.id} value={slot.id}>

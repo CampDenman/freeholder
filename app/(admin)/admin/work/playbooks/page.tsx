@@ -151,7 +151,7 @@ export default async function PlaybooksPage({
                           name="cron"
                           defaultValue={playbook.scheduleCron ?? ""}
                           placeholder="0 7 * * 1-5"
-                          className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-sm"
+                          className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-sm"
                         />
                       </label>
                       <label className="grid gap-1 text-sm">
@@ -160,7 +160,7 @@ export default async function PlaybooksPage({
                           name="timezone"
                           defaultValue={playbook.timezone ?? ""}
                           placeholder={timezone}
-                          className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                          className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                         />
                       </label>
                       <label className="flex items-center gap-2 text-sm">
@@ -191,7 +191,7 @@ export default async function PlaybooksPage({
                                 <select
                                   name={`param.${param.name}`}
                                   required={param.required}
-                                  className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                                  className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
                                 >
                                   {param.choices.map((choice) => (
                                     <option key={choice} value={choice}>
@@ -204,7 +204,7 @@ export default async function PlaybooksPage({
                                   name={`param.${param.name}`}
                                   required={param.required}
                                   type={param.type === "number" ? "number" : "text"}
-                                  className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                                  className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
                                 />
                               )}
                             </label>

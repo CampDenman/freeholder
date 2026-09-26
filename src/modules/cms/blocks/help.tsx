@@ -115,7 +115,7 @@ export const knowledge = defineBlock({
             name="q"
             defaultValue={resolved.q}
             placeholder={ctx.t("help.search.placeholder")}
-            className="rounded border border-rule bg-surface px-3 py-2 text-ink"
+            className="rounded border border-rule-strong bg-surface px-3 py-2 text-ink"
           />
         </label>
         <button

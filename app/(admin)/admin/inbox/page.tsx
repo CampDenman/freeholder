@@ -158,7 +158,7 @@ export default async function InboxPage({
               name="q"
               defaultValue={q}
               placeholder={t("inbox.search")}
-              className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+              className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
             />
           </label>
           <Button type="submit" variant="quiet">
@@ -236,7 +236,7 @@ export default async function InboxPage({
                   <select
                     name="action"
                     defaultValue="close"
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   >
                     {["close", "reopen", "assign", "snooze", "markRead", "markUnread"].map(
                       (action) => (
@@ -252,7 +252,7 @@ export default async function InboxPage({
                   <select
                     name="userId"
                     defaultValue=""
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   >
                     <option value="">{t("inbox.nobody")}</option>
                     {(staff ?? []).map((person) => (
@@ -267,7 +267,7 @@ export default async function InboxPage({
                   <input
                     type="date"
                     name="until"
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 <Button type="submit" variant="quiet">

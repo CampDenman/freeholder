@@ -175,7 +175,7 @@ export default async function MessagingPage({
                               <select
                                 name="state"
                                 defaultValue={requirement.state}
-                                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                               >
                                 {[
                                   "not_started",
@@ -200,7 +200,7 @@ export default async function MessagingPage({
                                   <input
                                     name="brand"
                                     defaultValue={requirement.brand ?? ""}
-                                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                                   />
                                 </label>
                                 <label className="grid gap-1 text-sm">
@@ -210,7 +210,7 @@ export default async function MessagingPage({
                                   <input
                                     name="campaign"
                                     defaultValue={requirement.campaign ?? ""}
-                                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                                   />
                                 </label>
                               </>
@@ -222,7 +222,7 @@ export default async function MessagingPage({
                               <input
                                 name="reason"
                                 defaultValue={requirement.reason ?? ""}
-                                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                               />
                             </label>
                             <Button type="submit" variant="quiet">
@@ -240,7 +240,7 @@ export default async function MessagingPage({
                       <input
                         name="label"
                         defaultValue={number.label ?? ""}
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       />
                     </label>
                     <label className="grid gap-1">
@@ -248,7 +248,7 @@ export default async function MessagingPage({
                       <select
                         name="purpose"
                         defaultValue={number.purpose}
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       >
                         {PURPOSES.map((purpose) => (
                           <option key={purpose} value={purpose}>
@@ -321,11 +321,11 @@ export default async function MessagingPage({
           <form action={createKeywordRuleAction} className="mt-4 grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("messaging.keywords.keyword")}</span>
-              <input name="keyword" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="keyword" required className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("messaging.keywords.match")}</span>
-              <select name="match" defaultValue="exact" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="match" defaultValue="exact" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 {KEYWORD_MATCH_KINDS.map((kind) => (
                   <option key={kind} value={kind}>{t(`messaging.keywords.match.${kind}`)}</option>
                 ))}
@@ -333,7 +333,7 @@ export default async function MessagingPage({
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("messaging.keywords.action")}</span>
-              <select name="action" defaultValue="auto_reply" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="action" defaultValue="auto_reply" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 {KEYWORD_ACTIONS.map((kind) => (
                   <option key={kind} value={kind}>{t(`messaging.keywords.action.${kind}`)}</option>
                 ))}
@@ -341,7 +341,7 @@ export default async function MessagingPage({
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("messaging.keywords.reply")}</span>
-              <input name="replyBody" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="replyBody" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <div>
               <Button type="submit">{t("messaging.keywords.add")}</Button>
@@ -378,19 +378,19 @@ export default async function MessagingPage({
           <form action={setMessagingWindowAction} className="mt-4 grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("messaging.windows.name")}</span>
-              <input name="name" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="name" required className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("messaging.windows.quietFrom")}</span>
-              <input name="quietFrom" type="time" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="quietFrom" type="time" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("messaging.windows.quietTo")}</span>
-              <input name="quietTo" type="time" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="quietTo" type="time" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("messaging.windows.maxPerDay")}</span>
-              <input name="maxPerDay" inputMode="numeric" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="maxPerDay" inputMode="numeric" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <div>
               <Button type="submit">{t("messaging.windows.add")}</Button>

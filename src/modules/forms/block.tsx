@@ -180,7 +180,7 @@ function Field({
   // Reported by a third party. The label stays at 14px; only the control has
   // to clear the threshold.
   const control =
-    "w-full rounded-md border border-rule bg-field px-3 py-2 text-base text-ink";
+    "w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-base text-ink";
 
   return (
     <div className="grid gap-1.5">
@@ -233,7 +233,7 @@ function Field({
           required={field.required}
           aria-describedby={describedBy}
           type="checkbox"
-          className="size-4 rounded border-rule"
+          className="size-4 rounded border-rule-strong"
         />
       ) : (
         <input

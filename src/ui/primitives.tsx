@@ -180,7 +180,7 @@ export function Field({
 // rather than one form at a time. Labels and help text stay at 14px; only what
 // the browser focuses has to clear the threshold.
 const CONTROL =
-  "w-full rounded-md border border-rule bg-field px-3 py-2 text-base text-ink " +
+  "w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-base text-ink " +
   "placeholder:text-ink-muted focus-visible:border-accent";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {

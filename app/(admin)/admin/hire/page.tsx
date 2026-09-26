@@ -137,7 +137,7 @@ export default async function HirePage({
                           <span className="text-ink-muted">{t("hire.field.condition")}</span>
                           <input
                             name="condition"
-                            className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                            className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                           />
                         </label>
                         <Button type="submit" variant="quiet">
@@ -154,7 +154,7 @@ export default async function HirePage({
                           <select
                             name="condition"
                             defaultValue="fine"
-                            className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                            className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                           >
                             <option value="fine">{t("hire.condition.fine")}</option>
                             <option value="damaged">{t("hire.condition.damaged")}</option>
@@ -165,7 +165,7 @@ export default async function HirePage({
                           <span className="text-ink-muted">{t("hire.field.notes")}</span>
                           <input
                             name="notes"
-                            className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                            className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                           />
                         </label>
                         <Button type="submit" variant="quiet">
