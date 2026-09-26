@@ -115,11 +115,22 @@ then a real disclosure was found and fixed and five features' worth of new publi
 and scoped surface landed. Refreshing that packet would make the review cheaper
 and is worth doing while a reviewer is lined up.
 
-**C1.38 and C10.31 are probably finished and merely unticked.** `app/playground/`
-and its test exist, the update executor is in `src/core/update/apply.ts`, and
-#410's changeset says the playground is live at demo.freeholder.ai. Verify the
-evidence and tick them — but *verify*, because C6.11 proved a finished item and an
-unfinished one look identical from the checklist.
+**C1.38 may be finished and merely unticked.** `app/playground/` and its test
+exist, and #410's changeset says the playground is live at demo.freeholder.ai.
+Verify the evidence and tick it — but *verify*, because C6.11 proved a finished
+item and an unfinished one look identical from the checklist.
+
+**C10.06 and C10.31 are open on purpose — do not tick them.** An earlier draft of
+this handoff guessed they were finished because `src/core/update/apply.ts` exists.
+It is a deliberately rejecting stub: every entry point returns a `conflict`
+error, and the header says why — "fail closed until a host executor can prove
+backup, signed candidate identity, migrations, candidate health and recovery".
+`deploy/update-apply.md` records that the previous implementation was **removed**
+because it did not create recoverable backups, did not run migrations, did not
+verify the candidate, and could report a successful rollback after rollback had
+failed. The opt-in Docker host executor is the narrow exception and updates only
+when a restored-backup rehearsal proves the schema and migration journal are
+unchanged.
 
 **Four of the five new items need a demo fixture.** C8.14 has one; C8.15, C8.16,
 C5.26 and C6.18 each say "ships no demo fixture of its own", which is their only
@@ -152,6 +163,23 @@ rather than feature completion — rather than the number. **Not agreed.**
 
 Also fix before release: `.changeset/no-live-phone-example.md` has a UTF-8 BOM
 before its `---`, which some front-matter parsers skip silently.
+
+## Deploying what landed this session
+
+**This is a schema-changing release, so no automatic path applies.** #411 added
+five migrations (`0013_assessments` through `0017_postal_service_areas`). Per
+`deploy/update-apply.md`, the opt-in Docker host executor updates only when a
+restored-backup rehearsal proves the schema and migration journal are unchanged;
+schema-changing releases and every other recipe use the manual procedure.
+
+Merging to `main` publishes the image, and that is all it does. Rolling it onto a
+host is an operator action with production access: maintenance window, record the
+running image's immutable digest, `pg_dump --format=custom`, restore into a
+separate database and verify records and application access there, back up
+configuration and object storage separately (a database dump excludes media),
+verify the release signature and pin the candidate by digest, then test the
+migrations. The full procedure is in `deploy/update-apply.md` and
+`deploy/migration-runbook.md`. **Nobody has run it for this release.**
 
 ## Owner action list
 
