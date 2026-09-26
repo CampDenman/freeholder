@@ -269,9 +269,23 @@ function main() {
   const directory = mkdtempSync(join(tmpdir(), "freeholder-performance-"));
   try {
     const reportPath = join(directory, "results.json");
+    // Vitest is run through Node directly rather than through the package
+    // manager. `spawnSync("pnpm", …)` cannot work on Windows: there is no bare
+    // `pnpm` to execute, and naming `pnpm.cmd` is refused outright with EINVAL
+    // because Node will not spawn a .cmd without a shell. Turning the shell on
+    // would then put a temp path through cmd quoting for no benefit.
+    //
+    // This matters rather than being a tidy-up: C11.11 asks the owner to
+    // produce acceptance evidence, the owner works on Windows, and until now
+    // this harness exited before measuring anything there. A gate that only
+    // runs on the CI image cannot be the gate somebody signs.
+    const vitest = resolve("node_modules", "vitest", "vitest.mjs");
+    if (!existsSync(vitest)) {
+      throw new Error("vitest is not installed; run the install before measuring.");
+    }
     const result = spawnSync(
-      "pnpm",
-      ["exec", "vitest", "run", "tests/core/performance-budgets.test.ts",
+      process.execPath,
+      [vitest, "run", "tests/core/performance-budgets.test.ts",
         "--reporter=default", "--reporter=json", `--outputFile.json=${reportPath}`],
       { stdio: "inherit", env: process.env },
     );
