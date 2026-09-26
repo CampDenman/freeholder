@@ -675,11 +675,14 @@ export const SERVICE_NAMES = [
   "events.get",
   "events.list",
   "events.listPublic",
+  "events.loadDemoFixture",
   "events.publish",
+  "events.purgeDemoFixture",
   "events.recentActivity",
   "events.register",
   "events.resolvePublic",
   "events.update",
+  "events.verifyDemoFixture",
   "forms.byId",
   "forms.create",
   "forms.delete",
@@ -4047,9 +4050,17 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { id: string; name: string; slug: string; summary: string | null; venueName: string | null; venueAddress: string | null; venueLocationId: string | null; status: "draft" | "published" | "cancelled"; seo: unknown; workingName: string | null; workingSummary: string | null; workingVenueName: string | null; workingVenueAddress: string | null; workingSeo: unknown | null; version: number; publishedAt: string | null; cancelledAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
   };
+  "events.loadDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+  };
   "events.publish": {
     input: { id: string; expectedVersion: number };
     output: { id: string; name: string; slug: string; summary: string | null; venueName: string | null; venueAddress: string | null; venueLocationId: string | null; status: "draft" | "published" | "cancelled"; seo: unknown; workingName: string | null; workingSummary: string | null; workingVenueName: string | null; workingVenueAddress: string | null; workingSeo: unknown | null; version: number; publishedAt: string | null; cancelledAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "events.purgeDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { purged: { subjectType: string; subjectId: string }[] };
   };
   "events.recentActivity": {
     input: { limit?: number };
@@ -4066,6 +4077,10 @@ export interface ServiceCatalog {
   "events.update": {
     input: { id: string; expectedVersion: number; name?: string; slug?: string; summary?: string | null; venueName?: string | null; venueAddress?: string | null; seo?: { title?: string; description?: string } };
     output: { id: string; name: string; slug: string; summary: string | null; venueName: string | null; venueAddress: string | null; venueLocationId: string | null; status: "draft" | "published" | "cancelled"; seo: unknown; workingName: string | null; workingSummary: string | null; workingVenueName: string | null; workingVenueAddress: string | null; workingSeo: unknown | null; version: number; publishedAt: string | null; cancelledAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "events.verifyDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
   };
   "forms.byId": {
     input: { id: string };
@@ -7530,11 +7545,14 @@ export interface FreeholderApi {
     get: (input: ServiceCatalog["events.get"]["input"]) => Promise<ServiceCatalog["events.get"]["output"]>;
     list: (input?: ServiceCatalog["events.list"]["input"]) => Promise<ServiceCatalog["events.list"]["output"]>;
     listPublic: (input?: ServiceCatalog["events.listPublic"]["input"]) => Promise<ServiceCatalog["events.listPublic"]["output"]>;
+    loadDemoFixture: (input: ServiceCatalog["events.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["events.loadDemoFixture"]["output"]>;
     publish: (input: ServiceCatalog["events.publish"]["input"]) => Promise<ServiceCatalog["events.publish"]["output"]>;
+    purgeDemoFixture: (input: ServiceCatalog["events.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["events.purgeDemoFixture"]["output"]>;
     recentActivity: (input?: ServiceCatalog["events.recentActivity"]["input"]) => Promise<ServiceCatalog["events.recentActivity"]["output"]>;
     register: (input: ServiceCatalog["events.register"]["input"]) => Promise<ServiceCatalog["events.register"]["output"]>;
     resolvePublic: (input: ServiceCatalog["events.resolvePublic"]["input"]) => Promise<ServiceCatalog["events.resolvePublic"]["output"]>;
     update: (input: ServiceCatalog["events.update"]["input"]) => Promise<ServiceCatalog["events.update"]["output"]>;
+    verifyDemoFixture: (input: ServiceCatalog["events.verifyDemoFixture"]["input"]) => Promise<ServiceCatalog["events.verifyDemoFixture"]["output"]>;
   };
   forms: {
     byId: (input: ServiceCatalog["forms.byId"]["input"]) => Promise<ServiceCatalog["forms.byId"]["output"]>;

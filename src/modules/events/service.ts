@@ -20,6 +20,13 @@ import {
   eventTickets,
   events,
 } from "./schema";
+import {
+  demoHandlerInputSchema,
+  demoLoadResultSchema,
+  demoPurgeResultSchema,
+  demoVerifyResultSchema,
+} from "@/core/onboarding/contract";
+import { requireDemoHandlerRun } from "@/core/demo/handler";
 import { renderEventIcs } from "./ics";
 import { syncEventPublicPage } from "./public-pages";
 import "./blocks";
@@ -727,6 +734,158 @@ export const eventCalendar = defineService({
   },
 });
 
+/**
+ * The demo contribution for events (C6.11, C1.28).
+ *
+ * A class rather than a conference, because the thing an owner needs to see
+ * working is the one that is hard to believe from a screenshot: a session
+ * with a real capacity, one seat already gone, and a public page that says so.
+ */
+const DEMO_CONTRIBUTION = { key: "events.demo-class", version: 1 };
+const DEMO_OUTCOME = "events.demo-class.visible";
+const DEMO_SLUG = "freeholder-demo-sourdough-class";
+
+const DEMO_CLASS = {
+  en: {
+    name: "[Demo] Intro to sourdough",
+    summary: "Four hours, one loaf each, everything provided.",
+    venueName: "The back kitchen",
+    ticket: "General admission",
+  },
+  es: {
+    name: "[Demo] Introducción a la masa madre",
+    summary: "Cuatro horas, un pan por persona, todo incluido.",
+    venueName: "La cocina trasera",
+    ticket: "Entrada general",
+  },
+  fr: {
+    name: "[Demo] Initiation au levain",
+    summary: "Quatre heures, un pain chacun, tout est fourni.",
+    venueName: "La cuisine du fond",
+    ticket: "Entrée générale",
+  },
+} as const;
+
+export const loadDemoEvent = defineService({
+  name: "events.loadDemoFixture",
+  summary: "Load the events contribution for a tracked demo run.",
+  kind: "mutation",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  output: demoLoadResultSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(ctx.tx, input, DEMO_CONTRIBUTION, "load");
+    const copy = DEMO_CLASS[input.locale as keyof typeof DEMO_CLASS];
+    if (!copy) throw new ServiceError("validation", "Unsupported demo locale.");
+
+    const made = await ctx.callAsSystem(createEvent, {
+      name: copy.name,
+      slug: DEMO_SLUG,
+      summary: copy.summary,
+      venueName: copy.venueName,
+    });
+    // Far enough ahead that the demo does not age into a past event the
+    // first week nobody looks at it.
+    const startsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const endsAt = new Date(startsAt.getTime() + 4 * 60 * 60 * 1000);
+    await ctx.callAsSystem(addEventSession, {
+      eventId: made.id,
+      startsAt,
+      endsAt,
+      capacity: 8,
+      waitlistEnabled: true,
+    });
+    await ctx.callAsSystem(addEventTicket, {
+      eventId: made.id,
+      name: copy.ticket,
+      priceMinor: 6500,
+    });
+    // Published, because an unpublished demo proves the admin screen exists
+    // and nothing about what a visitor would see.
+    await ctx.callAsSystem(publishEvent, { id: made.id, expectedVersion: made.version });
+
+    return demoLoadResultSchema.parse({
+      records: [
+        {
+          fixtureKey: "demo-class",
+          subjectType: "event",
+          subjectId: made.id,
+          label: made.name,
+        },
+      ],
+    });
+  },
+});
+
+export const purgeDemoEvent = defineService({
+  name: "events.purgeDemoFixture",
+  summary: "Purge only events proven to belong to a tracked demo run.",
+  kind: "mutation",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  output: demoPurgeResultSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(ctx.tx, input, DEMO_CONTRIBUTION, "purge");
+    const purged: Array<{ subjectType: string; subjectId: string }> = [];
+    for (const record of input.records) {
+      if (record.fixtureKey !== "demo-class" || record.subjectType !== "event") {
+        throw new ServiceError("validation", "Unexpected events demo provenance.");
+      }
+      // Registrations point at a contact with onDelete: restrict, so they go
+      // first. They are answers given to a demo, and the run that created
+      // them is the run removing them; sessions and tickets cascade.
+      await ctx.tx
+        .delete(eventRegistrations)
+        .where(eq(eventRegistrations.eventId, record.subjectId));
+      await ctx.tx.delete(events).where(eq(events.id, record.subjectId));
+      purged.push({ subjectType: record.subjectType, subjectId: record.subjectId });
+    }
+    return demoPurgeResultSchema.parse({ purged });
+  },
+});
+
+export const verifyDemoEvent = defineService({
+  name: "events.verifyDemoFixture",
+  summary: "Verify the visible events outcome for a tracked demo run.",
+  kind: "query",
+  permission: "scoped",
+  input: demoHandlerInputSchema,
+  output: demoVerifyResultSchema,
+  handler: async (input, ctx) => {
+    await requireDemoHandlerRun(ctx.tx, input, DEMO_CONTRIBUTION, "verify");
+    const ids = input.records
+      .filter((record) => record.subjectType === "event")
+      .map((record) => record.subjectId);
+    const [found] = ids.length
+      ? await ctx.tx
+          .select({ slug: events.slug, name: events.name, status: events.status })
+          .from(events)
+          .where(eq(events.id, ids[0]!))
+          .limit(1)
+      : [];
+    const sessions = found
+      ? await ctx.tx
+          .select({ id: eventSessions.id })
+          .from(eventSessions)
+          .where(eq(eventSessions.eventId, ids[0]!))
+      : [];
+    return demoVerifyResultSchema.parse({
+      outcomes: [
+        {
+          key: DEMO_OUTCOME,
+          // Published *and* has a session: a class with no date is not a
+          // class anybody could attend, so it would prove nothing.
+          achieved:
+            found?.slug === DEMO_SLUG &&
+            found.name.startsWith("[Demo]") &&
+            found.status === "published" &&
+            sessions.length > 0,
+          detail: found?.name,
+        },
+      ],
+    });
+  },
+});
 export default [
   listEvents,
   getEvent,
@@ -742,4 +901,7 @@ export default [
   cancelRegistration,
   checkInRegistration,
   eventCalendar,
+  loadDemoEvent,
+  purgeDemoEvent,
+  verifyDemoEvent,
 ];

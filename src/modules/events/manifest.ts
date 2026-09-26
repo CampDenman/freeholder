@@ -10,6 +10,7 @@ export default defineModule({
   tables: () => import("./tables"),
   services: () => import("./service"),
   blocks: () => import("./blocks"),
+  onboarding: () => import("./onboarding"),
   events: {
     emits: [
       "events.created",
