@@ -2213,6 +2213,21 @@ v2.
 - **F11** — §4.3, generated SDK and `customer-invoice-payments.md` changeset. — `tests/browser/journeys.spec.ts`.
 - **F12** — owner issue → encrypted invoice email → customer page → verified offline payment → paid history/confirmation; `mobile-screens.test.ts` covers the same localized invoice URL contract. Hosted-provider timeout, replay and settlement tests use adapter doubles; this evidence does not claim a live provider charge or completion of C10.26. — `tests/browser/journeys.spec.ts`.
 
+## C5.26 — Build owner-configured calculators that compute only from inputs
+
+- **F01** — `db/migrations/0016_calculators.sql` — `assumptions` is NOT NULL with a non-empty check, so a figure cannot be published without the caveats that produced it.
+- **F02** — `tests/modules/calculators.test.ts` — typed-service coverage including permission and refusal assertions.
+- **F03** — No contact reference: a calculation stores nothing about who asked. `tests/core/merge-completeness.test.ts` enforces that by reflection.
+- **F04** — /admin/calculators list and step builder — screen files `app/(admin)/admin/calculators/page.tsx` and `CalculatorBuilder.tsx`; public `calculator` block.
+- **F05** — `calculators.create`/`update`/`publish`/`close`/`compute`/`getPublic` at /api/v1/calculators.*, MCP `calculators_*` — surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and `tests/core/mcp.test.ts` (registry-derived).
+- **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG A/AA over this item's surfaces in both themes in `tests/browser/calculators.spec.ts`.
+- **F07** — `tests/modules/calculators.test.ts` covers a missing constant, a stale constant, out-of-bounds answers, division by zero and a closed calculator.
+- **F08** — `tests/modules/calculators.test.ts` plus `tests/browser/calculators.spec.ts` — unit, service, database, permission, browser and accessibility coverage.
+- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared participation: `tests/core/record-participation.test.ts`.
+- **F10** — Partial, honestly labelled: site-wide demo and defaults ride `tests/core/seed-demo.test.ts`; this item ships no demo fixture of its own.
+- **F11** — `deploy/spec-reconciliation.md` — the §-mapping for MASTER.md §4.18 and this item's §43 annotation; release note in `.changeset/calculators-and-coverage.md`.
+- **F12** — `tests/browser/calculators.spec.ts` — a published rate, a figure, and the page falling silent when the rate is withdrawn.
+
 ## C6.01 — Build calendars for business, users and resources with timezone
 
 - **F01** — `db/migrations/0000_reviewed-baseline.sql` — reviewed baseline (C10.19) folding the item's migration tag `0085_calendars.sql`; table invariants asserted in `tests/core/calendars.test.ts`.
@@ -2467,6 +2482,21 @@ v2.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — `tests/core/recurring-invoices.test.ts` is the composition proof.
+
+## C6.18 — Extend core/locations service areas into an enforced coverage check
+
+- **F01** — `db/migrations/0017_postal_service_areas.sql` — `service_areas_shape` widened so a `postal_codes` area must carry at least one code.
+- **F02** — `tests/core/coverage.test.ts` — typed-service coverage including permission and refusal assertions.
+- **F03** — N/A — no contact reference: coverage is a property of a location, not a person, and `tests/core/merge-completeness.test.ts` enforces that by reflection.
+- **F04** — /admin/locations service-area form gains the postcode list — screen file `app/(admin)/admin/locations/ServiceAreaForm.tsx`; public `coverageCheck` block.
+- **F05** — `locations.checkCoverage` at /api/v1/locations.*, MCP `locations_*` — surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and `tests/core/mcp.test.ts` (registry-derived).
+- **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG A/AA over this item's surfaces in both themes in `tests/browser/calculators.spec.ts`.
+- **F07** — `tests/core/coverage.test.ts` asserts the third answer: a radius or a named region returns `unconfirmed`, never `covered`.
+- **F08** — `tests/core/coverage.test.ts` plus `tests/browser/calculators.spec.ts` — unit, service, database, permission, browser and accessibility coverage.
+- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared participation: `tests/core/record-participation.test.ts`.
+- **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; this item ships no demo fixture of its own.
+- **F11** — `deploy/spec-reconciliation.md` — the §-mapping for MASTER.md §4.18 and this item's §43 annotation; release note in `.changeset/calculators-and-coverage.md`.
+- **F12** — `tests/browser/calculators.spec.ts` — a listed postcode, one outside, on a real page.
 
 ## C7.01 — Build configurable lifecycle and deal pipelines, stages
 
@@ -2917,6 +2947,51 @@ v2.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; per-item contextual help is not separately evidenced.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — `tests/modules/documents.test.ts` is the composition proof.
+
+## C8.14 — Build owner-authored guided assessments
+
+- **F01** — `db/migrations/0013_assessments.sql` — `assessment_responses.band_id` NOT NULL + RESTRICT makes an unauthored outcome unrepresentable; `assessment_bands_no_overlap` (EXCLUDE USING gist) makes two bands over one score impossible.
+- **F02** — `tests/modules/assessments.test.ts` — typed-service coverage including permission and refusal assertions.
+- **F03** — `registerContactReference` + `registerContactPrivacySource` for `assessment_responses`; asserted by `tests/core/merge-completeness.test.ts` and `tests/core/c11-14-retention.test.ts`.
+- **F04** — /admin/assessments list, question builder, band and escalation editors — screen file `app/(admin)/admin/assessments/page.tsx`; public `assessment` block in `src/modules/assessments/block.tsx`.
+- **F05** — `assessments.create`/`update`/`publish`/`close`/`respond`/`saveBand`/`saveEscalation` at /api/v1/assessments.*, MCP `assessments_*` — surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and `tests/core/mcp.test.ts` (registry-derived).
+- **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG A/AA over this item's surfaces in both themes in `tests/browser/assessments.spec.ts`.
+- **F07** — `tests/modules/assessments.test.ts` covers permission, refusal, escalation override, idempotency and the concurrent double-post.
+- **F08** — `tests/modules/assessments.test.ts` plus `tests/browser/assessments.spec.ts` — unit, service, database, permission, browser and accessibility coverage.
+- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared participation: `tests/core/record-participation.test.ts`.
+- **F10** — `src/modules/assessments/onboarding.ts` ships a demo heating check in en/fr/es, loaded, verified and purged by the tracked demo run.
+- **F11** — `deploy/spec-reconciliation.md` — the §-mapping for MASTER.md §4.18 and this item's §43 annotation; release note in `.changeset/owner-authored-assessments.md`.
+- **F12** — `tests/browser/assessments.spec.ts` — refused for a gap, fixed, published, answered, escalated.
+
+## C8.15 — Build as-of dated published facts with a correction ledger
+
+- **F01** — `db/migrations/0014_attestations.sql` — `attestations_current_idx` allows one current fact per key and subject (COALESCE-based, so a business-wide figure is not exempt); `attestations_one_correction_idx` stops the ledger forking.
+- **F02** — `tests/core/attestations.test.ts` — typed-service coverage including permission and refusal assertions.
+- **F03** — N/A — no contact reference: a published figure is about the business, not a person, and `tests/core/merge-completeness.test.ts` enforces that by reflection.
+- **F04** — /admin/facts list and ledger — screen files `app/(admin)/admin/facts/page.tsx` and `[key]/page.tsx`; public `fact` block.
+- **F05** — `attestations.record`/`correct`/`withdraw`/`current`/`history`/`list` at /api/v1/attestations.*, MCP `attestations_*` — surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and `tests/core/mcp.test.ts` (registry-derived).
+- **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG A/AA over this item's surfaces in both themes in `tests/browser/facts.spec.ts`.
+- **F07** — `tests/core/attestations.test.ts` covers a backwards-dated correction, a lapsed fact, withdrawal and the grant boundary.
+- **F08** — `tests/core/attestations.test.ts` plus `tests/browser/facts.spec.ts` — unit, service, database, permission, browser and accessibility coverage.
+- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared participation: `tests/core/record-participation.test.ts`.
+- **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; this item ships no demo fixture of its own.
+- **F11** — `deploy/spec-reconciliation.md` — the §-mapping for MASTER.md §4.18 and this item's §43 annotation; release note in `.changeset/attested-facts-and-corrections.md`.
+- **F12** — `tests/browser/facts.spec.ts` — published, corrected, withdrawn, with the page falling silent.
+
+## C8.16 — Build consent-gated progress and comparison media
+
+- **F01** — `db/migrations/0015_media_consents.sql` — `media_consents` is append-only by construction; `project_files_series` ties a progress step to its series key. The old consent columns are kept, not dropped, per `tests/core/schema-compat-gate.test.ts`.
+- **F02** — `tests/core/media-consent.test.ts` — typed-service coverage including permission and refusal assertions.
+- **F03** — `tests/core/merge-completeness.test.ts` and `tests/core/c11-14-retention.test.ts` — `media_consents` repoints on merge and registers export/erasure; erasure keeps the decisions and clears the free-text note.
+- **F04** — /admin/projects/[id] records, withdraws and lists consent decisions, and authors a progress series — screen file `app/(admin)/admin/projects/[id]/page.tsx`.
+- **F05** — `privacy.grantMediaConsent`/`withdrawMediaConsent`/`mediaConsent`/`mediaConsentHistory` at /api/v1/privacy.*, MCP `privacy_*` — surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and `tests/core/mcp.test.ts` (registry-derived).
+- **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG A/AA over this item's surfaces in both themes in `tests/browser/media-consent.spec.ts`.
+- **F07** — `tests/core/media-consent.test.ts` asserts the grant survives withdrawal, lapsed consent reads as lapsed, and effect-time ordering cannot reinstate a withdrawal.
+- **F08** — `tests/core/media-consent.test.ts` plus `tests/browser/media-consent.spec.ts` — unit, service, database, permission, browser and accessibility coverage.
+- **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared participation: `tests/core/record-participation.test.ts`.
+- **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; this item ships no demo fixture of its own.
+- **F11** — `deploy/spec-reconciliation.md` — the §-mapping for MASTER.md §4.18 and this item's §43 annotation; release note in `.changeset/consent-is-evidence.md`.
+- **F12** — `tests/core/media-consent.test.ts` — the hourly sweep takes published work offline when its permission stops standing.
 
 ## C9.01 — Build visual trigger → condition → action automations over the
 

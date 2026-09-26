@@ -193,6 +193,20 @@ describe("Tier-1 recipe contracts (C3.16, C3.17)", () => {
     expect(matrix).toContain("node scripts/doctor.mjs");
     expect(matrix).toContain("FREEHOLDER_STORAGE=s3");
     expect(workflow).toContain("bash scripts/recipe-matrix.sh");
-    expect(workflow).toContain("quay.io/minio/minio:");
+
+    // The gate has to run against a real S3-compatible server rather than the
+    // local filesystem adapter, which is what this used to prove by naming
+    // `quay.io/minio/minio`. MinIO closed public distribution in September 2026,
+    // so naming a vendor made the assertion a hostage: the gate went red for
+    // somebody else's licensing decision with nothing wrong in the candidate.
+    //
+    // So assert the two properties that actually matter. Storage is served on
+    // the endpoint recipe-matrix.sh points the image at, and the image for it
+    // comes from our own registry, so the next upstream withdrawal is a mirror
+    // commit rather than a red build.
+    expect(matrix).toContain("S3_ENDPOINT=http://127.0.0.1:9000");
+    expect(workflow).toMatch(/docker run .*127\.0\.0\.1:9000:/s);
+    expect(workflow).toContain("freeholder-ci-s3");
+    expect(workflow).toContain("ghcr.io/$(echo \"$OWNER\"");
   });
 });

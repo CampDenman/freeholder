@@ -195,12 +195,22 @@ export const serviceAreas = pgTable(
     locationId: uuid("location_id")
       .notNull()
       .references(() => businessLocations.id, { onDelete: "cascade" }),
-    kind: text("kind", { enum: ["radius", "regions"] }).notNull(),
+    kind: text("kind", { enum: ["radius", "regions", "postal_codes"] }).notNull(),
     centerLatitude: numeric("center_latitude", { precision: 9, scale: 6 }),
     centerLongitude: numeric("center_longitude", { precision: 9, scale: 6 }),
     radiusKm: numeric("radius_km", { precision: 8, scale: 2 }),
     /** Named places: "Comox Valley", "Vancouver Island", "Greater London". */
     regions: text("regions").array().notNull().default(sql`'{}'`),
+    /**
+     * The postal codes the owner named, normalised to upper case with the
+     * spacing removed.
+     *
+     * The only shape of this table a machine can check. A radius describes
+     * coverage to a reader and a region names it, but neither answers "do you
+     * come to L4C 2K1?" without a geocoder or a gazetteer \u2014 and answering it
+     * by guessing is the invented coverage 4.18 forbids.
+     */
+    postalCodes: text("postal_codes").array().notNull().default(sql`'{}'`),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -213,6 +223,7 @@ export const serviceAreas = pgTable(
       sql`case ${t.kind}
             when 'radius' then ${t.centerLatitude} is not null and ${t.centerLongitude} is not null and ${t.radiusKm} is not null
             when 'regions' then array_length(${t.regions}, 1) is not null
+            when 'postal_codes' then array_length(${t.postalCodes}, 1) is not null
             else false
           end`,
     ),

@@ -17,6 +17,7 @@ export {
   webauthnCredentials,
 } from "@/core/auth/schema";
 export { apiKeys } from "@/core/apikeys/schema";
+export { attestations } from "@/core/attestations/schema";
 export {
   updateSettings,
   updateSnapshots,
@@ -157,6 +158,7 @@ export {
   dataRequests,
   dataRequestArtifacts,
   privacyRetentionExceptions,
+  mediaConsents,
 } from "@/core/privacy/schema";
 export {
   businessLocations,

@@ -22,6 +22,7 @@ import agentPlaybookServices from "@/core/agents/playbooks";
 import agentPlaybookEvents from "@/core/agents/playbook-events";
 import agentPlaybookSchedules from "@/core/agents/playbook-schedule";
 import apiKeyServices from "@/core/apikeys/service";
+import attestationServices from "@/core/attestations/service";
 import connectionServices from "@/core/connections/service";
 import connectionGrantServices from "@/core/connections/grants";
 import calendarOAuthServices from "@/core/connections/calendar-oauth";
@@ -38,6 +39,7 @@ import duplicateServices from "@/core/contacts/duplicates";
 import organizationServices from "@/core/contacts/organizations";
 import relationshipServices from "@/core/contacts/relationships";
 import privacyServices from "@/core/privacy/service";
+import mediaConsentServices from "@/core/privacy/media-consent";
 import portalServices from "@/core/portal/service";
 import doctorServices from "@/core/doctor/service";
 import eventServices from "@/core/events/service";
@@ -49,6 +51,7 @@ import demoServices from "@/core/demo/service";
 import demoFixtureServices from "@/core/demo/fixtures";
 import invitationServices from "@/core/invitations/service";
 import locationServices from "@/core/locations/service";
+import coverageServices from "@/core/locations/coverage";
 import mailServices from "@/core/mail/service";
 import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
@@ -109,6 +112,7 @@ const services: Service[] = [
   ...agentPlaybookEvents,
   ...agentPlaybookSchedules,
   ...apiKeyServices,
+  ...attestationServices,
   ...connectionServices,
   ...connectionGrantServices,
   ...calendarOAuthServices,
@@ -140,6 +144,8 @@ const services: Service[] = [
   ...organizationServices,
   ...relationshipServices,
   ...privacyServices,
+  ...mediaConsentServices,
+  ...coverageServices,
   ...portalServices,
   ...doctorServices,
   ...eventServices,

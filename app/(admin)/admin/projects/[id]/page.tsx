@@ -12,6 +12,10 @@ import { listAssets } from "@/core/media/service";
 import { listContacts } from "@/core/contacts/service";
 import { listProducts } from "@/modules/catalog/service";
 import { getProject } from "@/modules/projects/service";
+import {
+  mediaConsentHistory,
+  mediaConsentState,
+} from "@/core/privacy/media-consent";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { domainOrNull } from "../../../read-helpers";
@@ -56,7 +60,7 @@ const TASK_TONES: Record<string, Tone> = {
 
 const STATUSES = ["enquiry", "quoted", "active", "on_hold", "complete", "cancelled"];
 const LINK_KINDS = ["quote", "contract", "booking", "invoice", "rental", "form_submission"];
-const FILE_ROLES = ["hero", "gallery", "before", "after", "process", "detail", "document"];
+const FILE_ROLES = ["hero", "gallery", "before", "after", "series", "process", "detail", "document"];
 const CONSENT_METHODS = ["contract", "email", "written", "verbal", "other"];
 const TESTIMONIAL_STATUSES = ["draft", "published", "withdrawn"];
 
@@ -78,6 +82,16 @@ export default async function ProjectPage({
 }) {
   const actor = await requireStaffActor("projects");
   const { id } = await params;
+  // Consent is a ledger now (C8.16), so the page asks what currently stands
+  // rather than reading a column that a revoke would have blanked.
+  const consent = await mediaConsentState
+    .call({ subjectKind: "project", subjectId: id }, actor)
+    .catch(() => ({ live: false, reason: "none" as const, decision: null }));
+  // Every decision anybody made, because a permission that was given and later
+  // taken back is two facts about this work, not one state.
+  const consentHistory = await mediaConsentHistory
+    .call({ subjectKind: "project", subjectId: id }, actor)
+    .catch(() => []);
   const [t, project, query, library, services, people] = await Promise.all([
     getT(),
     domainOrNull(getProject.call({ id }, actor)),
@@ -154,11 +168,11 @@ export default async function ProjectPage({
           {project.contactId ? (
             <div className="grid max-w-prose gap-3 rounded-md border border-rule p-3">
               <p className="text-sm font-semibold">{t("projects.caseStudy.clientConsent")}</p>
-              {project.clientConsentGivenAt ? (
+              {consent.live ? (
                 <div className="flex flex-wrap items-center gap-3 text-sm">
                   <Pill tone="success">{t("projects.caseStudy.consentRecorded")}</Pill>
                   <span className="text-ink-muted">
-                    {t(`projects.consent.${project.clientConsentMethod}`)}
+                    {t(`projects.consent.${consent.decision!.method}`)}
                   </span>
                   <form action={projectConsentAction} className="ms-auto">
                     <input type="hidden" name="id" value={project.id} />
@@ -172,6 +186,13 @@ export default async function ProjectPage({
                 <form action={projectConsentAction} className="grid gap-3 sm:grid-cols-2">
                   <input type="hidden" name="id" value={project.id} />
                   <input type="hidden" name="intent" value="record" />
+                  {consent.reason === "withdrawn" || consent.reason === "lapsed" ? (
+                    // Never-given, withdrawn and lapsed all block publishing,
+                    // but an owner needs to know which of the three this is.
+                    <p className="text-sm text-ink-muted sm:col-span-2">
+                      {t(`projects.caseStudy.consent${consent.reason === "withdrawn" ? "Withdrawn" : "Lapsed"}`)}
+                    </p>
+                  ) : null}
                   <label className="grid gap-1 text-sm">
                     <span className="text-ink-muted">{t("projects.caseStudy.consentMethod")}</span>
                     <select name="method" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
@@ -184,9 +205,50 @@ export default async function ProjectPage({
                     <span className="text-ink-muted">{t("projects.caseStudy.consentNote")}</span>
                     <input name="note" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
                   </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="text-ink-muted">{t("projects.caseStudy.consentExpiry")}</span>
+                    <input
+                      type="date"
+                      name="expiresAt"
+                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    />
+                  </label>
                   <div><Button type="submit" variant="quiet">{t("projects.caseStudy.recordConsent")}</Button></div>
                 </form>
               )}
+              {consentHistory.length ? (
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-ink-muted">
+                    {t("projects.caseStudy.consentHistory", { count: consentHistory.length })}
+                  </summary>
+                  <ul className="mt-2 grid list-none gap-1 p-0">
+                    {consentHistory.map((decision) => (
+                      <li key={decision.id} className="flex flex-wrap items-baseline gap-2 text-xs">
+                        <Pill tone={decision.state === "granted" ? "success" : "neutral"}>
+                          {t(`projects.caseStudy.consent.${decision.state}`)}
+                        </Pill>
+                        <span className="text-ink-muted">
+                          {t(`projects.consent.${decision.method}`)}
+                        </span>
+                        <time
+                          dateTime={decision.effectiveAt.toISOString()}
+                          className="font-mono text-ink-muted tabular-nums"
+                        >
+                          {decision.effectiveAt.toISOString().slice(0, 10)}
+                        </time>
+                        {decision.expiresAt ? (
+                          <span className="text-ink-muted">
+                            {t("projects.caseStudy.consentUntil", {
+                              date: decision.expiresAt.toISOString().slice(0, 10),
+                            })}
+                          </span>
+                        ) : null}
+                        {decision.note ? <span className="text-ink-muted">{decision.note}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
             </div>
           ) : null}
         </CardBody>
@@ -400,6 +462,19 @@ export default async function ProjectPage({
                     <Pill tone="neutral">{t(`projects.file.${file.role}`)}</Pill>
                     <span>{asset?.filename ?? file.assetId}</span>
                     {file.pairKey ? <span className="text-ink-muted">{file.pairKey}</span> : null}
+                    {file.seriesKey ? (
+                      <span className="text-ink-muted">{file.seriesKey}</span>
+                    ) : null}
+                    {file.capturedAt ? (
+                      // The date it was taken, which is what the series is
+                      // ordered by — not the date somebody got round to filing.
+                      <time
+                        dateTime={file.capturedAt.toISOString()}
+                        className="font-mono text-xs text-ink-muted tabular-nums"
+                      >
+                        {file.capturedAt.toISOString().slice(0, 10)}
+                      </time>
+                    ) : null}
                     {file.caption ? <span className="text-ink-muted">{file.caption}</span> : null}
                     <form action={detachProjectFileAction} className="ms-auto">
                       <input type="hidden" name="projectId" value={project.id} />
@@ -433,12 +508,21 @@ export default async function ProjectPage({
               <input name="pairKey" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.seriesKey")}</span>
+              <input name="seriesKey" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-ink-muted">{t("projects.caseStudy.capturedAt")}</span>
+              <input type="date" name="capturedAt" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+            </label>
+            <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.caption")}</span>
               <input name="caption" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
             </label>
             <div><Button type="submit" variant="quiet">{t("projects.caseStudy.attachMedia")}</Button></div>
           </form>
           <p className="max-w-prose text-sm text-ink-muted">{t("projects.caseStudy.pairHint")}</p>
+          <p className="max-w-prose text-sm text-ink-muted">{t("projects.caseStudy.seriesHint")}</p>
         </CardBody>
       </Card>
 

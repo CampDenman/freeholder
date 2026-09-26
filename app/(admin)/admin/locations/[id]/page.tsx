@@ -121,6 +121,7 @@ export default async function LocationPage({
               centerLongitude: area?.centerLongitude ?? "",
               radiusKm: area?.radiusKm ?? "",
               regions: (area?.regions ?? []).join(", "),
+              postalCodes: (area?.postalCodes ?? []).join(", "),
             }}
           />
           <div className="flex items-center gap-3 pt-2">

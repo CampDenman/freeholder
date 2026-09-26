@@ -1139,6 +1139,10 @@ export async function saveServiceAreaAction(
     .split(/[\n,]/)
     .map((line) => line.trim())
     .filter(Boolean);
+  const postalCodes = field(form, "postalCodes")
+    .split(/[\n,]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const latitude = optionalNumber(form, "centerLatitude");
   const longitude = optionalNumber(form, "centerLongitude");
   const radiusKm = optionalNumber(form, "radiusKm");
@@ -1146,11 +1150,14 @@ export async function saveServiceAreaAction(
   let area:
     | { kind: "radius"; centerLatitude: number; centerLongitude: number; radiusKm: number }
     | { kind: "regions"; regions: string[] }
+    | { kind: "postal_codes"; postalCodes: string[] }
     | null = null;
   if (kind === "radius" && latitude !== undefined && longitude !== undefined && radiusKm) {
     area = { kind: "radius", centerLatitude: latitude, centerLongitude: longitude, radiusKm };
   } else if (kind === "regions" && regions.length > 0) {
     area = { kind: "regions", regions };
+  } else if (kind === "postal_codes" && postalCodes.length > 0) {
+    area = { kind: "postal_codes", postalCodes };
   }
 
   try {

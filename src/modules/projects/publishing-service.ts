@@ -5,12 +5,17 @@
 // A publish copies normalized project facts and the owner-authored block tree
 // into a CMS page. The public page is therefore a snapshot: editing tomorrow's
 // draft cannot alter today's site until the owner publishes again.
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { assets } from "@/core/media/schema";
 import { contacts } from "@/core/contacts/schema";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { defineService, getService, ServiceError, type Actor, type ServiceContext } from "@/core/service";
+import {
+  grantMediaConsent,
+  liveConsent,
+  withdrawMediaConsent,
+} from "@/core/privacy/media-consent";
 import { getBusiness } from "@/core/settings/service";
 import { blockTreeSchema } from "@/modules/cms/blocks/registry";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -341,6 +346,14 @@ export const recordProjectConsent = defineService({
     id,
     method: consentMethod,
     note: z.string().trim().max(1_000).nullish(),
+    /**
+     * When the permission lapses, if it was given for a period.
+     *
+     * Optional because most releases are open-ended, and present because
+     * consent that has quietly run out reads exactly like consent that still
+     * holds unless something can say otherwise.
+     */
+    expiresAt: z.coerce.date().optional(),
   }),
   output: row({ id: uuid, givenAt: timestamp, method: consentMethod }),
   handler: async (input, ctx) => {
@@ -349,23 +362,23 @@ export const recordProjectConsent = defineService({
     if (!project.contactId) {
       throw new ServiceError("validation", "Internal work does not need client publication consent.");
     }
-    const [updated] = await ctx.tx
+    // A decision in the ledger, not three columns on the project (C8.16).
+    // Recording the same permission twice is neither an error nor a duplicate:
+    // it is what happens when a client re-signs, and both signings occurred.
+    const decision = await ctx.call(grantMediaConsent, {
+      contactId: project.contactId,
+      subjectKind: "project" as const,
+      subjectId: project.id,
+      method: input.method,
+      note: input.note ?? undefined,
+      expiresAt: input.expiresAt,
+    });
+    await ctx.tx
       .update(projects)
-      .set({
-        clientConsentGivenAt: sql`now()`,
-        clientConsentMethod: input.method,
-        clientConsentNote: input.note ?? null,
-        version: project.version + 1,
-        updatedAt: sql`now()`,
-      })
-      .where(eq(projects.id, project.id))
-      .returning({
-        id: projects.id,
-        givenAt: projects.clientConsentGivenAt,
-        method: projects.clientConsentMethod,
-      });
+      .set({ version: project.version + 1, updatedAt: sql`now()` })
+      .where(eq(projects.id, project.id));
     ctx.setSubject("project", project.id);
-    return { id: updated!.id, givenAt: updated!.givenAt!, method: updated!.method! };
+    return { id: project.id, givenAt: decision.effectiveAt, method: input.method };
   },
 });
 
@@ -528,11 +541,16 @@ export const publishCaseStudy = defineService({
     if (project.status !== "complete") {
       throw new ServiceError("validation", "Finish this project before publishing its case study.");
     }
-    if (project.contactId && !project.clientConsentGivenAt) {
-      throw new ServiceError(
-        "validation",
-        "Record the client's publication permission before publishing their work.",
-      );
+    if (project.contactId) {
+      // Withdrawn, lapsed and never-given are three different situations that
+      // must not be told apart here: all three mean do not publish.
+      const consent = await liveConsent(ctx.tx, "project", project.id);
+      if (!consent) {
+        throw new ServiceError(
+          "validation",
+          "Record the client's publication permission before publishing their work. If it was given and has since been withdrawn or has lapsed, it has to be given again.",
+        );
+      }
     }
     const blocks = await snapshotBlocks(ctx, project);
     await ensurePortfolioIndex(ctx);
@@ -618,12 +636,18 @@ export const revokeProjectConsent = defineService({
     if (project.publicPageId && project.publicationStatus === "published") {
       await ctx.callAsSystem(publishPage, { id: project.publicPageId, published: false });
     }
+    // Appended, not erased. What was granted stays granted in the record;
+    // what changed is that it no longer stands. Before C8.16 this set three
+    // columns back to NULL, and a business that had published lawfully for
+    // months could no longer show that it had.
+    await ctx.call(withdrawMediaConsent, {
+      subjectKind: "project" as const,
+      subjectId: project.id,
+      method: "other" as const,
+    });
     await ctx.tx
       .update(projects)
       .set({
-        clientConsentGivenAt: null,
-        clientConsentMethod: null,
-        clientConsentNote: null,
         publicationStatus: "draft",
         publishedAt: null,
         version: project.version + 1,
@@ -632,6 +656,67 @@ export const revokeProjectConsent = defineService({
       .where(eq(projects.id, project.id));
     ctx.setSubject("project", project.id);
     return { id: project.id };
+  },
+});
+
+
+/**
+ * Take published client work offline the moment its permission stops standing
+ * (C8.16).
+ *
+ * The publish gate already refuses work whose consent has lapsed, but a gate
+ * only fires when somebody pushes on it. Consent given until the end of March
+ * does not announce itself on the first of April, so without this a case study
+ * stays up indefinitely on the strength of a permission that expired — which
+ * is the same failure as never having asked, arriving late.
+ *
+ * Deliberately narrow: it unpublishes and says so. It does not delete the
+ * work, touch the consent ledger, or decide anything an owner has not already
+ * decided. The consent record is what changed; this is only the consequence.
+ */
+export const sweepLapsedConsent = defineService({
+  name: "projects.sweepLapsedConsent",
+  summary: "Unpublish client work whose publication permission no longer stands.",
+  kind: "mutation",
+  permission: "system",
+  input: z.object({}),
+  output: z.object({ unpublished: z.number().int() }),
+  handler: async (_input, ctx) => {
+    const live = await ctx.tx
+      .select({
+        id: projects.id,
+        publicPageId: projects.publicPageId,
+        version: projects.version,
+      })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.publicationStatus, "published"),
+          isNotNull(projects.contactId),
+        ),
+      );
+
+    let unpublished = 0;
+    for (const work of live) {
+      // Withdrawn and lapsed both land here. The sweep does not care which:
+      // neither is a permission, and the page comes down either way.
+      if (await liveConsent(ctx.tx, "project", work.id)) continue;
+      if (work.publicPageId) {
+        await ctx.callAsSystem(publishPage, { id: work.publicPageId, published: false });
+      }
+      await ctx.tx
+        .update(projects)
+        .set({
+          publicationStatus: "draft",
+          publishedAt: null,
+          version: work.version + 1,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(projects.id, work.id));
+      ctx.queueEvent("projects.consentLapsed", { projectId: work.id });
+      unpublished += 1;
+    }
+    return { unpublished };
   },
 });
 
@@ -681,4 +766,5 @@ export default [
   publishCaseStudy,
   unpublishCaseStudy,
   publicProjectsForService,
+  sweepLapsedConsent,
 ];

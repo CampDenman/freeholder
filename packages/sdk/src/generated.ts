@@ -93,6 +93,25 @@ export const SERVICE_NAMES = [
   "apikeys.list",
   "apikeys.revoke",
   "apikeys.scopes",
+  "assessments.close",
+  "assessments.create",
+  "assessments.deleteBand",
+  "assessments.deleteEscalation",
+  "assessments.get",
+  "assessments.getPublic",
+  "assessments.list",
+  "assessments.loadDemoFixture",
+  "assessments.publish",
+  "assessments.purge",
+  "assessments.purgeDemoFixture",
+  "assessments.remove",
+  "assessments.respond",
+  "assessments.responses",
+  "assessments.restore",
+  "assessments.saveBand",
+  "assessments.saveEscalation",
+  "assessments.update",
+  "assessments.verifyDemoFixture",
   "assistant.answer",
   "assistant.deleteKnowledge",
   "assistant.dismissGap",
@@ -106,6 +125,12 @@ export const SERVICE_NAMES = [
   "assistant.settings",
   "assistant.turns",
   "assistant.updateSettings",
+  "attestations.correct",
+  "attestations.current",
+  "attestations.history",
+  "attestations.list",
+  "attestations.record",
+  "attestations.withdraw",
   "audiences.create",
   "audiences.link",
   "audiences.list",
@@ -208,6 +233,17 @@ export const SERVICE_NAMES = [
   "builder.rejectCode",
   "builder.rollback",
   "builder.status",
+  "calculators.close",
+  "calculators.compute",
+  "calculators.create",
+  "calculators.get",
+  "calculators.getPublic",
+  "calculators.list",
+  "calculators.publish",
+  "calculators.purge",
+  "calculators.remove",
+  "calculators.restore",
+  "calculators.update",
   "calendars.archive",
   "calendars.create",
   "calendars.feed",
@@ -818,6 +854,7 @@ export const SERVICE_NAMES = [
   "invoicing.viewCustomerInvoice",
   "invoicing.void",
   "invoicing.voidCreditNote",
+  "locations.checkCoverage",
   "locations.create",
   "locations.createSetupLocation",
   "locations.get",
@@ -1031,8 +1068,12 @@ export const SERVICE_NAMES = [
   "privacy.createMyDataRequest",
   "privacy.downloadMyDataRequestArtifact",
   "privacy.getMyProfile",
+  "privacy.grantMediaConsent",
   "privacy.listMyDataRequests",
+  "privacy.mediaConsent",
+  "privacy.mediaConsentHistory",
   "privacy.setMyMarketingPreference",
+  "privacy.withdrawMediaConsent",
   "projects.addTask",
   "projects.addTestimonial",
   "projects.addToCollection",
@@ -1678,6 +1719,82 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { area: string; family: string; services: { name: string; summary: string; kind: "query" | "mutation"; [key: string]: unknown }[]; [key: string]: unknown }[];
   };
+  "assessments.close": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; intro: string | null; questions: unknown[]; destination: "contact" | "none"; notify: string[]; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "assessments.create": {
+    input: { slug: string; name: string; intro?: string; questions?: { key: string; label: string; kind: "single" | "multi" | "scale"; help?: string; required?: boolean; options: { key: string; label: string; score?: number }[] }[]; destination?: "contact" | "none"; notify?: string[] };
+    output: { id: string; slug: string; name: string; intro: string | null; questions: unknown[]; destination: "contact" | "none"; notify: string[]; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "assessments.deleteBand": {
+    input: { assessmentId: string; id: string };
+    output: { ok: true };
+  };
+  "assessments.deleteEscalation": {
+    input: { assessmentId: string; id: string };
+    output: { ok: true };
+  };
+  "assessments.get": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; intro: string | null; questions: unknown[]; destination: "contact" | "none"; notify: string[]; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; bands: { id: string; assessmentId: string; key: string; label: string; body: string; minScore: number; maxScore: number; ordinal: number; [key: string]: unknown }[]; escalations: { id: string; assessmentId: string; questionKey: string; optionKey: string; instruction: string; ordinal: number; [key: string]: unknown }[]; responseCount: number; [key: string]: unknown };
+  };
+  "assessments.getPublic": {
+    input: { slug: string };
+    output: { id: string; slug: string; name: string; intro: string | null; status: "draft" | "active" | "closed"; questions: unknown[]; bands: { key: string; label: string; body: string }[]; escalations: { id: string; instruction: string }[] } | null;
+  };
+  "assessments.list": {
+    input: Record<string, never>;
+    output: { id: string; slug: string; name: string; intro: string | null; questions: unknown[]; destination: "contact" | "none"; notify: string[]; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+  };
+  "assessments.loadDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { records: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+  };
+  "assessments.publish": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; intro: string | null; questions: unknown[]; destination: "contact" | "none"; notify: string[]; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "assessments.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
+  };
+  "assessments.purgeDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { purged: { subjectType: string; subjectId: string }[] };
+  };
+  "assessments.remove": {
+    input: { id: string };
+    output: { id: string; [key: string]: unknown };
+  };
+  "assessments.respond": {
+    input: { slug: string; answers: { [key: string]: string | string[] }; respondent?: { email?: string; name?: string }; idempotencyKey?: string; sourceUrl?: string };
+    output: { ok: true; responseId: string; repeat: boolean; score: number; band: { key: string; label: string; body: string }; escalation: { id: string; instruction: string } | null };
+  };
+  "assessments.responses": {
+    input: { assessmentId: string; limit?: number };
+    output: { id: string; contactId: string | null; score: number; bandLabel: string; escalated: boolean; createdAt: string; [key: string]: unknown }[];
+  };
+  "assessments.restore": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; intro: string | null; questions: unknown[]; destination: "contact" | "none"; notify: string[]; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "assessments.saveBand": {
+    input: { assessmentId: string; id?: string; key: string; label: string; body: string; minScore: number; maxScore: number; ordinal?: number };
+    output: { id: string; assessmentId: string; key: string; label: string; body: string; minScore: number; maxScore: number; ordinal: number; [key: string]: unknown };
+  };
+  "assessments.saveEscalation": {
+    input: { assessmentId: string; id?: string; questionKey: string; optionKey: string; instruction: string; ordinal?: number };
+    output: { id: string; assessmentId: string; questionKey: string; optionKey: string; instruction: string; ordinal: number; [key: string]: unknown };
+  };
+  "assessments.update": {
+    input: { id: string; name?: string; intro?: string | null; questions?: { key: string; label: string; kind: "single" | "multi" | "scale"; help?: string; required?: boolean; options: { key: string; label: string; score?: number }[] }[]; destination?: "contact" | "none"; notify?: string[] };
+    output: { id: string; slug: string; name: string; intro: string | null; questions: unknown[]; destination: "contact" | "none"; notify: string[]; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "assessments.verifyDemoFixture": {
+    input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
+    output: { outcomes: { key: string; achieved: boolean; detail?: string }[] };
+  };
   "assistant.answer": {
     input: { token: string };
     output: { status: "off" | "nothing_to_answer" | "already_attempted" | "refused" | "unconfigured" | "failed" | "answered"; reply: string | null; action: string | null; [key: string]: unknown };
@@ -1729,6 +1846,30 @@ export interface ServiceCatalog {
   "assistant.updateSettings": {
     input: { enabled: boolean; provider: "none" | "anthropic" | "openai"; model?: string | null; baseUrl?: string | null; credentialRef?: string | null; inputCentsPerMillion?: number | null; outputCentsPerMillion?: number | null; maxOutputTokens?: number; displayName?: string | null; spendCapCents?: number; spendPeriod?: "day" | "week" | "month"; repliesPerConversation?: number; repliesPerHour?: number; tone?: "professional" | "friendly" | "brief"; refuseTopics?: string[]; escalateTopics?: string[]; contactFormPath?: string | null };
     output: { enabled: boolean; provider: "none" | "anthropic" | "openai"; model: string | null; baseUrl: string | null; credentialRef: string | null; credentialPresent: boolean; inputCentsPerMillion: number | null; outputCentsPerMillion: number | null; maxOutputTokens: number; displayName: string | null; spendCapCents: number; spendPeriod: "day" | "week" | "month"; repliesPerConversation: number; repliesPerHour: number; tone: "professional" | "friendly" | "brief"; refuseTopics: string[]; escalateTopics: string[]; contactFormPath: string | null; lastError: string | null; priced: boolean; spentCents: number; remainingCents: number; repliesThisHour: number; ready: boolean; [key: string]: unknown };
+  };
+  "attestations.correct": {
+    input: { key: string; subject?: { kind?: string; id?: string }; value: unknown; source: string; asOf: string; validUntil?: string; note: string };
+    output: { id: string; key: string; subjectKind: string | null; subjectId: string | null; value: unknown; source: string; asOf: string; validUntil: string | null; publishedAt: string | null; withdrawnAt: string | null; supersededAt: string | null; correctionNote: string | null; createdAt: string; [key: string]: unknown };
+  };
+  "attestations.current": {
+    input: { key: string; subject?: { kind?: string; id?: string } };
+    output: { id: string; key: string; value: unknown; source: string; asOf: string; validUntil: string | null; stale: boolean } | null;
+  };
+  "attestations.history": {
+    input: { key: string; subject?: { kind?: string; id?: string } };
+    output: { id: string; key: string; subjectKind: string | null; subjectId: string | null; value: unknown; source: string; asOf: string; validUntil: string | null; publishedAt: string | null; withdrawnAt: string | null; supersededAt: string | null; correctionNote: string | null; createdAt: string; [key: string]: unknown }[];
+  };
+  "attestations.list": {
+    input: { key?: string };
+    output: { id: string; key: string; subjectKind: string | null; subjectId: string | null; value: unknown; source: string; asOf: string; validUntil: string | null; publishedAt: string | null; withdrawnAt: string | null; supersededAt: string | null; correctionNote: string | null; createdAt: string; [key: string]: unknown }[];
+  };
+  "attestations.record": {
+    input: { key: string; subject?: { kind?: string; id?: string }; value: unknown; source: string; asOf: string; validUntil?: string; publish?: boolean };
+    output: { id: string; key: string; subjectKind: string | null; subjectId: string | null; value: unknown; source: string; asOf: string; validUntil: string | null; publishedAt: string | null; withdrawnAt: string | null; supersededAt: string | null; correctionNote: string | null; createdAt: string; [key: string]: unknown };
+  };
+  "attestations.withdraw": {
+    input: { id: string; reason?: string };
+    output: { id: string; key: string; subjectKind: string | null; subjectId: string | null; value: unknown; source: string; asOf: string; validUntil: string | null; publishedAt: string | null; withdrawnAt: string | null; supersededAt: string | null; correctionNote: string | null; createdAt: string; [key: string]: unknown };
   };
   "audiences.create": {
     input: { name: string; who?: "public" | "token" | "tag" | "signed_in"; contactTag?: string | null; hours?: "calendar" | "custom" | "any"; minNoticeMin?: number | null; bookingHorizonDays?: number | null; bufferBeforeMin?: number | null; bufferAfterMin?: number | null; position?: number };
@@ -2137,6 +2278,50 @@ export interface ServiceCatalog {
   "builder.status": {
     input: Record<string, never>;
     output: { adapter: string; configured: boolean; monthlyTokenBudget: number; usedTokens: number; remainingTokens: number; maxOutputTokensPerProposal: number };
+  };
+  "calculators.close": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "calculators.compute": {
+    input: { slug: string; answers: { [key: string]: number } };
+    output: { ok: boolean; refusal: string | null; value: number | null; resultLabel: string; resultUnit: string | null; assumptions: string; basedOn: { key: string; value: number; source: string; asOf: string }[]; oldestAsOf: string | null };
+  };
+  "calculators.create": {
+    input: { slug: string; name: string; intro?: string; inputs?: { key: string; label: string; help?: string; min?: number; max?: number; unit?: string }[]; steps: { key: string; label: string; op: "add" | "subtract" | "multiply" | "divide" | "percentOf" | "min" | "max"; first: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string }; second: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string } }[]; resultLabel: string; resultUnit?: string; assumptions: string };
+    output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "calculators.get": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "calculators.getPublic": {
+    input: { slug: string };
+    output: { slug: string; name: string; intro: string | null; inputs: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed" } | null;
+  };
+  "calculators.list": {
+    input: Record<string, never>;
+    output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+  };
+  "calculators.publish": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "calculators.purge": {
+    input: { id: string; confirmation: "PURGE" };
+    output: { id: string; [key: string]: unknown };
+  };
+  "calculators.remove": {
+    input: { id: string };
+    output: { id: string; [key: string]: unknown };
+  };
+  "calculators.restore": {
+    input: { id: string };
+    output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "calculators.update": {
+    input: { id: string; name: string; intro?: string; inputs?: { key: string; label: string; help?: string; min?: number; max?: number; unit?: string }[]; steps: { key: string; label: string; op: "add" | "subtract" | "multiply" | "divide" | "percentOf" | "min" | "max"; first: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string }; second: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string } }[]; resultLabel: string; resultUnit?: string; assumptions: string };
+    output: { id: string; slug: string; name: string; intro: string | null; inputs: unknown[]; steps: unknown[]; resultLabel: string; resultUnit: string | null; assumptions: string; status: "draft" | "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "calendars.archive": {
     input: { id: string; archived?: boolean };
@@ -4578,6 +4763,10 @@ export interface ServiceCatalog {
     input: { id: string; reason: string };
     output: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "locations.checkCoverage": {
+    input: { postalCode: string; locationId?: string };
+    output: { answer: "covered" | "outside" | "unconfirmed"; postalCode: string; locationId: string | null; locationName: string | null };
+  };
   "locations.create": {
     input: { name: string; slug: string; schemaType?: string | null; street?: string | null; unit?: string | null; city?: string | null; region?: string | null; postalCode?: string | null; country: string; latitude?: number | null; longitude?: number | null; phone?: string | null; email?: string | null; googleBusinessProfileUrl?: string | null; sameAs?: string[]; priceRange?: string | null; timezone?: string | null; status?: "visible" | "hidden"; isPrimary?: boolean };
     output: { id: string; name: string; slug: string; isPrimary: boolean; schemaType: string | null; street: string | null; unit: string | null; city: string | null; region: string | null; postalCode: string | null; country: string; latitude: string | null; longitude: string | null; phone: string | null; email: string | null; googleBusinessProfileUrl: string | null; sameAs: string[]; priceRange: string | null; timezone: string | null; status: "visible" | "hidden"; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -4611,7 +4800,7 @@ export interface ServiceCatalog {
     output: { id: string; name: string; slug: string; isPrimary: boolean; schemaType: string | null; street: string | null; unit: string | null; city: string | null; region: string | null; postalCode: string | null; country: string; latitude: string | null; longitude: string | null; phone: string | null; email: string | null; googleBusinessProfileUrl: string | null; sameAs: string[]; priceRange: string | null; timezone: string | null; status: "visible" | "hidden"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "locations.setServiceArea": {
-    input: { locationId: string; area: ({ kind: "radius"; centerLatitude: number; centerLongitude: number; radiusKm: number } | { kind: "regions"; regions: string[] }) | null };
+    input: { locationId: string; area: ({ kind: "radius"; centerLatitude: number; centerLongitude: number; radiusKm: number } | { kind: "regions"; regions: string[] } | { kind: "postal_codes"; postalCodes: string[] }) | null };
     output: { id: string; locationId: string; kind: "radius" | "regions"; centerLatitude: string | null; centerLongitude: string | null; radiusKm: string | null; regions: string[]; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "locations.update": {
@@ -5430,13 +5619,29 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { effective: { purpose: "marketing" | "analytics" | "data_processing"; channel: ("email" | "sms" | "push" | "web") | null; state: "granted" | "denied" | "withdrawn" | "expired"; record: { id: string; contactId: string; purpose: "marketing" | "analytics" | "data_processing"; channel: ("email" | "sms" | "push" | "web") | null; state: "granted" | "denied" | "withdrawn"; method: "form" | "preference_center" | "double_opt_in" | "verbal" | "written" | "contract" | "import" | "system"; termsVersion: string | null; sourceUrl: string | null; ip: string | null; evidence: unknown; actor: string; occurredAt: string; expiresAt: string | null; createdAt: string; [key: string]: unknown } | null; [key: string]: unknown }[]; history: { id: string; contactId: string; purpose: "marketing" | "analytics" | "data_processing"; channel: ("email" | "sms" | "push" | "web") | null; state: "granted" | "denied" | "withdrawn"; method: "form" | "preference_center" | "double_opt_in" | "verbal" | "written" | "contract" | "import" | "system"; termsVersion: string | null; sourceUrl: string | null; ip: string | null; evidence: unknown; actor: string; occurredAt: string; expiresAt: string | null; createdAt: string; [key: string]: unknown }[]; contact: { id: string; name: string; email: string | null; phone: string | null; preferredLocale: string | null; timezone: string | null; country: string | null; [key: string]: unknown } };
   };
+  "privacy.grantMediaConsent": {
+    input: { contactId: string; subjectKind: "project"; subjectId: string; method: "contract" | "form" | "email" | "written" | "verbal" | "other"; surfaces?: ("project" | "portfolio" | "service" | "social" | "advertising")[]; note?: string; evidenceAssetId?: string; effectiveAt?: string; expiresAt?: string };
+    output: { id: string; contactId: string; subjectKind: string; subjectId: string; state: "granted" | "withdrawn"; method: "contract" | "form" | "email" | "written" | "verbal" | "other"; surfaces: string[]; note: string | null; effectiveAt: string; expiresAt: string | null; createdAt: string; [key: string]: unknown };
+  };
   "privacy.listMyDataRequests": {
     input: Record<string, never>;
     output: { request: { id: string; contactId: string; kind: "access" | "export" | "correction" | "erasure"; status: "submitted" | "verified" | "in_progress" | "completed" | "partially_completed" | "denied" | "cancelled"; jurisdiction: string | null; details: unknown; requestedBy: string; verificationMethod: string | null; verifiedAt: string | null; responseDueAt: string; resolution: string | null; fulfilledAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; artifact: { id: string | null; filename: string | null; sha256: string | null; expiresAt: string | null; [key: string]: unknown } | null; [key: string]: unknown }[];
   };
+  "privacy.mediaConsent": {
+    input: { subjectKind: "project"; subjectId: string };
+    output: { live: boolean; reason: "none" | "withdrawn" | "lapsed" | "future" | "live"; decision: { id: string; contactId: string; subjectKind: string; subjectId: string; state: "granted" | "withdrawn"; method: "contract" | "form" | "email" | "written" | "verbal" | "other"; surfaces: string[]; note: string | null; effectiveAt: string; expiresAt: string | null; createdAt: string; [key: string]: unknown } | null };
+  };
+  "privacy.mediaConsentHistory": {
+    input: { subjectKind: "project"; subjectId: string };
+    output: { id: string; contactId: string; subjectKind: string; subjectId: string; state: "granted" | "withdrawn"; method: "contract" | "form" | "email" | "written" | "verbal" | "other"; surfaces: string[]; note: string | null; effectiveAt: string; expiresAt: string | null; createdAt: string; [key: string]: unknown }[];
+  };
   "privacy.setMyMarketingPreference": {
     input: { channel: "email" | "sms" | "push"; state: "granted" | "withdrawn"; termsVersion: string };
     output: { contactId: string; preference: { id: string; contactId: string; purpose: "marketing" | "analytics" | "data_processing"; channel: ("email" | "sms" | "push" | "web") | null; state: "granted" | "denied" | "withdrawn"; method: "form" | "preference_center" | "double_opt_in" | "verbal" | "written" | "contract" | "import" | "system"; termsVersion: string | null; sourceUrl: string | null; ip: string | null; evidence: unknown; actor: string; occurredAt: string; expiresAt: string | null; createdAt: string; [key: string]: unknown } };
+  };
+  "privacy.withdrawMediaConsent": {
+    input: { subjectKind: "project"; subjectId: string; method: "contract" | "form" | "email" | "written" | "verbal" | "other"; note?: string; effectiveAt?: string };
+    output: { id: string; contactId: string; subjectKind: string; subjectId: string; state: "granted" | "withdrawn"; method: "contract" | "form" | "email" | "written" | "verbal" | "other"; surfaces: string[]; note: string | null; effectiveAt: string; expiresAt: string | null; createdAt: string; [key: string]: unknown };
   };
   "projects.addTask": {
     input: { projectId: string; title: string; assigneeUserId?: string | null; dueOn?: string | null };
@@ -5451,12 +5656,12 @@ export interface ServiceCatalog {
     output: { id: string; collectionId: string; projectId: string; position: number; [key: string]: unknown };
   };
   "projects.attachFile": {
-    input: { projectId: string; assetId: string; role?: "hero" | "gallery" | "before" | "after" | "process" | "detail" | "document"; pairKey?: string | null; caption?: string | null };
-    output: { id: string; projectId: string; assetId: string; role: "hero" | "gallery" | "before" | "after" | "process" | "detail" | "document"; pairKey: string | null; caption: string | null; position: number; [key: string]: unknown };
+    input: { projectId: string; assetId: string; role?: "hero" | "gallery" | "before" | "after" | "series" | "process" | "detail" | "document"; pairKey?: string | null; seriesKey?: string | null; capturedAt?: string | null; caption?: string | null };
+    output: { id: string; projectId: string; assetId: string; role: "hero" | "gallery" | "before" | "after" | "series" | "process" | "detail" | "document"; pairKey: string | null; seriesKey: string | null; capturedAt: string | null; caption: string | null; position: number; [key: string]: unknown };
   };
   "projects.create": {
     input: { title: string; slug?: string; contactId?: string | null; clientDisplayName?: string | null; summary?: string | null; ownerUserId?: string | null; locationId?: string | null; serviceProductIds?: string[]; startedOn?: string | null; notes?: string | null };
-    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; clientConsentGivenAt: string | null; clientConsentMethod: ("contract" | "email" | "written" | "verbal" | "other") | null; clientConsentNote: string | null; version: number; [key: string]: unknown };
+    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; [key: string]: unknown };
   };
   "projects.createCollection": {
     input: { name: string; slug?: string; kind: "portfolio" | "service" | "industry" | "season"; description?: string | null; coverAssetId?: string | null; position?: number };
@@ -5472,7 +5677,7 @@ export interface ServiceCatalog {
   };
   "projects.get": {
     input: { id: string };
-    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; clientConsentGivenAt: string | null; clientConsentMethod: ("contract" | "email" | "written" | "verbal" | "other") | null; clientConsentNote: string | null; version: number; contactName: string | null; links: { id: string; projectId: string; kind: "quote" | "contract" | "booking" | "invoice" | "rental" | "form_submission"; targetId: string; label: string | null; [key: string]: unknown }[]; tasks: { id: string; projectId: string; title: string; status: "open" | "doing" | "blocked" | "done" | "cancelled"; assigneeUserId: string | null; dueOn: string | null; position: number; doneAt: string | null; [key: string]: unknown }[]; outcomes: { id: string; projectId: string; label: string; value: string; unit: string | null; method: string | null; position: number; [key: string]: unknown }[]; files: { id: string; projectId: string; assetId: string; role: "hero" | "gallery" | "before" | "after" | "process" | "detail" | "document"; pairKey: string | null; caption: string | null; position: number; [key: string]: unknown }[]; testimonials: { id: string; projectId: string; contactId: string; displayName: string; role: string | null; body: string; rating: number | null; assetId: string | null; consentGivenAt: string; consentMethod: "contract" | "email" | "written" | "verbal" | "other"; consentNote: string | null; status: "draft" | "published" | "withdrawn"; displayLocations: string[]; [key: string]: unknown }[]; [key: string]: unknown } | null;
+    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; contactName: string | null; links: { id: string; projectId: string; kind: "quote" | "contract" | "booking" | "invoice" | "rental" | "form_submission"; targetId: string; label: string | null; [key: string]: unknown }[]; tasks: { id: string; projectId: string; title: string; status: "open" | "doing" | "blocked" | "done" | "cancelled"; assigneeUserId: string | null; dueOn: string | null; position: number; doneAt: string | null; [key: string]: unknown }[]; outcomes: { id: string; projectId: string; label: string; value: string; unit: string | null; method: string | null; position: number; [key: string]: unknown }[]; files: { id: string; projectId: string; assetId: string; role: "hero" | "gallery" | "before" | "after" | "series" | "process" | "detail" | "document"; pairKey: string | null; seriesKey: string | null; capturedAt: string | null; caption: string | null; position: number; [key: string]: unknown }[]; testimonials: { id: string; projectId: string; contactId: string; displayName: string; role: string | null; body: string; rating: number | null; assetId: string | null; consentGivenAt: string; consentMethod: "contract" | "email" | "written" | "verbal" | "other"; consentNote: string | null; status: "draft" | "published" | "withdrawn"; displayLocations: string[]; [key: string]: unknown }[]; [key: string]: unknown } | null;
   };
   "projects.getCollection": {
     input: { id: string };
@@ -5484,7 +5689,7 @@ export interface ServiceCatalog {
   };
   "projects.list": {
     input: { status?: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; contactId?: string; limit?: number };
-    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; clientConsentGivenAt: string | null; clientConsentMethod: ("contract" | "email" | "written" | "verbal" | "other") | null; clientConsentNote: string | null; version: number; contactName: string | null; openTasks: number; [key: string]: unknown }[];
+    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; contactName: string | null; openTasks: number; [key: string]: unknown }[];
   };
   "projects.listCollections": {
     input: Record<string, never>;
@@ -5507,7 +5712,7 @@ export interface ServiceCatalog {
     output: { id: string; href: string; pageId: string; [key: string]: unknown };
   };
   "projects.recordConsent": {
-    input: { id: string; method: "contract" | "email" | "written" | "verbal" | "other"; note?: string | null };
+    input: { id: string; method: "contract" | "email" | "written" | "verbal" | "other"; note?: string | null; expiresAt?: string };
     output: { id: string; givenAt: string; method: "contract" | "email" | "written" | "verbal" | "other"; [key: string]: unknown };
   };
   "projects.removeFromCollection": {
@@ -5560,7 +5765,7 @@ export interface ServiceCatalog {
   };
   "projects.update": {
     input: { id: string; title?: string; summary?: string | null; clientDisplayName?: string | null; status?: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId?: string | null; locationId?: string | null; serviceProductIds?: string[]; startedOn?: string | null; occurredOn?: string | null; notes?: string | null };
-    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; clientConsentGivenAt: string | null; clientConsentMethod: ("contract" | "email" | "written" | "verbal" | "other") | null; clientConsentNote: string | null; version: number; [key: string]: unknown };
+    output: { id: string; contactId: string | null; clientDisplayName: string | null; title: string; slug: string; summary: string | null; status: "enquiry" | "quoted" | "active" | "on_hold" | "complete" | "cancelled"; ownerUserId: string | null; locationId: string | null; serviceProductIds: string[]; startedOn: string | null; occurredOn: string | null; completedAt: string | null; notes: string | null; blocks: unknown; coverAssetId: string | null; featured: boolean; seo: unknown; publicationStatus: "draft" | "published"; publishedAt: string | null; publicPageId: string | null; version: number; [key: string]: unknown };
   };
   "projects.updateCaseStudySettings": {
     input: { id: string; coverAssetId?: string | null; featured: boolean; seo: { title?: string; description?: string } };
@@ -6686,6 +6891,27 @@ export interface FreeholderApi {
     revoke: (input: ServiceCatalog["apikeys.revoke"]["input"]) => Promise<ServiceCatalog["apikeys.revoke"]["output"]>;
     scopes: (input?: ServiceCatalog["apikeys.scopes"]["input"]) => Promise<ServiceCatalog["apikeys.scopes"]["output"]>;
   };
+  assessments: {
+    close: (input: ServiceCatalog["assessments.close"]["input"]) => Promise<ServiceCatalog["assessments.close"]["output"]>;
+    create: (input: ServiceCatalog["assessments.create"]["input"]) => Promise<ServiceCatalog["assessments.create"]["output"]>;
+    deleteBand: (input: ServiceCatalog["assessments.deleteBand"]["input"]) => Promise<ServiceCatalog["assessments.deleteBand"]["output"]>;
+    deleteEscalation: (input: ServiceCatalog["assessments.deleteEscalation"]["input"]) => Promise<ServiceCatalog["assessments.deleteEscalation"]["output"]>;
+    get: (input: ServiceCatalog["assessments.get"]["input"]) => Promise<ServiceCatalog["assessments.get"]["output"]>;
+    getPublic: (input: ServiceCatalog["assessments.getPublic"]["input"]) => Promise<ServiceCatalog["assessments.getPublic"]["output"]>;
+    list: (input?: ServiceCatalog["assessments.list"]["input"]) => Promise<ServiceCatalog["assessments.list"]["output"]>;
+    loadDemoFixture: (input: ServiceCatalog["assessments.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["assessments.loadDemoFixture"]["output"]>;
+    publish: (input: ServiceCatalog["assessments.publish"]["input"]) => Promise<ServiceCatalog["assessments.publish"]["output"]>;
+    purge: (input: ServiceCatalog["assessments.purge"]["input"]) => Promise<ServiceCatalog["assessments.purge"]["output"]>;
+    purgeDemoFixture: (input: ServiceCatalog["assessments.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["assessments.purgeDemoFixture"]["output"]>;
+    remove: (input: ServiceCatalog["assessments.remove"]["input"]) => Promise<ServiceCatalog["assessments.remove"]["output"]>;
+    respond: (input: ServiceCatalog["assessments.respond"]["input"]) => Promise<ServiceCatalog["assessments.respond"]["output"]>;
+    responses: (input: ServiceCatalog["assessments.responses"]["input"]) => Promise<ServiceCatalog["assessments.responses"]["output"]>;
+    restore: (input: ServiceCatalog["assessments.restore"]["input"]) => Promise<ServiceCatalog["assessments.restore"]["output"]>;
+    saveBand: (input: ServiceCatalog["assessments.saveBand"]["input"]) => Promise<ServiceCatalog["assessments.saveBand"]["output"]>;
+    saveEscalation: (input: ServiceCatalog["assessments.saveEscalation"]["input"]) => Promise<ServiceCatalog["assessments.saveEscalation"]["output"]>;
+    update: (input: ServiceCatalog["assessments.update"]["input"]) => Promise<ServiceCatalog["assessments.update"]["output"]>;
+    verifyDemoFixture: (input: ServiceCatalog["assessments.verifyDemoFixture"]["input"]) => Promise<ServiceCatalog["assessments.verifyDemoFixture"]["output"]>;
+  };
   assistant: {
     answer: (input: ServiceCatalog["assistant.answer"]["input"]) => Promise<ServiceCatalog["assistant.answer"]["output"]>;
     deleteKnowledge: (input: ServiceCatalog["assistant.deleteKnowledge"]["input"]) => Promise<ServiceCatalog["assistant.deleteKnowledge"]["output"]>;
@@ -6700,6 +6926,14 @@ export interface FreeholderApi {
     settings: (input?: ServiceCatalog["assistant.settings"]["input"]) => Promise<ServiceCatalog["assistant.settings"]["output"]>;
     turns: (input?: ServiceCatalog["assistant.turns"]["input"]) => Promise<ServiceCatalog["assistant.turns"]["output"]>;
     updateSettings: (input: ServiceCatalog["assistant.updateSettings"]["input"]) => Promise<ServiceCatalog["assistant.updateSettings"]["output"]>;
+  };
+  attestations: {
+    correct: (input: ServiceCatalog["attestations.correct"]["input"]) => Promise<ServiceCatalog["attestations.correct"]["output"]>;
+    current: (input: ServiceCatalog["attestations.current"]["input"]) => Promise<ServiceCatalog["attestations.current"]["output"]>;
+    history: (input: ServiceCatalog["attestations.history"]["input"]) => Promise<ServiceCatalog["attestations.history"]["output"]>;
+    list: (input?: ServiceCatalog["attestations.list"]["input"]) => Promise<ServiceCatalog["attestations.list"]["output"]>;
+    record: (input: ServiceCatalog["attestations.record"]["input"]) => Promise<ServiceCatalog["attestations.record"]["output"]>;
+    withdraw: (input: ServiceCatalog["attestations.withdraw"]["input"]) => Promise<ServiceCatalog["attestations.withdraw"]["output"]>;
   };
   audiences: {
     create: (input: ServiceCatalog["audiences.create"]["input"]) => Promise<ServiceCatalog["audiences.create"]["output"]>;
@@ -6818,6 +7052,19 @@ export interface FreeholderApi {
     rejectCode: (input: ServiceCatalog["builder.rejectCode"]["input"]) => Promise<ServiceCatalog["builder.rejectCode"]["output"]>;
     rollback: (input: ServiceCatalog["builder.rollback"]["input"]) => Promise<ServiceCatalog["builder.rollback"]["output"]>;
     status: (input?: ServiceCatalog["builder.status"]["input"]) => Promise<ServiceCatalog["builder.status"]["output"]>;
+  };
+  calculators: {
+    close: (input: ServiceCatalog["calculators.close"]["input"]) => Promise<ServiceCatalog["calculators.close"]["output"]>;
+    compute: (input: ServiceCatalog["calculators.compute"]["input"]) => Promise<ServiceCatalog["calculators.compute"]["output"]>;
+    create: (input: ServiceCatalog["calculators.create"]["input"]) => Promise<ServiceCatalog["calculators.create"]["output"]>;
+    get: (input: ServiceCatalog["calculators.get"]["input"]) => Promise<ServiceCatalog["calculators.get"]["output"]>;
+    getPublic: (input: ServiceCatalog["calculators.getPublic"]["input"]) => Promise<ServiceCatalog["calculators.getPublic"]["output"]>;
+    list: (input?: ServiceCatalog["calculators.list"]["input"]) => Promise<ServiceCatalog["calculators.list"]["output"]>;
+    publish: (input: ServiceCatalog["calculators.publish"]["input"]) => Promise<ServiceCatalog["calculators.publish"]["output"]>;
+    purge: (input: ServiceCatalog["calculators.purge"]["input"]) => Promise<ServiceCatalog["calculators.purge"]["output"]>;
+    remove: (input: ServiceCatalog["calculators.remove"]["input"]) => Promise<ServiceCatalog["calculators.remove"]["output"]>;
+    restore: (input: ServiceCatalog["calculators.restore"]["input"]) => Promise<ServiceCatalog["calculators.restore"]["output"]>;
+    update: (input: ServiceCatalog["calculators.update"]["input"]) => Promise<ServiceCatalog["calculators.update"]["output"]>;
   };
   calendars: {
     archive: (input: ServiceCatalog["calendars.archive"]["input"]) => Promise<ServiceCatalog["calendars.archive"]["output"]>;
@@ -7480,6 +7727,7 @@ export interface FreeholderApi {
     voidCreditNote: (input: ServiceCatalog["invoicing.voidCreditNote"]["input"]) => Promise<ServiceCatalog["invoicing.voidCreditNote"]["output"]>;
   };
   locations: {
+    checkCoverage: (input: ServiceCatalog["locations.checkCoverage"]["input"]) => Promise<ServiceCatalog["locations.checkCoverage"]["output"]>;
     create: (input: ServiceCatalog["locations.create"]["input"]) => Promise<ServiceCatalog["locations.create"]["output"]>;
     createSetupLocation: (input: ServiceCatalog["locations.createSetupLocation"]["input"]) => Promise<ServiceCatalog["locations.createSetupLocation"]["output"]>;
     get: (input?: ServiceCatalog["locations.get"]["input"]) => Promise<ServiceCatalog["locations.get"]["output"]>;
@@ -7723,8 +7971,12 @@ export interface FreeholderApi {
     createMyDataRequest: (input: ServiceCatalog["privacy.createMyDataRequest"]["input"]) => Promise<ServiceCatalog["privacy.createMyDataRequest"]["output"]>;
     downloadMyDataRequestArtifact: (input: ServiceCatalog["privacy.downloadMyDataRequestArtifact"]["input"]) => Promise<ServiceCatalog["privacy.downloadMyDataRequestArtifact"]["output"]>;
     getMyProfile: (input?: ServiceCatalog["privacy.getMyProfile"]["input"]) => Promise<ServiceCatalog["privacy.getMyProfile"]["output"]>;
+    grantMediaConsent: (input: ServiceCatalog["privacy.grantMediaConsent"]["input"]) => Promise<ServiceCatalog["privacy.grantMediaConsent"]["output"]>;
     listMyDataRequests: (input?: ServiceCatalog["privacy.listMyDataRequests"]["input"]) => Promise<ServiceCatalog["privacy.listMyDataRequests"]["output"]>;
+    mediaConsent: (input: ServiceCatalog["privacy.mediaConsent"]["input"]) => Promise<ServiceCatalog["privacy.mediaConsent"]["output"]>;
+    mediaConsentHistory: (input: ServiceCatalog["privacy.mediaConsentHistory"]["input"]) => Promise<ServiceCatalog["privacy.mediaConsentHistory"]["output"]>;
     setMyMarketingPreference: (input: ServiceCatalog["privacy.setMyMarketingPreference"]["input"]) => Promise<ServiceCatalog["privacy.setMyMarketingPreference"]["output"]>;
+    withdrawMediaConsent: (input: ServiceCatalog["privacy.withdrawMediaConsent"]["input"]) => Promise<ServiceCatalog["privacy.withdrawMediaConsent"]["output"]>;
   };
   projects: {
     addTask: (input: ServiceCatalog["projects.addTask"]["input"]) => Promise<ServiceCatalog["projects.addTask"]["output"]>;

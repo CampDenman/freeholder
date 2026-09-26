@@ -20,11 +20,16 @@ const INTERNAL = [
   "tasks.purgeExpired",
   // The record-trash sweeps (C11.14): a trash window expiring is not something
   // anybody did; the job purges eligible rows on nobody's behalf.
+  "assessments.purgeExpired",
+  "calculators.purgeExpired",
   "cms.purgeExpiredPages",
   "forms.purgeExpired",
   "popups.purgeExpired",
   "segments.purgeExpired",
   "views.purgeExpired",
+  // C8.16: a permission with an end date does not announce its own expiry,
+  // so work already public is taken down on nobody's behalf.
+  "projects.sweepLapsedConsent",
   "ads.rollUpStats",
   "agents.runDuePlaybooks",
   "agents.startEventPlaybooks",
@@ -122,6 +127,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "privacy.completeErasureJob",
   "notes.purgeExpired",
   "tasks.purgeExpired",
+  "assessments.purgeExpired",
+  "calculators.purgeExpired",
   "cms.purgeExpiredPages",
   "forms.purgeExpired",
   "popups.purgeExpired",
