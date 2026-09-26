@@ -10,46 +10,39 @@
 // already fills in, so there is nothing new to configure. The logo doubles as
 // the app icon when one is set: an owner who uploaded their logo has already
 // answered "what should this look like".
+//
+// Through the service layer, not the database (§15.5). The request-scoped reads
+// are the same ones the layout uses, so naming the site here costs no extra
+// query, and `media.resolveImage` is how the logo block resolves the very same
+// asset.
 import type { MetadataRoute } from "next";
-import { eq } from "drizzle-orm";
-import { db } from "@/core/db";
-import { assets } from "@/core/media/schema";
-import { businessProfile } from "@/core/settings/schema";
-import { designSettings } from "@/core/design/schema";
+import { currentBusiness } from "@/core/settings/read";
+import { currentDesign } from "@/core/design/read";
 
 export const dynamic = "force-dynamic";
-
-/** The icon the owner already uploaded, if they uploaded one. */
-async function logoIcon(): Promise<MetadataRoute.Manifest["icons"]> {
-  const [theme] = await db()
-    .select({ logoAssetId: designSettings.logoAssetId })
-    .from(designSettings)
-    .limit(1);
-  if (!theme?.logoAssetId) return undefined;
-
-  const [asset] = await db()
-    .select({ storageKey: assets.storageKey, mime: assets.mime })
-    .from(assets)
-    .where(eq(assets.id, theme.logoAssetId))
-    .limit(1);
-  if (!asset) return undefined;
-
-  // `sizes: "any"` rather than a declared pixel size: the original is whatever
-  // the owner uploaded, and claiming a size nobody verified would be worse
-  // than claiming none.
-  return [{ src: `/media/${asset.storageKey}`, type: asset.mime, sizes: "any" }];
-}
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
   let name = "Freeholder";
   let icons: MetadataRoute.Manifest["icons"];
+
   try {
-    const [business] = await db()
-      .select({ name: businessProfile.name })
-      .from(businessProfile)
-      .limit(1);
+    const business = await currentBusiness();
     if (business?.name) name = business.name;
-    icons = await logoIcon();
+
+    const design = await currentDesign();
+    if (design.logoAssetId) {
+      const { resolveImage } = await import("@/core/media/service");
+      const image = await resolveImage.call(
+        { id: design.logoAssetId },
+        { kind: "anonymous" },
+      );
+      if (image) {
+        // `sizes: "any"` rather than a declared pixel size: the logo is
+        // whatever the owner uploaded, and claiming a size nobody measured
+        // would be worse than claiming none.
+        icons = [{ src: image.src, sizes: "any" }];
+      }
+    }
   } catch {
     // Before setup, and during a database outage, there is no business to name.
     // Naming the software is a poor answer; failing the route is a worse one,

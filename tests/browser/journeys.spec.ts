@@ -281,7 +281,13 @@ test.describe("real-browser product journeys", () => {
           // The loading boundary can start a 200 stream before notFound().
           // Assert the rendered denial and absence of private invoice content.
           await customerPage.goto(path);
-          await expect(customerPage.getByRole("heading", { name: "404", exact: true })).toBeVisible();
+          // Was asserting Next's bare "404" heading, which is what the missing
+          // not-found route used to render — an empty body inside this site's
+          // own layout. This test had codified that. The denial is what matters
+          // and it still has to be a denial, so it now asserts the real page.
+          await expect(
+            customerPage.getByRole("heading", { name: translator("en")("notFound.title"), exact: true }),
+          ).toBeVisible();
           await expect(customerPage.getByRole("heading", { name: translator("en")("customerInvoice.title", { number: invoice!.number! }), exact: true })).toHaveCount(0);
           await expect(customerPage.getByRole("button", { name: "Arrange offline payment" })).toHaveCount(0);
           const [receipt] = await db().select().from(payments).where(eq(payments.invoiceId, id));
