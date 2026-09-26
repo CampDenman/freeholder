@@ -154,9 +154,12 @@ describe("a plugin that cannot be wired", () => {
 
   it("records a load failure as its own fact, with a reason", async () => {
     const report = await boot([throwsOnLoad()]);
-    expect(report.disabled).toEqual([
-      { module: "sinking", reason: expect.stringContaining("no database") },
-    ]);
+    // Field by field rather than `expect.stringContaining` inside an object
+    // literal: that matcher is typed `any`, and the lint rule that forbids
+    // assigning one is the reason this suite can trust its own assertions.
+    expect(report.disabled).toHaveLength(1);
+    expect(report.disabled[0]!.module).toBe("sinking");
+    expect(report.disabled[0]!.reason).toContain("no database");
   });
 
   it("records a plugin that does not fit this instance", async () => {
