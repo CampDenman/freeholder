@@ -438,6 +438,15 @@ export const nav = defineBlock({
       .array(z.object({ label: z.string().min(1), href: z.string().min(1) }))
       .default([]),
     ariaLabelKey: z.string().default("cms.nav.primary"),
+    /**
+     * Collapse behind a "Menu" disclosure on small screens.
+     *
+     * Right for the header, wrong for a footer: a footer nav collapsed to
+     * a disclosure hides its links from every phone visitor, which is most
+     * of them. Reported by a third party whose footer links were invisible
+     * on mobile. Defaults true so the header is unchanged.
+     */
+    collapseOnMobile: z.boolean().default(true),
   }),
   starter: () => ({ links: [{ label: "About", href: "/about" }] }),
   // The screen-reader name for the menu is platform machinery, not copy the
@@ -468,12 +477,16 @@ export const nav = defineBlock({
       });
     return (
       <nav aria-label={ctx.t(props.ariaLabelKey)}>
-        <details className="sm:hidden">
-          <summary className="cursor-pointer text-sm font-semibold text-ink">
-            {ctx.t("cms.nav.menu")}
-          </summary>
-          <ul className="mt-2 grid list-none gap-2 p-0">{linkItems("mobile")}</ul>
-        </details>
+        {props.collapseOnMobile ? (
+          <details className="sm:hidden">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">
+              {ctx.t("cms.nav.menu")}
+            </summary>
+            <ul className="mt-2 grid list-none gap-2 p-0">{linkItems("mobile")}</ul>
+          </details>
+        ) : (
+          <ul className="grid list-none gap-2 p-0 sm:hidden">{linkItems("mobile")}</ul>
+        )}
         <ul className="hidden list-none flex-wrap items-center gap-x-5 gap-y-1 p-0 sm:flex">
           {linkItems("desktop")}
         </ul>

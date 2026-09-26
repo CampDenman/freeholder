@@ -112,7 +112,7 @@ export const calculator = defineBlock({
                 // 16px, not 14px: iOS Safari zooms the page when a control
                 // under 16px takes focus, which moves the page under the
                 // visitor on their first tap.
-                className="rounded-md border border-rule bg-field px-3 py-2 text-base text-ink"
+                className="rounded-md border border-rule-strong bg-field px-3 py-2 text-base text-ink"
               />
             </label>
           ))}
@@ -208,7 +208,7 @@ export const coverageCheck = defineBlock({
               defaultValue={resolved.asked}
               required
               autoComplete="postal-code"
-              className="rounded-md border border-rule bg-field px-3 py-2 text-base text-ink"
+              className="rounded-md border border-rule-strong bg-field px-3 py-2 text-base text-ink"
             />
           </label>
           <button
@@ -658,7 +658,7 @@ export const tip = defineBlock({
         <input type="hidden" name="currency" value={props.currency} />
         <label className="grid gap-1 text-sm">
           <span className="font-semibold text-ink">{ctx.t("cms.inbound.email")}</span>
-          <input type="email" name="email" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+          <input type="email" name="email" required className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
         </label>
         <fieldset className="grid gap-2">
           <legend className="text-sm font-semibold text-ink">{ctx.t("cms.tip.amount")}</legend>
@@ -781,15 +781,15 @@ function InboundFields({ t }: { t: (key: string) => string }) {
     <>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.name")}</span>
-        <input type="text" name="name" autoComplete="name" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+        <input type="text" name="name" autoComplete="name" required className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.email")}</span>
-        <input type="email" name="email" autoComplete="email" required className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+        <input type="email" name="email" autoComplete="email" required className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
       </label>
       <label className="grid gap-1 text-sm">
         <span className="font-semibold text-ink">{t("cms.inbound.message")}</span>
-        <textarea name="message" required rows={4} className="rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+        <textarea name="message" required rows={4} className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
       </label>
     </>
   );

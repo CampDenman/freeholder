@@ -184,7 +184,7 @@ export function RenderedAssessment({
           type="email"
           name="respondent_email"
           autoComplete="email"
-          className="rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink"
+          className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-sm text-ink"
         />
         <p className="text-xs text-ink-muted">{t("assessments.public.emailHelp")}</p>
       </div>

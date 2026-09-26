@@ -204,7 +204,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
                 required
                 maxLength={4_000}
                 rows={3}
-                className="w-full rounded-md border border-rule bg-field px-3 py-2 text-ink"
+                className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-ink"
               />
             </label>
             <div className="flex flex-wrap items-center gap-3">
@@ -220,7 +220,7 @@ export function SiteChatClient({ locale, labels }: { locale: string; labels: Lab
             <form action={(form) => { void postSiteChatAction(form); }} className="grid gap-2">
               <label className="grid gap-1 text-sm">
                 <span className="font-semibold text-ink">{labels.message}</span>
-                <textarea name="message" required maxLength={4_000} rows={3} className="w-full rounded-md border border-rule bg-field px-3 py-2 text-ink" />
+                <textarea name="message" required maxLength={4_000} rows={3} className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-ink" />
               </label>
               <button type="submit" className="w-fit rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">{labels.send}</button>
             </form>

@@ -242,7 +242,7 @@ export default async function PublicCommunityPage({
                       required
                       maxLength={2000}
                       rows={4}
-                      className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                      className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
                     />
                   </Field>
                   <div>

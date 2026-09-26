@@ -158,7 +158,7 @@ export default async function AppointmentPage({
                       name="reason"
                       required
                       placeholder={t("appointments.reasonPlaceholder")}
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                     />
                   </label>
                   <Button type="submit" variant="danger">
@@ -187,7 +187,7 @@ export default async function AppointmentPage({
                   type="datetime-local"
                   name="startsAt"
                   required
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -202,7 +202,7 @@ export default async function AppointmentPage({
                       new Date(booking.startsAt).getTime()) /
                       60_000,
                   )}
-                  className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                  className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                 />
               </label>
               {/* The policy binds the customer, not the business. An owner who
@@ -359,7 +359,7 @@ export default async function AppointmentPage({
                   min={0}
                   step={30}
                   defaultValue={1440}
-                  className="w-28 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                  className="w-28 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                 />
               </label>
               <Button type="submit" variant="quiet">
@@ -426,7 +426,7 @@ export default async function AppointmentPage({
                 <input
                   name="name"
                   autoComplete="name"
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -435,7 +435,7 @@ export default async function AppointmentPage({
                   name="email"
                   type="email"
                   autoComplete="email"
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -445,7 +445,7 @@ export default async function AppointmentPage({
                   name="seatCount"
                   min={1}
                   defaultValue={1}
-                  className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                  className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                 />
               </label>
               <Button type="submit" variant="quiet">

@@ -88,7 +88,7 @@ export function PageLifecycle({
                 type="datetime-local"
                 name="publishAt"
                 defaultValue={localInput(page.scheduledPublishAt)}
-                className="rounded-md border border-rule bg-surface px-3 py-2 text-ink"
+                className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-ink"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -97,7 +97,7 @@ export function PageLifecycle({
                 type="datetime-local"
                 name="unpublishAt"
                 defaultValue={localInput(page.scheduledUnpublishAt)}
-                className="rounded-md border border-rule bg-surface px-3 py-2 text-ink"
+                className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-ink"
               />
             </label>
             <button
@@ -151,7 +151,7 @@ export function PageLifecycle({
                 <input
                   type="text"
                   name="note"
-                  className="rounded-md border border-rule bg-surface px-3 py-2 text-ink"
+                  className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-ink"
                 />
               </label>
               <button

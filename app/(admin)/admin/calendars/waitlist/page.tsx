@@ -93,7 +93,7 @@ export default async function WaitlistPage({
               <select
                 name="calendarId"
                 defaultValue={query.calendarId ?? ""}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="">{t("waitlist.allCalendars")}</option>
                 {(calendars ?? []).map((calendar) => (
@@ -123,7 +123,7 @@ export default async function WaitlistPage({
                   type="datetime-local"
                   name="startsAt"
                   required
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -134,7 +134,7 @@ export default async function WaitlistPage({
                   min={5}
                   step={5}
                   defaultValue={60}
-                  className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                  className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                 />
               </label>
               <Button type="submit" variant="quiet">
@@ -196,7 +196,7 @@ export default async function WaitlistPage({
                           name="position"
                           min={0}
                           defaultValue={entry.position}
-                          className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                          className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                         />
                       </label>
                       <Button type="submit" variant="quiet">

@@ -162,7 +162,7 @@ export default async function SharingPage({
                   readOnly
                   rows={4}
                   value={reviewsEmbed.html}
-                  className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs text-ink"
                 />
               </label>
             ) : null}
@@ -173,7 +173,7 @@ export default async function SharingPage({
                   readOnly
                   rows={4}
                   value={bookingEmbed.html}
-                  className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs text-ink"
                 />
               </label>
             ) : null}
@@ -185,7 +185,7 @@ export default async function SharingPage({
                     readOnly
                     rows={4}
                     value={entry.snippet.html}
-                    className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs text-ink"
                   />
                 </label>
               ) : null,

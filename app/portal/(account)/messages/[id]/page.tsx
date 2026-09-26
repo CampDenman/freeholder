@@ -108,7 +108,7 @@ export default async function PortalMessagePage({
             required
             rows={4}
             maxLength={50_000}
-            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm"
           />
         </Field>
         <div>

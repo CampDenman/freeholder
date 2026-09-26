@@ -14,6 +14,7 @@ const colorTokens = z.object({
   ink: z.string(),
   inkMuted: z.string(),
   rule: z.string(),
+  ruleStrong: z.string(),
   accent: z.string(),
   onAccent: z.string(),
   accentSoft: z.string(),
@@ -69,6 +70,7 @@ const colorPatch = z
     ink: HEX_COLOR.optional(),
     inkMuted: HEX_COLOR.optional(),
     rule: HEX_COLOR.optional(),
+    ruleStrong: HEX_COLOR.optional(),
     accent: HEX_COLOR.optional(),
     onAccent: HEX_COLOR.optional(),
     accentSoft: HEX_COLOR.optional(),
@@ -78,6 +80,12 @@ const colorPatch = z
     warningSoft: HEX_COLOR.optional(),
     danger: HEX_COLOR.optional(),
     dangerSoft: HEX_COLOR.optional(),
+    // Checked by refuseIfUnsafe as `onDanger on danger`, so it has to be
+    // settable. It was not: a site sending a light palette for the dark slot
+    // was refused over a role it had never been allowed to send, and the
+    // message named that role. Reported by a third party who hit exactly
+    // that and could not act on the error.
+    onDanger: HEX_COLOR.optional(),
     focus: HEX_COLOR.optional(),
   })
   .strict();

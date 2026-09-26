@@ -84,7 +84,7 @@ export default async function QuotesPage({
           <select
             name="status"
             defaultValue={status ?? ""}
-            className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+            className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
           >
             <option value="">{t("quotes.filter.any")}</option>
             {QUOTE_STATUSES.map((one) => (
@@ -158,7 +158,7 @@ export default async function QuotesPage({
               <select
                 name="contactId"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {(people?.rows ?? []).map((contact) => (
                   <option key={contact.id} value={contact.id}>
@@ -172,7 +172,7 @@ export default async function QuotesPage({
               <input
                 name="title"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -180,7 +180,7 @@ export default async function QuotesPage({
               <input
                 type="date"
                 name="validUntil"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit">{t("quotes.action.draft")}</Button>

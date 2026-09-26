@@ -55,7 +55,7 @@ export default async function PortalRegistryPage({
           <input
             readOnly
             value={jar.get(WISHLIST_SHARE_COOKIE)?.value}
-            className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+            className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs text-ink"
           />
         </label>
       ) : null}

@@ -105,7 +105,7 @@ export default async function GalleryEditorPage({
             <input
               readOnly
               value={inviteLink}
-              className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+              className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs text-ink"
             />
           </label>
         </div>
@@ -126,7 +126,7 @@ export default async function GalleryEditorPage({
               <input
                 name="title"
                 defaultValue={gallery.title}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -134,7 +134,7 @@ export default async function GalleryEditorPage({
               <select
                 name="access"
                 defaultValue={gallery.access}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="pin">{t("galleries.access.pin")}</option>
                 <option value="password">{t("galleries.access.password")}</option>
@@ -145,7 +145,7 @@ export default async function GalleryEditorPage({
               <span className="text-ink-muted">{t("galleries.field.secret")}</span>
               <input
                 name="secret"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -154,7 +154,7 @@ export default async function GalleryEditorPage({
                 type="datetime-local"
                 name="expiresAt"
                 defaultValue={expiresValue}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -162,7 +162,7 @@ export default async function GalleryEditorPage({
               <select
                 name="downloadPolicy"
                 defaultValue={gallery.downloadPolicy}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="none">{t("galleries.download.none")}</option>
                 <option value="web_res">{t("galleries.download.web_res")}</option>
@@ -177,7 +177,7 @@ export default async function GalleryEditorPage({
                 min={1}
                 name="downloadLimit"
                 defaultValue={gallery.downloadLimit ?? ""}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
@@ -230,7 +230,7 @@ export default async function GalleryEditorPage({
               <select
                 name="assetId"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {(library?.rows ?? []).map((asset) => (
                   <option key={asset.id} value={asset.id}>
@@ -287,7 +287,7 @@ export default async function GalleryEditorPage({
                 type="email"
                 name="email"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -295,7 +295,7 @@ export default async function GalleryEditorPage({
               <select
                 name="role"
                 defaultValue="partner"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="partner">{t("galleries.role.partner")}</option>
                 <option value="client">{t("galleries.role.client")}</option>
@@ -341,7 +341,7 @@ export default async function GalleryEditorPage({
                 <span className="text-ink-muted">{t("galleries.round.note")}</span>
                 <input
                   name="note"
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <div className="flex gap-2">
@@ -422,7 +422,7 @@ export default async function GalleryEditorPage({
               <select
                 name="variantId"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {(variants ?? []).map((variant) => (
                   <option key={variant.id} value={variant.id}>

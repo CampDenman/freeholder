@@ -120,7 +120,7 @@ export default async function QuotePage({
               <input
                 readOnly
                 value={jar.get(QUOTE_PARTNER_INVITE_COOKIE)?.value}
-                className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs text-ink"
               />
             </label>
           </div>
@@ -139,7 +139,7 @@ export default async function QuotePage({
                       type="email"
                       name="email"
                       required
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                     />
                   </label>
                   <Button type="submit">{t("quote.partner.invite")}</Button>
@@ -250,7 +250,7 @@ export default async function QuotePage({
                     name="acceptedName"
                     required
                     autoComplete="name"
-                    className="max-w-sm rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="max-w-sm rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 {/* Never disabled on what a field contains: the control acts,
@@ -265,7 +265,7 @@ export default async function QuotePage({
                   <span className="text-ink-muted">{t("quote.field.reason")}</span>
                   <input
                     name="reason"
-                    className="max-w-sm rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="max-w-sm rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 <div>
@@ -306,7 +306,7 @@ export default async function QuotePage({
                     name="body"
                     required
                     rows={3}
-                    className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                 </label>
                 <div>

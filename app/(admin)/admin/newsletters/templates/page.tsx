@@ -205,7 +205,7 @@ export default async function MessageTemplatesPage({
                 name="body"
                 rows={8}
                 defaultValue={bodyText(chosen?.template.blocks)}
-                className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
               />
             </Field>
 

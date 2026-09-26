@@ -447,7 +447,7 @@ export default async function AssistantPage({
                       name="refuseTopics"
                       rows={4}
                       defaultValue={current.refuseTopics.join("\n")}
-                      className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                      className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm"
                     />
                   </Field>
                   <Field
@@ -460,7 +460,7 @@ export default async function AssistantPage({
                       name="escalateTopics"
                       rows={4}
                       defaultValue={current.escalateTopics.join("\n")}
-                      className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                      className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm"
                     />
                   </Field>
                 </div>
@@ -599,7 +599,7 @@ export default async function AssistantPage({
                     required
                     rows={3}
                     maxLength={4000}
-                    className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm"
                   />
                 </Field>
                 <div className="flex items-end">
@@ -669,7 +669,7 @@ export default async function AssistantPage({
                             required
                             rows={3}
                             maxLength={4000}
-                            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm"
                           />
                         </Field>
                         <div className="flex items-end gap-2">
