@@ -50,7 +50,7 @@ export default async function EmbedNewsletterPage({
             type="email"
             name="email"
             required
-            className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+            className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
           />
         </label>
         <Button type="submit">{t("embed.newsletter.subscribe")}</Button>

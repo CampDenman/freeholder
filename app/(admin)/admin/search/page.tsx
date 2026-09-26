@@ -82,7 +82,7 @@ export default async function AdminSearchPage({
                 name="q"
                 defaultValue={q}
                 maxLength={200}
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit">{t("admin.search.action")}</Button>

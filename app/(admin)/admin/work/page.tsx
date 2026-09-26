@@ -245,7 +245,7 @@ export default async function WorkBoardPage({
               <select
                 name="agentId"
                 defaultValue={agentId ?? ""}
-                className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
               >
                 <option value="">{t("work.filter.anyAgent")}</option>
                 {agents.map((agent) => (
@@ -260,7 +260,7 @@ export default async function WorkBoardPage({
               <select
                 name="minPriority"
                 defaultValue={minPriority ? String(minPriority) : ""}
-                className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
               >
                 <option value="">{t("work.filter.anyPriority")}</option>
                 {[1, 2, 3, 4, 5].map((value) => (

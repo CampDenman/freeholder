@@ -195,7 +195,7 @@ export default async function ProjectPage({
                   ) : null}
                   <label className="grid gap-1 text-sm">
                     <span className="text-ink-muted">{t("projects.caseStudy.consentMethod")}</span>
-                    <select name="method" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                    <select name="method" required className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                       {CONSENT_METHODS.map((method) => (
                         <option key={method} value={method}>{t(`projects.consent.${method}`)}</option>
                       ))}
@@ -203,14 +203,14 @@ export default async function ProjectPage({
                   </label>
                   <label className="grid gap-1 text-sm">
                     <span className="text-ink-muted">{t("projects.caseStudy.consentNote")}</span>
-                    <input name="note" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+                    <input name="note" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
                   </label>
                   <label className="grid gap-1 text-sm">
                     <span className="text-ink-muted">{t("projects.caseStudy.consentExpiry")}</span>
                     <input
                       type="date"
                       name="expiresAt"
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                     />
                   </label>
                   <div><Button type="submit" variant="quiet">{t("projects.caseStudy.recordConsent")}</Button></div>
@@ -261,7 +261,7 @@ export default async function ProjectPage({
             <input type="hidden" name="id" value={project.id} />
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.cover")}</span>
-              <select name="coverAssetId" defaultValue={project.coverAssetId ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="coverAssetId" defaultValue={project.coverAssetId ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 <option value="">{t("projects.caseStudy.noCover")}</option>
                 {imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.filename}</option>)}
               </select>
@@ -272,11 +272,11 @@ export default async function ProjectPage({
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.seoTitle")}</span>
-              <input name="seoTitle" maxLength={60} defaultValue={seo.title ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="seoTitle" maxLength={60} defaultValue={seo.title ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.seoDescription")}</span>
-              <input name="seoDescription" maxLength={155} defaultValue={seo.description ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="seoDescription" maxLength={155} defaultValue={seo.description ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <div><Button type="submit" variant="quiet">{t("projects.action.save")}</Button></div>
           </form>
@@ -341,7 +341,7 @@ export default async function ProjectPage({
               <span className="text-ink-muted">{t("projects.field.kind")}</span>
               <select
                 name="kind"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {LINK_KINDS.map((kind) => (
                   <option key={kind} value={kind}>
@@ -355,14 +355,14 @@ export default async function ProjectPage({
               <input
                 name="targetId"
                 required
-                className="w-80 rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs"
+                className="w-80 rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs"
               />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.label")}</span>
               <input
                 name="label"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit" variant="quiet">
@@ -400,7 +400,7 @@ export default async function ProjectPage({
                     <select
                       name="status"
                       defaultValue={task.status}
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                     >
                       {["todo", "doing", "blocked", "done"].map((status) => (
                         <option key={status} value={status}>
@@ -430,7 +430,7 @@ export default async function ProjectPage({
               <input
                 name="title"
                 required
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -438,7 +438,7 @@ export default async function ProjectPage({
               <input
                 type="date"
                 name="dueOn"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit" variant="quiet">
@@ -490,14 +490,14 @@ export default async function ProjectPage({
             <input type="hidden" name="projectId" value={project.id} />
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.asset")}</span>
-              <select name="assetId" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="assetId" required className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 <option value="">{t("projects.caseStudy.chooseAsset")}</option>
                 {imageAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.filename}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.role")}</span>
-              <select name="role" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="role" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 {FILE_ROLES.filter((role) => role !== "document").map((role) => (
                   <option key={role} value={role}>{t(`projects.file.${role}`)}</option>
                 ))}
@@ -505,19 +505,19 @@ export default async function ProjectPage({
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.pairKey")}</span>
-              <input name="pairKey" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="pairKey" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.seriesKey")}</span>
-              <input name="seriesKey" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="seriesKey" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.capturedAt")}</span>
-              <input type="date" name="capturedAt" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input type="date" name="capturedAt" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.caption")}</span>
-              <input name="caption" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="caption" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <div><Button type="submit" variant="quiet">{t("projects.caseStudy.attachMedia")}</Button></div>
           </form>
@@ -564,7 +564,7 @@ export default async function ProjectPage({
               <input
                 name="label"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -572,21 +572,21 @@ export default async function ProjectPage({
               <input
                 name="value"
                 required
-                className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.unit")}</span>
               <input
                 name="unit"
-                className="w-20 rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-20 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid grow gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.method")}</span>
               <input
                 name="method"
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit" variant="quiet">
@@ -614,7 +614,7 @@ export default async function ProjectPage({
                     <input type="hidden" name="id" value={testimonial.id} />
                     <label className="grid gap-1">
                       <span className="text-ink-muted">{t("projects.caseStudy.testimonialStatus")}</span>
-                      <select name="status" defaultValue={testimonial.status} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+                      <select name="status" defaultValue={testimonial.status} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                         {TESTIMONIAL_STATUSES.map((status) => (
                           <option key={status} value={status}>{t(`projects.testimonial.${status}`)}</option>
                         ))}
@@ -630,39 +630,39 @@ export default async function ProjectPage({
             <input type="hidden" name="projectId" value={project.id} />
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.client")}</span>
-              <select name="contactId" required defaultValue={project.contactId ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="contactId" required defaultValue={project.contactId ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 <option value="">{t("projects.caseStudy.chooseContact")}</option>
                 {(people?.rows ?? []).map((contact) => <option key={contact.id} value={contact.id}>{contact.name}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.displayName")}</span>
-              <input name="displayName" required defaultValue={project.clientDisplayName ?? project.contactName ?? ""} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="displayName" required defaultValue={project.clientDisplayName ?? project.contactName ?? ""} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm sm:col-span-2">
               <span className="text-ink-muted">{t("projects.caseStudy.quote")}</span>
-              <textarea name="body" required rows={3} className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <textarea name="body" required rows={3} className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.clientRole")}</span>
-              <input name="role" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="role" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.rating")}</span>
-              <select name="rating" className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="rating" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 <option value="">{t("projects.caseStudy.noRating")}</option>
                 {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}/5</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.consentMethod")}</span>
-              <select name="consentMethod" required className="rounded-md border border-rule bg-field px-2 py-1 text-sm">
+              <select name="consentMethod" required className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm">
                 {CONSENT_METHODS.map((method) => <option key={method} value={method}>{t(`projects.consent.${method}`)}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.caseStudy.consentNote")}</span>
-              <input name="consentNote" className="rounded-md border border-rule bg-field px-2 py-1 text-sm" />
+              <input name="consentNote" className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm" />
             </label>
             <fieldset className="flex flex-wrap gap-3 text-sm sm:col-span-2">
               <legend className="mb-1 text-ink-muted">{t("projects.caseStudy.displayLocations")}</legend>
@@ -689,7 +689,7 @@ export default async function ProjectPage({
                 <input
                   name="title"
                   defaultValue={project.title}
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -697,7 +697,7 @@ export default async function ProjectPage({
                 <select
                   name="status"
                   defaultValue={project.status}
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 >
                   {STATUSES.map((status) => (
                     <option key={status} value={status}>
@@ -712,7 +712,7 @@ export default async function ProjectPage({
                   name="clientDisplayName"
                   defaultValue={project.clientDisplayName ?? ""}
                   placeholder={t("projects.publicNamePlaceholder")}
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
@@ -721,7 +721,7 @@ export default async function ProjectPage({
                   type="date"
                   name="occurredOn"
                   defaultValue={project.occurredOn ?? ""}
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
             </div>
@@ -750,7 +750,7 @@ export default async function ProjectPage({
               <input
                 name="summary"
                 defaultValue={project.summary ?? ""}
-                className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -759,7 +759,7 @@ export default async function ProjectPage({
                 name="notes"
                 rows={4}
                 defaultValue={project.notes ?? ""}
-                className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <div>

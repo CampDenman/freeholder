@@ -86,7 +86,7 @@ export default async function GalleriesPage({
               <input
                 name="title"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -94,7 +94,7 @@ export default async function GalleriesPage({
               <select
                 name="contactId"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="">{t("galleries.field.client")}</option>
                 {(people?.rows ?? []).map((contact) => (
@@ -108,7 +108,7 @@ export default async function GalleriesPage({
               <span className="text-ink-muted">{t("galleries.field.access")}</span>
               <select
                 name="access"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 defaultValue="pin"
               >
                 <option value="pin">{t("galleries.access.pin")}</option>
@@ -120,7 +120,7 @@ export default async function GalleriesPage({
               <span className="text-ink-muted">{t("galleries.field.secret")}</span>
               <input
                 name="secret"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit">{t("galleries.action.create")}</Button>

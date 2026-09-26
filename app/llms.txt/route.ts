@@ -11,6 +11,7 @@
 // Deliberately plain. An answer engine reading this wants the shape of the
 // business and where to look, not marketing copy it will have to strip.
 import { getBusiness } from "@/core/settings/service";
+import { countryName } from "@/core/settings/defaults";
 import { collectPublicEntities } from "@/core/seo/entities";
 import { originFor } from "@/core/seo/origin";
 import { humanizeSegment } from "@/core/seo/jsonld";
@@ -64,7 +65,7 @@ export async function GET(request: Request): Promise<Response> {
     "",
     business.tagline ?? "",
     "",
-    `> ${business.name} is a ${business.schemaType} based in ${business.country}, `
+    `> ${business.name} is a ${business.schemaType} based in ${countryName(business.country)}, `
       + `publishing in ${business.enabledLocales.join(", ")} and charging in ${business.baseCurrency}.`,
     "",
     "## Locations",

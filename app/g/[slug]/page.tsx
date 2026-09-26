@@ -105,7 +105,7 @@ export default async function ClientGalleryPage({
                 <input
                   readOnly
                   value={jar.get(GALLERY_PARTNER_INVITE_COOKIE)?.value}
-                  className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-xs text-ink"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-xs text-ink"
                 />
               </label>
             </div>
@@ -124,7 +124,7 @@ export default async function ClientGalleryPage({
                         type="email"
                         name="email"
                         required
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       />
                     </label>
                     <Button type="submit">{t("galleries.partner.invite")}</Button>
@@ -223,7 +223,7 @@ export default async function ClientGalleryPage({
                         <input
                           name="comment"
                           defaultValue={mark?.comment ?? ""}
-                          className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                          className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                         />
                       </label>
                       <Button type="submit" variant="quiet">
@@ -302,7 +302,7 @@ export default async function ClientGalleryPage({
                         type={lock.access === "password" ? "password" : "text"}
                         inputMode={lock.access === "pin" ? "numeric" : "text"}
                         required
-                        className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                        className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                       />
                     </label>
                     <Button type="submit">{t("galleries.action.open")}</Button>

@@ -417,7 +417,7 @@ export default async function SocialPage({
                 name="body"
                 rows={4}
                 maxLength={8000}
-                className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm"
               />
             </label>
             <fieldset className="grid gap-1">

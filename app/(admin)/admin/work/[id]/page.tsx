@@ -169,7 +169,7 @@ export default async function WorkTaskPage({
               <select
                 name="agentId"
                 defaultValue={task.agentId ?? ""}
-                className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
               >
                 <option value="">{t("work.unassigned")}</option>
                 {agents.map((agent) => (

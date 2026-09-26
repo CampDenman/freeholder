@@ -75,7 +75,7 @@ export default async function PublicContributePage({
             name="kind"
             defaultValue="bug"
             required
-            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
           >
             <option value="bug">{t("contribute.kind.bug")}</option>
             <option value="feature">{t("contribute.kind.feature")}</option>
@@ -92,7 +92,7 @@ export default async function PublicContributePage({
             name="title"
             required
             maxLength={200}
-            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
           />
         </label>
         <label className="grid gap-1.5">
@@ -104,7 +104,7 @@ export default async function PublicContributePage({
             required
             maxLength={20_000}
             rows={8}
-            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
           />
         </label>
         <label className="grid gap-1.5">
@@ -115,7 +115,7 @@ export default async function PublicContributePage({
             name="email"
             type="email"
             autoComplete="email"
-            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
           />
         </label>
         <label className="grid gap-1.5">
@@ -125,7 +125,7 @@ export default async function PublicContributePage({
           <input
             name="name"
             autoComplete="name"
-            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
           />
         </label>
         <label className="flex items-start gap-2 text-sm text-ink">
@@ -138,7 +138,7 @@ export default async function PublicContributePage({
           </span>
           <input
             name="dcoSigner"
-            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
           />
         </label>
         <button

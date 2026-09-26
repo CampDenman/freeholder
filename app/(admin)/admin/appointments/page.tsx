@@ -156,7 +156,7 @@ export default async function AppointmentsPage({
               <select
                 name="calendarId"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {(calendars ?? []).map((calendar) => (
                   <option key={calendar.id} value={calendar.id}>
@@ -171,7 +171,7 @@ export default async function AppointmentsPage({
                 type="datetime-local"
                 name="startsAt"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -182,7 +182,7 @@ export default async function AppointmentsPage({
                 min={5}
                 step={5}
                 defaultValue={60}
-                className="w-24 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-24 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -191,14 +191,14 @@ export default async function AppointmentsPage({
                 type="email"
                 name="email"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("appointments.field.name")}</span>
               <input
                 name="name"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="flex items-center gap-2 text-sm">

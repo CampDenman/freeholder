@@ -61,6 +61,7 @@
   --color-ink: var(--fh-ink);
   --color-ink-muted: var(--fh-ink-muted);
   --color-rule: var(--fh-rule);
+  --color-rule-strong: var(--fh-rule-strong);
   --color-accent: var(--fh-accent);
   --color-on-accent: var(--fh-on-accent);
   --color-accent-soft: var(--fh-accent-soft);

@@ -377,7 +377,7 @@ function CaptureForm({
           name="email"
           required
           autoComplete="email"
-          className="rounded-md border border-rule bg-field px-3 py-2 text-ink"
+          className="rounded-md border border-rule-strong bg-field px-3 py-2 text-ink"
         />
       </label>
       <label className="flex items-start gap-2 text-sm text-ink-muted">

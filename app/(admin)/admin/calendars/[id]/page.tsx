@@ -103,7 +103,7 @@ export default async function CalendarHoursPage({
                       type="time"
                       name={`open-${weekday}`}
                       defaultValue={bookable?.starts.slice(0, 5) ?? ""}
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                     />
                   </label>
                   <label className="grid gap-1 text-sm">
@@ -112,7 +112,7 @@ export default async function CalendarHoursPage({
                       type="time"
                       name={`close-${weekday}`}
                       defaultValue={bookable?.ends.slice(0, 5) ?? ""}
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                     />
                   </label>
                   <label className="grid gap-1 text-sm">
@@ -121,7 +121,7 @@ export default async function CalendarHoursPage({
                       type="time"
                       name={`oncall-open-${weekday}`}
                       defaultValue={onCall?.starts.slice(0, 5) ?? ""}
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                     />
                   </label>
                   <label className="grid gap-1 text-sm">
@@ -130,7 +130,7 @@ export default async function CalendarHoursPage({
                       type="time"
                       name={`oncall-close-${weekday}`}
                       defaultValue={onCall?.ends.slice(0, 5) ?? ""}
-                      className="rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                      className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                     />
                   </label>
                   {forDay.length === 0 ? (
@@ -197,7 +197,7 @@ export default async function CalendarHoursPage({
                 type="date"
                 name="startsOn"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -205,7 +205,7 @@ export default async function CalendarHoursPage({
               <input
                 type="date"
                 name="endsOn"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -213,7 +213,7 @@ export default async function CalendarHoursPage({
               <select
                 name="kind"
                 defaultValue="closed"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="closed">{t("availability.kind.closed")}</option>
                 <option value="reduced">{t("availability.kind.reduced")}</option>
@@ -225,7 +225,7 @@ export default async function CalendarHoursPage({
               <input
                 type="time"
                 name="starts"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -233,7 +233,7 @@ export default async function CalendarHoursPage({
               <input
                 type="time"
                 name="ends"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -241,7 +241,7 @@ export default async function CalendarHoursPage({
               <input
                 name="reason"
                 placeholder={t("availability.reasonPlaceholder")}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit" variant="quiet">

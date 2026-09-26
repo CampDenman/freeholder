@@ -56,7 +56,7 @@ export default async function MediaRecordPage({
                 <select
                   id="targetType"
                   name="targetType"
-                  className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                  className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
                   defaultValue="library"
                 >
                   <option value="library">{t("media.capture.target.library")}</option>
@@ -68,7 +68,7 @@ export default async function MediaRecordPage({
                 <select
                   id="targetId"
                   name="targetId"
-                  className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                  className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
                   defaultValue=""
                 >
                   <option value="">{t("media.capture.target.none")}</option>

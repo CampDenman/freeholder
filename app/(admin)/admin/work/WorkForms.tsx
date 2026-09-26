@@ -48,7 +48,7 @@ export function CreateTaskForm({
           name="brief"
           rows={3}
           maxLength={50_000}
-          className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+          className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -118,7 +118,7 @@ export function UpdateTaskForm({
           rows={4}
           maxLength={50_000}
           defaultValue={task.brief}
-          className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+          className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -291,7 +291,7 @@ export function HireAgentForm({
           name="instructions"
           rows={3}
           maxLength={20_000}
-          className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+          className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
         />
       </Field>
       <Field htmlFor="hire-scopes" label={labels.scopes} hint={labels.scopesHint}>

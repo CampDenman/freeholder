@@ -358,7 +358,7 @@ export function UploadForm({
           required
           multiple
           accept="image/jpeg,image/png,image/gif,image/webp,image/avif,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/mp4,application/pdf,text/plain,text/csv,application/json,.docx,.xlsx,.pptx"
-          className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+          className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
         />
       </Field>
       {pending ? (

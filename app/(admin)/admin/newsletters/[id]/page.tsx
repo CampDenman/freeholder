@@ -62,7 +62,7 @@ export default async function NewsletterDetailPage({
                 id="nl-status"
                 name="status"
                 defaultValue={newsletter.status === "paused" ? "paused" : "active"}
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="active">{t("newsletters.status.active")}</option>
                 <option value="paused">{t("newsletters.status.paused")}</option>
@@ -98,7 +98,7 @@ export default async function NewsletterDetailPage({
                 id="body"
                 name="body"
                 rows={8}
-                className="rounded-md border border-rule bg-surface px-3 py-2 text-sm"
+                className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-sm"
               />
             </Field>
             <Button type="submit">{t("newsletters.issueAdd")}</Button>

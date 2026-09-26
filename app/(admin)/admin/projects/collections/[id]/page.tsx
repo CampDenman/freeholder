@@ -94,28 +94,28 @@ export default async function ProjectCollectionPage({
             <input type="hidden" name="id" value={collection.id} />
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.collections.field.name")}</span>
-              <input name="name" required maxLength={160} defaultValue={collection.name} className="rounded-md border border-rule bg-field px-3 py-2" />
+              <input name="name" required maxLength={160} defaultValue={collection.name} className="rounded-md border border-rule-strong bg-field px-3 py-2" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.collections.field.kind")}</span>
-              <select name="kind" defaultValue={collection.kind} className="rounded-md border border-rule bg-field px-3 py-2">
+              <select name="kind" defaultValue={collection.kind} className="rounded-md border border-rule-strong bg-field px-3 py-2">
                 {KINDS.map((kind) => <option key={kind} value={kind}>{t(`projects.collections.kind.${kind}`)}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm sm:col-span-2">
               <span className="text-ink-muted">{t("projects.collections.field.description")}</span>
-              <textarea name="description" maxLength={2000} rows={4} defaultValue={collection.description ?? ""} className="rounded-md border border-rule bg-field px-3 py-2" />
+              <textarea name="description" maxLength={2000} rows={4} defaultValue={collection.description ?? ""} className="rounded-md border border-rule-strong bg-field px-3 py-2" />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.collections.field.cover")}</span>
-              <select name="coverAssetId" defaultValue={collection.coverAssetId ?? ""} className="rounded-md border border-rule bg-field px-3 py-2">
+              <select name="coverAssetId" defaultValue={collection.coverAssetId ?? ""} className="rounded-md border border-rule-strong bg-field px-3 py-2">
                 <option value="">{t("projects.collections.noCover")}</option>
                 {images.map((asset) => <option key={asset.id} value={asset.id}>{asset.filename}{asset.altText ? "" : ` — ${t("projects.collections.missingAlt")}`}</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.collections.field.position")}</span>
-              <input type="number" name="position" min="0" max="100000" defaultValue={collection.position} className="rounded-md border border-rule bg-field px-3 py-2" />
+              <input type="number" name="position" min="0" max="100000" defaultValue={collection.position} className="rounded-md border border-rule-strong bg-field px-3 py-2" />
             </label>
             <div className="sm:col-span-2"><Button type="submit">{t("projects.collections.action.save")}</Button></div>
           </form>
@@ -148,13 +148,13 @@ export default async function ProjectCollectionPage({
               <input type="hidden" name="collectionId" value={collection.id} />
               <label className="grid min-w-64 flex-1 gap-1 text-sm">
                 <span className="text-ink-muted">{t("projects.collections.field.project")}</span>
-                <select name="projectId" required className="rounded-md border border-rule bg-field px-3 py-2">
+                <select name="projectId" required className="rounded-md border border-rule-strong bg-field px-3 py-2">
                   {availableProjects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}
                 </select>
               </label>
               <label className="grid gap-1 text-sm">
                 <span className="text-ink-muted">{t("projects.collections.field.position")}</span>
-                <input type="number" name="position" min="0" max="100000" defaultValue="0" className="w-28 rounded-md border border-rule bg-field px-3 py-2" />
+                <input type="number" name="position" min="0" max="100000" defaultValue="0" className="w-28 rounded-md border border-rule-strong bg-field px-3 py-2" />
               </label>
               <Button type="submit">{t("projects.collections.action.add")}</Button>
             </form>

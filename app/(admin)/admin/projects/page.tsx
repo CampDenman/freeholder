@@ -120,14 +120,14 @@ export default async function ProjectsPage({
               <input
                 name="title"
                 required
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("projects.field.client")}</span>
               <select
                 name="contactId"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {/* Internal work is real work, so "nobody" is a first-class
                     option rather than a workaround. */}
@@ -143,7 +143,7 @@ export default async function ProjectsPage({
               <span className="text-ink-muted">{t("projects.field.summary")}</span>
               <input
                 name="summary"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <Button type="submit">{t("projects.action.start")}</Button>

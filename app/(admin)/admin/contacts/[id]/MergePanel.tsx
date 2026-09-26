@@ -65,7 +65,7 @@ export function MergePanel({
               type="search"
               defaultValue={query}
               placeholder={labels.searchPlaceholder}
-              className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent"
+              className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent"
             />
           </div>
           <Button type="submit" variant="quiet">

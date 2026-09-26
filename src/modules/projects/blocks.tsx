@@ -270,21 +270,21 @@ export const portfolioIndex = defineBlock({
       <form method="get" className="grid gap-3 rounded-lg border border-rule p-4 sm:grid-cols-3">
         <label className="grid gap-1 text-sm">
           <span className="font-semibold text-ink">{ctx.t("projects.portfolio.filterService")}</span>
-          <select name="filter[service]" defaultValue={resolved.active.service ?? ""} className="rounded-md border border-rule bg-field px-3 py-2">
+          <select name="filter[service]" defaultValue={resolved.active.service ?? ""} className="rounded-md border border-rule-strong bg-field px-3 py-2">
             <option value="">{ctx.t("projects.portfolio.allServices")}</option>
             {resolved.services.map((service) => <option key={service.id} value={service.slug}>{service.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1 text-sm">
           <span className="font-semibold text-ink">{ctx.t("projects.portfolio.filterCollection")}</span>
-          <select name="filter[collection]" defaultValue={resolved.active.collection ?? ""} className="rounded-md border border-rule bg-field px-3 py-2">
+          <select name="filter[collection]" defaultValue={resolved.active.collection ?? ""} className="rounded-md border border-rule-strong bg-field px-3 py-2">
             <option value="">{ctx.t("projects.portfolio.allCollections")}</option>
             {resolved.collections.map(({ collection }) => <option key={collection.id} value={collection.slug}>{collection.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1 text-sm">
           <span className="font-semibold text-ink">{ctx.t("projects.portfolio.search")}</span>
-          <input type="search" name="q" defaultValue={resolved.active.q ?? ""} className="rounded-md border border-rule bg-field px-3 py-2" />
+          <input type="search" name="q" defaultValue={resolved.active.q ?? ""} className="rounded-md border border-rule-strong bg-field px-3 py-2" />
         </label>
         <div className="flex flex-wrap gap-3 sm:col-span-3">
           <button type="submit" className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent">

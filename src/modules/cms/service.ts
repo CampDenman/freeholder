@@ -1482,6 +1482,34 @@ export const restoreRevision = defineService({
  * greppable, which is the whole reason elevation is spelled out rather than
  * implied (Â§11).
  */
+/**
+ * Parse a chrome tree, naming the section when it will not parse.
+ *
+ * `ensureDefaults` re-parses the stored header, nav and footer, so an
+ * upgrade that removes a block type — or a plugin being switched off — made
+ * this throw a BlockValidationError, which is not a ServiceError and so
+ * surfaced as a 500 with no indication of which section was stale. Header
+ * and footer maintenance then failed for reasons the owner could not read.
+ * Reported by a third party after an upgrade.
+ *
+ * The refusal itself is right and stays: silently dropping an unknown block
+ * is how an owner loses a section permanently, because the next save writes
+ * the tree back without it. What changes is that the refusal now says which
+ * section, and arrives as a validation error rather than a crash.
+ */
+function parseChrome(blocks: unknown, sectionKey: string): BlockNode[] {
+  try {
+    return parseBlockTree(blocks, "chrome");
+  } catch (error) {
+    if (error instanceof BlockValidationError) {
+      throw new ServiceError(
+        "validation",
+        `The "${sectionKey}" section cannot be read: ${error.message}`,
+      );
+    }
+    throw error;
+  }
+}
 export const ensureDefaults = defineService({
   name: "cms.ensureDefaults",
   summary: "Create the starting chrome sections and home page if absent.",
@@ -1512,7 +1540,7 @@ export const ensureDefaults = defineService({
           locale: input.locale,
           name: piece.name,
           kind: "chrome",
-          blocks: parseBlockTree(piece.blocks, "chrome"),
+          blocks: parseChrome(piece.blocks, piece.key),
         })
         .onConflictDoNothing({ target: [sections.key, sections.locale] })
         .returning({ key: sections.key });
@@ -1534,12 +1562,12 @@ export const ensureDefaults = defineService({
       if (pulled.nav.length > 0) {
         await ctx.tx
           .update(sections)
-          .set({ blocks: parseBlockTree(pulled.rest, "chrome") })
+          .set({ blocks: parseChrome(pulled.rest, HEADER_KEY) })
           .where(eq(sections.id, headerRow.id));
         if (!navHasLinks(navRow.blocks as BlockNode[])) {
           await ctx.tx
             .update(sections)
-            .set({ blocks: parseBlockTree(pulled.nav, "chrome") })
+            .set({ blocks: parseChrome(pulled.nav, NAV_KEY) })
             .where(eq(sections.id, navRow.id));
         }
         created.push("section:nav-migrated");

@@ -82,7 +82,7 @@ export function AltTextForm({
             defaultValue={value}
             maxLength={500}
             placeholder={labels.hint}
-            className="w-full rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent"
+            className="w-full rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus-visible:border-accent"
           />
         </div>
         <button
@@ -108,7 +108,7 @@ export function AltTextForm({
               maxLength={500}
               defaultValue={suggestion.suggestion}
               aria-label={labels.reviewHeading}
-              className="min-h-20 rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+              className="min-h-20 rounded-md border border-rule-strong bg-field px-3 py-2 text-sm text-ink"
             />
             <div className="flex flex-wrap items-center gap-2">
               <button

@@ -50,7 +50,7 @@ export default async function GiftCardClaimPage({
               <input
                 readOnly
                 value={card.code}
-                className="rounded-md border border-rule bg-field px-2 py-1 font-mono text-sm text-ink"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 font-mono text-sm text-ink"
               />
             </label>
           </CardBody>

@@ -75,7 +75,7 @@ export function PageComments({
               required
               rows={3}
               placeholder={labels.placeholder}
-              className="rounded-md border border-rule bg-surface px-3 py-2 text-ink"
+              className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-ink"
             />
           </label>
           <p className="text-xs text-ink-muted">{labels.mentionsHint}</p>
@@ -95,7 +95,7 @@ export function PageComments({
             <select
               name="reviewer"
               required
-              className="rounded-md border border-rule bg-surface px-3 py-2 text-ink"
+              className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-ink"
             >
               <option value=""> </option>
               {staff.map((person) => (
@@ -112,7 +112,7 @@ export function PageComments({
               required
               rows={2}
               placeholder={labels.reviewRequest}
-              className="rounded-md border border-rule bg-surface px-3 py-2 text-ink"
+              className="rounded-md border border-rule-strong bg-surface px-3 py-2 text-ink"
             />
           </label>
           <button
@@ -181,7 +181,7 @@ export function PageComments({
                           name="body"
                           required
                           placeholder={labels.reply}
-                          className="rounded-md border border-rule bg-surface px-2 py-1 text-xs text-ink"
+                          className="rounded-md border border-rule-strong bg-surface px-2 py-1 text-xs text-ink"
                         />
                         <button
                           type="submit"
@@ -220,7 +220,7 @@ export function PageComments({
                           type="text"
                           name="note"
                           placeholder={labels.requestChanges}
-                          className="rounded-md border border-rule bg-surface px-2 py-1 text-xs text-ink"
+                          className="rounded-md border border-rule-strong bg-surface px-2 py-1 text-xs text-ink"
                         />
                         <button
                           type="submit"

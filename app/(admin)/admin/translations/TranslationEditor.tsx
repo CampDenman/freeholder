@@ -134,7 +134,7 @@ export function TranslationEditor({
                         name={`t.${row.key}`}
                         defaultValue={row.value}
                         rows={Math.min(10, Math.max(3, row.source.split("\n").length + 1))}
-                        className="w-full rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink"
+                        className="w-full rounded-md border border-rule-strong bg-surface px-3 py-2 text-sm text-ink"
                       />
                     ) : (
                       <Input id={row.key} name={`t.${row.key}`} defaultValue={row.value} />

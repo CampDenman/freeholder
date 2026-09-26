@@ -107,7 +107,7 @@ export default async function ReviewsPage({
           <select
             name="status"
             defaultValue={status ?? ""}
-            className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+            className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
           >
             <option value="">{t("reviews.filter.any")}</option>
             {REVIEW_STATES.map((one) => (
@@ -200,7 +200,7 @@ export default async function ReviewsPage({
                           required
                           rows={3}
                           defaultValue={review.replyBody ?? ""}
-                          className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                          className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                         />
                       </label>
                       <div>

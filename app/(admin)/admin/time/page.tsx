@@ -88,7 +88,7 @@ export default async function TimePage({
                   <select
                     name="roundToMinutes"
                     defaultValue="1"
-                    className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   >
                     {[1, 6, 15, 30].map((minutes) => (
                       <option key={minutes} value={minutes}>
@@ -110,14 +110,14 @@ export default async function TimePage({
                 <input
                   name="description"
                   required
-                  className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 />
               </label>
               <label className="grid gap-1 text-sm">
                 <span className="text-ink-muted">{t("time.field.project")}</span>
                 <select
                   name="projectId"
-                  className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                  className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                 >
                   <option value="">{t("time.noProject")}</option>
                   {(projects ?? []).map((project) => (
@@ -188,7 +188,7 @@ export default async function TimePage({
               <input
                 name="description"
                 required
-                className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
@@ -197,14 +197,14 @@ export default async function TimePage({
                 name="minutes"
                 required
                 placeholder={t("time.howLongPlaceholder")}
-                className="w-28 rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="w-28 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <label className="grid gap-1 text-sm">
               <span className="text-ink-muted">{t("time.field.project")}</span>
               <select
                 name="projectId"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="">{t("time.noProject")}</option>
                 {(projects ?? []).map((project) => (
@@ -286,7 +286,7 @@ export default async function TimePage({
               <span className="text-ink-muted">{t("time.field.appliesTo")}</span>
               <select
                 name="scope"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="business">{t("time.scope.business")}</option>
                 <option value="project">{t("time.scope.project")}</option>
@@ -296,7 +296,7 @@ export default async function TimePage({
               <span className="text-ink-muted">{t("time.field.project")}</span>
               <select
                 name="scopeId"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 <option value="">{t("time.everything")}</option>
                 {(projects ?? []).map((project) => (
@@ -311,7 +311,7 @@ export default async function TimePage({
               <input
                 name="rate"
                 inputMode="decimal"
-                className="w-28 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                className="w-28 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
               />
             </label>
             <Button type="submit" variant="quiet">

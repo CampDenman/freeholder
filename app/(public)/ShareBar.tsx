@@ -86,7 +86,7 @@ export async function ShareBar({
               id="share-bar-link"
               readOnly
               value={`${attribution} ${mintedUrl}`}
-              className="min-w-0 flex-1 rounded-md border border-rule bg-field px-3 py-1.5 font-mono text-sm text-ink"
+              className="min-w-0 flex-1 rounded-md border border-rule-strong bg-field px-3 py-1.5 font-mono text-sm text-ink"
             />
             <NativeShare
               url={mintedUrl}

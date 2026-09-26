@@ -131,7 +131,7 @@ export default async function QuotePage({
                       name="description"
                       defaultValue={line.description}
                       placeholder={t("quotes.field.line")}
-                      className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                      className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                     />
                   </label>
                   <label className="grid gap-1 text-sm">
@@ -141,7 +141,7 @@ export default async function QuotePage({
                       inputMode="decimal"
                       defaultValue={line.price}
                       placeholder={t("quotes.field.price")}
-                      className="w-28 rounded-md border border-rule bg-field px-2 py-1 text-sm tabular-nums"
+                      className="w-28 rounded-md border border-rule-strong bg-field px-2 py-1 text-sm tabular-nums"
                     />
                   </label>
                   <label className="flex items-center gap-2 text-sm">
@@ -249,7 +249,7 @@ export default async function QuotePage({
                 name="body"
                 required
                 rows={3}
-                className="max-w-prose rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="max-w-prose rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               />
             </label>
             <div>

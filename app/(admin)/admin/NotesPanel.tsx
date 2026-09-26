@@ -88,7 +88,7 @@ export async function NotesPanel({
                     name="body"
                     rows={Math.min(8, Math.max(2, note.body.split("\n").length))}
                     defaultValue={note.body}
-                    className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                    className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
                   />
                   <div className="flex flex-wrap items-center gap-2">
                     <Button type="submit" variant="quiet">
@@ -128,7 +128,7 @@ export async function NotesPanel({
               name="body"
               rows={3}
               required
-              className="w-full rounded-md border border-rule bg-field px-2 py-1 text-sm"
+              className="w-full rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
             />
           </label>
           <div className="flex flex-wrap items-end gap-3">
@@ -137,7 +137,7 @@ export async function NotesPanel({
               <select
                 name="visibility"
                 defaultValue="team"
-                className="rounded-md border border-rule bg-field px-2 py-1 text-sm"
+                className="rounded-md border border-rule-strong bg-field px-2 py-1 text-sm"
               >
                 {NOTE_VISIBILITIES.map((visibility) => (
                   <option key={visibility} value={visibility}>

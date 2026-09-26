@@ -184,14 +184,14 @@ export default async function PortalContactImportPage({
                       <label htmlFor="signup-contact-source" className="text-sm font-semibold">
                         {t("contactImports.signup.sources")}
                       </label>
-                      <select id="signup-contact-source" name="source" className="rounded-md border border-rule bg-field px-3 py-2 text-sm">
+                      <select id="signup-contact-source" name="source" className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm">
                         {offer.allowedSources.includes("csv") ? <option value="csv">{t("contactImports.signup.source.csv")}</option> : null}
                         {offer.allowedSources.includes("vcard") ? <option value="vcard">{t("contactImports.signup.source.vcard")}</option> : null}
                       </select>
                       <label htmlFor="signup-contact-file" className="text-sm font-semibold">
                         {t("contactImports.field.file")}
                       </label>
-                      <input id="signup-contact-file" type="file" name="file" required accept=".csv,.vcf,text/csv,text/vcard" className="rounded-md border border-rule bg-field px-3 py-2 text-sm" />
+                      <input id="signup-contact-file" type="file" name="file" required accept=".csv,.vcf,text/csv,text/vcard" className="rounded-md border border-rule-strong bg-field px-3 py-2 text-sm" />
                       {offer.allowedFields.map((field) => <input key={field} type="hidden" name="field" value={field} />)}
                       <div><Button type="submit">{t("contactImports.signup.preview")}</Button></div>
                     </form>
