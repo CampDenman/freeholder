@@ -2508,6 +2508,7 @@
   "demo.outcome.assessmentVisible": "A marked heating check appears in Assessments",
   "demo.outcome.bookingVisible": "A marked sitting appears in Appointments",
   "demo.outcome.contactsVisible": "Marked demo contacts appear in Contacts",
+  "demo.outcome.eventVisible": "A marked sourdough class appears in Events",
   "demo.outcome.formVisible": "A marked enquiry form appears in Forms",
   "demo.outcome.galleryVisible": "A marked client gallery appears in Galleries",
   "demo.outcome.inboxVisible": "A marked thread appears in Inbox",

@@ -2508,6 +2508,7 @@
   "demo.outcome.assessmentVisible": "Une vérification du chauffage marquée apparaît dans Évaluations",
   "demo.outcome.bookingVisible": "Une séance marquée apparaît dans Rendez-vous",
   "demo.outcome.contactsVisible": "Des contacts de démonstration marqués apparaissent dans Contacts",
+  "demo.outcome.eventVisible": "Un cours de levain marqué apparaît dans Événements",
   "demo.outcome.formVisible": "Un formulaire de demande marqué apparaît dans Formulaires",
   "demo.outcome.galleryVisible": "Une galerie client marquée apparaît dans Galeries",
   "demo.outcome.inboxVisible": "Un fil marqué apparaît dans la boîte de réception",

@@ -5669,14 +5669,17 @@ payment, tax, inventory and reporting path, with no floating-point money.
   the policy says, because there is nothing left to inspect. `/admin/hire`,
   ordered overdue-first. `0094_rentals.sql`. Coverage in
   `tests/core/rentals.test.ts`. **F04** `/admin/hire` rentals. **F05** `rentals.quote`/`reserve`/`handOver`/`takeBack`/`setTerms`/`list` at `/api/v1/rentals.*`, MCP `rentals_*`. **F07** `tests/core/rentals.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/rentals.test.ts` is the composition proof.)
-- [ ] **C6.11** Build events/classes with venue, sessions, seat inventory,
+- [x] **C6.11** Build events/classes with venue, sessions, seat inventory,
   tickets/passes, waitlists, schema.org Event, ICS and check-in.
   *(Evidence: `events` module — venue fields, sessions with capacity,
   ticket types, contact-spine registrations that waitlist when a session is
   full and promote on cancel, check-in, Event JSON-LD, `/ics/events/{slug}`,
   public `/events` pages and `/admin/events`. Merge and privacy cover
-  `event_registrations`. Migration `0059_concerned_sumo.sql`;
-  `tests/core/events.test.ts`. **F04** `/admin/events` list/create. **F05** `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at `/api/v1/events.*`, MCP `events_*`. **F07** `tests/core/events.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/events.test.ts` is the composition proof.)*
+  `event_registrations`. The tables are in the squashed baseline
+  `db/migrations/0000_reviewed-baseline.sql` — this line previously cited
+  `0059_concerned_sumo.sql`, which the squash removed, so the citation could
+  not resolve and the item could not honestly be checked;
+  `tests/core/events.test.ts`. **F04** `/admin/events` list/create. **F05** `events.create`/`update`/`addSession`/`addTicket`/`register`/`list`/`publish` at `/api/v1/events.*`, MCP `events_*`. **F07** `tests/core/events.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F06** axe WCAG A/AA over the public index, the public event page and both admin surfaces, in light and dark, in `tests/browser/events.spec.ts`; ICU parity across shipped locales by `tests/core/i18n-gate.test.ts`. **F08** `tests/core/events.test.ts` plus `tests/browser/events.spec.ts` — service, database and browser coverage. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F10** `src/modules/events/onboarding.ts` ships a demo class in en/fr/es, loaded, verified and purged by the tracked demo run. **F12** `tests/core/events.test.ts` is the composition proof.)*
 
 #### Quotes, contracts, projects, and time
 - [x] **C6.12** Build quote draft/send/view/negotiate/revise/expire/accept/

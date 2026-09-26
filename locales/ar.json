@@ -2177,6 +2177,7 @@
   "demo.outcome.assessmentVisible": "تظهر فحص تدفئة مُعلّم في التقييمات",
   "demo.outcome.bookingVisible": "يظهر جلسة موسومة في المواعيد",
   "demo.outcome.contactsVisible": "تظهر جهات اتصال تجريبية موسومة في جهات الاتصال",
+  "demo.outcome.eventVisible": "يظهر درس عجينة مخمرة مُعلّم في الفعاليات",
   "demo.outcome.formVisible": "يظهر نموذج استفسار موسوم في النماذج",
   "demo.outcome.galleryVisible": "يظهر معرض عميل موسوم في المعارض",
   "demo.outcome.inboxVisible": "يظهر خيط محادثة موسوم في صندوق الوارد",
