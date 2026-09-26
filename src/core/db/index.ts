@@ -4,10 +4,14 @@
 // importing this module never connects — only use does.
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { databaseUrl } from "@/core/env";
+import { databasePoolMax, databaseUrl } from "@/core/env";
 
 function connect() {
   const conn = postgres(databaseUrl(), {
+    // Bounded so two instances fit in a small managed database during a
+    // rolling deploy: this process holds one pool per module graph, and the
+    // platform runs the new instance beside the old one.
+    max: databasePoolMax(),
     // Readiness must fail promptly while liveness remains available. A dead
     // database route otherwise occupies the pool and outlives the platform's
     // five-second health-check budget.

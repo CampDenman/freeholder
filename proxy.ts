@@ -70,6 +70,25 @@ const ENTITY_FEED = /^\/feeds\/([a-z]+)\.xml$/;
 const LOCALE_PREFIX = /^\/([a-z]{2}(?:-[A-Za-z]{2,4})?)(\/.*)?$/;
 
 /**
+ * Two-letter route roots that are not languages.
+ *
+ * `/og/services` is shaped exactly like a locale-prefixed path, so the prefix
+ * was stripped and the request became `/services` — every page's link-preview
+ * image 404ed, and every `/go/…` short link was swallowed the same way. Nobody
+ * sees that on the site itself; you see it when a page is shared to Facebook,
+ * iMessage or WhatsApp and comes back blank. Reported by a third party.
+ *
+ * `NEVER_LOCALIZED` cannot do this job: it is tested against the *rest* of the
+ * path, so it answers "is `/admin` localizable", never "is `og` a language".
+ * This is the same question asked about the first segment instead.
+ *
+ * A deny-list rather than an allow-list of languages, because the edge still
+ * cannot ask which locales exist, and `tests/core/proxy.test.ts` fails if a new
+ * two-letter route appears in `app/` without being listed here.
+ */
+const RESERVED_ROOT = /^(og|go)$/;
+
+/**
  * Surfaces where a visitor identifier would be pointless or unwelcome.
  *
  * The owner's own admin is not traffic to measure, and a crawler fetching
@@ -131,7 +150,11 @@ export function proxy(request: NextRequest): NextResponse {
   // the customer portal accept a prefix. Owner/internal routes never do, even
   // when somebody types `/fr/admin` by hand.
   const prefixed = LOCALE_PREFIX.exec(path);
-  if (prefixed && !NEVER_LOCALIZED.test(prefixed[2] ?? "/")) {
+  if (
+    prefixed &&
+    !RESERVED_ROOT.test(prefixed[1] ?? "") &&
+    !NEVER_LOCALIZED.test(prefixed[2] ?? "/")
+  ) {
     const [, locale = "", rest = "/"] = prefixed;
     headers.set(LOCALE_HEADER, locale);
     headers.set(PATH_HEADER, rest);
