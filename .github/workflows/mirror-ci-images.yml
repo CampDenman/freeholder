@@ -52,9 +52,11 @@ jobs:
       - name: Mirror the S3-compatible storage used by the recipe gate
         env:
           SOURCE: docker.io/adobe/s3mock:5.2.3@sha256:ab01a6946750f451ca215a47e91030695b260e4003b8a5a6201d25029b8fca92
-          TARGET: ghcr.io/${{ github.repository_owner }}/freeholder-ci-s3:5.2.3
+          OWNER: ${{ github.repository_owner }}
         run: |
-          docker buildx imagetools create --tag "$TARGET" "$SOURCE"
-          echo "Mirrored $SOURCE"
-          echo "Pin CI to this digest:"
-          docker buildx imagetools inspect "$TARGET" --format '{{ .Manifest.Digest }}'
+          # Lower-cased because ghcr.io rejects a mixed-case repository name and
+          # `github.repository_owner` is spelled the way the account is.
+          target="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/freeholder-ci-s3:5.2.3"
+          docker buildx imagetools create --tag "$target" "$SOURCE"
+          echo "Mirrored $SOURCE to $target"
+          docker buildx imagetools inspect "$target" --format '{{ .Manifest.Digest }}'
