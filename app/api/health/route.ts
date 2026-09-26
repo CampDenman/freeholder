@@ -24,16 +24,28 @@ export async function GET(): Promise<Response> {
   try {
     const report = await ready();
     const jobs = await getJobRuntimeEvidence();
+    // An installed plugin that could not be wired makes this instance a
+    // different product from the one that was deployed, so it is not ready.
+    //
+    // It used to be: a plugin was disabled, `modules.length` still counted it,
+    // readiness answered ok, and the platform promoted the broken instance over
+    // the healthy one it was replacing — 36 routes short, with nothing in the
+    // logs. Counting a disable as readiness is how that happened, so a disable
+    // now fails readiness and says how many.
+    const ok = jobs.ready && report.disabled.length === 0;
     return Response.json(
       {
-        ok: jobs.ready,
+        ok,
         version: PLATFORM_VERSION,
         modules: report.modules.length,
         services: report.services.length,
         listeners: report.listeners.length,
+        // A count, not the names or reasons: the same rule as every other
+        // number here. Which plugin and why is on stderr and behind Doctor.
+        disabled: report.disabled.length,
         jobs,
       },
-      { status: jobs.ready ? 200 : 503 },
+      { status: ok ? 200 : 503 },
     );
   } catch {
     // Database errors may contain query values. Public readiness needs only a

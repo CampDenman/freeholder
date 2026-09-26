@@ -25,6 +25,26 @@ const envSchema = z.object({
   /** Postgres connection string. Required at runtime, not at build time. */
   DATABASE_URL: z.string().url().optional(),
   /**
+   * Connections per pool. Coerced to a number on purpose.
+   *
+   * An idle instance held 21 connections: postgres.js defaults to 10, the
+   * instrumentation graph and the request graph each hold their own copy of the
+   * pool (see `src/core/runtime.ts`), and pg-boss adds 2. DigitalOcean's
+   * smallest managed Postgres allows 22, and App Platform starts the new
+   * instance beside the old one — so the second deploy could not connect at all
+   * ("remaining connection slots are reserved for roles with the SUPERUSER
+   * attribute"). Reported by a third party deploying Freeholder.
+   *
+   * 4 keeps two instances inside a 22-connection database with room to spare:
+   * 2 graphs x 4, plus 2 for pg-boss, is 10 per instance and 20 for a rollover.
+   *
+   * Coercion is the point. postgres.js reads `PGMAX` from the environment but
+   * leaves it a string, and `[...Array("6")]` has length 1 — so setting PGMAX
+   * to any value silently produced a *one*-connection pool. A setting that
+   * cannot be passed as a number is not a setting.
+   */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(4),
+  /**
    * Throwaway database for the test suite. Declared here because this file is
    * the single register of what the platform reads — vitest.config.ts maps it
    * onto DATABASE_URL so tests can never reach the development database.
@@ -403,6 +423,11 @@ export function requireProductionEnv(): void {
         .join("\n")}\nSee .env.example.`,
     );
   }
+}
+
+/** Connections per pool, as a number. See DATABASE_POOL_MAX for the why. */
+export function databasePoolMax(): number {
+  return env().DATABASE_POOL_MAX;
 }
 
 /** Fails loudly, in plain English, when the database is needed but absent. */

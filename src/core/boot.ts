@@ -19,6 +19,16 @@ import {
   validateOnboardingRegistry,
 } from "@/core/onboarding/registry";
 
+/**
+ * Record a disable and say so on stderr.
+ *
+ * Logged here rather than at the call sites so a disable can never be silent:
+ * the instance that swallowed one took a diagnostic job to find.
+ */
+function recordDisabled(report: BootReport, module: string, reason: string): void {
+  report.disabled.push({ module, reason });
+  console.error(`[freeholder] plugin disabled: ${module}: ${reason}`);
+}
 export interface BootReport {
   /** Modules in the order they were wired. */
   modules: string[];
@@ -31,6 +41,19 @@ export interface BootReport {
   guidance: string[];
   demoScenarios: string[];
   demoFixtures: string[];
+  /**
+   * Plugins that were installed but could not be wired, and why.
+   *
+   * A disable used to be recorded only as a decoration on the module name, so
+   * `modules.length` counted it and readiness answered ok. A third party
+   * deploying Freeholder hit exactly that: the new instance could not reach the
+   * database, its plugin was disabled, nothing was logged, `/api/health`
+   * returned ok, and App Platform promoted the broken instance over the healthy
+   * one. The site went live missing 36 routes.
+   *
+   * So a disable is its own fact, countable and separate from the module list.
+   */
+  disabled: Array<{ module: string; reason: string }>;
   listeners: Array<{ event: string; module: string; handler: string }>;
 }
 
@@ -157,12 +180,14 @@ export async function boot(
     guidance: [],
     demoScenarios: [],
     demoFixtures: [],
+    disabled: [],
   };
 
   const installed = manifests.map((manifest) => manifest.name);
   const isolated = isolatePlugins(manifests, installed);
   for (const failed of isolated.filter((entry) => entry.error)) {
     report.modules.push(`${failed.manifest.name} (disabled: ${failed.error})`);
+    recordDisabled(report, failed.manifest.name, failed.error ?? "unknown");
   }
   for (const manifest of sortModules(bootableManifests(isolated))) {
     const wired = await isolatePluginLoad(manifest.name, () =>
@@ -171,6 +196,7 @@ export async function boot(
     if (!wired.ok) {
       if (isPluginManifest(manifest)) {
         report.modules.push(`${manifest.name} (disabled: ${wired.error})`);
+        recordDisabled(report, manifest.name, wired.error);
         continue;
       }
       throw new Error(wired.error);

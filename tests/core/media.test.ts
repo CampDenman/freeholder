@@ -274,6 +274,19 @@ describe("renditions", () => {
     expect(widths).toEqual([400, 800, 1600]);
   });
 
+  // An original sitting exactly on a ladder width is the case a strict `<`
+  // dropped: a 1600-wide photograph got 400 and 800 and nothing else, so every
+  // full-width hero was a browser-upscaled 800. Reported from a site where 62
+  // of 185 originals were exactly 1600 wide.
+  it("includes the original width when it lands exactly on the ladder", async () => {
+    const built = await buildRenditions(
+      await png(1600, 900),
+      { width: 1600, height: 900 },
+      (format, width) => `k.${width}.${format}`,
+    );
+    const widths = [...new Set(built.map((r) => r.width))].sort((a, b) => a - b);
+    expect(widths).toEqual([400, 800, 1600]);
+  });
   it("groups renditions by format, smallest first", async () => {
     const built = await buildRenditions(
       await png(2000, 1200),

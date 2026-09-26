@@ -143,7 +143,12 @@ export async function buildRenditions(
   facts: ImageFacts,
   keyFor: (format: VariantFormat, width: number) => string,
 ): Promise<BuiltRendition[]> {
-  const targets = WIDTHS.filter((width) => width < facts.width);
+  // `<=`, not `<`: an original sitting exactly on one of these widths is the
+  // case where that rendition matters most, and a strict comparison skipped it,
+  // so the largest variant came out one step below the original and full-width
+  // heroes were upscaled by the browser. On the site this was reported from,
+  // 62 of 185 originals were exactly 1600 wide and topped out at 800.
+  const targets = WIDTHS.filter((width) => width <= facts.width);
   // A small image still deserves modern formats, just at its own size.
   if (targets.length === 0) targets.push(facts.width as (typeof WIDTHS)[number]);
 
