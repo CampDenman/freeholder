@@ -4081,7 +4081,7 @@ export interface ServiceCatalog {
   };
   "forms.get": {
     input: { slug: string };
-    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
+    output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; status: "active" | "closed"; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "forms.list": {
     input: { trashedOnly?: boolean };

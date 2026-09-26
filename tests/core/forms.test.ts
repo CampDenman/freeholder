@@ -13,6 +13,7 @@ import { contacts, timelineEvents } from "@/core/contacts/schema";
 import { formSubmissions } from "@/modules/forms/schema";
 import {
   createForm,
+  getForm,
   getFormById,
   listSubmissions,
   reviewSubmission,
@@ -405,6 +406,34 @@ describe.runIf(hasDatabase)("loading a form for the builder", () => {
     );
     const denied = await failure(getFormById.call({ id: created.id }, ANONYMOUS));
     expect(denied.code).toBe("permission");
+  });
+  // The assertion above was made against the staff service, which refuses an
+  // anonymous caller outright. The public one answers them, and it answered
+  // with the whole row — so the intent was tested on the service that never
+  // had the problem. This is the same assertion against the service a stranger
+  // can actually reach.
+  it("does not hand a stranger the notification addresses", async () => {
+    const created = await createForm.call(
+      {
+        slug: "contact",
+        name: "Contact",
+        fields: [{ key: "name", label: "Name", kind: "text", required: true }],
+        notify: ["studio@example.test"],
+      },
+      STAFF,
+    );
+
+    const seen = await getForm.call({ slug: "contact" }, ANONYMOUS);
+    expect(seen?.slug).toBe("contact");
+    // Not "is empty" — absent. A visitor is told nothing about the column,
+    // including how many addresses it holds.
+    expect(seen).not.toHaveProperty("notify");
+    expect(JSON.stringify(seen)).not.toContain("studio@example.test");
+
+    // And the address is still there for the people entitled to it, so this is
+    // a projection and not a deletion.
+    const staffView = await getFormById.call({ id: created.id }, STAFF);
+    expect(staffView?.notify).toEqual(["studio@example.test"]);
   });
 
   it("says so when the id is nobody's", async () => {
