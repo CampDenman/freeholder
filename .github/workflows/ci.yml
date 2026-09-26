@@ -353,19 +353,54 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/)" = "200"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/setup)" = "200"
           docker rm -f freeholder-ci >/dev/null
+      # Pulled from our own registry, not from upstream. MinIO closed public
+      # distribution in September 2026 — quay.io and Docker Hub both answer 401
+      # to an anonymous read and bitnami/minio was emptied — so a build that
+      # pulled it went red for a licensing decision with nothing wrong in it.
+      # `.github/workflows/mirror-ci-images.yml` owns the mirror.
+      #
+      # The replacement is adobe/s3mock rather than another MinIO build, because
+      # no MinIO build is still freely distributable. What the gate exercises is
+      # unchanged: Doctor writes, reads and deletes a real object over signed
+      # path-style HTTP through our own aws4fetch adapter. What is no longer
+      # exercised is credential enforcement — s3mock accepts any key — so a
+      # signing regression would now surface in deployment rather than here.
+      - name: Log in to ghcr.io for the mirrored CI images
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Start S3-compatible recipe storage
+        env:
+          OWNER: ${{ github.repository_owner }}
         run: |
-          docker run -d --name freeholder-minio --network host \
-            -e MINIO_ROOT_USER=freeholder-ci \
-            -e MINIO_ROOT_PASSWORD=freeholder-ci-secret \
-            quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z@sha256:d249d1fb6966de4d8ad26c04754b545205ff15a62e4fd19ebd0f26fa5baacbc0 server /data --address :9000
-          for _ in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:9000/minio/health/live && break
+          # Lower-cased because ghcr.io rejects a mixed-case repository
+          # name, and `github.repository_owner` is spelled as the account is.
+          image="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/freeholder-ci-s3:5.2.3@sha256:ab01a6946750f451ca215a47e91030695b260e4003b8a5a6201d25029b8fca92"
+          # Published rather than host-networked: s3mock serves HTTP on 9090 and
+          # offers no port override, and recipe-matrix.sh expects 9000.
+          docker run -d --name freeholder-s3 -p 127.0.0.1:9000:9090 \
+            -e COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS=freeholder-recipe-gate \
+            -e COM_ADOBE_TESTING_S3MOCK_STORE_REGION=us-east-1 \
+            "$image"
+          # The bucket arrives with the container, so there is no second image
+          # and no client to install. Waited on by listing it: a container that
+          # is up before its bucket exists fails the gate further along, where
+          # it reads as a storage bug in Freeholder rather than a race here.
+          ready=''
+          for _ in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:9000/freeholder-recipe-gate; then
+              ready=yes
+              break
+            fi
             sleep 1
           done
-          docker run --rm --network host --entrypoint /bin/sh \
-            quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z@sha256:fb8f773eac8ef9d6da0486d5dec2f42f219358bcb8de579d1623d518c9ebd4cc -c \
-            'mc alias set local http://127.0.0.1:9000 freeholder-ci freeholder-ci-secret && mc mb --ignore-existing local/freeholder-recipe-gate'
+          if [ -z "$ready" ]; then
+            docker logs freeholder-s3
+            echo 'the recipe-gate bucket never became readable'
+            exit 1
+          fi
       - run: bash scripts/recipe-matrix.sh
       - run: bash scripts/public-gates.sh
       - name: Registry login for the previous release
