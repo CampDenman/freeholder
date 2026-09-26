@@ -109,7 +109,10 @@ export const calculator = defineBlock({
                 min={input.min}
                 max={input.max}
                 required
-                className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+                // 16px, not 14px: iOS Safari zooms the page when a control
+                // under 16px takes focus, which moves the page under the
+                // visitor on their first tap.
+                className="rounded-md border border-rule bg-field px-3 py-2 text-base text-ink"
               />
             </label>
           ))}
@@ -205,7 +208,7 @@ export const coverageCheck = defineBlock({
               defaultValue={resolved.asked}
               required
               autoComplete="postal-code"
-              className="rounded-md border border-rule bg-field px-3 py-2 text-sm text-ink"
+              className="rounded-md border border-rule bg-field px-3 py-2 text-base text-ink"
             />
           </label>
           <button
