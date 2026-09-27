@@ -6880,13 +6880,53 @@ permitted conversation on the same contact timeline.
   all three asserted in `tests/modules/assessments.test.ts`, with the
   owner-refused-a-gap → visitor-reads-authored-words journey end to end in
   `tests/browser/assessments.spec.ts`.)
-- [ ] **C8.15** Build as-of dated published facts with a correction ledger on
+- [x] **C8.15** Build as-of dated published facts with a correction ledger on
   `core/attestations` (§4.18): every published rate, metric, status or byline
   carries its source and the moment it was true, a correction supersedes rather
   than edits, and superseded values stay readable with their dates. Prove
   publication with source and as-of, supersession, a visible correction
   history, staleness once `valid_until` passes, and that no fact renders
   without its date.
+  (§4.18 is the model; this item lands it end to end. A rate, a metric, an
+  opening status and a byline are one kind of row with its source and the
+  moment it was true (`src/core/attestations/schema.ts`); the migration is
+  `db/migrations/0014_attestations.sql`, and both ledger guarantees live in
+  the database rather than the service — `attestations_current_idx` allows
+  one current fact per key and subject (COALESCE-based, so a business-wide
+  figure is not exempt) and `attestations_one_correction_idx` stops the
+  history forking. Money rides the schemaless `value` as integer minor units,
+  and the tests keep it that way.
+  Tests: `tests/core/attestations.test.ts` — publication carries source and
+  as-of; a correction supersedes without erasing and the superseded value
+  stays readable with its dates; the ledger lists every statement of a key; a
+  fact past `valid_until` is returned marked stale, never hidden; withdrawal
+  unpublishes without deleting; a fact nobody stated returns null, and no code
+  path substitutes anything for it. **F04** `/admin/facts` and
+  `/admin/facts/[key]` (`app/(admin)/admin/facts/page.tsx`,
+  `app/(admin)/admin/facts/[key]/page.tsx`) are the correction-ledger UI, and
+  the public `fact` block (`src/modules/cms/blocks/surfaces.tsx`) renders a
+  figure with its date and source together — never the number alone, and
+  nothing at all once the fact is withdrawn or never stated. **F05**
+  `attestations.record`/`correct`/`withdraw`/`current`/`history`/`list` at
+  `/api/v1/attestations.*`, MCP `attestations_*`, SDK client in
+  `packages/sdk/src/generated.ts` — surface equivalence is registry-derived:
+  `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts`,
+  `tests/core/mcp.test.ts`. **F07** `tests/core/attestations.test.ts` covers
+  the grant boundary — a customer is refused; a staff view grant (the
+  administrator and legacy-staff seeds in `src/core/roles/defaults.ts`) reads
+  the ledger while every write is refused to it, so the owner publishes and
+  staff read — and the refusal semantics: a backwards-dated correction, a
+  second current value, a validity window that closes before its as-of, and
+  correcting a fact that was never stated. **F09** N/A as C11.14 — this item
+  uses the shared audit/outbox; product-wide export/restore/retention/erasure
+  proof is still open. Shared participation:
+  `tests/core/record-participation.test.ts`. **F12**
+  `tests/browser/facts.spec.ts` is the cross-surface journey — publish,
+  correct, withdraw, with the public page showing the figure and its
+  provenance, then the corrections, then nothing; calculators compose the
+  same facts and refuse missing or stale inputs
+  (`src/modules/calculators/service.ts`). Release note:
+  `.changeset/attested-facts-and-corrections.md`. Checked 2026-09-26.)
 - [ ] **C8.16** Build consent-gated progress and comparison media: before/after
   pairs and time-series publish only against a recorded consent naming the
   person and the scope; withdrawal unpublishes from page, gallery, feed,
