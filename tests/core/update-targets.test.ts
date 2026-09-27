@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { parse } from "yaml";
 import { TIER1_TARGETS } from "@/core/portability/archive";
 import {
+  assertBackupOperations,
   assertStrategyMatchesOperations,
   describeTargets,
   recipeUpdateTarget,
@@ -20,7 +21,7 @@ import {
 } from "@/core/update/targets";
 
 interface Recipe {
-  operations?: { update?: string; rollback?: string };
+  operations?: { update?: string; rollback?: string; backup?: string; restore?: string };
   update?: { strategy?: string; rollback?: string };
 }
 
@@ -65,6 +66,105 @@ describe("per-target update actions (C10.10)", () => {
         expect(TARGET_OPERATIONS[target].rollback).toBe(parsed.operations?.rollback);
       });
     }
+  });
+
+  describe("the 2026-09-21 repair note's tested backup", () => {
+    // The client-readiness repair reopens the recipe update path as a manual
+    // operator procedure "requiring a tested backup and immutable image
+    // pins". The pins were already gated; this is the other half. The audit
+    // struck a 64-byte fingerprint that claimed to be a backup, so the gate
+    // demands the custom format a rehearsal can actually restore, plus the
+    // restore command that rehearses it.
+    for (const target of TIER1_TARGETS) {
+      it(`${target} declares a rehearseable backup and the restore that runs it`, () => {
+        const parsed = recipe(target);
+        const problems = assertBackupOperations({
+          target,
+          operations: parsed.operations,
+        });
+        expect(problems.map((problem) => problem.problem)).toEqual([]);
+      });
+    }
+
+    it("refuses a recipe with no backup declared at all", () => {
+      const problems = assertBackupOperations({
+        target: "render",
+        operations: { restore: "pg_restore --dbname $DATABASE_URL freeholder.dump" },
+      });
+      expect(problems.map((p) => p.problem)).toEqual([
+        "has no operations.backup command",
+      ]);
+    });
+
+    it("refuses a plain dump nobody can rehearse, the fingerprint's shape", () => {
+      const problems = assertBackupOperations({
+        target: "render",
+        operations: {
+          backup: "pg_dump --file freeholder.dump $DATABASE_URL",
+          restore: "pg_restore --dbname $DATABASE_URL freeholder.dump",
+        },
+      });
+      expect(problems.map((p) => p.problem)).toEqual([
+        "operations.backup does not produce a restorable custom-format dump: pg_dump --file freeholder.dump $DATABASE_URL",
+      ]);
+    });
+
+    it("refuses a backup with no declared restore, because untested is not backed up", () => {
+      const problems = assertBackupOperations({
+        target: "railway",
+        operations: {
+          backup: "railway run pg_dump --format=custom --file freeholder.dump $DATABASE_URL",
+        },
+      });
+      expect(problems.map((p) => p.problem)).toEqual([
+        "has no operations.restore command, so the backup is never rehearsed",
+      ]);
+    });
+
+    it("refuses a restore that is not pg_restore into a database", () => {
+      const problems = assertBackupOperations({
+        target: "docker-selfhost",
+        operations: {
+          backup:
+            "docker compose exec -T db pg_dump --format=custom -U freeholder freeholder > freeholder.dump",
+          restore: "psql -d $DATABASE_URL -f freeholder.sql",
+        },
+      });
+      expect(problems.map((p) => p.problem)).toEqual([
+        "operations.restore is not pg_restore into a database: psql -d $DATABASE_URL -f freeholder.sql",
+      ]);
+    });
+
+    it("follows a delegated backup script, the way the droplet ships backup.sh", () => {
+      const problems = assertBackupOperations({
+        target: "digitalocean-droplet",
+        operations: {
+          backup: "deploy/digitalocean-droplet/infra/backup.sh",
+          restore:
+            "docker compose exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump",
+        },
+        readScript: (path) =>
+          path === "deploy/digitalocean-droplet/infra/backup.sh"
+            ? "pg_dump -U freeholder --format=custom --no-owner --no-privileges freeholder > archive.dump"
+            : null,
+      });
+      expect(problems).toEqual([]);
+    });
+
+    it("refuses a delegated script that does not itself dump in custom format", () => {
+      const problems = assertBackupOperations({
+        target: "digitalocean-droplet",
+        operations: {
+          backup: "deploy/digitalocean-droplet/infra/backup.sh",
+          restore:
+            "docker compose exec -T db pg_restore --no-owner --no-privileges -U freeholder -d freeholder < freeholder.dump",
+        },
+        readScript: () => "pg_dump freeholder > freeholder.sql",
+      });
+      expect(problems.map((p) => p.problem)).toEqual([
+        "operations.backup does not produce a restorable custom-format dump: deploy/digitalocean-droplet/infra/backup.sh",
+      ]);
+    });
   });
 
   describe("what this instance resolves to", () => {
