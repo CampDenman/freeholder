@@ -24,6 +24,7 @@ import { getTranslation, translatedIds } from "@/core/i18n/service";
 import { recordRedirect } from "@/core/seo/service";
 import { queueIndexNow } from "@/core/seo/indexnow";
 import { kindFromSlug, priorityFromSlug, PUBLIC_ENTITY_KINDS } from "@/core/seo/classify";
+import { blockingVetoes } from "@/core/privacy/publish-veto";
 import { resolveAuthors, writeRevision } from "./history";
 import {
   contentLayouts,
@@ -358,6 +359,14 @@ export const resolvePage = defineService({
     const page = source?.page;
     if (!page) return null;
 
+    // A published flag is a cache of "this may render". Registered vetoes
+    // re-derive the answer from the ledger that owns it (C8.16: a withdrawn
+    // consent unpublishes the case-study page even if the flag was put back
+    // by hand), so the public route never serves what the ledger forbids.
+    if ((await blockingVetoes(ctx.tx, { id: page.id, slug: page.slug })).length > 0) {
+      return null;
+    }
+
     const sourceLocale = source?.defaultLocale ?? page.locale;
     if (input.locale === sourceLocale) return page;
 
@@ -438,7 +447,7 @@ export const publishedPaths = defineService({
   input: z.object({ locale: z.string().default("en") }),
   output: listed(publishedPath),
   handler: async (input, ctx) => {
-    const published = await ctx.tx
+    const candidates = await ctx.tx
       .select({
         id: pages.id,
         slug: pages.slug,
@@ -449,6 +458,18 @@ export const publishedPaths = defineService({
       .from(pages)
       .where(and(eq(pages.status, "published"), isNull(pages.trashedAt), visibleLocationPage))
       .orderBy(pages.slug);
+
+    // A sitemap advertises what may render. Registered vetoes re-derive that
+    // from the owning ledger (C8.16), so a case study whose consent was
+    // withdrawn leaves the sitemap with the page — even if the status flag
+    // was put back by hand.
+    const published: typeof candidates = [];
+    for (const page of candidates) {
+      if ((await blockingVetoes(ctx.tx, { id: page.id, slug: page.slug })).length > 0) {
+        continue;
+      }
+      published.push(page);
+    }
 
     const [business] = await ctx.tx
       .select({ defaultLocale: businessProfile.defaultLocale })

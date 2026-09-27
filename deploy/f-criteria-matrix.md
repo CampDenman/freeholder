@@ -2971,7 +2971,7 @@ v2.
 - **F04** — /admin/facts list and ledger — screen files `app/(admin)/admin/facts/page.tsx` and `[key]/page.tsx`; public `fact` block.
 - **F05** — `attestations.record`/`correct`/`withdraw`/`current`/`history`/`list` at /api/v1/attestations.*, MCP `attestations_*` — surface equivalence: `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and `tests/core/mcp.test.ts` (registry-derived).
 - **F06** — Shared gates only, no per-item scan claimed: `tests/core/i18n-gate.test.ts` (every key in every shipped locale) + `tests/core/locale-quality.test.ts`; axe WCAG A/AA over this item's surfaces in both themes in `tests/browser/facts.spec.ts`.
-- **F07** — `tests/core/attestations.test.ts` covers a backwards-dated correction, a lapsed fact, withdrawal and the grant boundary.
+- **F07** — `tests/core/attestations.test.ts` covers a backwards-dated correction, a lapsed fact, withdrawal, and the grant boundary both ways: a customer is refused, and a staff view grant reads the ledger while record/correct/withdraw are refused to it (owner publishes; staff read).
 - **F08** — `tests/core/attestations.test.ts` plus `tests/browser/facts.spec.ts` — unit, service, database, permission, browser and accessibility coverage.
 - **F09** — N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. Shared participation: `tests/core/record-participation.test.ts`.
 - **F10** — Partial, honestly labelled: site-wide demo, defaults and first-run guidance ride `tests/core/seed-demo.test.ts`; this item ships no demo fixture of its own.

@@ -170,7 +170,7 @@ const LINKS = [
   { href: "/admin/media", key: "media", module: "media", Icon: ImageIcon },
   { href: "/admin/forms", key: "forms", module: "forms", Icon: Envelope },
   { href: "/admin/assessments", key: "assessments", module: "assessments", Icon: ListChecks },
-  { href: "/admin/facts", key: "facts", module: "core", Icon: Quotes },
+  { href: "/admin/facts", key: "facts", module: "attestations", Icon: Quotes },
   { href: "/admin/calculators", key: "calculators", module: "calculators", Icon: Calculator },
   { href: "/admin/invoices", key: "invoices", module: "invoicing", Icon: Receipt },
   { href: "/admin/payments", key: "payments", module: "invoicing", Icon: CreditCard },

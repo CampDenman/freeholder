@@ -220,4 +220,92 @@ describe.runIf(hasDatabase)("attestations", () => {
     // Reading is public: a correction only the owner can see is not a correction.
     expect(await factHistory.call({ key: "rate.30-year-fixed" }, ANONYMOUS)).toHaveLength(1);
   });
+
+  it("lets staff read the ledger but refuses to let them publish", async () => {
+    // The administrator seed grant: see `src/core/roles/defaults.ts`. A view
+    // grant reads; publishing stays with the owner unless the owner delegates
+    // manage explicitly.
+    const staffReader: typeof CUSTOMER = {
+      kind: "user",
+      userId: "00000000-0000-4000-8000-000000000004",
+      role: "administrator",
+      grants: [{ module: "attestations", access: "view" }],
+    };
+    await rate("6.5%");
+
+    // Staff read: the current list and the ledger are visible to a view grant.
+    const listed = await listFacts.call({}, staffReader);
+    expect(listed.map((entry) => entry.key)).toContain("rate.30-year-fixed");
+    const ledger = await factHistory.call({ key: "rate.30-year-fixed" }, staffReader);
+    expect(ledger).toHaveLength(1);
+
+    // Owner publishes: every write is refused to the reader, each naming
+    // permission rather than pretending the fact is missing.
+    expect(
+      (
+        await failure(
+          recordFact.call(
+            { key: "rate.15-year-fixed", value: "5.9%", source: "Theirs", asOf: SEPTEMBER },
+            staffReader,
+          ),
+        )
+      ).code,
+    ).toBe("permission");
+    expect(
+      (
+        await failure(
+          correctFact.call(
+            {
+              key: "rate.30-year-fixed",
+              value: "6.9%",
+              source: "Theirs",
+              asOf: LATER,
+              note: "Not yours to change.",
+            },
+            staffReader,
+          ),
+        )
+      ).code,
+    ).toBe("permission");
+    const [row] = await factHistory.call({ key: "rate.30-year-fixed" }, OWNER);
+    expect(
+      (
+        await failure(
+          withdrawFact.call({ id: row!.id, reason: "Not yours." }, staffReader),
+        )
+      ).code,
+    ).toBe("permission");
+  });
+
+  it("keeps money in integer minor units, exactly as recorded", async () => {
+    // The value column is schemaless by design (principle 12); the convention
+    // that keeps calculators and pages honest is that a money fact is an
+    // integer in minor units — 129999 cents, never 1299.99 — so it can cross
+    // a correction, a withdrawal and an export without float drift.
+    await recordFact.call(
+      {
+        key: "price.standard-session",
+        value: 129999,
+        source: "Current rate card",
+        asOf: SEPTEMBER,
+      },
+      OWNER,
+    );
+    const found = await currentFact.call({ key: "price.standard-session" }, ANONYMOUS);
+    expect(found?.value).toBe(129999);
+    expect(Number.isInteger(found?.value)).toBe(true);
+
+    await correctFact.call(
+      {
+        key: "price.standard-session",
+        value: 134999,
+        source: "Rate card, September revision",
+        asOf: LATER,
+        note: "Autumn pricing.",
+      },
+      OWNER,
+    );
+    const ledger = await factHistory.call({ key: "price.standard-session" }, ANONYMOUS);
+    expect(ledger.map((entry) => entry.value)).toEqual([129999, 134999]);
+  });
 });

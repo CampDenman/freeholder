@@ -30,6 +30,7 @@ import {
   projects,
 } from "./schema";
 import { ensurePortfolioIndex, projectTemplateSnapshot } from "./portfolio-service";
+import { consentBlockedProjectIds } from "./consent-gate";
 
 const id = z.string().uuid();
 const consentMethod = z.enum(PROJECT_CONSENT_METHODS);
@@ -224,6 +225,8 @@ async function snapshotBlocks(
           assetId: file.assetId,
           role: file.role,
           pairKey: file.pairKey,
+          seriesKey: file.seriesKey,
+          capturedAt: file.capturedAt ? file.capturedAt.toISOString() : null,
           caption: file.caption,
           position: file.position,
         })),
@@ -727,8 +730,8 @@ export const publicProjectsForService = defineService({
   permission: "public",
   input: z.object({ productId: id, limit: z.number().int().min(1).max(50).default(12) }),
   output: listed(publicProjectRow),
-  handler: (input, ctx) =>
-    ctx.tx
+  handler: async (input, ctx) => {
+    const rows = await ctx.tx
       .select({
         id: projects.id,
         title: projects.title,
@@ -747,11 +750,20 @@ export const publicProjectsForService = defineService({
         ),
       )
       .orderBy(sql`${projects.featured} desc`, sql`${projects.occurredOn} desc nulls last`)
-      .limit(input.limit)
-      .then((rows) => rows.map((project) => ({
+      .limit(input.limit);
+    // Same render-path consent check as the portfolio cards (C8.16): a service
+    // page listing work it proves is a publish surface for that work's media.
+    const blocked = await consentBlockedProjectIds(
+      ctx.tx,
+      rows.map((row) => row.id),
+    );
+    return rows
+      .filter((row) => !blocked.has(row.id))
+      .map((project) => ({
         ...project,
         href: `/portfolio/${project.slug}`,
-      }))),
+      }));
+  },
 });
 
 export default [

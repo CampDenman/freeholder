@@ -6863,7 +6863,7 @@ permitted conversation on the same contact timeline.
   Portal room registered through C8.11's registry, so no page changed.
   Tests: `tests/modules/documents.test.ts`. **F04** `/admin/documents` share with contacts. **F05** `documents.save`/`share`/`open`/`list`/`export`/`revokeShare` at `/api/v1/documents.*`, MCP `documents_*`. **F07** `tests/modules/documents.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/documents.test.ts` is the composition proof.)
 
-- [ ] **C8.14** Build owner-authored guided assessments: the owner writes the
+- [x] **C8.14** Build owner-authored guided assessments: the owner writes the
   questions, the answer options and the outcome bands; a response resolves to
   exactly one authored band, and escalation rules route defined answers to an
   immediate authored instruction that outranks the score. Prove an authored
@@ -6871,19 +6871,157 @@ permitted conversation on the same contact timeline.
   an unauthored outcome is unreachable rather than merely discouraged,
   responses reach the contact spine, and no surface states a diagnosis,
   candidacy, certification or recommendation.
-- [ ] **C8.15** Build as-of dated published facts with a correction ledger on
+  (Feature shipped in #411; evidence completed and box checked 2026-09-26.
+  The engine cannot compose an outcome: questions and per-option scores are
+  owner data (`src/modules/assessments/questions.ts`); bands and escalation
+  instructions are rows the owner wrote (`src/modules/assessments/schema.ts`)
+  — `assessment_responses.band_id` is NOT NULL with RESTRICT, so an unauthored
+  outcome is unrepresentable rather than discouraged, and the
+  `assessment_bands_no_overlap` exclusion constraint makes resolution
+  independent of row order. `assessments.publish` refuses any reachable score
+  no band covers, and if bands nonetheless drift under a live assessment
+  `assessments.respond` refuses rather than improvising — both refusals are
+  tested, not just the happy path. Escalation reading, documented because the
+  item's word is "outranks": per MASTER.md §4.18 the authored instruction is
+  rendered above the band and returned with it, not instead of it — the
+  respondent meets the instruction first, and the band row stays on the
+  response because the owner's queue still needs the score.
+  **F04** owner authoring UI at `app/(admin)/admin/assessments/` (list, detail,
+  question builder, outcome editor with live coverage, escalation editor,
+  publish controls) and the server-rendered public runner
+  `src/modules/assessments/block.tsx`, proven in a real browser with axe
+  WCAG A/AA in both themes by `tests/browser/assessments.spec.ts`.
+  **F05** `assessments.*` services in `src/modules/assessments/service.ts`
+  exposed at `/api/v1/assessments.*`, as MCP `assessments_*` tools
+  (`src/mcp/tools.ts`), and in the typed SDK (`packages/sdk/src/generated.ts`,
+  `pnpm sdk:generate` verified current).
+  **F07** `tests/modules/assessments.test.ts` covers permission (customer and
+  anonymous refused every authoring call), the publish-time gap and overlap
+  refusals, escalation on a nonexistent answer, an answer nobody authored,
+  re-wording questions into a gap while live, deleting a band somebody was
+  already shown, the respond-time drift refusal, and idempotent plus
+  concurrent double-post resolution. The vocabulary audit is the same file's
+  locale gate: it greps `locales/en.json`, `locales/fr.json`,
+  `locales/es.json` and `locales/ar.json` for diagnosis/candidacy/
+  certification/recommendation/guarantee vocabulary in every string an
+  assessment surface can render, so no surface states one in any language.
+  **F09** N/A as C11.14 — this item uses the shared audit/outbox; responses
+  still register the `assessments.responses` privacy scope with export and
+  erase in `src/modules/assessments/service.ts`.
+  **F12** a response resolves through `contacts.resolve` (never
+  `contacts.create`), emits an `assessment.responded` TimelineEvent on the
+  contact, and repoints on `contacts.merge` via `registerContactReference` —
+  all three asserted in `tests/modules/assessments.test.ts`, with the
+  owner-refused-a-gap → visitor-reads-authored-words journey end to end in
+  `tests/browser/assessments.spec.ts`.)
+- [x] **C8.15** Build as-of dated published facts with a correction ledger on
   `core/attestations` (§4.18): every published rate, metric, status or byline
   carries its source and the moment it was true, a correction supersedes rather
   than edits, and superseded values stay readable with their dates. Prove
   publication with source and as-of, supersession, a visible correction
   history, staleness once `valid_until` passes, and that no fact renders
   without its date.
-- [ ] **C8.16** Build consent-gated progress and comparison media: before/after
+  (§4.18 is the model; this item lands it end to end. A rate, a metric, an
+  opening status and a byline are one kind of row with its source and the
+  moment it was true (`src/core/attestations/schema.ts`); the migration is
+  `db/migrations/0014_attestations.sql`, and both ledger guarantees live in
+  the database rather than the service — `attestations_current_idx` allows
+  one current fact per key and subject (COALESCE-based, so a business-wide
+  figure is not exempt) and `attestations_one_correction_idx` stops the
+  history forking. Money rides the schemaless `value` as integer minor units,
+  and the tests keep it that way.
+  Tests: `tests/core/attestations.test.ts` — publication carries source and
+  as-of; a correction supersedes without erasing and the superseded value
+  stays readable with its dates; the ledger lists every statement of a key; a
+  fact past `valid_until` is returned marked stale, never hidden; withdrawal
+  unpublishes without deleting; a fact nobody stated returns null, and no code
+  path substitutes anything for it. **F04** `/admin/facts` and
+  `/admin/facts/[key]` (`app/(admin)/admin/facts/page.tsx`,
+  `app/(admin)/admin/facts/[key]/page.tsx`) are the correction-ledger UI, and
+  the public `fact` block (`src/modules/cms/blocks/surfaces.tsx`) renders a
+  figure with its date and source together — never the number alone, and
+  nothing at all once the fact is withdrawn or never stated. **F05**
+  `attestations.record`/`correct`/`withdraw`/`current`/`history`/`list` at
+  `/api/v1/attestations.*`, MCP `attestations_*`, SDK client in
+  `packages/sdk/src/generated.ts` — surface equivalence is registry-derived:
+  `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts`,
+  `tests/core/mcp.test.ts`. **F07** `tests/core/attestations.test.ts` covers
+  the grant boundary — a customer is refused; a staff view grant (the
+  administrator and legacy-staff seeds in `src/core/roles/defaults.ts`) reads
+  the ledger while every write is refused to it, so the owner publishes and
+  staff read — and the refusal semantics: a backwards-dated correction, a
+  second current value, a validity window that closes before its as-of, and
+  correcting a fact that was never stated. **F09** N/A as C11.14 — this item
+  uses the shared audit/outbox; product-wide export/restore/retention/erasure
+  proof is still open. Shared participation:
+  `tests/core/record-participation.test.ts`. **F12**
+  `tests/browser/facts.spec.ts` is the cross-surface journey — publish,
+  correct, withdraw, with the public page showing the figure and its
+  provenance, then the corrections, then nothing; calculators compose the
+  same facts and refuse missing or stale inputs
+  (`src/modules/calculators/service.ts`). Release note:
+  `.changeset/attested-facts-and-corrections.md`. Checked 2026-09-26.)
+- [x] **C8.16** Build consent-gated progress and comparison media: before/after
   pairs and time-series publish only against a recorded consent naming the
   person and the scope; withdrawal unpublishes from page, gallery, feed,
   sitemap and structured data; capture provenance stays attached. Prove
   publication blocked without consent, publication on consent, withdrawal
   removing it everywhere, and provenance surviving export.
+  (The consent record is the `media_consents` ledger the first half of this
+  item landed: each decision names the person (`contact_id`), the scope
+  (subject project plus surfaces) and when it took effect, withdrawal appends
+  a row rather than erasing one, and grants can lapse. This change builds the
+  publish gate on top of it and, more importantly, the render layer:
+  `src/modules/projects/consent-gate.ts` re-derives what may render from the
+  ledger at read time, and every public query path that can surface the media
+  consults it — the portfolio index and collections, the service page's
+  proof-of-work list, and the structured-data query behind a case study's
+  `CreativeWork` JSON-LD all drop a project the moment its permission stops
+  standing, and a public gallery hides blocked frames from its session list,
+  refuses direct view and download by item id, excludes them from rebuilt
+  ZIP archives and holds possibly-stale archives offline. Because pages and
+  sitemaps read `pages.status`, a publish-veto registry
+  (`src/core/privacy/publish-veto.ts`, registered when the projects module's
+  services load)
+  lets `cms.resolvePage` and `cms.publishedPaths` re-derive the same answer
+  from the ledger, so the case-study page and its sitemap entry come down
+  with withdrawal even if the status flag is flipped back by hand; the
+  portfolio index and collection pages are deliberately not vetoed, since
+  they re-derive their project lists at render time and one withdrawn project
+  must not take unrelated work offline. Time-series publishing becomes real
+  machinery rather than loose images: the publish snapshot carries
+  `seriesKey`/`capturedAt` into the `projectCaseStudy` block, the block
+  accepts the `series` role, and the public page renders each series as a
+  dated, chronologically ordered strip (new `projects.public.progress` key in
+  en/fr/es/ar). The ownership export's media manifest now carries each
+  asset's capture provenance, and `media_consents` exports as a table with
+  everything else. Changeset `consent-gated-media.md`. **F04**
+  `tests/browser/media-consent.spec.ts` (permission given, taken back, and
+  still on the record) plus the dated-strip render tests in
+  `tests/core/consent-publish-surfaces.test.ts`. **F05**
+  `privacy.grantMediaConsent`/`privacy.withdrawMediaConsent`/
+  `privacy.mediaConsent`/`privacy.mediaConsentHistory` and
+  `projects.recordConsent`/`projects.revokeConsent` at `/api/v1/privacy.*` and
+  `/api/v1/projects.*` with MCP parity; the public render queries
+  `projects.portfolioBrowse`/`projects.resolvePublicProject`/
+  `projects.publicForService` are the same surfaces the SDK and API expose.
+  **F07** `tests/core/media-consent.test.ts` (permission checks, refusal
+  semantics, lapsed == withdrawn == never-given, sweep behaviour) and the
+  negative cases in `tests/core/consent-publish-surfaces.test.ts` (blocked
+  view returns null, blocked download is a logged refusal, hand-flipped
+  publication flags still refuse, stale archive withheld). **F09**
+  `projects.sweepLapsedConsent` takes lapsed work offline
+  (`tests/core/media-consent.test.ts`); `tests/core/ownership-export.test.ts`
+  proves capture provenance and the consent ledger survive export. **F12**
+  `tests/core/consent-publish-surfaces.test.ts` is the cross-module journey:
+  one withdrawal removes a published pair and series from the CMS page,
+  sitemap, feeds, structured data, portfolio, service page and gallery in a
+  single action, with capture provenance still attached afterwards. Spec
+  choice recorded: consent `surfaces` are recorded vocabulary, not a
+  per-surface render gate — a live consent for the work publishes it to the
+  surfaces the item names, and withdrawal removes it from all of them;
+  per-surface differentiation remains available in the ledger for a future
+  item.)
 
 **C8 exit:** the business can prove, deliver and support its work while each
 customer has one secure, comprehensible home for the relationship.

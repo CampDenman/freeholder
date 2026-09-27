@@ -20,7 +20,7 @@ import { factFormLabels } from "./labels";
 export const dynamic = "force-dynamic";
 
 export default async function FactsPage() {
-  const actor = await requireStaffActor("core");
+  const actor = await requireStaffActor("attestations");
   const [facts, business, t] = await Promise.all([
     listFacts.call({}, actor),
     currentBusiness(),
@@ -29,7 +29,7 @@ export default async function FactsPage() {
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
-  const canManage = hasModuleAccess(actor, "core", "manage");
+  const canManage = hasModuleAccess(actor, "attestations", "manage");
   const now = Date.now();
 
   return (
