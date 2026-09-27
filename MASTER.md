@@ -8218,7 +8218,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   three commits ahead and two security releases behind reports
   "2 security releases behind — CVSS 8.1; this fork carries 3 commits of its
   own".)
-- [ ] **C10.10** Implement and continuously test target-specific update/
+- [x] **C10.10** Implement and continuously test target-specific update/
   rollback actions for every Tier-1 recipe.
   (`src/core/update/targets.ts` names §39.8's three strategies — `image-swap`
   for the droplet and self-host recipes, `deploy-hook` for App Platform,
@@ -8241,6 +8241,39 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   changeset `update-targets.md`. **F12** `scripts/recipe-update-actions.mjs`
   runs once per target inside the recipe matrix, so §39.8's "a recipe without
   a tested update path is not Tier 1" is enforced on every PR.)
+  (2026-09-21 readiness-repair closure; box checked with evidence 2026-09-26.
+  The repair note reopened this item because updater history proved neither
+  deployment nor recoverability, and target recipes remain manual operator
+  procedures *requiring a tested backup and immutable image pins*. The pins
+  half was already enforced — `operations.rollback` must name a `PREVIOUS_*`
+  artifact (matrix gate), image-swap rollback refuses without a
+  `ghcr.io/campdenman/freeholder@sha256:<64>` digest
+  (`recipeUpdateTarget.rollbackCutover` in `src/core/update/targets.ts`), and
+  both compose files interpolate `${FREEHOLDER_IMAGE:-…}` so the pin actually
+  selects the image. The tested-backup half landed with this change:
+  `scripts/recipe-update-actions.mjs` now refuses a Tier-1 recipe without
+  `operations.backup` producing a custom-format `pg_dump` (following a script
+  the command delegates to, the way the droplet ships
+  `deploy/digitalocean-droplet/infra/backup.sh`) and without
+  `operations.restore` being `pg_restore` into a database — the 64-byte
+  fingerprint the audit struck was metadata about a backup, not a backup.
+  `assertBackupOperations` in `src/core/update/targets.ts` is the normative
+  twin the unit suite runs, and the operator's executable rehearsal remains
+  step 7 of `deploy/recipe-verification.md`; CI cannot take a real provider
+  backup without owning somebody else's control plane, which the gate header
+  says plainly. **F04** Doctor `update.target` (`src/core/doctor/index.ts:945`).
+  **F05** `platform.describeUpdateTargets` (`src/core/update/service.ts:853`).
+  **F07** a target with no rollback command refuses; image-swap rollback
+  refuses a non-digest pin; a recipe with no backup, a plain-text dump, a
+  missing restore or a non-`pg_restore` restore fails the matrix — each
+  refusal asserted in `tests/core/update-targets.test.ts` (38 tests) and, for
+  the gate script, exercised against the real recipes. **F09** SPDX headers on
+  `src/core/update/targets.ts`, `scripts/recipe-update-actions.mjs` and
+  `tests/core/update-targets.test.ts`. **F12** the recipe matrix runs the gate
+  once per target on every PR (`scripts/recipe-matrix.sh:138`; workflow run
+  36294739626 on `bafebe6` logged "update and rollback declared, shaped and
+  pinned" for all six targets); the extended gate keeps that wiring unchanged,
+  all six real recipes pass it, and this PR's own matrix run exercises it.)
 - [x] **C10.11** Build the update read model §39.10 specifies: cache the
   verified feed as `AvailableRelease` (version, channel, digest, severity,
   cvss, schema_breaking, min_from_version, plugin_api, notes_url,

@@ -3690,12 +3690,12 @@ v2.
 - **F04** — Doctor `update.target`, which warns when no recipe is declared because an update that swaps nothing still looks like it worked; the admin screen is C10.11. — `tests/core/update-targets.test.ts`.
 - **F05** — `platform.describeUpdateTargets`. — surface equivalence: `tests/core/api.test.ts` (every service has an endpoint, spec schema is the validator), `tests/core/sdk-schema.test.ts` (generated client contract) and `tests/core/mcp.test.ts` (registry-derived MCP tools)..
 - **F06** — N/A — no human surface — operational or CI output only, so there is nothing to translate or scan.
-- **F07** — anonymous refused; an unknown recipe name resolves to the stub rather than a guessed strategy; a target with no rollback command refuses instead of pretending. — `tests/core/update-targets.test.ts`.
+- **F07** — anonymous refused; an unknown recipe name resolves to the stub rather than a guessed strategy; a target with no rollback command refuses instead of pretending; since the 2026-09-21 readiness repair the gate also refuses a recipe with no `operations.backup`, a non-custom-format dump, a missing restore, or a restore that is not `pg_restore` into a database. — `tests/core/update-targets.test.ts`.
 - **F08** — `tests/core/update-targets.test.ts` proves each recipe implements what it declares and that the embedded copy cannot drift from `recipe.yaml`.
 - **F09** — SPDX. — enforced in CI by `scripts/plan-gate.mjs` and `scripts/fast-gates.mjs`.
 - **F10** — N/A — no setup, seed or demo surface of its own — the capability runs against an already-configured instance.
 - **F11** — `deploy/update-targets.md`, changeset `update-targets.md`.
-- **F12** — `scripts/recipe-update-actions.mjs` runs once per target inside the recipe matrix, so §39.8's "a recipe without a tested update path is not Tier 1" is enforced on every PR.
+- **F12** — `scripts/recipe-update-actions.mjs` runs once per target inside the recipe matrix, so §39.8's "a recipe without a tested update path is not Tier 1" is enforced on every PR; since the 2026-09-21 readiness repair the same per-target run also enforces the tested backup the repair requires (custom-format dump plus a `pg_restore` into a database), so a recipe cannot drop its backup and stay Tier 1 while nobody noticed.
 
 ## C10.11 — Build the update read model §39.10 specifies: cache the
 
