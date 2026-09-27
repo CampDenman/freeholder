@@ -6829,7 +6829,7 @@ permitted conversation on the same contact timeline.
   Portal room registered through C8.11's registry, so no page changed.
   Tests: `tests/modules/documents.test.ts`. **F04** `/admin/documents` share with contacts. **F05** `documents.save`/`share`/`open`/`list`/`export`/`revokeShare` at `/api/v1/documents.*`, MCP `documents_*`. **F07** `tests/modules/documents.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/documents.test.ts` is the composition proof.)
 
-- [ ] **C8.14** Build owner-authored guided assessments: the owner writes the
+- [x] **C8.14** Build owner-authored guided assessments: the owner writes the
   questions, the answer options and the outcome bands; a response resolves to
   exactly one authored band, and escalation rules route defined answers to an
   immediate authored instruction that outranks the score. Prove an authored
@@ -6837,6 +6837,49 @@ permitted conversation on the same contact timeline.
   an unauthored outcome is unreachable rather than merely discouraged,
   responses reach the contact spine, and no surface states a diagnosis,
   candidacy, certification or recommendation.
+  (Feature shipped in #411; evidence completed and box checked 2026-09-26.
+  The engine cannot compose an outcome: questions and per-option scores are
+  owner data (`src/modules/assessments/questions.ts`); bands and escalation
+  instructions are rows the owner wrote (`src/modules/assessments/schema.ts`)
+  — `assessment_responses.band_id` is NOT NULL with RESTRICT, so an unauthored
+  outcome is unrepresentable rather than discouraged, and the
+  `assessment_bands_no_overlap` exclusion constraint makes resolution
+  independent of row order. `assessments.publish` refuses any reachable score
+  no band covers, and if bands nonetheless drift under a live assessment
+  `assessments.respond` refuses rather than improvising — both refusals are
+  tested, not just the happy path. Escalation reading, documented because the
+  item's word is "outranks": per MASTER.md §4.18 the authored instruction is
+  rendered above the band and returned with it, not instead of it — the
+  respondent meets the instruction first, and the band row stays on the
+  response because the owner's queue still needs the score.
+  **F04** owner authoring UI at `app/(admin)/admin/assessments/` (list, detail,
+  question builder, outcome editor with live coverage, escalation editor,
+  publish controls) and the server-rendered public runner
+  `src/modules/assessments/block.tsx`, proven in a real browser with axe
+  WCAG A/AA in both themes by `tests/browser/assessments.spec.ts`.
+  **F05** `assessments.*` services in `src/modules/assessments/service.ts`
+  exposed at `/api/v1/assessments.*`, as MCP `assessments_*` tools
+  (`src/mcp/tools.ts`), and in the typed SDK (`packages/sdk/src/generated.ts`,
+  `pnpm sdk:generate` verified current).
+  **F07** `tests/modules/assessments.test.ts` covers permission (customer and
+  anonymous refused every authoring call), the publish-time gap and overlap
+  refusals, escalation on a nonexistent answer, an answer nobody authored,
+  re-wording questions into a gap while live, deleting a band somebody was
+  already shown, the respond-time drift refusal, and idempotent plus
+  concurrent double-post resolution. The vocabulary audit is the same file's
+  locale gate: it greps `locales/en.json`, `locales/fr.json`,
+  `locales/es.json` and `locales/ar.json` for diagnosis/candidacy/
+  certification/recommendation/guarantee vocabulary in every string an
+  assessment surface can render, so no surface states one in any language.
+  **F09** N/A as C11.14 — this item uses the shared audit/outbox; responses
+  still register the `assessments.responses` privacy scope with export and
+  erase in `src/modules/assessments/service.ts`.
+  **F12** a response resolves through `contacts.resolve` (never
+  `contacts.create`), emits an `assessment.responded` TimelineEvent on the
+  contact, and repoints on `contacts.merge` via `registerContactReference` —
+  all three asserted in `tests/modules/assessments.test.ts`, with the
+  owner-refused-a-gap → visitor-reads-authored-words journey end to end in
+  `tests/browser/assessments.spec.ts`.)
 - [ ] **C8.15** Build as-of dated published facts with a correction ledger on
   `core/attestations` (§4.18): every published rate, metric, status or byline
   carries its source and the moment it was true, a correction supersedes rather
