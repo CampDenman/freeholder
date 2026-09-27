@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # Copyright (C) 2026 Tony Aly
 # SPDX-License-Identifier: Apache-2.0
-"""C10.06/C10.10: narrow host executor for one Docker Compose installation.
+"""C10.06/C10.10/C10.31: narrow host executor for one Docker Compose installation.
 
 No Docker socket enters the app. A root-owned configuration fixes every path,
 service and image repository. The app can request only a verified image digest.
-The first supported automatic lane requires an unchanged database schema and
-migration journal; schema-changing releases require a manual operator upgrade.
+The standard automatic lane requires an unchanged database schema and
+migration journal. An explicitly opted-in lane (`allow_schema_changes`) admits
+migration-changing candidates: the rehearsal proves the migrations run on a
+restored backup, cutover holds maintenance for the whole window, and rollback
+restores the write-free cutover backup because the previous image may not read
+a migrated schema. Other recipes still use the manual operator procedure.
 """
 import argparse
 import contextlib
@@ -69,6 +73,8 @@ def load_config(path):
         raise Refused("Unsupported release channel.")
     if type(config.get("automatic", False)) is not bool or type(config.get("utc_hour", 10)) is not int or not 0 <= config.get("utc_hour", 10) <= 23:
         raise Refused("Automatic scheduling requires a boolean and a UTC hour from 0 to 23.")
+    if type(config.get("allow_schema_changes", False)) is not bool:
+        raise Refused("allow_schema_changes requires a boolean.")
     return config
 
 
@@ -267,9 +273,11 @@ class Executor:
             self.smoke(app)
             self.run(["docker", "stop", "-t", "40", app], timeout=60)
             after = self.database_signature(database)
-            if before != after:
-                raise Refused("Candidate changes the database schema or migration journal. Use the manual migration procedure.")
-            return evidence
+            schema_changed = before != after
+            if schema_changed and not self.config.get("allow_schema_changes", False):
+                raise Refused("Candidate changes the database schema or migration journal. "
+                              "Set allow_schema_changes to opt in, or use the manual migration procedure.")
+            return {**evidence, "schemaChanged": schema_changed}
         finally:
             for container in (app, database):
                 try:
@@ -277,6 +285,21 @@ class Executor:
                 except Refused:
                     pass
             self.run(["docker", "network", "rm", network])
+
+    def restore_database(self, backup):
+        """Restore the write-free cutover backup into the production database.
+
+        Only called on the migration lane after the candidate booted (and so
+        ran its migrations). The app is stopped and Caddy serves maintenance,
+        so nothing holds the database and no writes land mid-restore.
+        """
+        self.compose("exec", "-T", "db", "dropdb", "-U", self.database_user,
+                     "--if-exists", "--force", self.database_name, timeout=120)
+        self.compose("exec", "-T", "db", "createdb", "-U", self.database_user,
+                     self.database_name, timeout=120)
+        self.compose("exec", "-T", "db", "pg_restore", "-U", self.database_user,
+                     "-d", self.database_name, "--no-owner", "--no-privileges", "--exit-on-error",
+                     data=backup.read_bytes(), timeout=600)
 
     def maintenance(self, enabled):
         target = self.directory / "Caddyfile"
@@ -307,6 +330,9 @@ class Executor:
             maintenance = False
             switched = False
             stopped = False
+            migrated = False
+            production_backup = None
+            schema_changed = False
             try:
                 previous, postgres_image = self.inventory()
                 digest = validate_digest(digest) if digest else self.resolve_candidate()
@@ -324,16 +350,18 @@ class Executor:
                 backup = self.snapshot("rehearsal.dump")
                 self.stage("rehearsing")
                 evidence = self.rehearse(digest, postgres_image, backup)
+                schema_changed = bool(evidence.get("schemaChanged"))
                 self.stage("maintenance", candidate=evidence)
                 maintenance = True
                 self.maintenance(True)
                 stopped = True
                 self.compose("stop", "-t", "45", "app", timeout=60)
-                self.snapshot("production.dump")
+                production_backup = self.snapshot("production.dump")
                 self.stage("deploying")
                 self.pin(IMAGE + "@" + digest)
                 switched = True
                 self.compose("up", "-d", "--no-deps", "app", timeout=120)
+                migrated = True # The candidate migrates at boot; a rollback must now restore the database.
                 app = self.compose("ps", "-q", "app").strip()
                 self.healthy(app)
                 self.smoke(app)
@@ -344,8 +372,14 @@ class Executor:
             except Exception as error:
                 if switched or stopped:
                     try:
-                        # The rehearsal proved schema and journal unchanged:
-                        # preserve writes, never rewind the production database.
+                        if schema_changed and migrated:
+                            # The rehearsal proved the candidate migrates: the
+                            # previous image may not read that schema, so the
+                            # way back is the backup, never an image swap.
+                            # Maintenance blocked writes for the whole window,
+                            # so the backup is current.
+                            self.compose("stop", "-t", "45", "app", timeout=60)
+                            self.restore_database(production_backup)
                         self.pin(previous)
                         self.compose("up", "-d", "--no-deps", "app", timeout=120)
                         app = self.compose("ps", "-q", "app").strip()
@@ -353,7 +387,10 @@ class Executor:
                         self.smoke(app)
                         self.maintenance(False)
                         maintenance = False
-                        self.stage("rolled_back", error="Candidate failed; the previous image is healthy. Database writes were preserved.")
+                        if schema_changed and migrated:
+                            self.stage("rolled_back", error="Candidate failed; the previous image is healthy. The database was restored from the backup taken when maintenance began; no writes occurred in between.")
+                        else:
+                            self.stage("rolled_back", error="Candidate failed; the previous image is healthy. Database writes were preserved.")
                     except Exception:
                         self.stage("recovery_required", error="Recovery did not verify. Maintenance remains enabled; inspect the retained backup and host logs.")
                 else:
