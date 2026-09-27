@@ -372,13 +372,17 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
 
-def serve(config):
+def prepare_socket_path(config):
     socket_path = Path(config["socket"])
     socket_path.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
     if socket_path.exists():
         if not socket_path.is_socket():
             raise Refused("Refusing to replace a non-socket path.")
         socket_path.unlink()
+    return socket_path
+
+
+def make_handler(config):
     queue_lock = threading.Lock()
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -441,7 +445,17 @@ def serve(config):
             threading.Thread(target=work, daemon=False).start()
             self.reply(202, {"id": request_id, "status": "queued"})
 
-    with Server(str(socket_path), Handler) as server:
+    return Handler
+
+
+def due_for_scheduled_run(config, now=None):
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return bool(config.get("automatic", False)) and now.hour == config.get("utc_hour", 10)
+
+
+def serve(config):
+    socket_path = prepare_socket_path(config)
+    with Server(str(socket_path), make_handler(config)) as server:
         os.chown(socket_path, 0, int(config.get("app_gid", 1001)))
         socket_path.chmod(0o660)
         server.serve_forever()
@@ -460,10 +474,8 @@ def main():
     elif args.operation == "status":
         print(json.dumps(Executor(config).status()))
     else:
-        if args.operation == "scheduled":
-            now = datetime.datetime.now(datetime.timezone.utc)
-            if not config.get("automatic", False) or now.hour != config.get("utc_hour", 10):
-                return
+        if args.operation == "scheduled" and not due_for_scheduled_run(config):
+            return
         print(json.dumps(Executor(config).apply(args.digest, trigger="schedule" if args.operation == "scheduled" else "cli")))
 
 
