@@ -26,6 +26,19 @@ export const CI_FIXED_JOB_OVERHEAD_MS = 2 * 60 * 1_000;
 // old path-hash imbalance. Keep only material outliers here: ordinary and new
 // files are estimated below, so this is not an exhaustive or brittle manifest.
 // Refresh an entry when a deliberate test redesign materially changes its cost.
+//
+// 2026-09-27 calibration (run 36297337768): the c11 journey entries had
+// drifted an order of magnitude above observed cost — the journeys now run
+// 5.7s–10.2s (they exercise provider-shaped fakes, and the earlier observations
+// came from a run whose mail/calendar endpoints were timing out) — so they are
+// refreshed to ≈3× the fresh observations, keeping generous headroom for that
+// I/O variance. media.test.ts moved the other way: it uploads real fixture
+// assets and observed at 219.5s under heavy cross-shard database contention
+// (older observation: 123s), so its entry is a rounded-up 160s midpoint — the
+// 7× shard budget absorbs the contention variance, while an understated
+// outlier weakens this gate exactly where it should bite. The two coverage
+// files joined the table at their observed cost rather than the source
+// estimate, which under-reads full-checkout setup.
 const MEASURED_DURATION_MS: Readonly<Record<string, number>> = Object.freeze({
   "tests/core/availability.test.ts": 76_000,
   "tests/core/booking-audiences.test.ts": 58_000,
@@ -33,21 +46,23 @@ const MEASURED_DURATION_MS: Readonly<Record<string, number>> = Object.freeze({
   "tests/core/contact-duplicate-review.test.ts": 35_000,
   "tests/core/consent-publish-surfaces.test.ts": 5_500,
   "tests/core/contribute.test.ts": 83_000,
+  "tests/core/coverage.test.ts": 19_000,
+  "tests/core/coverage-enforcement.test.ts": 28_500,
   "tests/core/invoicing.test.ts": 49_000,
   "tests/core/mail-service.test.ts": 52_000,
   "tests/core/media-capture.test.ts": 62_000,
-  "tests/core/media.test.ts": 123_000,
+  "tests/core/media.test.ts": 160_000,
   "tests/core/notifications.test.ts": 74_000,
   "tests/core/recurring-invoices.test.ts": 71_000,
   "tests/core/seed-demo.test.ts": 52_000,
   "tests/core/signup-contact-import.test.ts": 80_000,
-  "tests/core/c11-02-catalog-journey.test.ts": 60_000,
-  "tests/core/c11-03-booking-journey.test.ts": 90_000,
-  "tests/core/c11-04-gallery-social-journey.test.ts": 90_000,
-  "tests/core/c11-05-subscription-journey.test.ts": 60_000,
-  "tests/core/c11-06-agent-journey.test.ts": 40_000,
-  "tests/core/c11-07-mail-calendar-journey.test.ts": 90_000,
-  "tests/core/c11-08-install-update-journey.test.ts": 90_000,
+  "tests/core/c11-02-catalog-journey.test.ts": 25_000,
+  "tests/core/c11-03-booking-journey.test.ts": 25_000,
+  "tests/core/c11-04-gallery-social-journey.test.ts": 25_000,
+  "tests/core/c11-05-subscription-journey.test.ts": 25_000,
+  "tests/core/c11-06-agent-journey.test.ts": 20_000,
+  "tests/core/c11-07-mail-calendar-journey.test.ts": 30_000,
+  "tests/core/c11-08-install-update-journey.test.ts": 30_000,
   "tests/core/spine.test.ts": 167_000,
   "tests/core/agents-budgets.test.ts": 66_000,
   "tests/core/agents-inbound.test.ts": 33_000,

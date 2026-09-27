@@ -4780,7 +4780,7 @@ export interface ServiceCatalog {
   };
   "locations.checkCoverage": {
     input: { postalCode: string; locationId?: string };
-    output: { answer: "covered" | "outside" | "unconfirmed"; postalCode: string; locationId: string | null; locationName: string | null };
+    output: { answer: "covered" | "outside" | "unconfirmed"; postalCode: string; locationId: string | null; locationName: string | null; delivery: { weekdays: number[]; opens: string; closes: string } | null };
   };
   "locations.create": {
     input: { name: string; slug: string; schemaType?: string | null; street?: string | null; unit?: string | null; city?: string | null; region?: string | null; postalCode?: string | null; country: string; latitude?: number | null; longitude?: number | null; phone?: string | null; email?: string | null; googleBusinessProfileUrl?: string | null; sameAs?: string[]; priceRange?: string | null; timezone?: string | null; status?: "visible" | "hidden"; isPrimary?: boolean };
@@ -4792,7 +4792,7 @@ export interface ServiceCatalog {
   };
   "locations.get": {
     input: { id?: string; slug?: string };
-    output: { id: string; name: string; slug: string; isPrimary: boolean; schemaType: string | null; street: string | null; unit: string | null; city: string | null; region: string | null; postalCode: string | null; country: string; latitude: string | null; longitude: string | null; phone: string | null; email: string | null; googleBusinessProfileUrl: string | null; sameAs: string[]; priceRange: string | null; timezone: string | null; status: "visible" | "hidden"; createdAt: string; updatedAt: string; hours: { id: string; locationId: string; weekday: number | null; onDate: string | null; opens: string | null; closes: string | null; closed: boolean; label: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; serviceArea: { id: string; locationId: string; kind: "radius" | "regions"; centerLatitude: string | null; centerLongitude: string | null; radiusKm: string | null; regions: string[]; createdAt: string; updatedAt: string; [key: string]: unknown } | null; [key: string]: unknown } | null;
+    output: { id: string; name: string; slug: string; isPrimary: boolean; schemaType: string | null; street: string | null; unit: string | null; city: string | null; region: string | null; postalCode: string | null; country: string; latitude: string | null; longitude: string | null; phone: string | null; email: string | null; googleBusinessProfileUrl: string | null; sameAs: string[]; priceRange: string | null; timezone: string | null; status: "visible" | "hidden"; createdAt: string; updatedAt: string; hours: { id: string; locationId: string; weekday: number | null; onDate: string | null; opens: string | null; closes: string | null; closed: boolean; label: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; serviceArea: { id: string; locationId: string; kind: "radius" | "regions" | "postal_codes"; centerLatitude: string | null; centerLongitude: string | null; radiusKm: string | null; regions: string[]; postalCodes: string[]; deliveryWeekdays: number[] | null; deliveryOpens: string | null; deliveryCloses: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null; [key: string]: unknown } | null;
   };
   "locations.list": {
     input: { includeHidden?: boolean };
@@ -4815,8 +4815,8 @@ export interface ServiceCatalog {
     output: { id: string; name: string; slug: string; isPrimary: boolean; schemaType: string | null; street: string | null; unit: string | null; city: string | null; region: string | null; postalCode: string | null; country: string; latitude: string | null; longitude: string | null; phone: string | null; email: string | null; googleBusinessProfileUrl: string | null; sameAs: string[]; priceRange: string | null; timezone: string | null; status: "visible" | "hidden"; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "locations.setServiceArea": {
-    input: { locationId: string; area: ({ kind: "radius"; centerLatitude: number; centerLongitude: number; radiusKm: number } | { kind: "regions"; regions: string[] } | { kind: "postal_codes"; postalCodes: string[] }) | null };
-    output: { id: string; locationId: string; kind: "radius" | "regions"; centerLatitude: string | null; centerLongitude: string | null; radiusKm: string | null; regions: string[]; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
+    input: { locationId: string; area: ({ kind: "radius"; centerLatitude: number; centerLongitude: number; radiusKm: number } | { kind: "regions"; regions: string[] } | { kind: "postal_codes"; postalCodes: string[] }) | null; delivery?: { weekdays: number[]; opens: string; closes: string } | null };
+    output: { id: string; locationId: string; kind: "radius" | "regions" | "postal_codes"; centerLatitude: string | null; centerLongitude: string | null; radiusKm: string | null; regions: string[]; postalCodes: string[]; deliveryWeekdays: number[] | null; deliveryOpens: string | null; deliveryCloses: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null;
   };
   "locations.update": {
     input: { name?: string; slug?: string; schemaType?: string | null; street?: string | null; unit?: string | null; city?: string | null; region?: string | null; postalCode?: string | null; country?: string; latitude?: number | null; longitude?: number | null; phone?: string | null; email?: string | null; googleBusinessProfileUrl?: string | null; sameAs?: string[]; priceRange?: string | null; timezone?: string | null; status?: "visible" | "hidden"; id: string };

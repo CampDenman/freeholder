@@ -5951,12 +5951,46 @@ payment, tax, inventory and reporting path, with no floating-point money.
   chasing panel on each invoice. `0100_recurring_invoices.sql`. Coverage in
   `tests/core/recurring-invoices.test.ts`. **F04** `/admin/invoices/[id]` chase reminders. **F05** `invoicing.createDraft`/`createPaymentPlan`/`createSchedule`/`scheduleReminders`/`markOverdueSweep` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/recurring-invoices.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recurring-invoices.test.ts` is the composition proof.)
 
-- [ ] **C6.18** Extend `core/locations` service areas into an enforced coverage
+- [x] **C6.18** Extend `core/locations` service areas into an enforced coverage
   check: validate an address or postal code against the areas the owner named,
   both when a visitor asks and again at submission, and refuse cleanly outside
   them. Prove an in-area address, an out-of-area address, a boundary case, a
   delivery window attached to an area, and that coverage is never inferred for
-  an area the owner did not name.
+  an area the owner did not name. (Checked 2026-09-26. The boundary is exact
+  whole-postcode equality after normalisation: a code sharing a prefix with a
+  listed code but differing in any character is outside — no prefix matching,
+  radius or polygon — and `unconfirmed` (a radius, a region, or nothing named)
+  never refuses, because coverage is never inferred in either direction; the
+  semantics are documented in `src/core/locations/coverage.ts`. The visitor
+  asks via `locations.checkCoverage`, rendered by the coverage block; the
+  submission handler re-validates rather than trusting that answer —
+  `src/modules/catalog/orders.ts` has `catalog.checkoutCart` compose
+  `locations.checkCoverage` through `ctx.callAsSystem` inside the checkout
+  transaction and refuse a definite `outside` before anything is written, with
+  visitor-safe wording that ships localized for all four locales
+  (`locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`).
+  Each area may carry the weekly window when it receives deliveries
+  (`db/migrations/0018_area_delivery_windows.sql`; the table check
+  `service_areas_delivery_window` refuses a half-stated window), and the
+  covered answer returns it. **F04** `/admin/locations` service-area form gains
+  delivery days and from/until times (`admin/locations/ServiceAreaForm.tsx`);
+  the visitor-side coverage block renders the window line
+  (`src/modules/cms/blocks/surfaces.tsx`). **F05** `locations.checkCoverage` /
+  `locations.setServiceArea` / `catalog.checkoutCart` at `/api/v1/*`, MCP
+  `locations_*` and `catalog_*`; SDK regenerated in
+  `packages/sdk/src/generated.ts`. **F07** `tests/core/coverage-enforcement.test.ts`
+  proves the in-area order is taken, the out-of-area order is refused with
+  visitor-safe wording and zero rows written, a boundary postcode is refused
+  at submission, a radius / a region / no area never refuses, and the owner
+  pressing the button gets the same refusal as a visitor would;
+  `tests/core/coverage.test.ts` proves the exact-match boundary, the delivery
+  window round-trip through the service and the table constraint, and the
+  refusal wording rendering in every shipped locale. **F09** N/A as C11.14 —
+  this item uses the shared audit/outbox; product-wide
+  export/restore/retention/erasure proof is still open. **F12** `src/modules/catalog/orders.ts`
+  composing `src/core/locations/coverage.ts` service-to-service in one
+  transaction is the cross-module proof; the contact spine is untouched, so no
+  merge-repoint registration was needed.)
 
 **C6 exit:** the same availability and money engines can sell time, spaces,
 equipment, classes and expertise without double-booking or duplicated records.
@@ -8269,7 +8303,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   three commits ahead and two security releases behind reports
   "2 security releases behind — CVSS 8.1; this fork carries 3 commits of its
   own".)
-- [ ] **C10.10** Implement and continuously test target-specific update/
+- [x] **C10.10** Implement and continuously test target-specific update/
   rollback actions for every Tier-1 recipe.
   (`src/core/update/targets.ts` names §39.8's three strategies — `image-swap`
   for the droplet and self-host recipes, `deploy-hook` for App Platform,
@@ -8292,6 +8326,39 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   changeset `update-targets.md`. **F12** `scripts/recipe-update-actions.mjs`
   runs once per target inside the recipe matrix, so §39.8's "a recipe without
   a tested update path is not Tier 1" is enforced on every PR.)
+  (2026-09-21 readiness-repair closure; box checked with evidence 2026-09-26.
+  The repair note reopened this item because updater history proved neither
+  deployment nor recoverability, and target recipes remain manual operator
+  procedures *requiring a tested backup and immutable image pins*. The pins
+  half was already enforced — `operations.rollback` must name a `PREVIOUS_*`
+  artifact (matrix gate), image-swap rollback refuses without a
+  `ghcr.io/campdenman/freeholder@sha256:<64>` digest
+  (`recipeUpdateTarget.rollbackCutover` in `src/core/update/targets.ts`), and
+  both compose files interpolate `${FREEHOLDER_IMAGE:-…}` so the pin actually
+  selects the image. The tested-backup half landed with this change:
+  `scripts/recipe-update-actions.mjs` now refuses a Tier-1 recipe without
+  `operations.backup` producing a custom-format `pg_dump` (following a script
+  the command delegates to, the way the droplet ships
+  `deploy/digitalocean-droplet/infra/backup.sh`) and without
+  `operations.restore` being `pg_restore` into a database — the 64-byte
+  fingerprint the audit struck was metadata about a backup, not a backup.
+  `assertBackupOperations` in `src/core/update/targets.ts` is the normative
+  twin the unit suite runs, and the operator's executable rehearsal remains
+  step 7 of `deploy/recipe-verification.md`; CI cannot take a real provider
+  backup without owning somebody else's control plane, which the gate header
+  says plainly. **F04** Doctor `update.target` (`src/core/doctor/index.ts:945`).
+  **F05** `platform.describeUpdateTargets` (`src/core/update/service.ts:853`).
+  **F07** a target with no rollback command refuses; image-swap rollback
+  refuses a non-digest pin; a recipe with no backup, a plain-text dump, a
+  missing restore or a non-`pg_restore` restore fails the matrix — each
+  refusal asserted in `tests/core/update-targets.test.ts` (38 tests) and, for
+  the gate script, exercised against the real recipes. **F09** SPDX headers on
+  `src/core/update/targets.ts`, `scripts/recipe-update-actions.mjs` and
+  `tests/core/update-targets.test.ts`. **F12** the recipe matrix runs the gate
+  once per target on every PR (`scripts/recipe-matrix.sh:138`; workflow run
+  36294739626 on `bafebe6` logged "update and rollback declared, shaped and
+  pinned" for all six targets); the extended gate keeps that wiring unchanged,
+  all six real recipes pass it, and this PR's own matrix run exercises it.)
 - [x] **C10.11** Build the update read model §39.10 specifies: cache the
   verified feed as `AvailableRelease` (version, channel, digest, severity,
   cvss, schema_breaking, min_from_version, plugin_api, notes_url,

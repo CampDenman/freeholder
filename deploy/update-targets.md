@@ -66,7 +66,16 @@ same reason one without a migration path is not."* It proves, per recipe:
   quietly declare `image-swap`;
 - `operations.rollback` names a *previous* artifact, so it is a rollback and
   not a redeploy of the same build;
-- the update pins an image tag, directly or through a script it runs.
+- the update pins an image tag, directly or through a script it runs;
+- since the 2026-09-21 readiness repair, `operations.backup` produces a
+  custom-format `pg_dump` (the format `deploy/update-apply.md` step 2 and the
+  droplet's `backup.sh` mandate, following a script the command delegates to)
+  and `operations.restore` is a `pg_restore` into a database. The repair
+  reopens the recipe path as a manual operator procedure *requiring a tested
+  backup and immutable image pins* — a rollback pin is only real if the data
+  it returns to still exists. The executable rehearsal itself is the
+  operator's step 7 of `deploy/recipe-verification.md`; this gate keeps a
+  recipe that dropped its backup from staying Tier 1 while nobody noticed.
 
 It does **not** call `doctl`, `render` or `railway`. A green build must not
 depend on a third party's API being up, and a CI run that really redeployed

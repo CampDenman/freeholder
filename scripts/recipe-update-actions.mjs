@@ -10,10 +10,13 @@
 // What this gate can honestly prove without owning somebody else's control
 // plane: the recipe declares an update and a rollback, the declared strategy
 // is the one §39.8 assigns that target, the commands are the shape that
-// strategy implies, and each command pins the artifact its rollback needs. It
-// does not call doctl, render or railway — a green build must not depend on a
-// third party's API being up, and a CI run that really redeployed would be
-// deploying from a pull request.
+// strategy implies, and each command pins the artifact its rollback needs.
+// Since the 2026-09-21 readiness repair it also proves the recipe declares a
+// backup a rehearsal can restore (custom-format dump plus a pg_restore into
+// a database), because a rollback pin is only real when the data it returns
+// to still exists. It does not call doctl, render or railway — a green build
+// must not depend on a third party's API being up, and a CI run that really
+// redeployed would be deploying from a pull request.
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
@@ -101,6 +104,48 @@ if (update && expected !== "source-pull" && !pinsAnImageTag(update)) {
   problems.push(
     `operations.update pins no image tag, directly or through a script it runs: ${update}`,
   );
+}
+
+/**
+ * The 2026-09-21 readiness repair (MASTER.md client-readiness repair note)
+ * requires a manual update procedure to carry a tested backup. A rollback pin
+ * is only real if the data it returns to still exists, so a Tier-1 recipe
+ * must declare how it backs up and how it restores — and the dump must be
+ * the custom format a rehearsal can actually restore, the same format
+ * `deploy/update-apply.md` step 2 and the droplet's `backup.sh` mandate. A
+ * backup nobody can rehearse is the 64-byte fingerprint the audit struck:
+ * metadata about a backup, not a backup.
+ */
+const CUSTOM_DUMP = /\bpg_dump\b[\s\S]*(--format=custom\b|\s-Fc\s)/;
+const RESTORES_INTO_DATABASE = /\bpg_restore\b[\s\S]*(--dbname\b|\s-d\s)/;
+
+/** A recipe may delegate to its own script (the droplet ships backup.sh). */
+function dumpsCustomFormat(command) {
+  if (CUSTOM_DUMP.test(command)) return true;
+  for (const match of command.matchAll(/\b(deploy\/[\w./-]+\.sh)\b/g)) {
+    let source = "";
+    try {
+      source = readFileSync(match[1], "utf8");
+    } catch {
+      problems.push(`operations.backup invokes ${match[1]}, which does not exist`);
+      continue;
+    }
+    if (CUSTOM_DUMP.test(source)) return true;
+  }
+  return false;
+}
+
+const backup = recipe?.operations?.backup;
+const restore = recipe?.operations?.restore;
+if (!backup) {
+  problems.push("has no operations.backup");
+} else if (!dumpsCustomFormat(backup)) {
+  problems.push(`operations.backup produces no restorable custom-format dump: ${backup}`);
+}
+if (!restore) {
+  problems.push("has no operations.restore, so the backup is never rehearsed");
+} else if (!RESTORES_INTO_DATABASE.test(restore)) {
+  problems.push(`operations.restore is not pg_restore into a database: ${restore}`);
 }
 
 if (problems.length > 0) {

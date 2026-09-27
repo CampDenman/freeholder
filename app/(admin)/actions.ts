@@ -1146,6 +1146,15 @@ export async function saveServiceAreaAction(
   const latitude = optionalNumber(form, "centerLatitude");
   const longitude = optionalNumber(form, "centerLongitude");
   const radiusKm = optionalNumber(form, "radiusKm");
+  // The delivery window saves as a whole (days + both times); the service
+  // validates the shape, so this only collects what the owner ticked.
+  const deliveryDays = form
+    .getAll("deliveryDays")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6);
+  const deliveryOpens = field(form, "deliveryOpens").trim();
+  const deliveryCloses = field(form, "deliveryCloses").trim();
 
   let area:
     | { kind: "radius"; centerLatitude: number; centerLongitude: number; radiusKm: number }
@@ -1160,9 +1169,14 @@ export async function saveServiceAreaAction(
     area = { kind: "postal_codes", postalCodes };
   }
 
+  const delivery =
+    deliveryDays.length > 0 || deliveryOpens || deliveryCloses
+      ? { weekdays: deliveryDays, opens: deliveryOpens, closes: deliveryCloses }
+      : null;
+
   try {
     await setServiceArea.call(
-      { locationId: field(form, "locationId"), area },
+      { locationId: field(form, "locationId"), area, delivery },
       await currentActor(),
     );
   } catch (error) {

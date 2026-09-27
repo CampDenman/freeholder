@@ -22,6 +22,7 @@
 // this module exists to make impossible: `assertStrategyMatchesOperations`
 // runs in CI, so the declaration cannot drift away from the commands.
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { env } from "@/core/env";
 import { TIER1_TARGETS, type Tier1Target } from "@/core/portability/archive";
 import { localUpdateTarget, type UpdateTarget } from "./apply";
@@ -199,6 +200,81 @@ export type CommandRunner = (
   command: string,
   env: Record<string, string>,
 ) => Promise<{ code: number; stderr: string }>;
+
+export interface BackupOperations {
+  backup?: string;
+  restore?: string;
+}
+
+const CUSTOM_DUMP = /\bpg_dump\b[\s\S]*(--format=custom\b|\s-Fc\s)/;
+const RESTORES_INTO_DATABASE = /\bpg_restore\b[\s\S]*(--dbname\b|\s-d\s)/;
+
+/**
+ * Refuse a recipe whose manual update procedure has no tested backup.
+ *
+ * The 2026-09-21 readiness repair (MASTER.md client-readiness repair note;
+ * `security/client-readiness-audit-2026-09-21.md` finding 3) reopened C10.10
+ * because updater history proved neither deployment nor recoverability. A
+ * rollback pin is only real if the data it returns to still exists, so a
+ * Tier-1 recipe must declare how it backs up and how it restores — and the
+ * dump must be the custom format a rehearsal can actually restore, the same
+ * format `deploy/update-apply.md` step 2 and the droplet's `backup.sh`
+ * mandate. A backup nobody can rehearse is the fingerprint snapshot the
+ * audit struck: metadata about a backup, not a backup.
+ */
+export function assertBackupOperations(input: {
+  target: string;
+  operations: BackupOperations | undefined;
+  /** Reads a script the command delegates to; defaults to the filesystem. */
+  readScript?: (path: string) => string | null;
+}): StrategyMismatch[] {
+  const problems: StrategyMismatch[] = [];
+  const read = (path: string): string | null => {
+    if (input.readScript) return input.readScript(path);
+    try {
+      return readFileSync(path, "utf8");
+    } catch {
+      return null;
+    }
+  };
+
+  const backup = input.operations?.backup;
+  const restore = input.operations?.restore;
+
+  if (!backup) {
+    problems.push({ target: input.target, problem: "has no operations.backup command" });
+  } else if (!dumpsCustomFormat(backup, read)) {
+    problems.push({
+      target: input.target,
+      problem: `operations.backup does not produce a restorable custom-format dump: ${backup}`,
+    });
+  }
+
+  if (!restore) {
+    problems.push({
+      target: input.target,
+      problem: "has no operations.restore command, so the backup is never rehearsed",
+    });
+  } else if (!RESTORES_INTO_DATABASE.test(restore)) {
+    problems.push({
+      target: input.target,
+      problem: `operations.restore is not pg_restore into a database: ${restore}`,
+    });
+  }
+  return problems;
+}
+
+/** A recipe may delegate to its own script (the droplet ships backup.sh). */
+function dumpsCustomFormat(command: string, read: (path: string) => string | null): boolean {
+  if (CUSTOM_DUMP.test(command)) return true;
+  for (const match of command.matchAll(/\b(deploy\/[\w./-]+\.sh)\b/g)) {
+    const script = match[1];
+    if (!script) continue;
+    const source = read(script);
+    if (source && CUSTOM_DUMP.test(source)) return true;
+  }
+  return false;
+}
 
 export class TargetActionError extends Error {
   constructor(
