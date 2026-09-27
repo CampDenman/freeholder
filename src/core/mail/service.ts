@@ -17,6 +17,8 @@ import type {
 import { MailAdapterError } from "@/adapters/mail/types";
 import { users } from "@/core/auth/schema";
 import { db } from "@/core/db";
+import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
+import { env } from "@/core/env";
 import { enqueueJob } from "@/core/jobs";
 import { connectedAccounts, connectionCapabilities } from "@/core/connections/schema";
 import {
@@ -525,6 +527,18 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
   if (!["queued", "failed"].includes(queued.delivery.status)) {
     await db().delete(mailOutbox).where(eq(mailOutbox.deliveryId, deliveryId));
     return { status: "missing" };
+  }
+  if (playgroundBlocksExternalDelivery(env())) {
+    // C1.38: the public playground never contacts a mail provider, whatever
+    // queued the message — a visitor cannot call mail services, but background
+    // work (reminders, notices) enqueues as system and must still fail closed.
+    // Failed, not retried: the provider call is the thing that is disallowed,
+    // and retrying a disallowed call forever just burns the lease.
+    await finishQueuedMail(deliveryId, {
+      status: "failed",
+      lastError: "External mail delivery is disabled in the public playground.",
+    });
+    return { status: "failed" };
   }
 
   let message: StagedMessage;

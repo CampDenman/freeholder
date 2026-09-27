@@ -34,6 +34,8 @@ import type { SmsAdapter } from "@/adapters/sms";
 import { AdapterError } from "@/adapters/types";
 import { storage } from "@/adapters/storage";
 import { contacts } from "@/core/contacts/schema";
+import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
+import { env } from "@/core/env";
 import { assets } from "@/core/media/schema";
 import {
   defineOrchestratedService,
@@ -441,6 +443,15 @@ export const sendSms = defineService({
     messageId: uuid.nullable(),
   }),
   handler: async (input, ctx) => {
+    if (playgroundBlocksExternalDelivery(env())) {
+      // C1.38: the playground's container network has no route out, and this
+      // refusal is the in-app twin of that: reminder and compliance jobs run
+      // as system and reach here without a person at the keyboard.
+      throw new ServiceError(
+        "permission",
+        "Text message delivery is disabled in the public playground.",
+      );
+    }
     requirePerson(ctx.actor);
     const contactId =
       input.contactId ??

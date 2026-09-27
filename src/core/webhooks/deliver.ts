@@ -15,6 +15,8 @@
 // with in-process listeners.
 import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/core/db";
+import { playgroundBlocksExternalDelivery } from "@/core/demo/playground-policy";
+import { env } from "@/core/env";
 import { WEBHOOK_SCHEMA_VERSION } from "@/core/platform";
 import { webhookDeliveries, webhookSubscriptions } from "@/core/webhooks/schema";
 import {
@@ -163,6 +165,22 @@ async function fail(
 }
 
 async function attempt(delivery: Claimed): Promise<void> {
+  if (playgroundBlocksExternalDelivery(env())) {
+    // C1.38: no route out exists from the playground's container network, and
+    // this is the in-app twin of that — events visitors generate still
+    // enqueue deliveries, and the sweep must not turn them into POSTs.
+    // Failed outright, not backed off: retrying a disallowed delivery only
+    // delays the abandonment.
+    await db()
+      .update(webhookDeliveries)
+      .set({
+        status: "failed",
+        error: "External webhook delivery is disabled in the public playground.",
+        completedAt: sql`now()`,
+      })
+      .where(eq(webhookDeliveries.id, delivery.id));
+    return;
+  }
   const body = JSON.stringify({
     id: delivery.id,
     event: delivery.eventName,
