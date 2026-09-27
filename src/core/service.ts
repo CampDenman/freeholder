@@ -14,8 +14,12 @@
 // multi-table mutation — so composition must not mean a second transaction on
 // a second connection.
 import type { z } from "zod";
+import { sql } from "drizzle-orm";
 import { env } from "@/core/env";
-import { playgroundAllows } from "@/core/demo/playground-policy";
+import {
+  PLAYGROUND_ROW_CAPS,
+  playgroundAllows,
+} from "@/core/demo/playground-policy";
 import { db, type Database } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
 import { writeTimelineEvent } from "@/core/events";
@@ -447,6 +451,24 @@ function authorizeInput<In extends z.ZodType, Out>(
   return { input: parsed.data, viaSelfService };
 }
 
+async function enforcePlaygroundRowCap<In extends z.ZodType, Out>(
+  def: ServiceDef<In, Out>,
+  actor: Actor,
+): Promise<void> {
+  if (env().FREEHOLDER_PLAYGROUND !== "1" || actor.kind === "system") return;
+  const cap = PLAYGROUND_ROW_CAPS[def.name];
+  if (!cap) return;
+  const [row] = await db().execute<{ count: number }>(sql`
+    select count(*)::int as count from ${sql.identifier(cap.table)}
+  `);
+  if (Number(row?.count ?? 0) >= cap.limit) {
+    throw new ServiceError(
+      "rate_limited",
+      "This playground surface is full. The shared demo holds a bounded sample — try again after the hourly reset.",
+    );
+  }
+}
+
 async function enforceRateLimit<In extends z.ZodType, Out>(
   def: ServiceDef<In, Out>,
   input: z.output<In>,
@@ -520,6 +542,7 @@ export function defineService<In extends z.ZodType, Out>(
         rawInput,
         actor,
       );
+      await enforcePlaygroundRowCap(def, actor);
 
       // A composed call inherits its parent's transaction and event queue; a
       // top-level call owns both. Exactly one transaction per outermost call.

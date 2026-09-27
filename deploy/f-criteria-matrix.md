@@ -791,17 +791,17 @@ v2.
 ## C1.38 — Disposable public playground
 
 - **F01** — Existing users, roles and sessions; no additional tenant schema. `src/core/demo/playground.ts` initializes only a disposable database.
-- **F02** — `src/core/demo/playground.ts` defines the entry contract; `src/core/demo/playground-policy.ts` explicitly lists editing mutations.
+- **F02** — `src/core/demo/playground.ts` defines the entry contract; `src/core/demo/playground-policy.ts` explicitly lists editing mutations, the external-delivery block and per-surface row caps; `src/core/service.ts` enforces both at the single choke point.
 - **F03** — Uses the ordinary unified contact services; no separate demo contact model. `src/core/contacts/service.ts`.
-- **F04** — `app/playground/page.tsx` and the shared root banner; actual container entry is exercised by `scripts/playground-gate.sh`.
-- **F05** — Browser-only entry is deliberately excluded from external API/MCP projections; `tests/core/internal-services.test.ts`.
+- **F04** — `app/playground/page.tsx` and the shared root banner; the browser proof signs in and edits through the real screens. `app/layout.tsx`, `tests/browser/playground.spec.ts`; container entry exercised by `scripts/playground-gate.sh`.
+- **F05** — Browser-only entry is deliberately excluded from external API/MCP projections; the privileged-operation refusal is in `authorizeInput`, so every projection refuses identically and the browser proof posts to the REST API as the visitor. `tests/core/internal-services.test.ts`, `src/core/service.ts`, `tests/browser/playground.spec.ts`.
 - **F06** — Entry/banner strings in all four locale catalogs; shared semantic tokens. `locales/en.json`, `src/core/design/tokens.ts`.
-- **F07** — `tests/core/playground.test.ts` proves edits, privilege refusal and opt-in isolation; the container gate checks blocked egress.
-- **F08** — `tests/core/playground.test.ts`; `scripts/playground-gate.sh` exercises the built artifact.
-- **F09** — Disposable data and files reset hourly; no personal information belongs here. `deploy/docker-selfhost/playground/reset.sh`.
-- **F10** — Existing published sample content is installed at boot, with a persistent shared-data/reset notice. `src/modules/seed/boot.ts`, `app/layout.tsx`.
-- **F11** — `deploy/docker-selfhost/playground/README.md`; full live reset/browser proof remains required before closing the item.
-- **F12** — Entry through a real session and page edit use the ordinary services; `tests/core/playground.test.ts`.
+- **F07** — `tests/core/playground.test.ts` proves edits, privilege refusal, external-delivery refusals (mail/SMS/webhooks, with playground-off controls), the shared 300-mutations/minute ceiling and per-surface row caps; the container gate checks blocked egress.
+- **F08** — `tests/core/playground.test.ts`, `tests/browser/playground.spec.ts`; `scripts/playground-gate.sh` exercises the built artifact.
+- **F09** — Disposable data and files reset hourly; the reset's recovery is proven service-side (old session dead, visitor content gone, sample reinstalled). `deploy/docker-selfhost/playground/reset.sh`, `tests/core/playground.test.ts`.
+- **F10** — Published sample content is installed at boot, with a persistent shared-data/reset notice. `src/modules/seed/boot.ts`, `app/layout.tsx`.
+- **F11** — `deploy/docker-selfhost/playground/README.md`; `MASTER.md` §43 annotation this row transcribes; changeset `playground-hardening.md`.
+- **F12** — Entry → edit → publish → API denial → reset → re-entry in one Chromium journey; `tests/browser/playground.spec.ts`, with database separation proven service-side in the same file.
 
 ## C2.01 — Separate working drafts from published revisions for every
 

@@ -26,6 +26,7 @@
     "test:a11y": "playwright test tests/browser/accessibility.spec.ts --config playwright.a11y.config.ts",
     "test:journeys": "playwright test tests/browser/journeys.spec.ts tests/browser/c11-*.spec.ts --config playwright.a11y.config.ts",
     "test:browser": "playwright test --config playwright.a11y.config.ts",
+    "test:playground": "playwright test --config playwright.playground.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:baseline-identity": "node scripts/schema-baseline-identity.mjs",

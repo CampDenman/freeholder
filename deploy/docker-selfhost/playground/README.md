@@ -47,7 +47,16 @@ Check network membership and blocked outbound connections before exposing it.
 `FREEHOLDER_PLAYGROUND_URL=https://demo.example.com/playground` optionally adds a
 demo link on the main project website. Leave it unset on normal client sites.
 
-This is a shared sandbox with a global 300 mutations/minute cap, not a private
-workspace. A visitor may overwrite another visitor's work. Availability is
-bounded by the reset and container limits; this recipe is not a multi-tenant
-hosting service. Update its pinned image explicitly and reset after an upgrade.
+This is a shared sandbox with a global 300 mutations/minute cap, per-surface
+row caps (pages, sections, forms, contacts, products, notes and tasks refuse
+creates once full until the next reset), and no upload staging at all — not a
+private workspace. A visitor may overwrite another visitor's work.
+Availability is bounded by the reset and container limits; this recipe is not
+a multi-tenant hosting service. Update its pinned image explicitly and reset
+after an upgrade.
+
+The service layer also fails closed on outbound delivery: queued mail, SMS
+and webhook deliveries are refused with a playground reason before any
+provider or endpoint is contacted, so a background job can never make this
+box send — the internal-only networks above are the outer bound, not the
+only one.

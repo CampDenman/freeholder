@@ -38,6 +38,7 @@ const MEASURED_DURATION_MS: Readonly<Record<string, number>> = Object.freeze({
   "tests/core/media-capture.test.ts": 62_000,
   "tests/core/media.test.ts": 123_000,
   "tests/core/notifications.test.ts": 74_000,
+  "tests/core/playground.test.ts": 15_000,
   "tests/core/recurring-invoices.test.ts": 71_000,
   "tests/core/seed-demo.test.ts": 52_000,
   "tests/core/signup-contact-import.test.ts": 80_000,
