@@ -83,7 +83,12 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     name: "Administrator",
     description: "Runs the instance and manages every currently installed area.",
     assignable: true,
-    grants: manage(ADMIN_MODULES),
+    grants: [
+      ...manage(ADMIN_MODULES),
+      // Facts are owner-authored truth (§4.18): staff read the ledger, only
+      // the owner (or a role the owner explicitly grants) publishes to it.
+      ...view(["attestations"]),
+    ],
   },
   {
     key: "editor",
@@ -131,7 +136,7 @@ export const DEFAULT_ROLES: readonly DefaultRole[] = [
     name: "Legacy staff",
     description: "Compatibility role for accounts created before named roles.",
     assignable: false,
-    grants: view(ADMIN_MODULES),
+    grants: [...view(ADMIN_MODULES), ...view(["attestations"])],
   },
 ] as const;
 

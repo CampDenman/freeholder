@@ -29,7 +29,7 @@ export default async function FactPage({
 }) {
   const [{ key }, query] = await Promise.all([params, searchParams]);
   const factKey = decodeURIComponent(key);
-  const actor = await requireStaffActor("core");
+  const actor = await requireStaffActor("attestations");
   const subject = query.kind || query.id ? { kind: query.kind, id: query.id } : undefined;
 
   const [current, ledger, business, t] = await Promise.all([
@@ -44,7 +44,7 @@ export default async function FactPage({
 
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
-  const canManage = hasModuleAccess(actor, "core", "manage");
+  const canManage = hasModuleAccess(actor, "attestations", "manage");
   const newestFirst = [...ledger].reverse();
   const shown = (value: unknown) =>
     typeof value === "string" ? value : JSON.stringify(value);
