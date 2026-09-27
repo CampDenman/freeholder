@@ -216,12 +216,6 @@ export const calculator = defineBlock({
                         source: entry.source,
                         date: dateLabel(entry.asOf),
                       })}
-                      <time
-                        dateTime={entry.asOf.toISOString()}
-                        className="sr-only"
-                      >
-                        {entry.asOf.toISOString()}
-                      </time>
                     </li>
                   ))}
                 </ul>
@@ -231,7 +225,13 @@ export const calculator = defineBlock({
                     date: result.oldestAsOf ? dateLabel(result.oldestAsOf) : "",
                   })}
                   {result.oldestAsOf ? (
-                    <time dateTime={result.oldestAsOf.toISOString()} className="sr-only">
+                    // The machine-readable instant beside the human date:
+                    // crawlers and tests read the ISO string, people read
+                    // the localized one above it.
+                    <time
+                      dateTime={result.oldestAsOf.toISOString()}
+                      className="sr-only"
+                    >
                       {result.oldestAsOf.toISOString()}
                     </time>
                   ) : null}
