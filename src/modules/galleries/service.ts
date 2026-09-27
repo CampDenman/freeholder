@@ -63,6 +63,7 @@ import { hashGalleryToken, newGalleryToken } from "./tokens";
 import { buildZip, uniqueNames, zipCeilingExceeded } from "./archive";
 import { storage } from "@/adapters/storage";
 import { getService } from "@/core/service";
+import { consentBlockedAssetIds } from "@/modules/projects/consent-gate";
 
 const id = z.string().uuid();
 const slug = z
@@ -680,11 +681,20 @@ async function openedSessionPayload(
   guest: typeof galleryGuests.$inferSelect | null,
 ) {
   const speakerIsClient = isClientSpeaker(gallery, contactId, guest);
+  const items = await liveItems(ctx, gallery, guest);
+  // A gallery is a publish surface like any other (C8.16): media whose
+  // project consent no longer stands does not render here, whoever the
+  // session belongs to. Withdrawal lands on this surface with no separate
+  // step, because the filter reads the consent ledger, not a copied flag.
+  const blocked = await consentBlockedAssetIds(
+    ctx.tx,
+    items.map((item) => item.assetId),
+  );
   return {
     ok: true as const,
     sessionToken,
     gallery: publicGallery(gallery),
-    items: await liveItems(ctx, gallery, guest),
+    items: items.filter((item) => !blocked.has(item.assetId)),
     selections: await selectionsFor(ctx, gallery.id, contactId),
     round: await currentRound(ctx, gallery.id),
     lastDecided: await lastDecidedRound(ctx, gallery.id),
@@ -1594,6 +1604,18 @@ export const downloadGalleryItem = defineService({
     if (!row || row.asset.status !== "ready") {
       throw new ServiceError("not_found", "That file is not in this gallery.");
     }
+    // C8.16: never hand out bytes the list would no longer show. Denied goes
+    // in the access log like any other refused download, so the owner can see
+    // the withdrawal being honoured.
+    if ((await consentBlockedAssetIds(ctx.tx, [row.asset.id])).has(row.asset.id)) {
+      await logAccess(ctx, {
+        galleryId: gallery.id,
+        contactId: session.contactId,
+        action: "denied",
+        assetId: row.asset.id,
+      });
+      throw new ServiceError("not_found", "That file is not in this gallery.");
+    }
     const delivery =
       gallery.downloadPolicy === "none" || !itemAllowed(row.item, guest, "download")
         ? null
@@ -1673,6 +1695,14 @@ export const viewGalleryItem = defineService({
       .limit(1);
     if (!found || found.asset.status !== "ready") return null;
     if (!itemAllowed(found.item, guest, "view")) return null;
+    // C8.16: a blocked asset is not in this gallery for rendering purposes,
+    // however the session got here. The list above already hid it; this is
+    // the same rule for a direct item id.
+    if (
+      (await consentBlockedAssetIds(ctx.tx, [found.asset.id])).has(found.asset.id)
+    ) {
+      return null;
+    }
     // Null when a watermarked gallery has nothing marked to show: the page
     // renders a gap rather than the unmarked original.
     const delivery = deliverableFor(found.asset, gallery, "view");
@@ -2132,8 +2162,14 @@ export const buildGalleryArchive = defineService({
       .where(eq(galleryItems.galleryId, gallery.id))
       .orderBy(asc(galleryItems.position));
 
+    // C8.16: a packaged archive follows the same consent rule as the live
+    // list — withdrawn media is not deliverable in a bundle either.
+    const blocked = await consentBlockedAssetIds(
+      ctx.tx,
+      rows.map((row) => row.asset.id),
+    );
     const deliverable = rows
-      .filter((row) => row.asset.status === "ready")
+      .filter((row) => row.asset.status === "ready" && !blocked.has(row.asset.id))
       .map((row) => ({
         row,
         delivery: deliverableFor(row.asset, gallery, "download"),
@@ -2240,6 +2276,23 @@ export const downloadGalleryArchive = defineService({
   handler: async (input, ctx) => {
     const { gallery } = await loadSession(ctx, input.sessionToken);
     if (gallery.downloadPolicy === "none") return null;
+    // C8.16: an archive packaged before a consent withdrawal may still hold
+    // the withdrawn media, and this endpoint cannot tell. The gallery owner
+    // rebuilds (packaging excludes blocked media); until then the bundle
+    // stays offline rather than delivering what the list no longer shows.
+    const items = await ctx.tx
+      .select({ assetId: galleryItems.assetId })
+      .from(galleryItems)
+      .where(eq(galleryItems.galleryId, gallery.id));
+    if (
+      items.length > 0 &&
+      (await consentBlockedAssetIds(
+        ctx.tx,
+        items.map((item) => item.assetId),
+      )).size > 0
+    ) {
+      return null;
+    }
     const [archive] = await ctx.tx
       .select()
       .from(galleryArchives)

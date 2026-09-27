@@ -12,6 +12,12 @@
 // "part of the Henderson kitchen" without invoicing learning what a project
 // is: it asks the registry rather than importing anything.
 import { defineModule } from "@/core/module";
+// The render-path consent gate (C8.16) registers its page veto at import
+// time. Importing it here — rather than from whichever service happens to
+// load first — means the veto is registered whenever the module manifest is,
+// which every boot and every spine test imports. The public read paths must
+// not depend on which service file a process touched first.
+import "@/modules/projects/consent-gate";
 
 export default defineModule({
   name: "projects",

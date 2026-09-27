@@ -6844,12 +6844,66 @@ permitted conversation on the same contact timeline.
   publication with source and as-of, supersession, a visible correction
   history, staleness once `valid_until` passes, and that no fact renders
   without its date.
-- [ ] **C8.16** Build consent-gated progress and comparison media: before/after
+- [x] **C8.16** Build consent-gated progress and comparison media: before/after
   pairs and time-series publish only against a recorded consent naming the
   person and the scope; withdrawal unpublishes from page, gallery, feed,
   sitemap and structured data; capture provenance stays attached. Prove
   publication blocked without consent, publication on consent, withdrawal
   removing it everywhere, and provenance surviving export.
+  (The consent record is the `media_consents` ledger the first half of this
+  item landed: each decision names the person (`contact_id`), the scope
+  (subject project plus surfaces) and when it took effect, withdrawal appends
+  a row rather than erasing one, and grants can lapse. This change builds the
+  publish gate on top of it and, more importantly, the render layer:
+  `src/modules/projects/consent-gate.ts` re-derives what may render from the
+  ledger at read time, and every public query path that can surface the media
+  consults it — the portfolio index and collections, the service page's
+  proof-of-work list, and the structured-data query behind a case study's
+  `CreativeWork` JSON-LD all drop a project the moment its permission stops
+  standing, and a public gallery hides blocked frames from its session list,
+  refuses direct view and download by item id, excludes them from rebuilt
+  ZIP archives and holds possibly-stale archives offline. Because pages and
+  sitemaps read `pages.status`, a publish-veto registry
+  (`src/core/privacy/publish-veto.ts`, registered from the projects manifest)
+  lets `cms.resolvePage` and `cms.publishedPaths` re-derive the same answer
+  from the ledger, so the case-study page and its sitemap entry come down
+  with withdrawal even if the status flag is flipped back by hand; the
+  portfolio index and collection pages are deliberately not vetoed, since
+  they re-derive their project lists at render time and one withdrawn project
+  must not take unrelated work offline. Time-series publishing becomes real
+  machinery rather than loose images: the publish snapshot carries
+  `seriesKey`/`capturedAt` into the `projectCaseStudy` block, the block
+  accepts the `series` role, and the public page renders each series as a
+  dated, chronologically ordered strip (new `projects.public.progress` key in
+  en/fr/es/ar). The ownership export's media manifest now carries each
+  asset's capture provenance, and `media_consents` exports as a table with
+  everything else. Changeset `consent-gated-media.md`. **F04**
+  `tests/browser/media-consent.spec.ts` (permission given, taken back, and
+  still on the record) plus the dated-strip render tests in
+  `tests/core/project-series-render.test.ts`. **F05**
+  `privacy.grantMediaConsent`/`privacy.withdrawMediaConsent`/
+  `privacy.mediaConsent`/`privacy.mediaConsentHistory` and
+  `projects.recordConsent`/`projects.revokeConsent` at `/api/v1/privacy.*` and
+  `/api/v1/projects.*` with MCP parity; the public render queries
+  `projects.portfolioBrowse`/`projects.resolvePublicProject`/
+  `projects.publicForService` are the same surfaces the SDK and API expose.
+  **F07** `tests/core/media-consent.test.ts` (permission checks, refusal
+  semantics, lapsed == withdrawn == never-given, sweep behaviour) and the
+  negative cases in `tests/core/consent-publish-surfaces.test.ts` (blocked
+  view returns null, blocked download is a logged refusal, hand-flipped
+  publication flags still refuse, stale archive withheld). **F09**
+  `projects.sweepLapsedConsent` takes lapsed work offline
+  (`tests/core/media-consent.test.ts`); `tests/core/ownership-export.test.ts`
+  proves capture provenance and the consent ledger survive export. **F12**
+  `tests/core/consent-publish-surfaces.test.ts` is the cross-module journey:
+  one withdrawal removes a published pair and series from the CMS page,
+  sitemap, feeds, structured data, portfolio, service page and gallery in a
+  single action, with capture provenance still attached afterwards. Spec
+  choice recorded: consent `surfaces` are recorded vocabulary, not a
+  per-surface render gate — a live consent for the work publishes it to the
+  surfaces the item names, and withdrawal removes it from all of them;
+  per-surface differentiation remains available in the ledger for a future
+  item.)
 
 **C8 exit:** the business can prove, deliver and support its work while each
 customer has one secure, comprehensible home for the relationship.
