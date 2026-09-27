@@ -6907,7 +6907,8 @@ permitted conversation on the same contact timeline.
   refuses direct view and download by item id, excludes them from rebuilt
   ZIP archives and holds possibly-stale archives offline. Because pages and
   sitemaps read `pages.status`, a publish-veto registry
-  (`src/core/privacy/publish-veto.ts`, registered from the projects manifest)
+  (`src/core/privacy/publish-veto.ts`, registered when the projects module's
+  services load)
   lets `cms.resolvePage` and `cms.publishedPaths` re-derive the same answer
   from the ledger, so the case-study page and its sitemap entry come down
   with withdrawal even if the status flag is flipped back by hand; the
