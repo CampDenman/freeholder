@@ -5,8 +5,13 @@
 // Most of these tests assert a refusal, which is the point of the feature. An
 // assessment that answers every question is easy; one that cannot be made to
 // say something its owner did not write is the product.
+import { readFileSync } from "node:fs";
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { ready } from "@/core/runtime";
+import { db } from "@/core/db";
+import { contacts, timelineEvents } from "@/core/contacts/schema";
+import { assessmentBands } from "@/modules/assessments/schema";
 import {
   closeAssessment,
   createAssessment,
@@ -73,6 +78,62 @@ describe("scoring, without a database", () => {
     // An option key nobody authored contributes nothing rather than guessing.
     expect(scoreAnswers(QUESTIONS, { symptom: "invented", age: "new" })).toBe(0);
   });
+});
+
+/**
+ * The vocabulary audit, and why it is a grep rather than a review.
+ *
+ * "No surface states a diagnosis, candidacy, certification or
+ * recommendation" is a claim about every string this module renders, in four
+ * languages, forever — and a claim that wide is only kept by a gate, because
+ * any single review is a point in time. Owner-authored content (band text,
+ * questions, the demo fixture) is data and is the owner's speech; what the
+ * *product* says around that content is these locale files, so that is what
+ * the audit scans: every key an assessment surface can reach, in all four
+ * locales, against the forbidden vocabulary in each language. A new key that
+ * says "recommended next step" breaks the build here, not in front of a
+ * visitor on a clinic site.
+ *
+ * "Guarantee" is in the pattern even though the checklist names four words,
+ * because MASTER.md §4 principle 13 names it in the same breath ("structurally
+ * unable to diagnose, certify, guarantee or recommend") — the audit enforces
+ * the principle, not just the checklist sentence. Stems rather than whole
+ * words, so "recommendation" cannot sneak past as "recommendations".
+ */
+describe("the words no assessment surface may say", () => {
+  const LOCALES = ["en", "fr", "es", "ar"] as const;
+
+  // One pattern per language family the locales cover, matched
+  // case-insensitively against values. Diacritics are listed explicitly
+  // (diagnóstico) because the catalogues store them composed.
+  const FORBIDDEN =
+    /diagnos|diagnóstic|diagnostiqu|candida|certif|recommend|recommand|recomend|guarantee|garanti|تشخيص|ترشيح|أهلية|شهاد|توثيق|توصية|ضمان/i;
+
+  for (const locale of LOCALES) {
+    it(`keeps the forbidden vocabulary out of every ${locale} assessment string`, () => {
+      const catalogue = JSON.parse(
+        readFileSync(`locales/${locale}.json`, "utf8"),
+      ) as Record<string, string>;
+      // Every key an assessment surface can render: the module's namespace,
+      // plus the block palette and demo labels that name assessments.
+      const assessmentKeys = Object.keys(catalogue).filter(
+        (key) =>
+          key.startsWith("assessments.") ||
+          key === "cms.block.assessment" ||
+          key === "demo.outcome.assessmentVisible",
+      );
+      // The audit means nothing if a refactor moves the strings to keys this
+      // filter no longer reaches, so the set being scanned is asserted too.
+      expect(assessmentKeys.length).toBeGreaterThanOrEqual(90);
+
+      const offenders = assessmentKeys.filter((key) =>
+        FORBIDDEN.test(catalogue[key] ?? ""),
+      );
+      expect(
+        offenders.map((key) => `${key}: ${catalogue[key]}`),
+      ).toEqual([]);
+    });
+  }
 });
 
 describe.runIf(hasDatabase)("assessments", () => {
@@ -391,5 +452,130 @@ describe.runIf(hasDatabase)("assessments", () => {
     expect(rows[0]!.contactId).not.toBeNull();
     expect(rows[0]!.bandLabel).toBe("Routine");
     expect(rows[0]!.escalated).toBe(false);
+  });
+
+  it("resolves to one contact and writes a timeline event", async () => {
+    const made = await draft();
+    await coveredBands(made.id);
+    await publishAssessment.call({ id: made.id }, OWNER);
+
+    // The spine half of "responses reach the contact spine": not just that a
+    // contact_id is set, but that it went through contacts.resolve — one
+    // contact per email, so a second response from the same address lands on
+    // the same person instead of minting a duplicate.
+    const first = await respond.call(
+      {
+        slug: "boiler-check",
+        answers: { symptom: "noise", age: "new" },
+        respondent: { email: "sam@example.test", name: "Sam Rowe" },
+      },
+      ANONYMOUS,
+    );
+    const second = await respond.call(
+      {
+        slug: "boiler-check",
+        answers: { symptom: "no_heat", age: "old" },
+        respondent: { email: "sam@example.test", name: "Sam Rowe" },
+      },
+      ANONYMOUS,
+    );
+    expect(first.band.key).toBe("routine");
+    expect(second.band.key).toBe("urgent");
+
+    // One contact for the address, however many times they answered — the
+    // automated path resolves (contacts.resolve), it never creates a second
+    // row for an email the spine already knows.
+    const people = await db()
+      .select()
+      .from(contacts)
+      .where(eq(contacts.email, "sam@example.test"));
+    expect(people).toHaveLength(1);
+    const person = people[0]!;
+
+    const rows = await listResponses.call({ assessmentId: made.id }, OWNER);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.contactId).toBe(person.id);
+
+    // The other spine half: each response is a TimelineEvent, because an
+    // assessment answer the owner cannot find on the contact record is an
+    // answer that does not exist for follow-up. The creation event proves
+    // which path brought the contact in.
+    const events = await db()
+      .select()
+      .from(timelineEvents)
+      .where(eq(timelineEvents.contactId, person.id));
+    const answered = events.filter((event) => event.eventType === "assessment.responded");
+    expect(answered).toHaveLength(2);
+    for (const event of answered) {
+      expect(event.subjectType).toBe("assessment_response");
+    }
+    const bands = answered.map((event) => (event.payload as { band?: string }).band);
+    expect(bands).toContain("Routine");
+    expect(bands).toContain("Urgent");
+    const created = events.find((event) => event.eventType === "contact.created");
+    expect((created?.payload as { source?: string } | undefined)?.source).toBe(
+      "assessment:boiler-check",
+    );
+  });
+
+  it("moves a response when the contacts it belongs to merge", async () => {
+    const made = await draft();
+    await coveredBands(made.id);
+    await publishAssessment.call({ id: made.id }, OWNER);
+    await respond.call(
+      {
+        slug: "boiler-check",
+        answers: { symptom: "noise", age: "new" },
+        respondent: { email: "sam@example.test", name: "Sam Rowe" },
+      },
+      ANONYMOUS,
+    );
+
+    // The registerContactReference contract: the first time an owner merges a
+    // duplicate, a table missing from the list orphans its rows. So merge
+    // the responding contact *as the duplicate* and read where the row went.
+    const { resolveContact, mergeContacts } = await import("@/core/contacts/service");
+    const { contact: survivor } = await resolveContact.call(
+      { email: "sam.rowe@example.test", name: "Sam Rowe" },
+      OWNER,
+    );
+    const [before] = await db().select().from(contacts).where(eq(contacts.email, "sam@example.test"));
+    await mergeContacts.call(
+      { duplicateId: before!.id, survivingId: survivor.id },
+      OWNER,
+    );
+
+    const rows = await listResponses.call({ assessmentId: made.id }, OWNER);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.contactId).toBe(survivor.id);
+  });
+
+  it("refuses rather than improvises when bands drift under a live assessment", async () => {
+    const made = await draft();
+    await coveredBands(made.id);
+    await publishAssessment.call({ id: made.id }, OWNER);
+
+    // The band lookup in `respond` can only fail if the bands moved after
+    // publish, because publish refuses gaps and the exclusion constraint
+    // refuses overlaps. Every service path to that state is guarded, so the
+    // drift this branch guards against can only arrive from outside the
+    // service — which is how it has to be simulated.
+    await db()
+      .delete(assessmentBands)
+      .where(eq(assessmentBands.key, "urgent"));
+
+    const error = await failure(
+      respond.call(
+        { slug: "boiler-check", answers: { symptom: "no_heat", age: "old" } },
+        ANONYMOUS,
+      ),
+    );
+    expect(error.code).toBe("conflict");
+    expect(error.message).toContain("cannot be answered right now");
+
+    // The refusal must not store a half-answer either: no band means no row,
+    // because the row would claim an outcome it never showed anyone.
+    const rows = await listResponses.call({ assessmentId: made.id }, OWNER);
+    expect(rows).toHaveLength(0);
   });
 });
