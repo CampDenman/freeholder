@@ -211,6 +211,15 @@ export const serviceAreas = pgTable(
      * by guessing is the invented coverage 4.18 forbids.
      */
     postalCodes: text("postal_codes").array().notNull().default(sql`'{}'`),
+    /**
+     * The weekly window when this area receives deliveries, all three
+     * together or none (C6.18). Null means the owner named no window, and no
+     * window is a real answer — the coverage check must not invent one.
+     * Weekdays follow opening_hours.weekday: 0 = Sunday.
+     */
+    deliveryWeekdays: smallint("delivery_weekdays").array(),
+    deliveryOpens: time("delivery_opens"),
+    deliveryCloses: time("delivery_closes"),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
@@ -226,6 +235,23 @@ export const serviceAreas = pgTable(
             when 'postal_codes' then array_length(${t.postalCodes}, 1) is not null
             else false
           end`,
+    ),
+    // A delivery window is a whole or it is nothing: days without times name
+    // no hour, times without days name no day, and a window that closes
+    // before it opens is a negative afternoon. The database enforces it
+    // because a rule only the service checks is one a second writer can miss.
+    check(
+      "service_areas_delivery_window",
+      sql`(${t.deliveryWeekdays} is null and ${t.deliveryOpens} is null and ${t.deliveryCloses} is null)
+           or (
+             ${t.deliveryWeekdays} is not null
+             and array_length(${t.deliveryWeekdays}, 1) is not null
+             and ${t.deliveryOpens} is not null
+             and ${t.deliveryCloses} is not null
+             and ${t.deliveryOpens} < ${t.deliveryCloses}
+             and 0 <= all(${t.deliveryWeekdays})
+             and 6 >= all(${t.deliveryWeekdays})
+           )`,
     ),
   ],
 );

@@ -80,11 +80,15 @@ const hoursRow = row({
 const serviceAreaRow = row({
   id: uuid,
   locationId: uuid,
-  kind: z.enum(["radius", "regions"]),
+  kind: z.enum(["radius", "regions", "postal_codes"]),
   centerLatitude: z.string().nullable(),
   centerLongitude: z.string().nullable(),
   radiusKm: z.string().nullable(),
   regions: z.array(z.string()),
+  postalCodes: z.array(z.string()),
+  deliveryWeekdays: z.array(z.number().int().min(0).max(6)).nullable(),
+  deliveryOpens: z.string().nullable(),
+  deliveryCloses: z.string().nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -524,6 +528,21 @@ export const setServiceArea = defineService({
         }),
       ])
       .nullable(),
+    /**
+     * The weekly window when this area receives deliveries (C6.18) — the
+     * "when" that accompanies the "where". Absent or null names no window,
+     * which is itself the answer until the owner says otherwise.
+     */
+    delivery: z
+      .object({
+        weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+        opens: timeOfDay,
+        closes: timeOfDay,
+      })
+      .refine((v) => v.opens < v.closes, {
+        message: "a delivery window closes after it opens",
+      })
+      .nullish(),
   }),
   output: serviceAreaRow.nullable(),
   handler: async (input, ctx) => {
@@ -540,6 +559,17 @@ export const setServiceArea = defineService({
 
     let row = null;
     if (input.area) {
+      const delivery = input.delivery
+        ? {
+            deliveryWeekdays: input.delivery.weekdays,
+            deliveryOpens: input.delivery.opens,
+            deliveryCloses: input.delivery.closes,
+          }
+        : {
+            deliveryWeekdays: null,
+            deliveryOpens: null,
+            deliveryCloses: null,
+          };
       const values =
         input.area.kind === "radius"
           ? {
@@ -553,7 +583,7 @@ export const setServiceArea = defineService({
             : { kind: "postal_codes" as const, postalCodes: input.area.postalCodes };
       [row] = await ctx.tx
         .insert(serviceAreas)
-        .values({ locationId: input.locationId, ...values })
+        .values({ locationId: input.locationId, ...values, ...delivery })
         .returning();
     }
 

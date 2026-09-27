@@ -226,10 +226,40 @@ export const coverageCheck = defineBlock({
             })}
           </p>
         ) : null}
+        {resolved.answer?.answer === "covered" && resolved.answer.delivery ? (
+          <p className="rounded-md bg-surface-muted px-4 py-3 text-sm text-ink-muted">
+            {ctx.t("cms.coverage.delivery", {
+              window: deliveryWindowText(ctx.locale, resolved.answer.delivery),
+            })}
+          </p>
+        ) : null}
       </section>
     );
   },
 });
+
+/**
+ * "Tuesdays and Thursdays, 09:00–17:00" in the reader's language and clock.
+ *
+ * Day names come from `Intl` rather than seven catalog keys for the same
+ * reason labels.ts gives: the runtime already knows every language's day
+ * names. The times keep the 24-hour HH:MM the owner authored.
+ */
+function deliveryWindowText(
+  locale: string,
+  window: { weekdays: number[]; opens: string; closes: string },
+): string {
+  const names = window.weekdays
+    .slice()
+    .sort((a, b) => a - b)
+    .map((day) =>
+      new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" }).format(
+        new Date(Date.UTC(2024, 0, 7 + day)),
+      ),
+    );
+  const days = new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(names);
+  return `${days}, ${window.opens}–${window.closes}`;
+}
 
 /* ---------------------------------------------------------------- C8.15 */
 
