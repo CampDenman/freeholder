@@ -26,9 +26,10 @@ RealExecutor = updater.Executor
 
 
 class Drill(updater.Executor):
-    def __init__(self, root, failure=None):
+    def __init__(self, root, failure=None, schema_changed=False):
         super().__init__({"directory": str(root), "state_directory": str(root / "state"), "socket": "/run/freeholder-updater/updater.sock"})
         self.failure, self.calls, self.reference = failure, [], OLD
+        self.schema_changed = schema_changed
         for name in (".env", "compose.yml", "Caddyfile"):
             (root / name).write_text("original")
 
@@ -63,7 +64,12 @@ class Drill(updater.Executor):
 
     def rehearse(self, *_args):
         self.check("rehearsal")
-        return {"version": "test"}
+        if self.schema_changed and not self.config.get("allow_schema_changes", False):
+            raise updater.Refused("Candidate changes the database schema or migration journal.")
+        return {"version": "test", "schemaChanged": self.schema_changed}
+
+    def restore_database(self, backup):
+        self.calls.append("restore-db")
 
     def maintenance(self, enabled):
         self.calls.append("maintenance" if enabled else "traffic")
@@ -85,8 +91,8 @@ class UpdaterTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
 
-    def drill(self, failure=None):
-        result = Drill(self.root, failure)
+    def drill(self, failure=None, schema_changed=False):
+        result = Drill(self.root, failure, schema_changed)
         # Executor installs its injected subprocess runner on the instance.
         result.run = lambda *args, **kwargs: ""
         return result
@@ -138,6 +144,54 @@ class UpdaterTests(unittest.TestCase):
         self.assertLess(executor.calls.index("rehearsal"), executor.calls.index("maintenance"))
         self.assertLess(executor.calls.index("candidate-health"), executor.calls.index("traffic"))
         self.assertTrue((executor.release / "Caddyfile").exists())
+
+    def test_migration_lane_refuses_schema_change_without_operator_opt_in(self):
+        executor = self.drill(schema_changed=True)
+        with self.assertRaisesRegex(updater.Refused, "schema or migration journal"):
+            executor.apply(NEW)
+        self.assertNotIn("maintenance", executor.calls)
+        self.assertNotIn("restore-db", executor.calls)
+        self.assertEqual(executor.status()["status"], "failed")
+
+    def test_migration_lane_completes_with_opt_in_and_needs_no_restore(self):
+        executor = self.drill(schema_changed=True)
+        executor.config["allow_schema_changes"] = True
+        result = executor.apply(NEW)
+        self.assertEqual(result["status"], "completed")
+        self.assertNotIn("restore-db", executor.calls)
+
+    def test_migration_lane_rollback_restores_backup_before_repinning_previous_image(self):
+        executor = self.drill("candidate-health", schema_changed=True)
+        executor.config["allow_schema_changes"] = True
+        with self.assertRaises(updater.Refused): executor.apply(NEW)
+        self.assertEqual(executor.status()["status"], "rolled_back")
+        self.assertEqual(executor.reference, OLD)
+        self.assertIn("restore-db", executor.calls)
+        self.assertLess(executor.calls.index("restore-db"), executor.calls.index("pin:" + OLD))
+        self.assertIn("database was restored", executor.status()["error"])
+
+    def test_migration_lane_failed_recovery_keeps_maintenance_and_blocks_next_run(self):
+        executor = self.drill("smoke", schema_changed=True)
+        executor.config["allow_schema_changes"] = True
+        with self.assertRaises(updater.Refused): executor.apply(NEW)
+        self.assertEqual(executor.status()["status"], "recovery_required")
+        self.assertIn("restore-db", executor.calls)
+        with self.assertRaisesRegex(updater.Refused, "operator recovery"): executor.apply(NEW)
+
+    def test_unchanged_candidate_in_migration_lane_keeps_image_swap_rollback(self):
+        executor = self.drill("candidate-health")
+        executor.config["allow_schema_changes"] = True
+        with self.assertRaises(updater.Refused): executor.apply(NEW)
+        self.assertEqual(executor.status()["status"], "rolled_back")
+        self.assertNotIn("restore-db", executor.calls)
+        self.assertIn("Database writes were preserved", executor.status()["error"])
+
+    def test_migration_lane_failure_before_candidate_boot_needs_no_restore(self):
+        executor = self.drill("production.dump", schema_changed=True)
+        executor.config["allow_schema_changes"] = True
+        with self.assertRaises(updater.Refused): executor.apply(NEW)
+        self.assertEqual(executor.status()["status"], "rolled_back")
+        self.assertNotIn("restore-db", executor.calls)
 
     def test_real_rehearsal_refuses_schema_or_journal_change_and_removes_containers(self):
         executor = self.drill()
@@ -395,6 +449,12 @@ class ConfigValidationTests(unittest.TestCase):
                 with self.assertRaises(updater.Refused):
                     self.load(self.write_config(utc_hour=hour))
 
+    def test_allow_schema_changes_requires_a_boolean(self):
+        with self.assertRaisesRegex(updater.Refused, "allow_schema_changes"):
+            self.load(self.write_config(allow_schema_changes="yes"))
+        config = self.load(self.write_config(allow_schema_changes=True))
+        self.assertTrue(config["allow_schema_changes"])
+
 
 class ScheduleGateTests(unittest.TestCase):
     CONFIG = {"automatic": True, "utc_hour": 10}
@@ -521,7 +581,12 @@ class SocketServerTests(unittest.TestCase):
                 break
             threading.Event().wait(0.01)
         self.assertEqual(FakeExecutor.applied[0]["locked"], True)
-        status, body = unix_http(self.config["socket"], "GET", "/status")
+        status, body = 0, {}
+        for _ in range(100):
+            status, body = unix_http(self.config["socket"], "GET", "/status")
+            if body.get("status") == "completed":
+                break
+            threading.Event().wait(0.01)
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "completed")
 

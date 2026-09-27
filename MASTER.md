@@ -8237,7 +8237,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   SPDX. **F10** N/A. **F11** `deploy/update-preflight.md`, changeset
   `update-preflight.md`. **F12** shadow SQL `SELECT 1/0` fails migrations
   without touching `public`. This is not apply — C10.06.)
-- [ ] **C10.06** Implement a verified host update executor with recoverable database
+- [x] **C10.06** Implement a verified host update executor with recoverable database
   backups, signed immutable image selection, actual migrations, candidate health
   checks and independently verified rollback. The 2026-09-21 readiness audit
   found that the previous implementation recorded fingerprints as backups and
@@ -8246,6 +8246,38 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `deploy/update-apply.md` and `tests/core/client-readiness-security.test.ts`.
   The initial Docker lane is split into C10.31; migration-changing releases and
   other hosting targets remain in this broader item.
+  (Verified host executors now cover the remainder. Docker lane
+  (`scripts/docker-updater.py`): the unchanged-schema lane of C10.31 plus the
+  explicitly opted-in `allow_schema_changes` migration lane — the rehearsal
+  boots the candidate against a restored backup and requires the
+  schema/journal signature to change, cutover holds maintenance for the whole
+  window, and rollback restores the write-free cutover backup
+  (`restore_database`) before repinning the previous image, because the
+  previous image may not read a migrated schema; maintenance blocked writes
+  from the backup onward, so no accepted write is rewound. Non-Docker targets
+  (`scripts/host-updater.py`, `deploy/host-updater.md`): digest-pinned
+  immutable artifacts with optional exact-identity cosign verification, a
+  backup hook that must produce a real non-empty file at the declared path,
+  operator hooks for apply/health/rollback/maintenance, health independently
+  re-verified after rollback, durable interrupted-run refusal, operator daily
+  schedule, private root:operator-group 0660 socket. In-app apply/snapshot/
+  rollback still refuse; no success history or fake backup is created.
+  **F04** N/A — host executors; the human surface remains the C10.31
+  `/admin/updates` card. **F05** N/A — no new agent capability;
+  `platform.applyUpdate`/`rollbackUpdate` stay refusal-only. **F07**
+  root-owned 0600 config; artifact/hook validation before any run; backup
+  file verified non-empty; rollback independently health-checked;
+  `recovery_required` blocks later runs. **F08**
+  `tests/host/test_docker_updater.py` (migration-lane drills: opt-in refusal,
+  restore-before-repin ordering, failed-recovery block, image-swap rollback
+  for unchanged candidates), `tests/host/test_host_updater.py` (digest
+  mismatch, backup gate, cosign identity, rollback re-verification,
+  interrupted refusal, socket handler). **F09** SPDX; `pnpm gates` and the
+  plan gate green. **F11** `deploy/host-updater.md`,
+  `deploy/host-updater.example.json`, `deploy/update-apply.md`, and the
+  docker-updater README migration section. **F12** both executors read as
+  refusing fake success: every failure lands a durable
+  failed/rolled_back/recovery_required status. Evidence dated 2026-09-26.)
 - [x] **C10.31** Provide an opt-in host executor for the standard app/db/caddy
   Docker recipe with S3 media: exact publisher signature verification, private
   Unix socket, owner/fresh-factor apply action, restored-backup rehearsal,

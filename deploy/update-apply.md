@@ -3,8 +3,13 @@
 Automatic `platform.applyUpdate` and `platform.rollbackUpdate` are unavailable.
 The separate opt-in [Docker host executor](docker-selfhost/docker-updater/README.md) (C10.31)
 provides owner-requested and scheduled image updates only when a restored-backup
-rehearsal proves the database schema and migration journal remain unchanged.
-Schema-changing releases and all other recipes still use the manual procedure.
+rehearsal proves the database schema and migration journal remain unchanged; an
+explicit `allow_schema_changes` opt-in admits migration-changing candidates
+whose rollback restores the write-free cutover backup. The sibling
+[host updater](host-updater.md) (C10.06) gives the remaining hosting targets a
+verified executor: digest-pinned immutable artifacts, a backup hook that must
+produce a real file, health checks, and independently re-verified rollback.
+Everything else still uses the manual procedure below.
 The previous implementation did not create recoverable backups, execute
 migrations or verify a candidate deployment, and could report a successful
 rollback after rollback failed. It has been removed (C10.06/C10.10/C11.10).
@@ -37,5 +42,7 @@ verification through their provider tooling.
 
 `platform.listUpdateRuns` remains available for historical inspection. Legacy
 snapshot fingerprints contain no recoverable row data and must not be used as
-restore points. A host executor with independent verification remains required
-before unattended updates can be enabled again.
+restore points. Unattended updates exist again only as these independently
+verified host executors: start each with its operator schedule disabled, prove
+the refusal and recovery paths on your installation, and only then enable the
+daily schedule.
