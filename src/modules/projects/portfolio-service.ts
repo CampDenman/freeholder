@@ -28,6 +28,7 @@ import {
   projectCollections,
   projects,
 } from "./schema";
+import { consentBlockedProjectIds } from "./consent-gate";
 
 const id = z.string().uuid();
 const slug = z.string().trim().toLowerCase().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(120);
@@ -407,7 +408,7 @@ async function liveProjectCards(ctx: ServiceContext): Promise<Array<z.infer<type
     .innerJoin(pages, eq(pages.id, projects.publicPageId))
     .where(and(eq(projects.publicationStatus, "published"), eq(pages.status, "published")))
     .orderBy(asc(pages.title));
-  return rows
+  const cards = rows
     .map((row) => {
       const snapshot = snapshotOf(row.blocks);
       if (!snapshot || snapshot.projectId !== row.id) return null;
@@ -423,7 +424,17 @@ async function liveProjectCards(ctx: ServiceContext): Promise<Array<z.infer<type
         serviceProductIds: snapshot.services.map((service) => service.id),
       };
     })
-    .filter((project): project is z.infer<typeof projectCard> => project !== null)
+    .filter((project): project is z.infer<typeof projectCard> => project !== null);
+  // The publish gate and the withdrawal action keep this set empty in normal
+  // operation. The check runs anyway (C8.16): publication state is a cache of
+  // consent state, and a cache that is never revalidated is how a withdrawn
+  // before/after keeps rendering until somebody happens to republish.
+  const blocked = await consentBlockedProjectIds(
+    ctx.tx,
+    cards.map((project) => project.id),
+  );
+  return cards
+    .filter((project) => !blocked.has(project.id))
     .sort((a, b) =>
       Number(b.featured) - Number(a.featured) ||
       (b.occurredOn ?? "").localeCompare(a.occurredOn ?? "") ||

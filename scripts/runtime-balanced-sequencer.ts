@@ -31,6 +31,7 @@ const MEASURED_DURATION_MS: Readonly<Record<string, number>> = Object.freeze({
   "tests/core/booking-audiences.test.ts": 58_000,
   "tests/core/booking-concurrency.test.ts": 60_000,
   "tests/core/contact-duplicate-review.test.ts": 35_000,
+  "tests/core/consent-publish-surfaces.test.ts": 5_500,
   "tests/core/contribute.test.ts": 83_000,
   "tests/core/invoicing.test.ts": 49_000,
   "tests/core/mail-service.test.ts": 52_000,

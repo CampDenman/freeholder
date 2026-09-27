@@ -340,6 +340,10 @@ export function buildMediaManifest(assetRows, objectRows) {
       variantKeys: variants,
       checksumSha256: row.checksum_sha256,
       source: row.source,
+      // Capture provenance (which session introduced it, through what
+      // source, under whose hand) is part of what the asset *is* — C8.16
+      // requires it to survive export alongside the bytes inventory.
+      provenance: row.provenance ?? {},
       deletedAt: row.deleted_at,
       purgeAfter: row.purge_after,
     };
