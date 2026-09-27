@@ -72,6 +72,11 @@ Object.assign(process.env, {
 export default defineConfig({
   testDir: "./tests/browser",
   testMatch: "*.spec.ts",
+  // The playground proof boots the production build in playground mode on its
+  // own disposable database; it runs only under
+  // playwright.playground.config.ts (pnpm test:playground). Under this
+  // ordinary-instance config /playground is not a demo surface at all.
+  testIgnore: "playground.spec.ts",
   tsconfig: "./tsconfig.json",
   fullyParallel: false,
   workers: 1,
