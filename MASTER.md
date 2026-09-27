@@ -5330,7 +5330,7 @@ owner operations, never substitute for them.
   replay and settlement tests use adapter doubles; this evidence does not
   claim a live provider charge or completion of C10.26.)*
 
-- [ ] **C5.26** Build owner-configured calculators that compute only from inputs
+- [x] **C5.26** Build owner-configured calculators that compute only from inputs
   the owner published as attestations (§4.18) — affordability, cost ranges,
   rebate eligibility, value estimates — rendering every assumption and the
   as-of date of the oldest input beside the result, and refusing to emit a
@@ -5338,6 +5338,57 @@ owner operations, never substitute for them.
   configured calculator computes, a stale input refuses rather than
   estimating, assumptions and dates render in all four locales, and no result
   is presented as a quote, an approval or a guarantee.
+  (The engine and surfaces landed in #411; evidence completed and box checked
+  2026-09-26. Every constant a calculator uses is an attestation key resolved
+  at render through `attestations.current` — no stored constant, no default,
+  no last-known value (`src/modules/calculators/service.ts`); the formula
+  vocabulary is seven operations over named steps, never an expression string
+  (`src/modules/calculators/formula.ts`). "Every assumption" is read as the
+  owner's assumptions text — NOT NULL because an optional caveat is one
+  nobody writes — plus each published input rendered beside the result with
+  its key, value, source and as-of, and the as-of of the oldest input;
+  documented because the reading is broader than the figure-plus-caveats
+  #411 shipped. **F04** the public `calculator` block
+  (`src/modules/cms/blocks/surfaces.tsx`) renders a figure only after a GET
+  form submission — a crafted link cannot display a result the calculator
+  never produced — and renders a refusal, never a number, when a required
+  input is unset or past `valid_until`; the refusal reads from the service's
+  stable `refusalCode`/`refusalKey` through the catalog in en, fr, es and ar,
+  so a refusal never arrives in the service's English on a non-English page.
+  Owner authoring and publish from #411 at `app/(admin)/admin/calculators/`.
+  **F05** `calculators.*` services are registry-exposed at `/api/v1`, derived
+  as MCP tools, and in the regenerated SDK (`packages/sdk/src/generated.ts`,
+  `pnpm sdk:generate` verified current after the output schema gained
+  `refusalCode`/`refusalKey`); surface equivalence is registry-derived via
+  `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and
+  `tests/core/mcp.test.ts`. **F07** `tests/modules/calculators.test.ts`
+  proves a configured calculator computes and names what it rested on (value,
+  source, oldest as-of), a stale input refuses with `fact_stale` naming the
+  key rather than estimating, an unset or out-of-bounds input refuses with
+  `input_required`/`input_below_min`/`input_above_max`, publishing refuses
+  while a named figure is unpublished, division by zero and unfinished
+  configurations refuse, and the vocabulary audit greps every
+  calculator-reachable string in all four catalogs for quote/approval/
+  guarantee stems in each language — owner-authored calculator content (name,
+  questions, assumptions) is the owner's speech and is not product vocabulary,
+  so the audit scans the catalogs the product speaks through, as C8.14's
+  does; the demo's seeded assumptions model the honest use of that freedom by
+  disclaiming in the owner's own words. Four-locale render tests resolve and
+  render the block in en/fr/es/ar and assert the figure, the assumptions,
+  each input's key/value/source/date and the oldest date read in that
+  locale's words, with no English leak on refusal. **F09** N/A as C11.14 —
+  calculators write no records and carry no personal data; withdrawal and
+  staleness are the attestations spine's operational story. **F12** the
+  Aurora Coast demo seeds two calculators through the services on a new
+  /planning page — a wedding-day affordability figure and an off-season
+  print-credit eligibility figure — resting on dated, sourced facts in
+  integer minor units, the print terms carrying a `valid_until` so the demo
+  declines on schedule rather than answering from expired terms, installed by
+  `demo.install` (`seed/demo/content.ts`, `src/modules/seed/service.ts`) and
+  proven computing in `tests/core/seed-demo.test.ts`; the browser journey in
+  `tests/browser/calculators.spec.ts` runs figure-with-assumptions →
+  fact-withdrawal-refusal in both themes. Release note:
+  `.changeset/calculators-localized-evidence.md`. Checked 2026-09-26.)
 
 **C5 exit:** every form of value converges through one explainable invoice,
 payment, tax, inventory and reporting path, with no floating-point money.

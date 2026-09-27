@@ -66,6 +66,7 @@ const MEASURED_DURATION_MS: Readonly<Record<string, number>> = Object.freeze({
   "tests/core/spine.test.ts": 167_000,
   "tests/core/agents-budgets.test.ts": 66_000,
   "tests/core/agents-inbound.test.ts": 33_000,
+  "tests/modules/calculators.test.ts": 6_000,
   "tests/modules/referrals-commission.test.ts": 31_000,
 });
 

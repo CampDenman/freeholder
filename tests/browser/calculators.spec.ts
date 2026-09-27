@@ -141,7 +141,14 @@ test("a figure arrives with its assumptions, and stops when its rate does", asyn
     await expect(visitorPage.getByText("$2,000")).toBeVisible();
     // The caveats arrive with the figure, never after it.
     await expect(visitorPage.getByText(/Not a quote and not an offer of credit/)).toBeVisible();
-    await expect(visitorPage.getByText(/2026-09-12/)).toBeVisible();
+    // The working arrives too: every published input it rested on, with its
+    // source and the date it was true, and the oldest of those dates.
+    await expect(visitorPage.getByText("What this rests on")).toBeVisible();
+    await expect(
+      visitorPage.getByText(/Lender rate sheet, 12 September/),
+    ).toBeVisible();
+    await expect(visitorPage.getByText(/the oldest from/)).toBeVisible();
+    await expect(visitorPage.getByText(/2026-09-12/)).toHaveCount(1);
     await assertAxe(visitorPage, "calculator result", "dark");
 
     // Coverage: a listed postcode, and one that is not.
