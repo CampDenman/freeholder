@@ -33,6 +33,7 @@ import {
 import { FOOTER_KEY, HEADER_KEY } from "@/modules/cms/defaults";
 import { PAGES, IMAGES, BUSINESS, LOCATION } from "../../seed/demo/content";
 import type { BlockNode } from "@/modules/cms/blocks/types";
+import { compute } from "@/modules/calculators/service";
 import {
   ANONYMOUS,
   closeDb,
@@ -296,6 +297,35 @@ describe.runIf(hasDatabase)("installing the demo", () => {
       expect((node.props as { assetId?: string }).assetId).toMatch(/^[0-9a-f-]{36}$/);
     });
     expect(imageBlocks).toBeGreaterThan(0);
+  });
+
+  it("opens the planning calculators on figures that actually compute", async () => {
+    await installDemo.call({ publish: true }, OWNER);
+
+    // The affordability calculator: ten hours is two past the eight-hour
+    // day, at the published hourly rate, on the published base.
+    const cost = await compute.call(
+      { slug: "wedding-day-cost", answers: { hours: 10 } },
+      ANONYMOUS,
+    );
+    expect(cost.ok).toBe(true);
+    expect(cost.value).toBe(3900); // $3,400 + 2 × $250
+    expect(cost.basedOn.map((entry) => entry.key).sort()).toEqual([
+      "price.wedding-day-base",
+      "price.wedding-extra-hour",
+    ]);
+    // The as-of of the oldest input — how old the answer really is.
+    expect(cost.oldestAsOf?.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+    expect(cost.assumptions).toContain("not a quote");
+
+    // The rebate-eligibility calculator holds the visitor to the published
+    // cap: forty ordered prints still credit only twenty.
+    const credit = await compute.call(
+      { slug: "print-credit", answers: { prints: 40 } },
+      ANONYMOUS,
+    );
+    expect(credit.ok).toBe(true);
+    expect(credit.value).toBe(80); // 20 × $4.00
   });
 
   it("refuses to install over a site that already has pages", async () => {

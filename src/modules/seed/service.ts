@@ -178,6 +178,30 @@ const installDemoApply = defineService({
       });
     }
 
+    // The planning page's calculators (C5.26). Facts first: publishing a
+    // calculator is refused while any figure it names is unpublished, so the
+    // seed walks the same path an owner does — record the figures, then open
+    // the calculators.
+    const { recordFact } = await import("@/core/attestations/service");
+    const { createCalculator, publishCalculator } = await import(
+      "@/modules/calculators/service"
+    );
+    for (const fact of pack.FACTS) {
+      await ctx.callAsSystem(recordFact, {
+        key: fact.key,
+        value: fact.value,
+        source: fact.source,
+        asOf: new Date(`${fact.asOf}T00:00:00.000Z`),
+        validUntil: fact.validUntil
+          ? new Date(`${fact.validUntil}T00:00:00.000Z`)
+          : undefined,
+      });
+    }
+    for (const configured of pack.CALCULATORS) {
+      const made = await ctx.callAsSystem(createCalculator, configured);
+      await ctx.callAsSystem(publishCalculator, { id: made.id });
+    }
+
     await ctx.callAsSystem(completeSetup, {});
 
     ctx.queueEvent("demo.installed", { pages: created.length });

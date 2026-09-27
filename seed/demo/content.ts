@@ -18,6 +18,10 @@
 // business is fictional; the shape of it is not.
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import type { FormFieldInput } from "@/modules/forms/fields";
+import type {
+  CalculatorInput,
+  CalculatorStep,
+} from "@/modules/calculators/formula";
 
 /** Which generated image a block wants. Resolved to asset ids at install. */
 export type ImageSlot = "coastline" | "portrait" | "studio";
@@ -139,6 +143,7 @@ function gradient(from: string, via: string, to: string): string {
 
 const NAV_LINKS = [
   { label: "Services", href: "/services" },
+  { label: "Planning", href: "/planning" },
   { label: "About", href: "/about" },
   { label: "Contact", href: "/contact" },
 ];
@@ -252,6 +257,173 @@ export const FORMS: Array<{
         help: "Where, how many people, and anything you already know you want.",
       },
     ],
+  },
+];
+
+/**
+ * The figures the demo's calculators rest on (§4.18, C5.26).
+ *
+ * Money rides these as integer minor units, the platform-wide convention:
+ * 340000 is $3,400.00, not $340,000. The calculators divide by 100 as a
+ * published step, so the working stays in whole cents and the visitor still
+ * reads dollars. Each figure carries where it came from and the moment it
+ * was true; the print credit's terms stop being true at the end of April,
+ * which is the demo's live demonstration of a calculator declining rather
+ * than answering from an expired figure.
+ */
+export const FACTS: Array<{
+  key: string;
+  value: number;
+  source: string;
+  asOf: string;
+  validUntil?: string;
+}> = [
+  {
+    key: "price.wedding-day-base",
+    value: 340000,
+    source: "2026 wedding rate card",
+    asOf: "2026-09-01",
+  },
+  {
+    key: "price.wedding-extra-hour",
+    value: 25000,
+    source: "2026 wedding rate card",
+    asOf: "2026-09-15",
+  },
+  {
+    key: "rebate.print-credit-each",
+    value: 400,
+    source: "Off-season print terms, 2026",
+    asOf: "2026-09-01",
+    validUntil: "2027-04-30",
+  },
+  {
+    key: "rebate.print-credit-cap",
+    value: 20,
+    source: "Off-season print terms, 2026",
+    asOf: "2026-09-15",
+    validUntil: "2027-04-30",
+  },
+];
+
+/**
+ * The demo's two calculators (C5.26): an affordability figure and a
+ * rebate-eligibility figure. Both are plain lists of named steps over
+ * published figures — never an expression — and both carry assumptions in
+ * the owner's voice that say plainly what the number is not. Seeded through
+ * the services, not the table, so the demo can only contain what an owner
+ * could have made by hand: publishing refuses a calculator whose figures do
+ * not exist yet, so the facts above are recorded before these are opened.
+ */
+export const CALCULATORS: Array<{
+  slug: string;
+  name: string;
+  intro: string;
+  inputs: CalculatorInput[];
+  steps: CalculatorStep[];
+  resultLabel: string;
+  resultUnit?: string;
+  assumptions: string;
+}> = [
+  {
+    slug: "wedding-day-cost",
+    name: "What will a wedding day cost?",
+    intro:
+      "The published day rate plus the published hourly rate for every hour past eight. Worked from figures Aurora Coast has stood behind, with the dates those figures were true.",
+    inputs: [
+      {
+        key: "hours",
+        label: "How many hours of coverage?",
+        help: "From getting ready to the last dance; eight hours covers most weddings.",
+        min: 6,
+        max: 14,
+        unit: "hours",
+      },
+    ],
+    steps: [
+      {
+        key: "extra_hours",
+        label: "Hours past eight",
+        op: "subtract",
+        first: { kind: "input", key: "hours" },
+        second: { kind: "literal", value: 8 },
+      },
+      {
+        key: "extra_hours_capped",
+        label: "Billable extra hours",
+        op: "max",
+        first: { kind: "step", key: "extra_hours" },
+        second: { kind: "literal", value: 0 },
+      },
+      {
+        key: "extra_cost",
+        label: "Extra coverage",
+        op: "multiply",
+        first: { kind: "step", key: "extra_hours_capped" },
+        second: { kind: "fact", factKey: "price.wedding-extra-hour" },
+      },
+      {
+        key: "total_cents",
+        label: "Day total in cents",
+        op: "add",
+        first: { kind: "step", key: "extra_cost" },
+        second: { kind: "fact", factKey: "price.wedding-day-base" },
+      },
+      {
+        key: "total_dollars",
+        label: "Day total in dollars",
+        op: "divide",
+        first: { kind: "step", key: "total_cents" },
+        second: { kind: "literal", value: 100 },
+      },
+    ],
+    resultLabel: "Estimated wedding coverage",
+    resultUnit: "$",
+    assumptions:
+      "The published base day plus the published hourly rate for each hour past eight, worked in cents and shown in dollars. A planning number for sizing a budget — not a quote; ferry travel and mainland venues are talked through before you book.",
+  },
+  {
+    slug: "print-credit",
+    name: "Off-season print credit",
+    intro:
+      "Four dollars a print on up to twenty prints, for sessions booked between November and April. Worked from the published terms, with the dates those terms were true.",
+    inputs: [
+      {
+        key: "prints",
+        label: "How many prints are you ordering?",
+        help: "Counts prints ordered with a session booked November through April.",
+        min: 1,
+        max: 100,
+        unit: "prints",
+      },
+    ],
+    steps: [
+      {
+        key: "eligible_prints",
+        label: "Prints that qualify",
+        op: "min",
+        first: { kind: "input", key: "prints" },
+        second: { kind: "fact", factKey: "rebate.print-credit-cap" },
+      },
+      {
+        key: "credit_cents",
+        label: "Credit in cents",
+        op: "multiply",
+        first: { kind: "step", key: "eligible_prints" },
+        second: { kind: "fact", factKey: "rebate.print-credit-each" },
+      },
+      {
+        key: "credit_dollars",
+        label: "Credit in dollars",
+        op: "divide",
+        first: { kind: "step", key: "credit_cents" },
+        second: { kind: "literal", value: 100 },
+      },
+    ],
+    resultLabel: "Print credit you would be eligible for",
+    resultUnit: "$",
+    assumptions:
+      "Four dollars a print on up to twenty prints, for sessions booked November through April, worked in cents and shown in dollars. A planning number — whether a specific order qualifies is confirmed when the order is placed, not by this arithmetic.",
   },
 ];
 
@@ -521,6 +693,37 @@ export const PAGES: SeedPage[] = [
         },
       },
       { id: "por-cta", type: "button", props: { label: "Book a session", href: "/contact", variant: "solid" } },
+    ],
+  },
+  {
+    slug: "planning",
+    title: "Planning",
+    seo: {
+      title: "Plan a photography budget",
+      description:
+        "Work out a rough wedding coverage figure and an off-season print credit from the figures Aurora Coast has published, dates included.",
+    },
+    blocks: () => [
+      { id: "plan-h1", type: "heading", props: { text: "Planning tools", level: 1, align: "start" } },
+      {
+        id: "plan-intro",
+        type: "text",
+        props: {
+          body: "Two calculators, both worked out from figures this studio has published and dated. Each answer arrives with the assumptions behind it and the date of the oldest figure it used — and if a figure goes out of date, the calculator says so instead of guessing.",
+          align: "start",
+          measure: true,
+        },
+      },
+      {
+        id: "plan-cost",
+        type: "calculator",
+        props: { calculatorSlug: "wedding-day-cost" },
+      },
+      {
+        id: "plan-credit",
+        type: "calculator",
+        props: { calculatorSlug: "print-credit" },
+      },
     ],
   },
   {
