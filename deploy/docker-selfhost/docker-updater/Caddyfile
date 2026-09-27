@@ -1,0 +1,9 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# Live proxy configuration for the standard app/db/caddy host-updater recipe.
+# The executor replaces this file with a 503 maintenance response during a
+# cutover and restores this exact content afterwards; keep it under the
+# deployment directory named Caddyfile.
+{$FREEHOLDER_DOMAIN} {
+	reverse_proxy app:3000
+}

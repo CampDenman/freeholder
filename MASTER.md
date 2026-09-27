@@ -5331,7 +5331,7 @@ owner operations, never substitute for them.
   replay and settlement tests use adapter doubles; this evidence does not
   claim a live provider charge or completion of C10.26.)*
 
-- [ ] **C5.26** Build owner-configured calculators that compute only from inputs
+- [x] **C5.26** Build owner-configured calculators that compute only from inputs
   the owner published as attestations (§4.18) — affordability, cost ranges,
   rebate eligibility, value estimates — rendering every assumption and the
   as-of date of the oldest input beside the result, and refusing to emit a
@@ -5339,6 +5339,57 @@ owner operations, never substitute for them.
   configured calculator computes, a stale input refuses rather than
   estimating, assumptions and dates render in all four locales, and no result
   is presented as a quote, an approval or a guarantee.
+  (The engine and surfaces landed in #411; evidence completed and box checked
+  2026-09-26. Every constant a calculator uses is an attestation key resolved
+  at render through `attestations.current` — no stored constant, no default,
+  no last-known value (`src/modules/calculators/service.ts`); the formula
+  vocabulary is seven operations over named steps, never an expression string
+  (`src/modules/calculators/formula.ts`). "Every assumption" is read as the
+  owner's assumptions text — NOT NULL because an optional caveat is one
+  nobody writes — plus each published input rendered beside the result with
+  its key, value, source and as-of, and the as-of of the oldest input;
+  documented because the reading is broader than the figure-plus-caveats
+  #411 shipped. **F04** the public `calculator` block
+  (`src/modules/cms/blocks/surfaces.tsx`) renders a figure only after a GET
+  form submission — a crafted link cannot display a result the calculator
+  never produced — and renders a refusal, never a number, when a required
+  input is unset or past `valid_until`; the refusal reads from the service's
+  stable `refusalCode`/`refusalKey` through the catalog in en, fr, es and ar,
+  so a refusal never arrives in the service's English on a non-English page.
+  Owner authoring and publish from #411 at `app/(admin)/admin/calculators/`.
+  **F05** `calculators.*` services are registry-exposed at `/api/v1`, derived
+  as MCP tools, and in the regenerated SDK (`packages/sdk/src/generated.ts`,
+  `pnpm sdk:generate` verified current after the output schema gained
+  `refusalCode`/`refusalKey`); surface equivalence is registry-derived via
+  `tests/core/api.test.ts`, `tests/core/sdk-schema.test.ts` and
+  `tests/core/mcp.test.ts`. **F07** `tests/modules/calculators.test.ts`
+  proves a configured calculator computes and names what it rested on (value,
+  source, oldest as-of), a stale input refuses with `fact_stale` naming the
+  key rather than estimating, an unset or out-of-bounds input refuses with
+  `input_required`/`input_below_min`/`input_above_max`, publishing refuses
+  while a named figure is unpublished, division by zero and unfinished
+  configurations refuse, and the vocabulary audit greps every
+  calculator-reachable string in all four catalogs for quote/approval/
+  guarantee stems in each language — owner-authored calculator content (name,
+  questions, assumptions) is the owner's speech and is not product vocabulary,
+  so the audit scans the catalogs the product speaks through, as C8.14's
+  does; the demo's seeded assumptions model the honest use of that freedom by
+  disclaiming in the owner's own words. Four-locale render tests resolve and
+  render the block in en/fr/es/ar and assert the figure, the assumptions,
+  each input's key/value/source/date and the oldest date read in that
+  locale's words, with no English leak on refusal. **F09** N/A as C11.14 —
+  calculators write no records and carry no personal data; withdrawal and
+  staleness are the attestations spine's operational story. **F12** the
+  Aurora Coast demo seeds two calculators through the services on a new
+  /planning page — a wedding-day affordability figure and an off-season
+  print-credit eligibility figure — resting on dated, sourced facts in
+  integer minor units, the print terms carrying a `valid_until` so the demo
+  declines on schedule rather than answering from expired terms, installed by
+  `demo.install` (`seed/demo/content.ts`, `src/modules/seed/service.ts`) and
+  proven computing in `tests/core/seed-demo.test.ts`; the browser journey in
+  `tests/browser/calculators.spec.ts` runs figure-with-assumptions →
+  fact-withdrawal-refusal in both themes. Release note:
+  `.changeset/calculators-localized-evidence.md`. Checked 2026-09-26.)
 
 **C5 exit:** every form of value converges through one explainable invoice,
 payment, tax, inventory and reporting path, with no floating-point money.
@@ -5901,12 +5952,46 @@ payment, tax, inventory and reporting path, with no floating-point money.
   chasing panel on each invoice. `0100_recurring_invoices.sql`. Coverage in
   `tests/core/recurring-invoices.test.ts`. **F04** `/admin/invoices/[id]` chase reminders. **F05** `invoicing.createDraft`/`createPaymentPlan`/`createSchedule`/`scheduleReminders`/`markOverdueSweep` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/recurring-invoices.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/recurring-invoices.test.ts` is the composition proof.)
 
-- [ ] **C6.18** Extend `core/locations` service areas into an enforced coverage
+- [x] **C6.18** Extend `core/locations` service areas into an enforced coverage
   check: validate an address or postal code against the areas the owner named,
   both when a visitor asks and again at submission, and refuse cleanly outside
   them. Prove an in-area address, an out-of-area address, a boundary case, a
   delivery window attached to an area, and that coverage is never inferred for
-  an area the owner did not name.
+  an area the owner did not name. (Checked 2026-09-26. The boundary is exact
+  whole-postcode equality after normalisation: a code sharing a prefix with a
+  listed code but differing in any character is outside — no prefix matching,
+  radius or polygon — and `unconfirmed` (a radius, a region, or nothing named)
+  never refuses, because coverage is never inferred in either direction; the
+  semantics are documented in `src/core/locations/coverage.ts`. The visitor
+  asks via `locations.checkCoverage`, rendered by the coverage block; the
+  submission handler re-validates rather than trusting that answer —
+  `src/modules/catalog/orders.ts` has `catalog.checkoutCart` compose
+  `locations.checkCoverage` through `ctx.callAsSystem` inside the checkout
+  transaction and refuse a definite `outside` before anything is written, with
+  visitor-safe wording that ships localized for all four locales
+  (`locales/en.json`, `locales/fr.json`, `locales/es.json`, `locales/ar.json`).
+  Each area may carry the weekly window when it receives deliveries
+  (`db/migrations/0018_area_delivery_windows.sql`; the table check
+  `service_areas_delivery_window` refuses a half-stated window), and the
+  covered answer returns it. **F04** `/admin/locations` service-area form gains
+  delivery days and from/until times (`admin/locations/ServiceAreaForm.tsx`);
+  the visitor-side coverage block renders the window line
+  (`src/modules/cms/blocks/surfaces.tsx`). **F05** `locations.checkCoverage` /
+  `locations.setServiceArea` / `catalog.checkoutCart` at `/api/v1/*`, MCP
+  `locations_*` and `catalog_*`; SDK regenerated in
+  `packages/sdk/src/generated.ts`. **F07** `tests/core/coverage-enforcement.test.ts`
+  proves the in-area order is taken, the out-of-area order is refused with
+  visitor-safe wording and zero rows written, a boundary postcode is refused
+  at submission, a radius / a region / no area never refuses, and the owner
+  pressing the button gets the same refusal as a visitor would;
+  `tests/core/coverage.test.ts` proves the exact-match boundary, the delivery
+  window round-trip through the service and the table constraint, and the
+  refusal wording rendering in every shipped locale. **F09** N/A as C11.14 —
+  this item uses the shared audit/outbox; product-wide
+  export/restore/retention/erasure proof is still open. **F12** `src/modules/catalog/orders.ts`
+  composing `src/core/locations/coverage.ts` service-to-service in one
+  transaction is the cross-module proof; the contact spine is untouched, so no
+  merge-repoint registration was needed.)
 
 **C6 exit:** the same availability and money engines can sell time, spaces,
 equipment, classes and expertise without double-booking or duplicated records.
@@ -8153,7 +8238,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   SPDX. **F10** N/A. **F11** `deploy/update-preflight.md`, changeset
   `update-preflight.md`. **F12** shadow SQL `SELECT 1/0` fails migrations
   without touching `public`. This is not apply — C10.06.)
-- [ ] **C10.06** Implement a verified host update executor with recoverable database
+- [x] **C10.06** Implement a verified host update executor with recoverable database
   backups, signed immutable image selection, actual migrations, candidate health
   checks and independently verified rollback. The 2026-09-21 readiness audit
   found that the previous implementation recorded fingerprints as backups and
@@ -8162,13 +8247,75 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `deploy/update-apply.md` and `tests/core/client-readiness-security.test.ts`.
   The initial Docker lane is split into C10.31; migration-changing releases and
   other hosting targets remain in this broader item.
-- [ ] **C10.31** Provide an opt-in host executor for the standard app/db/caddy
+  (Verified host executors now cover the remainder. Docker lane
+  (`scripts/docker-updater.py`): the unchanged-schema lane of C10.31 plus the
+  explicitly opted-in `allow_schema_changes` migration lane — the rehearsal
+  boots the candidate against a restored backup and requires the
+  schema/journal signature to change, cutover holds maintenance for the whole
+  window, and rollback restores the write-free cutover backup
+  (`restore_database`) before repinning the previous image, because the
+  previous image may not read a migrated schema; maintenance blocked writes
+  from the backup onward, so no accepted write is rewound. Non-Docker targets
+  (`scripts/host-updater.py`, `deploy/host-updater.md`): digest-pinned
+  immutable artifacts with optional exact-identity cosign verification, a
+  backup hook that must produce a real non-empty file at the declared path,
+  operator hooks for apply/health/rollback/maintenance, health independently
+  re-verified after rollback, durable interrupted-run refusal, operator daily
+  schedule, private root:operator-group 0660 socket. In-app apply/snapshot/
+  rollback still refuse; no success history or fake backup is created.
+  **F04** N/A — host executors; the human surface remains the C10.31
+  `/admin/updates` card. **F05** N/A — no new agent capability;
+  `platform.applyUpdate`/`rollbackUpdate` stay refusal-only. **F07**
+  root-owned 0600 config; artifact/hook validation before any run; backup
+  file verified non-empty; rollback independently health-checked;
+  `recovery_required` blocks later runs. **F08**
+  `tests/host/test_docker_updater.py` (migration-lane drills: opt-in refusal,
+  restore-before-repin ordering, failed-recovery block, image-swap rollback
+  for unchanged candidates), `tests/host/test_host_updater.py` (digest
+  mismatch, backup gate, cosign identity, rollback re-verification,
+  interrupted refusal, socket handler). **F09** SPDX; `pnpm gates` and the
+  plan gate green. **F11** `deploy/host-updater.md`,
+  `deploy/host-updater.example.json`, `deploy/update-apply.md`, and the
+  docker-updater README migration section. **F12** both executors read as
+  refusing fake success: every failure lands a durable
+  failed/rolled_back/recovery_required status. Evidence dated 2026-09-26.)
+- [x] **C10.31** Provide an opt-in host executor for the standard app/db/caddy
   Docker recipe with S3 media: exact publisher signature verification, private
   Unix socket, owner/fresh-factor apply action, restored-backup rehearsal,
   unchanged schema and journal gate, maintenance cutover, independently checked
   image rollback preserving database writes, durable interrupted-run refusal,
   and an operator-configured daily schedule. Prove refusal and recovery paths
   before enabling unattended operation. No Docker socket in the application.
+  (`scripts/docker-updater.py` is the opt-in executor: root-owned 0600 config
+  (`load_config`), the standard app/db/caddy + S3 recipe enforced by
+  `inventory()`, exact publisher cosign identity
+  (`publish-image.yml@refs/heads/main` + GitHub OIDC issuer) in `verify()`,
+  forward-only commit ancestry via the public compare endpoint, a private
+  root:operator-group 0660 Unix socket exposing only GET /status and
+  POST /apply (`make_handler`/`prepare_socket_path`), restored-backup rehearsal
+  into a no-egress scratch DB with the unchanged schema+journal sha256 gate
+  (`rehearse`/`database_signature`), Caddy 503 maintenance cutover
+  (`maintenance`), rollback that re-pins the previous image and never rewinds
+  the database, durable refusal after an interrupted run, and the operator's
+  `automatic`/`utc_hour` daily schedule (`due_for_scheduled_run` + systemd
+  timer). **F04** `/admin/updates` host card
+  `app/(admin)/admin/updates/page.tsx`. **F05** `platform.getHostUpdateStatus`
+  / `platform.requestHostUpdate` (`src/core/update/host.ts`, no agent
+  capability). **F07** owner with a fresh step-up factor required; anonymous,
+  agent and playground refused; bounded request bodies; config and state
+  root-owned; the shipped recipe mounts no Docker socket
+  (`deploy/docker-selfhost/docker-updater/compose.yml`). **F08**
+  `tests/host/test_docker_updater.py` (42 drills: recipe-inventory refusals,
+  exact signature identity, socket handler 4xx/409/202, schedule gate, config
+  validation, interrupted-run refusal, rollback drills),
+  `tests/core/host-update-socket.test.ts`,
+  `tests/core/host-updater-recipe.test.ts`, `tests/core/playground.test.ts`.
+  **F09** SPDX headers; `pnpm gates` and the plan gate green. **F11**
+  `deploy/docker-selfhost/docker-updater/README.md` with shipped
+  `compose.yml`/`Caddyfile`; `deploy/update-apply.md`. **F12** the live
+  executor reads as refusing fake success: every refusal lands a durable
+  failed/rolled_back/recovery_required status and no success history is
+  invented. Evidence dated 2026-09-26.)
 - [x] **C10.07** Enforce N-1 schema readability in migrations and prove update
   plus rollback from the previous released image in CI.
   (`schema-compat-gate.mjs` `assertSchemaRisk` fails an acknowledged break
@@ -8219,7 +8366,7 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   three commits ahead and two security releases behind reports
   "2 security releases behind — CVSS 8.1; this fork carries 3 commits of its
   own".)
-- [ ] **C10.10** Implement and continuously test target-specific update/
+- [x] **C10.10** Implement and continuously test target-specific update/
   rollback actions for every Tier-1 recipe.
   (`src/core/update/targets.ts` names §39.8's three strategies — `image-swap`
   for the droplet and self-host recipes, `deploy-hook` for App Platform,
@@ -8242,6 +8389,39 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   changeset `update-targets.md`. **F12** `scripts/recipe-update-actions.mjs`
   runs once per target inside the recipe matrix, so §39.8's "a recipe without
   a tested update path is not Tier 1" is enforced on every PR.)
+  (2026-09-21 readiness-repair closure; box checked with evidence 2026-09-26.
+  The repair note reopened this item because updater history proved neither
+  deployment nor recoverability, and target recipes remain manual operator
+  procedures *requiring a tested backup and immutable image pins*. The pins
+  half was already enforced — `operations.rollback` must name a `PREVIOUS_*`
+  artifact (matrix gate), image-swap rollback refuses without a
+  `ghcr.io/campdenman/freeholder@sha256:<64>` digest
+  (`recipeUpdateTarget.rollbackCutover` in `src/core/update/targets.ts`), and
+  both compose files interpolate `${FREEHOLDER_IMAGE:-…}` so the pin actually
+  selects the image. The tested-backup half landed with this change:
+  `scripts/recipe-update-actions.mjs` now refuses a Tier-1 recipe without
+  `operations.backup` producing a custom-format `pg_dump` (following a script
+  the command delegates to, the way the droplet ships
+  `deploy/digitalocean-droplet/infra/backup.sh`) and without
+  `operations.restore` being `pg_restore` into a database — the 64-byte
+  fingerprint the audit struck was metadata about a backup, not a backup.
+  `assertBackupOperations` in `src/core/update/targets.ts` is the normative
+  twin the unit suite runs, and the operator's executable rehearsal remains
+  step 7 of `deploy/recipe-verification.md`; CI cannot take a real provider
+  backup without owning somebody else's control plane, which the gate header
+  says plainly. **F04** Doctor `update.target` (`src/core/doctor/index.ts:945`).
+  **F05** `platform.describeUpdateTargets` (`src/core/update/service.ts:853`).
+  **F07** a target with no rollback command refuses; image-swap rollback
+  refuses a non-digest pin; a recipe with no backup, a plain-text dump, a
+  missing restore or a non-`pg_restore` restore fails the matrix — each
+  refusal asserted in `tests/core/update-targets.test.ts` (38 tests) and, for
+  the gate script, exercised against the real recipes. **F09** SPDX headers on
+  `src/core/update/targets.ts`, `scripts/recipe-update-actions.mjs` and
+  `tests/core/update-targets.test.ts`. **F12** the recipe matrix runs the gate
+  once per target on every PR (`scripts/recipe-matrix.sh:138`; workflow run
+  36294739626 on `bafebe6` logged "update and rollback declared, shaped and
+  pinned" for all six targets); the extended gate keeps that wiring unchanged,
+  all six real recipes pass it, and this PR's own matrix run exercises it.)
 - [x] **C10.11** Build the update read model §39.10 specifies: cache the
   verified feed as `AvailableRelease` (version, channel, digest, severity,
   cvss, schema_breaking, min_from_version, plugin_api, notes_url,

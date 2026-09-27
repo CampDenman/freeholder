@@ -114,7 +114,7 @@ export default async function LocationPage({
           />
           <ServiceAreaForm
             locationId={location.id}
-            labels={serviceAreaFormLabels(t)}
+            labels={serviceAreaFormLabels(t, locale)}
             values={{
               kind: area?.kind ?? "none",
               centerLatitude: area?.centerLatitude ?? "",
@@ -122,6 +122,9 @@ export default async function LocationPage({
               radiusKm: area?.radiusKm ?? "",
               regions: (area?.regions ?? []).join(", "),
               postalCodes: (area?.postalCodes ?? []).join(", "),
+              deliveryWeekdays: area?.deliveryWeekdays ?? [],
+              deliveryOpens: forInput(area?.deliveryOpens ?? null),
+              deliveryCloses: forInput(area?.deliveryCloses ?? null),
             }}
           />
           <div className="flex items-center gap-3 pt-2">

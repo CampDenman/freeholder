@@ -62,7 +62,10 @@ export function hoursFormLabels(t: Translate): HoursFormLabels {
   };
 }
 
-export function serviceAreaFormLabels(t: Translate): ServiceAreaFormLabels {
+export function serviceAreaFormLabels(
+  t: Translate,
+  locale: string,
+): ServiceAreaFormLabels {
   return {
     cardTitle: t("locations.area.title"),
     intro: t("locations.area.intro"),
@@ -82,6 +85,11 @@ export function serviceAreaFormLabels(t: Translate): ServiceAreaFormLabels {
     submit: t("common.saveChanges"),
     pending: t("common.saving"),
     saved: t("admin.settings.saved"),
+    deliveryDays: t("locations.area.deliveryDays"),
+    deliveryOpens: t("locations.area.deliveryOpens"),
+    deliveryCloses: t("locations.area.deliveryCloses"),
+    deliveryHint: t("locations.area.deliveryHint"),
+    deliveryDayNames: weekdayNames(locale),
   };
 }
 
