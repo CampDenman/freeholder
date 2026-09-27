@@ -1,9 +1,17 @@
 # Docker host updates (C10.31)
 
-The first automatic lane supports the standard Linux `app` / PostgreSQL 16 `db` /
+The first supported automatic lane requires the standard Linux `app` / PostgreSQL 16 `db` /
 `caddy` Compose deployment, S3 media and no custom app mounts except its private
 control socket. Other recipes, local media and schema-changing updates remain
 manual. It never mounts Docker's socket inside Freeholder.
+
+This directory ships that recipe ready to adapt: `compose.yml` is the exact
+`app`/`db`/`caddy` shape the executor inventories (app behind Caddy, no
+published app port, the updater socket mounted read-only, `FREEHOLDER_STORAGE:
+s3`), and `Caddyfile` is the live proxy config the executor swaps for a 503
+maintenance response during a cutover and restores afterwards. Copy both into
+your deployment directory, set `FREEHOLDER_DOMAIN`, and point the updater
+configuration's `directory` at that directory.
 
 Install Python 3, Docker Compose and a checksum-verified current `cosign` from
 the official Sigstore release. The verifier requires the exact main-branch

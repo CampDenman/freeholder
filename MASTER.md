@@ -8246,13 +8246,43 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `deploy/update-apply.md` and `tests/core/client-readiness-security.test.ts`.
   The initial Docker lane is split into C10.31; migration-changing releases and
   other hosting targets remain in this broader item.
-- [ ] **C10.31** Provide an opt-in host executor for the standard app/db/caddy
+- [x] **C10.31** Provide an opt-in host executor for the standard app/db/caddy
   Docker recipe with S3 media: exact publisher signature verification, private
   Unix socket, owner/fresh-factor apply action, restored-backup rehearsal,
   unchanged schema and journal gate, maintenance cutover, independently checked
   image rollback preserving database writes, durable interrupted-run refusal,
   and an operator-configured daily schedule. Prove refusal and recovery paths
   before enabling unattended operation. No Docker socket in the application.
+  (`scripts/docker-updater.py` is the opt-in executor: root-owned 0600 config
+  (`load_config`), the standard app/db/caddy + S3 recipe enforced by
+  `inventory()`, exact publisher cosign identity
+  (`publish-image.yml@refs/heads/main` + GitHub OIDC issuer) in `verify()`,
+  forward-only commit ancestry via the public compare endpoint, a private
+  root:operator-group 0660 Unix socket exposing only GET /status and
+  POST /apply (`make_handler`/`prepare_socket_path`), restored-backup rehearsal
+  into a no-egress scratch DB with the unchanged schema+journal sha256 gate
+  (`rehearse`/`database_signature`), Caddy 503 maintenance cutover
+  (`maintenance`), rollback that re-pins the previous image and never rewinds
+  the database, durable refusal after an interrupted run, and the operator's
+  `automatic`/`utc_hour` daily schedule (`due_for_scheduled_run` + systemd
+  timer). **F04** `/admin/updates` host card
+  `app/(admin)/admin/updates/page.tsx`. **F05** `platform.getHostUpdateStatus`
+  / `platform.requestHostUpdate` (`src/core/update/host.ts`, no agent
+  capability). **F07** owner with a fresh step-up factor required; anonymous,
+  agent and playground refused; bounded request bodies; config and state
+  root-owned; the shipped recipe mounts no Docker socket
+  (`deploy/docker-selfhost/docker-updater/compose.yml`). **F08**
+  `tests/host/test_docker_updater.py` (42 drills: recipe-inventory refusals,
+  exact signature identity, socket handler 4xx/409/202, schedule gate, config
+  validation, interrupted-run refusal, rollback drills),
+  `tests/core/host-update-socket.test.ts`,
+  `tests/core/host-updater-recipe.test.ts`, `tests/core/playground.test.ts`.
+  **F09** SPDX headers; `pnpm gates` and the plan gate green. **F11**
+  `deploy/docker-selfhost/docker-updater/README.md` with shipped
+  `compose.yml`/`Caddyfile`; `deploy/update-apply.md`. **F12** the live
+  executor reads as refusing fake success: every refusal lands a durable
+  failed/rolled_back/recovery_required status and no success history is
+  invented. Evidence dated 2026-09-26.)
 - [x] **C10.07** Enforce N-1 schema readability in migrations and prove update
   plus rollback from the previous released image in CI.
   (`schema-compat-gate.mjs` `assertSchemaRisk` fails an acknowledged break
