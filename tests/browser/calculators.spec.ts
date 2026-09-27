@@ -96,7 +96,9 @@ test("a figure arrives with its assumptions, and stops when its rate does", asyn
     .returning();
   if (!made || !fact) throw new Error("The calculator fixtures were not created.");
 
-  // A location that has listed its postcodes, so coverage is checkable.
+  // A location that has listed its postcodes, so coverage is checkable — and
+  // that delivers to its area on Tuesdays and Thursdays, so the covered
+  // answer can say when as well as yes.
   const [shop] = await db()
     .insert(businessLocations)
     .values({ name: "Courtenay", slug: "courtenay", country: "CA" })
@@ -105,6 +107,9 @@ test("a figure arrives with its assumptions, and stops when its rate does", asyn
     locationId: shop!.id,
     kind: "postal_codes",
     postalCodes: ["V9N3A1"],
+    deliveryWeekdays: [2, 4],
+    deliveryOpens: "09:00",
+    deliveryCloses: "17:00",
   });
 
   await db().insert(pages).values({
@@ -143,10 +148,16 @@ test("a figure arrives with its assumptions, and stops when its rate does", asyn
     await visitorPage.getByLabel("Postcode").fill("V9N 3A1");
     await visitorPage.getByRole("button", { name: /^Check$/ }).click();
     await expect(visitorPage.getByText(/Courtenay covers V9N3A1/)).toBeVisible();
+    // The covered answer carries the area's delivery window — the "when"
+    // with the "yes".
+    await expect(visitorPage.getByText(/Delivery window:/)).toBeVisible();
+    await expect(visitorPage.getByText(/09:00–17:00/)).toBeVisible();
 
     await visitorPage.getByLabel("Postcode").fill("V8W 1A1");
     await visitorPage.getByRole("button", { name: /^Check$/ }).click();
     await expect(visitorPage.getByText(/outside the areas we have listed/)).toBeVisible();
+    // A refusal carries no window: an outside area has no "when" to invent.
+    await expect(visitorPage.getByText(/Delivery window:/)).toHaveCount(0);
 
     // Now take the rate away. The page must stop answering rather than carry
     // on with the number it used a moment ago.
