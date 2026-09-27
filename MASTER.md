@@ -6924,7 +6924,7 @@ permitted conversation on the same contact timeline.
   everything else. Changeset `consent-gated-media.md`. **F04**
   `tests/browser/media-consent.spec.ts` (permission given, taken back, and
   still on the record) plus the dated-strip render tests in
-  `tests/core/project-series-render.test.ts`. **F05**
+  `tests/core/consent-publish-surfaces.test.ts`. **F05**
   `privacy.grantMediaConsent`/`privacy.withdrawMediaConsent`/
   `privacy.mediaConsent`/`privacy.mediaConsentHistory` and
   `projects.recordConsent`/`projects.revokeConsent` at `/api/v1/privacy.*` and
