@@ -2288,7 +2288,7 @@ export interface ServiceCatalog {
   };
   "calculators.compute": {
     input: { slug: string; answers: { [key: string]: number } };
-    output: { ok: boolean; refusal: string | null; value: number | null; resultLabel: string; resultUnit: string | null; assumptions: string; basedOn: { key: string; value: number; source: string; asOf: string }[]; oldestAsOf: string | null };
+    output: { ok: boolean; refusal: string | null; refusalCode: ("input_required" | "input_below_min" | "input_above_max" | "fact_missing" | "fact_stale" | "fact_not_numeric" | "step_unusable") | null; refusalKey: string | null; value: number | null; resultLabel: string; resultUnit: string | null; assumptions: string; basedOn: { key: string; value: number; source: string; asOf: string }[]; oldestAsOf: string | null };
   };
   "calculators.create": {
     input: { slug: string; name: string; intro?: string; inputs?: { key: string; label: string; help?: string; min?: number; max?: number; unit?: string }[]; steps: { key: string; label: string; op: "add" | "subtract" | "multiply" | "divide" | "percentOf" | "min" | "max"; first: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string }; second: { kind: "literal"; value: number } | { kind: "input"; key: string } | { kind: "fact"; factKey: string } | { kind: "step"; key: string } }[]; resultLabel: string; resultUnit?: string; assumptions: string };

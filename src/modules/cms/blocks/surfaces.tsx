@@ -25,12 +25,21 @@ const href = z.string().trim().min(1).max(2048);
  * A plain GET form, and that is a deliberate choice rather than a shortcut.
  * Only the visitor's own numbers travel in the URL; the figure itself is
  * recomputed here on every render, so a crafted link cannot display a result
- * this calculator never produced. The assumptions and the label come from the
- * owner's row, as they must.
+ * this calculator never produced. The assumptions and the label come from
+ * the owner's row, as they must.
  *
  * It renders no answer at all until somebody has asked for one, and renders a
  * refusal rather than a number whenever the service declines — which it does
- * when a published figure it depends on is missing or past its date.
+ * when a published figure it depends on is missing or past its date. The
+ * refusal is rendered from the service's stable refusal code through the
+ * catalog, never from its English sentence: a visitor reading Arabic has to
+ * meet the same refusal an English reader does.
+ *
+ * A result never stands alone. The owner's assumptions render with it, and so
+ * does every published figure the arithmetic rested on — key, value, source
+ * and as-of — plus the as-of of the oldest of them, which is how old the
+ * answer really is. The figure is the least honest part of the sum; the
+ * provenance is what makes it publishable.
  */
 export const calculator = defineBlock({
   type: "calculator",
@@ -40,10 +49,11 @@ export const calculator = defineBlock({
   starter: () => ({ calculatorSlug: "calculator" }),
   resolve: async (props, ctx) => {
     const { getPublicCalculator, compute } = await import("@/modules/calculators/service");
-    const found = await getPublicCalculator.call(
-      { slug: props.calculatorSlug },
-      { kind: "anonymous" },
-    );
+    const { currentBusiness } = await import("@/core/settings/read");
+    const [found, business] = await Promise.all([
+      getPublicCalculator.call({ slug: props.calculatorSlug }, { kind: "anonymous" }),
+      currentBusiness(),
+    ]);
     if (!found || found.status !== "active") return null;
 
     const inputs = found.inputs as Array<{
@@ -77,11 +87,61 @@ export const calculator = defineBlock({
           )
         : null;
 
-    return { found, inputs, given, result };
+    // Store renders the fact's date in the business's timezone (the C8.15
+    // block does the same); which language formats it is the request's call.
+    return { found, inputs, given, result, timezone: business?.timezone ?? "UTC" };
   },
   render: ({ resolved, ctx }) => {
     if (!resolved) return null;
-    const { found, inputs, given, result } = resolved;
+    const { found, inputs, given, result, timezone } = resolved;
+    const dateLabel = (date: Date) =>
+      new Intl.DateTimeFormat(ctx.locale, {
+        dateStyle: "medium",
+        timeZone: timezone,
+      }).format(date);
+
+    // The service answers a refusal as a stable code plus the key at fault;
+    // the sentence a visitor reads is assembled here, in their own catalog.
+    const refusalText = (() => {
+      if (!result || result.ok || !result.refusalCode) return null;
+      const named = result.refusalKey
+        ? inputs.find((input) => input.key === result.refusalKey)
+        : undefined;
+      // The codes that name an input always carry its key; the fact codes
+      // always carry the fact key. The fallbacks keep the types honest for a
+      // case the service cannot currently produce.
+      switch (result.refusalCode) {
+        case "input_required":
+          return ctx.t("cms.calculator.refusal.inputRequired", {
+            label: named?.label ?? result.refusalKey ?? "",
+          });
+        case "input_below_min":
+          return ctx.t("cms.calculator.refusal.inputBelowMin", {
+            label: named?.label ?? result.refusalKey ?? "",
+            min: named?.min ?? "",
+          });
+        case "input_above_max":
+          return ctx.t("cms.calculator.refusal.inputAboveMax", {
+            label: named?.label ?? result.refusalKey ?? "",
+            max: named?.max ?? "",
+          });
+        case "fact_missing":
+          return ctx.t("cms.calculator.refusal.factMissing", {
+            key: result.refusalKey ?? "",
+          });
+        case "fact_stale":
+          return ctx.t("cms.calculator.refusal.factStale", {
+            key: result.refusalKey ?? "",
+          });
+        case "fact_not_numeric":
+          return ctx.t("cms.calculator.refusal.factNotNumeric", {
+            key: result.refusalKey ?? "",
+          });
+        case "step_unusable":
+          return ctx.t("cms.calculator.refusal.stepUnusable");
+      }
+    })();
+
     return (
       <section className="grid max-w-prose gap-4">
         <h3 className="text-lg font-medium text-ink">{found.name}</h3>
@@ -124,12 +184,12 @@ export const calculator = defineBlock({
           </button>
         </form>
 
-        {result && !result.ok ? (
+        {refusalText ? (
           <p
             role="status"
             className="rounded-md border border-rule bg-warning-soft px-4 py-3 text-sm text-warning"
           >
-            {result.refusal}
+            {refusalText}
           </p>
         ) : null}
 
@@ -143,14 +203,40 @@ export const calculator = defineBlock({
             {/* The caveats travel with the figure, always. */}
             <p className="whitespace-pre-line text-xs text-ink-muted">{found.assumptions}</p>
             {result.basedOn.length ? (
-              <p className="text-xs text-ink-muted">
-                {ctx.t("cms.calculator.basedOn", {
-                  count: result.basedOn.length,
-                  date: result.oldestAsOf
-                    ? result.oldestAsOf.toISOString().slice(0, 10)
-                    : "",
-                })}
-              </p>
+              <div className="grid gap-1">
+                <p className="text-xs font-medium text-ink">
+                  {ctx.t("cms.calculator.restsOn")}
+                </p>
+                <ul className="grid list-none gap-1 p-0 text-xs text-ink-muted">
+                  {result.basedOn.map((entry) => (
+                    <li key={entry.key}>
+                      {ctx.t("cms.calculator.assumption", {
+                        key: entry.key,
+                        value: entry.value,
+                        source: entry.source,
+                        date: dateLabel(entry.asOf),
+                      })}
+                      <time
+                        dateTime={entry.asOf.toISOString()}
+                        className="sr-only"
+                      >
+                        {entry.asOf.toISOString()}
+                      </time>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-ink-muted">
+                  {ctx.t("cms.calculator.basedOn", {
+                    count: result.basedOn.length,
+                    date: result.oldestAsOf ? dateLabel(result.oldestAsOf) : "",
+                  })}
+                  {result.oldestAsOf ? (
+                    <time dateTime={result.oldestAsOf.toISOString()} className="sr-only">
+                      {result.oldestAsOf.toISOString()}
+                    </time>
+                  ) : null}
+                </p>
+              </div>
             ) : null}
           </div>
         ) : null}

@@ -268,6 +268,25 @@ export const getPublicCalculator = defineService({
   },
 });
 
+/**
+ * Why a calculation declined, as data rather than prose.
+ *
+ * `refusal` carries an English sentence for logs and admin surfaces, but a
+ * public page cannot render that: the same refusal has to read correctly in
+ * every language the site speaks. So the reason also travels as a stable code
+ * and the key of the input or fact at fault, and the render surface maps the
+ * pair onto its own catalog. A code is a contract; a sentence is not.
+ */
+export const REFUSAL_CODES = [
+  "input_required",
+  "input_below_min",
+  "input_above_max",
+  "fact_missing",
+  "fact_stale",
+  "fact_not_numeric",
+  "step_unusable",
+] as const;
+
 export const compute = defineService({
   name: "calculators.compute",
   summary: "Work out the figure, or say why it will not.",
@@ -279,8 +298,12 @@ export const compute = defineService({
   }),
   output: z.object({
     ok: z.boolean(),
-    /** Why not. Named, because "it did not work" is not actionable. */
+    /** Why not, in English. Public surfaces localize by refusalCode instead. */
     refusal: z.string().nullable(),
+    /** Why not, as a stable code. Sibling to `refusal`, not a replacement. */
+    refusalCode: z.enum(REFUSAL_CODES).nullable(),
+    /** The input key or fact key at fault, when there is one. */
+    refusalKey: z.string().nullable(),
     value: z.number().nullable(),
     resultLabel: z.string(),
     resultUnit: z.string().nullable(),
@@ -312,9 +335,15 @@ export const compute = defineService({
 
     const inputs = found.inputs as CalculatorInput[];
     const steps = found.steps as CalculatorStep[];
-    const refuse = (refusal: string) => ({
+    const refuse = (
+      code: (typeof REFUSAL_CODES)[number],
+      key: string | null,
+      refusal: string,
+    ) => ({
       ok: false,
       refusal,
+      refusalCode: code,
+      refusalKey: key,
       value: null,
       resultLabel: found.resultLabel,
       resultUnit: found.resultUnit,
@@ -327,12 +356,22 @@ export const compute = defineService({
     const answers: Record<string, number> = {};
     for (const declared of inputs) {
       const given = input.answers[declared.key];
-      if (given === undefined) return refuse(`"${declared.label}" is needed.`);
+      if (given === undefined) {
+        return refuse("input_required", declared.key, `"${declared.label}" is needed.`);
+      }
       if (declared.min !== undefined && given < declared.min) {
-        return refuse(`"${declared.label}" cannot be below ${declared.min}.`);
+        return refuse(
+          "input_below_min",
+          declared.key,
+          `"${declared.label}" cannot be below ${declared.min}.`,
+        );
       }
       if (declared.max !== undefined && given > declared.max) {
-        return refuse(`"${declared.label}" cannot be above ${declared.max}.`);
+        return refuse(
+          "input_above_max",
+          declared.key,
+          `"${declared.label}" cannot be above ${declared.max}.`,
+        );
       }
       answers[declared.key] = given;
     }
@@ -345,23 +384,33 @@ export const compute = defineService({
     for (const key of factKeys(steps)) {
       const fact = await ctx.callAsSystem(currentFact, { key });
       if (!fact) {
-        return refuse(`This cannot be worked out yet: ${key} has not been published.`);
+        return refuse(
+          "fact_missing",
+          key,
+          `This cannot be worked out yet: ${key} has not been published.`,
+        );
       }
       if (fact.stale) {
         return refuse(
+          "fact_stale",
+          key,
           `This cannot be worked out right now: ${key} is past the date it was good for.`,
         );
       }
       const numeric = typeof fact.value === "number" ? fact.value : Number(fact.value);
       if (!Number.isFinite(numeric)) {
-        return refuse(`${key} is not a number this can calculate with.`);
+        return refuse(
+          "fact_not_numeric",
+          key,
+          `${key} is not a number this can calculate with.`,
+        );
       }
       facts[key] = numeric;
       basedOn.push({ key, value: numeric, source: fact.source, asOf: fact.asOf });
     }
 
     const result = evaluate(steps, { inputs: answers, facts });
-    if (!result.ok) return refuse(result.reason);
+    if (!result.ok) return refuse("step_unusable", null, result.reason);
 
     const oldestAsOf = basedOn.length
       ? basedOn.reduce((oldest, entry) => (entry.asOf < oldest ? entry.asOf : oldest), basedOn[0]!.asOf)
@@ -370,6 +419,8 @@ export const compute = defineService({
     return {
       ok: true,
       refusal: null,
+      refusalCode: null,
+      refusalKey: null,
       value: result.value,
       resultLabel: found.resultLabel,
       resultUnit: found.resultUnit,
