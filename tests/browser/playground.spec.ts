@@ -32,6 +32,14 @@ async function resetPlaygroundData(): Promise<void> {
 }
 
 test.describe("hardened public playground (C1.38)", () => {
+  // The shared accessibility/journey config also matches *.spec.ts; without
+  // the playground boot flag this suite has nothing to prove and must not
+  // touch the shared browser database. Its real run is `pnpm test:playground`.
+  test.skip(
+    process.env.FREEHOLDER_PLAYGROUND !== "1",
+    "playground browser proof requires FREEHOLDER_PLAYGROUND=1 (pnpm test:playground)",
+  );
+
   test.beforeAll(async () => {
     await resetPlaygroundData();
   });
