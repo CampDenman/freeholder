@@ -13,6 +13,7 @@ import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { listLocations } from "@/core/locations/service";
+import { checkCoverage } from "@/core/locations/coverage";
 import { defineService, ServiceError, type Tx } from "@/core/service";
 import { QUANTITY_SCALE } from "@/modules/invoicing/money";
 import {
@@ -189,6 +190,26 @@ export const checkoutCart = defineService({
     const needsShipping = basket.lines.some((line) => line.requiresShipping);
     if (needsShipping && !input.shippingAddress) {
       throw new ServiceError("validation", "A shipping address is required for physical items.");
+    }
+
+    // C6.18: the coverage check a visitor ran on the page was information;
+    // this is the gate. The order's destination is re-validated against the
+    // areas the owner actually named, in the same transaction, because a
+    // client-side answer is a hint and only the server can refuse. A definite
+    // "outside" refuses cleanly; "unconfirmed" never does — coverage is never
+    // inferred in either direction, so an address an unnamed area might reach
+    // is never turned away on a guess.
+    if (needsShipping && input.shippingAddress?.postalCode) {
+      const coverage = await ctx.callAsSystem(checkCoverage, {
+        postalCode: input.shippingAddress.postalCode,
+        locationId: input.locationId,
+      });
+      if (coverage.answer === "outside") {
+        throw new ServiceError(
+          "validation",
+          `${coverage.postalCode} is outside the areas we have listed for delivery. Check the postcode, or contact us and we will tell you whether we can come to you.`,
+        );
+      }
     }
 
     let shippingMinor = 0;

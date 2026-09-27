@@ -127,6 +127,13 @@
       "when": 1792166400020,
       "tag": "0017_postal_service_areas",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792264926359,
+      "tag": "0018_area_delivery_windows",
+      "breakpoints": true
     }
   ]
 }

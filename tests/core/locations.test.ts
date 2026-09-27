@@ -282,6 +282,9 @@ describe("LocalBusiness structured data", () => {
       centerLongitude: "-124.993000",
       radiusKm: "75.00",
       regions: [],
+      deliveryWeekdays: null,
+      deliveryOpens: null,
+      deliveryCloses: null,
       createdAt: new Date(0),
       updatedAt: new Date(0),
     }) as Record<string, unknown>;
