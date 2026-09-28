@@ -108,7 +108,7 @@ describe.runIf(hasDatabase)("Daily owner-storage import", { timeout: 30_000 }, (
 
   it("rejects a stale import claim after its lease is reclaimed", async () => {
     const contact = await createContact.call({ name: "Lease person", email: `${randomUUID()}@example.test` }, OWNER);
-    vi.spyOn(adapter, "voiceVideoProvider").mockReturnValue({
+    vi.spyOn(adapter, "voiceVideoProvider").mockResolvedValue({
       ...fixtureVoiceVideoProvider,
       async downloadRecording() { throw new Error("Temporary provider outage"); },
     });
@@ -125,7 +125,7 @@ describe.runIf(hasDatabase)("Daily owner-storage import", { timeout: 30_000 }, (
 
   it("keeps a failed import visible and retryable after a provider outage", async () => {
     const contact = await createContact.call({ name: "Outage person", email: `${randomUUID()}@example.test` }, OWNER);
-    vi.spyOn(adapter, "voiceVideoProvider").mockReturnValue({
+    vi.spyOn(adapter, "voiceVideoProvider").mockResolvedValue({
       ...fixtureVoiceVideoProvider,
       async downloadRecording() { throw new Error("Temporary provider outage"); },
     });
@@ -142,7 +142,7 @@ describe.runIf(hasDatabase)("Daily owner-storage import", { timeout: 30_000 }, (
 
   it("waits for the recording to be verified before importing", async () => {
     const contact = await createContact.call({ name: "Pending person", email: `${randomUUID()}@example.test` }, OWNER);
-    vi.spyOn(adapter, "voiceVideoProvider").mockReturnValue({
+    vi.spyOn(adapter, "voiceVideoProvider").mockResolvedValue({
       ...fixtureVoiceVideoProvider,
       async capture() { throw new Error("The recording is still processing."); },
     });

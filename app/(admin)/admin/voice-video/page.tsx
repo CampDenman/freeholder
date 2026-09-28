@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill, Select } from "@/ui/primitives";
 import { listContacts } from "@/core/contacts/service";
 import {
-  voiceVideoConfiguration,
+  voiceVideoAdminConfiguration,
   listVoiceVideoArtifacts,
   listVoiceVideoJoins,
   listVoiceVideoRooms,
@@ -14,9 +14,11 @@ import { getT } from "../../../i18n";
 import { requireStaffActor } from "../guard";
 import { domainOrNull } from "../../read-helpers";
 import {
-  voiceVideoHostAction,
+  voiceVideoConfigureAction,
   voiceVideoDownloadAction,
+  voiceVideoHostAction,
   voiceVideoImportAction,
+  voiceVideoRecordingAction,
   joinVoiceVideoAction,
   missVoiceVideoAction,
   recordVoiceVideoAction,
@@ -25,6 +27,8 @@ import {
 } from "../../first-party-plugin-actions";
 
 import { GuestInvite } from "./GuestInvite";
+import { HostJoin } from "./HostJoin";
+import { VerifyConnection } from "./VerifyConnection";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -41,7 +45,7 @@ export default async function VoiceVideoPage({
     domainOrNull(listVoiceVideoRooms.call({}, actor)),
     domainOrNull(listVoiceVideoArtifacts.call({}, actor)),
     domainOrNull(listContacts.call({ limit: 100 }, actor)),
-    domainOrNull(voiceVideoConfiguration.call({}, actor)),
+    domainOrNull(voiceVideoAdminConfiguration.call({}, actor)),
   ]);
   const chosen =
     (rooms ?? []).find((row) => row.id === query.room) ?? (rooms ?? [])[0] ?? null;
@@ -49,6 +53,12 @@ export default async function VoiceVideoPage({
     ? await domainOrNull(listVoiceVideoJoins.call({ roomId: chosen.id }, actor))
     : [];
   const recordings = (artifacts ?? []).filter((row) => row.kind !== "transcript");
+  const provider = configuration?.provider ?? "paradise";
+  const credentialLabels = {
+    serverLabel: t("voiceVideo.credential.server"),
+    tokenLabel: t("voiceVideo.credential.token"),
+    iceLabel: t("voiceVideo.credential.ice"),
+  };
 
   return (
     <div className="grid gap-6">
@@ -68,7 +78,58 @@ export default async function VoiceVideoPage({
       ) : null}
       <Card>
         <CardHeader title={t("voiceVideo.setup")} />
-        <CardBody><p className="text-sm text-ink-muted">{t(configuration?.configured ? "voiceVideo.configured" : "voiceVideo.setupHelp", { domain: configuration?.domain ?? "" })}</p></CardBody>
+        <CardBody>
+          <p className="text-sm text-ink-muted">{t("voiceVideo.setupHelpParadise")}</p>
+          <form action={voiceVideoConfigureAction} className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label={t("voiceVideo.field.provider")} htmlFor="vv-provider">
+              <Select id="vv-provider" name="provider" defaultValue={provider}>
+                <option value="paradise">{t("voiceVideo.provider.paradise")}</option>
+                <option value="daily">{t("voiceVideo.provider.daily")}</option>
+              </Select>
+            </Field>
+            <Field label={t("voiceVideo.field.authScheme")} htmlFor="vv-auth-scheme">
+              <Select id="vv-auth-scheme" name="authScheme" defaultValue={configuration?.paradise.authScheme ?? "site_key"}>
+                <option value="site_key">{t("voiceVideo.authScheme.siteKey")}</option>
+                <option value="portfolio_token">{t("voiceVideo.authScheme.portfolioToken")}</option>
+              </Select>
+            </Field>
+            <Field label={t("voiceVideo.field.baseUrl")} htmlFor="vv-base-url">
+              <Input id="vv-base-url" name="baseUrl" defaultValue={configuration?.paradise.baseUrl ?? ""} />
+            </Field>
+            <Field label={t("voiceVideo.field.roomPolicy")} htmlFor="vv-room-policy">
+              <Select id="vv-room-policy" name="roomPolicy" defaultValue={configuration?.paradise.roomPolicy ?? "invite_only"}>
+                <option value="invite_only">{t("voiceVideo.policy.inviteOnly")}</option>
+                <option value="moderated">{t("voiceVideo.policy.moderated")}</option>
+                <option value="open">{t("voiceVideo.policy.open")}</option>
+              </Select>
+            </Field>
+            <Field label={t("voiceVideo.field.apiKey")} htmlFor="vv-api-key">
+              <Input id="vv-api-key" name="apiKey" type="password" autoComplete="off"
+                placeholder={configuration?.paradise.hasApiKey ? t("voiceVideo.secretStored") : undefined} />
+            </Field>
+            <Field label={t("voiceVideo.field.portfolioToken")} htmlFor="vv-portfolio-token">
+              <Input id="vv-portfolio-token" name="portfolioToken" type="password" autoComplete="off"
+                placeholder={configuration?.paradise.hasPortfolioToken ? t("voiceVideo.secretStored") : undefined} />
+            </Field>
+            <Field label={t("voiceVideo.field.webhookSecret")} htmlFor="vv-webhook-secret">
+              <Input id="vv-webhook-secret" name="webhookSecret" type="password" autoComplete="off"
+                placeholder={configuration?.paradise.hasWebhookSecret ? t("voiceVideo.secretStored") : undefined} />
+            </Field>
+            <Field label={t("voiceVideo.field.retentionDays")} htmlFor="vv-retention">
+              <Input id="vv-retention" name="retentionDays" inputMode="numeric"
+                defaultValue={configuration?.paradise.retentionDays ?? ""} placeholder={t("voiceVideo.retentionHint")} />
+            </Field>
+            <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+              <Button type="submit">{t("voiceVideo.saveSettings")}</Button>
+              <VerifyConnection label={t("voiceVideo.verify")} topUpLabel={t("voiceVideo.topUp")} />
+            </div>
+          </form>
+          <p className="mt-3 text-sm text-ink-muted">
+            {provider === "daily"
+              ? t(configuration?.dailyConfigured ? "voiceVideo.configured" : "voiceVideo.setupHelpDaily", { domain: configuration?.dailyDomain ?? "" })
+              : t("voiceVideo.webhookSetup", { url: "/api/plugins/voice-video/webhooks/paradise" })}
+          </p>
+        </CardBody>
       </Card>
       <Card>
         <CardHeader title={t("voiceVideo.start")} />
@@ -93,8 +154,11 @@ export default async function VoiceVideoPage({
             <Field label={t("voiceVideo.field.title")} htmlFor="vv-title">
               <Input id="vv-title" name="title" required />
             </Field>
-            <Field label={t("voiceVideo.field.provider")} htmlFor="vv-provider">
-              <Input id="vv-provider" name="provider" defaultValue="daily" readOnly required />
+            <Field label={t("voiceVideo.field.provider")} htmlFor="vv-start-provider">
+              <Select id="vv-start-provider" name="provider" defaultValue={provider}>
+                <option value="paradise">{t("voiceVideo.provider.paradise")}</option>
+                <option value="daily">{t("voiceVideo.provider.daily")}</option>
+              </Select>
             </Field>
             <div className="sm:col-span-2">
               <Button type="submit">{t("voiceVideo.start")}</Button>
@@ -128,12 +192,32 @@ export default async function VoiceVideoPage({
                   {room.lastError ? <span className="text-danger">{room.lastError}</span> : null}
                   {room.status === "live" ? (
                     <>
-                      <form action={voiceVideoHostAction}>
-                        <input type="hidden" name="roomId" value={room.id} />
-                        <input type="hidden" name="hostName" value={t("voiceVideo.hostName")} />
-                        <Button type="submit" variant="quiet">{t("voiceVideo.openHost")}</Button>
-                      </form>
-                      <GuestInvite roomId={room.id} label={t("voiceVideo.invite")} help={t("voiceVideo.inviteHelp")} />
+                      {room.provider === "paradise" ? (
+                        <HostJoin roomId={room.id} hostName={t("voiceVideo.hostName")} label={t("voiceVideo.openHost")}
+                          credentialHelp={t("voiceVideo.credentialHelp")} credentialLabels={credentialLabels} />
+                      ) : (
+                        <form action={voiceVideoHostAction}>
+                          <input type="hidden" name="roomId" value={room.id} />
+                          <input type="hidden" name="hostName" value={t("voiceVideo.hostName")} />
+                          <Button type="submit" variant="quiet">{t("voiceVideo.openHost")}</Button>
+                        </form>
+                      )}
+                      <GuestInvite roomId={room.id} label={t("voiceVideo.invite")} help={t("voiceVideo.inviteHelp")}
+                        credentialHelp={t("voiceVideo.credentialHelp")} credentialLabels={credentialLabels} />
+                      {room.provider === "paradise" ? (
+                        <>
+                          <form action={voiceVideoRecordingAction}>
+                            <input type="hidden" name="roomId" value={room.id} />
+                            <input type="hidden" name="action" value="start" />
+                            <Button type="submit" variant="quiet">{t("voiceVideo.startRecording")}</Button>
+                          </form>
+                          <form action={voiceVideoRecordingAction}>
+                            <input type="hidden" name="roomId" value={room.id} />
+                            <input type="hidden" name="action" value="stop" />
+                            <Button type="submit" variant="quiet">{t("voiceVideo.stopRecording")}</Button>
+                          </form>
+                        </>
+                      ) : null}
                       <form action={stopVoiceVideoAction}>
                         <input type="hidden" name="roomId" value={room.id} />
                         <Button type="submit" variant="quiet">

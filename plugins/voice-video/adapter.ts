@@ -7,6 +7,11 @@ import { env } from "@/core/env";
 import { getPinnedBytes } from "@/core/http/pinned-download";
 import { z } from "zod";
 import { createDailyClient, DailyError, type DailyConfiguration } from "./daily";
+import { createParadiseVoiceVideoProvider } from "./paradise-provider";
+import {
+  readVoiceVideoSettings,
+  resolveParadiseConfig,
+} from "./settings";
 
 export interface VoiceVideoAccessInput {
   provider: string; externalRef: string | null; providerRoomId: string | null; accountDomain: string | null;
@@ -21,7 +26,7 @@ export interface VoiceVideoRoomInput {
 }
 
 export interface VoiceVideoRoomResult {
-  providerRoomId: string;
+  providerRoomId: string | null;
   externalRef: string;
 }
 
@@ -41,18 +46,38 @@ export interface VoiceVideoCaptureResult {
   durationSeconds: number;
 }
 
+export interface VoiceVideoMeetingTokenResult {
+  roomUrl: string;
+  meetingToken: string;
+  expiresAt: number;
+  /** Paradise Comms/LiveKit connection details, when the provider issues them. */
+  livekitUrl?: string;
+  iceServers?: unknown[];
+}
+
+export interface VoiceVideoRecordingResult {
+  providerRecordingId: string;
+  status: string;
+}
+
 export interface VoiceVideoProvider {
   downloadRecording(input: VoiceVideoAccessInput & { recordingId: string }): Promise<{ bytes: Uint8Array<ArrayBuffer>; contentType: string }>;
   eraseRoomRecordings(input: VoiceVideoAccessInput): Promise<void>;
   endRoom(input: VoiceVideoAccessInput): Promise<void>;
-  meetingToken(input: VoiceVideoAccessInput & { userId: string; userName: string; owner: boolean }): Promise<{ roomUrl: string; meetingToken: string; expiresAt: number }>;
+  meetingToken(input: VoiceVideoAccessInput & { userId: string; userName: string; owner: boolean }): Promise<VoiceVideoMeetingTokenResult>;
   recordingAccess(input: VoiceVideoAccessInput & { recordingId: string }): Promise<{ downloadTokenUrl: string; expiresAt: number }>;
   startRoom(input: VoiceVideoRoomInput): Promise<VoiceVideoRoomResult>;
   capture(input: VoiceVideoCaptureInput): Promise<VoiceVideoCaptureResult>;
+  startRecording?(input: VoiceVideoAccessInput & { audioOnly: boolean }): Promise<VoiceVideoRecordingResult>;
+  stopRecording?(input: VoiceVideoAccessInput): Promise<VoiceVideoRecordingResult | null>;
 }
 
 function refused(input: { title: string }): boolean {
   return input.title.startsWith("fail-");
+}
+
+function refusedRecording(input: { externalRef: string | null }): boolean {
+  return input.externalRef?.includes("fail-") ?? false;
 }
 
 /** Fixture provider: start and capture fail when the title asks them to. */
@@ -83,14 +108,34 @@ export const fixtureVoiceVideoProvider: VoiceVideoProvider = {
       durationSeconds: 42,
     };
   },
+  async startRecording(input) {
+    if (refusedRecording(input)) throw new Error("The call provider could not start recording.");
+    return { providerRecordingId: `vv-recording:${input.externalRef ?? "fixture"}`, status: "active" };
+  },
+  async stopRecording() { return null; },
 };
 
-export function voiceVideoProvider(): VoiceVideoProvider {
+/**
+ * The live provider for this instance. Settings in module_settings decide
+ * which adapter serves new work; an instance that only ever set the Daily
+ * environment variables (no stored settings row) keeps its Daily provider,
+ * so the pivot forces no migration.
+ */
+export async function voiceVideoProvider(): Promise<VoiceVideoProvider> {
   if (process.env.NODE_ENV === "test") return fixtureVoiceVideoProvider;
-  const settings = env();
-  if (!settings.DAILY_API_KEY || !settings.DAILY_DOMAIN) throw new Error("No live voice/video provider is configured. Set the Daily API key and domain.");
-  return createDailyVoiceVideoProvider({ apiKey: settings.DAILY_API_KEY, domain: settings.DAILY_DOMAIN });
+  const { settings, stored } = await readVoiceVideoSettings();
+  if (settings.provider === "daily" || (!stored && env().DAILY_API_KEY && env().DAILY_DOMAIN)) {
+    const daily = env();
+    if (!daily.DAILY_API_KEY || !daily.DAILY_DOMAIN) {
+      throw new Error("No live voice/video provider is configured. Set the Daily API key and domain or configure Paradise Comms in settings.");
+    }
+    return createDailyVoiceVideoProvider({ apiKey: daily.DAILY_API_KEY, domain: daily.DAILY_DOMAIN });
+  }
+  return createParadiseVoiceVideoProvider(resolveParadiseConfig(settings));
 }
+
+export { createParadiseVoiceVideoProvider } from "./paradise-provider";
+export type { ParadiseConfiguration } from "./paradise";
 
 export function createDailyVoiceVideoProvider(configuration: DailyConfiguration, fetcher: typeof fetch = fetch, download: typeof getPinnedBytes = getPinnedBytes): VoiceVideoProvider {
   const client = createDailyClient(configuration, fetcher, Date.now, download);
