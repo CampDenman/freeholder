@@ -215,3 +215,38 @@ BUDGET <=20s p95 -> PASS (7.81s)
 
 RESULTS TABLE update:
 | Cold boot to serving                 | <=20s p95     | 7.81s p95                            | PASS |
+
+--------------------------------------------------------------------------------
+ROW: JOB QUEUE LATENCY (on-droplet, real worker claims real jobs)
+--------------------------------------------------------------------------------
+Queue: pg-boss (schema `pgboss`, table `pgboss.job`). The app image bundles
+pg-boss inside the traced server bundle (not requireable from the container),
+so probes were enqueued by INSERTing rows shaped exactly like the queue's own
+cron-produced rows (same defaults: retry_limit 5, retry_backoff, policy
+'standard', dead_letter 'core.deadLetter', deletion_seconds 2592000), on a real
+queue the running worker executes: core.reapAgentLeases (schedule * * * * *,
+handler reapExpiredLeases — trivial, safe). Sequential probes on an otherwise
+idle queue (the repo harness's baseline discipline); created_on -> started_on
+read from the job row, the same clock the repo harness uses.
+
+Method note learned in-flight: an earlier attempt ran while the browser/tunnel
+measurements were hammering the single vCPU, and claims stalled ~7 minutes —
+starvation under measurement load, not baseline. That pass was discarded (the
+harness rule: baseline is an idle-queue measurement). Leftover probe rows were
+verified completed, then the box was left to settle before this timed pass.
+
+Raw output (idle pass):
+  probe 1: id=59209339-3756-4b13-9a88-ca7156787f4d state=completed created->started=364ms
+  probe 2: id=288ee576-e316-4366-ab24-fcaa180a66f2 state=completed created->started=918ms
+  probe 3: id=5821a692-4c3c-4267-a525-c51ea61e86c5 state=completed created->started=530ms
+  probe 4: id=f8fa07b5-b11b-4d00-82c1-db230c3ff314 state=completed created->started=697ms
+  probe 5: id=85aada77-b8bd-4bde-8d62-20c22b07d25c state=completed created->started=1169ms
+  probe 6: id=778cb258-beaa-48e1-ab91-a3225c9bbb1f state=completed created->started=666ms
+  probe 7: id=345d278d-1dde-4f76-9777-ec2fdd790429 state=completed created->started=1219ms
+samples-ms: 364 918 530 697 1169 666 1219
+sorted: 364 530 666 697 918 1169 1219
+p95 (n=7, nearest-rank) = 1219ms ; p75 = 1169ms ; all 7 completed, none failed/retried
+BUDGET <=30s p95 -> PASS (1219ms)
+
+RESULTS TABLE update:
+| Job queue latency                    | <=30s p95     | 1219ms p95                           | PASS |
