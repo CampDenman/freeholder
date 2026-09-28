@@ -34,9 +34,10 @@ function envelope(input: { id: string; type: string; resourceType: string; resou
 
 function relayRequest(body: string, options: { signature?: string | null; event?: string; deliveryId?: string } = {}) {
   const signed = sign(body);
+  const envelopeType = (JSON.parse(body) as { type: string }).type;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "Webhook-Event": options.event ?? JSON.parse(body).type,
+    "Webhook-Event": options.event ?? envelopeType,
     "Webhook-Delivery-Id": options.deliveryId ?? randomUUID(),
     "Webhook-Timestamp": signed.timestamp,
     "Webhook-Tenant": "demo",
@@ -89,7 +90,8 @@ describe.runIf(hasDatabase)("Paradise Comms webhook route and mapping", { timeou
     const body = envelope({ id: "evt_1", type: "stream.ended", resourceType: "room", resourceId: providerRoomId });
     const response = await POST(relayRequest(body));
     expect(response.status).toBe(500);
-    expect(await response.json()).toMatchObject({ error: expect.stringContaining("webhook secret") });
+    const payload = await response.json() as { error: string };
+    expect(payload.error).toContain("webhook secret");
   });
 
   it("rejects bad signatures and mismatched event headers without touching state", async () => {

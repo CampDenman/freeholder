@@ -12,7 +12,7 @@ import { createContact } from "@/core/contacts/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import { createDataRequest, verifyDataRequest, fulfillDataRequest } from "@/core/privacy/service";
 import { getJob, stopJobs } from "@/core/jobs";
-import { resetEnvForTests, env } from "@/core/env";
+import { resetEnvForTests } from "@/core/env";
 import type { getPinnedBytes } from "@/core/http/pinned-download";
 import { storage } from "@/adapters/storage";
 import { moduleSettings } from "@/core/settings/schema";
@@ -34,7 +34,6 @@ import {
 import { voiceVideoArtifacts } from "../../plugins/voice-video/schema";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
-const SYSTEM = { kind: "system" } as const;
 const providerRoomId = "rm_01J8ZQ6KM2B1T0ABCDEFGHJ5K9";
 const recordingId = "rec_01J8ZQ6KM2B1T0ABCDEFGHJ5K9";
 
@@ -46,7 +45,7 @@ function paradiseServer() {
     gate402: false,
     room: {
       id: providerRoomId, name: "Consultation", owner_id: "freeholder:room",
-      state: "idle", policy: "invite_only", max_participants: 20, recording_enabled: true, ended_at: null,
+      state: "idle", policy: "invite_only", max_participants: 20, recording_enabled: true, ended_at: null as string | null,
     },
     recording: {
       id: recordingId, object: "recording", source_type: "room", source_id: providerRoomId,
@@ -67,14 +66,15 @@ function paradiseServer() {
     const method = init?.method ?? "GET";
     if (state.gate402 && method === "POST" && (path === "/v1/rooms" || path.endsWith("/credentials") || path.endsWith("/recording/start"))) return gated();
     if (path === "/v1/rooms" && method === "POST") {
-      const body = JSON.parse(init!.body as string);
+      const body = JSON.parse(init!.body as string) as { name: string; policy: string;
+        recording: { enabled: boolean; tracks: string; retention_days?: number } };
       created.name = body.name; created.policy = body.policy; created.recording = body.recording;
       return Response.json({ ...state.room, state: "idle", name: body.name, policy: body.policy }, { status: 201 });
     }
     if (path === `/v1/rooms/${providerRoomId}` && method === "GET") return Response.json(state.room);
     if (path === `/v1/rooms/${providerRoomId}/credentials` && method === "POST") {
       if (state.room.state === "ended") return Response.json({ error: { code: "room_ended", message: "Room is in terminal state 'ended'" } }, { status: 409 });
-      const body = JSON.parse(init!.body as string);
+      const body = JSON.parse(init!.body as string) as { participant_id: string; role: string; ttl_seconds: number };
       state.credentials.push(body);
       return Response.json({ room_id: providerRoomId, participant_id: body.participant_id, role: body.role,
         livekit_url: "wss://livekit.example.test", token: `jwt-${body.role}-${body.participant_id}`,
@@ -222,18 +222,18 @@ describe.runIf(hasDatabase)("Paradise Comms room integration", { timeout: 60_000
     try {
       await configureVoiceVideo.call({ provider: "paradise", paradise: { apiKey: "pm-key" } }, OWNER);
       const paradise = await adapter.voiceVideoProvider();
-      expect(paradise.startRecording).toBeTypeOf("function");
+      expect(typeof paradise.startRecording).toBe("function");
       vi.stubEnv("DAILY_API_KEY", "daily-key");
       vi.stubEnv("DAILY_DOMAIN", "example.daily.co");
       resetEnvForTests();
       await configureVoiceVideo.call({ provider: "daily" }, OWNER);
       const daily = await adapter.voiceVideoProvider();
-      expect(daily.startRecording).toBeUndefined();
+      expect("startRecording" in daily).toBe(false);
       // The pre-pivot env-only configuration keeps working: no stored row,
       // Daily credentials in the environment, Daily provider selected.
       await db().delete(moduleSettings).where(eq(moduleSettings.module, "voice-video"));
       const legacy = await adapter.voiceVideoProvider();
-      expect(legacy.startRecording).toBeUndefined();
+      expect("startRecording" in legacy).toBe(false);
     } finally {
       vi.unstubAllEnvs();
       resetEnvForTests();
