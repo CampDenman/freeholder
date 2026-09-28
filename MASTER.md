@@ -3447,12 +3447,12 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3.13 live paradisemodern video acceptance (owner-side pending), C3.24 native storefront parity mapping; C11.16 spec reconciliation; C11.17 remains unsigned |
+| Current focus | C3.24 native storefront parity mapping; C11.16 spec reconciliation; C11.17 remains unsigned |
 | Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C3.13 live paradisemodern video acceptance (software remainder shipped against Daily; PM adapter re-target pending). C3.24 native storefront parity (new open work, owner decision 2026-09-27). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements — the 2026-09-27 acceptance run passed all thirteen §15.1 budgets on the target with complete evidence (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), and the box stays open only because the C11.16 spec-reconciliation gate orders C11.11 unchecked until that gate flips it. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity (new open work, owner decision 2026-09-27). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements — the 2026-09-27 acceptance run passed all thirteen §15.1 budgets on the target with complete evidence (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), and the box stays open only because the C11.16 spec-reconciliation gate orders C11.11 unchecked until that gate flips it. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -4339,7 +4339,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   tests and examples for a block, service, adapter, automation verb and route.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
   Coverage in `tests/core/plugin-scaffold.test.ts`. **F04** `/admin/imports` start/preview/commit. **F05** N/A — `packages/plugin-kit` scaffold/dev harness and `tests/fixtures/sample-plugin`, not an HTTP/MCP route. **F07** `tests/core/plugin-scaffold.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-scaffold.test.ts` is the composition proof.)
-- [ ] **C3.13** Ship first-party plugins for gift options/registries,
+- [x] **C3.13** Ship first-party plugins for gift options/registries,
   advanced communities, and voice and video artifacts — voice/video via
   paradisemodern's Paradise Comms as the de-facto provider (rooms,
   credentials, provider-confirmed end, recordings; transcripts unavailable
@@ -4397,8 +4397,42 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   remains in-tree as optional non-first-party code. The Paradise adapter
   ships at `plugins/voice-video/paradise.ts`, `paradise-provider.ts`,
   `settings.ts` and `webhook.ts` with mocked HTTP + database coverage in
-  `tests/core/paradise-*.test.ts`. Still [ ] while the live paradisemodern
-  acceptance above remains.)
+  `tests/core/paradise-*.test.ts`.
+  **Live acceptance, 2026-09-28 (production paradisemodern.com, closes the
+  item):** the droplet instance (post-#430 image) ran the full journey
+  against the live PM API (contract `2026-09-28.comms-recording-lifecycle`),
+  every hop through Freeholder's real service surface, transcript in
+  `deploy/c313-live-acceptance-2026-09-28.log` (sanitized) and summary in
+  `deploy/c313-live-acceptance-2026-09-28.md`. Five proofs: **(1) real
+  room** — `voiceVideo.startRoom` → PM `POST /v1/rooms` →
+  `rm_01M3MXMNPC1FKAK6TXPCPD7G76`, independently re-read at PM; **(2) real
+  participant/credentials** — `voiceVideo.meetingLink` minted room-scoped
+  LiveKit JWTs (host + guest) and headless Chromium (fake media devices)
+  connected to the production SFU (LiveKit 1.12.0): `connected` in 907 ms,
+  audio + video published 15.2 s, 1,888,138 bytes sent; **(3)
+  provider-confirmed end** — `voiceVideo.stopRoom` → PM end returned
+  `media_ended: true` (raw body logged; the retryable `503
+  media_termination_pending` path was also exercised fail-closed on an
+  earlier empty room); **(4) recording + owner-storage import** —
+  `voiceVideo.recordingControl` start/stop → egress → `rec_…SPXK` available
+  (MP4), capture verified the `rec_` id, import copied 51,369 bytes into
+  owner storage with the row's sha256 matching the file on disk
+  (`importStatus` `pending → failed → imported`; both failures were
+  environment gaps repaired and documented, not adapter defects);
+  **(5) erasure round-trip** — contact erasure queued
+  `voiceVideo.eraseProviderRecordings` + `voiceVideo.eraseImportedCopies`,
+  PM `DELETE /v1/recordings/:id` ran (re-GET 404, room listing empty), the
+  owner-storage copy was deleted, and the privacy receipt acknowledged
+  `completed` only after both provider jobs confirmed. Budget: $0.027634 of
+  the $1.00/100-min grant spent (ending balance $0.972366); no 402 hit.
+  Transcripts stayed absent (null, never placeholder) as the item's wording
+  allows. Four PM/droplet environment gaps surfaced and were repaired as
+  ops (PM portfolio provisioning for the acceptance site, the recording
+  object's public-read ACL vs the documented unsigned-URL contract,
+  split-horizon Spaces DNS vs the pinned downloader's SSRF guard, and
+  droplet `CREDENTIAL_KEY`/owner-storage config) — each logged with
+  before/after evidence; the adapter failed visibly and honestly at each
+  one exactly as the #430 contract tests specify.)
 
 #### Packages, installation, export, and target parity
 

@@ -1341,7 +1341,7 @@ v2.
 - **F09** — retry-in-place evidence in the per-plugin suites; retention/erasure ride the host seams (C11.14, `tests/core/record-participation.test.ts`).
 - **F10** — N/A — plugins ride the host demo; no plugin-specific seed claimed.
 - **F11** — `deploy/spec-reconciliation.md` + the §43 annotation this row transcribes.
-- **F12** — Open — `tests/browser/first-party-plugins.spec.ts` passes for every plugin; the box stays open for live paradisemodern video acceptance (the #364 seam and #394 import shipped against Daily and need the PM adapter re-targeted).
+- **F12** — Open — `tests/browser/first-party-plugins.spec.ts` passes for every plugin; the box stayed open for live paradisemodern video acceptance (the #364 seam and #394 import shipped against Daily and needed the PM adapter re-targeted). Closed 2026-09-28: the live Paradise Comms acceptance ran the full journey against production paradisemodern.com — real room, headless-Chromium media participant (1,888,138 bytes published), provider-confirmed end (`media_ended: true`), recording + owner-storage import (51,369 bytes, sha256 verified), and the erasure round-trip (PM DELETE → re-GET 404 → receipt completed after provider confirmation); $0.027634 of the $1.00 grant spent. Evidence: `deploy/c313-live-acceptance-2026-09-28.log` + `deploy/c313-live-acceptance-2026-09-28.md`.
 
 ## C3.14 — Implement `create-freeholder` with explicit environment checks
 

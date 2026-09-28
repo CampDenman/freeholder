@@ -8,8 +8,8 @@ SPDX-License-Identifier: Apache-2.0
 Product version remains **0.1.0**, in active development. This is a session
 digest, not a release-candidate announcement and not a claim of deployment.
 `CHANGELOG.md`, generated from `.changeset/`, is the canonical owner-facing
-change list. Plan gate at this snapshot: **298 unique IDs, 279 checked,
-19 open**. Refresh GitHub before treating anything below as shipped.
+change list. Plan gate at this snapshot: **298 unique IDs, 280 checked,
+18 open**. Refresh GitHub before treating anything below as shipped.
 
 ## C11.11 — performance budgets pass on the reference target
 
@@ -96,5 +96,46 @@ back to the Daily environment, so nothing is force-migrated.
 - **Locales**: en/fr/es/ar parity for the new setup and credential strings.
 
 Live acceptance against a real paradisemodern site key (open a room, join
-with a LiveKit client, record, import, erase) remains open C3.13 work and
-is named in `deploy/first-party-plugins.md`.
+with a LiveKit client, record, import, erase) was open C3.13 work when this
+section landed; the section below closes it same-day.
+
+## C3.13 — live Paradise Comms acceptance closes the item
+
+The remaining C3.13 clause — live voice/video acceptance against a real
+paradisemodern instance — ran end to end on 2026-09-28 against production
+`https://paradisemodern.com/v1` (contract `2026-09-28.comms-recording-lifecycle`),
+from the Freeholder droplet running the post-#430 image. Every hop went through
+Freeholder's real service surface; PM-side reads used only the site key for
+corroboration. The sanitized transcript is
+`deploy/c313-live-acceptance-2026-09-28.log`; the summary with the five proofs
+(real room; live media participant on the production SFU; provider-confirmed
+end; recording + owner-storage import with checksum-verified bytes; erasure
+round-trip ending in PM 404 + a completed privacy receipt) is
+`deploy/c313-live-acceptance-2026-09-28.md`.
+
+- **Real media, honestly metered.** Headless Chromium (fake devices) joined the
+  room with Freeholder-minted LiveKit JWTs: connected in 907 ms, audio + video
+  published, 1,888,138 bytes sent. Recording start/stop through
+  `voiceVideo.recordingControl` produced an MP4 whose import into owner storage
+  verified byte-for-byte (sha256 on the row equals the file on disk).
+- **Erasure is provider-confirmed.** Contact erasure deleted the PM recording
+  (re-GET 404, empty listing), removed the owner-storage copy, and the privacy
+  receipt acknowledged completion only after both durable provider jobs
+  confirmed.
+- **Budget.** $0.027634 of the $1.00/100-min grant; ending balance $0.972366.
+- **Ops findings (no product defects).** Four environment gaps surfaced and were
+  repaired with before/after evidence in the log: the acceptance site's PM
+  portfolio was not provisioned for Comms (site moved to the owner's
+  `campdenman` portfolio); the recording object's ACL was private despite the
+  documented public playback-URL contract (repaired); the droplet's split-
+  horizon DNS answered the Spaces hostname with a VPC-private IP that the
+  pinned downloader's SSRF guard rightly refuses (public IP pinned in compose);
+  and droplet `CREDENTIAL_KEY`/owner-storage needed configuration (set,
+  documented). The adapter failed visibly and honestly at each gap, matching
+  the #430 contract tests.
+- **Observed PM behavior worth noting.** Credential mints returned a 60-second
+  TTL (Freeholder requests 30 minutes and surfaces PM's `expires_at`
+  faithfully); the earlier release note's "expire within 30 minutes" reflects
+  the request, not PM's current grant.
+
+`MASTER.md` C3.13 is checked; `deploy/f-criteria-matrix.md` F12 is updated.
