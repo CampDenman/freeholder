@@ -1331,7 +1331,9 @@ export const SERVICE_NAMES = [
   "views.restore",
   "views.save",
   "views.setDefault",
+  "voiceVideo.adminConfiguration",
   "voiceVideo.configuration",
+  "voiceVideo.configure",
   "voiceVideo.importRecording",
   "voiceVideo.joinRoom",
   "voiceVideo.list",
@@ -1341,8 +1343,10 @@ export const SERVICE_NAMES = [
   "voiceVideo.missRoom",
   "voiceVideo.record",
   "voiceVideo.recordingAccess",
+  "voiceVideo.recordingControl",
   "voiceVideo.startRoom",
   "voiceVideo.stopRoom",
+  "voiceVideo.verifyConnection",
   "waitlist.claim",
   "waitlist.expireOffers",
   "waitlist.join",
@@ -6674,9 +6678,17 @@ export interface ServiceCatalog {
     input: { id?: string | null; entity: string };
     output: { id: string | null; [key: string]: unknown };
   };
+  "voiceVideo.adminConfiguration": {
+    input: Record<string, never>;
+    output: { provider: "paradise" | "daily"; stored: boolean; paradise: { baseUrl: string; authScheme: "site_key" | "portfolio_token"; hasApiKey: boolean; hasPortfolioToken: boolean; hasWebhookSecret: boolean; roomPolicy: "open" | "moderated" | "invite_only"; retentionDays: number | null }; dailyConfigured: boolean; dailyDomain: string | null };
+  };
   "voiceVideo.configuration": {
     input: Record<string, never>;
     output: { configured: boolean; domain: string | null };
+  };
+  "voiceVideo.configure": {
+    input: { provider: "paradise" | "daily"; paradise?: { baseUrl?: string; authScheme?: "site_key" | "portfolio_token"; apiKey?: string; portfolioToken?: string; webhookSecret?: string; clearSecrets?: ("apiKey" | "portfolioToken" | "webhookSecret")[]; roomPolicy?: "open" | "moderated" | "invite_only"; retentionDays?: number | null } };
+    output: { provider: "paradise" | "daily"; stored: boolean; paradise: { baseUrl: string; authScheme: "site_key" | "portfolio_token"; hasApiKey: boolean; hasPortfolioToken: boolean; hasWebhookSecret: boolean; roomPolicy: "open" | "moderated" | "invite_only"; retentionDays: number | null }; dailyConfigured: boolean; dailyDomain: string | null };
   };
   "voiceVideo.importRecording": {
     input: { artifactId: string };
@@ -6700,7 +6712,7 @@ export interface ServiceCatalog {
   };
   "voiceVideo.meetingLink": {
     input: { roomId: string; audience: "host" | "guest"; hostName?: string };
-    output: { roomUrl: string; meetingToken: string; expiresAt: number };
+    output: { roomUrl: string; meetingToken: string; expiresAt: number; livekitUrl: string | null; iceServers: unknown[] | null };
   };
   "voiceVideo.missRoom": {
     input: { roomId: string };
@@ -6714,6 +6726,10 @@ export interface ServiceCatalog {
     input: { artifactId: string };
     output: { downloadTokenUrl: string; expiresAt: number };
   };
+  "voiceVideo.recordingControl": {
+    input: { roomId: string; action: "start" | "stop" };
+    output: { roomId: string; action: "start" | "stop"; providerRecordingId: string | null; status: string | null };
+  };
   "voiceVideo.startRoom": {
     input: { contactId: string; kind: "voice" | "video"; provider: string; title: string; roomId?: string };
     output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown };
@@ -6721,6 +6737,10 @@ export interface ServiceCatalog {
   "voiceVideo.stopRoom": {
     input: { roomId: string; capture?: boolean };
     output: { id: string; contactId: string; conversationId: string | null; kind: string; provider: string; title: string; status: string; externalRef: string | null; lastError: string | null; providerLeaseExpiresAt: string | null; [key: string]: unknown };
+  };
+  "voiceVideo.verifyConnection": {
+    input: Record<string, never>;
+    output: { provider: string; ok: boolean; status: number | null; message: string; balanceUsd: number | null; topUpUrl: string | null };
   };
   "waitlist.claim": {
     input: { token: string };
@@ -8301,7 +8321,9 @@ export interface FreeholderApi {
     setDefault: (input: ServiceCatalog["views.setDefault"]["input"]) => Promise<ServiceCatalog["views.setDefault"]["output"]>;
   };
   voiceVideo: {
+    adminConfiguration: (input?: ServiceCatalog["voiceVideo.adminConfiguration"]["input"]) => Promise<ServiceCatalog["voiceVideo.adminConfiguration"]["output"]>;
     configuration: (input?: ServiceCatalog["voiceVideo.configuration"]["input"]) => Promise<ServiceCatalog["voiceVideo.configuration"]["output"]>;
+    configure: (input: ServiceCatalog["voiceVideo.configure"]["input"]) => Promise<ServiceCatalog["voiceVideo.configure"]["output"]>;
     importRecording: (input: ServiceCatalog["voiceVideo.importRecording"]["input"]) => Promise<ServiceCatalog["voiceVideo.importRecording"]["output"]>;
     joinRoom: (input: ServiceCatalog["voiceVideo.joinRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.joinRoom"]["output"]>;
     list: (input?: ServiceCatalog["voiceVideo.list"]["input"]) => Promise<ServiceCatalog["voiceVideo.list"]["output"]>;
@@ -8311,8 +8333,10 @@ export interface FreeholderApi {
     missRoom: (input: ServiceCatalog["voiceVideo.missRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.missRoom"]["output"]>;
     record: (input: ServiceCatalog["voiceVideo.record"]["input"]) => Promise<ServiceCatalog["voiceVideo.record"]["output"]>;
     recordingAccess: (input: ServiceCatalog["voiceVideo.recordingAccess"]["input"]) => Promise<ServiceCatalog["voiceVideo.recordingAccess"]["output"]>;
+    recordingControl: (input: ServiceCatalog["voiceVideo.recordingControl"]["input"]) => Promise<ServiceCatalog["voiceVideo.recordingControl"]["output"]>;
     startRoom: (input: ServiceCatalog["voiceVideo.startRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.startRoom"]["output"]>;
     stopRoom: (input: ServiceCatalog["voiceVideo.stopRoom"]["input"]) => Promise<ServiceCatalog["voiceVideo.stopRoom"]["output"]>;
+    verifyConnection: (input?: ServiceCatalog["voiceVideo.verifyConnection"]["input"]) => Promise<ServiceCatalog["voiceVideo.verifyConnection"]["output"]>;
   };
   waitlist: {
     claim: (input: ServiceCatalog["waitlist.claim"]["input"]) => Promise<ServiceCatalog["waitlist.claim"]["output"]>;

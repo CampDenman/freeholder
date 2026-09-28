@@ -101,8 +101,15 @@ room's recording options; recordings land in DigitalOcean Spaces.
 
 Transcripts are unavailable until PM ships them; a missing transcript stays
 absent, never a placeholder. Paradise Comms webhooks are HMAC-SHA256 signed
-(`Webhook-Signature: t=<ts>,v1=<hmac>`) and verified as LiveKit ingress.
-The prepaid-budget 402 gate applies to site-key callers.
+(`Webhook-Signature: t=<ts>,v1=<hmac>` over `"<ts>.<body>"`) and posted to
+`/api/plugins/voice-video/webhooks/paradise`, which verifies the signature
+and a five-minute timestamp window, de-duplicates on the envelope id, and
+maps room-ended to closing the local room and `recording.deleted`/
+`recording.expired` to dropping local provider references. The
+prepaid-budget 402 gate applies to site-key callers on cost-starting calls
+(create, credentials, recording start): Freeholder surfaces the balance and
+top-up URL on the room row and the setup screen's verify probe, and never
+treats a 402 as a transport error.
 
 A verified recording is copied automatically into the owner's configured
 storage (the same S3-compatible adapter as media). The copy uses content-
@@ -114,14 +121,19 @@ state per recording. Contact erasure deletes imported owner-storage copies
 through the same durable job receipt as provider copies; retention holds keep
 them exactly like the provider originals.
 
-**Honesty notes for the PM path.** Paradise Comms has no recording
-list/get/delete or erasure API yet — recordings land in DigitalOcean Spaces
-and the read/delete endpoints are PM-side work items — so provider-side
-erasure of PM recordings lands with PM's recording-delete API; until then a
-privacy receipt must name what it did not erase. See [provider erasure and
-recovery](provider-recording-erasure.md). The shipped seam and owner-storage
-import (PRs #364 and #394) were built against Daily and need the PM adapter
-re-targeted; live paradisemodern acceptance remains open C3.13 work.
+**Honesty notes for the PM path.** PM shipped the recording lifecycle
+(contract `2026-09-28.comms-recording-lifecycle`): Freeholder lists a room's
+recordings, reads one (playback URL only when `status=available`), imports
+the verified recording into owner storage, and erases provider-side through
+`DELETE /v1/recordings/:id` — retryable 503 keeps the PM row and the privacy
+receipt pending, 409 mid-egress defers to the durable job. One caveat: PM
+playback URLs are **public unsigned Spaces URLs** — anyone holding one can
+download until PM ships signed playback, so Freeholder treats them as
+short-lived access windows and never displays them as shareable links. See
+[provider erasure and recovery](provider-recording-erasure.md). The adapter
+(`plugins/voice-video/paradise.ts`, `paradise-provider.ts`, `settings.ts`,
+`webhook.ts`) is covered by mocked-HTTP and database tests; live
+paradisemodern acceptance against a real site key remains open C3.13 work.
 
 The Daily adapter remains in-tree as optional non-first-party code: set
 `DAILY_API_KEY` and `DAILY_DOMAIN` (for example `your-business.daily.co`)
