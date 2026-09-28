@@ -1,0 +1,106 @@
+================================================================================
+C11.11 §15.1 REFERENCE-TARGET ACCEPTANCE RUN — ARCHIVED EVIDENCE LOG
+================================================================================
+Run date:        2026-09-27 (log opened; measurements through 2026-09-28 UTC)
+Repo commit:     204f4f7 (origin/main, branch test/c1111-reference-acceptance)
+Budget source:   MASTER.md §15.1 (13 surfaces)
+
+TARGET HOST (provisioned before this run; not recreated)
+  Droplet:       freeholder-ref, ID 604232042, DigitalOcean nyc3
+  Size:          s-1vcpu-1gb (1 vCPU / 1 GB — the $6 §15.1 target)
+  OS:            ubuntu-24-04
+  Deploy recipe: deploy/digitalocean-droplet/ (app + db only; caddy not
+                 running — no domain; nothing published to host ports)
+  App image:     ghcr.io/campdenman/freeholder:edge
+                 sha256:c7c2b9e97a30b8bc50469ffbc0e28b196ba82bc7c994240310c2b9020e9d2206
+                 (≈ main 204f4f7)
+  DB image:      postgres:16-alpine (container-internal)
+
+MEASUREMENT PATH (method adaptation — remote target, stated per the brief)
+  - Public/admin/editor/search/report timings are measured THROUGH THE
+    DEPLOYED SURFACE: HTTP/browser at http://127.0.0.1:3001, an SSH tunnel
+    local 3001 -> app container :3000. In-process measurement would measure
+    the wrong machine.
+  - Queue/migration/cold-boot are timed ON the droplet via
+    `docker compose -f /opt/freeholder/compose.yml exec`.
+  - Tunnels in place before the run:
+      ssh -i ~/.ssh/freeholder_do -N -L 55433:172.18.0.2:5432 \
+          -L 3001:172.18.0.3:3000 root@104.131.118.196 &
+  - Local psql client: /tmp/pg-bin/postgresql-16.6.0-x86_64-unknown-linux-gnu/bin/psql
+
+OWNER SESSION (throwaway box; no real secret reused)
+  - users table was empty. Seeded owner row + business_profile row directly
+    in the droplet DB (same shape as the repo fixture in
+    tests/browser/owner-session.ts / tests/helpers/performance-browser.ts):
+      users:  id 00000000-0000-4000-8000-000000000001,
+              email owner@example.test, role owner,
+              password_hash scrypt(N=16384,r=8,p=1) of throwaway passphrase
+              "PerfOwnerPassphrase-2026!" (generated locally with the app's
+              exact src/core/auth/passwords.ts parameters)
+      business_profile: id 1, 'Perf Studio', CA/CAD, America/Vancouver,
+              setup_completed_at now()
+  - HTTP setup of the droplet blocks registerOwner (NODE_ENV=production,
+    BOOTSTRAP_SECRET unset), so the documented seed path was used and the
+    session itself was established through the app's REAL login over HTTP:
+      1. POST /api/auth/login {email,password} -> 200, session cookie
+         (twoFactorRequired:false at that point — no factors yet)
+      2. Privileged roles must enroll 2FA (guard redirects to
+         /security?required=1), so TOTP was enrolled through the real
+         services over HTTP:
+           POST /api/v1/auth.beginTotpEnrollment -> {enrollmentToken, secret}
+           TOTP code computed locally (HMAC-SHA1/30s/6-digit, same algorithm
+           as src/core/auth/two-factor-crypto.ts)
+           POST /api/v1/auth.confirmTotpEnrollment -> ok:true, factor live
+      3. Session cookie now passes the admin gate (verified /admin/contacts
+         -> 200).
+  - All measured admin/editor requests carry this real login session cookie.
+
+DATASET PROOF (droplet DB, counted before any measurement)
+  $ psql -h 127.0.0.1 -p 55433 -U freeholder -d freeholder -c \
+    "SELECT 'contacts' t, count(*) FROM contacts UNION ALL
+     SELECT 'messages', count(*) FROM messages UNION ALL
+     SELECT 'orders', count(*) FROM orders UNION ALL
+     SELECT 'products', count(*) FROM products UNION ALL
+     SELECT 'assets', count(*) FROM assets ORDER BY 1;"
+       t     | count
+    ---------+-------
+     assets  | 10000
+     contacts|  5000
+     messages| 20000
+     orders  |  2000
+     products|  500
+    (5 rows)
+  = verified §15.1 medium dataset. Fixture page present:
+    pages: slug perf-home, published, id b2470461-53d7-4da4-8fda-03e818d47df6,
+    heading block id perf-home-heading (field perf-home-heading-text).
+    First contact id: ffd327ef-6a8a-47e3-81cd-50e05893d34d
+
+DISCIPLINE
+  - p95/p75 nearest-rank, matching scripts/performance-budgets.mjs
+    (percentile(): sorted, index = ceil(p/100*n)-1).
+  - Sampling surfaces: one discarded warm-up, then >=7 measured samples.
+  - Every raw sample is recorded below. No number appears that did not come
+    from a command whose raw output is in this log.
+
+================================================================================
+RESULTS TABLE (filled as rows complete; PASS = within §15.1 budget)
+================================================================================
+| Surface                              | Budget        | Measured | Verdict |
+|--------------------------------------|---------------|----------|---------|
+| Public page, server render (TTFB)    | <=300ms p95   |          |         |
+| Public page, LCP                     | <=2.5s p75    |          |         |
+| Public page, INP                     | <=200ms p75   |          |         |
+| Public page, CLS                     | <=0.1 p75     |          |         |
+| Admin list (/admin/contacts)         | <=800ms p95   |          |         |
+| Admin detail (one contact)           | <=1s p95      |          |         |
+| Search (contacts.list search)        | <=500ms p95   |          |         |
+| Report generation (reports.revenue)  | <=5s p95      |          |         |
+| Editor first paint                   | <=2s p95      |          |         |
+| Editor keystroke -> preview          | <=100ms p95   |          |         |
+| Job queue latency                    | <=30s p95     |          |         |
+| Migration, medium dataset (chain)    | <=60s total   |          |         |
+| Cold boot to serving                 | <=20s p95     |          |         |
+
+================================================================================
+MEASUREMENT RECORD
+================================================================================
