@@ -190,3 +190,28 @@ RESULTS TABLE update:
 | Admin detail (one contact)           | <=1s p95      | 661ms raw                            | PASS |
 | Search (contacts.list search)        | <=500ms p95   | 499ms raw                            | PASS |
 | Report generation (reports.revenue)  | <=5s p95      | 544ms raw                            | PASS |
+
+--------------------------------------------------------------------------------
+ROW: COLD BOOT TO SERVING (on-droplet, docker compose exec timing)
+--------------------------------------------------------------------------------
+Method: `docker compose -f /opt/freeholder/compose.yml stop app`, then
+`t0; up -d app;` poll INSIDE the network with
+`docker compose exec -T app node -e "fetch(\"http://localhost:3000/api/health/live\")...`
+until HTTP 200. 3 boots (the minimum), nearest-rank p95.
+
+Raw output:
+  boot 1: 7.811448422s (stop->up->first HTTP 200 /api/health/live)
+  boot 2: 7.128142624s
+  boot 3: 6.613663477s
+samples-seconds: 7.811 7.128 6.614 -> sorted: 6.614 7.128 7.811
+p95 (n=3, nearest-rank) = 7.81s
+Serving proof after boot 3: /perf-home -> HTTP 200 from inside the network;
+/api/health (readiness) shortly after boot: {"ok":true,"modules":36,
+"services":1494,"listeners":37,"disabled":0,"jobs":{"registeredJobs":86,
+"mountedWorkers":86,"ready":true,"state":"degraded","reason":"ready"}}
+(state "degraded" reflects 5 pre-existing failed jobs / dead letters in the
+queue table, not boot failure; readiness ok:true, pages serve.)
+BUDGET <=20s p95 -> PASS (7.81s)
+
+RESULTS TABLE update:
+| Cold boot to serving                 | <=20s p95     | 7.81s p95                            | PASS |
