@@ -3,6 +3,12 @@
 
 # Provider recording erasure (C1.08 / C3.13)
 
+The implemented flow documented below is the in-tree Daily adapter's: the
+Daily adapter remains as optional non-first-party code, while the de-facto
+first-party provider is paradisemodern's Paradise Comms (owner decision
+2026-09-27), whose recording-delete API is not shipped yet (see the
+PM-path note at the end).
+
 A verified contact erasure commits cleanup jobs in the same database transaction
 that removes local Daily room and artifact rows. The privacy receipt lists the
 pending job IDs. The request stays **In progress**, with no completion timestamp,
@@ -69,3 +75,18 @@ the owner exported outside Freeholder are not independently erased or verified
 by these workers.
 Owner-storage import is implemented (see above); live provider acceptance
 remains open in C3.13.
+
+## Paradise Comms (first-party) path — pending PM recording-delete API
+
+The de-facto first-party voice/video provider is paradisemodern's Paradise
+Comms (owner decision 2026-09-27): prod `https://paradisemodern.com/v1`,
+per-site `x-api-key` or legacy portfolio bearer tokens. PM has **no recording
+list/get/delete or erasure API yet** — recordings land in DigitalOcean Spaces
+and the read/delete endpoints are PM-side work items. Provider-side erasure
+of PM recordings therefore lands with PM's recording-delete API; until then
+erasure covers local rows and the owner-storage copies, and the privacy
+receipt must name the un-erased provider recordings instead of claiming
+completion. Contact erasure still queues the local-row removal and the
+owner-storage copy deletion on the same receipt, so the local half of the
+obligation is met and the provider half is visibly pending. The Daily-based
+flow documented above remains implemented for the in-tree Daily adapter.

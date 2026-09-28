@@ -1040,13 +1040,18 @@ are strict enough to belong in the spine instead of a plugin.
 - **MMS media comes from `core/media`** — one library, one pipeline.
 
 **Voice and video are plugin territory** (§24), and deliberately so. Calls,
-video rooms and their recordings mean a vendor's SDK, a vendor's compliance
-posture and a vendor's pricing, none of which belong in a monolith that has to
-boot on a $6 droplet. What core owns is the seam: a plugin registering a voice
-or video adapter attaches its artifacts — a recording asset, a transcript, a
-duration, a missed-call event — to the same `Conversation` and the same
-timeline, so a call is part of a person's history without core learning what a
-SIP trunk is.
+video rooms and their recordings mean a provider's SDK, a provider's
+compliance posture and a provider's pricing, none of which belong in a
+monolith that has to boot on a $6 droplet. What core owns is the seam: a
+plugin registering a voice or video adapter attaches its artifacts — a
+recording asset, a transcript, a duration, a missed-call event — to the
+same `Conversation` and the same timeline, so a call is part of a person's
+history without core learning what a SIP trunk is. The de-facto provider
+behind that seam is paradisemodern's Paradise Comms — the owner's own
+platform (rooms, credentials and recordings per
+`/api/integration/capabilities`), so the compliance posture and pricing are
+the owner's; the Daily adapter remains in-tree as optional non-first-party
+code (owner decision 2026-09-27, §36).
 
 ### 4.15 Subscriptions, entitlements and paywalls
 
@@ -2466,6 +2471,13 @@ docs say so.
 
 Method: the most-installed plugins/apps on both ecosystems are a revealed-preference map of what every SMB eventually bolts on. The pattern across both stores in 2026 is consistent — SEO, page building, forms, security, performance, email/SMS flows, reviews with photos, loyalty/referrals, upsells, wishlists, subscriptions, support inboxes, and mobile apps dominate installs (per current ecosystem rankings: Yoast/Rank Math, Elementor, WPForms/CF7, Wordfence, WP Rocket/Smush, Klaviyo/Omnisend, Loox/Judge.me, ReferralCandy/Smile, Recharge, Gorgias, Tapcart/Shopney). Freeholder's plan for each, sorted by disposition:
 
+**Owner decision, 2026-09-27 (Tony Aly):** "freeholder should put shopify out
+of business." The native Freeholder store is the product this section's
+commerce lessons serve: Shopify's capability set is the benchmark to cover
+and then exceed, C3.24's capability mapping proves the coverage, and the
+Shopify importer is a migration bridge — import your Shopify history into
+the native store — not an ongoing dependency.
+
 **Absorb into core (table stakes the tool-mash proves):**
 - **Security hardening** (Wordfence's category): rate limiting, login protection, 2FA for staff, security headers, dependency audit in CI — shipped, not sold.
 - **Performance & image optimization** (WP Rocket/Smush): automatic responsive variants, AVIF/WebP, lazy loading, CDN-friendly caching headers — the media pipeline does this by default; Core Web Vitals tracked in first-party analytics.
@@ -2487,8 +2499,25 @@ Method: the most-installed plugins/apps on both ecosystems are a revealed-prefer
   obligations rather than features: a plugin that gets them wrong is the
   owner's legal exposure, and the only honest place for a rule nobody may skip
   is the service layer.
-- **Gift options & registries**; **print-on-demand adapter** (Printify-style) as a fulfillment plugin; **memberships/gated communities** beyond simple subscriptions. Community membership and moderation are bound to the authenticated user's contact, never a visitor-supplied email. Open feeds remain publicly readable; gated feed reads and reports require membership or the existing staff read grant. Member posts and moderation require sign-in. Provider fixtures may run only in tests; unconfigured live integrations must not fabricate success. (Local delivery and pickup scheduling also moved into core — §4.11.)
-- **Voice and video** (calls, video rooms, recordings, transcripts) through provider adapters. Core owns the conversation and the timeline; the vendor SDK, its compliance posture and its pricing stay behind a plugin boundary (§4.14).
+- **Gift options & registries**; **memberships/gated communities** beyond simple
+  subscriptions. Community membership and moderation are bound to the
+  authenticated user's contact, never a visitor-supplied email. Open feeds
+  remain publicly readable; gated feed reads and reports require membership
+  or the existing staff read grant. Member posts and moderation require
+  sign-in. Provider fixtures may run only in tests; unconfigured live
+  integrations must not fabricate success. (Local delivery and pickup
+  scheduling also moved into core — §4.11.) The print-on-demand adapter
+  (Printify-style) that used to sit in this list is **deferred to v2**
+  (§43.18, owner decision 2026-09-27); its adapter code remains in-tree as
+  working optional code.
+- **Voice and video** (calls, video rooms, recordings, transcripts) through
+  provider adapters — de-facto first-party via paradisemodern's Paradise
+  Comms (owner decision 2026-09-27): rooms, credentials and recordings per
+  `/api/integration/capabilities`; transcripts unavailable until PM ships
+  them; provider erasure lands with PM's recording-delete API. The Daily
+  adapter remains in-tree as optional non-first-party code. Core owns the
+  conversation and the timeline; a provider's SDK, its compliance posture
+  and its pricing stay behind a plugin boundary (§4.14).
 
 **Explicitly out (the anti-roadmap):** dropshipping marketplaces, third-party analytics pixels as core, page-builder lock-in formats, anything that makes the owner's data someone else's product. *(Narrowed 2026-08-02: ad **networks** were listed here outright. §4.16 now ships owner-sold and house ad inventory with first-party counting, and permits a third-party network tag as a consent-gated creative kind. The line that mattered was never "no advertising" — it was that the owner's audience must not be silently rented to an ad network by default, which the consent gate and the off-by-default flag preserve.)* The WordPress lesson cuts both ways — install-count proves demand, but half those plugins exist to patch an incoherent core. Freeholder absorbs the coherence and leaves the patchwork behind.
 
@@ -3418,12 +3447,12 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3.13 live adapter acceptance (owner-side pending), C11.16 spec reconciliation; C11.17 remains unsigned |
-| Completion rule | Every unchecked item in C0–C11, except the seven items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
+| Current focus | C3.13 live paradisemodern video acceptance (owner-side pending), C3.24 native storefront parity mapping; C11.16 spec reconciliation; C11.17 remains unsigned |
+| Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C3.13 live Printify/channel adapters (software remainder shipped; owner-side live acceptance pending). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements and browser vitals. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.13 live paradisemodern video acceptance (software remainder shipped against Daily; PM adapter re-target pending). C3.24 native storefront parity (new open work, owner decision 2026-09-27). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements and browser vitals. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -3438,7 +3467,9 @@ page-builder lock-in formats. Where the spec assigns something to a plugin,
 DONE requires the plugin and its integration seam, not that capability in
 core. By owner decision dated 2026-09-15, exactly seven mobile-app checklist
 items — C10.17, C10.18, C10.25, C10.26, C10.27, C10.28 and C10.30 — are
-deferred to v2 under §43.18; v1's DONE excludes those seven items and nothing
+deferred to v2 under §43.18; by owner decision dated 2026-09-27,
+print-on-demand is deferred to v2 under §43.18 alongside them. v1's DONE
+excludes those mobile items and the print-on-demand clause and nothing
 else.
 
 **What is not a completion criterion.** A public launch, marketing site,
@@ -4308,113 +4339,63 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   tests and examples for a block, service, adapter, automation verb and route.
   (`scaffoldPlugin` + `inspectPluginFolder`; `tests/fixtures/sample-plugin`.
   Coverage in `tests/core/plugin-scaffold.test.ts`. **F04** `/admin/imports` start/preview/commit. **F05** N/A — `packages/plugin-kit` scaffold/dev harness and `tests/fixtures/sample-plugin`, not an HTTP/MCP route. **F07** `tests/core/plugin-scaffold.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugin-scaffold.test.ts` is the composition proof.)
-- [ ] **C3.13** Ship first-party plugins for gift options/registries, print-on-
-  demand, advanced communities, voice and video artifacts, and marketplace
-  channel sync seams, as assigned by §§4.14 and 36.
-  (`plugins/gift-registry`, `print-on-demand`, `community`, `voice-video`,
-  `marketplace`. Admin screens plus `/gifts/<slug>` and `/community/<slug>`.
-  Fixture adapters with claim/apply around provider I/O; failed jobs/channels/
-  recordings retry in place. Gift contributions and marketplace orders land on
-  invoices through `contacts.resolve`. **F04** empty/error/retry on each admin
-  screen and the two public pages. **F05** plugin services use the same
-  service registry, HTTP dispatcher, generated SDK and MCP projection as core:
-  `community.getFeedBySlug`, `community.createPostBySlug`,
-  `community.moderatePostBySlug`, `printOnDemand.submit`,
-  `marketplace.sync` and `voiceVideo.startRoom`. They compose canonical
-  contact/invoicing services. The prior claim that plugins exposed no services
-  was contradicted by the generated SDK and is corrected by this audit.
+- [ ] **C3.13** Ship first-party plugins for gift options/registries,
+  advanced communities, and voice and video artifacts — voice/video via
+  paradisemodern's Paradise Comms as the de-facto provider (rooms,
+  credentials, provider-confirmed end, recordings; transcripts unavailable
+  until PM ships them; provider erasure lands with PM's recording-delete
+  API) — and marketplace channel sync seams, as assigned by §§4.14 and 36.
+  The marketplace plugin's Shopify import is a MIGRATION BRIDGE (import
+  your Shopify history into the native store), not an ongoing dependency;
+  the native store is the product (owner decision 2026-09-27, C3.24).
+  (`plugins/gift-registry`, `community`, `voice-video`, `marketplace`.
+  Admin screens plus `/gifts/<slug>` and `/community/<slug>`. Fixture
+  adapters with claim/apply around provider I/O; failed jobs/channels/
+  recordings retry in place. Gift contributions and marketplace orders land
+  on invoices through `contacts.resolve`. **F04** empty/error/retry on each
+  admin screen and the two public pages. **F05** plugin services use the
+  same service registry, HTTP dispatcher, generated SDK and MCP projection
+  as core: `community.getFeedBySlug`, `community.createPostBySlug`,
+  `community.moderatePostBySlug`, `marketplace.sync` and
+  `voiceVideo.startRoom`. They compose canonical contact/invoicing services.
   **F07** unique-slug/member conflicts, gated join refusal, provider `fail-`
   recovery. **F08** `tests/core/first-party-plugins.test.ts` and
   `tests/browser/first-party-plugins.spec.ts`. **F09** provider work runs in
-  durable jobs, so a failed channel sync, print job or recording retries in
-  place rather than being lost. **F12** gift → invoice and
-  marketplace order → invoice. Changeset `first-party-plugin-surfaces.md`;
+  durable jobs, so a failed channel sync or recording retries in place
+  rather than being lost. **F12** gift → invoice and marketplace order →
+  invoice. Changeset `first-party-plugin-surfaces.md`;
   `deploy/first-party-plugins.md`.
-  **Reopened 2026-09-12:** those seams exist; §36 product depth is now in
-  flight — community rooms/posts/moderation, voice/video rooms and
-  transcripts on the conversation spine, Printify-style POD fulfillment,
-  and marketplace channel sync that is not a hardcoded order. Do not treat
-  the fixture plugins as complete products.
-  Community: `0001_community_rooms.sql`. Voice/video: `0002_voice_video_rooms.sql`.
-  POD: `0003_print_on_demand_fulfillment.sql`. Marketplace: `0004_marketplace_channel_sync.sql`
-  pages staged provider orders onto invoices (`contacts.resolve` + invoicing).
-  Audit follow-up: POD, marketplace and voice/video fixtures are test-only;
-  deployed instances refuse unconfigured vendor operations instead of returning
-  fabricated success (`tests/core/plugin-provider-boundary.test.ts`). Gated
-  community feeds now use session-linked membership; posting and moderator
-  actions require authentication, and gated reports enforce the same read
-  boundary. A supplied member/moderator email grants no authority. Public
-  community pages use the existing customer sign-in and session actor.
-  Print and voice/video claims now lock existing jobs/rooms/artifacts and
-  reject competing pending claims; 17 integration/concurrency tests passed.
-  Marketplace sync uses expiring fenced leases, checks lease ownership before
-  every import/checkpoint, and resolves contact + invoice + channel order in
-  one transaction. Concurrent claims, expired-worker refusal, retry
-  idempotency and rollback are tested in `tests/core/marketplace-claims.test.ts`.
-  Provider acceptance no longer invents shipment evidence: the catalog fulfillment
-  remains pending and the order stays fulfilling until actual shipping evidence.
-  Printify implementation in progress: a real bounded HTTP client uses the
-  documented external-ID conflict response to recover the original vendor
-  order, verifies status ownership and reads actual shipment evidence.
-  `tests/core/printify-adapter.test.ts` passes seven mocked HTTP contract tests;
-  paid-order service integration, fenced retry recovery, configuration UI,
-  shipment refresh jobs and generated SDK are implemented. Database integration
-  tests prove acceptance stays pending and verified tracking ships the canonical
-  fulfillment. Live merchant acceptance and the other provider journeys remain.
-  Daily implementation: private expiring rooms, separate host/guest tokens,
-  provider-confirmed shutdown, recording downloads and real WebVTT refresh.
-  `0009_daily_voice_video.sql` adds vendor identity and fenced retry leases.
-  HTTP and database integration cover room/token/recording flows; missed calls
-  close the provider room before writing the timeline. Admin setup, invitations
-  and recording recovery are localized in en/fr/es. Changeset
-  `daily-private-rooms.md`. Live call/device acceptance
-  remains incomplete; no C3.13 completion is claimed by mocked
-  provider checks. Provider erasure implementation follows below.
-  Provider erasure follow-up: verified local erasure commits Daily cleanup
-  jobs before removing room/artifact rows. Workers verify the original domain,
-  close the room, erase recordings and transcripts, and confirm the inventory.
-  Failures remain pending with durable retry; the final worker completes the
-  privacy receipt. Recording retention holds preserve their parent room.
-  `provider-recording-erasure.md` records this bounded implementation; live
-  provider acceptance remains open and owner-storage import follows below. The provider and
-  privacy regression suites, transactional queue tests and eight live-database
-  SDK checks pass. Production-build Chromium verifies the pending request,
-  removal of unsafe fulfillment controls, platform-access filtering and axe in
-  both themes. Dead-letter recovery preserves the original receipt task ID;
-  active room leases delay cleanup. See `deploy/provider-recording-erasure.md`.
-  Owner-storage import follow-up: a verified capture now copies the recording
-  and its transcript into the owner's configured storage automatically, through
-  the same storage adapter convention as media (content-addressed keys,
-  content type, SHA-256 checksum). Retries converge on the same objects instead
-  of duplicating them; a failed copy stays visible on the recording and retries
-  in place from the admin screen or the scheduled job. `0012_owner_storage_refunds.sql`
-  tracks import state, storage keys and timestamps on the artifact row.
-  Contact erasure queues a second durable worker that deletes the imported
-  owner-storage copies and acknowledges the same privacy receipt; recording
-  retention holds protect them like the provider originals. Recordings above
-  512 MiB are not imported and report the failure on the row.
-  `tests/core/daily-import.test.ts` covers the automatic copy, retry
-  idempotency, provider-outage recovery, erasure of the owner copies and
-  retention protection; `tests/core/daily-adapter.test.ts` covers the bounded,
-  credential-free recording download. `voiceVideo.eraseImportedCopies` and the
-  updated runbook name what remains un-erased (provider telemetry, backups,
-  expired room metadata, copies exported outside Freeholder).
-  Shopify implementation in progress: an own-store client exchanges expiring
-  credentials, verifies shop identity on every page and imports paid orders as
-  reviewable draft invoices. `tests/core/shopify-adapter.test.ts` covers token
-  renewal, destination bounds, pagination, protected email refusal and currency
-  precision; `tests/core/shopify-sync.test.ts` proves invoice/contact idempotency
-  and fenced connection retries. Refund reconciliation follow-up: the same sync
-  now pages refunded and partially-refunded orders and records each provider
-  refund once, keyed by refund id. On an issued imported invoice the refund
-  becomes an issued credit note through the invoicing module, bounded by the
-  invoice total like any other credit note; multiple refunds produce separate
-  notes. A refund ahead of its order import or invoice issue stays listed as
-  pending and reconciles on a later sync. `tests/core/shopify-refunds.test.ts`
-  proves full, partial and repeated refunds, pending ordering, lease fencing
-  and re-sync idempotency; `marketplace_refunds` lands in
-  `0012_owner_storage_refunds.sql`. Live merchant acceptance and other provider
-  journeys remain open. Still [ ] while those requirements remain.)
+  **Pivot recorded 2026-09-27 (owner decision, Tony Aly):** paradisemodern's
+  Paradise Comms replaces Daily as the de-facto first-party voice/video
+  provider; print-on-demand moves to v2 (§43.18, quoting the pre-change
+  clause there); the Shopify import is migration-only. What shipped and
+  stands: community rooms/posts/moderation (`0001_community_rooms.sql`),
+  voice/video rooms (`0002_voice_video_rooms.sql`), marketplace channel
+  sync (`0004_marketplace_channel_sync.sql`) and the private-room voice/video
+  seam as private Daily rooms with verified recording access (#364) —
+  separate host/guest tokens, provider-confirmed shutdown, recording
+  downloads, real WebVTT refresh (`0009_daily_voice_video.sql`), durable
+  provider recording erasure (#370), the owner-storage recording import
+  (#394, `0012_owner_storage_refunds.sql` tracking import state) and the
+  marketplace Shopify own-store adapter with refund reconciliation
+  (`tests/core/shopify-refunds.test.ts`). The print-on-demand plugin shipped
+  the same way (`0003_print_on_demand_fulfillment.sql`,
+  `tests/core/printify-adapter.test.ts`); its requirement now lives in v2
+  (§43.18) while its adapter stays in-tree as working optional code. Gift
+  registries and community are unaffected by the pivot. What the pivot
+  changes: the #364 seam and #394 import were built against Daily and need
+  the PM adapter re-targeted — live acceptance is now live acceptance
+  against a real paradisemodern instance (prod
+  `https://paradisemodern.com/v1`, per-site `x-api-key` or legacy portfolio
+  bearer tokens; the prepaid-budget 402 gate applies to site-key callers).
+  Transcripts stay absent until PM ships them — a missing transcript is
+  absent, not a placeholder. PM has no recording list/get/delete or erasure
+  API yet (recordings land in DigitalOcean Spaces; read/delete endpoints
+  are PM-side work items), so provider-side erasure of PM recordings lands
+  with PM's recording-delete API; until then erasure covers local rows and
+  owner-storage copies, and the privacy receipt says so. The Daily adapter
+  remains in-tree as optional non-first-party code. Still [ ] while the
+  live paradisemodern acceptance above remains.)
 
 #### Packages, installation, export, and target parity
 
@@ -4515,6 +4496,18 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   with actionable progress, retry and audit for core and plugin sources.
   (`imports.start|preview|map|reviewConflicts|commit|reconcile|publish|rollback`;
   `/admin/imports`. Coverage in `tests/core/plugins-lifecycle.test.ts`. **F04** N/A — federated registry signature, not a screen. **F05** `imports.start`/`preview`/`map`/`reviewConflicts`/`commit`/`reconcile`/`publish`/`rollback`/`list` at `/api/v1/imports.*`, MCP `imports_*`. **F07** `tests/core/plugins-lifecycle.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/plugins-lifecycle.test.ts` is the composition proof.)
+- [ ] **C3.24** Prove the native Freeholder store covers Shopify-core
+  capability — products/variants, cart/checkout, orders, discounts/coupons,
+  customer accounts/portal, order notifications, analytics, SEO/marketing
+  surfaces — with a published capability mapping and the Shopify importer
+  positioned as migration-only; close every provable gap the mapping finds.
+  (Owner decision 2026-09-27, Tony Aly: "freeholder should put shopify out
+  of business" — the native store is the product and the Shopify importer
+  is a migration bridge, not an ongoing dependency (C3.13). Evidence
+  standard: the published capability-mapping doc under `deploy/` or `docs/`,
+  the gap-closing work it schedules, and the `deploy/f-criteria-matrix.md`
+  update naming both. New work: unchecked until the mapping and its
+  gap-closing land.)
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.
@@ -9653,6 +9646,29 @@ carries only a one-line marker per item.
 >   tests, native/root typechecks, the shared package build, lint after correcting
 >   a test-helper binding, and Android/iOS Hermes exports. PR #333 carries the
 >   implementation; the item remains open for the native-device evidence above.)*
+
+### Deferred to v2 — print-on-demand (owner decision 2026-09-27)
+
+**Owner decision, 2026-09-27 (Tony Aly):** "we'll get back to printify later."
+Print-on-demand is deferred to v2. The clause is quoted verbatim from
+C3.13's item text as previously written:
+
+> Ship first-party plugins for gift options/registries, print-on-demand,
+> advanced communities, voice and video artifacts, and marketplace channel
+> sync seams, as assigned by §§4.14 and 36.
+
+The obligation survives verbatim and moves to v2 with it, as does the §36
+first-party-plugin listing it was assigned from ("print-on-demand adapter
+(Printify-style)"). The Printify adapter code remains in the tree as
+working optional code; what leaves the v1 plan is the requirement, not the
+software.
+
+This is a dated, bounded, owner-approved scope decision, not a generic
+escape hatch. The §43.1 doctrine stands: version labels express dependency
+order, not an excuse to leave the product incomplete. Re-entry happens only
+by owner decision, never by silent deletion — the same discipline as the
+mobile deferral above. The live C3.13 text no longer carries the clause;
+the plan's references to print-on-demand as a v1 requirement resolve here.
 
 ### Client-readiness repair note — 2026-09-21
 

@@ -256,29 +256,50 @@ The ledger of accepted dependency advisories is currently empty.
 | Lower findings dispositioned | |
 | Follow-up tickets | |
 
-### Daily private calls (C3.13)
+### paradisemodern Comms surface (C3.13)
 
-**Code.** `plugins/voice-video/daily.ts`, `adapter.ts`, `service.ts`, and the
-admin voice/video actions. **Tests.** `daily-adapter.test.ts`,
+The de-facto first-party voice/video provider is paradisemodern's Paradise
+Comms (owner decision 2026-09-27): prod `https://paradisemodern.com/v1`,
+staging `https://comms-staging.paradisemodern.com/v1`; auth is a per-site
+`x-api-key` (carrying comms scopes) or a legacy portfolio bearer token.
+Capabilities `comms.calls/rooms/streams/conversations` are reported by
+`/api/integration/capabilities`.
+
+**Code.** The shipped in-tree adapter is still the Daily one —
+`plugins/voice-video/daily.ts`, `adapter.ts`, `service.ts`, and the
+admin voice/video actions — retained as optional non-first-party code and
+to be re-targeted at the PM adapter. **Tests.** `daily-adapter.test.ts`,
 `daily-flow.test.ts`, `plugin-claims.test.ts`, `internal-services.test.ts`, and
 the unconfigured-provider browser journey.
 
 Provider requests use a fixed HTTPS API origin, bounded bodies, timeouts and
-no redirects. Transcript downloads use public-DNS-pinned transport without
-the API credential. Room and recording identities must match the persisted
-provider account. Private rooms expire; separate room-bound host/guest tokens
-expire within 30 minutes. Token-bearing result fields use explicit `Token`
-names for central redaction and never enter room/artifact list rows. Guest
-links are generated for manual sharing, not sent automatically. Provider
-shutdown expires the room, ejects participants and verifies empty presence;
-local state alone is not accepted as that evidence. Expiring leases reject
-stale provider results, with provider I/O outside database transactions.
+no redirects. Room and recording identities must match the persisted
+provider account. On the shipped Daily path: transcript downloads use
+public-DNS-pinned transport without the API credential, private rooms
+expire with separate room-bound host/guest tokens expiring within 30
+minutes, provider shutdown expires the room, ejects participants and
+verifies empty presence (local state alone is not accepted as that
+evidence), and expiring leases reject stale provider results with provider
+I/O outside database transactions. On the PM path, credentials are TTL
+JWTs with TURN, room end persists terminal state and awaits LiveKit
+`DeleteRoom` (`media_ended`, with 503 `media_termination_pending`
+retryable), recordings land in DigitalOcean Spaces, and webhooks are
+HMAC-SHA256 signed (`Webhook-Signature: t=<ts>,v1=<hmac>`) and verified as
+LiveKit ingress. The prepaid-budget 402 gate applies to site-key callers.
+Token-bearing result fields use explicit `Token` names for central
+redaction and never enter room/artifact list rows. Guest links are
+generated for manual sharing, not sent automatically.
 
-**Residuals.** Review actual Daily token/recording behavior and access-link
-handling against a live domain. Recording bytes remain at Daily until durable
-erasure workers delete recordings/transcripts and confirm inventory; pending
-requests cannot claim completion. Expired provider room metadata remains.
-Review [provider erasure and recovery](../deploy/provider-recording-erasure.md),
-including original-domain verification and failed-job recovery. Owner-storage
-import and live provider erasure acceptance remain C3.13 requirements.
-This implementation and its mocked HTTP tests are not an independent review.
+**Residuals.** Review the actual PM surface once the adapter is re-targeted:
+credential TTL and TURN handling, room policy enforcement, the
+media-termination retry, and webhook signature verification against a live
+paradisemodern instance. PM has no recording list/get/delete or erasure API
+yet — recordings land in DigitalOcean Spaces and the read/delete endpoints
+are PM-side work items — so recording bytes cannot be provider-erased today
+and pending requests cannot claim completion; provider-side erasure lands
+with PM's recording-delete API. Transcripts are unavailable until PM ships
+them. Owner-storage import (#394, built against Daily) and the #364 seam
+need the PM adapter re-targeted; live paradisemodern acceptance remains
+C3.13 work. Review [provider erasure and recovery](../deploy/provider-recording-erasure.md),
+including the PM-path honesty note and failed-job recovery. This
+implementation and its mocked HTTP tests are not an independent review.
