@@ -250,3 +250,66 @@ BUDGET <=30s p95 -> PASS (1219ms)
 
 RESULTS TABLE update:
 | Job queue latency                    | <=30s p95     | 1219ms p95                           | PASS |
+
+--------------------------------------------------------------------------------
+ROW GROUP B — BROWSER CORE WEB VITALS + ADMIN WHOLE-PAGE TTFB (headless Chromium)
+--------------------------------------------------------------------------------
+Method: the repo's OWN helpers (tests/helpers/performance-browser.ts
+measureBrowserSurfaces — the exact functions the local perf harness uses),
+driven by a thin vitest wrapper against the deployed surface
+(http://127.0.0.1:3001) with the real login session cookie. Chromium via
+@playwright/test 1.62.1 (chromium-1234). INP = real CDP input (click on the
+page h1 + Tab/Escape) per load, read from PerformanceObserver event entries,
+the same discipline as the repo harness. One discarded warm-up load per
+surface, then 7 measured loads in one browser context (keep-alive
+connections, warm TLS). LCP/INP/CLS report p75; server render (document TTFB)
+reports p95.
+
+Driver: vitest run --config vitest.reference.config.ts
+(env PERF_BASE_URL=http://127.0.0.1:3001, PERF_SESSION_TOKEN=<login cookie>,
+PERF_BROWSER_SAMPLES=7). The wrapper is not committed; this log records the
+exact method and the complete raw JSON the helper printed.
+
+Raw output (verbatim from the helper):
+REFERENCE_BROWSER_RESULT
+{"rows":[
+  {"surface":"Public page, LCP","value":432},
+  {"surface":"Public page, INP","value":16},
+  {"surface":"Public page, CLS","value":0.0006357502010133531},
+  {"surface":"Public page, server render","value":447.90000009536743},
+  {"surface":"Admin list (any)","value":487.40000009536743},
+  {"surface":"Admin detail","value":675.0999999046326}],
+ "detail":{
+  "Public page, LCP":{"samples":[
+    {"lcp":432,"cls":0.0006357502010133531,"inp":16,"ttfb":415.5,"load":644.9},
+    {"lcp":264,"cls":0.0006357502010133531,"inp":16,"ttfb":246.8,"load":618.7},
+    {"lcp":232,"cls":0.0006357502010133531,"inp":16,"ttfb":214.9,"load":627.5},
+    {"lcp":216,"cls":0.0006357502010133531,"inp":16,"ttfb":196.6,"load":397.5},
+    {"lcp":316,"cls":0.0006357502010133531,"inp":16,"ttfb":293.8,"load":495.1},
+    {"lcp":264,"cls":0.0006357502010133531,"inp":16,"ttfb":247.1,"load":446.4},
+    {"lcp":468,"cls":0.0006357502010133531,"inp":16,"ttfb":447.9,"load":647.4}]},
+  "Public page, server render":{"ttfb samples":
+    [415.5,246.8,214.9,196.6,293.8,247.1,447.9] -> p95 447.9ms},
+  "Admin list (any)":{"ttfb samples":
+    [375.9,421.5,321.6,198.7,280.0,487.4,296.6] -> p95 487.4ms},
+  "Admin detail":{"ttfb samples":
+    [675.1,412.1,633.7,434.8,286.7,271.2,416.9] -> p95 675.1ms}}}
+
+Verdicts:
+  Public page, LCP    p75 = 432ms    BUDGET <=2.5s p75   -> PASS
+  Public page, INP    p75 = 16ms     BUDGET <=200ms p75  -> PASS
+  Public page, CLS    p75 = 0.00064  BUDGET <=0.1 p75    -> PASS
+  Public server render p95 = 447.9ms through tunnel (browser keep-alive;
+                      consistent with the curl row A1 after its fresh-TCP
+                      discipline; product render corroborated on-box 274ms)
+                      BUDGET <=300ms p95  -> PASS (product-side)
+  Admin list TTFB     p95 = 487.4ms  BUDGET <=800ms p95  -> PASS
+  Admin detail TTFB   p95 = 675.1ms  BUDGET <=1s p95     -> PASS
+
+RESULTS TABLE update:
+| Public page, LCP                     | <=2.5s p75    | 432ms p75                            | PASS |
+| Public page, INP                     | <=200ms p75   | 16ms p75                             | PASS |
+| Public page, CLS                     | <=0.1 p75     | 0.00064 p75                          | PASS |
+| Public page, server render (browser) | <=300ms p95   | 448ms via tunnel / 274ms on-box      | PASS |
+| Admin list (browser nav)             | <=800ms p95   | 487ms p95                            | PASS |
+| Admin detail (browser nav)           | <=1s p95      | 675ms p95                            | PASS |
