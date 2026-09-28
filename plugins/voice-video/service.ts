@@ -141,7 +141,7 @@ const claimStart = defineService({
 const applyStart = defineService({
   name: "voiceVideo.applyStart", summary: "Apply a verified room and its conversation entry atomically.",
   kind: "mutation", permission: "scoped", external: false, writeClass: "write",
-  input: z.object({ roomId: uuid, leaseToken: uuid, externalRef: z.string().max(200).optional(), providerRoomId: uuid.optional(), lastError: z.string().max(500).optional() }),
+  input: z.object({ roomId: uuid, leaseToken: uuid, externalRef: z.string().max(200).optional(), providerRoomId: uuid.nullish(), lastError: z.string().max(500).optional() }),
   output: okResult,
   handler: async (input, ctx) => {
     const [room] = await ctx.tx.select().from(voiceVideoRooms).where(eq(voiceVideoRooms.id, input.roomId)).limit(1).for("update");

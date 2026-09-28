@@ -118,7 +118,7 @@ export function createParadiseClient(
   download: typeof getPinnedBytes = getPinnedBytes,
 ) {
   const baseUrl = configuration.baseUrl.trim().replace(/\/+$/, "");
-  if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(baseUrl)) {
+  if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/[a-z0-9\-._~%]*)*$/i.test(baseUrl)) {
     throw new ParadiseError("Configure a valid https Paradise Comms base URL before opening rooms.");
   }
   const credential = configuration.authScheme === "site_key" ? configuration.apiKey : configuration.portfolioToken;
