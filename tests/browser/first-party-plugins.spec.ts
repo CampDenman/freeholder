@@ -104,16 +104,16 @@ test.describe("first-party plugin journeys", () => {
     await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
   });
 
-  test("Daily setup refuses unconfigured rooms without reporting a live call", async ({ page, context }) => {
+  test("Provider setup refuses unconfigured rooms without reporting a live call", async ({ page, context }) => {
     await context.addCookies([{ name: SESSION_COOKIE, value: token, url: BASE_URL }]);
     await page.goto("/admin/voice-video");
-    await expect(page.getByRole("heading", { name: "Daily setup" })).toBeVisible();
-    await expect(page.getByText(/Set DAILY_API_KEY and DAILY_DOMAIN/)).toBeVisible();
-    await expect(page.locator("#vv-provider")).toHaveValue("daily");
+    await expect(page.getByRole("heading", { name: "Provider setup" })).toBeVisible();
+    await expect(page.getByText(/Paradise Comms is the first-party provider/)).toBeVisible();
+    await expect(page.locator("#vv-start-provider")).toHaveValue("paradise");
     await page.locator("#vv-contact").selectOption(CONTACT_ID);
     await page.locator("#vv-title").fill("Browser consultation");
     await page.locator("form").filter({ has: page.locator("#vv-title") }).getByRole("button").click();
-    await expect(page.getByText(/No live voice\/video provider is configured/)).toBeVisible();
+    await expect(page.getByText(/Configure a Paradise Comms site API key/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open as host" })).toHaveCount(0);
   });
