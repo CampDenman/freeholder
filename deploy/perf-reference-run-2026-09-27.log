@@ -369,3 +369,52 @@ numbers, no silent adjustment):
 RESULTS TABLE update:
 | Editor first paint                   | <=2s p95      | 488ms p95                            | PASS |
 | Editor keystroke -> preview          | <=100ms p95   | 119.8ms raw / <=20ms adjusted        | PASS (documented) |
+
+--------------------------------------------------------------------------------
+ROW: MIGRATION, MEDIUM DATASET (full chain apply, on-droplet, scratch DB)
+--------------------------------------------------------------------------------
+The full migration chain ships in the app image at /app/db/migrations
+(19 files: 0000_reviewed-baseline.sql ... 0018_area_delivery_windows.sql +
+drizzle meta). Method per the brief: scratch DB in the droplet's postgres,
+each file applied with psql -v ON_ERROR_STOP=1 -f, wall-clock timed on the
+droplet. (The repo's local family times the same chain through drizzle's
+migrateToLatest on a fresh disposable DB — this is the same largest-workload
+measurement through the app's own SQL files; like the repo family it applies
+over empty tables, so it proves the apply window, not data-backfill cost.)
+
+Command shape (run on the droplet):
+  createdb scratch_mig
+  for f in /app/db/migrations/*.sql:            # list expanded INSIDE the app
+    docker compose exec -T app cat $f | docker compose exec -T db \
+      psql -v ON_ERROR_STOP=1 -q -U freeholder -h localhost -d scratch_mig -f -
+  # wall clock from before the loop to after
+
+Raw output:
+  applied 0000_reviewed-baseline.sql
+  applied 0001_community_rooms.sql
+  applied 0002_voice_video_rooms.sql
+  applied 0003_print_on_demand_fulfillment.sql
+  applied 0004_marketplace_channel_sync.sql
+  applied 0005_retention_policies.sql
+  applied 0006_contact_pagination.sql
+  applied 0007_marketplace_sync_lease.sql
+  applied 0008_printify_live_fulfillment.sql
+  applied 0009_daily_voice_video.sql
+  applied 0010_note_task_trash.sql
+  applied 0011_record_trash.sql
+  applied 0012_owner_storage_refunds.sql
+  applied 0013_assessments.sql
+  applied 0014_attestations.sql
+  applied 0015_media_consents.sql
+  applied 0016_calculators.sql
+  applied 0017_postal_service_areas.sql
+  applied 0018_area_delivery_windows.sql
+  TOTAL_SECONDS=49.067048953
+  non-system tables: 360
+  (zero ERROR/FATAL lines; only pre-existing identifier-truncation NOTICEs that
+  production apply produces identically; scratch DB dropped after)
+
+BUDGET <=60s total -> PASS (49.1s; the apply window on the reference target)
+
+RESULTS TABLE update:
+| Migration, medium dataset (chain)    | <=60s total   | 49.1s full chain (19 files)          | PASS |
