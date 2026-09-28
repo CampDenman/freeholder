@@ -1328,7 +1328,7 @@ v2.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — `tests/core/plugin-scaffold.test.ts` is the composition proof.
 
-## C3.13 — Ship first-party plugins for gift options/registries, print-on-
+## C3.13 — Ship first-party plugins for gift options/registries, advanced communities, and voice and video artifacts
 
 - **F01** — `plugins/community/schema.ts`, `plugins/gift-registry/schema.ts`, `plugins/marketplace/schema.ts`, `plugins/print-on-demand/schema.ts`, `plugins/voice-video/schema.ts` — plugin tables fold through `db/migrations/0000_reviewed-baseline.sql` and the on-disk post-collapse migrations 0001–0004.
 - **F02** — `tests/core/plugin-contract.test.ts` + the per-plugin suites (`tests/core/community-rooms.test.ts`, `tests/core/printify-fulfillment.test.ts`, `tests/core/marketplace-claims.test.ts`, `tests/core/daily-flow.test.ts`, `tests/core/product-gift-share.test.ts`).
@@ -1336,12 +1336,12 @@ v2.
 - **F04** — `tests/browser/first-party-plugins.spec.ts` — admin screens plus `/gifts/<slug>` and `/community/<slug>` in the real browser.
 - **F05** — the §43 annotation names the surfaced services (`community.getFeedBySlug`, `printOnDemand.submit`, `marketplace.sync`, `voiceVideo.*`); derivation equivalence is `tests/core/api.test.ts`.
 - **F06** — Host catalog gates `tests/core/i18n-gate.test.ts` + `tests/core/locale-quality.test.ts`; no per-item scan claimed.
-- **F07** — `tests/core/plugin-provider-boundary.test.ts` — fixture adapters refuse outside `NODE_ENV=test` (the audit repair); the Printify live adapter shipped with `tests/core/printify-fulfillment.test.ts`, owner-side live acceptance pending.
+- **F07** — `tests/core/plugin-provider-boundary.test.ts` — fixture adapters refuse outside `NODE_ENV=test` (the audit repair); the Printify live adapter shipped with `tests/core/printify-fulfillment.test.ts`, now in-tree optional code with print-on-demand deferred to v2 (MASTER.md §43.18, owner decision 2026-09-27).
 - **F08** — the per-plugin suites + `tests/core/plugins-lifecycle.test.ts` + `tests/core/plugin-provider-boundary.test.ts`.
 - **F09** — retry-in-place evidence in the per-plugin suites; retention/erasure ride the host seams (C11.14, `tests/core/record-participation.test.ts`).
 - **F10** — N/A — plugins ride the host demo; no plugin-specific seed claimed.
 - **F11** — `deploy/spec-reconciliation.md` + the §43 annotation this row transcribes.
-- **F12** — Open — `tests/browser/first-party-plugins.spec.ts` passes for every plugin; the box stays open for owner-side live acceptance of the Printify/channel adapters.
+- **F12** — Open — `tests/browser/first-party-plugins.spec.ts` passes for every plugin; the box stays open for live paradisemodern video acceptance (the #364 seam and #394 import shipped against Daily and need the PM adapter re-targeted).
 
 ## C3.14 — Implement `create-freeholder` with explicit environment checks
 
@@ -1492,6 +1492,21 @@ v2.
 - **F10** — N/A — no owner/staff/customer UI in this item — no setup or help surface of its own.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping).
 - **F12** — `tests/core/plugins-lifecycle.test.ts` is the composition proof.
+
+## C3.24 — Prove the native Freeholder store covers Shopify-core capability
+
+- **F01** — N/A — no schema yet — the first deliverable is the published capability mapping; tables belong to the gap-closing work it schedules.
+- **F02** — N/A — no new service in the mapping deliverable — gap-closing services will name their typed coverage when they land.
+- **F03** — N/A — the mapping touches no contact, money or audit surface — nothing to wire into the spine.
+- **F04** — N/A — the deliverable is a published mapping document — the native store's existing admin and customer surfaces become the human-surface evidence when gaps close.
+- **F05** — N/A — no agent surface is part of the mapping — HTTP/MCP evidence arrives with the gap-closing work.
+- **F06** — N/A — the mapping changes no shipped strings — locale gates keep covering whatever surfaces gap-closing touches.
+- **F07** — N/A — the mapping adds no executable path — safety evidence belongs to each gap-closing change.
+- **F08** — N/A — nothing executable is claimed yet — closing gaps adds tests under `tests/` and names them here.
+- **F09** — N/A — no new jobs or storage — the mapping is a document plus the gap-closing work it schedules.
+- **F10** — N/A — the mapping is not a setup or help surface.
+- **F11** — N/A — no doc ships with an unchecked item — the mapping lands under `deploy/` or `docs/` when the item closes, and this row updates then.
+- **F12** — N/A — no composed journey is claimed — the mapping's gap list is the composition contract gap-closing work must satisfy.
 
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 

@@ -1,14 +1,20 @@
 # First-party plugins
 
-Gift registries, print-on-demand, community spaces, voice/video and marketplace
-channel sync are first-party plugins (MASTER.md §36, C3.13). They install with
+Gift registries, community spaces, voice/video and marketplace channel
+sync are first-party plugins (MASTER.md §36, C3.13). They install with
 the instance; disable one from Admin → Plugins if the business does not use it.
 
-**These are not complete products.** Community, voice/video, print-on-demand
-and marketplace channel sync have landed as first-party plugins. Printify and
-Shopify and Daily have real HTTP adapters.
-Gift registries raise ordinary invoices. Missing live providers fail explicitly; no print
-submission, channel connection or call is reported as successful. Live acceptance and remaining product depth stay open under C3.13.
+**These are not complete products.** Community, voice/video and marketplace
+channel sync have landed as first-party plugins. Shopify and Daily have real
+HTTP adapters; the Daily adapter remains in-tree as optional non-first-party
+code — the de-facto first-party voice/video provider is paradisemodern's
+Paradise Comms (owner decision 2026-09-27). Print-on-demand's Printify
+adapter likewise remains in-tree as working optional code, but the
+print-on-demand product is **deferred to v2** (MASTER.md §43.18, owner
+decision 2026-09-27).
+Gift registries raise ordinary invoices. Missing live providers fail explicitly; no
+channel connection or call is reported as successful. Live acceptance and
+remaining product depth stay open under C3.13.
 
 ## Gift registries
 
@@ -19,6 +25,11 @@ The public page `/gifts/<slug>` lets a visitor contribute; that path calls
 Retry an item that failed to invoice from the same screen.
 
 ## Print on demand
+
+> **Deferred to v2** (MASTER.md §43.18, owner decision 2026-09-27: "we'll get
+> back to printify later"). Print-on-demand leaves the v1 plan; the adapter
+> documented below remains in-tree as working optional code, and re-entry
+> into the plan happens only by owner decision.
 
 Admin → Print on demand maps a catalog SKU to a Printify product and numeric
 variant ID. Set `PRINTIFY_API_TOKEN` and `PRINTIFY_SHOP_ID` in the deployment
@@ -65,31 +76,35 @@ land on the session-linked contact timeline.
 
 ## Voice and video
 
-Set `DAILY_API_KEY` and `DAILY_DOMAIN` (for example `your-business.daily.co`)
-in the deployment environment and restart Freeholder. Admin → Voice and video
-opens a private room attached to the canonical contact. The API key's domain
-is checked before each provider operation. Rooms expire after 24 hours, allow
-up to 20 participants, and start with microphones and cameras off.
+The de-facto first-party provider is paradisemodern's Paradise Comms
+(owner decision 2026-09-27): prod `https://paradisemodern.com/v1`, staging
+`https://comms-staging.paradisemodern.com/v1`; auth is a per-site
+`x-api-key` (carrying comms scopes) or a legacy portfolio bearer token;
+capabilities `comms.calls/rooms/streams/conversations` per
+`/api/integration/capabilities`. Admin → Voice and video opens a private
+room attached to the canonical contact. Rooms are created with policy
+(open/moderated/invite_only), participant and publisher caps and recording
+options plus retention; credentials are TTL JWTs with TURN.
 
 **Open as host** issues an owner token for that room. **Create guest link**
 returns a non-owner invitation to copy and share with the contact; Freeholder
-does not send it. Links expire within 30 minutes and never outlive the room.
-Treat these links as private credentials. **Record attendance** is a manual
-attendance entry, not evidence that the invited person joined.
+does not send it. Treat these links as private credentials. **Record
+attendance** is a manual attendance entry, not evidence that the invited
+person joined.
 
-The host starts recording and transcription in Daily's call controls.
-**Stop** expires the room, ejects its participants and checks that none remain.
-**Missed call** performs that shutdown before writing the timeline event.
-An unavailable or missing provider room stays failed for reconciliation;
-Freeholder does not claim that deleting a room proves its call ended.
+**Stop** asks Paradise Comms to end the room: PM persists the terminal
+state, then awaits LiveKit `DeleteRoom` and returns `media_ended`; a 503
+`media_termination_pending` is retryable. Freeholder does not claim that
+deleting a room proves its call ended. **Missed call** performs that
+shutdown before writing the timeline event. Recording start/stop rides the
+room's recording options; recordings land in DigitalOcean Spaces.
 
-**Check recording** retrieves a verified finished recording and any available
-WebVTT transcript. A recording still processing can be retried. **Refresh
-transcript** checks for later transcript text without duplicating the contact
-conversation or transcript artifact. Missing transcripts remain absent.
-**Download recording** obtains a fresh expiring provider link.
+Transcripts are unavailable until PM ships them; a missing transcript stays
+absent, never a placeholder. Paradise Comms webhooks are HMAC-SHA256 signed
+(`Webhook-Signature: t=<ts>,v1=<hmac>`) and verified as LiveKit ingress.
+The prepaid-budget 402 gate applies to site-key callers.
 
-A verified recording is then copied automatically into the owner's configured
+A verified recording is copied automatically into the owner's configured
 storage (the same S3-compatible adapter as media). The copy uses content-
 addressed keys and a SHA-256 checksum, so retries never duplicate objects; a
 failed copy stays visible on the recording with **Copy to storage** to retry
@@ -99,20 +114,25 @@ state per recording. Contact erasure deletes imported owner-storage copies
 through the same durable job receipt as provider copies; retention holds keep
 them exactly like the provider originals.
 
-Room creation uses a stable room name and recovers a lost creation response by
-reading that same private room. Ten-minute leases fence room, recording and
-import workers; stale results cannot overwrite recovered work. Scheduled
-retries run twice hourly for recent failures and expired leases. Contact
-merge repoints room, attendance and artifact contact references.
+**Honesty notes for the PM path.** Paradise Comms has no recording
+list/get/delete or erasure API yet — recordings land in DigitalOcean Spaces
+and the read/delete endpoints are PM-side work items — so provider-side
+erasure of PM recordings lands with PM's recording-delete API; until then a
+privacy receipt must name what it did not erase. See [provider erasure and
+recovery](provider-recording-erasure.md). The shipped seam and owner-storage
+import (PRs #364 and #394) were built against Daily and need the PM adapter
+re-targeted; live paradisemodern acceptance remains open C3.13 work.
 
-Contact erasure queues durable Daily recording/transcript deletion before
-removing local rows, and a second job deletes the imported owner-storage
-copies; the privacy request remains in progress until every cleanup job
-acknowledges. See [provider erasure and recovery](provider-recording-erasure.md).
-Live provider erasure acceptance remains unfinished C3.13 work. HTTP and
-database tests do not establish a live call or device compatibility.
-See [Daily room configuration](https://docs.daily.co/reference/rest-api/rooms/create-room)
-and [meeting tokens](https://docs.daily.co/reference/rest-api/meeting-tokens/create-meeting-token).
+The Daily adapter remains in-tree as optional non-first-party code: set
+`DAILY_API_KEY` and `DAILY_DOMAIN` (for example `your-business.daily.co`)
+in the deployment environment to use it. It provides private expiring rooms,
+separate host/guest tokens expiring within 30 minutes, recording and
+transcript handling, and durable erasure as documented in
+[provider erasure and recovery](provider-recording-erasure.md); its Daily
+references ([room configuration](https://docs.daily.co/reference/rest-api/rooms/create-room),
+[meeting tokens](https://docs.daily.co/reference/rest-api/meeting-tokens/create-meeting-token))
+remain the authority for that optional path. HTTP and database tests do not
+establish a live call or device compatibility on either provider.
 
 ## Marketplace channels
 
@@ -120,7 +140,10 @@ Admin → Marketplace channels connects the configured Shopify store and keeps
 failed handshakes available for retry. Etsy, Amazon and eBay remain unimplemented
 provider seams. The production adapter imports verified paid Shopify orders
 through the canonical contact and draft invoice services, as described below.
-Only tests use staged in-memory orders.
+Only tests use staged in-memory orders. The Shopify connection is a
+**migration bridge** — import your Shopify history into the native
+Freeholder store, which is the product (owner decision 2026-09-27, C3.24) —
+not an ongoing dependency.
 
 ### Sync ownership and retries (C3.13)
 
@@ -133,6 +156,9 @@ Print and call adapters recover documented idempotent operations, but HTTP
 fixtures do not prove live merchant or call-provider acceptance.
 
 ### Shopify own-store setup (C3.13)
+
+This connection exists to migrate your Shopify history into the native
+store; it is not an ongoing dependency (owner decision 2026-09-27, C3.24).
 
 Create and install an app for a store in your Shopify organization using the
 [client credentials grant guide](https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant).
