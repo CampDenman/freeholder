@@ -418,3 +418,15 @@ BUDGET <=60s total -> PASS (49.1s; the apply window on the reference target)
 
 RESULTS TABLE update:
 | Migration, medium dataset (chain)    | <=60s total   | 49.1s full chain (19 files)          | PASS |
+
+--------------------------------------------------------------------------------
+DISPOSITION (added after CI found the ordering gate)
+--------------------------------------------------------------------------------
+Every measured budget above passes. The C11.11 checklist box nonetheless stays
+UNCHECKED in MASTER.md: tests/core/spec-reconciliation.test.ts (the C11.16
+gate) names C11.11 among the items that must remain unchecked while that gate
+is open. Weakening that gate to flip the box was refused. The check itself is
+the C11.16 workstream's future edit, made with its reconciliation-table
+update; this log stands as the acceptance evidence for that moment.
+plan:check on the landed base reads 279 checked / 19 open (unchanged by this
+evidence PR).

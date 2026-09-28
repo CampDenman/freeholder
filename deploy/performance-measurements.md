@@ -160,12 +160,21 @@ run passes. Large fixtures check bounded pagination, and cannot silently pass
 requested missing auxiliary measurements. C11.11 remains open until the
 reference-target acceptance is complete.
 
-## §15.1 reference-target acceptance — 2026-09-27 run (C11.11 closed)
+## §15.1 reference-target acceptance — 2026-09-27 run (all budgets pass; box
+open per the C11.16 gate)
 
 The acceptance run was executed on 2026-09-27/28 against the provisioned §15.1
 target. The complete archived evidence — every command, raw sample, computed
 percentile and pass/fail — is `deploy/perf-reference-run-2026-09-27.log`; this
 section is its summary.
+
+**Verdict.** All thirteen §15.1 budgets pass on the reference target. The
+checklist box itself stays unchecked: the C11.16 spec-reconciliation gate
+(`tests/core/spec-reconciliation.test.ts`) names C11.11 among the items that
+must remain unchecked while that gate is open, and this run refuses to weaken
+a gate to flip it. Checking C11.11 is the C11.16 workstream's own future flip,
+made with its reconciliation-table update — the evidence below stands ready
+for that moment.
 
 **Target host.** DigitalOcean droplet `freeholder-ref` (ID 604232042), nyc3,
 `s-1vcpu-1gb` (1 vCPU / 1 GB, the $6 §15.1 target), ubuntu-24-04, deployed via

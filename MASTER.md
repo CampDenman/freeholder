@@ -3452,7 +3452,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C3.13 live paradisemodern video acceptance (software remainder shipped against Daily; PM adapter re-target pending). C3.24 native storefront parity (new open work, owner decision 2026-09-27). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C11.11 closed 2026-09-27 by the §15.1 reference-target acceptance run (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`). C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.13 live paradisemodern video acceptance (software remainder shipped against Daily; PM adapter re-target pending). C3.24 native storefront parity (new open work, owner decision 2026-09-27). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements — the 2026-09-27 acceptance run passed all thirteen §15.1 budgets on the target with complete evidence (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), and the box stays open only because the C11.16 spec-reconciliation gate orders C11.11 unchecked until that gate flips it. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -9022,7 +9022,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   Two regressions reproduced private-body disclosure before repair; all 51
   note/search/privacy checks pass afterwards. Changeset `private-note-access.md`.
   This repair is not independent review evidence.
-- [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
+- [ ] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
   *(Audit follow-up: `scripts/performance-budgets.mjs` now requires an
@@ -9084,7 +9084,15 @@ schema they inherit reads as a designed thing rather than an excavation.
   keypress pacing plus one poll tick, identical to the local 99–104ms band;
   both numbers stated, nothing silently adjusted), queue 1,219ms p95 (7/7
   completed), migration chain 49.1s (19 files, 360 tables), cold boot 7.81s
-  p95 (3 boots). **F04** human surface — real headless-Chromium evidence over
+  p95 (3 boots). **This box stays open, with the evidence landed, because the
+  C11.16 spec-reconciliation gate orders it so:**
+  `tests/core/spec-reconciliation.test.ts` names C11.11 among the items that
+  must remain unchecked while that gate is open, and flipping it would mean
+  weakening a gate — which this run refuses to do. Checking C11.11 is the
+  C11.16 workstream's own flip to make alongside its reconciliation-table
+  update (the same way C11.14's check arrived with that test's re-aiming).
+  Until then the measured budgets above stand as the acceptance evidence.
+  **F04** human surface — real headless-Chromium evidence over
   the deployed surface, archived in the log's ROW GROUPS B–C; **F05** agent
   surface — measured through the real HTTP API and login session the services
   expose (`/api/v1/contacts.list`, `/api/v1/reports.revenue`); **F07** safety —
