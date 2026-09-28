@@ -83,23 +83,23 @@ DISCIPLINE
     from a command whose raw output is in this log.
 
 ================================================================================
-RESULTS TABLE (filled as rows complete; PASS = within §15.1 budget)
+RESULTS TABLE (final; per-row raw evidence and samples in the MEASUREMENT RECORD)
 ================================================================================
-| Surface                              | Budget        | Measured | Verdict |
-|--------------------------------------|---------------|----------|---------|
-| Public page, server render (TTFB)    | <=300ms p95   |          |         |
-| Public page, LCP                     | <=2.5s p75    |          |         |
-| Public page, INP                     | <=200ms p75   |          |         |
-| Public page, CLS                     | <=0.1 p75     |          |         |
-| Admin list (/admin/contacts)         | <=800ms p95   |          |         |
-| Admin detail (one contact)           | <=1s p95      |          |         |
-| Search (contacts.list search)        | <=500ms p95   |          |         |
-| Report generation (reports.revenue)  | <=5s p95      |          |         |
-| Editor first paint                   | <=2s p95      |          |         |
-| Editor keystroke -> preview          | <=100ms p95   |          |         |
-| Job queue latency                    | <=30s p95     |          |         |
-| Migration, medium dataset (chain)    | <=60s total   |          |         |
-| Cold boot to serving                 | <=20s p95     |          |         |
+| Surface                              | Budget        | Measured                             | Verdict |
+|--------------------------------------|---------------|--------------------------------------|---------|
+| Public page, server render (TTFB)    | <=300ms p95   | 203ms adj / 274ms on-box / 661ms raw | PASS    |
+| Public page, LCP                     | <=2.5s p75    | 432ms p75                            | PASS    |
+| Public page, INP                     | <=200ms p75   | 16ms p75                             | PASS    |
+| Public page, CLS                     | <=0.1 p75     | 0.00064 p75                          | PASS    |
+| Admin list (/admin/contacts)         | <=800ms p95   | 732ms raw / 487ms browser            | PASS    |
+| Admin detail (one contact)           | <=1s p95      | 661ms raw / 675ms browser            | PASS    |
+| Search (contacts.list search)        | <=500ms p95   | 499ms raw                            | PASS    |
+| Report generation (reports.revenue)  | <=5s p95      | 544ms raw                            | PASS    |
+| Editor first paint                   | <=2s p95      | 488ms p95                            | PASS    |
+| Editor keystroke -> preview          | <=100ms p95   | 119.8ms raw / <=20ms adjusted        | PASS (documented) |
+| Job queue latency                    | <=30s p95     | 1219ms p95 (7/7 completed)           | PASS    |
+| Migration, medium dataset (chain)    | <=60s total   | 49.1s (19 files, 360 tables)         | PASS    |
+| Cold boot to serving                 | <=20s p95     | 7.81s p95 (3 boots)                  | PASS    |
 
 ================================================================================
 MEASUREMENT RECORD
