@@ -46,7 +46,7 @@ describe.runIf(hasDatabase)("Daily room integration", { timeout: 30_000 }, () =>
    throw new Error(`Unexpected Daily path: ${path}`);
   });
   const download = vi.fn<typeof getPinnedBytes>().mockResolvedValue({ status: 200, contentType: "text/vtt", bytes: new TextEncoder().encode("WEBVTT\n\n00:00.000 --> 00:01.000\nReal transcript\n") });
-  vi.spyOn(adapter, "voiceVideoProvider").mockReturnValue(adapter.createDailyVoiceVideoProvider({ apiKey: "private", domain: "freeholder-test.daily.co" }, fetcher, download));
+  vi.spyOn(adapter, "voiceVideoProvider").mockResolvedValue(adapter.createDailyVoiceVideoProvider({ apiKey: "private", domain: "freeholder-test.daily.co" }, fetcher, download));
   return { fetcher, readyTranscript: () => { transcriptReady = true; } };
  }
  async function input() {

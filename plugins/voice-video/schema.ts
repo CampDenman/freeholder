@@ -52,6 +52,23 @@ export const voiceVideoJoins = pgTable(
   ],
 );
 
+export const voiceVideoWebhookDeliveries = pgTable(
+  "voice_video_webhook_deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** PM envelope id (evt_…): one row per event, redeliveries de-dupe on it. */
+    eventId: text("event_id").notNull(),
+    /** PM delivery attempt id, kept for cross-relay tracing. */
+    deliveryId: text("delivery_id").notNull(),
+    eventType: text("event_type").notNull(),
+    resourceId: text("resource_id").notNull(),
+    /** What applying the event did: room-ended | recording-dropped | ignored | received. */
+    action: text("action").notNull(),
+    receivedAt: createdAtColumn(),
+  },
+  (t) => [uniqueIndex("voice_video_webhook_deliveries_event_idx").on(t.eventId)],
+);
+
 export const voiceVideoArtifacts = pgTable(
   "voice_video_artifacts",
   {

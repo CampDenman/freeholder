@@ -29,6 +29,9 @@ import {
   recordVoiceVideoArtifact,
   startVoiceVideoRoom,
   stopVoiceVideoRoom,
+  configureVoiceVideo,
+  controlVoiceVideoRecording,
+  verifyVoiceVideoConnection,
 } from "../../plugins/voice-video/service";
 import {
   connectMarketplaceChannel,
@@ -364,16 +367,86 @@ export async function voiceVideoHostAction(form: FormData): Promise<void> {
   redirect(url.toString());
 }
 
-export async function voiceVideoInviteAction(_previous: { inviteTokenUrl?: string; error?: string }, form: FormData): Promise<{ inviteTokenUrl?: string; error?: string }> {
+export interface IssuedCallCredential {
+  roomUrl: string;
+  meetingToken: string;
+  expiresAt: number;
+  livekitUrl: string | null;
+  iceServers: unknown[] | null;
+}
+
+async function issueCallCredential(form: FormData, audience: "host" | "guest"): Promise<{ credential?: IssuedCallCredential; redirectUrl?: string; error?: string }> {
   try {
-    const result = await createVoiceVideoMeetingLink.call({ roomId: text(form, "roomId"), audience: "guest" }, await actor());
+    const result = await createVoiceVideoMeetingLink.call({ roomId: text(form, "roomId"), audience, hostName: text(form, "hostName") || "Host" }, await actor());
+    // Paradise Comms/LiveKit issues connection details, not a hosted join
+    // page: render them for copy into a LiveKit client. Daily's prebuilt URL
+    // keeps the redirect-with-token flow.
+    if (result.livekitUrl) {
+      return { credential: { roomUrl: result.roomUrl, meetingToken: result.meetingToken, expiresAt: result.expiresAt,
+        livekitUrl: result.livekitUrl, iceServers: result.iceServers } };
+    }
     const url = new URL(result.roomUrl);
     url.searchParams.set("t", result.meetingToken);
-    return { inviteTokenUrl: url.toString() };
+    return { redirectUrl: url.toString() };
   } catch (error) {
     if (error instanceof ServiceError) return { error: error.message };
     throw error;
   }
+}
+
+export async function voiceVideoHostJoinAction(_previous: { credential?: IssuedCallCredential; redirectUrl?: string; error?: string }, form: FormData): Promise<{ credential?: IssuedCallCredential; redirectUrl?: string; error?: string }> {
+  return issueCallCredential(form, "host");
+}
+
+export async function voiceVideoInviteAction(_previous: { inviteTokenUrl?: string; credential?: IssuedCallCredential; error?: string }, form: FormData): Promise<{ inviteTokenUrl?: string; credential?: IssuedCallCredential; error?: string }> {
+  const issued = await issueCallCredential(form, "guest");
+  if (issued.redirectUrl) return { inviteTokenUrl: issued.redirectUrl };
+  return issued;
+}
+
+export async function voiceVideoConfigureAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    const retention = text(form, "retentionDays");
+    await configureVoiceVideo.call({
+      provider: text(form, "provider") === "daily" ? "daily" : "paradise",
+      paradise: {
+        baseUrl: text(form, "baseUrl") || undefined,
+        authScheme: text(form, "authScheme") === "portfolio_token" ? "portfolio_token" : "site_key",
+        apiKey: text(form, "apiKey") || undefined,
+        portfolioToken: text(form, "portfolioToken") || undefined,
+        webhookSecret: text(form, "webhookSecret") || undefined,
+        roomPolicy: ["open", "moderated", "invite_only"].includes(text(form, "roomPolicy")) ? text(form, "roomPolicy") as "open" | "moderated" | "invite_only" : undefined,
+        retentionDays: retention ? Number.parseInt(retention, 10) : null,
+      },
+    }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
+}
+
+export async function voiceVideoVerifyAction(_previous: { ok?: boolean; message?: string; topUpUrl?: string; status?: number | null }, form: FormData): Promise<{ ok?: boolean; message?: string; topUpUrl?: string; status?: number | null }> {
+  void form;
+  try {
+    const result = await verifyVoiceVideoConnection.call({}, await actor());
+    return { ok: result.ok, message: result.message, topUpUrl: result.topUpUrl ?? undefined, status: result.status };
+  } catch (error) {
+    if (error instanceof ServiceError) return { ok: false, message: error.message };
+    throw error;
+  }
+}
+
+export async function voiceVideoRecordingAction(form: FormData): Promise<void> {
+  const path = "/admin/voice-video";
+  try {
+    await controlVoiceVideoRecording.call({ roomId: text(form, "roomId"), action: text(form, "action") === "stop" ? "stop" : "start" }, await actor());
+  } catch (error) {
+    done(path, error);
+  }
+  revalidatePath(path);
+  done(path);
 }
 
 export async function voiceVideoDownloadAction(form: FormData): Promise<void> {

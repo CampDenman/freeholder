@@ -265,12 +265,15 @@ staging `https://comms-staging.paradisemodern.com/v1`; auth is a per-site
 Capabilities `comms.calls/rooms/streams/conversations` are reported by
 `/api/integration/capabilities`.
 
-**Code.** The shipped in-tree adapter is still the Daily one —
-`plugins/voice-video/daily.ts`, `adapter.ts`, `service.ts`, and the
-admin voice/video actions — retained as optional non-first-party code and
-to be re-targeted at the PM adapter. **Tests.** `daily-adapter.test.ts`,
-`daily-flow.test.ts`, `plugin-claims.test.ts`, `internal-services.test.ts`, and
-the unconfigured-provider browser journey.
+**Code.** The first-party adapter is the Paradise one —
+`plugins/voice-video/paradise.ts` (HTTP client), `paradise-provider.ts`
+(seam mapping), `settings.ts` (§41-encrypted secrets in module settings),
+`webhook.ts` plus `app/api/plugins/voice-video/webhooks/paradise/route.ts`
+(inbound relay), with `daily.ts` retained as optional non-first-party code.
+**Tests.** `paradise-adapter.test.ts`, `paradise-flow.test.ts`,
+`paradise-webhook.test.ts`, `daily-adapter.test.ts`, `daily-flow.test.ts`,
+`plugin-claims.test.ts`, `internal-services.test.ts`, and the
+unconfigured-provider browser journey.
 
 Provider requests use a fixed HTTPS API origin, bounded bodies, timeouts and
 no redirects. Room and recording identities must match the persisted
@@ -283,23 +286,25 @@ evidence), and expiring leases reject stale provider results with provider
 I/O outside database transactions. On the PM path, credentials are TTL
 JWTs with TURN, room end persists terminal state and awaits LiveKit
 `DeleteRoom` (`media_ended`, with 503 `media_termination_pending`
-retryable), recordings land in DigitalOcean Spaces, and webhooks are
-HMAC-SHA256 signed (`Webhook-Signature: t=<ts>,v1=<hmac>`) and verified as
-LiveKit ingress. The prepaid-budget 402 gate applies to site-key callers.
+retryable), recordings land in DigitalOcean Spaces and are listed, read
+and erased through the 2026-09-28 recording lifecycle (playback URL is a
+public unsigned Spaces URL — a short-lived access window, never a shareable
+link), webhooks are HMAC-SHA256 signed (`Webhook-Signature:
+t=<ts>,v1=<hmac>`) and verified with a five-minute timestamp window before
+any database effect, and the inbound relay is idempotent by envelope id in
+`voice_video_webhook_deliveries`. The prepaid-budget 402 gate applies to
+site-key callers and is surfaced with balance and top-up URL, never retried
+past.
 Token-bearing result fields use explicit `Token` names for central
 redaction and never enter room/artifact list rows. Guest links are
 generated for manual sharing, not sent automatically.
 
-**Residuals.** Review the actual PM surface once the adapter is re-targeted:
-credential TTL and TURN handling, room policy enforcement, the
-media-termination retry, and webhook signature verification against a live
-paradisemodern instance. PM has no recording list/get/delete or erasure API
-yet — recordings land in DigitalOcean Spaces and the read/delete endpoints
-are PM-side work items — so recording bytes cannot be provider-erased today
-and pending requests cannot claim completion; provider-side erasure lands
-with PM's recording-delete API. Transcripts are unavailable until PM ships
-them. Owner-storage import (#394, built against Daily) and the #364 seam
-need the PM adapter re-targeted; live paradisemodern acceptance remains
-C3.13 work. Review [provider erasure and recovery](../deploy/provider-recording-erasure.md),
+**Residuals.** Review the actual PM surface against a live paradisemodern
+instance: credential TTL and TURN handling, room policy enforcement, the
+media-termination retry, and webhook signature verification end to end.
+Provider-side erasure rides `DELETE /v1/recordings/:id` (retryable 503 keeps
+the PM row and the receipt pending; 409 mid-egress defers to the durable
+job). Transcripts are unavailable until PM ships them. Live paradisemodern
+acceptance remains C3.13 work. Review [provider erasure and recovery](../deploy/provider-recording-erasure.md),
 including the PM-path honesty note and failed-job recovery. This
 implementation and its mocked HTTP tests are not an independent review.

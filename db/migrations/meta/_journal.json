@@ -134,6 +134,13 @@
       "when": 1792264926359,
       "tag": "0018_area_delivery_windows",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793308800000,
+      "tag": "0019_paradise_voice_video",
+      "breakpoints": true
     }
   ]
 }

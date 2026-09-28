@@ -76,6 +76,8 @@ const INTERNAL = [
   "marketplace.importProviderOrder",
   "marketplace.reconcileRefund",
   "printOnDemand.workBatch",
+  "voiceVideo.applyParadiseWebhook",
+  "voiceVideo.recordingRoom",
   "voiceVideo.roomAccessSource",
   "privacy.completeErasureJob",
   "messaging.applySmsEvents",
@@ -195,6 +197,8 @@ const CALLER_AUTHORIZED_PHASES = [
   "voiceVideo.claimImport",
   "voiceVideo.claimStart",
   "voiceVideo.claimStop",
+  "voiceVideo.applyParadiseWebhook",
+  "voiceVideo.recordingRoom",
 ] as const;
 
 const PRIVATE = [...INTERNAL, ...CALLER_AUTHORIZED_PHASES] as const;

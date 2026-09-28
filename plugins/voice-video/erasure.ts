@@ -26,7 +26,7 @@ export const eraseProviderRecordings = defineJob({
     if (!context) throw new Error("Provider erasure requires a durable job identity.");
     const input = payload.parse(data);
     await context.throwIfCancelled();
-    await voiceVideoProvider().eraseRoomRecordings(input);
+    await (await voiceVideoProvider()).eraseRoomRecordings(input);
     await context.throwIfCancelled();
     await completeErasureJob.call({ requestId: input.requestId, scope, jobId: input.originalJobId }, { kind: "system" });
     return { erased: true };

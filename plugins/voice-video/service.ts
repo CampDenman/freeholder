@@ -25,6 +25,16 @@ import {
 } from "@/core/search/registry";
 import { queueRoomErasure, queueArtifactStorageErasure } from "./erasure";
 import { voiceVideoProvider } from "./adapter";
+import {
+  voiceVideoSettingsSchema,
+  readVoiceVideoSettings,
+  resolveParadiseConfig,
+  sealParadiseSecrets,
+  type ParadiseSecrets,
+} from "./settings";
+import { applyParadiseWebhook } from "./webhook";
+import { createParadiseClient, ParadiseError } from "./paradise";
+import { moduleSettings } from "@/core/settings/schema";
 import { voiceVideoArtifacts, voiceVideoJoins, voiceVideoRooms } from "./schema";
 
 attachPluginContactColumn({
@@ -131,7 +141,7 @@ const claimStart = defineService({
 const applyStart = defineService({
   name: "voiceVideo.applyStart", summary: "Apply a verified room and its conversation entry atomically.",
   kind: "mutation", permission: "scoped", external: false, writeClass: "write",
-  input: z.object({ roomId: uuid, leaseToken: uuid, externalRef: z.string().max(200).optional(), providerRoomId: uuid.optional(), lastError: z.string().max(500).optional() }),
+  input: z.object({ roomId: uuid, leaseToken: uuid, externalRef: z.string().max(200).optional(), providerRoomId: uuid.nullish(), lastError: z.string().max(500).optional() }),
   output: okResult,
   handler: async (input, ctx) => {
     const [room] = await ctx.tx.select().from(voiceVideoRooms).where(eq(voiceVideoRooms.id, input.roomId)).limit(1).for("update");
@@ -161,9 +171,9 @@ export const startVoiceVideoRoom = defineOrchestratedService({
   output: roomRow,
   handler: async (input) => {
     const claimed = await claimStart.call(input, { kind: "system" });
-    let started: { externalRef: string; providerRoomId: string } | undefined;
+    let started: { externalRef: string; providerRoomId: string | null } | undefined;
     try {
-      started = await voiceVideoProvider().startRoom(claimed);
+      started = await (await voiceVideoProvider()).startRoom(claimed);
       await applyStart.call({ roomId: claimed.roomId, leaseToken: claimed.leaseToken, ...started }, { kind: "system" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "The call provider could not open that room.";
@@ -432,7 +442,7 @@ export const recordVoiceVideoArtifact = defineOrchestratedService({
     const claimed = await claimCapture.call(input, { kind: "system" });
     let captured: { externalRef: string; transcript: string | null; durationSeconds: number } | undefined;
     try {
-      captured = await voiceVideoProvider().capture({ kind: claimed.kind, provider: claimed.provider, title: claimed.title,
+      captured = await (await voiceVideoProvider()).capture({ kind: claimed.kind, provider: claimed.provider, title: claimed.title,
         externalRef: claimed.externalRef ?? undefined, roomExternalRef: claimed.roomExternalRef,
         providerRoomId: claimed.providerRoomId, accountDomain: claimed.accountDomain });
       await applyCapture.call({ artifactId: claimed.artifactId, leaseToken: claimed.leaseToken, ...captured }, { kind: "system" });
@@ -557,7 +567,7 @@ export const importVoiceVideoRecording = defineOrchestratedService({
       try {
         const stored: { storageKey?: string; storageContentType?: string; storageChecksumSha256?: string; transcriptStorageKey?: string | null } = {};
         if (claimed.recordingNeeded) {
-          const downloaded = await voiceVideoProvider().downloadRecording({ provider: claimed.provider, externalRef: null,
+          const downloaded = await (await voiceVideoProvider()).downloadRecording({ provider: claimed.provider, externalRef: null,
             providerRoomId: null, accountDomain: claimed.accountDomain, recordingId: claimed.recordingId! });
           const checksum = createHash("sha256").update(downloaded.bytes).digest("hex");
           const key = storageKey(`recording-${claimed.artifactId}.${RECORDING_EXTENSIONS[downloaded.contentType] ?? "bin"}`, claimed.createdAt, checksum.slice(0, 16));
@@ -603,7 +613,7 @@ export const stopVoiceVideoRoom = defineOrchestratedService({
   handler: async (input, actor) => {
     const claimed = await claimStop.call(input, { kind: "system" });
     try {
-      await voiceVideoProvider().endRoom({ provider: claimed.provider, externalRef: claimed.externalRef,
+      await (await voiceVideoProvider()).endRoom({ provider: claimed.provider, externalRef: claimed.externalRef,
         providerRoomId: claimed.providerRoomId, accountDomain: claimed.accountDomain });
       await applyStop.call({ roomId: claimed.roomId, leaseToken: claimed.leaseToken, status: "ended" }, { kind: "system" });
     } catch (error) {
@@ -706,13 +716,16 @@ export const createVoiceVideoMeetingLink = defineOrchestratedService({
   name: "voiceVideo.meetingLink", summary: "Issue a short-lived private meeting link for the host or invited contact.",
   kind: "mutation", permission: "scoped", writeClass: "write",
   input: z.object({ roomId: uuid, audience: z.enum(["host", "guest"]), hostName: z.string().trim().min(1).max(200).default("Host") }),
-  output: z.object({ roomUrl: z.string().url(), meetingToken: z.string(), expiresAt: z.number().int() }),
+  output: z.object({ roomUrl: z.string(), meetingToken: z.string(), expiresAt: z.number().int(),
+    livekitUrl: z.string().nullable(), iceServers: z.array(z.unknown()).nullable() }),
   handler: async (input, actor) => {
     const room = await roomAccessSource.call({ roomId: input.roomId }, { kind: "system" });
     if (room.status !== "live") throw new ServiceError("conflict", "Open this room before issuing an invitation.");
     const owner = input.audience === "host";
-    return voiceVideoProvider().meetingToken({ ...room, owner, userName: owner ? input.hostName : room.guestName,
+    const token = await (await voiceVideoProvider()).meetingToken({ ...room, owner, userName: owner ? input.hostName : room.guestName,
       userId: owner ? (actor.kind === "user" ? actor.userId : randomUUID()) : room.guestId });
+    return { roomUrl: token.roomUrl, meetingToken: token.meetingToken, expiresAt: token.expiresAt,
+      livekitUrl: token.livekitUrl ?? null, iceServers: token.iceServers ?? null };
   },
 });
 
@@ -723,7 +736,7 @@ export const voiceVideoRecordingAccess = defineOrchestratedService({
   handler: async (input) => {
     const room = await roomAccessSource.call(input, { kind: "system" });
     if (!room.recordingId) throw new ServiceError("not_found", "No provider recording is attached.");
-    return voiceVideoProvider().recordingAccess({ ...room, recordingId: room.recordingId });
+    return (await voiceVideoProvider()).recordingAccess({ ...room, recordingId: room.recordingId });
   },
 });
 
@@ -731,6 +744,182 @@ export const voiceVideoConfiguration = defineService({
   name: "voiceVideo.configuration", summary: "Show the configured Daily domain without exposing credentials.",
   kind: "query", permission: "scoped", input: z.object({}), output: z.object({ configured: z.boolean(), domain: z.string().nullable() }),
   handler: async () => { const settings = env(); return { configured: Boolean(settings.DAILY_API_KEY && settings.DAILY_DOMAIN), domain: settings.DAILY_DOMAIN ?? null }; },
+});
+
+const adminConfigurationRow = z.object({
+  provider: z.enum(["paradise", "daily"]),
+  stored: z.boolean(),
+  paradise: z.object({
+    baseUrl: z.string(),
+    authScheme: z.enum(["site_key", "portfolio_token"]),
+    hasApiKey: z.boolean(),
+    hasPortfolioToken: z.boolean(),
+    hasWebhookSecret: z.boolean(),
+    roomPolicy: z.enum(["open", "moderated", "invite_only"]),
+    retentionDays: z.number().int().min(1).max(3650).nullable(),
+  }),
+  dailyConfigured: z.boolean(),
+  dailyDomain: z.string().nullable(),
+});
+
+function summarizeConfiguration(settings: VoiceVideoSettingsShape, stored: boolean) {
+  const paradise = resolveParadiseConfig(settings);
+  return {
+    provider: settings.provider,
+    stored,
+    paradise: {
+      baseUrl: paradise.baseUrl,
+      authScheme: paradise.authScheme,
+      hasApiKey: Boolean(paradise.apiKey),
+      hasPortfolioToken: Boolean(paradise.portfolioToken),
+      hasWebhookSecret: Boolean(paradise.webhookSecret),
+      roomPolicy: paradise.roomPolicy,
+      retentionDays: paradise.retentionDays,
+    },
+    dailyConfigured: Boolean(env().DAILY_API_KEY && env().DAILY_DOMAIN),
+    dailyDomain: env().DAILY_DOMAIN ?? null,
+  };
+}
+
+type VoiceVideoSettingsShape = ReturnType<typeof voiceVideoSettingsSchema.parse>;
+
+/** Everything the setup screen needs; secrets surface as booleans only. */
+export const voiceVideoAdminConfiguration = defineService({
+  name: "voiceVideo.adminConfiguration", summary: "Show voice/video provider settings without exposing credentials.",
+  kind: "query", permission: "scoped", input: z.object({}), output: adminConfigurationRow,
+  handler: async (_input, ctx) => {
+    const [row] = await ctx.tx.select().from(moduleSettings).where(eq(moduleSettings.module, "voice-video")).limit(1);
+    if (!row) return summarizeConfiguration(voiceVideoSettingsSchema.parse({}), false);
+    const parsed = voiceVideoSettingsSchema.safeParse(row.config);
+    if (!parsed.success) throw new ServiceError("validation", "The stored voice-video settings are invalid. Save them again from the admin screen.");
+    return summarizeConfiguration(parsed.data, true);
+  },
+});
+
+export const configureVoiceVideo = defineService({
+  name: "voiceVideo.configure", summary: "Save voice/video provider settings; secrets are encrypted before storage.",
+  kind: "mutation", permission: "scoped", writeClass: "write",
+  input: z.object({
+    provider: z.enum(["paradise", "daily"]),
+    paradise: z.object({
+      baseUrl: z.string().url().max(300).optional(),
+      authScheme: z.enum(["site_key", "portfolio_token"]).optional(),
+      /** Plaintext only on this write; stored as a §41 ciphertext envelope. */
+      apiKey: z.string().min(1).max(500).optional(),
+      portfolioToken: z.string().min(1).max(500).optional(),
+      webhookSecret: z.string().min(1).max(500).optional(),
+      clearSecrets: z.array(z.enum(["apiKey", "portfolioToken", "webhookSecret"])).max(3).optional(),
+      roomPolicy: z.enum(["open", "moderated", "invite_only"]).optional(),
+      retentionDays: z.number().int().min(1).max(3650).nullable().optional(),
+    }).optional(),
+  }),
+  output: adminConfigurationRow,
+  handler: async (input, ctx) => {
+    const [row] = await ctx.tx.select().from(moduleSettings).where(eq(moduleSettings.module, "voice-video")).limit(1).for("update");
+    const current = voiceVideoSettingsSchema.parse(row?.config ?? {});
+    const submitted = input.paradise ?? {};
+    const secrets: ParadiseSecrets = {};
+    if (submitted.apiKey) secrets.apiKey = submitted.apiKey;
+    if (submitted.portfolioToken) secrets.portfolioToken = submitted.portfolioToken;
+    if (submitted.webhookSecret) secrets.webhookSecret = submitted.webhookSecret;
+    const clearing = new Set(submitted.clearSecrets ?? []);
+    const paradise = {
+      baseUrl: submitted.baseUrl ?? current.paradise?.baseUrl,
+      authScheme: submitted.authScheme ?? current.paradise?.authScheme,
+      roomPolicy: submitted.roomPolicy ?? current.paradise?.roomPolicy,
+      retentionDays: submitted.retentionDays !== undefined ? submitted.retentionDays : current.paradise?.retentionDays,
+      ...(clearing.has("apiKey") ? {} : { apiKeyCiphertext: current.paradise?.apiKeyCiphertext }),
+      ...(clearing.has("portfolioToken") ? {} : { portfolioTokenCiphertext: current.paradise?.portfolioTokenCiphertext }),
+      ...(clearing.has("webhookSecret") ? {} : { webhookSecretCiphertext: current.paradise?.webhookSecretCiphertext }),
+      ...sealParadiseSecrets(secrets),
+    };
+    const next = voiceVideoSettingsSchema.parse({ provider: input.provider, paradise });
+    if (next.provider === "paradise") {
+      const resolved = resolveParadiseConfig(next);
+      if (!resolved.apiKey && !resolved.portfolioToken) {
+        throw new ServiceError("validation", "Paradise Comms needs a site API key or a portfolio token before it can open rooms.");
+      }
+    }
+    await ctx.tx.insert(moduleSettings).values({ module: "voice-video", config: next })
+      .onConflictDoUpdate({ target: moduleSettings.module, set: { config: next } });
+    ctx.setSubject("module_settings", "voice-video");
+    return summarizeConfiguration(next, true);
+  },
+});
+
+export const verifyVoiceVideoConnection = defineOrchestratedService({
+  name: "voiceVideo.verifyConnection", summary: "Probe the configured Paradise Comms connection with a real authenticated read.",
+  kind: "query", permission: "scoped",
+  input: z.object({}),
+  output: z.object({
+    provider: z.string(), ok: z.boolean(), status: z.number().int().nullable(),
+    message: z.string(), balanceUsd: z.number().nullable(), topUpUrl: z.string().nullable(),
+  }),
+  handler: async () => {
+    const { settings, stored } = await readVoiceVideoSettings();
+    if (settings.provider !== "paradise") {
+      const daily = env();
+      const configured = Boolean(daily.DAILY_API_KEY && daily.DAILY_DOMAIN);
+      return { provider: settings.provider, ok: configured, status: null,
+        message: configured ? "The Daily environment variables are set." : "Set DAILY_API_KEY and DAILY_DOMAIN on your server to use Daily.",
+        balanceUsd: null, topUpUrl: null };
+    }
+    if (!stored) {
+      return { provider: "paradise", ok: false, status: null, message: "Save Paradise Comms settings before verifying the connection.", balanceUsd: null, topUpUrl: null };
+    }
+    const config = resolveParadiseConfig(settings);
+    try {
+      const client = createParadiseClient({ baseUrl: config.baseUrl, authScheme: config.authScheme, apiKey: config.apiKey, portfolioToken: config.portfolioToken });
+      await client.verifyConnection();
+      return { provider: "paradise", ok: true, status: 200, message: "Paradise Comms accepted the credential.", balanceUsd: null, topUpUrl: null };
+    } catch (error) {
+      if (error instanceof ParadiseError) {
+        // 402 is surfaced honestly with the balance and top-up link so the
+        // setup screen can show exactly what unblocks calls.
+        return { provider: "paradise", ok: false, status: error.status ?? null, message: error.message,
+          balanceUsd: error.balanceUsd ?? null, topUpUrl: error.topUpUrl ?? null };
+      }
+      return { provider: "paradise", ok: false, status: null, message: error instanceof Error ? error.message : "The connection could not be verified.", balanceUsd: null, topUpUrl: null };
+    }
+  },
+});
+
+const recordingRoom = defineService({
+  name: "voiceVideo.recordingRoom", summary: "Read one room's recording-control state.",
+  kind: "query", permission: "system", external: false,
+  input: z.object({ roomId: uuid }),
+  output: z.object({ roomId: uuid, provider: z.string(), status: z.string(), kind: kindEnum,
+    externalRef: z.string().nullable(), providerRoomId: z.string().nullable(), accountDomain: z.string().nullable() }),
+  handler: async (input, ctx) => {
+    const [room] = await ctx.tx.select().from(voiceVideoRooms).where(eq(voiceVideoRooms.id, input.roomId)).limit(1);
+    if (!room) throw new ServiceError("not_found", "No such room.");
+    return { roomId: room.id, provider: room.provider, status: room.status, kind: kindEnum.parse(room.kind),
+      externalRef: room.externalRef, providerRoomId: room.providerRoomId, accountDomain: room.providerDomain };
+  },
+});
+
+export const controlVoiceVideoRecording = defineOrchestratedService({
+  name: "voiceVideo.recordingControl", summary: "Start or stop recording on a live Paradise Comms room.",
+  kind: "mutation", permission: "scoped", writeClass: "write",
+  input: z.object({ roomId: uuid, action: z.enum(["start", "stop"]) }),
+  output: z.object({ roomId: uuid, action: z.enum(["start", "stop"]), providerRecordingId: z.string().nullable(), status: z.string().nullable() }),
+  handler: async (input) => {
+    const room = await recordingRoom.call(input, { kind: "system" });
+    if (room.status !== "live") throw new ServiceError("conflict", "Open this room before controlling recording.");
+    if (room.provider !== "paradise") throw new ServiceError("conflict", "This room's provider starts recording inside the call.");
+    if (!room.externalRef) throw new ServiceError("conflict", "This room has no provider session. Stop it instead.");
+    const provider = await voiceVideoProvider();
+    if (input.action === "start") {
+      if (!provider.startRecording) throw new ServiceError("conflict", "This provider does not support starting recording remotely.");
+      const started = await provider.startRecording({ provider: room.provider, externalRef: room.externalRef,
+        providerRoomId: room.providerRoomId, accountDomain: room.accountDomain, audioOnly: room.kind === "voice" });
+      return { roomId: room.roomId, action: input.action, providerRecordingId: started.providerRecordingId, status: started.status };
+    }
+    if (!provider.stopRecording) throw new ServiceError("conflict", "This provider does not support stopping recording remotely.");
+    const stopped = await provider.stopRecording({ provider: room.provider, externalRef: room.externalRef,
+      providerRoomId: room.providerRoomId, accountDomain: room.accountDomain });
+    return { roomId: room.roomId, action: input.action, providerRecordingId: stopped?.providerRecordingId ?? null, status: stopped?.status ?? null };
+  },
 });
 
 export const listVoiceVideoRooms = defineService({
@@ -818,6 +1007,12 @@ export default [
   createVoiceVideoMeetingLink,
   voiceVideoRecordingAccess,
   voiceVideoConfiguration,
+  voiceVideoAdminConfiguration,
+  configureVoiceVideo,
+  verifyVoiceVideoConnection,
+  recordingRoom,
+  controlVoiceVideoRecording,
+  applyParadiseWebhook,
   listVoiceVideoRooms,
   listVoiceVideoJoins,
   listVoiceVideoArtifacts,

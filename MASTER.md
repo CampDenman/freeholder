@@ -4394,8 +4394,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   are PM-side work items), so provider-side erasure of PM recordings lands
   with PM's recording-delete API; until then erasure covers local rows and
   owner-storage copies, and the privacy receipt says so. The Daily adapter
-  remains in-tree as optional non-first-party code. Still [ ] while the
-  live paradisemodern acceptance above remains.)
+  remains in-tree as optional non-first-party code. The Paradise adapter
+  ships at `plugins/voice-video/paradise.ts`, `paradise-provider.ts`,
+  `settings.ts` and `webhook.ts` with mocked HTTP + database coverage in
+  `tests/core/paradise-*.test.ts`. Still [ ] while the live paradisemodern
+  acceptance above remains.)
 
 #### Packages, installation, export, and target parity
 

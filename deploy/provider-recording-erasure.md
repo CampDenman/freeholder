@@ -76,17 +76,27 @@ by these workers.
 Owner-storage import is implemented (see above); live provider acceptance
 remains open in C3.13.
 
-## Paradise Comms (first-party) path — pending PM recording-delete API
+## Paradise Comms (first-party) path
 
 The de-facto first-party voice/video provider is paradisemodern's Paradise
 Comms (owner decision 2026-09-27): prod `https://paradisemodern.com/v1`,
-per-site `x-api-key` or legacy portfolio bearer tokens. PM has **no recording
-list/get/delete or erasure API yet** — recordings land in DigitalOcean Spaces
-and the read/delete endpoints are PM-side work items. Provider-side erasure
-of PM recordings therefore lands with PM's recording-delete API; until then
-erasure covers local rows and the owner-storage copies, and the privacy
-receipt must name the un-erased provider recordings instead of claiming
-completion. Contact erasure still queues the local-row removal and the
-owner-storage copy deletion on the same receipt, so the local half of the
-obligation is met and the provider half is visibly pending. The Daily-based
-flow documented above remains implemented for the in-tree Daily adapter.
+per-site `x-api-key` or legacy portfolio bearer tokens. PM shipped the
+recording lifecycle on 2026-09-28 (contract
+`2026-09-28.comms-recording-lifecycle`): `GET /v1/recordings?room_id=…`
+(inventory), `GET /v1/recordings/:id` (metadata + playback URL),
+`DELETE /v1/recordings/:id` (Spaces object + row, idempotent). The
+voice-video plugin's Paradise adapter
+(`plugins/voice-video/paradise.ts`, `plugins/voice-video/paradise-provider.ts`)
+implements provider erasure on that surface: the room is ended
+provider-confirmed first, the inventory is walked, mid-egress recordings
+(HTTP 409 `recording_not_finished`) stop the egress and defer to the durable
+job's retry, and a retryable HTTP 503 `recording_delete_failed` keeps the PM
+row — so the privacy receipt (`voiceVideo.eraseProviderRecordings`) stays in
+progress until PM confirms deletion, exactly like the Daily flow. The relay
+also reports `recording.deleted`/`recording.expired` events, which drop local
+provider references on the matching recording rows. One caveat: PM playback
+URLs are **public unsigned Spaces URLs** — anyone holding the URL can
+download until PM ships signed playback. Freeholder bounds the import download
+as it does for Daily (pinned DNS, no redirects, 512 MiB ceiling), and treats
+the URL as a short-lived access window rather than a shareable link. Live
+acceptance against a real PM site key remains open in C3.13.
