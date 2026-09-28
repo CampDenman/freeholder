@@ -68,3 +68,8 @@ overrides:
   # Keep this exact patched version because every release below 11.1.1 is in
   # the advisory's affected range.
   uuid: "11.1.1"
+  # GHSA-3wwx-pv8p-q78v: WebSocket permessage-deflate unhandled error -> DoS.
+  # Only reachable through jsdom (dev/test fetch), overridden anyway because
+  # the fix is a patch version. 8.10.2 is the first release in the patched
+  # range for the 8.x line the tree uses.
+  undici: ">=8.10.2 <9"
