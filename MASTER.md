@@ -3447,12 +3447,12 @@ what is true now and what remains.
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3.24 storefront parity gaps (feed: `deploy/c324-storefront-parity-2026-09-29.md`; closure via C3.25/C2.24); C11.16 spec reconciliation; C11.17 remains unsigned |
+| Current focus | C3.24 native storefront parity — both fix-now gaps closed 2026-09-29 (taxonomy, faceted browse, storefront search and the public cart/checkout pages by the storefront slices; the collection/facet/search and buy blocks by the editor half; `deploy/c324-storefront-parity-2026-09-29.md` rows 2–3 flipped native with cited tests, box flips at the final sweep); C11.16 spec reconciliation; C11.17 remains unsigned |
 | Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity — the capability mapping is published (`deploy/c324-storefront-parity-2026-09-29.md`, 2026-09-29) with every gap dispositioned to C3.25/C2.24; the box stays open only until those items close the two fix-now gaps (collections/faceted browse/storefront search; public cart/checkout UI) — the remaining C1–C10 product item, and it is what keeps C11.16's box open. C2.25 world-class visual editor and C3.26 world-class merchandising (new open work, owner directive 2026-09-29). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity — the capability mapping is published (`deploy/c324-storefront-parity-2026-09-29.md`, 2026-09-29) and both fix-now gaps closed 2026-09-29 (G1 via C3.25 slices 1–2 + C2.24's collection/facet/search blocks; G2 via C3.25 slice 3 + C2.24's buy affordance), rows 2–3 flipped native with cited tests; the item's text stands satisfied and the box flips at the final sweep. C2.25 world-class visual editor (storefront blocks landed 2026-09-29 close its store-composition gap; drag-and-drop and inline editing landed in slices A–B, #450/#452) and C3.26 world-class merchandising (every named proof now evidenced under its annotation; box flips at the final sweep). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -4262,15 +4262,50 @@ project without silent telemetry, and ready to carry money.
   (`proof` module: `notice` block, `proof_notices` + `0073_plain_lilandra.sql`,
   `proof.publishedPaths` / `seedNotice`, seed block helper; editor unchanged;
   `tests/core/cms-plugin-proof.test.ts`; changeset `cms-plugin-proof.md` **F04** N/A — editor performance budgets, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/cms-plugin-proof.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-plugin-proof.test.ts` is the composition proof.)
-- [ ] **C2.24** Build the storefront commerce blocks: an add-to-cart
+- [x] **C2.24** Build the storefront commerce blocks: an add-to-cart
   affordance on product detail and product-card blocks wired to the existing
   cart services, and collection, facet and search blocks so an owner can
   compose faceted browse and search pages without code. (Scheduled by C3.24's
   published parity mapping (`deploy/c324-storefront-parity-2026-09-29.md`,
   2026-09-29), which carries this item's gap list: the editor half of gaps G1
   and G2. The service-side taxonomy, browse and public cart/checkout pages
-  are C3.25; this item owns only the blocks that render them. New work:
-  unchecked until the blocks land with their tests.)
+  are C3.25; this item owns only the blocks that render them. Closed
+  2026-09-29: the merchandising blocks land in
+  `src/modules/cms/blocks/merchandising.tsx` — `productGrid` (collection pick
+  by slug — manual or rule-driven, the browse machinery's sort links,
+  optional FacetPanel and crawlable pagination through the shared
+  browse-params codec), `featuredCollection` (hero reading the collection's
+  own title/description under editable copy, plus its curated front),
+  `storeSearch` (term search scoped to the page's own `?q`, facets and sort
+  included) and `buyButton`, with `productCard` upgraded onto the same buy
+  flow and `productDetail`'s panel confirmed on it. Every product surface
+  renders through the storefront's own CollectionGrid, FacetPanel, SortLinks,
+  SearchBox and AddToCart components and the `catalog.browseProducts` /
+  `catalog.purchaseOptions` services — no divergent render path — and product
+  grids emit ItemList JSON-LD through the collection pages' own helper;
+  collection/product pickers reuse the admin's anchored-picker pattern (the
+  form select and the on-canvas replace affordance draw one translated choice
+  list), canvas buy chrome renders inert so the preview cannot submit into
+  the frame, and the chrome ships in EN/FR/ES/AR. Evidence:
+  `tests/core/merch-blocks.test.ts` (blocks on canvas and public, picker
+  round-trips, filters/pagination/facets, JSON-LD, locales),
+  `tests/core/editor-preview-bridge.test.ts` (the entity-pick message) and
+  the world-class proof `tests/browser/storefront-merch-blocks.spec.ts` — a
+  page composed of featured collection + product grid + buy button publishes,
+  and a shopper browses it, filters it through crawlable facet URLs and buys
+  from it to the token-gated confirmation. With this, the mapping's rows 2–3
+  flip native with cited tests and C3.24's gap list stands closed.
+  **F04** `/admin/pages/[id]` — the palette, the form-panel selects and the
+  on-canvas replace affordances (picker round-trips in
+  `tests/core/merch-blocks.test.ts`). **F05** N/A — not an agent capability;
+  the blocks render through the catalog services the HTTP/SDK/MCP gates
+  already cover. **F07** `tests/core/merch-blocks.test.ts` covers refusal
+  (unbound or missing collections/products render nothing; malformed props
+  refuse at the schema); scoped service-boundary enforcement rides
+  `tests/core/api.test.ts`. **F09** N/A as C11.14 — composition rides the CMS
+  revision/audit spine; product-wide export/restore proof is still open.
+  **F12** `tests/browser/storefront-merch-blocks.spec.ts` is the composition
+  proof.)
 - [ ] **C2.25** World-class visual editing: true
   what-you-see-is-what-renders editing — the page itself is the canvas
   (inline text/image editing on the rendered surface), drag-and-drop
@@ -4600,7 +4635,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   those items' gap lists. Box stays open per the item's own wording ("close
   every provable gap the mapping finds"): closure lands via C3.25/C2.24,
   and the f-criteria-matrix row updates from its standing N/A cells at that
-  closure.)
+  closure. Both gaps closed 2026-09-29 — G1 by C3.25 slices 1–2 plus C2.24's
+  collection/facet/search blocks, G2 by C3.25 slice 3 plus C2.24's buy
+  affordance — rows 2–3 flipped native with cited tests, the f-criteria
+  matrix's C3.24 row now carries dated evidence, and the item's remaining
+  text stands satisfied; the box flips at the final sweep.)
 - [ ] **C3.25** Close the native storefront's two parity gaps that C3.24's
   published mapping proved, on the existing commerce spine — no parallel
   money path: (a) product collections/categories taxonomy with faceted
@@ -4645,7 +4684,16 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `tests/core/cart-storefront.test.ts`,
   `tests/browser/storefront-checkout.spec.ts`; the merchandising editor
   blocks remain with C2.24, and the C3.24 mapping's rows 2–3 flip lands
-  with those blocks.)
+  with those blocks — flipped 2026-09-29: C2.24's merchandising blocks
+  (`productGrid`, `featuredCollection`, `storeSearch`, `buyButton`, the
+  `productCard` upgrade) render both gaps' capabilities on composed pages
+  through the same public components, proven by
+  `tests/core/merch-blocks.test.ts` and
+  `tests/browser/storefront-merch-blocks.spec.ts`, and
+  `deploy/c324-storefront-parity-2026-09-29.md`'s rows 2–3 now stand native
+  with those citations. C3.25's own text — taxonomy, faceted browse and
+  storefront search, public cart, checkout and confirmation on the existing
+  services — stands fully satisfied; the box flips at the final sweep.)
 - [ ] **C3.26** World-class merchandising: first-class product taxonomy —
   collections and categories with manual and rule-based (segment-driven)
   membership; faceted storefront browsing (filter/sort on price, options,
@@ -4671,7 +4719,17 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   "filter, and buy" — add-to-cart with variant pickers, the public cart,
   the verified-email checkout and the token-gated confirmation (evidence
   under C3.25's slice-3 annotation); the merchandising editor blocks
-  (product grid, featured collection, buy-button) remain with C2.24.
+  (product grid, featured collection, buy-button) landed with C2.24 —
+  2026-09-29: `productGrid`, `featuredCollection`, `storeSearch` and
+  `buyButton` in `src/modules/cms/blocks/merchandising.tsx`, with
+  `productCard` upgraded onto the same buy flow, all rendering through the
+  storefront's own components and emitting the collection pages' ItemList
+  JSON-LD, proven by `tests/core/merch-blocks.test.ts` and the world-class
+  journey `tests/browser/storefront-merch-blocks.spec.ts` (browse → filter →
+  buy from a composed page). Every proof the item names — taxonomy, faceted
+  browsing, native collection pages with grids/pagination/SEO integration,
+  the merchandising blocks, and the browser journeys — now stands evidenced;
+  the box flips at the final sweep.
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.

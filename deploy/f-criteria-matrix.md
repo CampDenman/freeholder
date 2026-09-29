@@ -1525,18 +1525,20 @@ v2.
 
 ## C3.24 — Prove the native Freeholder store covers Shopify-core capability
 
-- **F01** — N/A — no schema yet — the first deliverable is the published capability mapping; tables belong to the gap-closing work it schedules.
-- **F02** — N/A — no new service in the mapping deliverable — gap-closing services will name their typed coverage when they land.
-- **F03** — N/A — the mapping touches no contact, money or audit surface — nothing to wire into the spine.
-- **F04** — N/A — the deliverable is a published mapping document — the native store's existing admin and customer surfaces become the human-surface evidence when gaps close.
-- **F05** — N/A — no agent surface is part of the mapping — HTTP/MCP evidence arrives with the gap-closing work.
-- **F06** — N/A — the mapping changes no shipped strings — locale gates keep covering whatever surfaces gap-closing touches.
-- **F07** — N/A — the mapping adds no executable path — safety evidence belongs to each gap-closing change.
-- **F08** — N/A — nothing executable is claimed yet — closing gaps adds tests under `tests/` and names them here.
-- **F09** — N/A — no new jobs or storage — the mapping is a document plus the gap-closing work it schedules.
-- **F10** — N/A — the mapping is not a setup or help surface.
-- **F11** — N/A for closure — the item stays unchecked; its capability mapping has landed at `deploy/c324-storefront-parity-2026-09-29.md` (2026-09-29) and dispositions every gap to C3.25/C2.24, whose closure updates this row to dated evidence.
-- **F12** — N/A — no composed journey is claimed — the mapping's gap list is the composition contract gap-closing work must satisfy.
+*Closed 2026-09-29 — both fix-now gaps of `deploy/c324-storefront-parity-2026-09-29.md` closed (G1 by C3.25 slices 1–2 + C2.24's collection/facet/search blocks; G2 by C3.25 slice 3 + C2.24's buy affordance on the product blocks), rows 2–3 flipped native with cited tests, and the dated sentences live under each item's MASTER.md annotation.*
+
+- **F01** — `db/migrations/0020_collections.sql` (collections + collection_products, C3.25 slice 1); database coverage in `tests/core/catalog-collections.test.ts` and `tests/core/catalog-browse.test.ts`.
+- **F02** — `catalog.browseProducts` / `catalog.purchaseOptions` / `catalog.shopperCheckout` / `catalog.shopperOrder` typed coverage in `tests/core/catalog-browse.test.ts`, `tests/core/storefront-commerce.test.ts` and `tests/core/cart-storefront.test.ts` (permission, refusal and recovery included).
+- **F03** — N/A — the gap-closing work rides the existing contact, money and audit spine (checkout composes `catalog.checkoutCart`; orders fan out on the outbox bus); no parallel money path was added.
+- **F04** — Public surfaces: `/c/<slug>` faceted browse and `/search` (C3.25 slice 2, `app/(public)/c/[slug]/`, `app/(public)/search/`), `/cart`, `/checkout`, `/orders/confirm` (C3.25 slice 3, `app/(public)/cart/`, `app/(public)/checkout/`, `app/(public)/orders/confirm/`), and the merchandising blocks composing the same components onto CMS pages (C2.24, `src/modules/cms/blocks/merchandising.tsx`); browser coverage in `tests/browser/storefront-checkout.spec.ts` and `tests/browser/storefront-merch-blocks.spec.ts`.
+- **F05** — N/A — not a new agent capability — the public surfaces render through the HTTP-projected services (`/api/v1/catalog.*`) the SDK/MCP gates already cover.
+- **F06** — `tests/core/i18n-gate.test.ts` + `tests/core/locale-quality.test.ts` (browse/buy/merch chrome ships EN/FR/ES/AR); axe WCAG over the composed shop page in `tests/browser/storefront-merch-blocks.spec.ts`.
+- **F07** — `tests/core/cart-access.test.ts` (the guest-cart capability boundary) and `tests/core/storefront-commerce.test.ts` (permission, refusal and recovery on the public commerce services).
+- **F08** — `tests/core/browse-storefront.test.ts`, `tests/core/collections-storefront.test.ts`, `tests/core/storefront-commerce.test.ts`, `tests/core/cart-storefront.test.ts`, `tests/core/merch-blocks.test.ts` — the item's unit/service/database coverage.
+- **F09** — N/A as C11.14 — the gap-closing work uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open.
+- **F10** — N/A — no setup or help surface of its own.
+- **F11** — `MASTER.md` §43 C3.24 annotation (dated 2026-09-29) + `deploy/c324-storefront-parity-2026-09-29.md` (the mapping, rows 2–3 flipped native with cited tests).
+- **F12** — `tests/browser/storefront-merch-blocks.spec.ts` is the composed journey: a page built from the merchandising blocks (featured collection + product grid + buy button) publishes, a shopper browses, filters through crawlable facet URLs and buys to the token-gated confirmation; `tests/browser/storefront-checkout.spec.ts` proves the same on the entity routes.
 
 ## C3.25 — Close the native storefront's two parity gaps (mapping G1/G2)
 

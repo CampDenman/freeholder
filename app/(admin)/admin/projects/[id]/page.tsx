@@ -10,7 +10,7 @@ import { notFound } from "next/navigation";
 import { Button, Card, CardBody, CardHeader, Pill, type Tone } from "@/ui/primitives";
 import { listAssets } from "@/core/media/service";
 import { listContacts } from "@/core/contacts/service";
-import { listProducts } from "@/modules/catalog/service";
+import { listProducts, listCollections } from "@/modules/catalog/service";
 import { getProject } from "@/modules/projects/service";
 import {
   mediaConsentHistory,
@@ -92,14 +92,17 @@ export default async function ProjectPage({
   const consentHistory = await mediaConsentHistory
     .call({ subjectKind: "project", subjectId: id }, actor)
     .catch(() => []);
-  const [t, project, query, library, services, people] = await Promise.all([
-    getT(),
-    domainOrNull(getProject.call({ id }, actor)),
-    searchParams,
-    domainOrNull(listAssets.call({ kind: "image", limit: 500 }, actor)),
-    domainOrNull(listProducts.call({ kind: "service", limit: 500 }, actor)),
-    domainOrNull(listContacts.call({ limit: 500 }, actor)),
-  ]);
+  const [t, project, query, library, services, people, allProducts, publishedCollections] =
+    await Promise.all([
+      getT(),
+      domainOrNull(getProject.call({ id }, actor)),
+      searchParams,
+      domainOrNull(listAssets.call({ kind: "image", limit: 500 }, actor)),
+      domainOrNull(listProducts.call({ kind: "service", limit: 500 }, actor)),
+      domainOrNull(listContacts.call({ limit: 500 }, actor)),
+      domainOrNull(listProducts.call({ status: "active", limit: 500 }, actor)),
+      domainOrNull(listCollections.call({}, actor)),
+    ]);
   if (!project) notFound();
   const seo = project.seo;
   const imageAssets = library?.rows ?? [];
@@ -295,6 +298,12 @@ export default async function ProjectPage({
               t,
               "page",
               imageAssets.map((asset) => ({ id: asset.id, filename: asset.filename, kind: asset.kind })),
+              {
+                collections: (publishedCollections ?? [])
+                  .filter((collection) => collection.published)
+                  .map((collection) => ({ slug: collection.slug, title: collection.title })),
+                products: (allProducts ?? []).map((row) => ({ slug: row.slug, name: row.name })),
+              },
             ).filter((entry) => entry.type !== "projectCaseStudy")}
             labels={editorLabels(t)}
           />

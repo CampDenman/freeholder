@@ -4,6 +4,7 @@
 import { notFound } from "next/navigation";
 import { getTemplate, previewEmail } from "@/modules/cms/service";
 import { listAssets } from "@/core/media/service";
+import { listCollections, listProducts } from "@/modules/catalog/service";
 import { currentBusiness } from "@/core/settings/read";
 import { languageName, resolveEnabledLocale } from "@/core/i18n/customer";
 import type { BlockNode } from "@/modules/cms/blocks/types";
@@ -35,10 +36,14 @@ export default async function EditTemplatePage({
     defaultLocale: business?.defaultLocale ?? "en",
     enabledLocales: business?.enabledLocales ?? ["en"],
   });
-  const [template, library, t] = await Promise.all([
+  const [template, library, t, collectionRows, productRows] = await Promise.all([
     getTemplate.call({ key, locale }, actor),
     listAssets.call({}, actor),
     getT(),
+    // Only page-kind templates embed the commerce blocks, but the queries
+    // are cheap and the palette translation below is unconditional.
+    listCollections.call({}, actor).catch(() => []),
+    listProducts.call({ status: "active", limit: 500 }, actor).catch(() => []),
   ]);
   if (!template) notFound();
   const inbox =
@@ -109,6 +114,12 @@ export default async function EditTemplatePage({
             filename: a.filename,
             kind: a.kind,
           })),
+          {
+            collections: collectionRows
+              .filter((collection) => collection.published)
+              .map((collection) => ({ slug: collection.slug, title: collection.title })),
+            products: productRows.map((product) => ({ slug: product.slug, name: product.name })),
+          },
         )}
         labels={editorLabels(t)}
       />

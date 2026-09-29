@@ -51,7 +51,16 @@ import { RichField } from "./RichField";
 
 export interface EditorField {
   name: string;
-  kind: "text" | "multiline" | "rich" | "boolean" | "choice" | "list" | "asset";
+  kind:
+    | "text"
+    | "multiline"
+    | "rich"
+    | "boolean"
+    | "choice"
+    | "list"
+    | "asset"
+    | "collection"
+    | "product";
   required: boolean;
   label: string;
   choices?: { value: string; label: string }[];
@@ -467,24 +476,39 @@ export function BlockEditor({
     [],
   );
 
-  // The image block's replace affordance raises the picker; the pick itself
-  // is an ordinary canvas edit (props.assetId) from there on.
-  const [assetPick, setAssetPick] = useState<
+  // A replace affordance on the canvas — an image's, or a commerce block's
+  // collection/product pick — raises the anchored picker; the pick itself is
+  // an ordinary canvas edit (the named prop) from there on.
+  const [propPick, setPropPick] = useState<
     | { blockId: string; prop: string; x: number; y: number }
     | undefined
   >();
 
-  const pickerAssets = (pick: { blockId: string; prop: string }) => {
+  const pickerFor = (pick: { blockId: string; prop: string }) => {
     const node = collectById(blocksRef.current, new Set([pick.blockId]))[0];
     const field = node
       ? byType
           .get(node.type)
-          ?.fields.find((f) => f.name === pick.prop && f.kind === "asset")
+          ?.fields.find(
+            (f) =>
+              f.name === pick.prop &&
+              (f.kind === "asset" || f.kind === "collection" || f.kind === "product"),
+          )
       : undefined;
+    if (!field) return undefined;
     // The field's own choices carry the translated "None" entry, exactly as
     // the form panel's select renders it — one library, two doors.
-    return field?.choices ?? [];
+    const preview = labels.preview;
+    const meta =
+      field.kind === "asset"
+        ? { label: preview.replaceImage, empty: preview.noAssets }
+        : field.kind === "collection"
+          ? { label: preview.replaceCollection, empty: preview.noCollections }
+          : { label: preview.replaceProduct, empty: preview.noProducts };
+    return { choices: field.choices ?? [], ...meta };
   };
+
+  const activePicker = propPick ? pickerFor(propPick) : undefined;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
@@ -594,24 +618,27 @@ export function BlockEditor({
           onEdit={applyInlineEdit}
           onMove={applyMove}
           onAssetPick={(blockId, prop, anchor) =>
-            setAssetPick({ blockId, prop, x: anchor.x, y: anchor.y })
+            setPropPick({ blockId, prop, x: anchor.x, y: anchor.y })
+          }
+          onPropPick={(blockId, prop, anchor) =>
+            setPropPick({ blockId, prop, x: anchor.x, y: anchor.y })
           }
           labels={labels.preview}
         />
-        {assetPick ? (
-          <AssetPicker
-            choices={pickerAssets(assetPick)}
-            x={assetPick.x}
-            y={assetPick.y}
-            label={labels.preview.replaceImage}
-            emptyLabel={labels.preview.noAssets}
+        {propPick && activePicker ? (
+          <AnchoredPicker
+            choices={activePicker.choices}
+            x={propPick.x}
+            y={propPick.y}
+            label={activePicker.label}
+            emptyLabel={activePicker.empty}
             cancelLabel={labels.cancel}
             onPick={(value) => {
               // An empty pick clears the prop, as the form select does.
-              applyInlineEdit(assetPick.blockId, assetPick.prop, value || undefined);
-              setAssetPick(undefined);
+              applyInlineEdit(propPick.blockId, propPick.prop, value || undefined);
+              setPropPick(undefined);
             }}
-            onClose={() => setAssetPick(undefined)}
+            onClose={() => setPropPick(undefined)}
           />
         ) : null}
       </div>
@@ -1045,9 +1072,12 @@ function Field({
     );
   }
 
-  if (field.kind === "asset") {
-    // Values stay strings: an asset id is a uuid, and the numeric coercion the
-    // literal-union control needs would mangle it.
+  if (field.kind === "asset" || field.kind === "collection" || field.kind === "product") {
+    // Values stay strings: an asset id is a uuid, a collection/product pick
+    // is a public slug, and the numeric coercion the literal-union control
+    // needs would mangle both. All three pick from choices the server
+    // resolved (media library, published collections, active products), so
+    // the form select and the on-canvas picker draw from one list.
     return (
       <div className="grid gap-1.5">
         <label htmlFor={id} className="font-mono text-xs font-medium text-ink-muted">
@@ -1387,17 +1417,19 @@ function AddBlock({
   );
 }
 
-/* --------------------------------------------------------- asset picker */
+/* --------------------------------------------------------- choice picker */
 
 /**
- * Choosing the asset an image block shows, raised from the block's own
- * replace affordance on the canvas and anchored next to it.
+ * Choosing the value a canvas replace affordance names — the image block's
+ * asset, a commerce block's collection or product — raised from the block's
+ * own on-canvas button and anchored next to it.
  *
- * A pick is an ordinary canvas edit (the tree's `assetId` prop), so the
- * canvas swaps the picture through the same draft broadcast as a keystroke
- * and the autosave persists it like one.
+ * A pick is an ordinary canvas edit (the tree's named prop), so the canvas
+ * swaps the value through the same draft broadcast as a keystroke and the
+ * autosave persists it like one. One picker, three entity kinds: the field
+ * descriptor's translated choices and the caller's labels do the shaping.
  */
-function AssetPicker({
+function AnchoredPicker({
   choices,
   x,
   y,
@@ -1407,13 +1439,13 @@ function AssetPicker({
   onPick,
   onClose,
 }: {
-  /** The asset field's choices, "None" first, exactly as the form shows them. */
+  /** The field's choices, "None" first, exactly as the form shows them. */
   choices: { value: string; label: string }[];
-  /** Physical viewport coordinates the canvas reported for the image block. */
+  /** Physical viewport coordinates the canvas reported for the block. */
   x: number;
   y: number;
   label: string;
-  /** Shown above the list when the library holds no assets at all. */
+  /** Shown above the list when there is nothing to pick yet. */
   emptyLabel: string;
   cancelLabel: string;
   onPick: (value: string) => void;

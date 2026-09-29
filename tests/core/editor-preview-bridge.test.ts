@@ -387,3 +387,42 @@ describe("the canvas bridge image replace", () => {
     );
   });
 });
+
+describe("the canvas bridge entity pick", () => {
+  const GRID_HTML = `
+    <div data-block-id="g1" data-block-type="productGrid">
+      <div class="fh-asset" data-pick-prop="collectionSlug" data-pick-current="wall">
+        <div class="fh-asset-body"><section><ul><li>Coast print</li></ul></section></div>
+        <button type="button" class="fh-replace" data-replace-pick="collectionSlug">Replace collection</button>
+      </div>
+    </div>`;
+
+  it("reports the pick intent with the block, the prop and the anchor box", () => {
+    const { document, parentPost } = canvas(GRID_HTML);
+    document.querySelector<HTMLButtonElement>(".fh-replace")!.click();
+    expect(parentPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "freeholder-preview",
+        blockId: "g1",
+        pick: { prop: "collectionSlug", x: 0, y: 0 },
+      }),
+      ORIGIN,
+    );
+  });
+
+  it("never repaints an entity pick as a media asset", async () => {
+    const { window, document } = canvas(GRID_HTML);
+    const fetchMock = vi.fn();
+    Object.defineProperty(window, "fetch", { configurable: true, value: fetchMock });
+    draftMessage(window, [
+      { id: "g1", type: "productGrid", props: { collectionSlug: "shelf" } },
+    ]);
+    await flushMicrotasks();
+    // The entity host is outside the asset namespace: no resolveImage fetch,
+    // and the server render stays for the post-save reload to reconcile —
+    // exactly like a heading level.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(document.querySelector(".fh-asset-body li")?.textContent).toBe("Coast print");
+    expect(document.querySelector("[data-asset-prop]")).toBeNull();
+  });
+});

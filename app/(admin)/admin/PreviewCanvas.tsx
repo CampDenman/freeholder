@@ -35,6 +35,18 @@ export interface PreviewLabels {
   noImage: string;
   /** Picker hint when the asset library holds no images at all. */
   noAssets: string;
+  /** The collection blocks' on-canvas replace affordance, and the picker's name. */
+  replaceCollection: string;
+  /** Placeholder a collection block with no collection chosen renders. */
+  noCollection: string;
+  /** Picker hint when no published collection exists yet. */
+  noCollections: string;
+  /** The product blocks' on-canvas replace affordance, and the picker's name. */
+  replaceProduct: string;
+  /** Placeholder a product block with no product chosen renders. */
+  noProduct: string;
+  /** Picker hint when no active product exists yet. */
+  noProducts: string;
 }
 
 /** A node of the editor's local draft — the same shape it persists. */
@@ -54,6 +66,7 @@ export function PreviewCanvas({
   onEdit,
   onMove,
   onAssetPick,
+  onPropPick,
   labels,
 }: {
   /** The preview page for this subject. */
@@ -97,6 +110,16 @@ export function PreviewCanvas({
     prop: string,
     anchor: { x: number; y: number },
   ) => void;
+  /**
+   * The replace affordance on a commerce block (collection or product pick)
+   * was clicked — same anchored-picker contract as `onAssetPick`, raised for
+   * entity props the media picker cannot offer.
+   */
+  onPropPick?: (
+    blockId: string,
+    prop: string,
+    anchor: { x: number; y: number },
+  ) => void;
   labels: PreviewLabels;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -134,6 +157,7 @@ export function PreviewCanvas({
         edit?: { blockId?: string; prop?: string; value?: unknown };
         move?: { blockId?: string; targetId?: string; position?: string };
         assetPick?: { prop?: string; x?: number; y?: number };
+        pick?: { prop?: string; x?: number; y?: number };
       };
       if (data?.source !== "freeholder-preview") return;
       // The frame (re)loaded — a reload may have raced the last broadcast, so
@@ -161,11 +185,18 @@ export function PreviewCanvas({
           y: (frameBox?.top ?? 0) + (data.assetPick.y ?? 0),
         });
       }
+      if (data.pick?.prop && data.blockId && onPropPick) {
+        const frameBox = frame.current?.getBoundingClientRect();
+        onPropPick(data.blockId, data.pick.prop, {
+          x: (frameBox?.left ?? 0) + (data.pick.x ?? 0),
+          y: (frameBox?.top ?? 0) + (data.pick.y ?? 0),
+        });
+      }
       onSelect(data.blockId ?? undefined);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [onSelect, onEdit, onMove, onAssetPick]);
+  }, [onSelect, onEdit, onMove, onAssetPick, onPropPick]);
 
   // …and selecting in the editor outlines it in the frame.
   useEffect(() => {

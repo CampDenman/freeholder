@@ -719,7 +719,14 @@ export default async function ProductPage({
               id={product.id}
               initialVersion={product.version}
               initialBlocks={product.description}
-              blockTypes={editorBlockTypes(t, "page", library.rows.map((asset) => ({ id: asset.id, filename: asset.filename })))}
+              blockTypes={editorBlockTypes(t, "page", library.rows.map((asset) => ({ id: asset.id, filename: asset.filename })), {
+                collections: allCollections
+                  .filter((collection) => collection.published)
+                  .map((collection) => ({ slug: collection.slug, title: collection.title })),
+                products: catalog
+                  .filter((row) => row.status === "active")
+                  .map((row) => ({ slug: row.slug, name: row.name })),
+              })}
               labels={editorLabels(t)}
             />
           </CardBody>

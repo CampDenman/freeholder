@@ -12,9 +12,11 @@
 // editor's *local draft* onto the typeable elements ([data-editable-prop],
 // [data-editable-rich]) and the swappable assets ([data-asset-prop]) so a
 // keystroke's preview never waits for the autosave debounce or a server
-// round-trip. Anything the draft cannot express this way (a heading level, a
-// new block) still reconverges when a save bumps the frame's version and it
-// reloads from stored state.
+// round-trip. Entity props ([data-pick-prop] — a collection or product a
+// commerce block renders) are reported as anchored pick requests instead;
+// they repaint through the post-save reload, like a heading level. Anything
+// the draft cannot express this way still reconverges when a save bumps the
+// frame's version and it reloads from stored state.
 export const CANVAS_BRIDGE = `
 // Chromium defaults to <div> for Enter inside a contentEditable region; the
 // typed rich document has paragraphs, so make the browser's own splits
@@ -58,6 +60,26 @@ document.addEventListener("click", function (event) {
       y: pickY,
       width: pickW,
       height: pickH
+    };
+  }
+  // The entity-pick affordance on the commerce blocks (collection/product):
+  // same anchored-picker message, different namespace. These are NOT media
+  // assets — the draft cannot repaint them client-side, so unlike
+  // data-asset-prop there is no fhApplyAsset pass for data-pick-prop; the
+  // post-save frame reload reconciles the pick, like a heading level.
+  var entityPick = target ? target.closest("[data-replace-pick]") : null;
+  if (entityPick) {
+    var pickHost = entityPick.closest("[data-pick-prop]");
+    var pickBox = pickHost ? pickHost.getBoundingClientRect() : null;
+    var entityX = 0, entityY = 0;
+    if (pickBox) {
+      entityX = pickBox.left;
+      entityY = pickBox.top;
+    }
+    message.pick = {
+      prop: entityPick.getAttribute("data-replace-pick"),
+      x: entityX,
+      y: entityY
     };
   }
   parent.postMessage(message, window.location.origin);

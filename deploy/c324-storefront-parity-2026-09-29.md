@@ -11,9 +11,9 @@ importer is a migration bridge, not an ongoing dependency). This document is the
 capability mapping C3.24's evidence standard names: it maps Shopify-core storefront
 capability onto Freeholder's native equivalent, marks each row native ✓ / partial ~ /
 gap ✗ with repository citations, and dispositions every gap to a named plan item.
-Its gap list feeds C3.25 (storefront commerce parity) and C2.24 (storefront editor
-blocks); the C3.24 box stays open until those items close the gaps, per the item's
-exact wording ("close every provable gap the mapping finds").*
+Its gap list fed C3.25 (storefront commerce parity) and C2.24 (storefront editor
+blocks); both gaps closed on 2026-09-29 (G1 via C3.25 slices 1–2 + C2.24; G2 via
+C3.25 slice 3 + C2.24), and rows 2–3 below carry the native flips with cited tests.*
 
 ## Method
 
@@ -35,24 +35,26 @@ but the public screen does not", the row says ~ and the gap is dispositioned.
 | Depth beyond Shopify | Reusable option dimensions across products; attribute comparison; six product kinds through one contract. |
 | Disposition | None. |
 
-### 2. Collections / categories + faceted browse — ✗ gap
+### 2. Collections / categories + faceted browse — ✓ native
 
 | | |
 |---|---|
 | Shopify-core | Product collections/categories, taxonomy, faceted storefront browse, storefront search. |
-| Freeholder | No product taxonomy exists: the catalog schema's only category foreign key is `products.tax_category_id` (invoicing, `src/modules/catalog/schema.ts`); `project_collections` (portfolio groupings) are not product taxonomy. The public `/products` index is a flat list rendered by the `productsIndex` block (`src/modules/cms/blocks/library.tsx`); `catalog.filterProductsByAttribute` is an admin merchandising verb (C5.11), not a public facet; the search service (`src/core/search/service.ts`) has no public storefront UI. |
-| Proof of absence | Schema sweep of `src/modules/catalog/schema.ts` and `db/migrations/0000_reviewed-baseline.sql`; no `collection`/`category` table for products. |
-| Disposition | **C3.25** — collections/categories tables + services, faceted public browse, storefront search. **C2.24** — collection/facet/search blocks for the public page editor. |
+| Freeholder | Collections and collection_products tables with services, trash/restore/purge, segment-driven rule membership, public /c/<slug> pages with SEO stamping (C3.25 slice 1, `src/modules/catalog/collections.ts`, migration `db/migrations/0020_collections.sql`); one `catalog.browseProducts` query powers the /c/<slug> filter/sort UI and the /search page — facet dimensions from option types, filterable attributes, anonymous-mirror price bands and availability, filter state in crawlable query params (C3.25 slice 2, `src/modules/catalog/browse.ts`, `app/(public)/browse-params.ts`, `app/(public)/browse/`, `app/(public)/search/`); the editor blocks render the same machinery on composed pages — productGrid (collection pick, optional facet panel, sort, pagination), featuredCollection (hero + curated front), storeSearch (term search scoped to the page's own ?q) — through the storefront's own CollectionGrid/FacetPanel/SortLinks/SearchBox components, so a composed page and an entity page cannot diverge (C2.24, `src/modules/cms/blocks/merchandising.tsx`). |
+| Proof | `tests/core/catalog-collections.test.ts`, `tests/core/collections-storefront.test.ts`, `tests/core/catalog-browse.test.ts`, `tests/core/browse-storefront.test.ts` (services and both pages); `tests/core/merch-blocks.test.ts` (the blocks, canvas and public, EN/FR/ES/AR) |
+| Depth beyond Shopify | Rule-based (segment-driven) membership alongside manual curation, through one reconciliation path; the same browse query feeds the page, the search surface and the editor blocks. |
+| Disposition | None — G1 closed by C3.25 slices 1–2 (taxonomy, faceted browse, storefront search) and C2.24 (the collection/facet/search blocks), 2026-09-29. |
 
-### 3. Cart / checkout — ~ partial (services native and deep; public self-serve UI is the gap)
+### 3. Cart / checkout — ✓ native (services and public self-serve UI)
 
 | | |
 |---|---|
 | Shopify-core | Visitor adds to cart, checks out, pays, gets an order confirmation — self-serve on the storefront. |
 | Freeholder (services) | Persistent/contact-attached carts with guest tokens, cross-device restore, merge, wishlists, price/stock refresh, abandonment events (`src/modules/catalog/cart.ts`, C5.20); checkout creates the order and an issued invoice in one transaction with shipping quote, tax, consent, idempotency and failure recovery (`catalog.checkoutCart`, C5.21); `payOrder` convergence. Gallery selling runs through the same cart (`galleries.addToCart`, `src/modules/galleries/service.ts`). |
 | Proof (services) | `tests/core/catalog-carts.test.ts`, `tests/core/cart-access.test.ts`, `tests/core/gallery-sales.test.ts` |
-| The gap | No public storefront cart/checkout/confirmation UI: no route under `app/` outside admin calls the cart services (`app/(admin)/admin/carts` is staff-only; the `productDetail` block renders no buy affordance). C5.21 itself records "public storefront checkout waits on product landing pages". |
-| Disposition | **C3.25** — public cart, checkout and order-confirmation pages bound to the existing services. **C2.24** — add-to-cart affordance on `productDetail`/product cards. |
+| Freeholder (public UI) | Add-to-cart with a variant picker on the shelf, the product detail block and product cards, quoting the cart's own resolvePrice/availability sources (`catalog.purchaseOptions`); the guest cart capability in an HttpOnly cookie; a cartWidget chrome block; public /cart, /checkout and /orders/confirm pages — checkout proves the email first through the platform's customer magic link, and guest order lookup extends the cart-token gate via `catalog.shopperOrder` (C3.25 slice 3, `src/modules/catalog/storefront.ts`, `app/(public)/buy/`, `app/(public)/cart/`, `app/(public)/checkout/`, `app/(public)/orders/confirm/`). The buy affordance reaches composed pages through C2.24's buyButton block and the upgraded productCard, rendered by the same AddToCart component the shelf uses (`src/modules/cms/blocks/merchandising.tsx`, `src/modules/cms/blocks/surfaces.tsx`). |
+| Proof (public UI) | `tests/core/storefront-commerce.test.ts`, `tests/core/cart-storefront.test.ts`, `tests/browser/storefront-checkout.spec.ts` (browse → variant picker → cart → email proof → order → token-gated confirmation); `tests/core/merch-blocks.test.ts` and `tests/browser/storefront-merch-blocks.spec.ts` (a page composed of the merchandising blocks: browse, filter, buy). |
+| Disposition | None — G2 closed by C3.25 slice 3 (public cart/checkout/confirmation pages) and C2.24 (the buy affordance on product blocks), 2026-09-29. |
 
 ### 4. Discounts / coupons — ✓ native
 
@@ -131,13 +133,13 @@ but the public screen does not", the row says ~ and the gap is dispositioned.
 
 | # | Gap | Status | Disposition |
 |---|---|---|---|
-| G1 | No product collections/categories taxonomy, no faceted public browse, no storefront search | ✗ | **C3.25** (tables/services + public browse + search), **C2.24** (collection/facet/search blocks) |
-| G2 | No public self-serve storefront cart/checkout/order-confirmation UI (services are native and deep) | ✗ | **C3.25** (public pages on existing services), **C2.24** (buy affordance on product blocks) |
+| G1 | No product collections/categories taxonomy, no faceted public browse, no storefront search | ✓ closed 2026-09-29 | **C3.25** slices 1–2 (tables/services + public browse/search), **C2.24** (collection/facet/search blocks) — rows flip native with cited tests |
+| G2 | No public self-serve storefront cart/checkout/order-confirmation UI (services are native and deep) | ✓ closed 2026-09-29 | **C3.25** slice 3 (public pages on existing services), **C2.24** (buy affordance on product blocks) — row flips native with cited tests |
 | G3 | Live carrier label purchase | deferred | Documented adapter seam (C5.18); provider work, not a parity gap |
 | G4 | Prebuilt theme marketplace | deferred | §36 anti-roadmap (no lock-in formats); token-level theming ships |
 | G5 | Third-party analytics pixels as core | deferred | §36 anti-roadmap; first-party analytics ships |
 
-Counts: 2 fix-now gaps → C3.25/C2.24; 3 deferred with reasons. Native ✓: 9 rows (products/variants, discounts/coupons, customer accounts, orders+notifications, analytics, SEO/marketing, shipping/taxes, apps/webhooks, themes). Partial ~: 1 row (cart/checkout — services ✓, public UI is G2).
+Counts: both fix-now gaps closed (G1 via C3.25 slices 1–2 + C2.24; G2 via C3.25 slice 3 + C2.24). 3 deferred with reasons. Native ✓: 10 rows (products/variants, **collections/faceted browse/storefront search**, discounts/coupons, customer accounts, orders+notifications, analytics, SEO/marketing, shipping/taxes, apps/webhooks, themes) — cart/checkout promoted from partial ~ to native ✓ on 2026-09-29 with its public UI proven. Partial ~: 0.
 
 ## Shopify importer positioning (migration-only)
 
@@ -158,7 +160,9 @@ positioning is recorded in MASTER.md §36, C3.13 and C3.24 (owner decision
 ## What closes C3.24
 
 C3.24's box requires the mapping **and** the gaps closed. This document is the
-mapping; closure lands when C3.25 (G1, G2 storefront commerce) and C2.24 (G1, G2
-editor blocks) close their gap lists, at which point `deploy/f-criteria-matrix.md`'s
-C3.24 row updates from its standing N/A cells to the dated evidence. Until then the
-box stays open, named in §43.1's focus and remaining-open rows.
+mapping; closure landed when C3.25 (G1, G2 storefront commerce) and C2.24 (G1,
+G2 editor blocks) closed their gap lists — **both gaps closed 2026-09-29**: G1
+by C3.25 slices 1–2 plus C2.24's collection/facet/search blocks, G2 by C3.25
+slice 3 plus C2.24's buy affordance on the product blocks. Rows 2–3 above flip
+to native ✓ with the cited tests, and `deploy/f-criteria-matrix.md`'s C3.24 row
+carries the dated evidence.

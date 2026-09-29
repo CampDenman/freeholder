@@ -40,11 +40,64 @@ export interface AssetChoice {
   kind?: "image" | "video" | "doc" | "audio";
 }
 
+/** One entry the collection picker can offer — a published collection. */
+export interface CollectionChoice {
+  slug: string;
+  title: string;
+}
+
+/** One entry the product picker can offer — an active product. */
+export interface ProductChoice {
+  slug: string;
+  name: string;
+}
+
+/**
+ * The choice lists entity-pick fields draw from. Every editor screen passes
+ * what it can resolve; a missing list simply renders that field's "None"
+ * entry alone, the same as an empty asset library.
+ */
+export interface EntityChoices {
+  collections?: CollectionChoice[];
+  products?: ProductChoice[];
+}
+
 function translateField(
   t: Translate,
   field: FieldDescriptor,
   assets: AssetChoice[],
+  entities: EntityChoices = {},
 ): EditorField {
+  if (field.kind === "collection") {
+    return {
+      name: field.name,
+      kind: field.kind,
+      required: field.required,
+      label: label(t, `cms.field.${field.name}`, field.name),
+      choices: [
+        { value: "", label: t("cms.field.noCollection") },
+        ...(entities.collections ?? []).map((collection) => ({
+          value: collection.slug,
+          label: collection.title,
+        })),
+      ],
+    };
+  }
+  if (field.kind === "product") {
+    return {
+      name: field.name,
+      kind: field.kind,
+      required: field.required,
+      label: label(t, `cms.field.${field.name}`, field.name),
+      choices: [
+        { value: "", label: t("cms.field.noProduct") },
+        ...(entities.products ?? []).map((product) => ({
+          value: product.slug,
+          label: product.name,
+        })),
+      ],
+    };
+  }
   return {
     name: field.name,
     kind: field.kind,
@@ -67,7 +120,7 @@ function translateField(
             value: choice.value,
             label: label(t, choice.labelKey, choice.value),
           })),
-    itemFields: field.itemFields?.map((sub) => translateField(t, sub, assets)),
+    itemFields: field.itemFields?.map((sub) => translateField(t, sub, assets, entities)),
   };
 }
 
@@ -75,13 +128,14 @@ export function editorBlockTypes(
   t: Translate,
   context: "page" | "chrome" | "email",
   assets: AssetChoice[] = [],
+  entities: EntityChoices = {},
 ): EditorBlockType[] {
   return paletteFor(context).map((entry) => ({
     type: entry.type,
     label: label(t, entry.labelKey, entry.type),
     container: entry.container,
     starter: entry.starter,
-    fields: entry.fields.map((field) => translateField(t, field, assets)),
+    fields: entry.fields.map((field) => translateField(t, field, assets, entities)),
   }));
 }
 
@@ -94,6 +148,12 @@ export function editorLabels(t: Translate): EditorLabels {
       replaceImage: t("cms.editor.replaceImage"),
       noImage: t("cms.editor.noImage"),
       noAssets: t("cms.editor.noAssets"),
+      replaceCollection: t("cms.editor.replaceCollection"),
+      noCollection: t("cms.editor.noCollection"),
+      noCollections: t("cms.editor.noCollections"),
+      replaceProduct: t("cms.editor.replaceProduct"),
+      noProduct: t("cms.editor.noProduct"),
+      noProducts: t("cms.editor.noProducts"),
     },
     addBlock: t("cms.editor.addBlock"),
     cancel: t("common.cancel"),

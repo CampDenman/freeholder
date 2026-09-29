@@ -26,6 +26,7 @@ import {
 import { listComments } from "@/modules/cms/collaboration";
 import { listAssets } from "@/core/media/service";
 import { listRoleUsers } from "@/core/roles/service";
+import { listCollections, listProducts } from "@/modules/catalog/service";
 import { actorString } from "@/core/service";
 import type { BlockNode } from "@/modules/cms/blocks/types";
 import { Button, Card, CardBody, CardHeader, Field, Select } from "@/ui/primitives";
@@ -60,7 +61,7 @@ export default async function EditPagePage({
     throw error;
   });
 
-  const [business, revisions, authors, library, t, links, lease, diff, comments, staff, sectionRows, layout, categories, filed] =
+  const [business, revisions, authors, library, t, links, lease, diff, comments, staff, sectionRows, layout, categories, filed, collectionRows, productRows] =
     await Promise.all([
       currentBusiness(),
       listRevisions.call({ subjectType: "page", subjectId: page.id }, actor),
@@ -81,6 +82,10 @@ export default async function EditPagePage({
       getLayout.call({ pageId: page.id }, actor),
       helpCategoryList.call({ locale: page.locale }, actor).catch(() => []),
       helpArticleFeedback.call({ locale: page.locale }, actor).catch(() => []),
+      // The commerce blocks' pickers: published collections and active
+      // products, exactly what the storefront itself may render.
+      listCollections.call({}, actor).catch(() => []),
+      listProducts.call({ status: "active", limit: 500 }, actor).catch(() => []),
     ]);
   const currentCategory = filed.find((article) => article.id === page.id)?.categoryId ?? "";
 
@@ -160,6 +165,12 @@ export default async function EditPagePage({
               filename: a.filename,
               kind: a.kind,
             })),
+            {
+              collections: collectionRows
+                .filter((collection) => collection.published)
+                .map((collection) => ({ slug: collection.slug, title: collection.title })),
+              products: productRows.map((product) => ({ slug: product.slug, name: product.name })),
+            },
           ),
           ...sectionPaletteEntries(
             t,
