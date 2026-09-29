@@ -4588,7 +4588,15 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   editor blocks that render both are C2.24. The cart/checkout services this
   builds on are C5.20–C5.22, already native and tested. Proof contract:
   mapping rows 2 and 3 flip to native with cited tests. New work: unchecked
-  until both gaps close.)
+  builds on are C5.20–C5.22, already native and tested. Proof contract:
+  mapping rows 2 and 3 flip to native with cited tests. New work: unchecked
+  until both gaps close. Slice 1 (product taxonomy, 2026-09-29): collections
+  and collection_products tables with services, trash/restore/purge, segment
+  recompute, public /c/<slug> pages with SEO stamping, and admin UI —
+  evidence `src/modules/catalog/collections.ts`, migration
+  `db/migrations/0020_collections.sql`, `tests/core/catalog-collections.test.ts`,
+  `tests/core/collections-storefront.test.ts`; faceted browse, storefront
+  search and the public cart/checkout pages remain for later slices.)
 - [ ] **C3.26** World-class merchandising: first-class product taxonomy —
   collections and categories with manual and rule-based (segment-driven)
   membership; faceted storefront browsing (filter/sort on price, options,
@@ -4601,7 +4609,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   collections, filter, and buy; five proofs named. Renumbered from C3.25
   when #446's storefront-parity items merged first; this item extends
   C3.25's collections/faceted-browse parity floor to the world-class
-  ceiling described here.)
+  ceiling described here. Slice 1's collections spine —
+  `src/modules/catalog/collections.ts`, `0020_collections.sql`,
+  `tests/core/catalog-collections.test.ts`,
+  `tests/core/collections-storefront.test.ts` — is shared evidence for
+  this item's taxonomy half.)
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.

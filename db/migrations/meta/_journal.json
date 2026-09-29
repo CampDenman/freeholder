@@ -141,6 +141,13 @@
       "when": 1793308800000,
       "tag": "0019_paradise_voice_video",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793310000000,
+      "tag": "0020_collections",
+      "breakpoints": true
     }
   ]
 }

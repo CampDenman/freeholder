@@ -5,6 +5,8 @@ export {
   backInStockSubscriptions,
   bundleComponents,
   cancellationPolicies,
+  collections,
+  collectionProducts,
   customerGroups,
   deliveryWindows,
   inventoryItems,

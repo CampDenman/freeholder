@@ -90,6 +90,15 @@ import {
   updateProduct,
   updateProductDescription,
   upsertServiceOffering,
+  addCollectionProduct,
+  createCollection,
+  getCollection,
+  purgeCollection,
+  removeCollection,
+  removeCollectionProduct,
+  reorderCollectionProducts,
+  restoreCollection,
+  updateCollection,
 } from "@/modules/catalog/service";
 import type { EditorNode } from "./admin/BlockEditor";
 
@@ -926,4 +935,115 @@ export async function saveProductDescriptionAction(
   } catch (error) {
     return { error: errorMessage(error) };
   }
+}
+
+/**
+ * Thin collection admin callers (C3.25 slice 1). The services carry the
+ * rules — stale-write refusal, segment liveness, derived-membership
+ * protection — so this stays a translation from form fields to calls.
+ */
+export async function collectionAction(form: FormData): Promise<void> {
+  const intent = field(form, "intent");
+  let destination = "/admin/collections";
+  try {
+    const actor = await currentActor();
+    if (intent === "create") {
+      const ruleType = field(form, "ruleType") || "manual";
+      const collection = await createCollection.call(
+        {
+          title: field(form, "title"),
+          slug: field(form, "slug"),
+          ruleType: ruleType === "segment" ? "segment" : "manual",
+          ...(ruleType === "segment" && field(form, "segmentId")
+            ? { ruleConfig: { segmentId: field(form, "segmentId") } }
+            : {}),
+          sortOrder:
+            field(form, "sortOrder") === "title" || field(form, "sortOrder") === "newest"
+              ? field(form, "sortOrder")
+              : "manual",
+        },
+        actor,
+      );
+      destination = `/admin/collections/${collection.id}?saved=created`;
+    } else if (intent === "update") {
+      const id = field(form, "id");
+      const expectedVersion = Number(field(form, "expectedVersion"));
+      const ruleType = field(form, "ruleType") || "manual";
+      destination = `/admin/collections/${id}`;
+      await updateCollection.call(
+        {
+          id,
+          expectedVersion,
+          title: field(form, "title"),
+          slug: field(form, "slug"),
+          description: field(form, "description") || null,
+          ruleType: ruleType === "segment" ? "segment" : "manual",
+          ...(ruleType === "segment" && field(form, "segmentId")
+            ? { ruleConfig: { segmentId: field(form, "segmentId") } }
+            : {}),
+          sortOrder:
+            field(form, "sortOrder") === "title" || field(form, "sortOrder") === "newest"
+              ? field(form, "sortOrder")
+              : "manual",
+          published: field(form, "published") === "true",
+          seo: {
+            ...(field(form, "seoTitle") ? { title: field(form, "seoTitle") } : {}),
+            ...(field(form, "seoDescription")
+              ? { description: field(form, "seoDescription") }
+              : {}),
+          },
+        },
+        actor,
+      );
+      destination += "?saved=updated";
+    } else if (intent === "addProduct") {
+      const collectionId = field(form, "collectionId");
+      await addCollectionProduct.call(
+        { collectionId, productId: field(form, "productId") },
+        actor,
+      );
+      destination = `/admin/collections/${collectionId}?saved=productAdded`;
+    } else if (intent === "removeProduct") {
+      const collectionId = field(form, "collectionId");
+      await removeCollectionProduct.call(
+        { collectionId, productId: field(form, "productId") },
+        actor,
+      );
+      destination = `/admin/collections/${collectionId}?saved=productRemoved`;
+    } else if (intent === "move") {
+      const collectionId = field(form, "collectionId");
+      const productId = field(form, "productId");
+      const direction = field(form, "direction");
+      const current = await getCollection.call({ id: collectionId }, actor);
+      const ids = current.products.map((row) => row.productId);
+      const index = ids.indexOf(productId);
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (index >= 0 && target >= 0 && target < ids.length) {
+        [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+        await reorderCollectionProducts.call({ collectionId, productIds: ids }, actor);
+      }
+      destination = `/admin/collections/${collectionId}`;
+    } else if (intent === "trash") {
+      const id = field(form, "id");
+      await removeCollection.call({ id }, actor);
+      destination = `/admin/collections?saved=trashed`;
+    } else if (intent === "restore") {
+      const id = field(form, "id");
+      await restoreCollection.call({ id }, actor);
+      destination = `/admin/collections/${id}?saved=restored`;
+    } else if (intent === "purge") {
+      await purgeCollection.call(
+        { id: field(form, "id"), confirmation: "PURGE" as const },
+        actor,
+      );
+      destination = `/admin/collections?saved=purged`;
+    } else {
+      throw new ServiceError("validation", "Unknown collection action.");
+    }
+  } catch (error) {
+    destination += `${destination.includes("?") ? "&" : "?"}error=${encodeURIComponent(errorMessage(error))}`;
+  }
+  revalidatePath("/admin/collections");
+  revalidatePath("/admin/products");
+  redirect(destination);
 }

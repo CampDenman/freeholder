@@ -23,6 +23,7 @@ const INTERNAL = [
   "assessments.purgeExpired",
   "calculators.purgeExpired",
   "cms.purgeExpiredPages",
+  "collections.purgeExpired",
   "forms.purgeExpired",
   "popups.purgeExpired",
   "segments.purgeExpired",
@@ -54,6 +55,7 @@ const INTERNAL = [
   "broadcasts.tick",
   // Provider work is split around short system-only snapshot/apply services.
   // These names are implementation seams for workers, never public verbs.
+  "catalog.recomputeCollectionMembership",
   "catalogue.applyRefresh",
   "catalogue.refreshSource",
   "entitlements.issuePass",
@@ -132,10 +134,15 @@ const CALLER_AUTHORIZED_PHASES = [
   "assessments.purgeExpired",
   "calculators.purgeExpired",
   "cms.purgeExpiredPages",
+  "collections.purgeExpired",
   "forms.purgeExpired",
   "popups.purgeExpired",
   "segments.purgeExpired",
   "views.purgeExpired",
+  // The membership recompute is a job phase: it runs from
+  // catalog.recomputeSegmentCollections on nobody's behalf and claims nothing
+  // on an external protocol.
+  "catalog.recomputeCollectionMembership",
   "invoicing.claimCustomerCheckout",
   "invoicing.applyCustomerCheckout",
   "invoicing.customerPaymentSource",
