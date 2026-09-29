@@ -5,7 +5,12 @@ SPDX-License-Identifier: Apache-2.0
 
 # Spec reconciliation — §§1–42 vs schema, services, UI
 
-*MASTER.md C11.16. Reconciled 2026-09-13 against parent `2b14cbe`.*
+*MASTER.md C11.16. Reconciled 2026-09-13 against parent `2b14cbe`;
+re-reconciled 2026-09-28 against main after #441–#443: C3.13 closed by the live
+Paradise Comms acceptance, C11.08 closed by the live Tier-1 restore drill,
+C11.11 closed on its archived reference-target evidence, the mobile-app rows
+re-cast as v2-deferred per §43.18, and C3.24 (native storefront parity)
+recorded as the new remaining product item.*
 
 C11.16 requires that every affirmative capability in §§1–42 either has a
 completed checklist item, is listed here as remaining work with an open
@@ -26,7 +31,9 @@ verified operational completeness. Current evidence is in MASTER.md §43 and
   routes, `apps/mobile`
 
 Checked C-items are the delivery evidence; unchecked C-items are remaining.
-Anti-roadmap rows are refusals, not leftovers.
+Anti-roadmap rows are refusals, not leftovers. Reconciliation updates since
+2026-09-13 are noted in the rows and the remaining-work table below; the
+2026-09-13 baseline is preserved in git history.
 
 ## How to read the table
 
@@ -35,6 +42,7 @@ Anti-roadmap rows are refusals, not leftovers.
 | Built | Affirmative claim exists in schema, services and a human surface, with a checked C-item |
 | Built (service) | Schema + services exist; F04 is a named existing screen or an explicit N/A on the C-item |
 | Remaining | Affirmative, not complete; named open C-item |
+| Deferred to v2 | Owner-deferred per §43.18; the obligation survives verbatim to v2 and is not v1 remaining work |
 | Struck | Wording in §§1–42 over-claimed; narrowed in this change |
 | Doctrine | Architecture / refusal / historical rationale, not a feature to ship |
 
@@ -58,7 +66,7 @@ Anti-roadmap rows are refusals, not leftovers.
 | 4.11 | Shipping | Zones, methods, rate bands, boxes, fulfillments, delivery windows, RMAs. `/admin/shipping`, fulfillment, returns. Carrier family is `adapters/carrier/none`. | Built | Live carrier labels/rates are the seam, not a shipped UPS/ShipStation adapter (C5.18 honesty). |
 | 4.12 | Tax | Categories, zones, rates, registrations, exemptions, tax lines. `/admin/invoices/tax`. `adapters/tax/none` plus built-in templates (CA/EU/UK/US/AU/NZ). | Built | **Struck named Stripe Tax / Avalara / TaxJar implementations as DONE**, including the leftover “replacement family” sentence. The contract is C5.01; the arithmetic is the templates (C5.02–C5.04). |
 | 4.13 | Loyalty & referrals | Programs, accounts, points ledger, tiers, rewards, attribution, invitations, payout batches/lines. `/admin/loyalty`, referrals. | Built | C9.09–C9.12. Payout `method` is manual; `provider` is not a shipped adapter (see 4.3). |
-| 4.14 | Messaging | Conversations, messages, deliveries, numbers, windows, keywords, SMS Twilio, site chat. `/admin/inbox`, messaging. Voice/video is the plugin. | Built | C7.08–C7.15, C3.13 plugin. |
+| 4.14 | Messaging | Conversations, messages, deliveries, numbers, windows, keywords, SMS Twilio, site chat. `/admin/inbox`, messaging. Voice/video is the plugin. | Built | C7.08–C7.15. C3.13 closed 2026-09-28: the Paradise Comms adapter, webhooks, owner-storage import and provider-confirmed erasure ran live against production paradisemodern.com (`deploy/c313-live-acceptance-2026-09-28.md`). |
 | 4.15 | Subscriptions & paywalls | Plans, subscriptions, entitlements, grants, pass balances, paywalls, meters, dunning. `/admin/subscriptions`, paywalls. Portal self-service. | Built | **Live Stripe/PayPal settlement remaining honesty (C11.05), not a claimed hop.** |
 | 4.16 | Ads | Sizes, slots, advertisers, campaigns, creatives, stats, ads.txt. `/admin/ads`. | Built | C9.17–C9.20. |
 | 4.17 | Runs | `runs`, `run_steps`, `run_approvals`, `run_spend` shared by agents and automations. `/admin/work`, automations. | Built | C4.02, C9.02. |
@@ -72,7 +80,7 @@ Anti-roadmap rows are refusals, not leftovers.
 | 12 | Adapter contract | Payments (Stripe, PayPal, manual, Square, Mollie, Razorpay, Paystack, Flutterwave), mail (Gmail/Outlook/Resend/Postmark/SES/SMTP), storage, SMS Twilio, AI, agent, POS Stripe/manual, social, tax/carrier/calendar `none`. | Built | **Struck Mercado Pago as in-plan.** C5.07 shipped the four named “after 1.0” adapters. Accounting is export shapes (C9.32), not an adapter family. |
 | 13 | Setup wizard | `/setup` country/locale/currency/timezone, owner, modules, demo. | Built | C1.24–C1.25. |
 | 14 | Replit-first deploy | `.replit`, `replit.nix`, `create-freeholder`, `env.ts`, doctor, ownership export. | Built | Struck MIT on the scaffolder (Apache-2.0, C0.10 / §22). |
-| 15 | Quality gates | typecheck, lint, tests, SEO, i18n, money, service-layer, changelog, a11y, upgrade, schema-compat, autofill, perf harness. | Built | Medium-dataset perf and browser vitals remain C11.11. Upgrade gate needs published images. |
+| 15 | Quality gates | typecheck, lint, tests, SEO, i18n, money, service-layer, changelog, a11y, upgrade, schema-compat, autofill, perf harness. | Built | C11.11 closed 2026-09-28: all thirteen §15.1 budgets pass on the reference target with archived evidence (`deploy/perf-reference-run-2026-09-27.log`, summary in `deploy/performance-measurements.md`). Upgrade gate needs published images. |
 | 16 | Agent conventions | CLAUDE.md, one C-item per change, DCO, changesets. | Built | C0.08, C0.12. |
 | 17 | Configuration | `freeholder.config.ts`, env Zod, doctor. | Built | C3.16 recipes. |
 | 18 | Recipe anatomy | Six recipe directories with README / env / infra / verify. | Built | C3.16–C3.17. |
@@ -86,14 +94,14 @@ Anti-roadmap rows are refusals, not leftovers.
 | 26 | Trust model | Signed install, capability isolation, hostile-plugin refusals. | Built | C3.10–C3.11. |
 | 27 | Federated registries | Local/community/verified/private registries. | Built | C3.11. |
 | 28 | Living platform contract | OpenAPI, SDK, MCP, `llms.txt` generated from the registry. | Built | C3.01–C3.07. |
-| 29 | Ecosystem | First-party plugins teach the API by existing. | Built | C3.13 gift/print/community/voice-video/marketplace. |
+| 29 | Ecosystem | First-party plugins teach the API by existing. | Built | C3.13 gift/print/community/voice-video/marketplace (closed 2026-09-28). |
 | 30 | CRM depth | Pipelines, tasks, notes, segments, scoring, saved views, imports, newsletters, templates. `/admin/pipeline`, tasks, segments, scoring, newsletters. | Built | C7.01–C7.07, C9.04–C9.06. |
 | 31 | Front-site assistant | Grounded assistant, guardrails, corpus. `/admin/assistant`, public block. | Built | C9.21–C9.23. |
 | 32 | Universal editor | Block editor, sections, templates, layouts, tokens, experiments, email-safe output. `/admin/pages`, sections, templates, design, experiments. | Built | C2.01–C2.23. |
 | 33 | Social hub | OAuth, ingest, composer, GBP, publication calendar. `/admin/social`. | Built | C9.24–C9.27, C9.31. Auto-clip struck. |
 | 34 | Sharing DNA | Share targets, tracked links, gallery partner, quote partner, product/gift share, embeds. `/admin/sharing`, embed routes. | Built | C9.28–C9.29, C9.34–C9.36. |
-| 35 | React Native app | `packages/mobile-app`, `apps/mobile`, screen contracts, push tokens, private cache, companion/capture code, `freeholder-app init`, store/CI gates. | Remaining | **C10.15 and C10.16 are checked.** Device leftover is physical proof: C10.17 companion, C10.18 capture batches, C10.25–C10.28 tabs, C10.30 cache. Signed store binaries still need EAS credentials. |
-| 36 | Mined roadmap | Core absorptions and first-party plugins match C3.13 / C5–C9. Anti-roadmap held. Autofill gate §36.1 / §15.10. | Built | Anti-roadmap is exclusion, not leftover. |
+| 35 | React Native app | `packages/mobile-app`, `apps/mobile`, screen contracts, push tokens, private cache, companion/capture code, `freeholder-app init`, store/CI gates. | Deferred to v2 | Owner decision 2026-09-15 (§43.18): C10.17, C10.18, C10.25, C10.26, C10.27, C10.28 and C10.30 defer to v2 with obligations verbatim. C10.15 init and C10.16 store/CI gates are checked. Signed store binaries still need EAS credentials. |
+| 36 | Mined roadmap | Core absorptions and first-party plugins match C3.13 / C5–C9. Anti-roadmap held. Autofill gate §36.1 / §15.10. | Built | Anti-roadmap is exclusion, not leftover. C3.24 is the open affirmative work: native storefront parity against Shopify-core capability (owner decision 2026-09-27); the importer is a migration bridge. |
 | 37 | Self-building instance | Builder content + code lanes, MCP, `/source`, budgets, approvals. `/admin/builder`. | Built | C4.19–C4.22. GitHub PR delivery still needs a connected repo (C11.06 honesty). |
 | 38 | Day-one surface | Demos, guidance, capture, services, calendars, catalog, shipping/tax, passes, loyalty, SMS, subscriptions, ads, time, POS, projects, galleries, SEO, CRM, automations, reporting, roles, export, help, waivers, updates. | Built except named leftovers | In-person Terminal is adapter representation (C5.24), not a claimed live reader. 3D/AR is accepted media roles (C5.11), not a storefront AR viewer. |
 | 39 | Staying current | Channels, signed feed, checks, preflight, apply/rollback, N-1, policy, fork lane, targets, admin/CLI/MCP. `/admin/updates`. | Built | C10.01–C10.11, C10.19–C10.22. |
@@ -123,14 +131,16 @@ These stay in the spec. They are why C11.17 cannot be checked.
 
 | Item | What is still true |
 |---|---|
-| Device evidence | C10.17, C10.18, C10.25, C10.26, C10.27, C10.28, C10.30: native screens/cache exist in tree; physical device, keychain and accessibility inspection are not claimed. C10.15 init and C10.16 store/CI gates are checked. |
+| Native storefront parity | C3.24 (owner decision 2026-09-27): prove the native Freeholder store covers Shopify-core capability with a published mapping; close every provable gap the mapping finds. The Shopify importer is repositioned as a migration bridge. This is the remaining C1–C10 product item, and it is what keeps C11.16's own box open. |
+| Device evidence | Not v1 remaining work: owner decision 2026-09-15 (§43.18) defers C10.17, C10.18, C10.25, C10.26, C10.27, C10.28 and C10.30 to v2 with obligations verbatim. C10.15 init and C10.16 store/CI gates are checked. |
 | Independent security review | C11.10 — packet at `security/independent-review-packet.md` is not a signed review. |
 | Live settlement | C11.05 remaining honesty. Manual/offline and adapter doubles are what journeys run. Hosted Stripe/PayPal charges are not claimed. |
 | C11.08 Tier-1 restore | Closed 2026-09-28 by the live restore drill (`deploy/c11-08-restore-summary.md` + dated drill log): real export → provision a second droplet from the recipe → `pg_restore` into an empty database → verify before cutover; target re-export matched the source on 366/374 tables with every owned total exact, `pnpm doctor` 16 ok / 14 warn / 0 fail, seeded public page served through the target's Caddy. Fresh demo + WordPress/generic import + local signed apply/rollback predate it (2026-09-12). |
-| C11.11 large seed | Small-seed server clocks in CI; verified medium/large fixtures and opt-in real-worker queue dispatch measurements are available. Reference-target acceptance, Core Web Vitals, editor, migration and cold-boot remain open; requested missing clocks fail closed. |
+| C11.11 large seed | Closed 2026-09-28 on the 2026-09-27 reference-target acceptance run: all thirteen §15.1 budgets pass on the provisioned `freeholder-ref` droplet against the verified medium dataset — public render 203ms p95 (274ms on-box), LCP 432ms p75, INP 16ms p75, CLS 0.00064, admin 732/661ms p95, search 499ms p95, report 544ms p95, editor first paint 488ms p95, keystroke→preview 119.8ms raw at the harness floor, queue 1,219ms p95, migration chain 49.1s, cold boot 7.81s p95. Every raw sample archived in `deploy/perf-reference-run-2026-09-27.log`; summary and honest caveats in `deploy/performance-measurements.md`. The spec-reconciliation gate was re-aimed with this check: C11.11 moved from "must stay unchecked" to "must be checked" (`tests/core/spec-reconciliation.test.ts`), the same way C11.08's check arrived the same day. |
 | C11.12 leftovers | Closed 2026-09-16: `locales/ar.json` ships the complete Arabic catalog (i18n-gate enforced, AI-drafted pending native review); the real-browser suite proves `html[lang=ar][dir=rtl]` with axe in both themes, keyboard loop and 320px reflow on admin, storefront and portal; populated contact/invoice/product/appointment detail forms and ten more owner screens carry the same pass. |
 | C11.14 leftovers | `search.query` covers registered live sources; other titled contact-attached stores (orders, subscriptions, remaining SEARCH_TABLE_OPT_OUTS) stay per-list. Per-record restore now covers note/task trash, media/product restoration, merge-undo, the instance drill and trash/restore/purge for pages, forms, popups, segments and saved views (`deploy/record-trash.md`, `tests/core/record-trash-families.test.ts`); money ledgers, append-only evidence, credentials and never-deleted families are named not-applicable. Retention is a bounded per-kind policy registry + `core.applyRetention` job (privacy holds honoured; consent/audit/accounting opted out), not a TTL column on every table. |
 | C11.15 | Closed 2026-09-16 by `deploy/doc-claim-mapping.md` + `tests/core/doc-claim-mapping.test.ts`: every affirmative §§1–42 claim is mapped to passing evidence or struck in the same change; the mapping gate refuses unmapped claims, unresolved paths and stale strike text. |
+| C11.16 | Re-reconciled 2026-09-28 (this change). Its own box stays open while C3.24 remains, per the reconciliation test's gate. |
 | C11.17 | Unsigned. Owner must sign the §43.1 record after the clean-room suite. |
 
 ## Anti-roadmap (correctly not built)
