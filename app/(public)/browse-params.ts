@@ -239,16 +239,19 @@ export function browseServiceFilters(query: BrowseQuery) {
 
 /** Toggle one option value; empty dimensions drop out of the query. */
 export function toggleOption(query: BrowseQuery, code: string, value: string): BrowseQuery {
-  const options = query.filters.options.map((option) =>
-    option.code === code
-      ? {
-          ...option,
-          values: option.values.includes(value)
-            ? option.values.filter((entry) => entry !== value)
-            : [...option.values, value].sort(),
-        }
-      : option,
-  );
+  const existing = query.filters.options.find((option) => option.code === code);
+  const options = existing
+    ? query.filters.options.map((option) =>
+        option.code === code
+          ? {
+              ...option,
+              values: option.values.includes(value)
+                ? option.values.filter((entry) => entry !== value)
+                : [...option.values, value].sort(),
+            }
+          : option,
+      )
+    : [...query.filters.options, { code, values: [value] }];
   return {
     ...query,
     page: 1,
@@ -261,16 +264,19 @@ export function toggleAttributeValue(
   key: string,
   value: string,
 ): BrowseQuery {
-  const attributes = query.filters.attributes.map((attribute) =>
-    attribute.key === key
-      ? {
-          ...attribute,
-          values: attribute.values.includes(value)
-            ? attribute.values.filter((entry) => entry !== value)
-            : [...attribute.values, value].sort(),
-        }
-      : attribute,
-  );
+  const existing = query.filters.attributes.find((attribute) => attribute.key === key);
+  const attributes = existing
+    ? query.filters.attributes.map((attribute) =>
+        attribute.key === key
+          ? {
+              ...attribute,
+              values: attribute.values.includes(value)
+                ? attribute.values.filter((entry) => entry !== value)
+                : [...attribute.values, value].sort(),
+            }
+          : attribute,
+      )
+    : [...query.filters.attributes, { key, values: [value] }];
   return {
     ...query,
     page: 1,

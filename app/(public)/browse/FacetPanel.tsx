@@ -59,12 +59,15 @@ export function FacetPanel({
   hrefFor,
   formatMinor,
   labels,
+  extraHidden = [],
 }: {
   facets: FacetPanelData;
   query: BrowseQuery;
   hrefFor: (query: BrowseQuery) => string;
   formatMinor: (minor: number) => string;
   labels: FacetPanelLabels;
+  /** Extra fields the surrounding form must preserve (e.g. the search term). */
+  extraHidden?: { name: string; value: string }[];
 }) {
   const active =
     query.filters.options.length > 0 ||
@@ -123,6 +126,9 @@ export function FacetPanel({
             ))}
           </ul>
           <form method="get" className="flex flex-wrap items-center gap-2 text-sm">
+            {extraHidden.map((field) => (
+              <input key={`x-${field.name}-${field.value}`} type="hidden" name={field.name} value={field.value} />
+            ))}
             {hiddenParams(query, ["filter[price:min]", "filter[price:max]"]).map((field) => (
               <input key={`${field.name}-${field.value}`} type="hidden" name={field.name} value={field.value} />
             ))}
@@ -222,6 +228,9 @@ export function FacetPanel({
                   </p>
                 ) : null}
                 <form method="get" className="flex flex-wrap items-center gap-2 text-sm">
+                  {extraHidden.map((field) => (
+                    <input key={`x-${field.name}-${field.value}`} type="hidden" name={field.name} value={field.value} />
+                  ))}
                   {hiddenParams(query, [
                     `filter[attr:${dimension.key}:min]`,
                     `filter[attr:${dimension.key}:max]`,

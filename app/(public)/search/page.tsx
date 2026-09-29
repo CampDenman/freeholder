@@ -121,8 +121,12 @@ export default async function StorefrontSearchPage({
   const gridProducts: CollectionGridProduct[] = products;
   const searchPath = localePath("search", locale, defaultLocale);
 
+  // Every browse link on this page must carry the term along: a facet on
+  // /search?q=print that navigated away from ?q would answer a different
+  // question than the shopper asked.
+  const termParam = term ? `q=${encodeURIComponent(term)}` : "";
   const hrefFor = (browseQuery: BrowseQuery) => {
-    const params = browseQueryString(browseQuery);
+    const params = [termParam, browseQueryString(browseQuery)].filter(Boolean).join("&");
     return params ? `${searchPath}?${params}` : searchPath;
   };
   const pageHref = (target: number) => hrefFor({ ...parsed, page: target });
