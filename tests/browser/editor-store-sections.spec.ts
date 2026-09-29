@@ -54,6 +54,7 @@ function pageFrame(page: Page): FrameLocator {
 async function seedPrint(
   sessionToken: string,
   taxCategoryId: string,
+  currency: string,
   name: string,
   slug: string,
   price: string,
@@ -100,8 +101,8 @@ async function seedPrint(
     })) as { version: number }
   ).version;
   const list = (await callService(sessionToken, "catalog.createPriceList", {
-    name: `CAD retail ${slug}`,
-    currency: "CAD",
+    name: `Retail ${slug}`,
+    currency,
     kind: "retail",
   })) as { id: string };
   const variants = (
@@ -176,11 +177,25 @@ test.describe("store-section composition on the canvas", () => {
       code: "standard_print",
       name: "Standard",
     })) as { id: string };
-    const coast = await seedPrint(sessionToken, tax.id, "Coast print", "coast-print", "25.00");
-    await seedPrint(sessionToken, tax.id, "Dune print", "dune-print", "30.00");
+    // The demo business profile names the currency; the purchase projection
+    // only resolves price lists in that currency.
+    const business = (await callService(sessionToken, "settings.getBusiness", {})) as {
+      baseCurrency: string;
+    };
+    const currency = business.baseCurrency;
+    const coast = await seedPrint(
+      sessionToken,
+      tax.id,
+      currency,
+      "Coast print",
+      "coast-print",
+      "25.00",
+    );
+    await seedPrint(sessionToken, tax.id, currency, "Dune print", "dune-print", "30.00");
     const harbour = await seedPrint(
       sessionToken,
       tax.id,
+      currency,
       "Harbour light",
       "harbour-light",
       "40.00",
@@ -220,17 +235,21 @@ test.describe("store-section composition on the canvas", () => {
 
     await test.step("open the editor on an empty landing page", async () => {
       await page.goto(`/admin/pages/${landingPageId}`);
-      await expect(page.getByText("Empty")).toBeVisible();
+      await expect(
+        page.getByText("Nothing here yet. Add your first block."),
+      ).toBeVisible();
     });
 
     await test.step("hero: add a heading and type it on the canvas", async () => {
       await addBlock("Heading");
-      const headline = canvas.locator(".fh-canvas h2");
+      // The publish gate requires one H1 — a hero is one.
+      await page.locator("[id$='-level']").selectOption("1");
+      const headline = canvas.locator(".fh-canvas h1");
       await headline.click();
       await page.keyboard.press("ControlOrMeta+a");
       await page.keyboard.type("The summer drop");
       await page.keyboard.press("Enter");
-      await expect(canvas.locator(".fh-canvas h2")).toHaveText("The summer drop");
+      await expect(canvas.locator(".fh-canvas h1")).toHaveText("The summer drop");
     });
 
     await test.step("featured products: add a row and pick both prints on the canvas", async () => {
@@ -273,13 +292,23 @@ test.describe("store-section composition on the canvas", () => {
         page.getByRole("heading", { name: "The summer drop" }),
       ).toBeVisible();
       // The row's picked products, with their live prices.
-      await expect(page.getByText("Coast print", { exact: true })).toBeVisible();
-      await expect(page.getByText("Dune print", { exact: true })).toBeVisible();
-      await expect(page.getByText("$25.00")).toBeVisible();
-      await expect(page.getByText("$30.00")).toBeVisible();
+      await expect(
+        page.getByText("Coast print", { exact: true }).first(),
+      ).toBeVisible();
+      await expect(
+        page.getByText("Dune print", { exact: true }).first(),
+      ).toBeVisible();
+      // Variant prices live inside each card's options picker — open one and
+      // read the live quote through it.
+      await page.getByText("Choose options").first().click();
+      await expect(page.getByText("25.00").first()).toBeVisible();
+      await page.getByText("Choose options").nth(1).click();
+      await expect(page.getByText("30.00").first()).toBeVisible();
       // The band's live shelf and its collection link.
-      const band = page.locator("main").getByText("Coast print", { exact: true }).first();
-      await expect(band).toBeVisible();
+      const bandShelf = page
+        .getByText("Coast print", { exact: true })
+        .nth(1);
+      await expect(bandShelf).toBeVisible();
       await expect(
         page.getByRole("link", { name: "Shop The Wall" }),
       ).toBeVisible();
@@ -304,10 +333,13 @@ test.describe("store-section composition on the canvas", () => {
       });
       await page.reload();
       // The band now shelves both prints — the section reads the catalog at
-      // render time, so no edit and no publish stood between.
-      await expect(
-        page.locator("main").getByText("Dune print", { exact: true }).last(),
-      ).toBeVisible();
+      // render time, so no edit and no publish stood between. (The row
+      // already showed Dune print; the band's copy is the proof.)
+      const bandDune = page
+        .locator("main")
+        .getByText("Dune print", { exact: true })
+        .last();
+      await expect(bandDune).toBeVisible();
     });
 
     await test.step("swap the band's collection on the canvas and publish the change", async () => {
@@ -329,8 +361,12 @@ test.describe("store-section composition on the canvas", () => {
       await expect(
         page.getByRole("link", { name: "Shop Harbour Lights" }),
       ).toBeVisible();
-      await expect(page.getByText("Harbour light", { exact: true })).toBeVisible();
-      await expect(page.getByText("Coast print", { exact: true })).toBeVisible();
+      await expect(
+        page.getByText("Harbour light", { exact: true }).first(),
+      ).toBeVisible();
+      await expect(
+        page.getByText("Coast print", { exact: true }).first(),
+      ).toBeVisible();
       await expect(
         page.getByRole("link", { name: "Shop The Wall" }),
       ).toHaveCount(0);
