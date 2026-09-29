@@ -4062,15 +4062,15 @@ v2.
 - **F01** — `tests/helpers/performance.ts` — the seeded fixture inserts and counts all five declared record families (the audit repair).
 - **F02** — `scripts/performance-budgets.mjs` — the runner requires a disposable database and a passing seeded measurement.
 - **F03** — N/A — measurement tooling; fixture rows are cleaned up, nothing joins the spine.
-- **F04** — N/A — no screen; it measures existing lists and the editor.
-- **F05** — N/A — no agent surface.
+- **F04** — real headless-Chromium evidence over the deployed surface — the acceptance run's ROW GROUPS B–C in `deploy/perf-reference-run-2026-09-27.log`, summarised with the method in `deploy/performance-measurements.md`.
+- **F05** — measured through the real HTTP API and login session the services expose (`/api/v1/contacts.list`, `/api/v1/reports.revenue`) — `deploy/perf-reference-run-2026-09-27.log` records the calls; `deploy/performance-measurements.md` the method.
 - **F06** — N/A — no human surface.
-- **F07** — `scripts/performance-budgets.mjs` + `tests/core/performance-budgets.test.ts` — NaN/infinity/negative timings and skipped databases fail (the audit repair).
-- **F08** — `tests/core/performance-budgets.test.ts` — runner plus regressions for missing database, bad clocks and missing requested data.
-- **F09** — `deploy/performance-measurements.md` — the measurement record, commands and limitations.
+- **F07** — no gate weakened, no budget raised, no secret printed; fail-closed rules kept (raw samples retained, discarded warm-ups named, measurement floor stated) — `deploy/performance-measurements.md` records the honest caveats, including the keystroke row and the 1.1ms search margin.
+- **F08** — `tests/core/performance-measurement-families.test.ts` + `tests/core/performance-budgets.test.ts` — the measurement families and the runner's fail-closed clocks.
+- **F09** — `deploy/perf-reference-run-2026-09-27.log` (the full operational log: commands, samples, percentiles, dataset proof, host config) + `deploy/performance-measurements.md`.
 - **F10** — N/A — measurement tooling, not a setup surface.
 - **F11** — `deploy/performance-measurements.md` + the §43 annotation this row transcribes.
-- **F12** — Open — reference-target measurements, whole-page HTTP/browser timing, editor, migration and cold boot remain; small/medium/large local runs pass (`deploy/performance-measurements.md` records them).
+- **F12** — Closed 2026-09-28: the reference-target acceptance run composes every §15.1 row over the full product stack on the real deploy recipe (public render, Core Web Vitals, admin, search, report, editor, queue, migration chain, cold boot) — `deploy/perf-reference-run-2026-09-27.log`; the spec-reconciliation gate's re-aiming arrived with this check (`tests/core/spec-reconciliation.test.ts`).
 
 ## C11.12 — Pass real-browser WCAG AA and complete keyboard workflows in
 

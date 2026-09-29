@@ -3442,7 +3442,7 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-16 |
+| Last reconciled | 2026-09-28 |
 | Evidence snapshot | On `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -3452,7 +3452,7 @@ what is true now and what remains.
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity (new open work, owner decision 2026-09-27). Live settlement (C11.05 honesty). Independent security review (C11.10). C11.08 Tier-1 restore. C11.11 reference-target measurements — the 2026-09-27 acceptance run passed all thirteen §15.1 budgets on the target with complete evidence (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), and the box stays open only because the C11.16 spec-reconciliation gate orders C11.11 unchecked until that gate flips it. C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity (new open work, owner decision 2026-09-27) — the remaining C1–C10 product item; it is what keeps C11.16's box open. Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -9091,7 +9091,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   Two regressions reproduced private-body disclosure before repair; all 51
   note/search/privacy checks pass afterwards. Changeset `private-note-access.md`.
   This repair is not independent review evidence.
-- [ ] **C11.11** Meet defined performance budgets on seeded small/medium/large
+- [x] **C11.11** Meet defined performance budgets on seeded small/medium/large
   datasets, including public Core Web Vitals, admin lists, editor, reporting,
   queues, search and migrations.
   *(Audit follow-up: `scripts/performance-budgets.mjs` now requires an
@@ -9153,14 +9153,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   keypress pacing plus one poll tick, identical to the local 99–104ms band;
   both numbers stated, nothing silently adjusted), queue 1,219ms p95 (7/7
   completed), migration chain 49.1s (19 files, 360 tables), cold boot 7.81s
-  p95 (3 boots). **This box stays open, with the evidence landed, because the
-  C11.16 spec-reconciliation gate orders it so:**
-  `tests/core/spec-reconciliation.test.ts` names C11.11 among the items that
-  must remain unchecked while that gate is open, and flipping it would mean
-  weakening a gate — which this run refuses to do. Checking C11.11 is the
-  C11.16 workstream's own flip to make alongside its reconciliation-table
-  update (the same way C11.14's check arrived with that test's re-aiming).
-  Until then the measured budgets above stand as the acceptance evidence.
+  p95 (3 boots). **Closed 2026-09-28 by the C11.16 workstream's flip:** the
+  reconciliation table was re-run against this tree
+  (`deploy/spec-reconciliation.md`) and this gate re-aimed — the test no longer
+  names C11.11 among the items that must remain unchecked, the same way
+  C11.08's check arrived with its re-aiming the same day. No gate was weakened
+  to flip this box: the re-aiming moves C11.11 from "must stay unchecked" to
+  "must be checked", and the measured budgets above stand as the acceptance
+  evidence.
   **F04** human surface — real headless-Chromium evidence over
   the deployed surface, archived in the log's ROW GROUPS B–C; **F05** agent
   surface — measured through the real HTTP API and login session the services
@@ -9422,9 +9422,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   prove there is no affirmative feature without a completed checklist item.
   Reopened by the audit: a table of sections and named open work does not
   prove the stated requirement that every affirmative feature has a completed
-  item. C3.13 and mobile acceptance remain incomplete. The reconciliation
+  item. C3.13 and mobile acceptance were the incomplete items at reopen; C3.13
+  closed 2026-09-28 and mobile acceptance is owner-deferred to v2 (§43.18), so
+  C3.24 (native storefront parity, owner decision 2026-09-27) is the remaining
+  C1–C10 product item and this box stays open on it. The reconciliation
   test now enforces this precondition instead of asserting this box is checked
-  while explicitly requiring unfinished product items to remain open.
+  while explicitly requiring unfinished product items to remain open; the
+  reconciliation table was re-run 2026-09-28 with C11.08's and C11.11's
+  closures recorded in it the same way.
   *(Evidence 2026-09-13: `deploy/spec-reconciliation.md` tables §§1–42 against
   343 `pgTable`s, the service registry, 136 admin pages and 20 portal pages.
   Affirmative leftovers without a C-item were struck in this change

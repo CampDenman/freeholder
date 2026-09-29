@@ -33,14 +33,21 @@ describe("C11.16 spec reconciliation", () => {
     expect(items.get("C11.17")).toBe(false);
     for (const id of [
       // C11.08 closed 2026-09-28 by the live Tier-1 restore drill
-      // (deploy/c11-08-restore-summary.md); the rest stay open.
+      // (deploy/c11-08-restore-summary.md); C11.11 closed 2026-09-28 by the
+      // reference-target acceptance run
+      // (deploy/perf-reference-run-2026-09-27.log). Both arrived with this
+      // gate's re-aiming; the rest stay open.
       "C11.10",
-      "C11.11",
       "C11.17",
     ]) {
       expect(items.get(id)).toBe(false);
       expect(recon).toContain(id);
     }
+    // C11.11 is checked with its archived reference-target evidence; the
+    // reconciliation table must record where that evidence lives.
+    expect(items.get("C11.11")).toBe(true);
+    expect(recon).toContain("C11.11");
+    expect(recon).toContain("perf-reference-run-2026-09-27");
     // C11.14 is checked with its five proofs; the reconciliation table must
     // still record where its evidence lives.
     expect(items.get("C11.14")).toBe(true);
