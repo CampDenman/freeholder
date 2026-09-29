@@ -149,9 +149,16 @@ export function setPropAtPath(
     const key = keys[depth]!;
     if (Array.isArray(container)) {
       const index = Number(key);
-      return container.map((item, i) => (i === index ? walk(item, depth + 1) : item));
+      const copy = container.slice();
+      copy[index] = walk(copy[index], depth + 1);
+      return copy;
     }
-    const record = (container ?? {}) as Record<string, unknown>;
+    if (container === undefined || container === null) {
+      // Recreate a missing container in the shape this level's key implies:
+      // a numeric key indexes into an array, anything else names a record.
+      return walk(/^\d+$/.test(key) ? [] : {}, depth);
+    }
+    const record = container as Record<string, unknown>;
     if (depth === keys.length - 1) return { ...record, [key]: value };
     return { ...record, [key]: walk(record[key], depth + 1) };
   };

@@ -249,3 +249,35 @@ describe("collectJsonLd()", () => {
     expect(collectJsonLd(tree)).toEqual([]);
   });
 });
+
+describe("setPropAtPath()", () => {
+  it("sets a flat prop like a plain assignment", async () => {
+    const { setPropAtPath } = await import("@/modules/cms/blocks/edit");
+    const next = setPropAtPath({ text: "Before", level: 1 }, "text", "After");
+    expect(next).toEqual({ text: "After", level: 1 });
+  });
+
+  it("sets a value inside an array prop without mutating the input", async () => {
+    const { setPropAtPath } = await import("@/modules/cms/blocks/edit");
+    const before = { items: [{ question: "Q?", answer: "A." }] };
+    const next = setPropAtPath(before, "items.0.question", "New?");
+    expect(next).toEqual({ items: [{ question: "New?", answer: "A." }] });
+    expect(before.items[0]!.question).toBe("Q?");
+    // A second item survives untouched.
+    const two = setPropAtPath(
+      { items: [{ question: "One", answer: "1" }, { question: "Two", answer: "2" }] },
+      "items.1.answer",
+      "2!",
+    );
+    expect(two).toEqual({
+      items: [{ question: "One", answer: "1" }, { question: "Two", answer: "2!" }],
+    });
+  });
+
+  it("creates missing containers for deeper paths", async () => {
+    const { setPropAtPath } = await import("@/modules/cms/blocks/edit");
+    expect(setPropAtPath({}, "items.0.question", "Q")).toEqual({
+      items: [{ question: "Q" }],
+    });
+  });
+});

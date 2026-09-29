@@ -299,8 +299,8 @@ function fhRenderAsset(body, data) {
   var picture = document.createElement("picture");
   (data.sources || []).forEach(function (source) {
     var el = document.createElement("source");
-    el.srcSet = source.srcset;
-    el.type = source.type;
+    el.setAttribute("srcset", source.srcset);
+    el.setAttribute("type", source.type);
     picture.appendChild(el);
   });
   var img = document.createElement("img");

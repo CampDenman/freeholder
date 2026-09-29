@@ -46,6 +46,40 @@ const CANVAS_HTML = `
     <h2 data-editable-prop="text">Stored only</h2>
   </div>`;
 
+const RICH_HTML = `
+  <div data-block-id="t1" data-block-type="text">
+    <div data-editable-rich="body"><p>Hello <strong>bold</strong> <a href="/about">world</a></p><ul><li>One</li><li>Two</li></ul></div>
+  </div>`;
+
+const FAQ_HTML = `
+  <div data-block-id="f1" data-block-type="faq">
+    <dl><div><dt data-editable-prop="items.0.question">Q?</dt><dd data-editable-prop="items.0.answer">A.</dd></div></dl>
+  </div>`;
+
+const IMAGE_HTML = `
+  <div data-block-id="i1" data-block-type="image">
+    <div class="fh-asset" data-asset-prop="assetId" data-asset-current="aaaaaaaa-0000-4000-8000-000000000001">
+      <div class="fh-asset-body"><picture><img src="/media/old.jpg" alt="Old" width="800" height="600" class="rounded-lg"></picture></div>
+      <button type="button" class="fh-replace" data-replace-asset="assetId">Replace image</button>
+    </div>
+  </div>`;
+
+const EMPTY_IMAGE_HTML = `
+  <div data-block-id="i2" data-block-type="image">
+    <div class="fh-asset" data-asset-prop="assetId" data-asset-current="">
+      <div class="fh-asset-body"><span class="fh-asset-empty">No image chosen</span></div>
+      <button type="button" class="fh-replace" data-replace-asset="assetId">Replace image</button>
+    </div>
+  </div>`;
+
+function inputEvent(window: JSDOM["window"], el: Element) {
+  el.dispatchEvent(new window.Event("input", { bubbles: true }));
+}
+
+async function flushMicrotasks() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("the canvas bridge draft overlay", () => {
   it("posts ready to the editor when the frame loads", () => {
     const { parentPost } = canvas(CANVAS_HTML);
@@ -144,5 +178,213 @@ describe("the canvas bridge draft overlay", () => {
       }),
     );
     expect(document.querySelector('[data-block-id="h1"] [data-editable-prop="text"]')?.textContent).toBe("Hello");
+  });
+});
+
+describe("the canvas bridge rich regions", () => {
+  it("serializes typing back to the typed document, keeping marks, links and lists", () => {
+    const { window, document, parentPost } = canvas(RICH_HTML);
+    const paragraph = document.querySelector('[data-block-id="t1"] p')!;
+    paragraph.childNodes[0]!.textContent = "Hi ";
+    inputEvent(window, paragraph);
+
+    const edit = parentPost.mock.calls
+      .map((call) => call[0] as { edit?: { blockId?: string; prop?: string; value?: unknown } })
+      .map((message) => message.edit)
+      .find(Boolean);
+    expect(edit).toMatchObject({ blockId: "t1", prop: "body" });
+    expect(edit?.value).toEqual([
+      {
+        type: "paragraph",
+        children: [
+          { type: "text", text: "Hi " },
+          { type: "text", text: "bold", marks: ["strong"] },
+          { type: "text", text: " " },
+          { type: "link", href: "/about", children: [{ type: "text", text: "world" }] },
+        ],
+      },
+      {
+        type: "bulletList",
+        children: [
+          { type: "listItem", children: [{ type: "text", text: "One" }] },
+          { type: "listItem", children: [{ type: "text", text: "Two" }] },
+        ],
+      },
+    ]);
+  });
+
+  it("normalizes a browser div split and an emptied region into schema-shaped paragraphs", () => {
+    const { window, document, parentPost } = canvas(`
+      <div data-block-id="t1" data-block-type="text">
+        <div data-editable-rich="body"><div>First</div><div><br></div></div>
+      </div>`);
+    inputEvent(window, document.querySelector('[data-block-id="t1"] [data-editable-rich]')!);
+    const edit = parentPost.mock.calls.at(-1)?.[0] as { edit?: { value?: unknown } };
+    expect(edit.edit?.value).toEqual([
+      { type: "paragraph", children: [{ type: "text", text: "First" }] },
+      { type: "paragraph", children: [{ type: "text", text: " " }] },
+    ]);
+
+    const emptied = canvas(`
+      <div data-block-id="t2" data-block-type="text">
+        <div data-editable-rich="body"></div>
+      </div>`);
+    inputEvent(emptied.window, emptied.document.querySelector('[data-editable-rich]')!);
+    const emptyEdit = emptied.parentPost.mock.calls.at(-1)?.[0] as { edit?: { value?: unknown } };
+    expect(emptyEdit.edit?.value).toEqual([
+      { type: "paragraph", children: [{ type: "text", text: " " }] },
+    ]);
+  });
+
+  it("rebuilds a rich region from a different draft document", () => {
+    const { window, document } = canvas(RICH_HTML);
+    draftMessage(window, [
+      {
+        id: "t1",
+        type: "text",
+        props: {
+          body: [
+            { type: "paragraph", children: [{ type: "text", text: "Replaced" }] },
+            {
+              type: "orderedList",
+              children: [{ type: "listItem", children: [{ type: "text", text: "One", marks: ["em"] }] }],
+            },
+          ],
+        },
+      },
+    ]);
+    const region = document.querySelector('[data-editable-rich]')!;
+    expect(region.querySelector("p")?.textContent).toBe("Replaced");
+    expect(region.querySelector("ol li em")?.textContent).toBe("One");
+    expect(region.querySelector("ul")).toBeNull();
+  });
+
+  it("leaves the region alone while it holds the caret, and when the document matches", () => {
+    const { window, document } = canvas(RICH_HTML);
+    const region = document.querySelector('[data-editable-rich]')!;
+    const doc = [
+      { type: "paragraph", children: [{ type: "text", text: "Other" }] },
+    ];
+    // Focused: the owner's own typing echoes back — rebuilding would evict the caret.
+    Object.defineProperty(document, "activeElement", {
+      configurable: true,
+      get: () => region.querySelector("p"),
+    });
+    draftMessage(window, [{ id: "t1", type: "text", props: { body: doc } }]);
+    expect(region.querySelector("p")?.textContent).toBe("Hello bold world");
+
+    // Blurred: the next draft applies, and a matching one never rebuilds.
+    Object.defineProperty(document, "activeElement", {
+      configurable: true,
+      get: () => document.body,
+    });
+    draftMessage(window, [{ id: "t1", type: "text", props: { body: doc } }]);
+    expect(region.querySelector("p")?.textContent).toBe("Other");
+    region.querySelector("p")!.setAttribute("data-marker", "kept");
+    draftMessage(window, [{ id: "t1", type: "text", props: { body: doc } }]);
+    expect(region.querySelector("p")?.getAttribute("data-marker")).toBe("kept");
+  });
+});
+
+describe("the canvas bridge array-prop paths", () => {
+  it("applies a draft value through a dotted path into an array prop", () => {
+    const { window, document } = canvas(FAQ_HTML);
+    draftMessage(window, [
+      { id: "f1", type: "faq", props: { items: [{ question: "New question?", answer: "A." }] } },
+    ]);
+    expect(document.querySelector('[data-editable-prop="items.0.question"]')?.textContent).toBe(
+      "New question?",
+    );
+    expect(document.querySelector('[data-editable-prop="items.0.answer"]')?.textContent).toBe("A.");
+  });
+});
+
+describe("the canvas bridge image replace", () => {
+  it("reports the pick intent with the block, the prop and the anchor box", () => {
+    const { window, document, parentPost } = canvas(IMAGE_HTML);
+    document.querySelector<HTMLButtonElement>(".fh-replace")!.click();
+    expect(parentPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "freeholder-preview",
+        blockId: "i1",
+        assetPick: { prop: "assetId", top: 0, left: 0, width: 0, height: 0 },
+      }),
+      ORIGIN,
+    );
+    // jsdom has no layout; the shape above is what a real frame fills in.
+    void window;
+  });
+
+  it("swaps the picture optimistically when the draft names a new asset", async () => {
+    const { window, document } = canvas(IMAGE_HTML);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          src: "/media/new.jpg",
+          sources: [{ format: "avif", srcset: "/media/new.avif 800w", type: "image/avif" }],
+          width: 1024,
+          height: 768,
+          altText: "New picture",
+        }),
+    });
+    Object.defineProperty(window, "fetch", { configurable: true, value: fetchMock });
+
+    draftMessage(window, [
+      { id: "i1", type: "image", props: { assetId: "bbbbbbbb-1111-4222-8333-000000000002" } },
+    ]);
+    await flushMicrotasks();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/media.resolveImage",
+      expect.objectContaining({ method: "POST", credentials: "omit" }),
+    );
+    const img = document.querySelector<HTMLImageElement>(".fh-asset-body img")!;
+    expect(img.getAttribute("src")).toBe("/media/new.jpg");
+    expect(img.getAttribute("alt")).toBe("New picture");
+    // The server render's classes (rounding, width) survive the swap.
+    expect(img.className).toBe("rounded-lg");
+    expect(document.querySelector(".fh-asset-body source")?.getAttribute("srcset")).toBe(
+      "/media/new.avif 800w",
+    );
+  });
+
+  it("shows the placeholder when the asset is cleared, and keeps the picture when a resolve fails", async () => {
+    const { window, document } = canvas(IMAGE_HTML);
+    draftMessage(window, [{ id: "i1", type: "image", props: {} }]);
+    await flushMicrotasks();
+    expect(document.querySelector(".fh-asset-body .fh-asset-empty")).not.toBeNull();
+    expect(document.querySelector(".fh-asset-body img")).toBeNull();
+
+    const failing = canvas(EMPTY_IMAGE_HTML);
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
+    Object.defineProperty(failing.window, "fetch", { configurable: true, value: fetchMock });
+    failing.window.eval; // fetch defined before the draft applies
+    draftMessage(failing.window, [
+      { id: "i2", type: "image", props: { assetId: "cccccccc-2222-4333-8444-000000000003" } },
+    ]);
+    await flushMicrotasks();
+    // No picture to keep here; the failed resolve must not paint an empty box
+    // over a still-pending state — the placeholder stays for the post-save
+    // reload to reconcile.
+    expect(failing.document.querySelector(".fh-asset-body .fh-asset-empty")).not.toBeNull();
+    expect(failing.document.querySelector(".fh-asset-body img")).toBeNull();
+  });
+
+  it("resolves the picked asset for an image block that had none", async () => {
+    const { window, document } = canvas(EMPTY_IMAGE_HTML);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({ src: "/media/first.jpg", sources: [], width: null, height: null, altText: null }),
+    });
+    Object.defineProperty(window, "fetch", { configurable: true, value: fetchMock });
+    draftMessage(window, [
+      { id: "i2", type: "image", props: { assetId: "dddddddd-3333-4444-8555-000000000004" } },
+    ]);
+    await flushMicrotasks();
+    expect(document.querySelector<HTMLImageElement>(".fh-asset-body img")?.getAttribute("src")).toBe(
+      "/media/first.jpg",
+    );
   });
 });
