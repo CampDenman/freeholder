@@ -1148,6 +1148,21 @@ v2.
 - **F11** — `MASTER.md` §43 annotation this row transcribes + `deploy/spec-reconciliation.md` (§-mapping). Changeset `cms-plugin-proof.md` named in §43.
 - **F12** — `tests/core/cms-plugin-proof.test.ts` is the composition proof.
 
+## C2.24 — Build the storefront commerce blocks
+
+- **F01** — N/A — no schema in this item — the blocks render C3.25's taxonomy and the existing cart services; the tables belong to C3.25 and C5.20–C5.22.
+- **F02** — N/A — no new service in this item — block `resolve` calls the existing services through the registry; service-boundary proof stays with those services.
+- **F03** — N/A — the item touches no contact, money or audit surface — nothing to wire into the spine.
+- **F04** — N/A until built — the deliverable is public page blocks (add-to-cart, collection, facet, search); the checked item will cite the block files under `src/modules/cms/blocks/` and their browser coverage.
+- **F05** — N/A — not an agent capability — blocks render through existing HTTP-projected services.
+- **F06** — N/A — no shipped strings yet — locale and WCAG gates cover the blocks when they land.
+- **F07** — N/A — no executable path yet — safety evidence belongs to the landing change, riding on the cart-access boundary proven in `tests/core/cart-access.test.ts`.
+- **F08** — N/A — nothing executable is claimed yet — the landing change adds tests under `tests/` and names them here.
+- **F09** — N/A — no new jobs or storage — blocks resolve per request from existing services.
+- **F10** — N/A — no setup or help surface of its own.
+- **F11** — `MASTER.md` §43 C2.24 annotation + `deploy/c324-storefront-parity-2026-09-29.md` (the mapping carrying this item's gap list).
+- **F12** — N/A — no composed journey is claimed yet — the public browse→cart→checkout journey this item composes is proven when C3.25 lands.
+
 ## C3.01 — Add required output schemas to every service and validate
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/service-output.test.ts`.
@@ -1505,8 +1520,23 @@ v2.
 - **F08** — N/A — nothing executable is claimed yet — closing gaps adds tests under `tests/` and names them here.
 - **F09** — N/A — no new jobs or storage — the mapping is a document plus the gap-closing work it schedules.
 - **F10** — N/A — the mapping is not a setup or help surface.
-- **F11** — N/A — no doc ships with an unchecked item — the mapping lands under `deploy/` or `docs/` when the item closes, and this row updates then.
+- **F11** — N/A for closure — the item stays unchecked; its capability mapping has landed at `deploy/c324-storefront-parity-2026-09-29.md` (2026-09-29) and dispositions every gap to C3.25/C2.24, whose closure updates this row to dated evidence.
 - **F12** — N/A — no composed journey is claimed — the mapping's gap list is the composition contract gap-closing work must satisfy.
+
+## C3.25 — Close the native storefront's two parity gaps (mapping G1/G2)
+
+- **F01** — N/A — no schema yet — the collections/categories tables this item will add are named in `deploy/c324-storefront-parity-2026-09-29.md` gap G1; this row gains its migration citation when the item ships.
+- **F02** — N/A — no new service yet — browse/search services land with the item; the cart/checkout/order services it binds to are proven in `tests/core/catalog-carts.test.ts` and `tests/core/catalog-orders.test.ts`.
+- **F03** — N/A — the item touches no contact, money or audit surface beyond the existing spine — nothing to wire into the spine.
+- **F04** — N/A until built — the deliverable is public pages (faceted browse, search, cart, checkout, confirmation); the checked item will cite the route files and their browser coverage.
+- **F05** — N/A — not a new agent capability — public pages render through existing HTTP-projected services.
+- **F06** — N/A — no shipped strings yet — locale and WCAG gates cover the pages when they land.
+- **F07** — N/A — no executable path yet — the public cart boundary rides on `tests/core/cart-access.test.ts`; the landing change adds its own safety evidence.
+- **F08** — N/A — nothing executable is claimed yet — the landing change adds tests under `tests/` and names them here.
+- **F09** — N/A — no new jobs or storage — pages resolve per request from existing services.
+- **F10** — N/A — no setup or help surface of its own.
+- **F11** — `MASTER.md` §43 C3.25 annotation + `deploy/c324-storefront-parity-2026-09-29.md` (the mapping carrying this item's gap list).
+- **F12** — N/A — no composed journey is claimed yet — the mapping's proof contract (rows 2 and 3 flip to native with cited tests) is the composition proof this item must deliver.
 
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
