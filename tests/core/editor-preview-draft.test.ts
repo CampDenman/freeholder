@@ -54,7 +54,14 @@ function labels(): EditorLabels {
     popupRawHtml: "popupRawHtml",
   };
   return {
-    preview: { region: "Preview", desktop: "Desktop", mobile: "Mobile" },
+    preview: {
+      region: "Preview",
+      desktop: "Desktop",
+      mobile: "Mobile",
+      replaceImage: "Replace image",
+      noImage: "No image chosen",
+      noAssets: "No images yet",
+    },
     addBlock: "Add a block",
     cancel: "Cancel",
     remove: "Remove",

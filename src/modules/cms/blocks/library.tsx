@@ -72,8 +72,11 @@ export const text = defineBlock({
   }),
   starter: () => ({ body: fromPlainString("Write something here.") }),
   fieldHints: { body: { control: "rich" } },
-  render: ({ props }) => (
+  render: ({ props, ctx }) => (
+    // The whole body is one rich region on the canvas: the caret flows across
+    // paragraphs and lists exactly where the owner reads them.
     <div
+      {...ctx.editableRich?.("body")}
       className={cx(
         "grid gap-4 text-ink-muted",
         props.measure && "max-w-prose",
@@ -299,12 +302,18 @@ export const faq = defineBlock({
   starter: () => ({
     items: [{ question: "A question people ask", answer: "The answer." }],
   }),
-  render: ({ props }) => (
+  render: ({ props, ctx }) => (
     <dl className="grid gap-0 border-t border-rule">
       {props.items.map((item, i) => (
         <div key={i} className="border-b border-rule py-4">
-          <dt className="font-semibold text-ink">{item.question}</dt>
-          <dd className="mt-1.5 max-w-prose text-ink-muted">{item.answer}</dd>
+          {/* Each question and answer is its own typeable surface; the dotted
+              path is how the canvas edit is written back into the items array. */}
+          <dt {...ctx.editable?.(`items.${i}.question`)} className="font-semibold text-ink">
+            {item.question}
+          </dt>
+          <dd {...ctx.editable?.(`items.${i}.answer`)} className="mt-1.5 max-w-prose text-ink-muted">
+            {item.answer}
+          </dd>
         </div>
       ))}
     </dl>
@@ -538,10 +547,9 @@ export const image = defineBlock({
     const { resolveImage } = await import("@/core/media/service");
     return resolveImage.call({ id: props.assetId }, { kind: "anonymous" });
   },
-  render: ({ props, resolved }) => {
-    if (!resolved) return null;
-    const alt = props.decorative ? "" : (props.alt ?? resolved.altText ?? "");
-    return (
+  render: ({ props, resolved, ctx }) => {
+    const alt = props.decorative ? "" : (props.alt ?? resolved?.altText ?? "");
+    const picture = resolved ? (
       <picture>
         {resolved.sources.map((source) => (
           <source key={source.format} srcSet={source.srcset} type={source.type} />
@@ -561,6 +569,21 @@ export const image = defineBlock({
           )}
         />
       </picture>
+    ) : null;
+    // The public surface renders exactly the picture (nothing at all when no
+    // asset is chosen). The canvas instead wraps it so the picture can be
+    // replaced where it renders: an empty block shows a placeholder rather
+    // than being invisible, and a button raises the picker.
+    if (!ctx.identifyBlocks) return picture;
+    return (
+      <div className="fh-asset" data-asset-prop="assetId" data-asset-current={props.assetId ?? ""}>
+        <div className="fh-asset-body">
+          {picture ?? <span className="fh-asset-empty">{ctx.t("cms.editor.noImage")}</span>}
+        </div>
+        <button type="button" className="fh-replace" data-replace-asset="assetId">
+          {ctx.t("cms.editor.replaceImage")}
+        </button>
+      </div>
     );
   },
 });
@@ -590,7 +613,7 @@ export const video = defineBlock({
     if (!asset || asset.kind !== "video") return null;
     return asset;
   },
-  render: ({ props, resolved }) => {
+  render: ({ props, resolved, ctx }) => {
     if (!resolved) return null;
     return (
       <figure className={cx(props.width !== "column" && "w-full")}>
@@ -605,7 +628,9 @@ export const video = defineBlock({
           {resolved.filename}
         </video>
         {props.caption ? (
-          <figcaption className="mt-2 text-sm text-ink-muted">{props.caption}</figcaption>
+          <figcaption {...ctx.editable?.("caption")} className="mt-2 text-sm text-ink-muted">
+            {props.caption}
+          </figcaption>
         ) : null}
       </figure>
     );

@@ -63,6 +63,20 @@ async function renderBlock(
       })
     : () => undefined;
 
+  /**
+   * The rich-text counterpart of `editable`: one contentEditable region over
+   * the rendered document, typed freely (formatting included) and serialized
+   * back to the typed document by the canvas bridge.
+   */
+  const editableRich = identify
+    ? (prop: string) => ({
+        contentEditable: "true",
+        suppressContentEditableWarning: "true",
+        "data-editable-rich": prop,
+        spellCheck: "false",
+      })
+    : () => undefined;
+
   const allowChildren = definition.includeChildren
     ? await definition.includeChildren({ props: node.props, ctx, resolved })
     : true;
@@ -83,7 +97,7 @@ async function renderBlock(
 
   const rendered = definition.render({
     props: node.props,
-    ctx: { ...ctx, editable },
+    ctx: { ...ctx, editable, editableRich },
     resolved,
     children,
   });

@@ -130,6 +130,34 @@ export function collectById(nodes: BlockNode[], ids: ReadonlySet<string>): Block
   return found;
 }
 
+/**
+ * Set a prop by dotted path, for canvas edits that name a nested value.
+ *
+ * `"text"` is the common flat case. The canvas can also name a value inside an
+ * array prop — an FAQ item's question is `"items.0.question"` — using the same
+ * dotted syntax the canvas bridge reads values back with, so the two never
+ * drift. Missing intermediate containers are created; arrays are copied at the
+ * changed index, matching the immutable updates everywhere else here.
+ */
+export function setPropAtPath(
+  props: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): Record<string, unknown> {
+  const keys = path.split(".");
+  const walk = (container: unknown, depth: number): unknown => {
+    const key = keys[depth]!;
+    if (Array.isArray(container)) {
+      const index = Number(key);
+      return container.map((item, i) => (i === index ? walk(item, depth + 1) : item));
+    }
+    const record = (container ?? {}) as Record<string, unknown>;
+    if (depth === keys.length - 1) return { ...record, [key]: value };
+    return { ...record, [key]: walk(record[key], depth + 1) };
+  };
+  return walk(props, 0) as Record<string, unknown>;
+}
+
 export class EditorHistory {
   private past: BlockNode[][] = [];
   private future: BlockNode[][] = [];

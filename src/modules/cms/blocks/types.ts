@@ -75,6 +75,15 @@ export interface BlockRenderContext {
    */
   editable?: (prop: string) => Record<string, string> | undefined;
   /**
+   * Mark a *rich-text* region for canvas editing — a container whose children
+   * are the typed document's paragraphs and lists, as opposed to one flat
+   * string. The canvas serializes the region's DOM back to the typed document
+   * on input, so formatting the owner types inside marks survives; a plain
+   * `editable` region is plaintext-only by contrast. Preview-only, like
+   * `editable`.
+   */
+  editableRich?: (prop: string) => Record<string, string> | undefined;
+  /**
    * Sticky experiment assignments for this visitor (C2.17). Server-side only;
    * the public HTML contains the chosen variant, never a client swap.
    */

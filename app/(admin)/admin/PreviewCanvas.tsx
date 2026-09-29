@@ -29,6 +29,12 @@ export interface PreviewLabels {
   region: string;
   desktop: string;
   mobile: string;
+  /** The image block's on-canvas replace affordance, and the picker's name. */
+  replaceImage: string;
+  /** Placeholder an image block with no asset chosen renders on the canvas. */
+  noImage: string;
+  /** Picker hint when the asset library holds no images at all. */
+  noAssets: string;
 }
 
 /** A node of the editor's local draft — the same shape it persists. */
@@ -47,6 +53,7 @@ export function PreviewCanvas({
   onSelect,
   onEdit,
   onMove,
+  onAssetPick,
   labels,
 }: {
   /** The preview page for this subject. */
@@ -72,13 +79,23 @@ export function PreviewCanvas({
    * itself, which is what keeps the tree the source of truth and the rendering
    * a view of it.
    */
-  onEdit: (blockId: string, prop: string, value: string) => void;
+  onEdit: (blockId: string, prop: string, value: unknown) => void;
   /**
    * A block dragged somewhere else. The canvas has already moved the DOM for
    * feedback, but that is a preview of the request — the editor decides
    * whether the move is legal and what the tree becomes.
    */
   onMove: (blockId: string, targetId: string, position: string) => void;
+  /**
+   * The replace affordance on an image block was clicked. `anchor` is the
+   * host element's position in this document's viewport, for anchoring the
+   * asset picker next to the image it will change.
+   */
+  onAssetPick?: (
+    blockId: string,
+    prop: string,
+    anchor: { top: number; left: number },
+  ) => void;
   labels: PreviewLabels;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -113,8 +130,9 @@ export function PreviewCanvas({
         source?: string;
         blockId?: string | null;
         ready?: boolean;
-        edit?: { blockId?: string; prop?: string; value?: string };
+        edit?: { blockId?: string; prop?: string; value?: unknown };
         move?: { blockId?: string; targetId?: string; position?: string };
+        assetPick?: { prop?: string; top?: number; left?: number };
       };
       if (data?.source !== "freeholder-preview") return;
       // The frame (re)loaded — a reload may have raced the last broadcast, so
@@ -133,11 +151,20 @@ export function PreviewCanvas({
         onMove(data.move.blockId, data.move.targetId, data.move.position);
         return;
       }
+      if (data.assetPick?.prop && data.blockId && onAssetPick) {
+        // The message's coordinates are the frame's viewport; anchor the
+        // picker in this document's viewport instead.
+        const frameBox = frame.current?.getBoundingClientRect();
+        onAssetPick(data.blockId, data.assetPick.prop, {
+          top: (frameBox?.top ?? 0) + (data.assetPick.top ?? 0),
+          left: (frameBox?.left ?? 0) + (data.assetPick.left ?? 0),
+        });
+      }
       onSelect(data.blockId ?? undefined);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [onSelect, onEdit, onMove]);
+  }, [onSelect, onEdit, onMove, onAssetPick]);
 
   // …and selecting in the editor outlines it in the frame.
   useEffect(() => {
