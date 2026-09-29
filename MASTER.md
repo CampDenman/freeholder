@@ -4283,7 +4283,15 @@ project without silent telemetry, and ready to carry money.
   interaction; then the overhaul with browser journeys proving drag, drop,
   inline edit, and store-section composition. Renumbered from C2.24 when
   #446's storefront-parity items merged first; C2.24's blocks are the
-  parity floor this item's store-composition bar builds on.)
+  parity floor this item's store-composition bar builds on. Slice A,
+  2026-09-29: the existing page blocks edit inline on the rendered canvas —
+  rich-text bodies, FAQ items and video captions type where they render,
+  and image blocks swap through an on-canvas picker — all riding the #409
+  draft-broadcast/autosave pipeline, proven by
+  tests/core/editor-preview-bridge.test.ts,
+  tests/core/editor-inline-edit.test.ts and the
+  tests/browser/editor-inline-editing.spec.ts journey; drag-and-drop
+  repositioning and store-section composition remain later slices.)
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
