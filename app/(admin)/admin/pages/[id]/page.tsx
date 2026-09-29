@@ -150,6 +150,7 @@ export default async function EditPagePage({
         id={page.id}
         initialVersion={page.version}
         initialBlocks={(page.workingBlocks ?? page.blocks) as BlockNode[]}
+        initialPublished={published}
         blockTypes={[
           ...editorBlockTypes(
             t,

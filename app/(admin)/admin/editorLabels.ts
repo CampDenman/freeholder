@@ -128,6 +128,18 @@ export function editorLabels(t: Translate): EditorLabels {
     saveAsSection: t("cms.editor.saveAsSection"),
     detachSection: t("cms.editor.detachSection"),
     sectionName: t("cms.editor.sectionName"),
+    live: t("cms.editor.live"),
+    draft: t("cms.editor.draft"),
+    publishChanges: t("cms.editor.publishChanges"),
+    publishing: t("cms.editor.publishing"),
+    // The placeholders survive formatting as literals — the client fills them
+    // in once the moved block's new position is known (same pattern as
+    // media.uploadProgress).
+    movedTo: t("cms.editor.movedTo", {
+      label: "{label}",
+      position: "{position}",
+      total: "{total}",
+    }),
     a11y: {
       title: t("cms.a11y.title"),
       ok: t("cms.a11y.ok"),

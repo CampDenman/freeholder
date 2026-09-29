@@ -436,6 +436,25 @@ export async function setPagePublishedAction(form: FormData): Promise<void> {
   applyInvalidation(invalidationPlan({ kind: "published", pageId: id, slug: page.slug }));
 }
 
+/**
+ * Publish the page's current draft without touching its live status first
+ * (audit gap 8). The editor saves the draft before calling this, so the
+ * publish validates exactly what the owner sees; `cms.publishPage` copies the
+ * draft over the published tree in one transaction and the public page never
+ * comes down.
+ */
+export async function publishPageNowAction(
+  id: string,
+): Promise<SaveResult> {
+  try {
+    const page = await publishPage.call({ id, published: true }, await currentActor());
+    applyInvalidation(invalidationPlan({ kind: "published", pageId: id, slug: page.slug }));
+    return { version: page.version };
+  } catch (error) {
+    return present(error);
+  }
+}
+
 export async function restoreRevisionAction(form: FormData): Promise<void> {
   const revisionId = text(form, "revisionId");
   await restoreRevision.call({ revisionId }, await currentActor());

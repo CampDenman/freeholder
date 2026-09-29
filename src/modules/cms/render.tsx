@@ -107,7 +107,14 @@ async function renderBlock(
   // the markup a visitor and a crawler receive stays exactly what the blocks
   // produced, which is what keeps the SEO gate checking the real thing.
   return identify ? (
-    <div key={node.id} data-block-id={node.id} data-block-type={node.type}>
+    <div
+      key={node.id}
+      data-block-id={node.id}
+      data-block-type={node.type}
+      // The canvas drag script offers a nest zone ("inside") only where the
+      // schema says children can live; this flag is how the wrapper says so.
+      data-container={definition.container ? "true" : undefined}
+    >
       {rendered}
     </div>
   ) : (
