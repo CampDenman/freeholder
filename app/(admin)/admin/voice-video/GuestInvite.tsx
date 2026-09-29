@@ -19,6 +19,7 @@ export function CallCredentialPanel({ credential, help, labels }: { credential: 
       <Input aria-label={labels.tokenLabel} readOnly value={credential.meetingToken} onFocus={event => event.currentTarget.select()} />
       <Input aria-label={labels.iceLabel} readOnly value={ice} onFocus={event => event.currentTarget.select()} />
       <p className="text-sm text-ink-muted">{help}</p>
+      <p className="text-sm text-ink-muted">{credential.expiresAtLabel}</p>
     </div>
   );
 }

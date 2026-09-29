@@ -86,8 +86,9 @@ back to the Daily environment, so nothing is force-migrated.
   path.
 - **Admin UI**: provider picker, encrypted secret fields, verify-connection
   probe with 402 top-up surfacing, LiveKit credential panels for host and
-  guest (copy into a LiveKit client; the credentials expire within 30
-  minutes), and recording start/stop controls on live rooms.
+  guest (copy into a LiveKit client promptly; PM's `expires_at` governs —
+  the live run minted 60-second TTLs, not the requested 30 minutes), and
+  recording start/stop controls on live rooms.
 - **Coverage**: 33 new tests across `tests/core/paradise-adapter.test.ts`
   (15 mocked-HTTP client tests), `tests/core/paradise-flow.test.ts` (10
   database compositions incl. provider switching, erasure round-trip and

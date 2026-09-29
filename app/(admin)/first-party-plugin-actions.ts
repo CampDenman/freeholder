@@ -6,7 +6,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
+import { formatDateTime } from "@/core/i18n";
 import { ServiceError } from "@/core/service";
+import { currentBusiness } from "@/core/settings/read";
+import { getLocale, getT } from "../i18n";
 import {
   addGiftRegistryItem,
   createGiftRegistry,
@@ -371,6 +374,7 @@ export interface IssuedCallCredential {
   roomUrl: string;
   meetingToken: string;
   expiresAt: number;
+  expiresAtLabel: string;
   livekitUrl: string | null;
   iceServers: unknown[] | null;
 }
@@ -382,8 +386,13 @@ async function issueCallCredential(form: FormData, audience: "host" | "guest"): 
     // page: render them for copy into a LiveKit client. Daily's prebuilt URL
     // keeps the redirect-with-token flow.
     if (result.livekitUrl) {
+      // PM grants its own TTL — observed 60 seconds against the 30 minutes
+      // requested — so the panel shows the provider's real expiry in the
+      // business timezone (§4.9), never the requested duration.
+      const [t, locale, business] = await Promise.all([getT(), getLocale(), currentBusiness()]);
+      const when = formatDateTime(new Date(result.expiresAt * 1000), business?.timezone ?? "UTC", locale);
       return { credential: { roomUrl: result.roomUrl, meetingToken: result.meetingToken, expiresAt: result.expiresAt,
-        livekitUrl: result.livekitUrl, iceServers: result.iceServers } };
+        expiresAtLabel: t("voiceVideo.credentialsExpire", { when }), livekitUrl: result.livekitUrl, iceServers: result.iceServers } };
     }
     const url = new URL(result.roomUrl);
     url.searchParams.set("t", result.meetingToken);
