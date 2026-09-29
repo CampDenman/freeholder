@@ -1163,6 +1163,21 @@ v2.
 - **F11** — `MASTER.md` §43 C2.24 annotation + `deploy/c324-storefront-parity-2026-09-29.md` (the mapping carrying this item's gap list).
 - **F12** — N/A — no composed journey is claimed yet — the public browse→cart→checkout journey this item composes is proven when C3.25 lands.
 
+## C2.25 — World-class visual editing: true what-you-see-is-what-renders editing
+
+- **F01** — N/A — no schema yet — the first deliverable is the dated current-state UX audit; tables belong to the overhaul it schedules.
+- **F02** — N/A — no new service in the audit deliverable — overhaul services will name their typed coverage when they land.
+- **F03** — N/A — the item claims no executable yet — nothing to wire into the contact, money or audit spine.
+- **F04** — N/A — nothing executable is claimed yet — the overhaul's editor screens become the human-surface evidence when it lands.
+- **F05** — N/A — no agent surface is part of the audit — HTTP/MCP evidence arrives with the overhaul.
+- **F06** — N/A — the audit changes no shipped strings — locale gates keep covering whatever surfaces the overhaul touches.
+- **F07** — N/A — the audit adds no executable path — safety evidence belongs to each overhaul change.
+- **F08** — N/A — nothing executable is claimed yet — the overhaul adds tests under `tests/` and names them here.
+- **F09** — N/A — no new jobs or storage — the audit is a document plus the overhaul it schedules.
+- **F10** — N/A — the audit is not a setup or help surface.
+- **F11** — N/A — no doc ships with this change itself — the dated UX audit lands under `deploy/` or `docs/` as the item's first evidence, and this row updates then.
+- **F12** — N/A — no composed journey is claimed yet — the browser journeys proving drag, drop, inline edit and store-section composition are the composition proof the overhaul must name.
+
 ## C3.01 — Add required output schemas to every service and validate
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/service-output.test.ts`.
@@ -1537,6 +1552,20 @@ v2.
 - **F10** — N/A — no setup or help surface of its own.
 - **F11** — `MASTER.md` §43 C3.25 annotation + `deploy/c324-storefront-parity-2026-09-29.md` (the mapping carrying this item's gap list).
 - **F12** — N/A — no composed journey is claimed yet — the mapping's proof contract (rows 2 and 3 flip to native with cited tests) is the composition proof this item must deliver.
+## C3.26 — World-class merchandising: first-class product taxonomy
+
+- **F01** — N/A — no schema yet — taxonomy, collection and facet tables belong to the gap-closing work C3.24's mapping schedules.
+- **F02** — N/A — no new service yet — merchandising services name their typed coverage when the gap-closing lands.
+- **F03** — N/A — the item claims no executable yet — nothing to wire into the contact, money or audit spine beyond the store spine C3.24's mapping already covers.
+- **F04** — N/A — nothing executable is claimed yet — collection pages and merchandising blocks become the human-surface evidence when they land.
+- **F05** — N/A — no agent surface is part of this item — HTTP/MCP evidence arrives with the gap-closing work.
+- **F06** — N/A — the item ships no strings yet — locale gates keep covering whatever surfaces the gap-closing touches.
+- **F07** — N/A — the item adds no executable path — safety evidence belongs to each gap-closing change.
+- **F08** — N/A — nothing executable is claimed yet — closing the gap list adds tests under `tests/` and names them here.
+- **F09** — N/A — no new jobs or storage — the item is a document plus the gap-closing work it schedules.
+- **F10** — N/A — the item is not a setup or help surface.
+- **F11** — N/A — no doc ships with an unchecked item — the gap-closing evidence lands under `deploy/` or `docs/` as the item closes, and this row updates then.
+- **F12** — N/A — no composed journey is claimed yet — the browser journeys proving a shopper can browse collections, filter and buy are the composition proof the gap-closing must name.
 
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 
