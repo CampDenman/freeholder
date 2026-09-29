@@ -8967,7 +8967,7 @@ schema they inherit reads as a designed thing rather than an excavation.
   untrusted inputTrust, busy union shape has no titles. **F09** briefing
   assembly job. **F12** the vitest chain. OAuth/providers are mocked — no live
   Google/Microsoft session.)*
-- [ ] **C11.08** Prove both fresh install → role-guided productive demo and
+- [x] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
   *(Partial 2026-09-12: `tests/browser/demo-scenarios.spec.ts` already proves
@@ -8978,7 +8978,39 @@ schema they inherit reads as a designed thing rather than an excavation.
   replace-then-rollback restoring the original CMS page. Ownership-export
   format and a local signed apply plus `failAt: "smoke"` rollback.
   **Left open:** restore on another Tier-1 target remains the ownership-drill
-  pair matrix rather than a second live instance in this journey.)*
+  pair matrix rather than a second live instance in this journey.
+  Closed 2026-09-28 by the live Tier-1 restore drill: a real export →
+  provision → restore → verify cycle across two live DigitalOcean droplets,
+  recorded in `deploy/c11-08-restore-summary.md` with the timestamped
+  transcript in the deploy/ drill log of the same date. Source `freeholder-ref`
+  (id 604232042) exported a 6,918,459-byte archive, SHA-256
+  `e78527321bb2fb93675a57d83f7e7782499c4936e5a8dc19b8eb119a46279123`, plus a
+  logical ownership export (374 tables / 150,812 rows / 10,000 media assets,
+  `secretValuesIncluded: false`). Target `freeholder-restore` (id 604504844)
+  was provisioned from the droplet recipe (cloud-init + compose + on-box
+  secrets, image pinned to the source digest via the recipe's FREEHOLDER_IMAGE
+  mechanism) and restored through the recipe's own `pg_restore` operation into
+  an empty database, exit 0. Target re-export: 366 of 374 tables byte-identical
+  (row counts and canonical SHA-256), every owned total exact — contacts 5,001,
+  messages 20,000, orders and invoices 2,000 each, products 500, assets and
+  media_objects 10,000 each; the 8 differing tables are the live target app's
+  own operational churn (pgboss queue family, audit_log, analytics_events,
+  job_runtime_heartbeats). The recipe `verify` operation (`pnpm doctor`)
+  against the restored instance: 16 ok / 14 warn / 0 fail, and the seeded
+  public page served 200 through the target's Caddy. The media leg is recorded
+  honestly: the source dataset seeds 10,000 media rows with zero object bytes
+  (the seed harness writes DB rows only — the source itself 404s its media), so
+  the manifest round-tripped identically while `media:transfer`'s local-disk
+  guardrail fired as designed; a source-data finding, not a restore failure.
+  **F04** the served `/perf-home` page rendered identically on the restored
+  instance (only the origin in canonical/OG URLs differs). **F05**
+  `platform.doctor` plus the recipe's install/restore/verify operations are the
+  exercised agent surface. **F07** owner re-entry on the disposable box used
+  the recipe's own owner-password.mjs plus doctor's designed `--enroll-totp`
+  path; no secret was printed or committed. **F09** both droplets are reported
+  leave-running with IDs/IPs, the recipe's documented operations were run
+  unmodified, and the source stayed healthy and read-only throughout. **F12**
+  `pnpm plan:check` gates this box.)*
 
 #### Whole-product quality
 

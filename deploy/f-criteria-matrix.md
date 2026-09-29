@@ -4022,10 +4022,10 @@ v2.
 - **F06** — N/A — exercises existing surfaces; no new strings of its own.
 - **F07** — `tests/core/c11-08-install-update-journey.test.ts` — `failAt: "smoke"` rollback restores the original CMS page.
 - **F08** — `tests/browser/demo-scenarios.spec.ts` + `tests/core/c11-08-install-update-journey.test.ts`.
-- **F09** — `tests/core/ownership-export.test.ts` + `scripts/ownership-drill.mjs` — export/restore pair matrix; restore on a second live Tier-1 target remains open.
+- **F09** — `tests/core/ownership-export.test.ts` + `scripts/ownership-drill.mjs` — export/restore pair matrix; the second live Tier-1 restore ran 2026-09-28 (`deploy/c11-08-restore-summary.md`).
 - **F10** — `tests/core/seed-demo.test.ts` — the role-guided demo IS the seeded first-run experience this item proves.
 - **F11** — `MASTER.md` §43 annotation this row transcribes. — `deploy/spec-reconciliation.md` (§-mapping).
-- **F12** — Open — restore on another Tier-1 target is the ownership-drill pair matrix, not yet a second live instance; everything else composes in the two suites above (`tests/core/ownership-export.test.ts` is the export/restore matrix).
+- **F12** — Closed 2026-09-28: the live Tier-1 restore drill composes the full journey on a second instance — export → provision → `pg_restore` → doctor → served page (`deploy/c11-08-restore-summary.md`); the two suites above carry the remaining composed proof. (`tests/core/ownership-export.test.ts` is the export/restore matrix.)
 
 ## C11.09 — Run every F01–F12 criterion across every core/module/plugin/
 
