@@ -32,7 +32,8 @@ describe("C11.16 spec reconciliation", () => {
     }
     expect(items.get("C11.17")).toBe(false);
     for (const id of [
-      "C11.08",
+      // C11.08 closed 2026-09-28 by the live Tier-1 restore drill
+      // (deploy/c11-08-restore-summary.md); the rest stay open.
       "C11.10",
       "C11.11",
       "C11.17",
