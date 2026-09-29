@@ -302,15 +302,11 @@ export default async function PublicPage({
       : undefined,
     // Blocks whose state survives a page load read it from here — see the
     // form block, which confirms a submission by re-rendering rather than by
-    // holding the result in client state. Repeated parameters collapse to the
-    // first: a block asking "was this form just sent?" wants an answer, not an
-    // array.
-    query: Object.fromEntries(
-      Object.entries(query).map(([key, value]) => [
-        key,
-        Array.isArray(value) ? value[0] : value,
-      ]),
-    ),
+    // holding the result in client state. Repeated parameters stay arrays:
+    // the product-grid block's facet codec reads several values for one
+    // name, while a block asking "was this form just sent?" compares against
+    // a string, and a comparison with an array is simply false.
+    query: { ...query },
   });
 
   // Structured data comes from two places, and neither is a setting an owner

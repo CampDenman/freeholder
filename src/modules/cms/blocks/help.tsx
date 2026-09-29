@@ -14,7 +14,7 @@
 // public surface stays the unhydrated markup §5 and the SEO gate depend on.
 import { z } from "zod";
 import { submitInboundAction } from "../../../../app/(public)/inbound-actions";
-import { defineBlock } from "./types";
+import { defineBlock, firstQueryValue } from "./types";
 
 const ANONYMOUS = { kind: "anonymous" } as const;
 
@@ -64,7 +64,7 @@ export const knowledge = defineBlock({
       };
     }
 
-    const q = (ctx.query?.q ?? "").trim();
+    const q = (firstQueryValue(ctx.query?.q) ?? "").trim();
     if (q) {
       return {
         mode: "search",

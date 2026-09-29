@@ -5,9 +5,11 @@ import { z } from "zod";
 import { formatMoney } from "@/core/i18n";
 import { ShareCopyButton } from "@/ui/ShareCopyButton";
 import { submitInboundAction } from "../../../../app/(public)/inbound-actions";
+import { addToCartLabels, AddToCart } from "../../../../app/(public)/buy/AddToCart";
 import { SiteChatClient } from "./SiteChatClient";
-import { defineBlock } from "./types";
+import { defineBlock, firstQueryValue } from "./types";
 import { socialEmbed } from "./social";
+import { buyableOf } from "./merchandising";
 import {
   previewChildCount,
   selectPreviewChildren,
@@ -71,7 +73,7 @@ export const calculator = defineBlock({
     const given: Record<string, string> = {};
     if (asked) {
       for (const input of inputs) {
-        const raw = ctx.query?.[`c_${input.key}`];
+        const raw = firstQueryValue(ctx.query?.[`c_${input.key}`]);
         if (raw === undefined || raw === "") continue;
         given[input.key] = raw;
         const parsed = Number(raw);
@@ -265,7 +267,7 @@ export const coverageCheck = defineBlock({
   }),
   starter: () => ({}),
   resolve: async (props, ctx) => {
-    const asked = (ctx.query?.postcode ?? "").trim();
+    const asked = (firstQueryValue(ctx.query?.postcode) ?? "").trim();
     if (!asked) return { asked: "", answer: null };
     const { checkCoverage } = await import("@/core/locations/coverage");
     const answer = await checkCoverage.call(
@@ -659,23 +661,48 @@ export const productCard = defineBlock({
     slug: z.string().min(1),
   }),
   starter: () => ({ slug: "product" }),
-  resolve: async (props) => {
-    const { resolveVisibleProduct } = await import("@/modules/catalog/service");
-    return resolveVisibleProduct.call({ slug: props.slug }, { kind: "anonymous" });
-  },
+  fieldHints: { slug: { control: "product" } },
+  resolve: async (props, ctx) => buyableOf(props.slug, ctx.actor),
   render: ({ resolved, ctx }) => {
     if (!resolved) return null;
-    const href = ctx.localizeHref?.(`/products/${resolved.slug}`) ?? `/products/${resolved.slug}`;
-    return (
+    const { product, purchase } = resolved;
+    const href = ctx.localizeHref?.(`/products/${product.slug}`) ?? `/products/${product.slug}`;
+    const formatMinor = (minor: number) =>
+      formatMoney(minor, purchase?.currency ?? "USD", ctx.locale);
+    const card = (
       <article className="grid gap-2 rounded-lg border border-rule p-4">
         <h2 className="text-lg font-bold tracking-tight text-ink">
-          <a href={href}>{resolved.name}</a>
+          <a href={href}>{product.name}</a>
         </h2>
-        {resolved.subtitle ? <p className="text-sm text-ink-muted">{resolved.subtitle}</p> : null}
+        {product.subtitle ? <p className="text-sm text-ink-muted">{product.subtitle}</p> : null}
+        {purchase && purchase.priceFromMinor !== null ? (
+          <p className="text-sm font-semibold text-ink">
+            {purchase.variants.length > 1
+              ? ctx.t("store.buy.from", { price: formatMinor(purchase.priceFromMinor) })
+              : formatMinor(purchase.priceFromMinor)}
+          </p>
+        ) : null}
+        {purchase && purchase.variants.length > 0 ? (
+          <AddToCart product={purchase} formatMinor={formatMinor} labels={addToCartLabels(ctx.t)} />
+        ) : null}
         <a href={href} className="text-sm font-semibold text-accent">
           {ctx.t("cms.productCard.view")}
         </a>
       </article>
+    );
+    if (!ctx.identifyBlocks) return card;
+    // The canvas shows the card as it will render, with the buy chrome inert
+    // so the design surface cannot submit into the frame; the product picker
+    // affordance sits outside the inert region.
+    return (
+      <div className="fh-asset" data-pick-prop="slug" data-pick-current={product.slug}>
+        <div className="fh-asset-body">
+          <div inert>{card}</div>
+        </div>
+        <button type="button" className="fh-replace" data-replace-pick="slug">
+          {ctx.t("cms.editor.replaceProduct")}
+        </button>
+      </div>
     );
   },
 });

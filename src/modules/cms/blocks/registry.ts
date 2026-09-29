@@ -37,6 +37,7 @@ import {
   text,
   video,
 } from "./library";
+import { featuredCollection, buyButton, productGrid, storeSearch } from "./merchandising";
 import {
   booking,
   calculator,
@@ -76,6 +77,10 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   locationsIndex,
   productsIndex,
   productDetail,
+  productGrid,
+  featuredCollection,
+  buyButton,
+  storeSearch,
   cartWidget,
   sectionInstance,
   experiment,

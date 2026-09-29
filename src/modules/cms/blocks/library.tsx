@@ -895,18 +895,23 @@ export const productDetail = defineBlock({
           {resolved.product.brand ? <p className="text-sm text-ink-muted">{resolved.product.brand}</p> : null}
         </div>
         {resolved.purchase && resolved.purchase.variants.length > 0 ? (
-          <AddToCart
-            product={resolved.purchase}
-            formatMinor={(minor) =>
-              formatMoney(minor, resolved.purchase?.currency ?? "USD", ctx.locale)
-            }
-            labels={{
-              add: ctx.t("store.buy.add"),
-              choose: ctx.t("store.buy.choose"),
-              unavailable: ctx.t("store.buy.unavailable"),
-              priceUnavailable: ctx.t("store.buy.priceUnavailable"),
-            }}
-          />
+          // On the canvas (identifyBlocks) the buy chrome renders inert: the
+          // preview must show exactly what ships, but a form that submitted
+          // inside the iframe would rip the frame to /cart.
+          <div inert={ctx.identifyBlocks === true}>
+            <AddToCart
+              product={resolved.purchase}
+              formatMinor={(minor) =>
+                formatMoney(minor, resolved.purchase?.currency ?? "USD", ctx.locale)
+              }
+              labels={{
+                add: ctx.t("store.buy.add"),
+                choose: ctx.t("store.buy.choose"),
+                unavailable: ctx.t("store.buy.unavailable"),
+                priceUnavailable: ctx.t("store.buy.priceUnavailable"),
+              }}
+            />
+          </div>
         ) : null}
         {resolved.projects.length ? (
           <section className="grid gap-3" aria-labelledby={`service-${resolved.product.id}-projects`}>

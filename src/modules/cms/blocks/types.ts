@@ -54,8 +54,13 @@ export interface BlockRenderContext {
    * in state — would put the first hydration boundary on the public surface.
    * §5 and the SEO gate both rest on that surface being plain server-rendered
    * HTML, so a query parameter is the cheaper answer by a wide margin.
+   *
+   * Repeated keys stay arrays: the browse machinery (filter[option:size]=s&
+   * filter[option:size]=l) reads several values for one name, while a block
+   * asking "was this form just sent?" wants an answer, not an array — it
+   * compares, and a comparison with an array is simply false.
    */
-  query?: Record<string, string | undefined>;
+  query?: Record<string, string | string[] | undefined>;
   /**
    * Wrap each block so the editor can trace a click back to a node.
    *
@@ -212,6 +217,20 @@ export interface BlockNode {
   type: string;
   props: Record<string, unknown>;
   children?: BlockNode[];
+}
+
+/**
+ * The first value of a query parameter.
+ *
+ * Blocks that ask a yes/no question ("was this form just sent?") want an
+ * answer, not an array — a comparison with an array is simply false. The
+ * browse machinery reads repeated keys whole; everything else reads the
+ * first value, which is what a repeated key never means on those params.
+ */
+export function firstQueryValue(
+  value: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 /** Helper that keeps a definition's generics inferred rather than widened. */
