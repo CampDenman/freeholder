@@ -3442,17 +3442,17 @@ what is true now and what remains.
 
 | Field | Value |
 |---|---|
-| Last reconciled | 2026-09-28 |
+| Last reconciled | 2026-09-29 |
 | Evidence snapshot | On `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
 | Repository host | The `CampDenman` GitHub organization; it is not a separate rights holder |
-| Current focus | C3.24 native storefront parity mapping; C11.16 spec reconciliation; C11.17 remains unsigned |
+| Current focus | C3.24 storefront parity gaps (feed: `deploy/c324-storefront-parity-2026-09-29.md`; closure via C3.25/C2.24); C11.16 spec reconciliation; C11.17 remains unsigned |
 | Completion rule | Every unchecked item in C0–C11, except the items deferred to v2 in §43.18, is checked and the final C11.17 gate passes |
 | Completion record | **Unsigned.** Prepared 2026-09-13. This is not DONE and does not claim it. |
 | Record date | 2026-09-13 |
 | Record HEAD | This change (parent `2b14cbea6e36f974d97a7cd87e64cbaf3c9c59af`). Record the merge commit SHA when signing. |
-| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity (new open work, owner decision 2026-09-27) — the remaining C1–C10 product item; it is what keeps C11.16's box open. Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
+| Remaining open | §43.2's F01–F12 row applies per item. C3.24 native storefront parity — the capability mapping is published (`deploy/c324-storefront-parity-2026-09-29.md`, 2026-09-29) with every gap dispositioned to C3.25/C2.24; the box stays open only until those items close the two fix-now gaps (collections/faceted browse/storefront search; public cart/checkout UI) — the remaining C1–C10 product item, and it is what keeps C11.16's box open. Live settlement (C11.05 honesty). Independent security review (C11.10). C11.16 spec reconciliation. C11.17 itself. Mobile app acceptance is deferred to v2 (§43.18, owner decision 2026-09-15), not remaining; print-on-demand is likewise deferred to v2 (§43.18, owner decision 2026-09-27). C3.13 closed 2026-09-28 by the live Paradise Comms acceptance run (`deploy/c313-live-acceptance-2026-09-28.log`; annotation under the item). C11.08 closed 2026-09-28 by the live Tier-1 restore drill (`deploy/c11-08-restore-summary.md`; annotation under the item). C11.11 closed 2026-09-28 on the 2026-09-27 reference-target acceptance run that passed all thirteen §15.1 budgets (`deploy/perf-reference-run-2026-09-27.log`; summary in `deploy/performance-measurements.md`), alongside this reconciliation-table re-run and the gate's re-aiming. C11.15 closed 2026-09-16 by `deploy/doc-claim-mapping.md` (the §§1–42 claim→evidence map, carrying the F-audit annotation rewrite to completion). |
 | Clean-room suite | `pnpm plan:check`; `pnpm gates`; `pnpm test`; `pnpm test:journeys`; `pnpm test:a11y`; `pnpm ownership:drill`; `bash scripts/upgrade-gate.sh`. Commands and what this worktree can run: `deploy/spec-reconciliation.md`. |
 | Owner signature | _unsigned — Tony Aly signs here after a clean-room run with zero unexplained failures_ |
 
@@ -4262,6 +4262,15 @@ project without silent telemetry, and ready to carry money.
   (`proof` module: `notice` block, `proof_notices` + `0073_plain_lilandra.sql`,
   `proof.publishedPaths` / `seedNotice`, seed block helper; editor unchanged;
   `tests/core/cms-plugin-proof.test.ts`; changeset `cms-plugin-proof.md` **F04** N/A — editor performance budgets, not a screen. **F05** N/A — not an agent capability. **F07** `tests/core/cms-plugin-proof.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/cms-plugin-proof.test.ts` is the composition proof.)
+- [ ] **C2.24** Build the storefront commerce blocks: an add-to-cart
+  affordance on product detail and product-card blocks wired to the existing
+  cart services, and collection, facet and search blocks so an owner can
+  compose faceted browse and search pages without code. (Scheduled by C3.24's
+  published parity mapping (`deploy/c324-storefront-parity-2026-09-29.md`,
+  2026-09-29), which carries this item's gap list: the editor half of gaps G1
+  and G2. The service-side taxonomy, browse and public cart/checkout pages
+  are C3.25; this item owns only the blocks that render them. New work:
+  unchecked until the blocks land with their tests.)
 
 **C2 exit:** every public or message-facing surface is safely editable by a
 human, collaboratively, without code, lock-in markup or accidental publication.
@@ -4543,8 +4552,30 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   is a migration bridge, not an ongoing dependency (C3.13). Evidence
   standard: the published capability-mapping doc under `deploy/` or `docs/`,
   the gap-closing work it schedules, and the `deploy/f-criteria-matrix.md`
-  update naming both. New work: unchecked until the mapping and its
-  gap-closing land.)
+  update naming both. Mapping published 2026-09-29:
+  `deploy/c324-storefront-parity-2026-09-29.md` — eleven Shopify-core rows
+  (nine native ✓ with proving tests cited, one partial ~ for cart/checkout
+  services-without-public-UI, two gaps), the Shopify importer positioned
+  migration-only with its documented import limits, and every gap
+  dispositioned: collections/faceted-browse/storefront-search and the
+  public cart/checkout/confirmation UI are fix-now, assigned to **C3.25**
+  (storefront commerce) and **C2.24** (editor blocks) — this mapping feeds
+  those items' gap lists. Box stays open per the item's own wording ("close
+  every provable gap the mapping finds"): closure lands via C3.25/C2.24,
+  and the f-criteria-matrix row updates from its standing N/A cells at that
+  closure.)
+- [ ] **C3.25** Close the native storefront's two parity gaps that C3.24's
+  published mapping proved, on the existing commerce spine — no parallel
+  money path: (a) product collections/categories taxonomy with faceted
+  public browse and storefront search over it; (b) public self-serve cart,
+  checkout and order-confirmation pages bound to the existing cart,
+  checkout and order services. (Scheduled by
+  `deploy/c324-storefront-parity-2026-09-29.md` (2026-09-29), which carries
+  this item's gap list: mapping gaps G1 and G2, service and page half; the
+  editor blocks that render both are C2.24. The cart/checkout services this
+  builds on are C5.20–C5.22, already native and tested. Proof contract:
+  mapping rows 2 and 3 flip to native with cited tests. New work: unchecked
+  until both gaps close.)
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.
