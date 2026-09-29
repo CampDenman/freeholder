@@ -104,6 +104,31 @@ export interface BlockRenderContext {
   thirdPartyConsent?: "granted" | "denied";
   /** Request CSP nonce, so a reviewed tag's inline scripts can run. */
   cspNonce?: string;
+  /**
+   * The request's guest-cart snapshot, for the cart widget block (C3.25).
+   * A loader rather than a value so a chrome tree without the widget costs
+   * nothing; absent means "no request cart to show" (emails, previews) and
+   * the widget renders nothing. The routing layer owns reading the cookie —
+   * blocks never touch the jar themselves (§10).
+   */
+  shopperCart?: () => Promise<ShopperCartSnapshot | null>;
+}
+
+/**
+ * The cart-widget's view of the caller's cart: counts and line totals only.
+ * Deliberately no ids, tokens or contact data — what the chrome needs and
+ * nothing the chrome must not print.
+ */
+export interface ShopperCartSnapshot {
+  currency: string;
+  lineCount: number;
+  subtotalMinor: number;
+  lines: Array<{
+    variantId: string;
+    productName: string;
+    quantity: number;
+    lineTotalMinor: number | null;
+  }>;
 }
 
 /**

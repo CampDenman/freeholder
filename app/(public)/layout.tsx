@@ -48,6 +48,7 @@ import { recordExperimentImpressions } from "@/modules/analytics/service";
 import { PopupMount } from "@/modules/popups/mount";
 import { POPUP_TALLY_COOKIE } from "@/modules/popups/tally";
 import { MagicWand } from "@phosphor-icons/react/dist/ssr";
+import { loadShopperCartSnapshot } from "./shopper-cart";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,7 @@ export default async function PublicLayout({
       cookieJar.get(THIRD_PARTY_CREATIVE_CONSENT_COOKIE)?.value,
     ),
     cspNonce: requestHeaders.get(CSP_NONCE_HEADER) ?? undefined,
+    shopperCart: loadShopperCartSnapshot,
     localizeHref: business
       ? (href: string) => localizeCustomerHref(href, locale, business)
       : undefined,

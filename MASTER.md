@@ -4614,7 +4614,22 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `app/(public)/browse/`, `app/(public)/search/page.tsx`,
   `tests/core/catalog-browse.test.ts`,
   `tests/core/browse-storefront.test.ts`; the public cart/checkout pages
-  remain for the next slice.)
+  remain for the next slice. Slice 3 (public cart, checkout and
+  confirmation, 2026-09-29): add-to-cart with a variant picker on the
+  shelf and product-detail surfaces (`catalog.purchaseOptions` quotes the
+  cart's own resolvePrice/availability sources), the guest cart capability
+  in an HttpOnly cookie the cart-access model still gates, a cartWidget
+  chrome block in the default header, and public `/cart`, `/checkout` and
+  `/orders/confirm` pages — checkout proves the email first through the
+  platform's customer magic link before composing `catalog.checkoutCart`,
+  and guest order lookup extends the cart-token gate via
+  `catalog.shopperOrder` — evidence `src/modules/catalog/storefront.ts`,
+  `app/(public)/buy/`, `app/(public)/cart/`, `app/(public)/checkout/`,
+  `app/(public)/orders/confirm/`, `tests/core/storefront-commerce.test.ts`,
+  `tests/core/cart-storefront.test.ts`,
+  `tests/browser/storefront-checkout.spec.ts`; the merchandising editor
+  blocks remain with C2.24, and the C3.24 mapping's rows 2–3 flip lands
+  with those blocks.)
 - [ ] **C3.26** World-class merchandising: first-class product taxonomy —
   collections and categories with manual and rule-based (segment-driven)
   membership; faceted storefront browsing (filter/sort on price, options,
@@ -4636,7 +4651,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   and attributes, crawlable query-param facet URLs under the SEO doctrine,
   and the public `/search` surface, all through `catalog.browseProducts`
   (evidence under C3.25's slice-2 annotation); the merchandising editor
-  blocks remain with C2.24.
+  blocks remain with C2.24. Slice 3 (2026-09-29) lands the buy half of
+  "filter, and buy" — add-to-cart with variant pickers, the public cart,
+  the verified-email checkout and the token-gated confirmation (evidence
+  under C3.25's slice-3 annotation); the merchandising editor blocks
+  (product grid, featured collection, buy-button) remain with C2.24.
 
 **C3 exit:** every capability has one machine-checked contract; extensions and
 deployments are portable, testable and incapable of silently forking the truth.

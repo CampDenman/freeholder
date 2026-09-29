@@ -168,6 +168,11 @@ import orderServices, {
   listOrders,
   payOrder,
 } from "./orders";
+import storefrontServices, {
+  purchaseOptions,
+  shopperCheckout,
+  shopperOrder,
+} from "./storefront";
 import fulfillmentServices, {
   createFulfillment,
   decideReturn,
@@ -356,6 +361,9 @@ export {
   subscribeBackInStock,
   transferStock,
   upsertServiceOffering,
+  purchaseOptions,
+  shopperCheckout,
+  shopperOrder,
 };
 
 const productId = z.string().uuid();
@@ -1038,4 +1046,5 @@ export default [
   ...promotionServices,
   ...collectionServices,
   ...browseServices,
+  ...storefrontServices,
 ];

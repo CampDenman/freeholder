@@ -22,7 +22,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { browseProducts } from "@/modules/catalog/service";
+import { browseProducts, purchaseOptions } from "@/modules/catalog/service";
 import {
   breadcrumbJsonLd,
   collectionPageJsonLd,
@@ -44,6 +44,7 @@ import { getLocale, getT } from "../../../i18n";
 import { recordPageView } from "../../[[...slug]]/pageview";
 import { ShareBar } from "../../ShareBar";
 import { CollectionGrid, type CollectionGridProduct } from "./CollectionGrid";
+import { addToCartLabels } from "../../buy/AddToCart";
 import { FacetPanel, type FacetPanelData } from "../../browse/FacetPanel";
 import { SortLinks } from "../../browse/SortLinks";
 import {
@@ -202,6 +203,20 @@ export default async function PublicCollectionPage({
 
   await recordPageView(`/c/${collection.slug}`, locale, query);
 
+  // Slice 3: the shelf is shoppable. One batched purchase projection covers
+  // exactly the page's products, so cards can price options and offer the
+  // picker without a second question to the catalog.
+  const purchases = products.length
+    ? Object.fromEntries(
+        (
+          await purchaseOptions.call(
+            { slugs: products.map((product) => product.slug) },
+            ANONYMOUS,
+          )
+        ).map((entry) => [entry.slug, entry]),
+      )
+    : {};
+
   const origin = siteOrigin();
   const defaultLocale = business?.defaultLocale ?? "en";
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -310,6 +325,9 @@ export default async function PublicCollectionPage({
                   : `/products/${product.slug}`
               }
               pageHref={pageHref}
+              purchases={purchases}
+              formatMinor={formatMinor}
+              buyLabels={addToCartLabels(t)}
             />
           </div>
         </div>
