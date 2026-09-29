@@ -92,12 +92,19 @@ const CANVAS_CSS = `
     clip-path: inset(50%); white-space: nowrap;
   }
 
-  /* The image block's on-canvas replace affordance. Token colours so both
-     themes render it correctly; keyboard focus reveals it without a hover. */
-  .fh-asset { position: relative; }
+  /* The image block's on-canvas replace affordance, and the store sections'
+     source-swap affordance — one pattern (a host wrapper, a replace button),
+     two data attributes so the bridge can tell an asset swap from a
+     collection swap. Token colours so both themes render it correctly;
+     keyboard focus reveals it without a hover. */
+  .fh-asset, .fh-store { position: relative; }
   .fh-asset-empty {
     display: flex; align-items: center; justify-content: center;
     min-height: 9rem; border: 1px dashed var(--fh-rule); border-radius: 0.5rem;
+    color: var(--fh-ink-muted); font-size: 0.875rem;
+  }
+  .fh-store-empty {
+    margin: 0; padding: 1.5rem; border: 1px dashed var(--fh-rule); border-radius: 0.5rem;
     color: var(--fh-ink-muted); font-size: 0.875rem;
   }
   .fh-replace {
@@ -108,8 +115,32 @@ const CANVAS_CSS = `
     cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
   }
   .fh-asset:hover .fh-replace, .fh-asset:focus-within .fh-replace,
+  .fh-store:hover .fh-replace, .fh-store:focus-within .fh-replace,
+  [data-selected] > .fh-replace,
   .fh-replace:focus { opacity: 1; }
   .fh-replace:focus-visible { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
+
+  /* The image block's alt-text affordance: the corner opposite the replace
+     button, revealed the same way. */
+  .fh-alt {
+    position: absolute; inset-block-start: 0.5rem; inset-inline-start: 0.5rem;
+    padding: 0.3rem 0.65rem; border-radius: 0.375rem;
+    border: 1px solid var(--fh-rule); background: var(--fh-surface);
+    color: var(--fh-ink); font-size: 0.75rem; font-weight: 600;
+    cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+  }
+  .fh-asset:hover .fh-alt, .fh-asset:focus-within .fh-alt,
+  [data-selected] > .fh-alt,
+  .fh-alt:focus { opacity: 1; }
+  .fh-alt:focus-visible { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
+
+  /* Persistent block outlines (the zen surface's "show structure"): every
+     block keeps a dashed rule around it, sharpened to the accent when
+     hovered or selected exactly as before. */
+  .fh-outlines [data-block-id] { outline: 1px dashed var(--fh-rule-strong); outline-offset: 3px; }
+  .fh-outlines [data-block-id]:hover { outline-color: var(--fh-rule); }
+  .fh-outlines [data-block-id][data-selected] { outline: 2px solid var(--fh-accent); }
+  .fh-outlines [data-block-id][data-hovered]:not([data-selected]) { outline: 1px dashed var(--fh-accent); }
 
 `;
 

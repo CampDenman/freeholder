@@ -15,6 +15,8 @@ import {
 } from "../../BlockEditor";
 import {
   detachSectionAction,
+  listCollectionsForEditorAction,
+  listProductsForEditorAction,
   mergePageBlocksAction,
   publishPageNowAction,
   reloadWorkingDraftAction,
@@ -86,6 +88,8 @@ export function PageEditor({
         const result = await detachSectionAction(key);
         return { error: result.error, nodes: result.nodes as EditorNode[] | undefined };
       }}
+      listCollections={listCollectionsForEditorAction}
+      listProducts={listProductsForEditorAction}
     />
   );
 }

@@ -39,6 +39,11 @@ import {
 } from "./library";
 import { featuredCollection, buyButton, productGrid, storeSearch } from "./merchandising";
 import {
+  collectionShowcase,
+  productRow,
+  promoBand,
+} from "./store-sections";
+import {
   booking,
   calculator,
   coverageCheck,
@@ -82,6 +87,9 @@ const definitions: BlockDefinition<z.ZodType, never>[] = [
   buyButton,
   storeSearch,
   cartWidget,
+  collectionShowcase,
+  productRow,
+  promoBand,
   sectionInstance,
   experiment,
   variable,

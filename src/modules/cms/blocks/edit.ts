@@ -165,29 +165,124 @@ export function setPropAtPath(
   return walk(props, 0) as Record<string, unknown>;
 }
 
+/**
+ * One recorded edit: what the tree looked like before and after, and the
+ * human label the editor chrome shows in the history menu (audit gap 6 —
+ * undo/redo the owner can *see*). Both trees are stored so a redo never has
+ * to re-derive the state it returns.
+ */
+export interface HistoryRecord {
+  label: string;
+  at: number;
+  before: BlockNode[];
+  after: BlockNode[];
+}
+
+/** What the history menu lists: labels only, no trees. */
+export interface HistoryEntry {
+  label: string;
+  at: number;
+}
+
+/**
+ * The undo stack (MASTER.md C2.06).
+ *
+ * `past` holds records oldest-first; `future` holds undone records with the
+ * most recently undone last (so the tip of `future` is the next redo).
+ * `push` is coalescing-aware: a caller passes an `editKey` (a block id plus
+ * the prop being typed) and continuous typing into the same field stays one
+ * record instead of one per keystroke.
+ */
 export class EditorHistory {
-  private past: BlockNode[][] = [];
-  private future: BlockNode[][] = [];
+  private past: HistoryRecord[] = [];
+  private future: HistoryRecord[] = [];
+  private lastEditKey: string | null = null;
 
   constructor(private readonly limit = 50) {}
 
-  push(current: BlockNode[]): void {
-    this.past.push(structuredClone(current));
+  push(current: BlockNode[], label: string, next?: BlockNode[], editKey?: string): void {
+    if (editKey && editKey === this.lastEditKey && next !== undefined && this.past.length > 0) {
+      // The same field is still being typed: extend the open record instead
+      // of stacking one entry per keystroke. `before` stays where it started.
+      this.past[this.past.length - 1]!.after = structuredClone(next);
+      return;
+    }
+    this.past.push({
+      label,
+      at: Date.now(),
+      before: structuredClone(current),
+      after: structuredClone(next ?? current),
+    });
     if (this.past.length > this.limit) this.past.shift();
     this.future = [];
+    this.lastEditKey = editKey ?? null;
+  }
+
+  /** Any mutation other than typing breaks a coalescing run. */
+  breakRun(): void {
+    this.lastEditKey = null;
   }
 
   undo(current: BlockNode[]): BlockNode[] | undefined {
-    const previous = this.past.pop();
-    if (!previous) return undefined;
-    this.future.push(structuredClone(current));
-    return previous;
+    const record = this.past.pop();
+    if (!record) return undefined;
+    this.future.push({ ...record, after: structuredClone(current) });
+    this.lastEditKey = null;
+    return record.before;
   }
 
   redo(current: BlockNode[]): BlockNode[] | undefined {
-    const next = this.future.pop();
-    if (!next) return undefined;
-    this.past.push(structuredClone(current));
-    return next;
+    const record = this.future.pop();
+    if (!record) return undefined;
+    this.past.push({ ...record, before: structuredClone(current) });
+    this.lastEditKey = null;
+    return record.after;
+  }
+
+  canUndo(): boolean {
+    return this.past.length > 0;
+  }
+
+  canRedo(): boolean {
+    return this.future.length > 0;
+  }
+
+  /**
+   * The entries for the visible history menu: undoable oldest-first, then
+   * the redoable with the next redo first — one list, oldest → newest →
+   * current → next-redo → … .
+   */
+  entries(): { undoable: HistoryEntry[]; redoable: HistoryEntry[] } {
+    const pick = ({ label, at }: HistoryRecord): HistoryEntry => ({ label, at });
+    return {
+      undoable: this.past.map(pick),
+      redoable: [...this.future].reverse().map(pick),
+    };
+  }
+
+  /**
+   * Restore the state *before* `past[index]`'s action, undoing that record
+   * and everything newer. The menu lists records oldest-first above the
+   * current marker, so clicking a row travels back to just before it.
+   */
+  restoreUndo(index: number, current: BlockNode[]): BlockNode[] | undefined {
+    if (index < 0 || index >= this.past.length) return undefined;
+    let tree = current;
+    while (this.past.length > index) {
+      const previous = this.undo(tree);
+      if (!previous) return undefined;
+      tree = previous;
+    }
+    return tree;
+  }
+
+  /** Restore the state `index + 1` redos from now (index 0 = one redo). */
+  restoreRedo(index: number, current: BlockNode[]): BlockNode[] | undefined {
+    let tree: BlockNode[] | undefined;
+    for (let step = 0; step <= index; step++) {
+      tree = this.redo(tree ?? current);
+      if (!tree) return undefined;
+    }
+    return tree;
   }
 }
