@@ -376,7 +376,7 @@ export function BlockEditor({
   // The image block's replace affordance raises the picker; the pick itself
   // is an ordinary canvas edit (props.assetId) from there on.
   const [assetPick, setAssetPick] = useState<
-    | { blockId: string; prop: string; top: number; left: number }
+    | { blockId: string; prop: string; x: number; y: number }
     | undefined
   >();
 
@@ -485,15 +485,15 @@ export function BlockEditor({
           onEdit={applyInlineEdit}
           onMove={applyMove}
           onAssetPick={(blockId, prop, anchor) =>
-            setAssetPick({ blockId, prop, top: anchor.top, left: anchor.left })
+            setAssetPick({ blockId, prop, x: anchor.x, y: anchor.y })
           }
           labels={labels.preview}
         />
         {assetPick ? (
           <AssetPicker
             choices={pickerAssets(assetPick)}
-            top={assetPick.top}
-            left={assetPick.left}
+            x={assetPick.x}
+            y={assetPick.y}
             label={labels.preview.replaceImage}
             emptyLabel={labels.preview.noAssets}
             cancelLabel={labels.cancel}
@@ -1240,8 +1240,8 @@ function AddBlock({
  */
 function AssetPicker({
   choices,
-  top,
-  left,
+  x,
+  y,
   label,
   emptyLabel,
   cancelLabel,
@@ -1250,9 +1250,9 @@ function AssetPicker({
 }: {
   /** The asset field's choices, "None" first, exactly as the form shows them. */
   choices: { value: string; label: string }[];
-  /** Viewport coordinates the canvas reported for the image block. */
-  top: number;
-  left: number;
+  /** Physical viewport coordinates the canvas reported for the image block. */
+  x: number;
+  y: number;
   label: string;
   /** Shown above the list when the library holds no assets at all. */
   emptyLabel: string;
@@ -1260,17 +1260,26 @@ function AssetPicker({
   onPick: (value: string) => void;
   onClose: () => void;
 }) {
-  // Anchor next to the block, clamped inside the viewport.
-  const clampedTop = Math.max(8, Math.min(top, Math.max(8, window.innerHeight - 280)));
-  const clampedLeft = Math.max(8, Math.min(left, Math.max(8, window.innerWidth - 264)));
+  // Anchor next to the block through logical margins: the block axis never
+  // flips, and the inline offset is computed from the physical x in whichever
+  // direction the document runs, so RTL admins anchor just as LTR ones do.
+  const width = 256; // w-64
+  const inlineStart =
+    document.documentElement.dir === "rtl"
+      ? Math.max(8, window.innerWidth - x - width)
+      : Math.max(8, Math.min(x, Math.max(8, window.innerWidth - width - 8)));
+  const blockStart = Math.max(8, Math.min(y, Math.max(8, window.innerHeight - 280)));
   const hasAssets = choices.some((choice) => choice.value !== "");
   return (
     <div className="fixed inset-0 z-50" onClick={onClose}>
       <div
         role="dialog"
         aria-label={label}
-        className="absolute w-64 rounded-lg border border-rule bg-surface p-2 shadow-raised"
-        style={{ top: clampedTop, left: clampedLeft }}
+        className="fixed start-0 top-0 w-64 rounded-lg border border-rule bg-surface p-2 shadow-raised"
+        style={{
+          marginInlineStart: inlineStart,
+          marginBlockStart: blockStart,
+        }}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === "Escape") {

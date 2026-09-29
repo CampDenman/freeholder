@@ -307,7 +307,7 @@ describe("the canvas bridge image replace", () => {
       expect.objectContaining({
         source: "freeholder-preview",
         blockId: "i1",
-        assetPick: { prop: "assetId", top: 0, left: 0, width: 0, height: 0 },
+        assetPick: { prop: "assetId", x: 0, y: 0, width: 0, height: 0 },
       }),
       ORIGIN,
     );
@@ -359,7 +359,6 @@ describe("the canvas bridge image replace", () => {
     const failing = canvas(EMPTY_IMAGE_HTML);
     const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
     Object.defineProperty(failing.window, "fetch", { configurable: true, value: fetchMock });
-    failing.window.eval; // fetch defined before the draft applies
     draftMessage(failing.window, [
       { id: "i2", type: "image", props: { assetId: "cccccccc-2222-4333-8444-000000000003" } },
     ]);

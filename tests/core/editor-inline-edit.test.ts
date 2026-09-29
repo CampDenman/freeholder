@@ -307,7 +307,7 @@ describe("canvas edits at the editor", () => {
       canvasMessage({
         source: "freeholder-preview",
         blockId: "i1",
-        assetPick: { prop: "assetId", top: 120, left: 40, width: 300, height: 200 },
+        assetPick: { prop: "assetId", x: 40, y: 120, width: 300, height: 200 },
       });
       await new Promise((resolve) => setTimeout(resolve, 5));
     });
@@ -337,7 +337,7 @@ describe("canvas edits at the editor", () => {
       canvasMessage({
         source: "freeholder-preview",
         blockId: "i1",
-        assetPick: { prop: "assetId", top: 120, left: 40, width: 300, height: 200 },
+        assetPick: { prop: "assetId", x: 40, y: 120, width: 300, height: 200 },
       });
       await new Promise((resolve) => setTimeout(resolve, 5));
     });

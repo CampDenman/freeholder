@@ -39,16 +39,25 @@ document.addEventListener("click", function (event) {
   };
   // The replace affordance on an image block: report which prop names the
   // asset and where the block sits, so the editor can anchor its picker.
+  // x/y are physical viewport coordinates (getBoundingClientRect), consumed
+  // by the picker's own direction-aware anchoring.
   var replace = target ? target.closest("[data-replace-asset]") : null;
   if (replace) {
     var host = replace.closest("[data-asset-prop]");
     var box = host ? host.getBoundingClientRect() : null;
+    var pickX = 0, pickY = 0, pickW = 0, pickH = 0;
+    if (box) {
+      pickX = box.left;
+      pickY = box.top;
+      pickW = box.width;
+      pickH = box.height;
+    }
     message.assetPick = {
       prop: replace.getAttribute("data-replace-asset"),
-      top: box ? box.top : 0,
-      left: box ? box.left : 0,
-      width: box ? box.width : 0,
-      height: box ? box.height : 0
+      x: pickX,
+      y: pickY,
+      width: pickW,
+      height: pickH
     };
   }
   parent.postMessage(message, window.location.origin);

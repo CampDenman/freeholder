@@ -88,13 +88,14 @@ export function PreviewCanvas({
   onMove: (blockId: string, targetId: string, position: string) => void;
   /**
    * The replace affordance on an image block was clicked. `anchor` is the
-   * host element's position in this document's viewport, for anchoring the
-   * asset picker next to the image it will change.
+   * host element's position in this document's viewport (physical x/y, from
+   * getBoundingClientRect), for anchoring the asset picker next to the image
+   * it will change.
    */
   onAssetPick?: (
     blockId: string,
     prop: string,
-    anchor: { top: number; left: number },
+    anchor: { x: number; y: number },
   ) => void;
   labels: PreviewLabels;
 }) {
@@ -132,7 +133,7 @@ export function PreviewCanvas({
         ready?: boolean;
         edit?: { blockId?: string; prop?: string; value?: unknown };
         move?: { blockId?: string; targetId?: string; position?: string };
-        assetPick?: { prop?: string; top?: number; left?: number };
+        assetPick?: { prop?: string; x?: number; y?: number };
       };
       if (data?.source !== "freeholder-preview") return;
       // The frame (re)loaded — a reload may have raced the last broadcast, so
@@ -156,8 +157,8 @@ export function PreviewCanvas({
         // picker in this document's viewport instead.
         const frameBox = frame.current?.getBoundingClientRect();
         onAssetPick(data.blockId, data.assetPick.prop, {
-          top: (frameBox?.top ?? 0) + (data.assetPick.top ?? 0),
-          left: (frameBox?.left ?? 0) + (data.assetPick.left ?? 0),
+          x: (frameBox?.left ?? 0) + (data.assetPick.x ?? 0),
+          y: (frameBox?.top ?? 0) + (data.assetPick.y ?? 0),
         });
       }
       onSelect(data.blockId ?? undefined);
