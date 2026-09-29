@@ -150,6 +150,8 @@ const CANVAS_CSS = `
   [data-block-id] { outline-offset: 3px; cursor: pointer; }
   [data-editable-prop] { cursor: text; }
   [data-editable-prop]:focus { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
+  [data-editable-rich] { cursor: text; white-space: normal; }
+  [data-editable-rich]:focus { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
   [data-hovered] { outline: 1px dashed var(--fh-rule); }
   [data-selected] { outline: 2px solid var(--fh-accent); }
   [data-block-id] { position: relative; }
@@ -171,6 +173,25 @@ const CANVAS_CSS = `
   [data-drop="before"]::before { inset-block-start: -0.5rem; }
   [data-drop="after"]::after { inset-block-end: -0.5rem; }
   [data-drop="inside"] { outline: 2px dashed var(--fh-accent); }
+
+  /* The image block's on-canvas replace affordance. Token colours so both
+     themes render it correctly; keyboard focus reveals it without a hover. */
+  .fh-asset { position: relative; }
+  .fh-asset-empty {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 9rem; border: 1px dashed var(--fh-rule); border-radius: 0.5rem;
+    color: var(--fh-ink-muted); font-size: 0.875rem;
+  }
+  .fh-replace {
+    position: absolute; inset-block-start: 0.5rem; inset-inline-end: 0.5rem;
+    padding: 0.3rem 0.65rem; border-radius: 0.375rem;
+    border: 1px solid var(--fh-rule); background: var(--fh-surface);
+    color: var(--fh-ink); font-size: 0.75rem; font-weight: 600;
+    cursor: pointer; opacity: 0; transition: opacity 0.12s ease;
+  }
+  .fh-asset:hover .fh-replace, .fh-asset:focus-within .fh-replace,
+  .fh-replace:focus { opacity: 1; }
+  .fh-replace:focus-visible { outline: 2px solid var(--fh-accent); outline-offset: 2px; }
 
 `;
 

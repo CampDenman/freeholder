@@ -42,6 +42,7 @@ import {
   moveSiblings,
   readClipboard,
   removeNodes,
+  setPropAtPath,
   writeClipboard,
 } from "@/modules/cms/blocks/edit";
 import { replaceNodes, sectionKeyOf } from "@/modules/cms/section-instances";
@@ -338,10 +339,16 @@ export function BlockEditor({
   );
 
   /**
-   * Apply text typed on the canvas.
+   * Apply an edit made directly on the canvas.
    *
    * `useCallback` because the canvas subscribes to it: a new identity on every
    * render would tear down and re-add the message listener each keystroke.
+   *
+   * `prop` is usually a flat prop ("text"); it can also be a dotted path into
+   * an array prop ("items.0.question"), and `value` anything the prop holds —
+   * a string for a text edit, the typed document for a rich region. The path
+   * walk lives in `setPropAtPath`, shared with nothing else because nothing
+   * else needs it.
    *
    * The canvas is *not* reloaded afterwards. It already shows what was typed —
    * it is where the typing happened — and refreshing the frame mid-sentence
@@ -349,12 +356,12 @@ export function BlockEditor({
    * catches up on its own rhythm.
    */
   const applyInlineEdit = useCallback(
-    (blockId: string, prop: string, value: string) => {
+    (blockId: string, prop: string, value: unknown) => {
       setBlocks((current) => {
         const walk = (nodes: EditorNode[]): EditorNode[] =>
           nodes.map((node) =>
             node.id === blockId
-              ? { ...node, props: { ...node.props, [prop]: value } }
+              ? { ...node, props: setPropAtPath(node.props, prop, value) }
               : node.children
                 ? { ...node, children: walk(node.children) }
                 : node,
@@ -365,6 +372,25 @@ export function BlockEditor({
     },
     [],
   );
+
+  // The image block's replace affordance raises the picker; the pick itself
+  // is an ordinary canvas edit (props.assetId) from there on.
+  const [assetPick, setAssetPick] = useState<
+    | { blockId: string; prop: string; x: number; y: number }
+    | undefined
+  >();
+
+  const pickerAssets = (pick: { blockId: string; prop: string }) => {
+    const node = collectById(blocksRef.current, new Set([pick.blockId]))[0];
+    const field = node
+      ? byType
+          .get(node.type)
+          ?.fields.find((f) => f.name === pick.prop && f.kind === "asset")
+      : undefined;
+    // The field's own choices carry the translated "None" entry, exactly as
+    // the form panel's select renders it — one library, two doors.
+    return field?.choices ?? [];
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
@@ -458,8 +484,27 @@ export function BlockEditor({
           onSelect={setSelectedId}
           onEdit={applyInlineEdit}
           onMove={applyMove}
+          onAssetPick={(blockId, prop, anchor) =>
+            setAssetPick({ blockId, prop, x: anchor.x, y: anchor.y })
+          }
           labels={labels.preview}
         />
+        {assetPick ? (
+          <AssetPicker
+            choices={pickerAssets(assetPick)}
+            x={assetPick.x}
+            y={assetPick.y}
+            label={labels.preview.replaceImage}
+            emptyLabel={labels.preview.noAssets}
+            cancelLabel={labels.cancel}
+            onPick={(value) => {
+              // An empty pick clears the prop, as the form select does.
+              applyInlineEdit(assetPick.blockId, assetPick.prop, value || undefined);
+              setAssetPick(undefined);
+            }}
+            onClose={() => setAssetPick(undefined)}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -1178,6 +1223,97 @@ function AddBlock({
         >
           {labels.cancel}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------- asset picker */
+
+/**
+ * Choosing the asset an image block shows, raised from the block's own
+ * replace affordance on the canvas and anchored next to it.
+ *
+ * A pick is an ordinary canvas edit (the tree's `assetId` prop), so the
+ * canvas swaps the picture through the same draft broadcast as a keystroke
+ * and the autosave persists it like one.
+ */
+function AssetPicker({
+  choices,
+  x,
+  y,
+  label,
+  emptyLabel,
+  cancelLabel,
+  onPick,
+  onClose,
+}: {
+  /** The asset field's choices, "None" first, exactly as the form shows them. */
+  choices: { value: string; label: string }[];
+  /** Physical viewport coordinates the canvas reported for the image block. */
+  x: number;
+  y: number;
+  label: string;
+  /** Shown above the list when the library holds no assets at all. */
+  emptyLabel: string;
+  cancelLabel: string;
+  onPick: (value: string) => void;
+  onClose: () => void;
+}) {
+  // Anchor next to the block through logical margins: the block axis never
+  // flips, and the inline offset is computed from the physical x in whichever
+  // direction the document runs, so RTL admins anchor just as LTR ones do.
+  const width = 256; // w-64
+  const inlineStart =
+    document.documentElement.dir === "rtl"
+      ? Math.max(8, window.innerWidth - x - width)
+      : Math.max(8, Math.min(x, Math.max(8, window.innerWidth - width - 8)));
+  const blockStart = Math.max(8, Math.min(y, Math.max(8, window.innerHeight - 280)));
+  const hasAssets = choices.some((choice) => choice.value !== "");
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-label={label}
+        className="fixed start-0 top-0 w-64 rounded-lg border border-rule bg-surface p-2 shadow-raised"
+        style={{
+          marginInlineStart: inlineStart,
+          marginBlockStart: blockStart,
+        }}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      >
+        {hasAssets ? null : (
+          <p className="px-2 py-1.5 text-sm text-ink-muted">{emptyLabel}</p>
+        )}
+        <ul className="grid max-h-56 list-none gap-1 overflow-auto p-0">
+          {choices.map((choice) => (
+            <li key={choice.value || "none"}>
+              <button
+                type="button"
+                autoFocus={choice === choices[0]}
+                onClick={() => onPick(choice.value)}
+                className="w-full truncate rounded-md px-2.5 py-1.5 text-start text-sm text-ink hover:bg-surface-muted focus-visible:bg-surface-muted"
+              >
+                {choice.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-1 border-t border-rule pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-2.5 py-1 text-xs text-ink-muted underline decoration-rule underline-offset-2"
+          >
+            {cancelLabel}
+          </button>
+        </div>
       </div>
     </div>
   );
